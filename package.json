@@ -37,9 +37,8 @@
     ]
   },
   "scripts": {
-    "dev": "concurrently npm:dev:*",
-    "build": "webpack --config webpack/prod.config.js",
-    "dev:webpack": "webpack serve --config webpack/dev.config.js",
-    "dev:django": "python manage.py runserver"
+    "build": "NODE_ENV=production webpack --mode production --config webpack/prod.config.js",
+    "dev": "webpack --mode development --config webpack/base.config.js",
+    "dev-watch": "webpack --mode development --config webpack/base.config.js --watch"
   }
 }

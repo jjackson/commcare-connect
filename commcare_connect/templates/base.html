@@ -1,4 +1,4 @@
-{% load static i18n %}{% load render_bundle from webpack_loader %}<!DOCTYPE html>
+{% load static i18n %}<!DOCTYPE html>
 {% get_current_language as LANGUAGE_CODE %}
 <html lang="{{ LANGUAGE_CODE }}">
   <head>
@@ -15,24 +15,19 @@
     <!-- Your stuff: Third-party CSS libraries go here -->
 
     <!-- This file stores project-specific CSS -->
-    {% render_bundle 'project' 'css' %}
+    <link rel="stylesheet" href="{% static 'bundles/css/project.css' %}">
     {% endblock %}
     <!-- Le javascript
     ================================================== -->
     {# Placed at the top of the document so pages load faster with defer #}
     {% block javascript %}
       <!-- Vendor dependencies bundled as one file -->
-      {% render_bundle 'vendors' 'js' attrs='defer' %}
-
+      <script src="{% static 'bundles/js/vendors-bundle.js'%}" defer></script>
       <!-- place project specific Javascript in this file -->
-      {% render_bundle 'project' 'js' attrs='defer' %}
-
+      <script src="{% static 'bundles/js/project-bundle.js'%}" defer></script>
     {% endblock javascript %}
-
   </head>
-
   <body>
-
     <div class="mb-1">
       <nav class="navbar navbar-expand-md navbar-light bg-light">
         <div class="container-fluid">

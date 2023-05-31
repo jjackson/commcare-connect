@@ -12,18 +12,18 @@ module.exports = {
   output: {
     path: path.resolve(
       __dirname,
-      '../commcare_connect/static/webpack_bundles/',
+      '../commcare_connect/static/bundles/',
     ),
-    publicPath: '/static/webpack_bundles/',
-    filename: 'js/[name]-[fullhash].js',
-    chunkFilename: 'js/[name]-[hash].js',
+    publicPath: '/static/bundles/',
+    filename: 'js/[name]-bundle.js',
+    chunkFilename: 'js/[name]-bundle.js',
   },
   plugins: [
     new BundleTracker({
       path: path.resolve(path.join(__dirname, '../')),
       filename: 'webpack-stats.json',
     }),
-    new MiniCssExtractPlugin({ filename: 'css/[name].[contenthash].css' }),
+    new MiniCssExtractPlugin({ filename: 'css/[name].css' }),
   ],
   module: {
     rules: [
@@ -54,4 +54,5 @@ module.exports = {
     modules: ['node_modules'],
     extensions: ['.js', '.jsx'],
   },
+  devtool: 'eval-cheap-source-map',
 };

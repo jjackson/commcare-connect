@@ -314,5 +314,5 @@ dump.rdb
 commcare_connect/media/
 
 .pytest_cache/
-commcare_connect/static/webpack_bundles/
+commcare_connect/static/bundles/
 webpack-stats.json
