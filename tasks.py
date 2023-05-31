@@ -4,9 +4,9 @@ from invoke import task, Context, Exit, call
 @task
 def docker(c: Context, command):
     if command == 'up':
-        c.run("docker-compose -f docker-compose-dev.yml up -d")
+        c.run("docker compose -f docker-compose.yml up -d")
     elif command == 'down':
-        c.run("docker-compose -f docker-compose-dev.yml down")
+        c.run("docker compose -f docker-compose.yml down")
     else:
         raise Exit(f"Unknown docker command: {command}", -1)
 
