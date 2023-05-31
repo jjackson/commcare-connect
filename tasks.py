@@ -42,3 +42,14 @@ def translations(c: Context):
 @task
 def api_schema(c: Context):
     c.run('python manage.py spectacular --file api_schema.yaml')
+
+
+@task
+def build_js(c: Context, watch=False, prod=False):
+    if prod:
+        if watch:
+            print("[warn] Prod build can't be watched")
+        c.run("npm run build")
+    else:
+        extra = "-watch" if watch else ""
+        c.run(f"npm run dev{extra}")
