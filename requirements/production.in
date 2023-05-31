@@ -1,0 +1,10 @@
+-c base.txt
+
+gunicorn
+psycopg2
+sentry-sdk
+
+# Django
+# ------------------------------------------------------------------------------
+django-storages[boto3]
+django-anymail[amazon-ses]

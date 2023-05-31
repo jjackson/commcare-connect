@@ -1,0 +1,24 @@
+python-slugify
+Pillow
+argon2-cffi
+whitenoise
+redis
+hiredis
+celery
+django-celery-beat
+
+# Django
+# ------------------------------------------------------------------------------
+django
+django-environ
+django-model-utils
+django-allauth
+django-crispy-forms
+crispy-bootstrap5
+django-redis
+# Django REST Framework
+djangorestframework
+django-cors-headers
+# DRF-spectacular for api documentation
+drf-spectacular
+django-webpack-loader
