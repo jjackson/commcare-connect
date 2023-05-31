@@ -80,8 +80,6 @@ django-redis==5.2.0
     # via -r requirements/base.in
 django-timezone-field==5.0
     # via django-celery-beat
-django-webpack-loader==2.0.0
-    # via -r requirements/base.in
 djangorestframework==3.14.0
     # via
     #   -r requirements/base.in
