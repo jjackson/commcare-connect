@@ -23,7 +23,7 @@ babel==2.12.1
 backcall==0.2.0
     # via ipython
 black==23.3.0
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 build==0.10.0
     # via pip-tools
 certifi==2023.5.7
@@ -45,7 +45,7 @@ colorama==0.4.6
     # via sphinx-autobuild
 coverage==7.2.7
     # via
-    #   -r requirements/local.in
+    #   -r requirements/dev.in
     #   django-coverage-plugin
 decorator==5.1.1
     # via
@@ -63,13 +63,13 @@ django==4.2.1
     #   django-stubs
     #   django-stubs-ext
 django-coverage-plugin==3.0.0
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 django-debug-toolbar==4.1.0
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 django-extensions==3.2.1
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 django-stubs==4.2.0
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 django-stubs-ext==4.2.0
     # via django-stubs
 docutils==0.20.1
@@ -81,17 +81,17 @@ exceptiongroup==1.1.1
 executing==1.2.0
     # via stack-data
 factory-boy==3.2.1
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 faker==18.9.0
     # via factory-boy
 filelock==3.12.0
     # via virtualenv
 flake8==6.0.0
     # via
-    #   -r requirements/local.in
+    #   -r requirements/dev.in
     #   flake8-isort
 flake8-isort==6.0.0
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 identify==2.5.24
     # via pre-commit
 idna==3.4
@@ -104,9 +104,9 @@ imagesize==1.4.1
 iniconfig==2.0.0
     # via pytest
 invoke==2.1.2
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 ipdb==0.13.13
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 ipython==8.13.2
     # via ipdb
 isort==5.12.0
@@ -132,9 +132,7 @@ mccabe==0.7.0
     #   flake8
     #   pylint
 mypy==1.3.0
-    # via
-    #   -r requirements/local.in
-    #   django-stubs
+    # via django-stubs
 mypy-extensions==1.0.0
     # via
     #   black
@@ -157,7 +155,7 @@ pexpect==4.8.0
 pickleshare==0.7.5
     # via ipython
 pip-tools==6.13.0
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 platformdirs==3.5.1
     # via
     #   black
@@ -166,13 +164,13 @@ platformdirs==3.5.1
 pluggy==1.0.0
     # via pytest
 pre-commit==3.3.2
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 prompt-toolkit==3.0.38
     # via
     #   -c requirements/base.txt
     #   ipython
 psycopg2-binary==2.9.6
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 ptyprocess==0.7.0
     # via pexpect
 pure-eval==0.2.2
@@ -191,9 +189,9 @@ pylint==2.17.4
     #   pylint-django
     #   pylint-plugin-utils
 pylint-celery==0.3
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 pylint-django==2.5.3
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 pylint-plugin-utils==0.8.2
     # via
     #   pylint-celery
@@ -202,13 +200,13 @@ pyproject-hooks==1.0.0
     # via build
 pytest==7.3.1
     # via
-    #   -r requirements/local.in
+    #   -r requirements/dev.in
     #   pytest-django
     #   pytest-sugar
 pytest-django==4.5.2
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 pytest-sugar==0.9.7
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 python-dateutil==2.8.2
     # via
     #   -c requirements/base.txt
@@ -233,10 +231,10 @@ snowballstemmer==2.2.0
     # via sphinx
 sphinx==7.0.1
     # via
-    #   -r requirements/local.in
+    #   -r requirements/dev.in
     #   sphinx-autobuild
 sphinx-autobuild==2021.3.14
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 sphinxcontrib-applehelp==1.0.4
     # via sphinx
 sphinxcontrib-devhelp==1.0.2
@@ -288,7 +286,7 @@ typing-extensions==4.6.2
     #   django-stubs
     #   django-stubs-ext
     #   mypy
-urllib3<2.0.0
+urllib3==2.0.2
     # via
     #   -c requirements/base.txt
     #   requests
@@ -297,13 +295,13 @@ virtualenv==20.23.0
 watchdog==3.0.0
     # via werkzeug
 watchfiles==0.19.0
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 wcwidth==0.2.6
     # via
     #   -c requirements/base.txt
     #   prompt-toolkit
 werkzeug[watchdog]==2.3.4
-    # via -r requirements/local.in
+    # via -r requirements/dev.in
 wheel==0.40.0
     # via pip-tools
 wrapt==1.15.0

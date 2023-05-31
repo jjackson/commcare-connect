@@ -9,7 +9,6 @@ pip-tools
 
 # Testing
 # ------------------------------------------------------------------------------
-mypy
 django-stubs
 pytest
 pytest-sugar

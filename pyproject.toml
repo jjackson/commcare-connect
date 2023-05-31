@@ -32,28 +32,6 @@ skip = ["venv/"]
 skip_glob = ["**/migrations/*.py"]
 
 
-# ==== mypy ====
-[tool.mypy]
-python_version = "3.11"
-check_untyped_defs = true
-ignore_missing_imports = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-warn_unused_configs = true
-plugins = [
-    "mypy_django_plugin.main",
-    "mypy_drf_plugin.main",
-]
-
-[[tool.mypy.overrides]]
-# Django migrations should not produce any errors:
-module = "*.migrations.*"
-ignore_errors = true
-
-[tool.django-stubs]
-django_settings_module = "config.settings.test"
-
-
 # ==== PyLint ====
 [tool.pylint.MASTER]
 load-plugins = [
