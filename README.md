@@ -7,7 +7,7 @@ CommCare Connect
 
 ## Settings
 
-Moved to [settings](http://cookiecutter-django.readthedocs.io/en/latest/settings.html).
+See `.env_template`
 
 ## Basic Commands
 
@@ -20,12 +20,6 @@ Moved to [settings](http://cookiecutter-django.readthedocs.io/en/latest/settings
       $ python manage.py createsuperuser
 
 For convenience, you can keep your normal user logged in on Chrome and your superuser logged in on Firefox (or similar), so that you can see how the site behaves for both kinds of users.
-
-### Type checks
-
-Running type checks with mypy:
-
-    $ mypy commcare_connect
 
 ### Test coverage
 
@@ -41,7 +35,7 @@ To run the tests, check your test coverage, and generate an HTML coverage report
 
 ### Live reloading and Sass CSS compilation
 
-Moved to [Live reloading and SASS compilation](https://cookiecutter-django.readthedocs.io/en/latest/developing-locally.html#sass-compilation-live-reloading).
+    $ inv build-js -w
 
 ### Celery
 
@@ -50,7 +44,6 @@ This app comes with Celery.
 To run a celery worker:
 
 ```bash
-cd commcare_connect
 celery -A config.celery_app worker -l info
 ```
 
@@ -59,23 +52,14 @@ Please note: For Celery's import magic to work, it is important _where_ the cele
 To run [periodic tasks](https://docs.celeryq.dev/en/stable/userguide/periodic-tasks.html), you'll need to start the celery beat scheduler service. You can start it as a standalone process:
 
 ```bash
-cd commcare_connect
 celery -A config.celery_app beat
 ```
 
 or you can embed the beat service inside a worker with the `-B` option (not recommended for production use):
 
 ```bash
-cd commcare_connect
 celery -A config.celery_app worker -B -l info
 ```
-
-### Sentry
-
-Sentry is an error logging aggregator service. You can sign up for a free account at <https://sentry.io/signup/?code=cookiecutter> or download and host it yourself.
-The system is set up with reasonable defaults, including 404 logging and integration with the WSGI application.
-
-You must set the DSN url in production.
 
 ## Deployment
 
