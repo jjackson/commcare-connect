@@ -10,10 +10,7 @@ module.exports = {
     vendors: path.resolve(__dirname, '../commcare_connect/static/js/vendors'),
   },
   output: {
-    path: path.resolve(
-      __dirname,
-      '../commcare_connect/static/bundles/',
-    ),
+    path: path.resolve(__dirname, '../commcare_connect/static/bundles/'),
     publicPath: '/static/bundles/',
     filename: 'js/[name]-bundle.js',
     chunkFilename: 'js/[name]-bundle.js',

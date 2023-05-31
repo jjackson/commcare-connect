@@ -11,11 +11,7 @@ from django.urls import reverse
 from commcare_connect.users.forms import UserAdminChangeForm
 from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import UserFactory
-from commcare_connect.users.views import (
-    UserRedirectView,
-    UserUpdateView,
-    user_detail_view,
-)
+from commcare_connect.users.views import UserRedirectView, UserUpdateView, user_detail_view
 
 pytestmark = pytest.mark.django_db
 
