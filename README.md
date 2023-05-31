@@ -5,11 +5,34 @@ CommCare Connect
 [![Built with Cookiecutter Django](https://img.shields.io/badge/built%20with-Cookiecutter%20Django-ff69b4.svg?logo=cookiecutter)](https://github.com/cookiecutter/cookiecutter-django/)
 [![Black code style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 
-## Settings
+## Local setup
 
-See `.env_template`
+This assumes you will use the docker compose file in this repo to run services. If that is not the case you may
+need to edit some settings.
+
+    # create and active a python vertual environment using Python 3.11
+    $ python3.11 -m venv <virtual env path>
+
+    # install requirements
+    $ pip install -r requirements-dev.txt
+
+    # create env file and edit the settings as needed (or export settings directly)
+    $ cp .env_template .env
+
+    # start docker services
+    $ inv up
+
+    # build JS (optionally watch files for changes and rebuild)
+    $ inv build-js [-w]
+
+    # run Django
+    $ ./manage.py runserver
 
 ## Basic Commands
+
+Some useful command are available via the `tasks.py` file:
+
+    $ inv -l
 
 ### Setting Up Your Users
 
