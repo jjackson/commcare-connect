@@ -71,6 +71,7 @@ venv/
 ENV/
 .direnv
 .envrc
+.env
 
 # Rope project settings
 .ropeproject
