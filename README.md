@@ -22,6 +22,9 @@ need to edit some settings.
     # start docker services
     $ inv up
 
+    # install JS dependencies
+    $ npm ci
+
     # build JS (optionally watch files for changes and rebuild)
     $ inv build-js [-w]
 
