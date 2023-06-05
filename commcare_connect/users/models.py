@@ -1,9 +1,21 @@
 from django.contrib.auth.models import AbstractUser
 from django.db.models import CharField, EmailField
+from django.db import models
 from django.urls import reverse
+from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.users.managers import UserManager
+
+
+class BaseModel(models.Model):
+    created_by = models.CharField(max_length=255)
+    modified_by = models.CharField(max_length=255)
+    date_created = models.DateTimeField(auto_now_add=True)
+    date_modified = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
 
 
 class User(AbstractUser):
@@ -33,3 +45,28 @@ class User(AbstractUser):
 
         """
         return reverse("users:detail", kwargs={"pk": self.id})
+
+
+class Organization(BaseModel):
+    name = models.CharField(max_length=255, unique=True)
+    slug = models.SlugField(max_length=255)
+
+    def save(self, *args, **kwargs):
+        self.slug = slugify(self.name)
+        super().save(*args, *kwargs)
+
+
+class UserOrganizationMembership(models.Model):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='users',
+        related_query_name='user'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.DO_NOTHING,
+        related_name='organizations',
+        related_query_name='organization'
+    )
+    role = models.CharField(max_length=255)
