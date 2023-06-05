@@ -147,8 +147,10 @@ tzdata==2023.3
     # via django-celery-beat
 uritemplate==4.1.1
     # via drf-spectacular
-urllib3<2.0.0
-    # via requests
+urllib3==1.26.16
+    # via
+    #   -r requirements/base.in
+    #   requests
 vine==5.0.0
     # via
     #   amqp
