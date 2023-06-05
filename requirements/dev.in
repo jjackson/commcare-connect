@@ -9,9 +9,7 @@ pip-tools
 
 # Testing
 # ------------------------------------------------------------------------------
-django-stubs
 pytest
-pytest-sugar
 
 # Code quality
 # ------------------------------------------------------------------------------
@@ -28,6 +26,4 @@ pre-commit
 factory-boy
 
 django-debug-toolbar
-django-extensions
-django-coverage-plugin
 pytest-django
