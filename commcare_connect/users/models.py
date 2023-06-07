@@ -56,6 +56,10 @@ class Organization(BaseModel):
 
 
 class UserOrganizationMembership(models.Model):
+    class Role(models.TextChoices):
+        ADMIN = "admin", _("Admin")
+        MEMBER = "member", _("Member")
+
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
@@ -68,4 +72,4 @@ class UserOrganizationMembership(models.Model):
         related_name='organizations',
         related_query_name='organization'
     )
-    role = models.CharField(max_length=255)
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.MEMBER)
