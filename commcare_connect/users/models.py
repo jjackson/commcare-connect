@@ -1,10 +1,10 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.urls import reverse
-from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.users.managers import UserManager
+from commcare_connect.utils.db import slugify_uniquely
 
 
 class BaseModel(models.Model):
@@ -47,11 +47,12 @@ class User(AbstractUser):
 
 
 class Organization(BaseModel):
-    name = models.CharField(max_length=255, unique=True)
-    slug = models.SlugField(max_length=255)
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True)
 
     def save(self, *args, **kwargs):
-        self.slug = slugify(self.name)
+        if not self.id:
+            self.slug = slugify_uniquely(self.name, self.__class__)
         super().save(*args, *kwargs)
 
 
