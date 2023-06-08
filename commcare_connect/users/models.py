@@ -55,6 +55,9 @@ class Organization(BaseModel):
             self.slug = slugify_uniquely(self.name, self.__class__)
         super().save(*args, *kwargs)
 
+    def __str__(self):
+        return self.slug
+
 
 class UserOrganizationMembership(models.Model):
     class Role(models.TextChoices):
