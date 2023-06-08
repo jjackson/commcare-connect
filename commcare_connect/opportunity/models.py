@@ -1,6 +1,6 @@
 from django.db import models
 
-from commcare_connect.users.models import Organization, BaseModel
+from commcare_connect.users.models import BaseModel, Organization
 
 
 class Opportunity(BaseModel):
