@@ -72,6 +72,7 @@ THIRD_PARTY_APPS = [
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
+    "commcare_connect.commcarehq_provider",
     "django_celery_beat",
     "rest_framework",
     "rest_framework.authtoken",
