@@ -1,14 +1,15 @@
 import requests
 from allauth.socialaccount.providers.oauth2.views import OAuth2Adapter, OAuth2CallbackView, OAuth2LoginView
+from django.conf import settings
 
 from .provider import CommcareHQProvider
 
 
 class CommcareHQOAuth2Adapter(OAuth2Adapter):
     provider_id = CommcareHQProvider.id
-    access_token_url = "https://staging.commcarehq.org/oauth/token/"
-    authorize_url = "https://staging.commcarehq.org/oauth/authorize/"
-    profile_url = "https://staging.commcarehq.org/api/v0.5/identity/"
+    access_token_url = f"{settings.COMMCARE_HQ_URL}/oauth/token/"
+    authorize_url = f"{settings.COMMCARE_HQ_URL}/oauth/authorize/"
+    profile_url = f"{settings.COMMCARE_HQ_URL}/api/v0.5/identity/"
     supports_state = False
     redirect_uri_protocol = "https"
 
