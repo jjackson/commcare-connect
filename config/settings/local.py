@@ -11,8 +11,8 @@ SECRET_KEY = env(
     default="5xpjGRDKKXRiO2u1AiwUT6fbl5iM89JkQ9lnMCJEhvW1JQvXdNroF2OMSe60KEcR",
 )
 # https://docs.djangoproject.com/en/dev/ref/settings/#allowed-hosts
-ALLOWED_HOSTS = ["localhost", "0.0.0.0", "127.0.0.1", "fair-peas-deny.loca.lt"]
-CSRF_TRUSTED_ORIGINS = ["https://*.fair-peas-deny.loca.lt", "https://*.127.0.0.1"]
+ALLOWED_HOSTS = ["localhost", "0.0.0.0", "127.0.0.1"] + env.list("ALLOWED_HOSTS")
+CSRF_TRUSTED_ORIGINS = ["https://*.127.0.0.1"] + env.list("CSRF_TRUSTED_ORIGINS")
 
 # CACHES
 # ------------------------------------------------------------------------------
