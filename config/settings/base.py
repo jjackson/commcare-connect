@@ -81,8 +81,8 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     "commcare_connect.users",
-    "commcare_connect.opportunity"
-    # Your stuff: custom apps go here
+    "commcare_connect.opportunity",
+    "commcare_connect.commcarehq_provider",
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -335,3 +335,4 @@ SPECTACULAR_SETTINGS = {
 # ------------------------------------------------------------------------------
 # CommCare Connect Settings...
 # ------------------------------------------------------------------------------
+COMMCARE_HQ_URL = "https://www.commcarehq.org"
