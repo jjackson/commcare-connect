@@ -28,7 +28,7 @@ class OpportunityCreate(CreateView):
     form_class = OpportunityCreationForm
 
     def get_success_url(self):
-        return reverse("opportunity:opportunity_list", args=(self.kwargs.get("org_slug"),))
+        return reverse("opportunity_list", args=(self.kwargs.get("org_slug"),))
 
     def form_valid(self, form):
         form.instance.created_by = self.request.user.email
@@ -49,7 +49,7 @@ class OpportunityEdit(UpdateView):
     form_class = OpportunityChangeForm
 
     def get_success_url(self):
-        return reverse("opportunity:opportunity_list", args=(self.kwargs.get("org_slug"),))
+        return reverse("opportunity_list", args=(self.kwargs.get("org_slug"),))
 
     def form_valid(self, form):
         form.instance.modified_by = self.request.user.email
