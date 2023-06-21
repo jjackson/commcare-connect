@@ -36,6 +36,11 @@ class OpportunityCreate(CreateView):
         form.instance.organization = Organization.objects.filter(slug=self.kwargs["org_slug"]).first()
         return super().form_valid(form)
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_title"] = "Create new opportunity"
+        return context
+
 
 @method_decorator(login_required, name="dispatch")
 class OpportunityEdit(UpdateView):
@@ -49,3 +54,8 @@ class OpportunityEdit(UpdateView):
     def form_valid(self, form):
         form.instance.modified_by = self.request.user.email
         return super().form_valid(form)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_title"] = "Edit opportunity"
+        return context
