@@ -1,11 +1,12 @@
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import UserPassesTestMixin
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.generic import CreateView, ListView, UpdateView
 
 from commcare_connect.opportunity.forms import OpportunityChangeForm, OpportunityCreationForm
 from commcare_connect.opportunity.models import Opportunity
-from commcare_connect.users.models import Organization
+from commcare_connect.utils.commcarehq_api import get_applications_for_user
 
 
 @method_decorator(login_required, name="dispatch")
@@ -23,23 +24,27 @@ class OpportunityList(ListView):
 
 
 @method_decorator(login_required, name="dispatch")
-class OpportunityCreate(CreateView):
+class OpportunityCreate(UserPassesTestMixin, CreateView):
     template_name = "opportunity/opportunity_create.html"
     form_class = OpportunityCreationForm
 
     def get_success_url(self):
         return reverse("opportunity:list", args=(self.kwargs.get("org_slug"),))
 
-    def form_valid(self, form):
-        form.instance.created_by = self.request.user.email
-        form.instance.modified_by = self.request.user.email
-        form.instance.organization = Organization.objects.filter(slug=self.kwargs["org_slug"]).first()
-        return super().form_valid(form)
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["page_title"] = "Create new opportunity"
         return context
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["applications"] = get_applications_for_user(self.request.user)
+        kwargs["user"] = self.request.user
+        kwargs["org_slug"] = self.kwargs.get("org_slug")
+        return kwargs
+
+    def test_func(self):
+        return self.request.user.organizations.filter(organization__slug=self.kwargs.get("org_slug")).exists()
 
 
 @method_decorator(login_required, name="dispatch")
