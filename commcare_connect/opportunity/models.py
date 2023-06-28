@@ -10,6 +10,9 @@ class CommCareApp(BaseModel):
     name = models.CharField(max_length=255)
     description = models.TextField()
 
+    def __str__(self):
+        return self.name
+
 
 class Opportunity(BaseModel):
     organization = models.ForeignKey(
@@ -32,3 +35,6 @@ class Opportunity(BaseModel):
         on_delete=models.CASCADE,
         null=True,
     )
+
+    def __str__(self):
+        return self.name
