@@ -1,7 +1,5 @@
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth.mixins import UserPassesTestMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.urls import reverse
-from django.utils.decorators import method_decorator
 from django.views.generic import CreateView, ListView, UpdateView
 
 from commcare_connect.opportunity.forms import OpportunityChangeForm, OpportunityCreationForm
@@ -9,8 +7,12 @@ from commcare_connect.opportunity.models import Opportunity
 from commcare_connect.utils.commcarehq_api import get_applications_for_user
 
 
-@method_decorator(login_required, name="dispatch")
-class OpportunityList(ListView):
+class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
+    def test_func(self):
+        return self.request.user.organizations.filter(organization__slug=self.kwargs.get("org_slug")).exists()
+
+
+class OpportunityList(OrganizationUserMixin, ListView):
     model = Opportunity
     paginate_by = 10
 
@@ -23,8 +25,7 @@ class OpportunityList(ListView):
         return Opportunity.objects.filter(organization__slug=self.kwargs["org_slug"])
 
 
-@method_decorator(login_required, name="dispatch")
-class OpportunityCreate(UserPassesTestMixin, CreateView):
+class OpportunityCreate(OrganizationUserMixin, CreateView):
     template_name = "opportunity/opportunity_create.html"
     form_class = OpportunityCreationForm
 
@@ -47,8 +48,7 @@ class OpportunityCreate(UserPassesTestMixin, CreateView):
         return self.request.user.organizations.filter(organization__slug=self.kwargs.get("org_slug")).exists()
 
 
-@method_decorator(login_required, name="dispatch")
-class OpportunityEdit(UpdateView):
+class OpportunityEdit(OrganizationUserMixin, UpdateView):
     model = Opportunity
     template_name = "opportunity/opportunity_create.html"
     form_class = OpportunityChangeForm
