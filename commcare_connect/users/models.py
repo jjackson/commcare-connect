@@ -4,17 +4,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.users.managers import UserManager
-from commcare_connect.utils.db import slugify_uniquely
-
-
-class BaseModel(models.Model):
-    created_by = models.CharField(max_length=255)
-    modified_by = models.CharField(max_length=255)
-    date_created = models.DateTimeField(auto_now_add=True)
-    date_modified = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        abstract = True
+from commcare_connect.utils.db import BaseModel, slugify_uniquely
 
 
 class User(AbstractUser):

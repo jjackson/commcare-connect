@@ -308,6 +308,7 @@ ACCOUNT_FORMS = {"signup": "commcare_connect.users.forms.UserSignupForm"}
 SOCIALACCOUNT_ADAPTER = "commcare_connect.users.adapters.SocialAccountAdapter"
 # https://django-allauth.readthedocs.io/en/latest/forms.html
 SOCIALACCOUNT_FORMS = {"signup": "commcare_connect.users.forms.UserSocialSignupForm"}
+SOCIALACCOUNT_STORE_TOKENS = True
 
 # django-rest-framework
 # -------------------------------------------------------------------------------
