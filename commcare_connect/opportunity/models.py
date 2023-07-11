@@ -1,6 +1,17 @@
 from django.db import models
 
-from commcare_connect.users.models import BaseModel, Organization
+from commcare_connect.users.models import Organization
+from commcare_connect.utils.db import BaseModel
+
+
+class CommCareApp(BaseModel):
+    cc_domain = models.CharField(max_length=255)
+    cc_app_id = models.CharField(max_length=50)
+    name = models.CharField(max_length=255)
+    description = models.TextField()
+
+    def __str__(self):
+        return self.name
 
 
 class Opportunity(BaseModel):
@@ -13,3 +24,17 @@ class Opportunity(BaseModel):
     name = models.CharField(max_length=255)
     description = models.TextField()
     active = models.BooleanField(default=True)
+    learn_app = models.ForeignKey(
+        CommCareApp,
+        on_delete=models.CASCADE,
+        related_name="learn_app_opportunities",
+        null=True,
+    )
+    deliver_app = models.ForeignKey(
+        CommCareApp,
+        on_delete=models.CASCADE,
+        null=True,
+    )
+
+    def __str__(self):
+        return self.name
