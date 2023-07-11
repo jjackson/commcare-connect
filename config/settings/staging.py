@@ -144,7 +144,7 @@ ANYMAIL = {}
 
 LOGGING = {
     "version": 1,
-    "disable_existing_loggers": True,
+    "disable_existing_loggers": False,
     "formatters": {
         "verbose": {
             "format": "%(levelname)s %(asctime)s %(module)s %(process)d %(thread)d %(message)s",
@@ -162,25 +162,30 @@ LOGGING = {
             "formatter": "verbose",
             "maxBytes": 10 * 1024 * 1024,
             "backupCount": 20,
-            "filename": "/var/log/connect/django.log",
+            "filename": "/opt/python/log/django.log",
         },
     },
-    "root": {"level": "INFO", "handlers": ["console", "file"]},
+    "root": {"level": "DEBUG", "handlers": ["console", "file"]},
     "loggers": {
         "django.db.backends": {
-            "level": "ERROR",
+            "level": "DEBUG",
             "handlers": ["console", "file"],
-            "propagate": False,
+            "propagate": True,
         },
         # # Errors logged by the SDK itself
         # "sentry_sdk": {"level": "ERROR", "handlers": ["console"], "propagate": False},
         "django.security.DisallowedHost": {
-            "level": "ERROR",
+            "level": "DEBUG",
             "handlers": ["console", "file"],
-            "propagate": False,
+            "propagate": True,
         },
         "django": {
-            "handlers": ["file"],
+            "handlers": ["console", "file"],
+            "level": "DEBUG",
+            "propagate": True,
+        },
+        "django.server": {
+            "handlers": ["console", "file"],
             "level": "DEBUG",
             "propagate": True,
         },
