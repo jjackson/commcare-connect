@@ -41,6 +41,11 @@ class Opportunity(BaseModel):
         on_delete=models.CASCADE,
         null=True,
     )
+    max_visits_per_user = models.IntegerField(null=True)
+    daily_max_visits_per_user = models.IntegerField(null=True)
+    end_date = models.DateField(null=True)
+    budget_per_visit = models.IntegerField(null=True)
+    total_budget = models.IntegerField(null=True)
 
     def __str__(self):
         return self.name
