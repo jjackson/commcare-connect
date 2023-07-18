@@ -1,3 +1,5 @@
+from crispy_forms.helper import FormHelper, Layout
+from crispy_forms.layout import Field, Row, Submit
 from django import forms
 
 from commcare_connect.opportunity.models import CommCareApp, Opportunity
@@ -8,6 +10,17 @@ class OpportunityChangeForm(forms.ModelForm):
     class Meta:
         model = Opportunity
         fields = ["name", "description", "active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("name")),
+            Row(Field("description")),
+            Row(Field("active")),
+            Submit("submit", "Submit"),
+        )
 
 
 class OpportunityCreationForm(forms.ModelForm):
@@ -23,6 +36,24 @@ class OpportunityCreationForm(forms.ModelForm):
         self.user = kwargs.pop("user", {})
         self.org_slug = kwargs.pop("org_slug", "")
         super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("name")),
+            Row(Field("description")),
+            Row(Field("end_date")),
+            Row(
+                Field("max_visits_per_user", wrapper_class="form-group col-md-6 mb-0"),
+                Field("daily_max_visits_per_user", wrapper_class="form-group col-md-6 mb-0"),
+            ),
+            Row(
+                Field("total_budget", wrapper_class="form-group col-md-6 mb-0"),
+                Field("budget_per_visit", wrapper_class="form-group col-md-6 mb-0"),
+            ),
+            Row(Field("learn_app")),
+            Row(Field("deliver_app")),
+            Submit("submit", "Submit"),
+        )
 
         choices = [(app["id"], app["name"]) for app in self.applications]
         self.fields["learn_app"] = forms.ChoiceField(choices=choices)
