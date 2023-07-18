@@ -26,7 +26,18 @@ class OpportunityChangeForm(forms.ModelForm):
 class OpportunityCreationForm(forms.ModelForm):
     class Meta:
         model = Opportunity
-        fields = ["name", "description"]
+        fields = [
+            "name",
+            "description",
+            "end_date",
+            "max_visits_per_user",
+            "daily_max_visits_per_user",
+            "budget_per_visit",
+            "total_budget",
+        ]
+        widgets = {
+            "end_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+        }
 
     learn_app = forms.ChoiceField()
     deliver_app = forms.ChoiceField()
