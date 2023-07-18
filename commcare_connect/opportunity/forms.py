@@ -35,13 +35,18 @@ class OpportunityCreationForm(forms.ModelForm):
             self.add_error("deliver_app", "Learn app and Deliver app cannot be same")
 
     def save(self, commit=True):
+        organization = Organization.objects.filter(slug=self.org_slug).first()
         for app in self.applications:
             if app["id"] == self.cleaned_data["learn_app"]:
                 self.instance.learn_app, _ = CommCareApp.objects.get_or_create(
                     cc_app_id=app["id"],
                     name=app["name"],
                     cc_domain=app["domain"],
-                    defaults={"created_by": self.user.email, "modified_by": self.user.email},
+                    organization=organization,
+                    defaults={
+                        "created_by": self.user.email,
+                        "modified_by": self.user.email,
+                    },
                 )
 
             if app["id"] == self.cleaned_data["deliver_app"]:
@@ -49,10 +54,14 @@ class OpportunityCreationForm(forms.ModelForm):
                     cc_app_id=app["id"],
                     name=app["name"],
                     cc_domain=app["domain"],
-                    defaults={"created_by": self.user.email, "modified_by": self.user.email},
+                    organization=organization,
+                    defaults={
+                        "created_by": self.user.email,
+                        "modified_by": self.user.email,
+                    },
                 )
 
         self.instance.created_by = self.user.email
         self.instance.modified_by = self.user.email
-        self.instance.organization = Organization.objects.filter(slug=self.org_slug).first()
+        self.instance.organization = organization
         return super().save(commit=commit)
