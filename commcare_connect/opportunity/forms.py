@@ -1,6 +1,7 @@
 from crispy_forms.helper import FormHelper, Layout
 from crispy_forms.layout import Field, Row, Submit
 from django import forms
+from django.utils.timezone import now
 
 from commcare_connect.opportunity.models import CommCareApp, Opportunity
 from commcare_connect.users.models import Organization
@@ -72,9 +73,22 @@ class OpportunityCreationForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        if cleaned_data["learn_app"] == cleaned_data["deliver_app"]:
-            self.add_error("learn_app", "Learn app and Deliver app cannot be same")
-            self.add_error("deliver_app", "Learn app and Deliver app cannot be same")
+        if cleaned_data:
+            if cleaned_data["learn_app"] == cleaned_data["deliver_app"]:
+                self.add_error("learn_app", "Learn app and Deliver app cannot be same")
+                self.add_error("deliver_app", "Learn app and Deliver app cannot be same")
+
+            if cleaned_data["daily_max_visits_per_user"] > cleaned_data["max_visits_per_user"]:
+                self.add_error(
+                    "daily_max_visits_per_user",
+                    "Daily max visits per user cannot be greater than Max visits per user",
+                )
+
+            if cleaned_data["budget_per_visit"] > cleaned_data["total_budget"]:
+                self.add_error("budget_per_visit", "Budget per visit cannot be greater than Total budget")
+
+            if cleaned_data["end_date"] < now().date():
+                self.add_error("end_date", "Please enter the correct end date for this opportunity")
 
     def save(self, commit=True):
         organization = Organization.objects.filter(slug=self.org_slug).first()
