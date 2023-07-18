@@ -5,6 +5,12 @@ from commcare_connect.utils.db import BaseModel
 
 
 class CommCareApp(BaseModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="apps",
+        related_query_name="app",
+    )
     cc_domain = models.CharField(max_length=255)
     cc_app_id = models.CharField(max_length=50)
     name = models.CharField(max_length=255)
