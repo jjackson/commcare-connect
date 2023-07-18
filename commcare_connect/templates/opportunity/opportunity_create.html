@@ -9,8 +9,7 @@
 
     <form method="post">
       {% csrf_token %}
-      {{ form|crispy }}
-      <input class="btn btn-primary" type="submit">
+      {% crispy form %}
     </form>
 
   </div>
