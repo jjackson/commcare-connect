@@ -41,6 +41,7 @@ class OpportunityCreationForm(forms.ModelForm):
         }
 
     learn_app = forms.ChoiceField()
+    learn_app_description = forms.CharField(widget=forms.Textarea)
     deliver_app = forms.ChoiceField()
 
     def __init__(self, *args, **kwargs):
@@ -63,6 +64,7 @@ class OpportunityCreationForm(forms.ModelForm):
                 Field("budget_per_visit", wrapper_class="form-group col-md-6 mb-0"),
             ),
             Row(Field("learn_app")),
+            Row(Field("learn_app_description")),
             Row(Field("deliver_app")),
             Submit("submit", "Submit"),
         )
@@ -102,6 +104,7 @@ class OpportunityCreationForm(forms.ModelForm):
                     defaults={
                         "created_by": self.user.email,
                         "modified_by": self.user.email,
+                        "description": self.cleaned_data["learn_app_description"],
                     },
                 )
 
