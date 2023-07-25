@@ -14,16 +14,6 @@ SECRET_KEY = env(
 ALLOWED_HOSTS = ["localhost", "0.0.0.0", "127.0.0.1"] + env.list("DJANGO_ALLOWED_HOSTS", default=[])
 CSRF_TRUSTED_ORIGINS = ["https://*.127.0.0.1"] + env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
-# CACHES
-# ------------------------------------------------------------------------------
-# https://docs.djangoproject.com/en/dev/ref/settings/#caches
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "",
-    }
-}
-
 # EMAIL
 # ------------------------------------------------------------------------------
 # https://docs.djangoproject.com/en/dev/ref/settings/#email-backend

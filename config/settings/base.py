@@ -335,6 +335,20 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
 }
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": env("REDIS_CACHE_URL"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            # Mimicing memcache behavior.
+            # https://github.com/jazzband/django-redis#memcached-exceptions-behavior
+            "IGNORE_EXCEPTIONS": True,
+        },
+    }
+}
+
 # ------------------------------------------------------------------------------
 # CommCare Connect Settings...
 # ------------------------------------------------------------------------------
