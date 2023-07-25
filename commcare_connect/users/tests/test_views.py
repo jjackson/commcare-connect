@@ -9,7 +9,7 @@ from django.test import RequestFactory
 from django.urls import reverse
 
 from commcare_connect.users.forms import UserAdminChangeForm
-from commcare_connect.users.models import User
+from commcare_connect.users.models import Organization, User
 from commcare_connect.users.tests.factories import UserFactory
 from commcare_connect.users.views import UserRedirectView, UserUpdateView, user_detail_view
 
@@ -71,9 +71,21 @@ class TestUserRedirectView:
         view = UserRedirectView()
         request = rf.get("/fake-url")
         request.user = user
+        request.org = None
 
         view.request = request
         assert view.get_redirect_url() == f"/users/{user.pk}/"
+
+    def test_get_redirect_url_for_org_user(
+        self, organization: Organization, org_user_member: User, rf: RequestFactory
+    ):
+        view = UserRedirectView()
+        request = rf.get("/fake-url")
+        request.user = org_user_member
+        request.org = organization
+
+        view.request = request
+        assert view.get_redirect_url() == f"/a/{organization.slug}/opportunity/"
 
 
 class TestUserDetailView:

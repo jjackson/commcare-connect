@@ -16,6 +16,10 @@ need to edit some settings.
     # install requirements
     $ pip install -r requirements-dev.txt
 
+    # install git hooks
+    $ pre-commit install
+    $ pre-commit run -a
+
     # create env file and edit the settings as needed (or export settings directly)
     $ cp .env_template .env
 
@@ -29,6 +33,7 @@ need to edit some settings.
     $ inv build-js [-w]
 
     # run Django
+    $ ./manage.py migrate
     $ ./manage.py runserver
 
 ## Basic Commands
@@ -44,6 +49,10 @@ Some useful command are available via the `tasks.py` file:
 - To create a **superuser account**, use this command:
 
       $ python manage.py createsuperuser
+
+- To promote a user to superuser, use this command:
+
+      $ python manage.py promote_user_to_superuser <email>
 
 For convenience, you can keep your normal user logged in on Chrome and your superuser logged in on Firefox (or similar), so that you can see how the site behaves for both kinds of users.
 
