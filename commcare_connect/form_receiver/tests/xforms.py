@@ -1,3 +1,7 @@
+from xml2json import xml2json
+
+from commcare_connect.form_receiver.const import CCC_LEARN_XMLNS
+
 DEFAULT_XMLNS = "http://openrosa.org/formdesigner/67D08BE6-BBEE-452D-AE73-34DCC3A742C1"
 FORM_META = {
     "@xmlns": "http://openrosa.org/jr/xforms",
@@ -24,6 +28,18 @@ MOCK_FORM = {
     "server_modified_on": "2023-06-07T12:34:12.509392Z",
 }
 
+MODULE_XML_TEMPLATE = (
+    """<data>
+<module xmlns="%s" id="{id}">
+    <name>{name}</name>
+    <description>{description}</description>
+    <time_estimate>{time_estimate}</time_estimate>
+</module>
+</data>
+"""
+    % CCC_LEARN_XMLNS
+)
+
 
 def get_form(xmlns=DEFAULT_XMLNS, form_block=None):
     form = MOCK_FORM.copy()
@@ -31,3 +47,14 @@ def get_form(xmlns=DEFAULT_XMLNS, form_block=None):
     if form_block:
         form["form"].update(form_block)
     return form
+
+
+def get_learn_module(
+    module_id: str = "module1",
+    name: str = "Test Module",
+    description: str = "Test Description",
+    time_estimate: int = 2,
+):
+    xml = MODULE_XML_TEMPLATE.format(id=module_id, name=name, description=description, time_estimate=time_estimate)
+    _, module = xml2json(xml)
+    return module
