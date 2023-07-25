@@ -47,6 +47,9 @@
               </li>
               {% if request.user.is_authenticated %}
                 <li class="nav-item">
+                  <a class="nav-link {% active_link "opportunity:list" %}" href="{% url 'opportunity:list' request.org.slug %}">{% translate "Opportunities" %}</a>
+                </li>
+                <li class="nav-item">
                   <a class="nav-link {% active_link "users:detail" %}" href="{% url 'users:detail' request.user.pk %}">{% translate "My Profile" %}</a>
                 </li>
                 <li class="nav-item">
