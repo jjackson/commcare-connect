@@ -37,7 +37,7 @@ class UserRedirectView(LoginRequiredMixin, RedirectView):
     permanent = False
 
     def get_redirect_url(self):
-        membership = self.request.user.organizations.first()
+        membership = self.request.user.memberships.first()
         if membership:
             return reverse("opportunity:list", kwargs={"org_slug": membership.organization.slug})
         return reverse("users:detail", kwargs={"pk": self.request.user.pk})

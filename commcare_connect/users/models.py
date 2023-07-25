@@ -57,13 +57,11 @@ class UserOrganizationMembership(models.Model):
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
-        related_name="users",
-        related_query_name="user",
+        related_name="memberships",
     )
     user = models.ForeignKey(
         User,
         on_delete=models.DO_NOTHING,
-        related_name="organizations",
-        related_query_name="organization",
+        related_name="memberships",
     )
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.MEMBER)
