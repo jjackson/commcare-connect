@@ -31,7 +31,7 @@ def down(c: Context):
 def requirements(c: Context, upgrade=False):
     """Re-compile the pip requirements files"""
     args = " -U" if upgrade else ""
-    cmd_base = "pip-compile -q"
+    cmd_base = "pip-compile -q --resolver=backtracking"
     env = {"CUSTOM_COMPILE_COMMAND": "inv requirements"}
     c.run(f"{cmd_base} --resolver=backtracking requirements/base.in{args}", env=env)
     c.run(f"{cmd_base} --resolver=backtracking requirements/dev.in{args}", env=env)
