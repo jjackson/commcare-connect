@@ -29,6 +29,7 @@ need to edit some settings.
     $ inv build-js [-w]
 
     # run Django
+    $ ./manage.py migrate
     $ ./manage.py runserver
 
 ## Basic Commands

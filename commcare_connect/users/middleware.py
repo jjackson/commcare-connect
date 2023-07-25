@@ -14,11 +14,13 @@ def _get_organization(request, view_kwargs):
 
 def _get_org_membership(request):
     if not hasattr(request, '_cached_org_membership'):
-        org = request.organization
-        try:
-            membership = Membership.objects.get(organization=org, user=request.user) if org else None
-        except Membership.DoesNotExist:
-            membership = None
+        org = request.org
+        membership = None
+        if org:
+            try:
+                membership = Membership.objects.get(organization=org, user=request.user) if org else None
+            except Membership.DoesNotExist:
+                pass
         request._cached_org_membership = membership
     return request._cached_org_membership
 

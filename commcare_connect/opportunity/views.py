@@ -9,7 +9,7 @@ from commcare_connect.utils.commcarehq_api import get_applications_for_user
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
-        return self.request.user.memberships.filter(organization__slug=self.kwargs.get("org_slug")).exists()
+        return self.request.org_membership is not None
 
 
 class OpportunityList(OrganizationUserMixin, ListView):
@@ -43,9 +43,6 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
         kwargs["user"] = self.request.user
         kwargs["org_slug"] = self.kwargs.get("org_slug")
         return kwargs
-
-    def test_func(self):
-        return self.request.user.memberships.filter(organization__slug=self.kwargs.get("org_slug")).exists()
 
 
 class OpportunityEdit(OrganizationUserMixin, UpdateView):

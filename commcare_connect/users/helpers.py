@@ -12,5 +12,5 @@ def get_organization_for_request(request, view_kwargs):
         except Organization.DoesNotExist:
             return None
 
-    membership = request.user.memberships.first()
+    membership = request.user.memberships.select_related("organization").first()
     return membership.organization if membership else None
