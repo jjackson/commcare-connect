@@ -9,6 +9,11 @@ ASSESSMENT_JSONPATH = parse("assessment where @xmlns")
 
 
 def process_xform(domain: str, app_id: str, form: dict):
+    """Process a form received from CommCare HQ.
+
+    :param domain: The domain of the form.
+    :param app_id: The ID of the application the form belongs to.
+    :param form: The JSON form data."""
     processors = [
         (LEARN_MODULE_JSONPATH, process_learn_modules),
         (ASSESSMENT_JSONPATH, process_assessments),
@@ -22,9 +27,15 @@ def process_xform(domain: str, app_id: str, form: dict):
             raise ProcessingError from e
 
 
-def process_learn_modules(domain, app_id, modules):
+def process_learn_modules(domain: str, app_id: str, modules: list[dict]):
+    """Process learn modules from a form received from CommCare HQ.
+
+    :param modules: A list of learn module form blocks."""
     pass
 
 
-def process_assessments(domain, app_id, assessments):
+def process_assessments(domain: str, app_id: str, assessments: list[dict]):
+    """Process assessments from a form received from CommCare HQ.
+
+    :param assessments: A list of assessment form blocks."""
     pass
