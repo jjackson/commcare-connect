@@ -33,6 +33,7 @@ coverage==7.2.7
     # via -r requirements/dev.in
 decorator==5.1.1
     # via
+    #   -c requirements/base.txt
     #   ipdb
     #   ipython
 dill==0.3.7
