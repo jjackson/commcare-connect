@@ -15,22 +15,24 @@ asgiref==3.7.2
 async-timeout==4.0.2
     # via redis
 attrs==23.1.0
-    # via jsonschema
-billiard==3.6.4.0
+    # via
+    #   jsonschema
+    #   referencing
+billiard==4.1.0
     # via celery
-celery==5.2.7
+celery==5.3.1
     # via
     #   -r requirements/base.in
     #   django-celery-beat
-certifi==2023.5.7
+certifi==2023.7.22
     # via requests
 cffi==1.15.1
     # via
     #   argon2-cffi-bindings
     #   cryptography
-charset-normalizer==3.1.0
+charset-normalizer==3.2.0
     # via requests
-click==8.1.3
+click==8.1.6
     # via
     #   celery
     #   click-didyoumean
@@ -40,17 +42,17 @@ click-didyoumean==0.3.0
     # via celery
 click-plugins==1.1.1
     # via celery
-click-repl==0.2.0
+click-repl==0.3.0
     # via celery
 crispy-bootstrap5==0.7
     # via -r requirements/base.in
 cron-descriptor==1.4.0
     # via django-celery-beat
-cryptography==41.0.0
+cryptography==41.0.2
     # via pyjwt
 defusedxml==0.7.1
     # via python3-openid
-django==4.2.1
+django==4.2.3
     # via
     #   -r requirements/base.in
     #   crispy-bootstrap5
@@ -60,13 +62,14 @@ django==4.2.1
     #   django-crispy-forms
     #   django-model-utils
     #   django-redis
+    #   django-timezone-field
     #   djangorestframework
     #   drf-spectacular
 django-allauth==0.54.0
     # via -r requirements/base.in
 django-celery-beat==2.5.0
     # via -r requirements/base.in
-django-cors-headers==4.0.0
+django-cors-headers==4.2.0
     # via -r requirements/base.in
 django-crispy-forms==2.0
     # via
@@ -76,15 +79,15 @@ django-environ==0.10.0
     # via -r requirements/base.in
 django-model-utils==4.3.1
     # via -r requirements/base.in
-django-redis==5.2.0
+django-redis==5.3.0
     # via -r requirements/base.in
-django-timezone-field==5.0
+django-timezone-field==5.1
     # via django-celery-beat
 djangorestframework==3.14.0
     # via
     #   -r requirements/base.in
     #   drf-spectacular
-drf-spectacular==0.26.2
+drf-spectacular==0.26.4
     # via -r requirements/base.in
 hiredis==2.2.3
     # via -r requirements/base.in
@@ -92,59 +95,68 @@ idna==3.4
     # via requests
 inflection==0.5.1
     # via drf-spectacular
-jsonschema==4.17.3
+jsonschema==4.18.4
     # via drf-spectacular
-kombu==5.2.4
+jsonschema-specifications==2023.7.1
+    # via jsonschema
+kombu==5.3.1
     # via celery
 oauthlib==3.2.2
     # via requests-oauthlib
-pillow==9.5.0
+pillow==10.0.0
     # via -r requirements/base.in
-prompt-toolkit==3.0.38
+prompt-toolkit==3.0.39
     # via click-repl
 pycparser==2.21
     # via cffi
-pyjwt[crypto]==2.7.0
+pyjwt[crypto]==2.8.0
     # via django-allauth
-pyrsistent==0.19.3
-    # via jsonschema
-python-crontab==2.7.1
+python-crontab==3.0.0
     # via django-celery-beat
 python-dateutil==2.8.2
-    # via python-crontab
+    # via
+    #   celery
+    #   python-crontab
 python-slugify==8.0.1
     # via -r requirements/base.in
 python3-openid==3.2.0
     # via django-allauth
 pytz==2023.3
     # via
-    #   celery
     #   django-timezone-field
     #   djangorestframework
-pyyaml==6.0
+pyyaml==6.0.1
     # via drf-spectacular
-redis==4.5.5
+redis==4.6.0
     # via
     #   -r requirements/base.in
     #   django-redis
+referencing==0.30.0
+    # via
+    #   jsonschema
+    #   jsonschema-specifications
 requests==2.31.0
     # via
     #   django-allauth
     #   requests-oauthlib
 requests-oauthlib==1.3.1
     # via django-allauth
-six==1.16.0
+rpds-py==0.9.2
     # via
-    #   click-repl
-    #   python-dateutil
+    #   jsonschema
+    #   referencing
+six==1.16.0
+    # via python-dateutil
 sqlparse==0.4.4
     # via django
 text-unidecode==1.3
     # via python-slugify
-typing-extensions==4.6.2
+typing-extensions==4.7.1
     # via asgiref
 tzdata==2023.3
-    # via django-celery-beat
+    # via
+    #   celery
+    #   django-celery-beat
 uritemplate==4.1.1
     # via drf-spectacular
 urllib3==1.26.16
@@ -158,5 +170,5 @@ vine==5.0.0
     #   kombu
 wcwidth==0.2.6
     # via prompt-toolkit
-whitenoise==6.4.0
+whitenoise==6.5.0
     # via -r requirements/base.in
