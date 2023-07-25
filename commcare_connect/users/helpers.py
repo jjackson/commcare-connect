@@ -8,8 +8,9 @@ def get_organization_for_request(request, view_kwargs):
     org_slug = view_kwargs.get('org_slug', None)
     if org_slug:
         try:
-            return Organization.objects.get(slug=org_slug, user__user=request.user)
+            return Organization.objects.get(slug=org_slug, memberships__user=request.user)
         except Organization.DoesNotExist:
             return None
 
-    return request.user.organizations.first()
+    membership = request.user.memberships.first()
+    return membership.organization if membership else None
