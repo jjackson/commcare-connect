@@ -4,7 +4,7 @@ register = template.Library()
 
 
 @register.simple_tag(takes_context=True)
-def active_link(context, viewnames, css_class='active', inactive_class='', namespace=None, *args, **kwargs):
+def active_link(context, viewnames, css_class="active", inactive_class="", namespace=None, *args, **kwargs):
     """
     Renders the given CSS class if the request path matches the path of the view.
     :param context: The context where the tag was called. Used to access the request object.
@@ -14,14 +14,14 @@ def active_link(context, viewnames, css_class='active', inactive_class='', names
     :param namespace: The namespace of the view or views. This can also be provided in the view name.
     :return:
     """
-    request = context.get('request')
+    request = context.get("request")
     if request is None:
         # Can't work without the request object.
-        return ''
+        return ""
     current_url_name = request.resolver_match.url_name
     namespaces = request.resolver_match.namespaces
     active = False
-    views = viewnames.split('||')
+    views = viewnames.split("||")
     for view_name in views:
         view_namespace = namespace
         if ":" in view_name:

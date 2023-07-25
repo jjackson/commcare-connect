@@ -6,14 +6,14 @@ from .models import UserOrganizationMembership as Membership
 
 
 def _get_organization(request, view_kwargs):
-    if not hasattr(request, '_cached_org'):
+    if not hasattr(request, "_cached_org"):
         team = get_organization_for_request(request, view_kwargs)
         request._cached_org = team
     return request._cached_org
 
 
 def _get_org_membership(request):
-    if not hasattr(request, '_cached_org_membership'):
+    if not hasattr(request, "_cached_org_membership"):
         org = request.org
         membership = None
         if org:

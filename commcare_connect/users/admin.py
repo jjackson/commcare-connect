@@ -56,4 +56,3 @@ class OrganizationAdmin(admin.ModelAdmin):
     search_fields = ["name"]
     ordering = ["name"]
     inlines = [UserOrganizationMembershipInline]
-
