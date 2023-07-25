@@ -15,6 +15,7 @@ class CommCareApp(BaseModel):
     cc_app_id = models.CharField(max_length=50)
     name = models.CharField(max_length=255)
     description = models.TextField()
+    passing_score = models.IntegerField(null=True)
 
     def __str__(self):
         return self.name
