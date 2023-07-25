@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from xml2json import xml2json
 
 from commcare_connect.form_receiver.const import CCC_LEARN_XMLNS
@@ -40,9 +42,18 @@ MODULE_XML_TEMPLATE = (
     % CCC_LEARN_XMLNS
 )
 
+ASSESSMENT_XML_TEMPLATE = (
+    """<data>
+<assessment xmlns="%s" id="{id}">
+    <user_score>{score}</user_score>
+</assessment>
+</data>"""
+    % CCC_LEARN_XMLNS
+)
+
 
 def get_form(xmlns=DEFAULT_XMLNS, form_block=None):
-    form = MOCK_FORM.copy()
+    form = deepcopy(MOCK_FORM)
     form["form"]["@xmlns"] = xmlns
     if form_block:
         form["form"].update(form_block)
@@ -56,5 +67,14 @@ def get_learn_module(
     time_estimate: int = 2,
 ):
     xml = MODULE_XML_TEMPLATE.format(id=module_id, name=name, description=description, time_estimate=time_estimate)
+    _, module = xml2json(xml)
+    return module
+
+
+def get_assessment(
+    assessment_id: str = "assessment1",
+    score: int = 75,
+):
+    xml = ASSESSMENT_XML_TEMPLATE.format(id=assessment_id, score=score)
     _, module = xml2json(xml)
     return module
