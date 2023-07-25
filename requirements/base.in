@@ -4,6 +4,7 @@ argon2-cffi
 whitenoise
 redis
 hiredis
+httpx[http2]
 celery
 django-celery-beat
 
