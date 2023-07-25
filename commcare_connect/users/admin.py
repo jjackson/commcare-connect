@@ -44,14 +44,16 @@ class UserAdmin(auth_admin.UserAdmin):
     )
 
 
+class UserOrganizationMembershipInline(admin.TabularInline):
+    list_display = ["organization", "user", "role"]
+    model = UserOrganizationMembership
+
+
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
     form = OrganizationCreationForm
     list_display = ["name", "created_by"]
     search_fields = ["name"]
     ordering = ["name"]
+    inlines = [UserOrganizationMembershipInline]
 
-
-@admin.register(UserOrganizationMembership)
-class UserOrganizationMembershipAdmin(admin.ModelAdmin):
-    list_display = ["organization", "user", "role"]
