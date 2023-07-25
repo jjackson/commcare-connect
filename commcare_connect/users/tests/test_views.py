@@ -71,6 +71,7 @@ class TestUserRedirectView:
         view = UserRedirectView()
         request = rf.get("/fake-url")
         request.user = user
+        request.org = None
 
         view.request = request
         assert view.get_redirect_url() == f"/users/{user.pk}/"
