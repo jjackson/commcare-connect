@@ -1,4 +1,5 @@
 import pytest
+from rest_framework.test import APIRequestFactory
 
 from commcare_connect.users.models import Organization, User
 from commcare_connect.users.tests.factories import OrgWithUsersFactory, UserFactory
@@ -7,6 +8,13 @@ from commcare_connect.users.tests.factories import OrgWithUsersFactory, UserFact
 @pytest.fixture(autouse=True)
 def media_storage(settings, tmpdir):
     settings.MEDIA_ROOT = tmpdir.strpath
+
+
+@pytest.fixture()
+def api_rf() -> APIRequestFactory:
+    """APIRequestFactory instance"""
+
+    return APIRequestFactory()
 
 
 @pytest.fixture
