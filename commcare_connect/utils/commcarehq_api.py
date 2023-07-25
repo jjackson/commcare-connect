@@ -8,6 +8,8 @@ from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.utils import timezone
 
+from commcare_connect.cache import quickcache
+
 
 def refresh_access_token(user, force=False):
     social_app = SocialApp.objects.filter(provider="commcarehq").first()
@@ -39,6 +41,7 @@ def refresh_access_token(user, force=False):
     return social_token
 
 
+@quickcache(["user.pk"], timeout=60 * 60)
 def get_domains_for_user(user):
     social_token = refresh_access_token(user)
     response = httpx.get(
@@ -50,6 +53,7 @@ def get_domains_for_user(user):
     return domains
 
 
+@quickcache(["user.pk"], timeout=60 * 60)
 def get_applications_for_user(user):
     social_token = refresh_access_token(user)
     domains = get_domains_for_user(user)
