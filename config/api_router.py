@@ -1,6 +1,8 @@
 from django.conf import settings
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter, SimpleRouter
 
+from commcare_connect.form_receiver.views import FormReceiver
 from commcare_connect.opportunity.api.views import OpportunityViewSet
 from commcare_connect.users.api.views import UserViewSet
 
@@ -13,4 +15,7 @@ router.register("users", UserViewSet)
 router.register("opportunity", OpportunityViewSet)
 
 app_name = "api"
-urlpatterns = router.urls
+urlpatterns = [
+    path("", include(router.urls)),
+    path("receiver/", FormReceiver.as_view(), name="receiver"),
+]
