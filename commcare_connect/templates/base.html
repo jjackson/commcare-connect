@@ -46,9 +46,11 @@
                 <a class="nav-link {% active_link "about" %}" href="{% url 'about' %}">About</a>
               </li>
               {% if request.user.is_authenticated %}
+                {% if request.org %}
                 <li class="nav-item">
                   <a class="nav-link {% active_link "list || create || edit" namespace='opportunity' %}" href="{% url 'opportunity:list' request.org.slug %}">{% translate "Opportunities" %}</a>
                 </li>
+                {% endif %}
                 <li class="nav-item">
                   <a class="nav-link {% active_link "users:detail" %}" href="{% url 'users:detail' request.user.pk %}">{% translate "My Profile" %}</a>
                 </li>
