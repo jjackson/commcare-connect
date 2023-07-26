@@ -5,7 +5,8 @@ whitenoise
 redis
 hiredis
 celery
-django-celery-beat
+jsonpath-ng
+xml2json @ git+https://github.com/dimagi/xml2json@041b1ef
 
 # Django
 # ------------------------------------------------------------------------------
@@ -13,6 +14,7 @@ django
 django-environ
 django-model-utils
 django-allauth
+django-celery-beat
 django-crispy-forms
 crispy-bootstrap5
 django-redis
