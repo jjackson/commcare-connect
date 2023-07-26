@@ -42,6 +42,35 @@ Some useful command are available via the `tasks.py` file:
 
     $ inv -l
 
+### Setting up auth with CommCare HQ
+
+**Expose your local service to the internet**
+
+- Install loca.lt
+  - `npm install -g localtunnel`
+- Run `loca.lt --port 8000 --subdomain [my-unique-subdomain]` and copy the generated URL
+- Update your `.env` file with the host:
+
+      DJANGO_ALLOWED_HOSTS=[my-unique-subdomain].loca.lt
+
+**Create an OAuth2 application on CommCare HQ**
+
+- Navigate to https://staging.commcarehq.org/oauth/applications/
+- Create a new application with the following settings:
+  - Client Type: Confidential
+  - Authorization Grant Type: Authorization Code
+  - Redirect URIs: https://[my-unique-subdomain].loca.lt/accounts/commcarehq/login/callback/
+  - Pkce required: False
+- Copy the Client ID and Client Secret
+- Create a new SocialApp locally at http://localhost:8000/admin/socialaccount/socialapp/
+
+**Test the OAuth2 flow**
+
+- Navigate to http://[my-unique-subdomain].loca.lt/accounts/login/
+- Click the "Log in with CommCare HQ" button
+- You should be redirected to CommCare HQ to log in
+- After logging in, you should be redirected back to the app and logged in
+
 ### Setting Up Your Users
 
 - To create a **normal user account**, just go to Sign Up and fill out the form. Once you submit it, you'll see a "Verify Your E-mail Address" page. Go to your console to see a simulated email verification message. Copy the link into your browser. Now the user's email should be verified and ready to go.
