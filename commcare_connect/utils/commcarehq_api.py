@@ -50,6 +50,12 @@ def get_applications_for_user(user):
     domains = get_domains_for_user(user)
     applications = []
 
+    def _get_name(block: dict):
+        name_data = block.get("name", {})
+        for lang in ["en"] + list(name_data):
+            if lang in name_data:
+                return name_data[lang]
+
     for domain in domains:
         response = requests.get(
             f"{settings.COMMCARE_HQ_URL}/a/{domain}/api/v0.5/application/",
@@ -57,6 +63,18 @@ def get_applications_for_user(user):
         )
         data = response.json()
         for application in data.get("objects", []):
-            applications.append({"id": application.get("id"), "name": application.get("name"), "domain": domain})
+            forms = [
+                {
+                    "module": _get_name(module),
+                    "id": form.get("unique_id"),
+                    "name": _get_name(form),
+                    "xmlns": form.get("xmlns"),
+                }
+                for module in application.get("modules", [])
+                for form in module.get("forms", [])
+            ]
+            applications.append(
+                {"id": application.get("id"), "name": application.get("name"), "domain": domain, "forms": forms}
+            )
 
     return applications
