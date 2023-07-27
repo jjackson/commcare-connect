@@ -15,10 +15,10 @@
     <script>
       window.onload = function () {
         const applications = {{ applications|safe }};
-        const deliver_app_select = document.getElementById("id_deliver_app");
+        const deliver_app_select = document.getElementById("deliver_app_select");
 
         deliver_app_select.addEventListener("change", populateDeliverFormSelect);
-        const deliver_form_select = document.getElementById("id_deliver_form");
+        const deliver_form_select = document.getElementById("deliver_form_select");
         populateDeliverFormSelect();
 
         function populateDeliverFormSelect() {
