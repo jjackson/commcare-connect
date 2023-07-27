@@ -78,7 +78,9 @@ class OpportunityCreationForm(forms.ModelForm):
         self.fields["learn_app_description"] = forms.CharField(widget=forms.Textarea)
         self.fields["learn_app_passing_score"] = forms.IntegerField(max_value=100, min_value=0)
         self.fields["deliver_app"] = forms.ChoiceField(choices=app_choices)
+        self.fields["deliver_app"].widget.attrs.update({"id": "deliver_app_select"})
         self.fields["deliver_form"] = forms.ChoiceField(choices=form_choices)
+        self.fields["deliver_form"].widget.attrs.update({"id": "deliver_form_select"})
 
     def clean(self):
         cleaned_data = super().clean()
