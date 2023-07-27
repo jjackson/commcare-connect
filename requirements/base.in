@@ -4,9 +4,11 @@ argon2-cffi
 whitenoise
 redis
 hiredis
+httpx[http2]
 celery
 jsonpath-ng
 xml2json @ git+https://github.com/dimagi/xml2json@041b1ef
+quickcache
 
 # Django
 # ------------------------------------------------------------------------------

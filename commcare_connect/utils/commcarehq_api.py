@@ -1,20 +1,25 @@
+import asyncio
 import datetime
+import itertools
 
-import requests
+import httpx
 from allauth.socialaccount.models import SocialAccount, SocialApp, SocialToken
+from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.utils import timezone
 
+from commcare_connect.cache import quickcache
 
-def refresh_access_token(user):
+
+def refresh_access_token(user, force=False):
     social_app = SocialApp.objects.filter(provider="commcarehq").first()
     social_acc = SocialAccount.objects.filter(user=user).first()
     social_token = SocialToken.objects.filter(account=social_acc).first()
 
-    if social_token.expires_at > timezone.now():
+    if not force and social_token.expires_at > timezone.now():
         return social_token
 
-    response = requests.post(
+    response = httpx.post(
         f"{settings.COMMCARE_HQ_URL}/oauth/token/",
         data={
             "grant_type": "refresh_token",
@@ -23,8 +28,10 @@ def refresh_access_token(user):
             "refresh_token": social_token.token_secret,
         },
     )
-    data = response.json()
+    if response.status_code != 200:
+        raise Exception(f"Failed to refresh token: {response.text}")
 
+    data = response.json()
     if data.get("access_token", ""):
         social_token.token = data["access_token"]
         social_token.token_secret = data["refresh_token"]
@@ -34,9 +41,10 @@ def refresh_access_token(user):
     return social_token
 
 
+@quickcache(["user.pk"], timeout=60 * 60)
 def get_domains_for_user(user):
     social_token = refresh_access_token(user)
-    response = requests.get(
+    response = httpx.get(
         f"{settings.COMMCARE_HQ_URL}/api/v0.5/user_domains/",
         headers={"Authorization": f"Bearer {social_token}"},
     )
@@ -45,10 +53,29 @@ def get_domains_for_user(user):
     return domains
 
 
+@quickcache(["user.pk"], timeout=60 * 60)
 def get_applications_for_user(user):
     social_token = refresh_access_token(user)
     domains = get_domains_for_user(user)
+    return _get_applications_for_domains(social_token, domains)
+
+
+@async_to_sync
+async def _get_applications_for_domains(social_token, domains):
+    async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {social_token}"}) as client:
+        tasks = []
+        for domain in domains:
+            tasks.append(asyncio.ensure_future(_get_commcare_app_json(client, domain)))
+
+        domain_apps = await asyncio.gather(*tasks)
+    applications = list(itertools.chain.from_iterable(domain_apps))
+    return applications
+
+
+async def _get_commcare_app_json(client, domain):
     applications = []
+    response = await client.get(f"{settings.COMMCARE_HQ_URL}/a/{domain}/api/v0.5/application/")
+    data = response.json()
 
     def _get_name(block: dict):
         name_data = block.get("name", {})
@@ -56,25 +83,6 @@ def get_applications_for_user(user):
             if lang in name_data:
                 return name_data[lang]
 
-    for domain in domains:
-        response = requests.get(
-            f"{settings.COMMCARE_HQ_URL}/a/{domain}/api/v0.5/application/",
-            headers={"Authorization": f"Bearer {social_token}"},
-        )
-        data = response.json()
-        for application in data.get("objects", []):
-            forms = [
-                {
-                    "module": _get_name(module),
-                    "id": form.get("unique_id"),
-                    "name": _get_name(form),
-                    "xmlns": form.get("xmlns"),
-                }
-                for module in application.get("modules", [])
-                for form in module.get("forms", [])
-            ]
-            applications.append(
-                {"id": application.get("id"), "name": application.get("name"), "domain": domain, "forms": forms}
-            )
-
+    for application in data.get("objects", []):
+        applications.append({"id": application.get("id"), "name": application.get("name"), "domain": domain})
     return applications
