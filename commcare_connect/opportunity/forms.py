@@ -3,7 +3,7 @@ from crispy_forms.layout import Field, Row, Submit
 from django import forms
 from django.utils.timezone import now
 
-from commcare_connect.opportunity.models import CommCareApp, Opportunity
+from commcare_connect.opportunity.models import CommCareApp, DeliverForm, Opportunity
 from commcare_connect.users.models import Organization
 
 
@@ -40,11 +40,6 @@ class OpportunityCreationForm(forms.ModelForm):
             "end_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
         }
 
-    learn_app = forms.ChoiceField()
-    learn_app_description = forms.CharField(widget=forms.Textarea)
-    learn_app_passing_score = forms.IntegerField(max_value=100, min_value=0)
-    deliver_app = forms.ChoiceField()
-
     def __init__(self, *args, **kwargs):
         self.applications = kwargs.pop("applications", [])
         self.user = kwargs.pop("user", {})
@@ -68,12 +63,22 @@ class OpportunityCreationForm(forms.ModelForm):
             Row(Field("learn_app_description")),
             Row(Field("learn_app_passing_score")),
             Row(Field("deliver_app")),
+            Row(Field("deliver_form")),
             Submit("submit", "Submit"),
         )
 
-        choices = [(app["id"], app["name"]) for app in self.applications]
-        self.fields["learn_app"] = forms.ChoiceField(choices=choices)
-        self.fields["deliver_app"] = forms.ChoiceField(choices=choices)
+        app_choices = []
+        form_choices = []
+        for app in self.applications:
+            app_choices.append((app["id"], app["name"]))
+            for form in app["forms"]:
+                form_choices.append((form["id"], form["name"]))
+
+        self.fields["learn_app"] = forms.ChoiceField(choices=app_choices)
+        self.fields["learn_app_description"] = forms.CharField(widget=forms.Textarea)
+        self.fields["learn_app_passing_score"] = forms.IntegerField(max_value=100, min_value=0)
+        self.fields["deliver_app"] = forms.ChoiceField(choices=app_choices)
+        self.fields["deliver_form"] = forms.ChoiceField(choices=form_choices)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -96,6 +101,8 @@ class OpportunityCreationForm(forms.ModelForm):
 
     def save(self, commit=True):
         organization = Organization.objects.filter(slug=self.org_slug).first()
+        deliver_form = DeliverForm()
+
         for app in self.applications:
             if app["id"] == self.cleaned_data["learn_app"]:
                 self.instance.learn_app, _ = CommCareApp.objects.get_or_create(
@@ -123,7 +130,19 @@ class OpportunityCreationForm(forms.ModelForm):
                     },
                 )
 
+                for form in app["forms"]:
+                    if form["id"] == self.cleaned_data["deliver_form"]:
+                        deliver_form.xmlns = form["xmlns"]
+                        deliver_form.name = form["name"]["en"]
+                        deliver_form.app = self.instance.deliver_app
+
         self.instance.created_by = self.user.email
         self.instance.modified_by = self.user.email
         self.instance.organization = organization
-        return super().save(commit=commit)
+        super().save(commit=commit)
+
+        deliver_form.opportunity = self.instance
+        deliver_form.clean()
+        deliver_form.save()
+
+        return self.instance
