@@ -5,7 +5,9 @@
 #    inv requirements
 #
 anyio==3.7.1
-    # via watchfiles
+    # via
+    #   -c requirements/base.txt
+    #   watchfiles
 asgiref==3.7.2
     # via
     #   -c requirements/base.txt
@@ -48,6 +50,7 @@ django-debug-toolbar==4.1.0
     # via -r requirements/dev.in
 exceptiongroup==1.1.2
     # via
+    #   -c requirements/base.txt
     #   anyio
     #   pytest
 executing==1.2.0
@@ -173,7 +176,9 @@ six==1.16.0
     #   asttokens
     #   python-dateutil
 sniffio==1.3.0
-    # via anyio
+    # via
+    #   -c requirements/base.txt
+    #   anyio
 sqlparse==0.4.4
     # via
     #   -c requirements/base.txt

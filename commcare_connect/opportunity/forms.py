@@ -100,10 +100,10 @@ class OpportunityCreationForm(forms.ModelForm):
             if app["id"] == self.cleaned_data["learn_app"]:
                 self.instance.learn_app, _ = CommCareApp.objects.get_or_create(
                     cc_app_id=app["id"],
-                    name=app["name"],
                     cc_domain=app["domain"],
                     organization=organization,
                     defaults={
+                        "name": app["name"],
                         "created_by": self.user.email,
                         "modified_by": self.user.email,
                         "description": self.cleaned_data["learn_app_description"],
@@ -114,10 +114,10 @@ class OpportunityCreationForm(forms.ModelForm):
             if app["id"] == self.cleaned_data["deliver_app"]:
                 self.instance.deliver_app, _ = CommCareApp.objects.get_or_create(
                     cc_app_id=app["id"],
-                    name=app["name"],
                     cc_domain=app["domain"],
                     organization=organization,
                     defaults={
+                        "name": app["name"],
                         "created_by": self.user.email,
                         "modified_by": self.user.email,
                     },
