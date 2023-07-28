@@ -12,10 +12,12 @@
       {% crispy form %}
     </form>
 
+    {{ applications|json_script:"applications-data" }}
     <script>
       window.onload = function () {
-        const applications = {{ applications|safe }};
+        const applications = JSON.parse(document.getElementById("applications-data").textContent);
         const deliver_app_select = document.getElementById("deliver_app_select");
+        if (!deliver_app_select) return
 
         deliver_app_select.addEventListener("change", populateDeliverFormSelect);
         const deliver_form_select = document.getElementById("deliver_form_select");
