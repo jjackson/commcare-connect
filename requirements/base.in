@@ -6,6 +6,8 @@ redis
 hiredis
 celery
 django-celery-beat
+django-oauth-toolkit
+
 
 # Django
 # ------------------------------------------------------------------------------
