@@ -77,6 +77,7 @@ THIRD_PARTY_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
     "drf_spectacular",
+    "oauth2_provider",
 ]
 
 LOCAL_APPS = [
@@ -317,6 +318,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.TokenAuthentication",
+        "oauth2_provider.contrib.rest_framework.OAuth2Authentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -337,3 +339,9 @@ SPECTACULAR_SETTINGS = {
 # CommCare Connect Settings...
 # ------------------------------------------------------------------------------
 COMMCARE_HQ_URL = "https://www.commcarehq.org"
+
+OAUTH2_PROVIDER = {
+    "RESOURCE_SERVER_INTROSPECTION_URL": f"https://{env('connect_hostname')}/o/introspect/",
+
+    "RESOURCE_SERVER_INTROSPECTION_CREDENTIALS": (env("rs_client_id"), env("rs_client_secret"),
+}
