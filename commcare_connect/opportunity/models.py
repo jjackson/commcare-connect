@@ -50,3 +50,23 @@ class Opportunity(BaseModel):
 
     def __str__(self):
         return self.name
+
+
+class DeliverForm(models.Model):
+    app = models.ForeignKey(
+        CommCareApp,
+        on_delete=models.CASCADE,
+        related_name="deliver_form",
+        related_query_name="deliver_form",
+    )
+    opportunity = models.ForeignKey(
+        Opportunity,
+        on_delete=models.CASCADE,
+        related_name="deliver_form",
+        related_query_name="deliver_form",
+    )
+    name = models.CharField(max_length=255)
+    xmlns = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.name
