@@ -1,6 +1,6 @@
 from django.db import models
 
-from commcare_connect.users.models import Organization
+from commcare_connect.users.models import ConnectUser, Organization
 from commcare_connect.utils.db import BaseModel
 
 
@@ -70,3 +70,18 @@ class DeliverForm(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class OpportunityAccess(models.Model):
+    user = models.OneToOneField(
+        ConnectUser,
+        on_delete=models.CASCADE,
+        related_name="claims",
+        related_query_name="claim",
+    )
+    opportunity = models.ForeignKey(
+        Opportunity,
+        on_delete=models.CASCADE,
+        related_name="claims",
+        related_query_name="claim",
+    )
