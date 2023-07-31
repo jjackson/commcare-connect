@@ -84,5 +84,17 @@ async def _get_commcare_app_json(client, domain):
                 return name_data[lang]
 
     for application in data.get("objects", []):
-        applications.append({"id": application.get("id"), "name": application.get("name"), "domain": domain})
+        forms = [
+            {
+                "module": _get_name(module),
+                "id": form.get("unique_id"),
+                "name": _get_name(form),
+                "xmlns": form.get("xmlns"),
+            }
+            for module in application.get("modules", [])
+            for form in module.get("forms", [])
+        ]
+        applications.append(
+            {"id": application.get("id"), "name": application.get("name"), "domain": domain, "forms": forms}
+        )
     return applications
