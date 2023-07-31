@@ -69,3 +69,15 @@ class UserOrganizationMembership(models.Model):
         related_name="memberships",
     )
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.MEMBER)
+
+
+class ConnectUser(BaseModel):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="connect_user",
+        related_query_name="connect_user",
+        primary_key=True,
+    )
+    remote_id = models.IntegerField()
+    phone = models.CharField(max_length=25)
