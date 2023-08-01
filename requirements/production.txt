@@ -38,7 +38,7 @@ django==4.2.3
     #   -c requirements/base.txt
     #   django-anymail
     #   django-storages
-django-anymail[amazon-ses]==10.0
+django-anymail[amazon-ses]==10.1
     # via -r requirements/production.in
 django-storages[boto3]==1.13.2
     # via -r requirements/production.in
@@ -80,10 +80,6 @@ sqlparse==0.4.4
     # via
     #   -c requirements/base.txt
     #   django
-typing-extensions==4.7.1
-    # via
-    #   -c requirements/base.txt
-    #   asgiref
 urllib3==1.26.16
     # via
     #   -c requirements/base.txt
