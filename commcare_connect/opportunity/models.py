@@ -76,38 +76,26 @@ class LearnModule(models.Model):
     app = models.ForeignKey(
         CommCareApp,
         on_delete=models.CASCADE,
-        related_name="learn_module",
-        related_query_name="learn_module",
+        related_name="learn_modules",
     )
     slug = models.SlugField()
     name = models.CharField(max_length=255)
-    description = models.CharField(max_length=255)
-    time_estimate = models.IntegerField()
+    description = models.TextField()
+    time_estimate = models.IntegerField(help_text="Estimated hours to complete the module")
 
 
-class UserModule(models.Model):
+class CompletedModule(models.Model):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="user_modules",
-        related_query_name="user_module",
+        related_name="completed_modules",
     )
-    module = models.ForeignKey(
-        LearnModule,
-        on_delete=models.PROTECT,
-        related_name="user_modules",
-        related_query_name="user_module",
-    )
-    opportunity = models.ForeignKey(
-        Opportunity,
-        on_delete=models.PROTECT,
-        related_name="user_modules",
-        related_query_name="user_module",
-    )
-    date_completed = models.DateTimeField(blank=True, null=True)
-    duration = models.TimeField()
-    cc_form_id = models.CharField(max_length=25)
-    app_build_id = models.CharField(max_length=25)
+    module = models.ForeignKey(LearnModule, on_delete=models.PROTECT)
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
+    date = models.DateTimeField()
+    duration = models.DurationField()
+    xform_id = models.CharField(max_length=50)
+    app_build_id = models.CharField(max_length=50)
     app_build_version = models.IntegerField()
 
 
@@ -116,24 +104,13 @@ class Assessment(models.Model):
         User,
         on_delete=models.CASCADE,
         related_name="assessments",
-        related_query_name="assessment",
     )
-    app = models.ForeignKey(
-        CommCareApp,
-        on_delete=models.PROTECT,
-        related_name="assessments",
-        related_query_name="assessment",
-    )
-    opportunity = models.ForeignKey(
-        Opportunity,
-        on_delete=models.PROTECT,
-        related_name="assessments",
-        related_query_name="assessment",
-    )
-    date_accomplished = models.DateTimeField(blank=True, null=True)
+    app = models.ForeignKey(CommCareApp, on_delete=models.PROTECT)
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
+    date = models.DateTimeField()
     score = models.IntegerField()
     passing_score = models.IntegerField()
     passed = models.BooleanField()
-    cc_form_id = models.CharField(max_length=25)
-    app_build_id = models.CharField(max_length=25)
+    xform_id = models.CharField(max_length=50)
+    app_build_id = models.CharField(max_length=50)
     app_build_version = models.IntegerField()
