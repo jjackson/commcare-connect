@@ -13,21 +13,36 @@ on:
   #    types: [completed]
   #    branches: [main]
   workflow_dispatch:
-  pull_request:
 
 jobs:
-  test_aws_credentials:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Git clone the repository
+      - name: Checkout source code
         uses: actions/checkout@v3
+
+      - name: Generate deployment package
+        run: zip -r deploy.zip . -x '*.git*'
+
       - name: configure aws credentials
         uses: aws-actions/configure-aws-credentials@v2.2.0
         with:
           role-to-assume: arn:aws:iam::037129986032:role/github_deploy
           role-session-name: GithubDeploy
           aws-region: ${{ env.AWS_REGION }}
-      # Hello from AWS: WhoAmI
-      - name: Sts GetCallerIdentity
-        run: |
-          aws sts get-caller-identity
+
+      - name: Set Version Label
+        run: echo "version_label=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_ENV
+
+      - name: Deploy to EB
+        uses: einaregilsson/beanstalk-deploy@v21
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          application_name: commcare-connect
+          environment_name: Commcare-connect-env
+          version_description: ${{ github.sha }}
+          version_label: ${{ env.version_label }}
+          region: us-east-1
+          deployment_package: deploy.zip
