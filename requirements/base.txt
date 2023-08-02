@@ -127,8 +127,6 @@ jsonschema-specifications==2023.7.1
     # via jsonschema
 kombu==5.3.1
     # via celery
-lxml==4.9.3
-    # via xml2json
 oauthlib==3.2.2
     # via requests-oauthlib
 pillow==10.0.0
@@ -211,6 +209,4 @@ vine==5.0.0
 wcwidth==0.2.6
     # via prompt-toolkit
 whitenoise==6.5.0
-    # via -r requirements/base.in
-xml2json @ git+https://github.com/dimagi/xml2json@041b1ef
     # via -r requirements/base.in
