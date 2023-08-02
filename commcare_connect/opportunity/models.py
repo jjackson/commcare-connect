@@ -73,15 +73,6 @@ class DeliverForm(models.Model):
 
 
 class OpportunityAccess(models.Model):
-    user = models.OneToOneField(
-        User,
-        on_delete=models.CASCADE,
-        related_name="claims",
-        related_query_name="claim",
-    )
-    opportunity = models.ForeignKey(
-        Opportunity,
-        on_delete=models.CASCADE,
-        related_name="claims",
-        related_query_name="claim",
-    )
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
+    date_claimed = models.DateTimeField()
