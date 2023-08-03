@@ -51,6 +51,12 @@ class Opportunity(BaseModel):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs) -> None:
+        from commcare_connect.opportunity.tasks import create_learn_modules_assessments
+
+        super().save(*args, **kwargs)
+        create_learn_modules_assessments.delay(self.id)
+
 
 class DeliverForm(models.Model):
     app = models.ForeignKey(
@@ -82,6 +88,9 @@ class LearnModule(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField()
     time_estimate = models.IntegerField(help_text="Estimated hours to complete the module")
+
+    def __str__(self):
+        return self.name
 
 
 class CompletedModule(models.Model):
