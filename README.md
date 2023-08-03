@@ -129,6 +129,22 @@ celery -A config.celery_app worker -B -l info
 
 The following details how to deploy this application.
 
+The application is running on AWS Beanstalk. Deploying new version of the app can be done via the "Deploy" workflow
+on Github Actions.
+
+Should the deploy fail you can view the logs via the [AWS console][aws_console] or by using the [EB CLI][eb_cli].
+
+To configure the EB CLI you will need to [get temporary credentials from AWS][tmp_creds].
+
+[aws_console]: https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/using-features.logging.html?icmpid=docs_elasticbeanstalk_console
+[eb_cli]: https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/eb-cli3.html
+[tmp_creds]: https://aws.amazon.com/blogs/security/aws-single-sign-on-now-enables-command-line-interface-access-for-aws-accounts-using-corporate-credentials/
+
+For details on how this actions is configured see:
+
+- https://aws.amazon.com/blogs/security/use-iam-roles-to-connect-github-actions-to-actions-in-aws/
+- https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
+
 ### Custom Bootstrap Compilation
 
 The generated CSS is set up with automatic Bootstrap recompilation with variables of your choice.
