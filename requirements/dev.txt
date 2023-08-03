@@ -108,6 +108,8 @@ jedi==0.18.2
     # via ipython
 lazy-object-proxy==1.9.0
     # via astroid
+lxml==4.9.3
+    # via xml2json
 markupsafe==2.1.3
     # via werkzeug
 matplotlib-inline==0.1.6
@@ -246,6 +248,8 @@ wheel==0.41.0
     # via pip-tools
 wrapt==1.15.0
     # via astroid
+xml2json @ git+https://github.com/dimagi/xml2json@041b1ef
+    # via -r requirements/dev.in
 
 # The following packages are considered to be unsafe in a requirements file:
 # pip

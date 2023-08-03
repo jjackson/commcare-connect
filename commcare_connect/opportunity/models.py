@@ -1,6 +1,6 @@
 from django.db import models
 
-from commcare_connect.users.models import Organization
+from commcare_connect.users.models import Organization, User
 from commcare_connect.utils.db import BaseModel
 
 
@@ -70,3 +70,53 @@ class DeliverForm(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class LearnModule(models.Model):
+    app = models.ForeignKey(
+        CommCareApp,
+        on_delete=models.CASCADE,
+        related_name="learn_modules",
+    )
+    slug = models.SlugField()
+    name = models.CharField(max_length=255)
+    description = models.TextField()
+    time_estimate = models.IntegerField(help_text="Estimated hours to complete the module")
+
+
+class CompletedModule(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="completed_modules",
+    )
+    module = models.ForeignKey(LearnModule, on_delete=models.PROTECT)
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
+    date = models.DateTimeField()
+    duration = models.DurationField()
+    xform_id = models.CharField(max_length=50)
+    app_build_id = models.CharField(max_length=50)
+    app_build_version = models.IntegerField()
+
+
+class Assessment(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="assessments",
+    )
+    app = models.ForeignKey(CommCareApp, on_delete=models.PROTECT)
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
+    date = models.DateTimeField()
+    score = models.IntegerField()
+    passing_score = models.IntegerField()
+    passed = models.BooleanField()
+    xform_id = models.CharField(max_length=50)
+    app_build_id = models.CharField(max_length=50)
+    app_build_version = models.IntegerField()
+
+
+class OpportunityAccess(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
+    date_claimed = models.DateTimeField()
