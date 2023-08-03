@@ -1,9 +1,11 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.http import HttpResponse
 from django.urls import reverse
 from django.views.generic import CreateView, ListView, UpdateView
 
 from commcare_connect.opportunity.forms import OpportunityChangeForm, OpportunityCreationForm
 from commcare_connect.opportunity.models import Opportunity
+from commcare_connect.opportunity.tasks import create_learn_modules_assessments
 from commcare_connect.utils.commcarehq_api import get_applications_for_user
 
 
@@ -44,6 +46,11 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
         kwargs["user"] = self.request.user
         kwargs["org_slug"] = self.kwargs.get("org_slug")
         return kwargs
+
+    def form_valid(self, form: OpportunityCreationForm) -> HttpResponse:
+        response = super().form_valid(form)
+        create_learn_modules_assessments.delay(self.object.id)
+        return response
 
 
 class OpportunityEdit(OrganizationUserMixin, UpdateView):
