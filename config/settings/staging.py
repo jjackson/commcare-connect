@@ -140,37 +140,29 @@ LOGGING = {
             "level": "DEBUG",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
-        },
-        "file": {
-            "level": "DEBUG",
-            "class": "logging.handlers.RotatingFileHandler",
-            "formatter": "verbose",
-            "maxBytes": 10 * 1024 * 1024,
-            "backupCount": 20,
-            "filename": "/opt/python/log/django.log",
-        },
+        }
     },
-    "root": {"level": "DEBUG", "handlers": ["console", "file"]},
+    "root": {"level": "DEBUG", "handlers": ["console"]},
     "loggers": {
         "django.db.backends": {
             "level": "DEBUG",
-            "handlers": ["console", "file"],
+            "handlers": ["console"],
             "propagate": True,
         },
         # # Errors logged by the SDK itself
         # "sentry_sdk": {"level": "ERROR", "handlers": ["console"], "propagate": False},
         "django.security.DisallowedHost": {
             "level": "DEBUG",
-            "handlers": ["console", "file"],
+            "handlers": ["console"],
             "propagate": True,
         },
         "django": {
-            "handlers": ["console", "file"],
+            "handlers": ["console"],
             "level": "DEBUG",
             "propagate": True,
         },
         "django.server": {
-            "handlers": ["console", "file"],
+            "handlers": ["console"],
             "level": "DEBUG",
             "propagate": True,
         },
