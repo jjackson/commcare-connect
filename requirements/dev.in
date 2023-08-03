@@ -10,6 +10,7 @@ pip-tools
 # Testing
 # ------------------------------------------------------------------------------
 pytest
+pytest-httpx
 xml2json @ git+https://github.com/dimagi/xml2json@041b1ef
 
 # Code quality

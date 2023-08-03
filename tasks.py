@@ -33,8 +33,8 @@ def requirements(c: Context, upgrade=False):
     args = " -U" if upgrade else ""
     cmd_base = "pip-compile -q --resolver=backtracking"
     env = {"CUSTOM_COMPILE_COMMAND": "inv requirements"}
-    c.run(f"{cmd_base} --resolver=backtracking requirements/base.in{args}", env=env)
-    c.run(f"{cmd_base} --resolver=backtracking requirements/dev.in{args}", env=env)
+    c.run(f"{cmd_base} requirements/base.in{args}", env=env)
+    c.run(f"{cmd_base} requirements/dev.in{args}", env=env)
     # can't use backtracking resolver for now: https://github.com/pypa/pip/issues/8713
     c.run(f"{cmd_base} requirements/production.in{args}", env=env)
 
