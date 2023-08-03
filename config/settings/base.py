@@ -243,7 +243,7 @@ LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "verbose": {
-            "format": "%(levelname)s %(asctime)s %(module)s %(process)d %(thread)d %(message)s",
+            "format": "%(levelname)s %(asctime)s %(name)s %(message)s",
         },
     },
     "handlers": {
@@ -254,6 +254,10 @@ LOGGING = {
         }
     },
     "root": {"level": "INFO", "handlers": ["console"]},
+    "django.template": {
+        "handlers": ["console"],
+        "level": env("DJANGO_TEMPLATE_LOG_LEVEL", default="WARN"),
+    },
 }
 
 # Celery
