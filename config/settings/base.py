@@ -257,6 +257,7 @@ LOGGING = {
     "django.template": {
         "handlers": ["console"],
         "level": env("DJANGO_TEMPLATE_LOG_LEVEL", default="WARN"),
+        "propagate": False,
     },
 }
 
