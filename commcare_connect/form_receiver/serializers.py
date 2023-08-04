@@ -29,14 +29,14 @@ class XForm:
 class XFormMetadataSerializer(serializers.Serializer):
     timeStart = serializers.DateTimeField(required=True)
     timeEnd = serializers.DateTimeField(required=True)
-    app_build_version = serializers.CharField()
+    app_build_version = serializers.CharField(allow_null=True)
 
 
 class XFormSerializer(serializers.Serializer):
     domain = serializers.CharField(required=True)
     id = serializers.CharField(required=True)
     app_id = serializers.CharField(required=True)
-    build_id = serializers.CharField(required=True)
+    build_id = serializers.CharField(allow_null=True)
     received_on = serializers.DateTimeField(required=True)
     form = serializers.DictField(required=True)
     metadata = XFormMetadataSerializer(required=True)
