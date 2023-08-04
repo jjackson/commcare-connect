@@ -2,6 +2,7 @@ from unittest import mock
 
 from rest_framework.test import APIRequestFactory
 
+from commcare_connect.form_receiver.exceptions import ProcessingError
 from commcare_connect.form_receiver.tests.xforms import get_assessment, get_form_json, get_learn_module
 from commcare_connect.form_receiver.views import FormReceiver
 from commcare_connect.users.models import User
@@ -41,6 +42,16 @@ def test_form_receiver(user: User, api_rf: APIRequestFactory):
         response = receiver_view(request)
     assert response.status_code == 200, response.data
     assert process_learn_modules.call_count == 0
+
+
+def test_form_receiver_request_error(user: User, api_rf: APIRequestFactory):
+    request = api_rf.post("/api/receiver/", data=get_form_json(), format="json")
+    request.user = user
+    with (mock.patch("commcare_connect.form_receiver.processor.get_related_models") as get_related_models,):
+        get_related_models.side_effect = ProcessingError("oops, something went wrong")
+        response = receiver_view(request)
+    assert response.status_code == 400, response.data
+    assert response.data == {"detail": "oops, something went wrong"}
 
 
 def test_form_receiver_learn_module(user: User, api_rf: APIRequestFactory):
