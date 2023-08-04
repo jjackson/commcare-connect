@@ -3,7 +3,7 @@ from unittest import mock
 from rest_framework.test import APIRequestFactory
 
 from commcare_connect.form_receiver.exceptions import ProcessingError
-from commcare_connect.form_receiver.tests.xforms import get_assessment, get_form_json, get_learn_module
+from commcare_connect.form_receiver.tests.xforms import AssessmentStubFactory, LearnModuleJsonFactory, get_form_json
 from commcare_connect.form_receiver.views import FormReceiver
 from commcare_connect.users.models import User
 
@@ -55,14 +55,14 @@ def test_form_receiver_request_error(user: User, api_rf: APIRequestFactory):
 
 
 def test_form_receiver_learn_module(user: User, api_rf: APIRequestFactory):
-    learn_module = get_learn_module()
+    learn_module = LearnModuleJsonFactory().json
     request = api_rf.post("/api/receiver/", data=get_form_json(form_block=learn_module), format="json")
     request.user = user
     _test_processing(request, 1, 0)
 
 
 def test_form_receiver_assessment(user: User, api_rf: APIRequestFactory):
-    assessment = get_assessment()
+    assessment = AssessmentStubFactory().json
     request = api_rf.post("/api/receiver/", data=get_form_json(form_block=assessment), format="json")
     request.user = user
     _test_processing(request, 0, 1)

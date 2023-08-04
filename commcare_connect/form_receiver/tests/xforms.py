@@ -1,5 +1,6 @@
 from copy import deepcopy
 
+import factory
 from xml2json import xml2json
 
 from commcare_connect.form_receiver.const import CCC_LEARN_XMLNS
@@ -69,21 +70,35 @@ def get_form_model(xmlns=DEFAULT_XMLNS, form_block=None):
     return serializer.save()
 
 
-def get_learn_module(
-    module_id: str = "module1",
-    name: str = "Test Module",
-    description: str = "Test Description",
-    time_estimate: int = 2,
-):
-    xml = MODULE_XML_TEMPLATE.format(id=module_id, name=name, description=description, time_estimate=time_estimate)
+class LearnModuleJsonFactory(factory.StubFactory):
+    id = factory.Faker("slug")
+    name = factory.Faker("name")
+    description = factory.Faker("text")
+    time_estimate = factory.Faker("pyint", min_value=1, max_value=10)
+
+    @factory.lazy_attribute
+    def json(self):
+        return _get_learn_module_json(self)
+
+
+def _get_learn_module_json(stub):
+    xml = MODULE_XML_TEMPLATE.format(
+        id=stub.id, name=stub.name, description=stub.description, time_estimate=stub.time_estimate
+    )
     _, module = xml2json(xml)
     return module
 
 
-def get_assessment(
-    assessment_id: str = "assessment1",
-    score: int = 75,
-):
-    xml = ASSESSMENT_XML_TEMPLATE.format(id=assessment_id, score=score)
+class AssessmentStubFactory(factory.StubFactory):
+    id = factory.Faker("slug")
+    score = factory.Faker("pyint", min_value=0, max_value=100)
+
+    @factory.lazy_attribute
+    def json(self):
+        return _get_assessment_json(self)
+
+
+def _get_assessment_json(stub):
+    xml = ASSESSMENT_XML_TEMPLATE.format(id=stub.id, score=stub.score)
     _, module = xml2json(xml)
     return module
