@@ -4,7 +4,7 @@ from jsonpath_ng.ext import parse
 from commcare_connect.form_receiver.const import CCC_LEARN_XMLNS
 from commcare_connect.form_receiver.exceptions import ProcessingError
 from commcare_connect.form_receiver.serializers import XForm
-from commcare_connect.opportunity.models import CommCareApp, CompletedModule, LearnModule, Opportunity
+from commcare_connect.opportunity.models import Assessment, CommCareApp, CompletedModule, LearnModule, Opportunity
 from commcare_connect.users.models import User
 
 LEARN_MODULE_JSONPATH = parse("module where @xmlns")
@@ -28,16 +28,29 @@ def process_xform(xform: XForm):
             raise ProcessingError from e
 
 
-def process_learn_modules(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, modules: list[dict]):
+def get_or_create_learn_module(app, module_data):
+    module, _ = LearnModule.objects.get_or_create(
+        app=app,
+        slug=module_data["@id"],
+        defaults=dict(
+            name=module_data["name"],
+            description=module_data["description"],
+            time_estimate=module_data["time_estimate"],
+        ),
+    )
+    return module
+
+
+def process_learn_modules(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, blocks: list[dict]):
     """Process learn modules from a form received from CommCare HQ.
 
     :param user: The user who submitted the form.
     :param xform: The deserialized form object.
     :param app: The CommCare app the form belongs to.
     :param opportunity: The opportunity the app belongs to.
-    :param modules: A list of learn module form blocks."""
-    for module in modules:
-        module = LearnModule.objects.filter(app=app, slug=module["@id"]).first()
+    :param blocks: A list of learn module form blocks."""
+    for module_data in blocks:
+        module = get_or_create_learn_module(app, module_data)
         CompletedModule.objects.create(
             user=user,
             module=module,
@@ -50,11 +63,33 @@ def process_learn_modules(user, xform: XForm, app: CommCareApp, opportunity: Opp
         )
 
 
-def process_assessments(domain: str, app: CommCareApp, assessments: list[dict]):
+def process_assessments(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, blocks: list[dict]):
     """Process assessments from a form received from CommCare HQ.
 
-    :param assessments: A list of assessment form blocks."""
-    print(assessments)
+    :param user: The user who submitted the form.
+    :param xform: The deserialized form object.
+    :param app: The CommCare app the form belongs to.
+    :param opportunity: The opportunity the app belongs to.
+    :param blocks: A list of assessment form blocks."""
+    for assessment_data in blocks:
+        try:
+            score = int(assessment_data["user_score"])
+        except ValueError:
+            raise ProcessingError("User score must be an integer")
+        # TODO: should this move to the opportunity to allow better re-use of the app?
+        passing_score = app.passing_score
+        Assessment.objects.create(
+            user=user,
+            app=app,
+            opportunity=opportunity,
+            date=xform.received_on,
+            score=score,
+            passing_score=passing_score,
+            passed=score >= passing_score,
+            xform_id=xform.id,
+            app_build_id=xform.build_id,
+            app_build_version=xform.metadata.app_build_version,
+        )
 
 
 def get_related_models(xform: XForm):
