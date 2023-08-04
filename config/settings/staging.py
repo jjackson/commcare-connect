@@ -86,11 +86,7 @@ aws_s3_domain = AWS_S3_CUSTOM_DOMAIN or f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws
 # MEDIA
 # ------------------------------------------------------------------------------
 MEDIA_URL = f"https://{aws_s3_domain}/media/"
-
-STORAGES = {
-    "default": {"BACKEND": "commcare_connect.utils.storages.MediaRootS3Boto3Storage"},
-    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
-}
+STORAGES["default"]["BACKEND"] = "commcare_connect.utils.storages.MediaRootS3Boto3Storage"  # noqa: F405
 
 # EMAIL
 # ------------------------------------------------------------------------------
