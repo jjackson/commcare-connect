@@ -13,7 +13,6 @@ from .base import env
 # GENERAL
 # ------------------------------------------------------------------------------
 SECRET_KEY = env("DJANGO_SECRET_KEY")
-# https://docs.djangoproject.com/en/dev/ref/settings/#allowed-hosts
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["commcare-connect.org"])
 
 # DATABASES
@@ -105,6 +104,7 @@ ANYMAIL = {}
 SPECTACULAR_SETTINGS["SERVERS"] = [  # noqa: F405
     {"url": "https://commcare-connect.org", "description": "Production server"},
 ]
-# Your stuff...
+
+# CommCareConnect
 # ------------------------------------------------------------------------------
 CSRF_TRUSTED_ORIGINS = ["https://*.127.0.0.1"] + env.list("CSRF_TRUSTED_ORIGINS")
