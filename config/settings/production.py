@@ -76,6 +76,7 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 # ------------------------------------------------------------------------------
 DEFAULT_FILE_STORAGE = "commcare_connect.utils.storages.MediaRootS3Boto3Storage"
 MEDIA_URL = f"https://{aws_s3_domain}/media/"
+STORAGES["default"]["BACKEND"] = "commcare_connect.utils.storages.MediaRootS3Boto3Storage"  # noqa: F405
 
 # EMAIL
 # ------------------------------------------------------------------------------
