@@ -222,7 +222,7 @@ X_FRAME_OPTIONS = "DENY"
 # ------------------------------------------------------------------------------
 EMAIL_BACKEND = env(
     "DJANGO_EMAIL_BACKEND",
-    default="django.core.mail.backends.smtp.EmailBackend",
+    default="django.core.mail.backends.console.EmailBackend",
 )
 EMAIL_TIMEOUT = 5
 DEFAULT_FROM_EMAIL = env(

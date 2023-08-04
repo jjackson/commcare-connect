@@ -75,7 +75,6 @@ STORAGES["default"]["BACKEND"] = "commcare_connect.utils.storages.MediaRootS3Bot
 # https://anymail.readthedocs.io/en/stable/installation/#installing-anymail
 INSTALLED_APPS += ["anymail"]  # noqa: F405
 # https://anymail.readthedocs.io/en/stable/esps/amazon_ses/
-EMAIL_BACKEND = "anymail.backends.amazon_ses.EmailBackend"
 ANYMAIL = {}
 
 # # Sentry
