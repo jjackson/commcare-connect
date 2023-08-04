@@ -3,6 +3,7 @@ from copy import deepcopy
 from xml2json import xml2json
 
 from commcare_connect.form_receiver.const import CCC_LEARN_XMLNS
+from commcare_connect.form_receiver.serializers import XFormSerializer
 
 DEFAULT_XMLNS = "http://openrosa.org/formdesigner/67D08BE6-BBEE-452D-AE73-34DCC3A742C1"
 FORM_META = {
@@ -52,12 +53,20 @@ ASSESSMENT_XML_TEMPLATE = (
 )
 
 
-def get_form(xmlns=DEFAULT_XMLNS, form_block=None):
+def get_form_json(xmlns=DEFAULT_XMLNS, form_block=None, **kwargs):
     form = deepcopy(MOCK_FORM)
     form["form"]["@xmlns"] = xmlns
     if form_block:
         form["form"].update(form_block)
+    form.update(kwargs)
     return form
+
+
+def get_form_model(xmlns=DEFAULT_XMLNS, form_block=None):
+    form_json = get_form_json(xmlns, form_block)
+    serializer = XFormSerializer(data=form_json)
+    serializer.is_valid(raise_exception=True)
+    return serializer.save()
 
 
 def get_learn_module(

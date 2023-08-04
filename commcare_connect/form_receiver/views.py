@@ -13,5 +13,6 @@ class FormReceiver(APIView):
     def post(self, request):
         serializer = XFormSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        process_xform(**serializer.validated_data)
+        xform = serializer.save()
+        process_xform(xform)
         return Response(status=status.HTTP_200_OK)
