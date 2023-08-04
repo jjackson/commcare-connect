@@ -1,8 +1,8 @@
 import pytest
 from rest_framework.test import APIClient
 
-from commcare_connect.form_receiver.tests.xforms import LearnModuleJsonFactory, get_form_json
-from commcare_connect.opportunity.models import CompletedModule, LearnModule, Opportunity
+from commcare_connect.form_receiver.tests.xforms import AssessmentStubFactory, LearnModuleJsonFactory, get_form_json
+from commcare_connect.opportunity.models import Assessment, CompletedModule, LearnModule, Opportunity
 from commcare_connect.opportunity.tests.factories import LearnModuleFactory, OpportunityFactory
 from commcare_connect.users.models import User
 
@@ -52,6 +52,30 @@ def test_form_receiver_learn_module_create(user: User, api_client: APIClient, op
         name=module.name,
         description=module.description,
         time_estimate=module.time_estimate,
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_form_receiver_assessment(user: User, api_client: APIClient, opportunity: Opportunity):
+    passing_score = opportunity.learn_app.passing_score
+    score = passing_score + 5
+    assessment = AssessmentStubFactory(score=score).json
+    form_json = get_form_json(
+        form_block=assessment,
+        domain=opportunity.learn_app.cc_domain,
+        app_id=opportunity.learn_app.cc_app_id,
+    )
+    assert Assessment.objects.count() == 0
+
+    make_request(api_client, form_json, user)
+    assert Assessment.objects.count() == 1
+    assert Assessment.objects.filter(
+        score=score,
+        passing_score=passing_score,
+        passed=True,
+        xform_id=form_json["id"],
+        app_build_id=form_json["build_id"],
+        app_build_version=form_json["metadata"]["app_build_version"],
     ).exists()
 
 
