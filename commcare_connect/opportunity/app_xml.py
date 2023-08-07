@@ -20,12 +20,7 @@ class Module:
     time_estimate: int
 
 
-@dataclass
-class Assessment:
-    id: str
-
-
-def get_connect_blocks_for_app(domain: str, app_id: str) -> list[str]:
+def get_connect_blocks_for_app(domain: str, app_id: str) -> list[Module]:
     form_xmls = get_form_xml_for_app(domain, app_id)
     return list(itertools.chain.from_iterable(extract_connect_blocks(form_xml) for form_xml in form_xmls))
 
@@ -57,15 +52,9 @@ def get_form_xml_for_app(domain: str, app_id: str) -> list[str]:
 def extract_connect_blocks(form_xml):
     xml = ET.fromstring(form_xml)
     yield from extract_modules(xml)
-    yield from extract_assessments(xml)
 
 
-def extract_assessments(xml: ET.ElementTree) -> list[str]:
-    for block in xml.findall(f".//{XMLNS_PREFIX}assessment"):
-        yield Assessment(block.get("id"))
-
-
-def extract_modules(xml: ET.ElementTree):
+def extract_modules(xml: ET.Element):
     for block in xml.findall(f".//{XMLNS_PREFIX}module"):
         slug = block.get("id")
         name = get_element_text(block, "name")

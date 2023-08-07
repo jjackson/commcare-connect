@@ -135,7 +135,7 @@ class OpportunityCreationForm(forms.ModelForm):
                 for form in app["forms"]:
                     if form["id"] == self.cleaned_data["deliver_form"]:
                         deliver_form.xmlns = form["xmlns"]
-                        deliver_form.name = form["name"]["en"]
+                        deliver_form.name = form["name"]
                         deliver_form.app = self.instance.deliver_app
 
         self.instance.created_by = self.user.email
