@@ -126,3 +126,15 @@ class OpportunityAccess(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     date_claimed = models.DateTimeField()
+
+
+class UserVisit(XFormBaseModel):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+    )
+    deliver_form = models.ForeignKey(
+        DeliverForm,
+        on_delete=models.PROTECT,
+    )
+    visit_date = models.DateTimeField()
