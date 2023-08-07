@@ -83,6 +83,9 @@ class LearnModule(models.Model):
     description = models.TextField()
     time_estimate = models.IntegerField(help_text="Estimated hours to complete the module")
 
+    def __str__(self):
+        return self.name
+
 
 class XFormBaseModel(models.Model):
     xform_id = models.CharField(max_length=50)

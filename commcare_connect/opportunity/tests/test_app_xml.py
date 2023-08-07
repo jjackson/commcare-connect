@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from commcare_connect.opportunity.app_xml import Assessment, Module, get_connect_blocks_for_app, get_form_xml_for_app
+from commcare_connect.opportunity.app_xml import Module, get_connect_blocks_for_app, get_form_xml_for_app
 
 
 @pytest.fixture
@@ -57,5 +57,4 @@ def test_get_connect_blocks_for_app(httpx_mock, demo_app_ccz_content):
             description="Module 3 in the series",
             time_estimate=3,
         ),
-        Assessment(id="demo"),
     ]
