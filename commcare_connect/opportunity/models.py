@@ -84,7 +84,16 @@ class LearnModule(models.Model):
     time_estimate = models.IntegerField(help_text="Estimated hours to complete the module")
 
 
-class CompletedModule(models.Model):
+class XFormBaseModel(models.Model):
+    xform_id = models.CharField(max_length=50)
+    app_build_id = models.CharField(max_length=50, null=True, blank=True)
+    app_build_version = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        abstract = True
+
+
+class CompletedModule(XFormBaseModel):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -94,12 +103,9 @@ class CompletedModule(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
     date = models.DateTimeField()
     duration = models.DurationField()
-    xform_id = models.CharField(max_length=50)
-    app_build_id = models.CharField(max_length=50)
-    app_build_version = models.IntegerField()
 
 
-class Assessment(models.Model):
+class Assessment(XFormBaseModel):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -111,9 +117,6 @@ class Assessment(models.Model):
     score = models.IntegerField()
     passing_score = models.IntegerField()
     passed = models.BooleanField()
-    xform_id = models.CharField(max_length=50)
-    app_build_id = models.CharField(max_length=50)
-    app_build_version = models.IntegerField()
 
 
 class OpportunityAccess(models.Model):
