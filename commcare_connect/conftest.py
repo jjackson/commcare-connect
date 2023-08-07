@@ -1,5 +1,5 @@
 import pytest
-from rest_framework.test import APIRequestFactory
+from rest_framework.test import APIClient, APIRequestFactory
 
 from commcare_connect.users.models import Organization, User
 from commcare_connect.users.tests.factories import OrgWithUsersFactory, UserFactory
@@ -15,6 +15,11 @@ def api_rf() -> APIRequestFactory:
     """APIRequestFactory instance"""
 
     return APIRequestFactory()
+
+
+@pytest.fixture
+def api_client() -> APIClient:
+    return APIClient()
 
 
 @pytest.fixture
