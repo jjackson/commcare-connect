@@ -2,8 +2,10 @@ from collections.abc import Sequence
 from typing import Any
 
 from django.contrib.auth import get_user_model
-from factory import Faker, post_generation
+from factory import Faker, RelatedFactory, SubFactory, post_generation
 from factory.django import DjangoModelFactory
+
+from commcare_connect.users.models import UserOrganizationMembership
 
 
 class UserFactory(DjangoModelFactory):
@@ -29,3 +31,24 @@ class UserFactory(DjangoModelFactory):
     class Meta:
         model = get_user_model()
         django_get_or_create = ["email"]
+
+
+class OrganizationFactory(DjangoModelFactory):
+    name = Faker("company")
+
+    class Meta:
+        model = "users.Organization"
+
+
+class MembershipFactory(DjangoModelFactory):
+    class Meta:
+        model = UserOrganizationMembership
+
+    user = SubFactory(UserFactory)
+    organization = SubFactory(OrganizationFactory)
+    role = "admin"
+
+
+class OrgWithUsersFactory(OrganizationFactory):
+    admin = RelatedFactory(MembershipFactory, "organization", role="admin")
+    member = RelatedFactory(MembershipFactory, "organization", role="member")

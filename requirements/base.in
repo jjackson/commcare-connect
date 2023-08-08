@@ -4,10 +4,11 @@ argon2-cffi
 whitenoise
 redis
 hiredis
+httpx[http2]
 celery
-django-celery-beat
 django-oauth-toolkit
-
+jsonpath-ng
+quickcache
 
 # Django
 # ------------------------------------------------------------------------------
@@ -15,6 +16,7 @@ django
 django-environ
 django-model-utils
 django-allauth
+django-celery-beat
 django-crispy-forms
 crispy-bootstrap5
 django-redis

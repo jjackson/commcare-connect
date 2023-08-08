@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.urls import reverse
@@ -39,11 +40,14 @@ class User(AbstractUser):
 class Organization(BaseModel):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
+    members = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, related_name="organizations", through="UserOrganizationMembership"
+    )
 
     def save(self, *args, **kwargs):
         if not self.id:
             self.slug = slugify_uniquely(self.name, self.__class__)
-        super().save(*args, *kwargs)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.slug
@@ -57,13 +61,11 @@ class UserOrganizationMembership(models.Model):
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
-        related_name="users",
-        related_query_name="user",
+        related_name="memberships",
     )
     user = models.ForeignKey(
         User,
         on_delete=models.DO_NOTHING,
-        related_name="organizations",
-        related_query_name="organization",
+        related_name="memberships",
     )
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.MEMBER)
