@@ -9,9 +9,33 @@
 
     <form method="post">
       {% csrf_token %}
-      {{ form|crispy }}
-      <input class="btn btn-primary" type="submit">
+      {% crispy form %}
     </form>
 
+    {{ applications|json_script:"applications-data" }}
+    <script>
+      window.onload = function () {
+        const applications = JSON.parse(document.getElementById("applications-data").textContent);
+        const deliver_app_select = document.getElementById("deliver_app_select");
+        if (!deliver_app_select) return
+
+        deliver_app_select.addEventListener("change", populateDeliverFormSelect);
+        const deliver_form_select = document.getElementById("deliver_form_select");
+        populateDeliverFormSelect();
+
+        function populateDeliverFormSelect() {
+          const selectedAppId =  deliver_app_select.options[deliver_app_select.selectedIndex].value;
+          const selectedApp = applications.filter(app => app.id === selectedAppId)[0];
+          deliver_form_select.innerHTML = "";
+
+          for (const form of selectedApp.forms) {
+            const form_option = document.createElement("option");
+            form_option.text = form.name;
+            form_option.value = form.id;
+            deliver_form_select.add(form_option);
+          }
+        }
+      }
+    </script>
   </div>
 {% endblock content %}

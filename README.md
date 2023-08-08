@@ -16,6 +16,10 @@ need to edit some settings.
     # install requirements
     $ pip install -r requirements-dev.txt
 
+    # install git hooks
+    $ pre-commit install
+    $ pre-commit run -a
+
     # create env file and edit the settings as needed (or export settings directly)
     $ cp .env_template .env
 
@@ -29,6 +33,7 @@ need to edit some settings.
     $ inv build-js [-w]
 
     # run Django
+    $ ./manage.py migrate
     $ ./manage.py runserver
 
 ## Basic Commands
@@ -37,6 +42,35 @@ Some useful command are available via the `tasks.py` file:
 
     $ inv -l
 
+### Setting up auth with CommCare HQ
+
+**Expose your local service to the internet**
+
+- Install loca.lt
+  - `npm install -g localtunnel`
+- Run `loca.lt --port 8000 --subdomain [my-unique-subdomain]` and copy the generated URL
+- Update your `.env` file with the host:
+
+      DJANGO_ALLOWED_HOSTS=[my-unique-subdomain].loca.lt
+
+**Create an OAuth2 application on CommCare HQ**
+
+- Navigate to https://staging.commcarehq.org/oauth/applications/
+- Create a new application with the following settings:
+  - Client Type: Confidential
+  - Authorization Grant Type: Authorization Code
+  - Redirect URIs: https://[my-unique-subdomain].loca.lt/accounts/commcarehq/login/callback/
+  - Pkce required: False
+- Copy the Client ID and Client Secret
+- Create a new SocialApp locally at http://localhost:8000/admin/socialaccount/socialapp/
+
+**Test the OAuth2 flow**
+
+- Navigate to http://[my-unique-subdomain].loca.lt/accounts/login/
+- Click the "Log in with CommCare HQ" button
+- You should be redirected to CommCare HQ to log in
+- After logging in, you should be redirected back to the app and logged in
+
 ### Setting Up Your Users
 
 - To create a **normal user account**, just go to Sign Up and fill out the form. Once you submit it, you'll see a "Verify Your E-mail Address" page. Go to your console to see a simulated email verification message. Copy the link into your browser. Now the user's email should be verified and ready to go.
@@ -44,6 +78,10 @@ Some useful command are available via the `tasks.py` file:
 - To create a **superuser account**, use this command:
 
       $ python manage.py createsuperuser
+
+- To promote a user to superuser, use this command:
+
+      $ python manage.py promote_user_to_superuser <email>
 
 For convenience, you can keep your normal user logged in on Chrome and your superuser logged in on Firefox (or similar), so that you can see how the site behaves for both kinds of users.
 
@@ -90,6 +128,22 @@ celery -A config.celery_app worker -B -l info
 ## Deployment
 
 The following details how to deploy this application.
+
+The application is running on AWS Beanstalk. Deploying new version of the app can be done via the "Deploy" workflow
+on Github Actions.
+
+Should the deploy fail you can view the logs via the [AWS console][aws_console] or by using the [EB CLI][eb_cli].
+
+To configure the EB CLI you will need to [get temporary credentials from AWS][tmp_creds].
+
+[aws_console]: https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/using-features.logging.html?icmpid=docs_elasticbeanstalk_console
+[eb_cli]: https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/eb-cli3.html
+[tmp_creds]: https://aws.amazon.com/blogs/security/aws-single-sign-on-now-enables-command-line-interface-access-for-aws-accounts-using-corporate-credentials/
+
+For details on how this actions is configured see:
+
+- https://aws.amazon.com/blogs/security/use-iam-roles-to-connect-github-actions-to-actions-in-aws/
+- https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 
 ### Custom Bootstrap Compilation
 

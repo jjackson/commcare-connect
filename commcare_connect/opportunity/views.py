@@ -1,15 +1,17 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.http import HttpResponse
 from django.urls import reverse
 from django.views.generic import CreateView, ListView, UpdateView
 
 from commcare_connect.opportunity.forms import OpportunityChangeForm, OpportunityCreationForm
 from commcare_connect.opportunity.models import Opportunity
+from commcare_connect.opportunity.tasks import create_learn_modules_assessments
 from commcare_connect.utils.commcarehq_api import get_applications_for_user
 
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
-        return self.request.user.organizations.filter(organization__slug=self.kwargs.get("org_slug")).exists()
+        return self.request.org_membership is not None
 
 
 class OpportunityList(OrganizationUserMixin, ListView):
@@ -35,6 +37,7 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["page_title"] = "Create new opportunity"
+        context["applications"] = get_applications_for_user(self.request.user)
         return context
 
     def get_form_kwargs(self):
@@ -44,8 +47,10 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
         kwargs["org_slug"] = self.kwargs.get("org_slug")
         return kwargs
 
-    def test_func(self):
-        return self.request.user.organizations.filter(organization__slug=self.kwargs.get("org_slug")).exists()
+    def form_valid(self, form: OpportunityCreationForm) -> HttpResponse:
+        response = super().form_valid(form)
+        create_learn_modules_assessments.delay(self.object.id)
+        return response
 
 
 class OpportunityEdit(OrganizationUserMixin, UpdateView):
