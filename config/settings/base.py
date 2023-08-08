@@ -293,6 +293,6 @@ CACHES = {
 COMMCARE_HQ_URL = env("COMMCARE_HQ_URL", default="https://staging.commcarehq.org")
 
 OAUTH2_PROVIDER = {
-    "RESOURCE_SERVER_INTROSPECTION_URL": f"https://{env('connect_hostname')}/o/introspect/",
-    "RESOURCE_SERVER_INTROSPECTION_CREDENTIALS": (env("rs_client_id"), env("rs_client_secret"),
+    "RESOURCE_SERVER_INTROSPECTION_URL": f"https://{env('connect_hostname', default='localhost:8080')}/o/introspect",
+    "RESOURCE_SERVER_INTROSPECTION_CREDENTIALS": (env("rs_client_id", default=""), env("rs_client_secret", default="")),
 }
