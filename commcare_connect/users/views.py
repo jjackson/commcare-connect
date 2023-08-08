@@ -1,3 +1,8 @@
+from oauth2_provider.views.mixins import ClientProtectedResourceMixin
+from rest_framework import parsers, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
@@ -44,3 +49,22 @@ class UserRedirectView(LoginRequiredMixin, RedirectView):
 
 
 user_redirect_view = UserRedirectView.as_view()
+
+
+class CreateUserLinkView(ClientProtectedResourceMixin, APIView):
+    parser_classes = [parsers.JSONParser]
+
+    def post(self, request):
+        commcare_username = request.data.get('commcare_username')
+        connect_username = request.data.get('connect_username')
+        if not commcare_username or not connect_username:
+            return Response("commcare_username and connect_username required", status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = User.objects.get(username=connect_username)
+        except User.DoesNotExist:
+            return Response("connect user does not exist", status=status.HTTP_400_BAD_REQUEST)
+        ConnectIDUserLink.objects.create(commcare_username=commcare_username, user=user)
+        return Response(status=status.HTTP_200_OK)
+
+
+create_user_link_view = CreateUserLinkView.as_view()
