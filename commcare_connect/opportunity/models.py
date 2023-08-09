@@ -127,6 +127,13 @@ class OpportunityAccess(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     date_claimed = models.DateTimeField()
 
+    @property
+    def learn_progress(self):
+        learn_modules = LearnModule.objects.filter(app=self.opportunity.learn_app)
+        completed_modules = CompletedModule.objects.filter(module__in=learn_modules).count()
+        percentage = (completed_modules / learn_modules.count()) * 100
+        return round(percentage, 2)
+
 
 class UserVisit(XFormBaseModel):
     user = models.ForeignKey(
