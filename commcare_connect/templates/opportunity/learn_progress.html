@@ -4,35 +4,39 @@
 
 {% block content %}
   <div class="container">
-    <h2>Learn Progress for Users</h2>
-    <table class="table table-bordered">
-      <thead>
-      <tr>
-        <th>User Name</th>
-        <th>Learn Modules Completed</th>
-        <th></th>
-      </tr>
-      </thead>
-      <tbody class="align-middle">
-      {% for opportunity_access in page_obj %}
+    <div class="mt-2">
+      <h2>{{ opportunity.name }}</h2>
+
+      <h4 class="mt-4">Learn Progress for Users</h4>
+      <table class="table border mt-2 table-custom">
+        <thead class="table-secondary">
         <tr>
-          <td>{{ opportunity_access.user.name }}</td>
-          <td>
-            {{ opportunity_access.learn_progress }}%
-          </td>
-          <td>
-            <a
-              href="{% url 'opportunity:user_learn_progress' org_slug=org_slug opp_id=opportunity_access.opportunity.id pk=opportunity_access.id %}">
-              Details
-            </a>
-          </td>
+          <th>Name</th>
+          <th>Modules Completed</th>
+          <th></th>
         </tr>
-        {% empty %}
-        <tr>
-          <td colspan="3">No learn progress for users.</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody class="align-middle">
+        {% for opportunity_access in page_obj %}
+          <tr>
+            <td>{{ opportunity_access.user.name }}</td>
+            <td>
+              {{ opportunity_access.learn_progress }}%
+            </td>
+            <td>
+              <a
+                href="{% url 'opportunity:user_learn_progress' org_slug=org_slug opp_id=opportunity.id pk=opportunity_access.id %}">
+                Details
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="3">No learn progress for users.</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 {% endblock content %}

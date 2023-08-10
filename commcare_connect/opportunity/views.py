@@ -83,9 +83,10 @@ class OpportunityLearnProgressList(ListView):
         return Opportunity.objects.filter(id=self.kwargs["pk"]).exists()
 
     def get_context_data(self, *args, object_list=None, **kwargs):
-        context_data = super().get_context_data(*args, **kwargs)
-        context_data["org_slug"] = self.kwargs["org_slug"]
-        return context_data
+        context = super().get_context_data(*args, **kwargs)
+        context["org_slug"] = self.kwargs["org_slug"]
+        context["opportunity"] = Opportunity.objects.get(id=self.kwargs["pk"])
+        return context
 
 
 class OpportunityUserLearnProgress(DetailView):
