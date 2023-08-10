@@ -21,9 +21,6 @@ class Organization(BaseModel):
     def __str__(self):
         return self.slug
 
-    class Meta:
-        managed = False
-
 
 class UserOrganizationMembership(models.Model):
     class Role(models.TextChoices):
@@ -44,4 +41,3 @@ class UserOrganizationMembership(models.Model):
 
     class Meta:
         db_table = "organization_membership"
-        managed = False
