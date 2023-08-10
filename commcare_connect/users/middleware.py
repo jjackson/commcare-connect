@@ -1,8 +1,8 @@
 from django.utils.deprecation import MiddlewareMixin
 from django.utils.functional import SimpleLazyObject
 
+from ..organization.models import UserOrganizationMembership as Membership
 from .helpers import get_organization_for_request
-from .models import UserOrganizationMembership as Membership
 
 
 def _get_organization(request, view_kwargs):
