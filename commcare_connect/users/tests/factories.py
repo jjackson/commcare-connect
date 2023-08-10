@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from factory import Faker, RelatedFactory, SubFactory, post_generation
 from factory.django import DjangoModelFactory
 
-from commcare_connect.organization.models import UserOrganizationMembership
+from commcare_connect.organization.models import Organization, UserOrganizationMembership
 
 
 class UserFactory(DjangoModelFactory):
@@ -37,7 +37,7 @@ class OrganizationFactory(DjangoModelFactory):
     name = Faker("company")
 
     class Meta:
-        model = "users.Organization"
+        model = Organization
 
 
 class MembershipFactory(DjangoModelFactory):
