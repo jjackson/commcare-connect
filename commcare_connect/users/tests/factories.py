@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from factory import Faker, RelatedFactory, SubFactory, post_generation
 from factory.django import DjangoModelFactory
 
-from commcare_connect.users.models import UserOrganizationMembership
+from commcare_connect.organization.models import UserOrganizationMembership
 
 
 class UserFactory(DjangoModelFactory):

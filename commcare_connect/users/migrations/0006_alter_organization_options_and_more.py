@@ -17,10 +17,18 @@ class Migration(migrations.Migration):
             name="userorganizationmembership",
             options={"managed": False},
         ),
-        migrations.DeleteModel(
+        migrations.RemoveField(
+            model_name="userorganizationmembership",
             name="organization",
         ),
+        migrations.RemoveField(
+            model_name="userorganizationmembership",
+            name="user",
+        ),
         migrations.DeleteModel(
-            name="userorganizationmembership",
-        )
+            name="Organization",
+        ),
+        migrations.DeleteModel(
+            name="UserOrganizationMembership",
+        ),
     ]

@@ -1,6 +1,7 @@
 from django.db import models
 
-from commcare_connect.users.models import Organization, User
+from commcare_connect.organization.models import Organization
+from commcare_connect.users.models import User
 from commcare_connect.utils.db import BaseModel
 
 
