@@ -13,6 +13,8 @@
         <tr>
           <th>Name</th>
           <th>Modules Completed</th>
+          <th>Visit Count</th>
+          <th>Last visit date</th>
           <th></th>
         </tr>
         </thead>
@@ -22,6 +24,12 @@
             <td>{{ opportunity_access.user.name }}</td>
             <td>
               {{ opportunity_access.learn_progress }}%
+            </td>
+            <td>
+              {{ opportunity_access.visit_count }}
+            </td>
+            <td>
+              {{ opportunity_access.last_visit_date|default_if_none:"N/A" }}
             </td>
             <td>
               <a
