@@ -6,9 +6,7 @@ from commcare_connect.users.models import Organization, User, UserOrganizationMe
 
 @receiver(user_signed_up)
 def create_org_for_user(request, user, **kwargs):
-    try:
-        user.members.exists()
-    except AttributeError or Organization.DoesNotExist:
+    if not user.memberships.exists():
         _create_default_org_for_user(user)
 
 
