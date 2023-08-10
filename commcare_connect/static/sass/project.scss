@@ -3,6 +3,18 @@
 
 // project specific CSS goes here
 
+.table-custom {
+  th:first-child,
+  td:first-child {
+    padding-left: 2rem !important;
+  }
+
+  th:last-child,
+  td:last-child {
+    padding-right: 2rem !important;
+  }
+}
+
 ///////////////
 // Variables //
 ///////////////
