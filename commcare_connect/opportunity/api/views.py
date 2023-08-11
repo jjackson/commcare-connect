@@ -6,8 +6,8 @@ from commcare_connect.opportunity.models import Opportunity
 
 
 class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
-    # TODO: Add filtering for CID users
-    queryset = Opportunity.objects.all()
     serializer_class = OpportunitySerializer
-    # TODO: Add permission for CID users
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Opportunity.objects.filter(opportunityaccess__user=self.request.user)

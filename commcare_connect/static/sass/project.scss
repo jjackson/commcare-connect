@@ -1,7 +1,22 @@
 @import 'custom_bootstrap_vars';
 @import '~bootstrap/scss/bootstrap';
 
+$bootstrap-icons-font-dir: '~bootstrap-icons/font/fonts';
+@import '~bootstrap-icons/font/bootstrap-icons';
+
 // project specific CSS goes here
+
+.table-custom {
+  th:first-child,
+  td:first-child {
+    padding-left: 2rem !important;
+  }
+
+  th:last-child,
+  td:last-child {
+    padding-right: 2rem !important;
+  }
+}
 
 ///////////////
 // Variables //
