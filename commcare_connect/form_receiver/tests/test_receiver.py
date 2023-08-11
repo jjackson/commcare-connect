@@ -11,7 +11,7 @@ receiver_view = FormReceiver.as_view()
 
 
 def test_form_receiver_requires_auth(api_rf: APIRequestFactory):
-    request = api_rf.post("/api/receiver/", data={"foo": "bar"})
+    request = api_rf.post("/api/receiver/", data={"foo": "bar"}, format="json")
     response = receiver_view(request)
     assert response.status_code == 403
 
