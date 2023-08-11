@@ -1,7 +1,8 @@
 import pytest
 from rest_framework.test import APIClient, APIRequestFactory
 
-from commcare_connect.users.models import Organization, User
+from commcare_connect.organization.models import Organization
+from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import OrgWithUsersFactory, UserFactory
 
 

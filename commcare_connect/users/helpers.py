@@ -1,4 +1,4 @@
-from commcare_connect.users.models import Organization
+from commcare_connect.organization.models import Organization
 
 
 def get_organization_for_request(request, view_kwargs):

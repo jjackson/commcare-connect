@@ -70,6 +70,7 @@ LOCAL_APPS = [
     "commcare_connect.commcarehq_provider",
     "commcare_connect.form_receiver",
     "commcare_connect.opportunity",
+    "commcare_connect.organization",
     "commcare_connect.users",
     "commcare_connect.web",
 ]
@@ -118,6 +119,7 @@ MIDDLEWARE = [
     "commcare_connect.users.middleware.OrganizationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "commcare_connect.utils.middleware.CustomErrorHandlingMiddleware",
 ]
 
 # STATIC
@@ -244,10 +246,10 @@ CELERY_TASK_SEND_SENT_EVENT = True
 # django-allauth
 # ------------------------------------------------------------------------------
 ACCOUNT_ALLOW_REGISTRATION = env.bool("DJANGO_ACCOUNT_ALLOW_REGISTRATION", True)
-ACCOUNT_AUTHENTICATION_METHOD = "email"
+ACCOUNT_AUTHENTICATION_METHOD = "username_email"
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_USER_MODEL_USERNAME_FIELD = "username"
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_ADAPTER = "commcare_connect.users.adapters.AccountAdapter"
 ACCOUNT_FORMS = {"signup": "commcare_connect.users.forms.UserSignupForm"}
@@ -294,5 +296,8 @@ COMMCARE_HQ_URL = env("COMMCARE_HQ_URL", default="https://staging.commcarehq.org
 
 OAUTH2_PROVIDER = {
     "RESOURCE_SERVER_INTROSPECTION_URL": f"https://{env('connect_hostname', default='localhost:8080')}/o/introspect",
-    "RESOURCE_SERVER_INTROSPECTION_CREDENTIALS": (env("rs_client_id", default=""), env("rs_client_secret", default="")),
+    "RESOURCE_SERVER_INTROSPECTION_CREDENTIALS": (
+        env("rs_client_id", default=""),
+        env("rs_client_secret", default=""),
+    ),
 }

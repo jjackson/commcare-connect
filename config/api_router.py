@@ -12,7 +12,7 @@ else:
     router = SimpleRouter()
 
 router.register("users", UserViewSet)
-router.register("opportunity", OpportunityViewSet)
+router.register("opportunity", OpportunityViewSet, basename="Opportunity")
 
 app_name = "api"
 urlpatterns = [
