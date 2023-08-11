@@ -1,6 +1,9 @@
 @import 'custom_bootstrap_vars';
 @import '~bootstrap/scss/bootstrap';
 
+$bootstrap-icons-font-dir: '~bootstrap-icons/font/fonts';
+@import '~bootstrap-icons/font/bootstrap-icons';
+
 // project specific CSS goes here
 
 .table-custom {
