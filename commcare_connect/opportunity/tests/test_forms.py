@@ -42,7 +42,7 @@ class TestOpportunityCreationForm:
     def test_incorrect_end_date(self):
         opportunity = self._get_opportunity()
         opportunity.update(
-            end_date=FuzzyDate(start_date=(datetime.date.today() - datetime.timedelta(days=20))).fuzz(),
+            end_date=datetime.date.today() - datetime.timedelta(days=20),
         )
 
         form = OpportunityCreationForm(
