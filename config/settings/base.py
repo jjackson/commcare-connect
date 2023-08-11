@@ -70,6 +70,7 @@ LOCAL_APPS = [
     "commcare_connect.commcarehq_provider",
     "commcare_connect.form_receiver",
     "commcare_connect.opportunity",
+    "commcare_connect.organization",
     "commcare_connect.users",
     "commcare_connect.web",
 ]
@@ -118,6 +119,7 @@ MIDDLEWARE = [
     "commcare_connect.users.middleware.OrganizationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "commcare_connect.utils.middleware.CustomErrorHandlingMiddleware",
 ]
 
 # STATIC

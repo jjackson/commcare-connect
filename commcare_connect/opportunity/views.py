@@ -1,10 +1,10 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.http import HttpResponse
 from django.urls import reverse
-from django.views.generic import CreateView, ListView, UpdateView
+from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from commcare_connect.opportunity.forms import OpportunityChangeForm, OpportunityCreationForm
-from commcare_connect.opportunity.models import Opportunity
+from commcare_connect.opportunity.models import CompletedModule, Opportunity, OpportunityAccess
 from commcare_connect.opportunity.tasks import create_learn_modules_assessments
 from commcare_connect.utils.commcarehq_api import get_applications_for_user
 
@@ -68,4 +68,29 @@ class OpportunityEdit(OrganizationUserMixin, UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["page_title"] = "Edit opportunity"
+        return context
+
+
+class OpportunityDetail(OrganizationUserMixin, DetailView):
+    model = Opportunity
+    template_name = "opportunity/opportunity_detail.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["org_slug"] = self.kwargs["org_slug"]
+        return context
+
+
+class OpportunityUserLearnProgress(DetailView):
+    template_name = "opportunity/user_learn_progress.html"
+
+    def get_queryset(self):
+        return OpportunityAccess.objects.filter(opportunity_id=self.kwargs.get("opp_id"))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["completed_modules"] = CompletedModule.objects.filter(
+            user=self.object.user,
+            opportunity_id=self.kwargs.get("opp_id"),
+        )
         return context
