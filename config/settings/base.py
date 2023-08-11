@@ -117,6 +117,7 @@ MIDDLEWARE = [
     "commcare_connect.users.middleware.OrganizationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "commcare_connect.utils.middleware.CustomErrorHandlingMiddleware",
 ]
 
 # STATIC
