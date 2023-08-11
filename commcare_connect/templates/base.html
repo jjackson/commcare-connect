@@ -50,7 +50,7 @@
           {% if request.user.is_authenticated %}
             {% if request.org %}
               <li class="nav-item">
-                <a class="nav-link {% active_link "list || create || edit || learn_progress" namespace='opportunity' %}"
+                <a class="nav-link {% active_link "list || create || edit || detail" namespace='opportunity' %}"
                    href="{% url 'opportunity:list' request.org.slug %}">{% translate "Opportunities" %}</a>
               </li>
             {% endif %}
