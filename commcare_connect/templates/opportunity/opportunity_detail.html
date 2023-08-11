@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+  <div class="container">
+    <div class="mt-2 pt-4 px-4">
+      <div class="row align-items-center">
+        <div class="col-8">
+          <h1 class="display-5 mb-0">{{ object.name }}</h1>
+        </div>
+        <div class="col-4">
+          <a class="float-end btn btn-primary rounded-circle" href="{% url 'opportunity:edit' org_slug=org_slug pk=opportunity.id %}">
+            <i class="bi bi-pencil"></i>
+          </a>
+        </div>
+      </div>
+      <small title="End date"><i class="bi bi-clock"></i> Ends on <b>{{ object.end_date }}</b></small>
+      <hr />
+      <span class="text-black-50 text-uppercase">Description</span>
+      <p>
+        {{ object.description }}
+      </p>
+      <table class="table table-borderless">
+        <tbody>
+        <tr>
+          <th scope="row">Learn App</th>
+          <td>{{ object.learn_app.name }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Deliver App</th>
+          <td>{{ object.deliver_app.name }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Max Visits per user</th>
+          <td>{{ object.max_visits_per_user }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Daily Visits per user</th>
+          <td>{{ object.daily_max_visits_per_user }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Total Budget</th>
+          <td>{{ object.total_budget }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Budget per visit</th>
+          <td>{{ object.budget_per_visit }}</td>
+        </tr>
+        </tbody>
+      </table>
+      <hr />
+    </div>
+
+    <div class="pt-2 px-4">
+      <h4>Learn App Progress for Users</h4>
+      <table class="table border mt-3 table-custom">
+        <thead class="table-secondary">
+        <tr>
+          <th>Name</th>
+          <th>Modules Completed</th>
+          <th>Visit Count</th>
+          <th>Last visit date</th>
+          <th></th>
+        </tr>
+        </thead>
+        <tbody class="align-middle">
+          {% for opportunity_access in object.opportunityaccess_set.all %}
+            <tr>
+              <td>{{ opportunity_access.user.name }}</td>
+              <td>
+                {{ opportunity_access.learn_progress }}%
+              </td>
+              <td>
+                {{ opportunity_access.visit_count }}
+              </td>
+              <td>
+                {{ opportunity_access.last_visit_date|default_if_none:"N/A" }}
+              </td>
+              <td>
+                <a
+                  href="{% url 'opportunity:user_learn_progress' org_slug=org_slug opp_id=object.id pk=opportunity_access.id %}">
+                  Details
+                </a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="3">No learn progress for users.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock content %}
