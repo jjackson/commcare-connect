@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.forms import EmailField
 from django.utils.translation import gettext_lazy as _
 
-from commcare_connect.users.models import Organization
+from commcare_connect.organization.models import Organization
 
 User = get_user_model()
 

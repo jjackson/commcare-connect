@@ -4,7 +4,7 @@ from django import forms
 from django.utils.timezone import now
 
 from commcare_connect.opportunity.models import CommCareApp, DeliverForm, Opportunity
-from commcare_connect.users.models import Organization
+from commcare_connect.organization.models import Organization
 
 
 class OpportunityChangeForm(forms.ModelForm):

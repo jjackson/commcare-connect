@@ -8,8 +8,9 @@ from django.http import HttpRequest, HttpResponseRedirect
 from django.test import RequestFactory
 from django.urls import reverse
 
+from commcare_connect.organization.models import Organization
 from commcare_connect.users.forms import UserAdminChangeForm
-from commcare_connect.users.models import Organization, User
+from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import UserFactory
 from commcare_connect.users.views import UserRedirectView, UserUpdateView, user_detail_view
 

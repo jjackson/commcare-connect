@@ -1,7 +1,8 @@
 from allauth.account.signals import user_logged_in, user_signed_up
 from django.dispatch import receiver
 
-from commcare_connect.users.models import Organization, User, UserOrganizationMembership
+from commcare_connect.organization.models import Organization, UserOrganizationMembership
+from commcare_connect.users.models import User
 
 
 @receiver(user_signed_up)
