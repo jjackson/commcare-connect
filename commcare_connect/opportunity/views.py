@@ -71,21 +71,13 @@ class OpportunityEdit(OrganizationUserMixin, UpdateView):
         return context
 
 
-class OpportunityLearnProgressList(ListView):
-    model = OpportunityAccess
-    template_name = "opportunity/learn_progress.html"
-    paginate_by = 20
+class OpportunityDetail(OrganizationUserMixin, DetailView):
+    model = Opportunity
+    template_name = "opportunity/opportunity_detail.html"
 
-    def get_queryset(self):
-        return OpportunityAccess.objects.filter(opportunity_id=self.kwargs["pk"])
-
-    def get_allow_empty(self):
-        return Opportunity.objects.filter(id=self.kwargs["pk"]).exists()
-
-    def get_context_data(self, *args, object_list=None, **kwargs):
-        context = super().get_context_data(*args, **kwargs)
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
         context["org_slug"] = self.kwargs["org_slug"]
-        context["opportunity"] = Opportunity.objects.get(id=self.kwargs["pk"])
         return context
 
 
