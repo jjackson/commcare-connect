@@ -7,7 +7,7 @@ from commcare_connect.users.models import Organization, User, UserOrganizationMe
 @receiver(user_signed_up)
 @receiver(user_logged_in)
 def create_org_for_user(request, user, **kwargs):
-    if not user.members.exists():
+    if not user.memberships.exists():
         _create_default_org_for_user(user)
 
 
