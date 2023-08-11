@@ -296,6 +296,6 @@ OAUTH2_PROVIDER = {
     "RESOURCE_SERVER_INTROSPECTION_URL": f"https://{env('connect_hostname', default='localhost:8080')}/o/introspect",
     "RESOURCE_SERVER_INTROSPECTION_CREDENTIALS": (
         env("rs_client_id", default=""),
-        env("rs_client_secret", default="")
+        env("rs_client_secret", default=""),
     ),
 }
