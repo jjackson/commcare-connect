@@ -1,14 +1,17 @@
 from oauth2_provider.views.mixins import ClientProtectedResourceMixin
 from rest_framework import parsers, status
-from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
+from django.http import HttpResponse
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
-from django.views.generic import DetailView, RedirectView, UpdateView
+from django.views.generic import DetailView, RedirectView, UpdateView, View
+from django.views.decorators.csrf import csrf_exempt
+
+from .models import ConnectIDUserLink
 
 User = get_user_model()
 
@@ -51,12 +54,12 @@ class UserRedirectView(LoginRequiredMixin, RedirectView):
 user_redirect_view = UserRedirectView.as_view()
 
 
-class CreateUserLinkView(ClientProtectedResourceMixin, APIView):
-    parser_classes = [parsers.JSONParser]
+@method_decorator(csrf_exempt, name="dispatch")
+class CreateUserLinkView(ClientProtectedResourceMixin, View):
 
     def post(self, request):
-        commcare_username = request.data.get('commcare_username')
-        connect_username = request.data.get('connect_username')
+        commcare_username = request.POST.get('commcare_username')
+        connect_username = request.POST.get('connect_username')
         if not commcare_username or not connect_username:
             return Response("commcare_username and connect_username required", status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -64,7 +67,7 @@ class CreateUserLinkView(ClientProtectedResourceMixin, APIView):
         except User.DoesNotExist:
             return Response("connect user does not exist", status=status.HTTP_400_BAD_REQUEST)
         ConnectIDUserLink.objects.create(commcare_username=commcare_username, user=user)
-        return Response(status=status.HTTP_200_OK)
+        return HttpResponse(status=200)
 
 
 create_user_link_view = CreateUserLinkView.as_view()
