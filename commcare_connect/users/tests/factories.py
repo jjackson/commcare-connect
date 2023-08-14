@@ -33,6 +33,16 @@ class UserFactory(DjangoModelFactory):
         django_get_or_create = ["email"]
 
 
+class MobileUserFactory(DjangoModelFactory):
+    username = Faker("word")
+    name = Faker("name")
+
+
+    class Meta:
+        model = get_user_model()
+        django_get_or_create = ["username"]
+
+
 class OrganizationFactory(DjangoModelFactory):
     name = Faker("company")
 
