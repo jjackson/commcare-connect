@@ -27,7 +27,7 @@ def active_link(context, viewnames, css_class="active", inactive_class="", names
         if ":" in view_name:
             view_namespace, view_name = view_name.split(":", 1)
 
-        if not view_namespace or view_namespace in namespaces:
+        if not namespaces or view_namespace in namespaces:
             active = current_url_name == view_name.strip()
 
         if active:
