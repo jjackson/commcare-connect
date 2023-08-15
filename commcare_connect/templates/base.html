@@ -38,15 +38,16 @@
         <span class="navbar-toggler-icon"></span>
       </button>
       <a class="navbar-brand" href="{% url 'home' %}">CommCare Connect</a>
+      {% if request.org %}
+        {% if request.org_membership.is_admin %}
+        <a class="navbar-brand abs" href="{% url 'organization:home' request.org.slug %}">{{ request.org.name }}</a>
+        {% else %}
+        <a class="navbar-brand abs" href="">{{ request.org.name }}</a>
+        {% endif %}
+      {% endif %}
 
       <div class="collapse navbar-collapse" id="navbarSupportedContent">
-        <ul class="navbar-nav mr-auto">
-          <li class="nav-item">
-            <a class="nav-link {% active_link "home" %}" href="{% url 'home' %}">Home <span class="visually-hidden">(current)</span></a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% active_link "about" %}" href="{% url 'about' %}">About</a>
-          </li>
+        <ul class="navbar-nav">
           {% if request.user.is_authenticated %}
             {% if request.org %}
               <li class="nav-item">
@@ -54,6 +55,10 @@
                    href="{% url 'opportunity:list' request.org.slug %}">{% translate "Opportunities" %}</a>
               </li>
             {% endif %}
+          {% endif %}
+        </ul>
+        <ul class="navbar-nav ms-auto">
+            {% if request.user.is_authenticated %}
             <li class="nav-item">
               <a class="nav-link {% active_link "users:detail" %}"
                  href="{% url 'users:detail' request.user.pk %}">{% translate "My Profile" %}</a>
