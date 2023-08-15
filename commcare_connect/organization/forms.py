@@ -19,5 +19,5 @@ class OrganizationChangeForm(forms.ModelForm):
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
             layout.Row(layout.Field("name")),
-            layout.Submit("submit", "Submit"),
+            layout.Submit("submit", gettext("Update")),
         )
