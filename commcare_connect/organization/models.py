@@ -39,5 +39,9 @@ class UserOrganizationMembership(models.Model):
     )
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.MEMBER)
 
+    @property
+    def is_admin(self):
+        return self.role == self.Role.ADMIN
+
     class Meta:
         db_table = "organization_membership"
