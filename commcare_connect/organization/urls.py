@@ -5,5 +5,5 @@ from commcare_connect.organization import views
 app_name = "organization"
 
 urlpatterns = [
-    path("", views.organization_home, name="home"),
+    path("organization/", views.organization_home, name="home"),
 ]
