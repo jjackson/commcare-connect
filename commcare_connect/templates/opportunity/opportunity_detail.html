@@ -1,6 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
-{% load crispy_forms_tags %}
+{% load django_tables2 %}
 
 {% block content %}
   <div class="container">
@@ -54,43 +53,7 @@
 
     <div class="pt-2 px-4">
       <h4>Learn App Progress for Users</h4>
-      <table class="table border mt-3 table-custom">
-        <thead class="table-secondary">
-        <tr>
-          <th>Name</th>
-          <th>Modules Completed</th>
-          <th>Visit Count</th>
-          <th>Last visit date</th>
-          <th></th>
-        </tr>
-        </thead>
-        <tbody class="align-middle">
-          {% for opportunity_access in object.opportunityaccess_set.all %}
-            <tr>
-              <td>{{ opportunity_access.user.name }}</td>
-              <td>
-                {{ opportunity_access.learn_progress }}%
-              </td>
-              <td>
-                {{ opportunity_access.visit_count }}
-              </td>
-              <td>
-                {{ opportunity_access.last_visit_date|default_if_none:"N/A" }}
-              </td>
-              <td>
-                <a
-                  href="{% url 'opportunity:user_learn_progress' org_slug=org_slug opp_id=object.id pk=opportunity_access.id %}">
-                  Details
-                </a>
-              </td>
-            </tr>
-            {% empty %}
-            <tr>
-              <td colspan="3">No learn progress for users.</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      {% render_table user_table %}
     </div>
   </div>
 {% endblock content %}
