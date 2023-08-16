@@ -158,6 +158,10 @@ class OpportunityAccess(models.Model):
 
 
 class UserVisit(XFormBaseModel):
+    opportunity = models.ForeignKey(
+        Opportunity,
+        on_delete=models.CASCADE,
+    )
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
