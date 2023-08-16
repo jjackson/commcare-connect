@@ -8,6 +8,8 @@ from dataclasses import dataclass
 import httpx
 from django.conf import settings
 
+from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
+
 XMLNS = "http://commcareconnect.com/data/v1/learn"
 XMLNS_PREFIX = "{%s}" % XMLNS
 
@@ -18,6 +20,10 @@ class Module:
     name: str
     description: str
     time_estimate: int
+
+
+class AppNoBuildException(CommCareHQAPIException):
+    pass
 
 
 def get_connect_blocks_for_app(domain: str, app_id: str) -> list[Module]:
@@ -50,6 +56,8 @@ def get_form_xml_for_app(domain: str, app_id: str) -> list[str]:
                         with zip_ref.open(file) as xml_file:
                             form_xml.append(xml_file.read().decode())
         return form_xml
+
+    raise AppNoBuildException(f"App {app_id} has no builds available.")
 
 
 def extract_connect_blocks(form_xml):
