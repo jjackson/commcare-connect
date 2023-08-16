@@ -4,7 +4,15 @@ from jsonpath_ng.ext import parse
 from commcare_connect.form_receiver.const import CCC_LEARN_XMLNS
 from commcare_connect.form_receiver.exceptions import ProcessingError
 from commcare_connect.form_receiver.serializers import XForm
-from commcare_connect.opportunity.models import Assessment, CommCareApp, CompletedModule, LearnModule, Opportunity
+from commcare_connect.opportunity.models import (
+    Assessment,
+    CommCareApp,
+    CompletedModule,
+    DeliverForm,
+    LearnModule,
+    Opportunity,
+    UserVisit,
+)
 from commcare_connect.users.models import User
 
 LEARN_MODULE_JSONPATH = parse("module where @xmlns")
@@ -13,7 +21,15 @@ ASSESSMENT_JSONPATH = parse("assessment where @xmlns")
 
 def process_xform(xform: XForm):
     """Process a form received from CommCare HQ."""
-    app, opportunity, user = get_related_models(xform)
+    app = get_app(xform.domain, xform.app_id)
+    user = get_user(xform)
+
+    if process_deliver_form(user, xform):
+        return
+
+    opportunity = get_opportunity_for_learn_app(app)
+    if not opportunity:
+        raise ProcessingError(f"No active opportunities found for CommCare app {app.cc_app_id}.")
     process_learn_form(user, xform, app, opportunity)
 
 
@@ -95,21 +111,34 @@ def process_assessments(user, xform: XForm, app: CommCareApp, opportunity: Oppor
         )
 
 
-def get_related_models(xform: XForm):
-    app = get_app(xform.domain, xform.app_id)
-    opportunity = get_opportunity_for_app(app)
-    user = get_user(xform)
-    return app, opportunity, user
-
-
-def get_opportunity_for_app(app):
+def process_deliver_form(user, xform):
     try:
-        opportunity = Opportunity.objects.get(learn_app=app, active=True)
+        deliver_form = DeliverForm.objects.filter(
+            xmlns=xform.xmlns, app__cc_domain=xform.domain, app__cc_app_id=xform.app_id
+        ).get()
+    except DeliverForm.DoesNotExist:
+        return False
+    except DeliverForm.MultipleObjectsReturned:
+        raise ProcessingError(f"Multiple deliver forms found for this app and XMLNS: {xform.app_id}, {xform.xmlns}")
+
+    UserVisit.objects.create(
+        user=user,
+        deliver_form=deliver_form,
+        visit_date=xform.metadata.timeStart,
+        xform_id=xform.id,
+        app_build_id=xform.build_id,
+        app_build_version=xform.metadata.app_build_version,
+    )
+    return True
+
+
+def get_opportunity_for_learn_app(app):
+    try:
+        return Opportunity.objects.get(learn_app=app, active=True)
     except Opportunity.DoesNotExist:
-        raise ProcessingError(f"No active opportunities found for CommCare app {app.cc_app_id}.")
+        pass
     except Opportunity.MultipleObjectsReturned:
         raise ProcessingError(f"Multiple active opportunities found for CommCare app {app.cc_app_id}.")
-    return opportunity
 
 
 def get_app(domain, app_id):
