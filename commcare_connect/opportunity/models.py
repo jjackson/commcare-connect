@@ -167,3 +167,4 @@ class UserVisit(XFormBaseModel):
         on_delete=models.PROTECT,
     )
     visit_date = models.DateTimeField()
+    form_json = models.JSONField()
