@@ -106,7 +106,7 @@ class OpportunityUserVisitTableView(OrganizationUserMixin, SingleTableView):
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        return UserVisit.objects.filter(deliver_form__opportunity=opportunity)
+        return UserVisit.objects.filter(opportunity=opportunity)
 
 
 class OpportunityUserLearnProgress(DetailView):
