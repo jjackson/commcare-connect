@@ -53,7 +53,9 @@
 
     <div class="pt-2 px-4">
       <h4>Learn App Progress for Users</h4>
-      {% render_table user_table %}
+      <div hx-get="{% url "opportunity:user_table" org_slug=org_slug pk=opportunity.pk %}{% querystring %}" hx-trigger="load" hx-swap="outerHTML">
+        {% include "tables/table_placeholder.html" with num_cols=4 %}
+      </div>
     </div>
   </div>
 {% endblock content %}
