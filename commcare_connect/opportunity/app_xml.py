@@ -27,26 +27,29 @@ def get_connect_blocks_for_app(domain: str, app_id: str) -> list[Module]:
 
 def get_form_xml_for_app(domain: str, app_id: str) -> list[str]:
     """Download the CCZ for the given app and return the XML for each form."""
-    ccz_url = f"{settings.COMMCARE_HQ_URL}/a/{domain}/apps/api/download_ccz/"
-    params = {
-        "app_id": app_id,
-        "latest": "release",
-    }
-    response = httpx.get(ccz_url, params=params)
-    response.raise_for_status()
 
-    form_xml = []
-    with tempfile.NamedTemporaryFile() as file:
-        file.write(response.content)
-        file.seek(0)
+    for latest in ["release", "build", "save"]:
+        ccz_url = f"{settings.COMMCARE_HQ_URL}/a/{domain}/apps/api/download_ccz/"
+        params = {
+            "app_id": app_id,
+            "latest": latest,
+        }
+        response = httpx.get(ccz_url, params=params)
+        if not response.is_success:
+            continue
 
-        form_re = re.compile(r"modules-\d+/forms-\d+\.xml")
-        with zipfile.ZipFile(file, "r") as zip_ref:
-            for file in zip_ref.namelist():
-                if form_re.match(file):
-                    with zip_ref.open(file) as xml_file:
-                        form_xml.append(xml_file.read().decode())
-    return form_xml
+        form_xml = []
+        with tempfile.NamedTemporaryFile() as file:
+            file.write(response.content)
+            file.seek(0)
+
+            form_re = re.compile(r"modules-\d+/forms-\d+\.xml")
+            with zipfile.ZipFile(file, "r") as zip_ref:
+                for file in zip_ref.namelist():
+                    if form_re.match(file):
+                        with zip_ref.open(file) as xml_file:
+                            form_xml.append(xml_file.read().decode())
+        return form_xml
 
 
 def extract_connect_blocks(form_xml):
