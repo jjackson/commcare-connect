@@ -46,3 +46,16 @@ class User(AbstractUser):
 
         """
         return reverse("users:detail", kwargs={"pk": self.id})
+
+
+class ConnectIDUserLink(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+    )
+    commcare_username = models.TextField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'commcare_username'], name='connect_user')
+        ]
