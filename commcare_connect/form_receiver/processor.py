@@ -128,6 +128,7 @@ def process_deliver_form(user, xform):
         xform_id=xform.id,
         app_build_id=xform.build_id,
         app_build_version=xform.metadata.app_build_version,
+        form_json=xform.raw_form,
     )
     return True
 
