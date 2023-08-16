@@ -14,7 +14,10 @@ ASSESSMENT_JSONPATH = parse("assessment where @xmlns")
 def process_xform(xform: XForm):
     """Process a form received from CommCare HQ."""
     app, opportunity, user = get_related_models(xform)
+    process_learn_form(user, xform, app, opportunity)
 
+
+def process_learn_form(user, xform: XForm, app: CommCareApp, opportunity: Opportunity):
     processors = [
         (LEARN_MODULE_JSONPATH, process_learn_modules),
         (ASSESSMENT_JSONPATH, process_assessments),
