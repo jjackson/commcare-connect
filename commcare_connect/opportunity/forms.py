@@ -3,7 +3,7 @@ from crispy_forms.layout import Field, Row, Submit
 from django import forms
 from django.utils.timezone import now
 
-from commcare_connect.opportunity.models import CommCareApp, DeliverForm, Opportunity
+from commcare_connect.opportunity.models import CommCareApp, DeliverForm, HQApiKey, Opportunity
 from commcare_connect.organization.models import Organization
 
 
@@ -64,6 +64,7 @@ class OpportunityCreationForm(forms.ModelForm):
             Row(Field("learn_app_passing_score")),
             Row(Field("deliver_app")),
             Row(Field("deliver_form")),
+            Row(Field("api_key")),
             Submit("submit", "Submit"),
         )
 
@@ -81,6 +82,8 @@ class OpportunityCreationForm(forms.ModelForm):
         self.fields["deliver_app"].widget.attrs.update({"id": "deliver_app_select"})
         self.fields["deliver_form"] = forms.ChoiceField(choices=form_choices)
         self.fields["deliver_form"].widget.attrs.update({"id": "deliver_form_select"})
+        self.fields["api_key"] = forms.CharField(max_length=50)
+
 
     def clean(self):
         cleaned_data = super().clean()
@@ -146,5 +149,7 @@ class OpportunityCreationForm(forms.ModelForm):
         deliver_form.opportunity = self.instance
         deliver_form.clean()
         deliver_form.save()
+
+        HQApiKey.objects.create(opportunity=self.instance, api_key=self.cleaned_data["api_key"])
 
         return self.instance
