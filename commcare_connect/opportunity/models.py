@@ -167,3 +167,11 @@ class UserVisit(XFormBaseModel):
         on_delete=models.PROTECT,
     )
     visit_date = models.DateTimeField()
+
+
+class HQApiKey(models.Model):
+    opportunity = models.ForeignKey(
+        Opportunity,
+        on_delete=models.CASCADE,
+    )
+    api_key = models.CharField(max_length=50)
