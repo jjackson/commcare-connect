@@ -24,6 +24,7 @@ djangorestframework
 django-cors-headers
 # DRF-spectacular for api documentation
 drf-spectacular
+django-tables2
 
 # Temporary
 # -------------------------------------------------------------------------------
