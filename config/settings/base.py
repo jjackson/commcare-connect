@@ -63,6 +63,7 @@ THIRD_PARTY_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
     "drf_spectacular",
+    "django_tables2",
 ]
 
 LOCAL_APPS = [
@@ -285,6 +286,14 @@ CACHES = {
             "IGNORE_EXCEPTIONS": True,
         },
     }
+}
+
+DJANGO_TABLES2_TEMPLATE = "django_tables2/bootstrap5.html"
+DJANGO_TABLES2_TABLE_ATTRS = {
+    "class": "table border table-custom",
+    "thead": {
+        "class": "table-secondary",
+    },
 }
 
 # ------------------------------------------------------------------------------

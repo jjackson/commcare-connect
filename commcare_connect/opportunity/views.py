@@ -5,6 +5,7 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from commcare_connect.opportunity.forms import OpportunityChangeForm, OpportunityCreationForm
 from commcare_connect.opportunity.models import CompletedModule, Opportunity, OpportunityAccess
+from commcare_connect.opportunity.tables import OpportunityAccessTable
 from commcare_connect.opportunity.tasks import create_learn_modules_assessments
 from commcare_connect.utils.commcarehq_api import get_applications_for_user
 
@@ -78,6 +79,7 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["org_slug"] = self.kwargs["org_slug"]
+        context["user_table"] = OpportunityAccessTable(self.object.opportunityaccess_set.all())
         return context
 
 
