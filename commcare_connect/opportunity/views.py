@@ -6,8 +6,8 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 
 from commcare_connect.opportunity.forms import OpportunityChangeForm, OpportunityCreationForm
-from commcare_connect.opportunity.models import CompletedModule, Opportunity, OpportunityAccess
-from commcare_connect.opportunity.tables import OpportunityAccessTable
+from commcare_connect.opportunity.models import CompletedModule, Opportunity, OpportunityAccess, UserVisit
+from commcare_connect.opportunity.tables import OpportunityAccessTable, UserVisitTable
 from commcare_connect.opportunity.tasks import create_learn_modules_assessments
 from commcare_connect.utils.commcarehq_api import get_applications_for_user
 
@@ -96,11 +96,17 @@ class OpportunityUserTableView(OrganizationUserMixin, SingleTableView):
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
         return OpportunityAccess.objects.filter(opportunity=opportunity)
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["org_slug"] = self.kwargs["org_slug"]
-        context["opportunity_id"] = self.kwargs["pk"]
-        return context
+
+class OpportunityUserVisitTableView(OrganizationUserMixin, SingleTableView):
+    model = UserVisit
+    paginate_by = 25
+    table_class = UserVisitTable
+    template_name = "tables/single_table.html"
+
+    def get_queryset(self):
+        opportunity_id = self.kwargs["pk"]
+        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        return UserVisit.objects.filter(deliver_form__opportunity=opportunity)
 
 
 class OpportunityUserLearnProgress(DetailView):
