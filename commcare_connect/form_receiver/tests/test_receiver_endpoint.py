@@ -34,8 +34,8 @@ def test_form_receiver_validation(user: User, api_rf: APIRequestFactory):
 def test_process_xform_error(user: User, api_rf: APIRequestFactory):
     request = api_rf.post("/api/receiver/", data=get_form_json(), format="json")
     request.user = user
-    with (mock.patch("commcare_connect.form_receiver.processor.get_related_models") as get_related_models,):
-        get_related_models.side_effect = ProcessingError("oops, something went wrong")
+    with (mock.patch("commcare_connect.form_receiver.views.process_xform") as process_xform,):
+        process_xform.side_effect = ProcessingError("oops, something went wrong")
         response = receiver_view(request)
     assert response.status_code == 400, response.data
     assert response.data == {"detail": "oops, something went wrong"}

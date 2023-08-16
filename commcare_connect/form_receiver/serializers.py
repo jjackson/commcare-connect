@@ -25,6 +25,10 @@ class XForm:
     form: dict
     metadata: XFormMetadata
 
+    @property
+    def xmlns(self):
+        return self.form.get("@xmlns")
+
 
 class XFormMetadataSerializer(serializers.Serializer):
     timeStart = serializers.DateTimeField(required=True)
