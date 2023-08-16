@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
@@ -157,6 +158,12 @@ class OpportunityAccess(models.Model):
         return
 
 
+class VisitValidationStatus(models.TextChoices):
+    pending = "pending", gettext("Pending")
+    approved = "approved", gettext("Approved")
+    rejected = "rejected", gettext("Rejected")
+
+
 class UserVisit(XFormBaseModel):
     opportunity = models.ForeignKey(
         Opportunity,
@@ -171,4 +178,7 @@ class UserVisit(XFormBaseModel):
         on_delete=models.PROTECT,
     )
     visit_date = models.DateTimeField()
+    status = models.CharField(
+        max_length=50, choices=VisitValidationStatus.choices, default=VisitValidationStatus.pending
+    )
     form_json = models.JSONField()

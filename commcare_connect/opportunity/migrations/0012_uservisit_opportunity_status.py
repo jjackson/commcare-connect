@@ -18,4 +18,13 @@ class Migration(migrations.Migration):
             ),
             preserve_default=False,
         ),
+        migrations.AddField(
+            model_name="uservisit",
+            name="status",
+            field=models.CharField(
+                choices=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")],
+                default="pending",
+                max_length=50,
+            ),
+        ),
     ]

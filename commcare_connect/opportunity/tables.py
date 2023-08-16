@@ -25,7 +25,7 @@ class UserVisitTable(tables.Table):
 
     class Meta:
         model = UserVisit
-        fields = ("user.name", "visit_date")
-        sequence = ("user.name", "deliver_form", "visit_date")
+        fields = ("user.name", "visit_date", "status")
+        sequence = ("user.name", "deliver_form", "visit_date", "status")
         empty_text = "No forms."
         orderable = False
