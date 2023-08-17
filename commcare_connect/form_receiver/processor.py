@@ -122,6 +122,7 @@ def process_deliver_form(user, xform):
         raise ProcessingError(f"Multiple deliver forms found for this app and XMLNS: {xform.app_id}, {xform.xmlns}")
 
     UserVisit.objects.create(
+        opportunity=deliver_form.opportunity,
         user=user,
         deliver_form=deliver_form,
         visit_date=xform.metadata.timeStart,
