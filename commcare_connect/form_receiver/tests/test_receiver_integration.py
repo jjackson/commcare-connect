@@ -2,7 +2,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from commcare_connect.form_receiver.tests.xforms import AssessmentStubFactory, LearnModuleJsonFactory, get_form_json
-from commcare_connect.opportunity.models import Assessment, CompletedModule, LearnModule, Opportunity
+from commcare_connect.opportunity.models import Assessment, CompletedModule, LearnModule, Opportunity, UserVisit
 from commcare_connect.opportunity.tests.factories import LearnModuleFactory, OpportunityFactory
 from commcare_connect.users.models import User
 
@@ -77,6 +77,20 @@ def test_form_receiver_assessment(user: User, api_client: APIClient, opportunity
         app_build_id=form_json["build_id"],
         app_build_version=form_json["metadata"]["app_build_version"],
     ).exists()
+
+
+@pytest.mark.django_db
+def test_receiver_deliver_form(user: User, api_client: APIClient, opportunity: Opportunity):
+    deliver_form = opportunity.deliver_form.first()
+    form_json = get_form_json(
+        xmlns=deliver_form.xmlns,
+        domain=opportunity.deliver_app.cc_domain,
+        app_id=opportunity.deliver_app.cc_app_id,
+    )
+    assert UserVisit.objects.filter(user=user).count() == 0
+
+    make_request(api_client, form_json, user)
+    assert UserVisit.objects.filter(user=user).count() == 1
 
 
 def _get_form_json(learn_app, module_id, form_block=None):
