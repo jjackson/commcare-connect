@@ -1,5 +1,7 @@
 from oauth2_provider.views.mixins import ClientProtectedResourceMixin
+from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from rest_framework import parsers, status
+from rest_framework.decorators import api_view, authentication_classes
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -74,3 +76,29 @@ class CreateUserLinkView(ClientProtectedResourceMixin, View):
 
 
 create_user_link_view = CreateUserLinkView.as_view()
+
+
+@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([OAuth2Authentication])
+def create_hq_user(request):
+    opportunity = request.POST.get("opportunity")
+    app = request.POST.get("app")
+    if app is None or opportunity is None:
+        return HttpResponse("app and opportunity required", status=400)
+    api_key = Opportunity.objects.get(pk=opportunity).api_key
+    if api_key is None:
+        return HttpResponse("Opportunity requires API Key", status=400)
+    domain = CommCareApp.objects.get(pk=app).cc_domain
+    mobile_worker_api_url = f"{settings.COMMCARE_HQ_URL}/a/{domain}/api/v0.5/user"
+    hq_request  = requests.post(mobile_worker_api_url,
+                                data={
+                                    "username": request.user.username,
+                                    "connect_user": request.user.username,
+                                },
+                                headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"}
+                                )
+    if hq_request.status_code == 201:
+        ConnectIDUserLink.objects.create(commcare_username=request.user.username, user=request.user)
+        return HttpResponse(status=200)
+    return HttpResponse(status=400)
