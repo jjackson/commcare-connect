@@ -63,11 +63,11 @@ class CreateUserLinkView(ClientProtectedResourceMixin, View):
         commcare_username = request.POST.get('commcare_username')
         connect_username = request.POST.get('connect_username')
         if not commcare_username or not connect_username:
-            return Response("commcare_username and connect_username required", status=status.HTTP_400_BAD_REQUEST)
+            return HttpResponse("commcare_username and connect_username required", status=400)
         try:
             user = User.objects.get(username=connect_username)
         except User.DoesNotExist:
-            return Response("connect user does not exist", status=status.HTTP_400_BAD_REQUEST)
+            return HttpResponse("connect user does not exist", status=400)
         user_link, new = ConnectIDUserLink.objects.get_or_create(commcare_username=commcare_username, user=user)
         if new:
             return HttpResponse(status=201)
