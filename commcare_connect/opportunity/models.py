@@ -22,6 +22,14 @@ class CommCareApp(BaseModel):
         return self.name
 
 
+class HQApiKey(models.Model):
+    api_key = models.CharField(max_length=50, unique=True)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+    )
+
+
 class Opportunity(BaseModel):
     organization = models.ForeignKey(
         Organization,
@@ -48,6 +56,11 @@ class Opportunity(BaseModel):
     end_date = models.DateField(null=True)
     budget_per_visit = models.IntegerField(null=True)
     total_budget = models.IntegerField(null=True)
+    api_key = models.ForeignKey(
+        HQApiKey,
+        on_delete=models.DO_NOTHING,
+        null=True
+    )
 
     def __str__(self):
         return self.name
@@ -167,11 +180,3 @@ class UserVisit(XFormBaseModel):
         on_delete=models.PROTECT,
     )
     visit_date = models.DateTimeField()
-
-
-class HQApiKey(models.Model):
-    opportunity = models.ForeignKey(
-        Opportunity,
-        on_delete=models.CASCADE,
-    )
-    api_key = models.CharField(max_length=50)
