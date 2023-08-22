@@ -20,8 +20,7 @@ class UserLearnProgressView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, *args, **kwargs):
-        qs = OpportunityAccess.objects.all()
-        opportunity_access = get_object_or_404(qs, user=self.request.user, opportunity=kwargs.get("pk"))
+        opportunity_access = get_object_or_404(OpportunityAccess, user=self.request.user, opportunity=kwargs.get("pk"))
         completed_modules = CompletedModule.objects.filter(
             user=self.request.user, opportunity=opportunity_access.opportunity
         )
