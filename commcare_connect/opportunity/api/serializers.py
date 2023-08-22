@@ -33,3 +33,8 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "budget_per_visit",
             "total_budget",
         ]
+
+
+class UserLearnProgressSerializer(serializers.Serializer):
+    completed_modules = serializers.IntegerField()
+    total_modules = serializers.IntegerField()
