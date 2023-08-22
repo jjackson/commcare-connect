@@ -21,11 +21,6 @@ class OpportunityList(OrganizationUserMixin, ListView):
     model = Opportunity
     paginate_by = 10
 
-    def get_context_data(self, *args, object_list=None, **kwargs):
-        context_data = super().get_context_data(*args, **kwargs)
-        context_data["org_slug"] = self.kwargs["org_slug"]
-        return context_data
-
     def get_queryset(self):
         return Opportunity.objects.filter(organization__slug=self.kwargs["org_slug"])
 
