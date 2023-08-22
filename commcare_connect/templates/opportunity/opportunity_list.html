@@ -7,7 +7,7 @@
   <div class="container">
     <div class="mb-2 mt-2">
       <a class="btn btn-primary"
-         href="{% url 'opportunity:create' org_slug=org_slug %}">Create new</a>
+         href="{% url 'opportunity:create' org_slug=request.org %}">Create new</a>
     </div>
     <table class="table table-bordered">
       <thead class="table-light">
@@ -25,8 +25,8 @@
             {% if opportunity.active %} Active {% else %} Inactive {% endif %}
           </td>
           <td>
-            <a href="{% url 'opportunity:detail' org_slug=org_slug pk=opportunity.id %}">View</a>
-            <a href="{% url 'opportunity:edit' org_slug=org_slug pk=opportunity.id %}">Edit</a>
+            <a href="{% url 'opportunity:detail' org_slug=request.org pk=opportunity.id %}">View</a>
+            <a href="{% url 'opportunity:edit' org_slug=request.org pk=opportunity.id %}">Edit</a>
           </td>
         </tr>
         {% empty %}
