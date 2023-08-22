@@ -34,7 +34,6 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["page_title"] = "Create new opportunity"
         context["applications"] = get_applications_for_user(self.request.user)
         return context
 
@@ -62,11 +61,6 @@ class OpportunityEdit(OrganizationUserMixin, UpdateView):
     def form_valid(self, form):
         form.instance.modified_by = self.request.user.email
         return super().form_valid(form)
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["page_title"] = "Edit opportunity"
-        return context
 
 
 class OpportunityDetail(OrganizationUserMixin, DetailView):
