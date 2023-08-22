@@ -22,7 +22,7 @@ class OpportunityList(OrganizationUserMixin, ListView):
     paginate_by = 10
 
     def get_queryset(self):
-        return Opportunity.objects.filter(organization__slug=self.kwargs["org_slug"])
+        return Opportunity.objects.filter(organization__slug=self.request.org)
 
 
 class OpportunityCreate(OrganizationUserMixin, CreateView):
@@ -30,7 +30,7 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
     form_class = OpportunityCreationForm
 
     def get_success_url(self):
-        return reverse("opportunity:list", args=(self.kwargs.get("org_slug"),))
+        return reverse("opportunity:list", args=(self.request.org,))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -42,7 +42,7 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
         kwargs = super().get_form_kwargs()
         kwargs["applications"] = get_applications_for_user(self.request.user)
         kwargs["user"] = self.request.user
-        kwargs["org_slug"] = self.kwargs.get("org_slug")
+        kwargs["org_slug"] = self.request.org
         return kwargs
 
     def form_valid(self, form: OpportunityCreationForm) -> HttpResponse:
@@ -57,7 +57,7 @@ class OpportunityEdit(OrganizationUserMixin, UpdateView):
     form_class = OpportunityChangeForm
 
     def get_success_url(self):
-        return reverse("opportunity:list", args=(self.kwargs.get("org_slug"),))
+        return reverse("opportunity:list", args=(self.request.org,))
 
     def form_valid(self, form):
         form.instance.modified_by = self.request.user.email
