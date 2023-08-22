@@ -73,12 +73,6 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
     model = Opportunity
     template_name = "opportunity/opportunity_detail.html"
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["org_slug"] = self.kwargs["org_slug"]
-        context["user_table"] = OpportunityAccessTable(self.object.opportunityaccess_set.all())
-        return context
-
 
 class OpportunityUserTableView(OrganizationUserMixin, SingleTableView):
     model = OpportunityAccess
