@@ -31,6 +31,7 @@ class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
 
 class UserLearnProgressView(APIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = UserLearnProgressSerializer
 
     def get(self, *args, **kwargs):
         opportunity_access = get_object_or_404(OpportunityAccess, user=self.request.user, opportunity=kwargs.get("pk"))
@@ -52,7 +53,7 @@ class UserVisitVerificationStatus(APIView):
     def get(self, *args, **kwargs):
         user_visits = UserVisit.objects.filter(user=self.request.user, opportunity=kwargs.get("pk"))
         total_visits = user_visits.count()
-        daily_visits = user_visits.filter(visit_date=datetime.today()).count()
+        daily_visits = user_visits.filter(visit_date__date=datetime.today().date()).count()
         approved = user_visits.filter(status=VisitValidationStatus.approved).count()
         pending = user_visits.filter(status=VisitValidationStatus.pending).count()
         rejected = user_visits.filter(status=VisitValidationStatus.rejected).count()
