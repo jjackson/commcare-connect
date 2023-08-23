@@ -37,7 +37,6 @@ class MobileUserFactory(DjangoModelFactory):
     username = Faker("word")
     name = Faker("name")
 
-
     class Meta:
         model = get_user_model()
         django_get_or_create = ["username"]

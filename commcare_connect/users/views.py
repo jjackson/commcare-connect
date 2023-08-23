@@ -1,6 +1,3 @@
-from oauth2_provider.views.mixins import ClientProtectedResourceMixin
-from rest_framework import parsers, status
-
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
@@ -8,8 +5,10 @@ from django.http import HttpResponse
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
-from django.views.generic import DetailView, RedirectView, UpdateView, View
 from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import DetailView, RedirectView, UpdateView, View
+from oauth2_provider.views.mixins import ClientProtectedResourceMixin
+from rest_framework import parsers, status
 
 from .models import ConnectIDUserLink
 
@@ -56,10 +55,9 @@ user_redirect_view = UserRedirectView.as_view()
 
 @method_decorator(csrf_exempt, name="dispatch")
 class CreateUserLinkView(ClientProtectedResourceMixin, View):
-
     def post(self, request):
-        commcare_username = request.POST.get('commcare_username')
-        connect_username = request.POST.get('connect_username')
+        commcare_username = request.POST.get("commcare_username")
+        connect_username = request.POST.get("connect_username")
         if not commcare_username or not connect_username:
             return Response("commcare_username and connect_username required", status=status.HTTP_400_BAD_REQUEST)
         try:
