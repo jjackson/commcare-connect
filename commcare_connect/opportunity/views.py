@@ -22,7 +22,7 @@ class OpportunityList(OrganizationUserMixin, ListView):
     paginate_by = 10
 
     def get_queryset(self):
-        return Opportunity.objects.filter(organization__slug=self.request.org)
+        return Opportunity.objects.filter(organization=self.request.org)
 
 
 class OpportunityCreate(OrganizationUserMixin, CreateView):
