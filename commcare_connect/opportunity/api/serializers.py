@@ -38,3 +38,11 @@ class OpportunitySerializer(serializers.ModelSerializer):
 class UserLearnProgressSerializer(serializers.Serializer):
     completed_modules = serializers.IntegerField()
     total_modules = serializers.IntegerField()
+
+
+class UserVisitVerificationStatusSerializer(serializers.Serializer):
+    total_visits = serializers.IntegerField()
+    daily_visits = serializers.IntegerField()
+    approved = serializers.IntegerField()
+    rejected = serializers.IntegerField()
+    failed = serializers.IntegerField()
