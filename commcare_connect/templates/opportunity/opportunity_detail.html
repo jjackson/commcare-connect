@@ -49,6 +49,26 @@
         </tr>
         </tbody>
       </table>
+      <h4>Learn App Modules</h4>
+
+      <table class="table border table-custom">
+        <thead class="table-light">
+        <tr>
+          <th>Name</th>
+          <th>Description</th>
+          <th>Time Estimate</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for module in object.learn_app.learn_modules.all %}
+          <tr>
+            <td>{{ module.name }}</td>
+            <td>{{ module.description }}</td>
+            <td>{{ module.time_estimate }} hour{{ module.time_estimate|pluralize:",s" }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
       <hr/>
     </div>
 
