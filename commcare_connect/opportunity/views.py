@@ -52,7 +52,7 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
 
 class OpportunityEdit(OrganizationUserMixin, UpdateView):
     model = Opportunity
-    template_name = "opportunity/opportunity_create.html"
+    template_name = "opportunity/opportunity_edit.html"
     form_class = OpportunityChangeForm
 
     def get_success_url(self):
