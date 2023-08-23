@@ -8,6 +8,7 @@ from commcare_connect.opportunity.models import (
     LearnModule,
     Opportunity,
     OpportunityAccess,
+    UserVisit,
 )
 
 # Register your models here.
@@ -20,3 +21,4 @@ admin.site.register(LearnModule)
 admin.site.register(CompletedModule)
 admin.site.register(Assessment)
 admin.site.register(OpportunityAccess)
+admin.site.register(UserVisit)

@@ -1,4 +1,4 @@
-from factory import CREATE_STRATEGY, DictFactory, Faker, SelfAttribute, SubFactory
+from factory import CREATE_STRATEGY, DictFactory, Faker, RelatedFactory, SelfAttribute, SubFactory
 from factory.django import DjangoModelFactory
 
 from commcare_connect.users.tests.factories import OrganizationFactory
@@ -43,6 +43,12 @@ class OpportunityFactory(DjangoModelFactory):
     budget_per_visit = Faker("pyint", min_value=100, max_value=1000)
     total_budget = Faker("pyint", min_value=1000, max_value=10000)
 
+    deliver_form = RelatedFactory(
+        "commcare_connect.opportunity.tests.factories.DeliverFormFactory",
+        factory_related_name="opportunity",
+        app=SelfAttribute("..deliver_app"),
+    )
+
     class Meta:
         model = "opportunity.Opportunity"
 
@@ -56,3 +62,18 @@ class LearnModuleFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.LearnModule"
+
+
+class DeliverFormFactory(DjangoModelFactory):
+    app = SubFactory(CommCareAppFactory)
+    opportunity = SubFactory(
+        OpportunityFactory,
+        deliver_app=SelfAttribute("..app"),
+        organization=SelfAttribute("..app.organization"),
+        deliver_form=None,
+    )
+    name = Faker("name")
+    xmlns = Faker("url")
+
+    class Meta:
+        model = "opportunity.DeliverForm"

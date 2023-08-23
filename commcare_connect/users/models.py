@@ -56,6 +56,4 @@ class ConnectIDUserLink(models.Model):
     commcare_username = models.TextField()
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=['user', 'commcare_username'], name='connect_user')
-        ]
+        constraints = [models.UniqueConstraint(fields=['user', 'commcare_username'], name='connect_user')]
