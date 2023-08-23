@@ -34,6 +34,7 @@ def test_xform_serializer():
     assert xform.metadata.duration == timedelta(seconds=60, microseconds=540000)
     assert xform.metadata.app_build_version == "abcd"
     assert xform.form == form_json["form"]
+    assert xform.raw_form == form_json
 
 
 def test_xform_serializer_null_build():

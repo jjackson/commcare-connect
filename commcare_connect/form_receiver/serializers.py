@@ -24,6 +24,11 @@ class XForm:
     received_on: datetime
     form: dict
     metadata: XFormMetadata
+    raw_form: dict
+
+    @property
+    def xmlns(self):
+        return self.form.get("@xmlns")
 
 
 class XFormMetadataSerializer(serializers.Serializer):
@@ -43,4 +48,4 @@ class XFormSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         metadata = XFormMetadata(**validated_data.pop("metadata"))
-        return XForm(metadata=metadata, **validated_data)
+        return XForm(metadata=metadata, raw_form=self.initial_data, **validated_data)

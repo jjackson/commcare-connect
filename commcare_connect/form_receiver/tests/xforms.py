@@ -63,8 +63,8 @@ def get_form_json(xmlns=DEFAULT_XMLNS, form_block=None, **kwargs):
     return form
 
 
-def get_form_model(xmlns=DEFAULT_XMLNS, form_block=None):
-    form_json = get_form_json(xmlns, form_block)
+def get_form_model(xmlns=DEFAULT_XMLNS, form_block=None, **kwargs):
+    form_json = get_form_json(xmlns, form_block, **kwargs)
     serializer = XFormSerializer(data=form_json)
     serializer.is_valid(raise_exception=True)
     return serializer.save()

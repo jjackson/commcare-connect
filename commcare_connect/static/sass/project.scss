@@ -49,3 +49,13 @@ $red: #b94a48;
   border-color: $dark-pink;
   color: $red;
 }
+
+@media (min-width: 768px) {
+  .navbar-brand.abs {
+    position: absolute;
+    width: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+  }
+}
