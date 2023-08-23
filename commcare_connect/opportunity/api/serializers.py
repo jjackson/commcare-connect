@@ -45,4 +45,4 @@ class UserVisitVerificationStatusSerializer(serializers.Serializer):
     daily_visits = serializers.IntegerField()
     approved = serializers.IntegerField()
     rejected = serializers.IntegerField()
-    failed = serializers.IntegerField()
+    pending = serializers.IntegerField()
