@@ -1,11 +1,6 @@
 from django.urls import path
 
-from commcare_connect.users.views import (
-    create_user_link_view,
-    user_detail_view,
-    user_redirect_view,
-    user_update_view
-)
+from commcare_connect.users.views import create_user_link_view, user_detail_view, user_redirect_view, user_update_view
 
 app_name = "users"
 urlpatterns = [
