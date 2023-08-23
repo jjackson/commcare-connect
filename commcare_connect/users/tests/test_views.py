@@ -122,5 +122,5 @@ class TestCreateUserLinkView:
             response = create_user_link_view(request)
             print(response)
         user_link = ConnectIDUserLink.objects.get(user=mobile_user)
-        assert response.status_code == 200
+        assert response.status_code == 201
         assert user_link.commcare_username == "abc"
