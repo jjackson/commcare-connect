@@ -17,3 +17,13 @@ def create_learn_modules_assessments(opportunity_id):
             time_estimate=block.time_estimate,
         )
         learn_module.save()
+
+
+@celery_app.task()
+def add_connect_users(data_file, opportunity):
+    numbers = [line.strip() for line in f]
+    result = request.get(f"{CONNECT_ID}/users/fetch_users", auth=(settings.CONNECTID_CLIENT_ID, settings.CONNECTID_CLIENT_SECRET), params={"phone_numbers": numbers})
+    data = result.json()
+    for user in data["found_users"]:
+        u = User.objects.get_or_create(username=user["username"])
+        OpportunityAccess.get_or_create(user=user, opportunity=oppportunity)
