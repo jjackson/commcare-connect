@@ -37,7 +37,7 @@ class UserLearnProgressView(APIView):
         return Response(UserLearnProgressSerializer(ret).data)
 
 
-class UserVisitViewSet(viewsets.ReadOnlyModelViewSet):
+class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
     serializer_class = UserVisitSerializer
     permission_classes = [IsAuthenticated]
 
