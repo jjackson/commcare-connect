@@ -21,13 +21,8 @@ class OpportunityList(OrganizationUserMixin, ListView):
     model = Opportunity
     paginate_by = 10
 
-    def get_context_data(self, *args, object_list=None, **kwargs):
-        context_data = super().get_context_data(*args, **kwargs)
-        context_data["org_slug"] = self.kwargs["org_slug"]
-        return context_data
-
     def get_queryset(self):
-        return Opportunity.objects.filter(organization__slug=self.kwargs["org_slug"])
+        return Opportunity.objects.filter(organization=self.request.org)
 
 
 class OpportunityCreate(OrganizationUserMixin, CreateView):
@@ -35,11 +30,10 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
     form_class = OpportunityCreationForm
 
     def get_success_url(self):
-        return reverse("opportunity:list", args=(self.kwargs.get("org_slug"),))
+        return reverse("opportunity:list", args=(self.request.org.slug,))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["page_title"] = "Create new opportunity"
         context["applications"] = get_applications_for_user(self.request.user)
         return context
 
@@ -47,7 +41,7 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
         kwargs = super().get_form_kwargs()
         kwargs["applications"] = get_applications_for_user(self.request.user)
         kwargs["user"] = self.request.user
-        kwargs["org_slug"] = self.kwargs.get("org_slug")
+        kwargs["org_slug"] = self.request.org.slug
         return kwargs
 
     def form_valid(self, form: OpportunityCreationForm) -> HttpResponse:
@@ -62,27 +56,16 @@ class OpportunityEdit(OrganizationUserMixin, UpdateView):
     form_class = OpportunityChangeForm
 
     def get_success_url(self):
-        return reverse("opportunity:list", args=(self.kwargs.get("org_slug"),))
+        return reverse("opportunity:list", args=(self.request.org.slug,))
 
     def form_valid(self, form):
         form.instance.modified_by = self.request.user.email
         return super().form_valid(form)
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["page_title"] = "Edit opportunity"
-        return context
-
 
 class OpportunityDetail(OrganizationUserMixin, DetailView):
     model = Opportunity
     template_name = "opportunity/opportunity_detail.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["org_slug"] = self.kwargs["org_slug"]
-        context["user_table"] = OpportunityAccessTable(self.object.opportunityaccess_set.all())
-        return context
 
 
 class OpportunityUserTableView(OrganizationUserMixin, SingleTableView):
