@@ -9,7 +9,7 @@
       <h1 class="display-4">Opportunities</h1>
       <hr/>
       <a class="btn btn-primary"
-         href="{% url 'opportunity:create' org_slug=org_slug %}" title="Add new opportunity">Add new
+         href="{% url 'opportunity:create' org_slug=request.org.slug %}" title="Add new opportunity">Add new
       </a>
     </div>
 
@@ -33,11 +33,12 @@
             {% endif %}
           </td>
           <td>
-            <a class="btn btn-primary btn-sm" href="{% url 'opportunity:detail' org_slug=org_slug pk=opportunity.id %}">
+            <a class="btn btn-primary btn-sm"
+               href="{% url 'opportunity:detail' org_slug=request.org.slug pk=opportunity.id %}">
               View
             </a>
             <a class="btn btn-secondary btn-sm"
-               href="{% url 'opportunity:edit' org_slug=org_slug pk=opportunity.id %}">Edit</a>
+               href="{% url 'opportunity:edit' org_slug=request.org.slug pk=opportunity.id %}">Edit</a>
           </td>
         </tr>
         {% empty %}
