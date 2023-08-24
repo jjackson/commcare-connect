@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from commcare_connect.opportunity.models import CommCareApp, Opportunity
+from commcare_connect.opportunity.models import CommCareApp, Opportunity, UserVisit
 
 
 class CommCareAppSerializer(serializers.ModelSerializer):
@@ -40,9 +40,9 @@ class UserLearnProgressSerializer(serializers.Serializer):
     total_modules = serializers.IntegerField()
 
 
-class UserVisitVerificationStatusSerializer(serializers.Serializer):
-    total_visits = serializers.IntegerField()
-    daily_visits = serializers.IntegerField()
-    approved = serializers.IntegerField()
-    rejected = serializers.IntegerField()
-    pending = serializers.IntegerField()
+class UserVisitSerializer(serializers.ModelSerializer):
+    deliver_form_name = serializers.CharField(source="deliver_form.name")
+
+    class Meta:
+        model = UserVisit
+        fields = ["id", "status", "visit_date", "deliver_form_name"]
