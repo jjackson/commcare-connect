@@ -20,8 +20,11 @@ class OpportunityChangeForm(forms.ModelForm):
             Row(Field("name")),
             Row(Field("description")),
             Row(Field("active")),
+            Row(Field("users")),
             Submit("submit", "Submit"),
         )
+
+        self.fields["users"] = forms.FileField()
 
 
 class OpportunityCreationForm(forms.ModelForm):
