@@ -1,6 +1,7 @@
+import pytest
 from django.utils.timezone import now
 
-from commcare_connect.opportunity.export import export_user_visits
+from commcare_connect.opportunity.export import export_user_visits, get_flattened_dataset
 from commcare_connect.opportunity.models import UserVisit
 from commcare_connect.opportunity.tests.factories import DeliverFormFactory
 
@@ -23,16 +24,39 @@ def test_export_user_visits(user):
                 user=user,
                 visit_date=date2,
                 deliver_form=deliver_form,
-                form_json={"form": {"name": "test_form2"}},
+                form_json={"form": {"name": "test_form2", "group": {"q": "b"}}},
             ),
         ]
     )
     exporter = export_user_visits(deliver_form.opportunity)
     # TODO: update with username
     assert exporter.export("csv") == (
-        "Visit date,Username,Name of User,Form Name,Status,Form JSON\r\n"
-        f"{date1.isoformat()},,{user.name},{deliver_form.name},Pending,"
-        "{'form': {'name': 'test_form1'}}\r\n"
-        f"{date2.isoformat()},,{user.name},{deliver_form.name},Pending,"
-        "{'form': {'name': 'test_form2'}}\r\n"
+        "Visit date,Username,Name of User,Form Name,Status,form.name,form.group.q\r\n"
+        f"{date1.isoformat()},,{user.name},{deliver_form.name},Pending,test_form1,\r\n"
+        f"{date2.isoformat()},,{user.name},{deliver_form.name},Pending,test_form2,b\r\n"
     )
+
+
+@pytest.mark.parametrize(
+    "data, expected",
+    [
+        (
+            {"form": {"name": "form1"}},
+            [
+                (
+                    "form.name",
+                    "form1",
+                )
+            ],
+        ),
+        ({"form": [{"name": "form1"}, {"name": "form2"}]}, [("form.0.name", "form1"), ("form.1.name", "form2")]),
+    ],
+)
+def test_get_flattened_dataset(data, expected):
+    headers = ["header1", "header2", "header3"]
+    data = [
+        ["value1", "value2", data],
+    ]
+    dataset = get_flattened_dataset(headers, data)
+    assert dataset.headers == ["header1", "header2"] + [x[0] for x in expected]
+    assert dataset[0] == ("value1", "value2") + tuple(x[1] for x in expected)

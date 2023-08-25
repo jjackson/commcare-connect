@@ -9,6 +9,7 @@ celery
 jsonpath-ng
 quickcache
 tablib[xlsx]
+flatten-dict
 
 # Django
 # ------------------------------------------------------------------------------

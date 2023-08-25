@@ -105,7 +105,7 @@
                   {% translate "Export User Visits" %}
                 </button>
                 <ul class="dropdown-menu">
-                  <li><a class="dropdown-item" href="{% url "opportunity:visit_export" org_slug=request.org.slug pk=opportunity.pk %}{% export_url "CSV" %}">CSV</a></li>
+                  <li><a class="dropdown-item" href="{% url "opportunity:visit_export" org_slug=request.org.slug pk=opportunity.pk %}{% export_url "csv" %}">CSV</a></li>
                   <li><a class="dropdown-item" href="{% url "opportunity:visit_export" org_slug=request.org.slug pk=opportunity.pk %}{% export_url "xlsx" %}">Excel</a></li>
                 </ul>
               </div>
