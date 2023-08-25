@@ -1,9 +1,10 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
+from django_tables2.export import TableExport
 
 from commcare_connect.opportunity.export import export_user_visits
 from commcare_connect.opportunity.forms import OpportunityChangeForm, OpportunityCreationForm
@@ -113,5 +114,11 @@ class ExportUserVisits(OrganizationUserMixin, DetailView):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
         export_format = request.GET.get("_export", None)
-        exporter = export_user_visits(opportunity, export_format)
-        return exporter.response()
+        if not TableExport.is_valid_format(export_format):
+            return HttpResponseBadRequest(f"Invalid export format: {export_format}")
+
+        dataset = export_user_visits(opportunity)
+        response = HttpResponse(content_type=self.content_type())
+        response["Content-Disposition"] = 'attachment; filename="user_visits.csv"'
+        response.write(dataset.export(export_format))
+        return response
