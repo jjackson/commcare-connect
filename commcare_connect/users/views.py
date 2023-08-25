@@ -14,7 +14,7 @@ from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from rest_framework import parsers, status
 from rest_framework.decorators import api_view, authentication_classes
 
-from commcare_connect.opportunity.models import OpportunityAccess
+from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
 
 from .helpers import create_hq_user
 from .models import ConnectIDUserLink
@@ -93,7 +93,7 @@ def start_learn_app(request):
     if api_key is None:
         return HttpResponse("Opportunity requires API Key", status=400)
     app = opportunity.learn_app
-    domain = CommCareApp.objects.get(pk=app).cc_domain
+    domain = app.cc_domain
     user_created = create_hq_user(request.user, domain, app, api_key)
     if not user_created:
         return HttpResponse("Failed to create user", status=400)
