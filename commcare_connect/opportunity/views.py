@@ -1,6 +1,7 @@
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.http import HttpResponse, HttpResponseBadRequest
-from django.shortcuts import get_object_or_404
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
@@ -115,7 +116,8 @@ class ExportUserVisits(OrganizationUserMixin, DetailView):
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
         export_format = request.GET.get("_export", None)
         if not TableExport.is_valid_format(export_format):
-            return HttpResponseBadRequest(f"Invalid export format: {export_format}")
+            messages.error(request, f"Invalid export format: {export_format}")
+            return redirect("opportunity:detail", self.request.org.slug, opportunity_id)
 
         dataset = export_user_visits(opportunity)
         response = HttpResponse(content_type=TableExport.FORMATS[export_format])
