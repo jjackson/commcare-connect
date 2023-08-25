@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 
+from commcare_connect.opportunity.export import export_user_visits
 from commcare_connect.opportunity.forms import OpportunityChangeForm, OpportunityCreationForm
 from commcare_connect.opportunity.models import CompletedModule, Opportunity, OpportunityAccess, UserVisit
 from commcare_connect.opportunity.tables import OpportunityAccessTable, UserVisitTable
@@ -105,3 +106,12 @@ class OpportunityUserLearnProgress(DetailView):
             opportunity_id=self.kwargs.get("opp_id"),
         )
         return context
+
+
+class ExportUserVisits(OrganizationUserMixin, DetailView):
+    def get(self, request, *args, **kwargs):
+        opportunity_id = self.kwargs["pk"]
+        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        export_format = request.GET.get("_export", None)
+        exporter = export_user_visits(opportunity, export_format)
+        return exporter.response()
