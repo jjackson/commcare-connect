@@ -118,7 +118,7 @@ class ExportUserVisits(OrganizationUserMixin, DetailView):
             return HttpResponseBadRequest(f"Invalid export format: {export_format}")
 
         dataset = export_user_visits(opportunity)
-        response = HttpResponse(content_type=self.content_type())
+        response = HttpResponse(content_type=TableExport.FORMATS[export_format])
         response["Content-Disposition"] = 'attachment; filename="user_visits.csv"'
         response.write(dataset.export(export_format))
         return response
