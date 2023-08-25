@@ -48,4 +48,4 @@ def get_flattened_dataset(headers: list[str], data: list[list]) -> Dataset:
 
 
 def _schema_sort(item):
-    return len(item), item
+    return len(item.split(".")), item
