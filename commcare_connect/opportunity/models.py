@@ -141,6 +141,7 @@ class OpportunityAccess(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     date_claimed = models.DateTimeField()
+    date_learn_started = models.DateTimeField()
 
     # TODO: Convert to a field and calculate this property CompletedModule is saved
     @property
