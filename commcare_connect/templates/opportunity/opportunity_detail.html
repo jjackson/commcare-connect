@@ -31,7 +31,7 @@
                   </li>
                 </ul>
               </div>
-              <button type="button" class="btn btn-primary">{% translate "Import Verified Visits" %}</button>
+              <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#importModal">{% translate "Import Verified Visits" %}</button>
               <a class="float-end btn btn-primary"
                 href="{% url 'opportunity:edit' org_slug=request.org.slug pk=opportunity.id %}">
                 <i class="bi bi-pencil"></i>
@@ -132,3 +132,24 @@
     </div>
   </div>
 {% endblock content %}
+
+{% block modal %}
+<!-- Import modal -->
+<div class="modal fade" id="importModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h1 class="modal-title fs-5">{% translate "Import Verified Visits" %}</h1>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary">Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock modal %}
