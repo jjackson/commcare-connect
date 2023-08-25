@@ -52,10 +52,10 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
     status_by_visit_id = get_status_by_visit_id(dataset)
     visit_ids = list(status_by_visit_id)
     missing_visits = set()
+    seen_visits = set()
     with transaction.atomic():
         for visit_batch in batched(visit_ids, 100):
             to_update = []
-            seen_visits = set()
             for visit in UserVisit.objects.filter(xform_id__in=visit_batch, opportunity=opportunity):
                 seen_visits.add(visit.xform_id)
                 status = status_by_visit_id[visit.xform_id]
