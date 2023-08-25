@@ -8,6 +8,8 @@ httpx[http2]
 celery
 jsonpath-ng
 quickcache
+tablib[xlsx]
+flatten-dict
 
 # Django
 # ------------------------------------------------------------------------------
