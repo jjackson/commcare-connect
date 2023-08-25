@@ -1,12 +1,12 @@
 import pytest
 from django.utils.timezone import now
 
-from commcare_connect.opportunity.export import export_user_visits, get_flattened_dataset
+from commcare_connect.opportunity.export import export_user_visit_data, get_flattened_dataset
 from commcare_connect.opportunity.models import UserVisit
 from commcare_connect.opportunity.tests.factories import DeliverFormFactory
 
 
-def test_export_user_visits(user):
+def test_export_user_visit_data(user):
     deliver_form = DeliverFormFactory()
     date1 = now()
     date2 = now()
@@ -28,7 +28,7 @@ def test_export_user_visits(user):
             ),
         ]
     )
-    exporter = export_user_visits(deliver_form.opportunity)
+    exporter = export_user_visit_data(deliver_form.opportunity)
     # TODO: update with username
     assert exporter.export("csv") == (
         "Visit date,Username,Name of User,Form Name,Status,form.name,form.group.q\r\n"

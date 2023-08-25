@@ -6,7 +6,7 @@ from commcare_connect.opportunity.models import Opportunity, UserVisit
 from commcare_connect.opportunity.tables import UserVisitTable
 
 
-def export_user_visits(opportunity: Opportunity) -> Dataset:
+def export_user_visit_data(opportunity: Opportunity) -> Dataset:
     """Export all user visits for an opportunity."""
     user_visits = UserVisit.objects.filter(opportunity=opportunity)
     table = UserVisitTable(user_visits)
