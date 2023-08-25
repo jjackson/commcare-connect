@@ -78,7 +78,7 @@ class OpportunityUserTableView(OrganizationUserMixin, SingleTableView):
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        return OpportunityAccess.objects.filter(opportunity=opportunity)
+        return OpportunityAccess.objects.filter(opportunity=opportunity).order_by("user__name")
 
 
 class OpportunityUserVisitTableView(OrganizationUserMixin, SingleTableView):
@@ -90,10 +90,10 @@ class OpportunityUserVisitTableView(OrganizationUserMixin, SingleTableView):
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        return UserVisit.objects.filter(opportunity=opportunity)
+        return UserVisit.objects.filter(opportunity=opportunity).order_by("visit_date")
 
 
-class OpportunityUserLearnProgress(DetailView):
+class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
     template_name = "opportunity/user_learn_progress.html"
 
     def get_queryset(self):
