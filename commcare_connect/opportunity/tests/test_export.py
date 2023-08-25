@@ -27,9 +27,9 @@ def test_export_user_visits(user):
             ),
         ]
     )
-    exporter = export_user_visits(deliver_form.opportunity, "csv")
+    exporter = export_user_visits(deliver_form.opportunity)
     # TODO: update with username
-    assert exporter.export() == (
+    assert exporter.export("csv") == (
         "Visit date,Username,Name of User,Form Name,Status,Form JSON\r\n"
         f"{date1.isoformat()},,{user.name},{deliver_form.name},Pending,"
         "{'form': {'name': 'test_form1'}}\r\n"
