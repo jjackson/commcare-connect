@@ -1,6 +1,7 @@
 from factory import CREATE_STRATEGY, DictFactory, Faker, RelatedFactory, SelfAttribute, SubFactory
 from factory.django import DjangoModelFactory
 
+from commcare_connect.opportunity.models import VisitValidationStatus
 from commcare_connect.users.tests.factories import OrganizationFactory
 
 
@@ -77,3 +78,15 @@ class DeliverFormFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.DeliverForm"
+
+
+class UserVisitFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    user = SubFactory("commcare_connect.users.tests.factories.UserFactory")
+    deliver_form = SubFactory(DeliverFormFactory, opportunity=SelfAttribute("..opportunity"))
+    status = Faker("enum", enum_cls=VisitValidationStatus)
+    visit_date = Faker("date")
+    form_json = Faker("pydict", value_types=[str, int, float, bool])
+
+    class Meta:
+        model = "opportunity.UserVisit"

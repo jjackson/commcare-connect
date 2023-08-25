@@ -142,13 +142,27 @@
         <h1 class="modal-title fs-5">{% translate "Import Verified Visits" %}</h1>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body">
-
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary">Import</button>
-      </div>
+      <form action="{% url "opportunity:visit_import" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
+            enctype="multipart/form-data">
+        <div class="modal-body">
+          <div class="mb-3">
+            {% csrf_token %}
+            <input class="form-control" type="file" id="importFile" name="visits">
+            <div class="col-auto">
+              <span id="importFileHelp" class="form-text">
+                {% blocktrans %}
+                  The file must contain at least the "Visit ID" and "Status" column.
+                  The import is case-insensitive.
+                {% endblocktrans %}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Import</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>

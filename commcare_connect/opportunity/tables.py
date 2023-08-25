@@ -22,17 +22,18 @@ class OpportunityAccessTable(tables.Table):
 
 class UserVisitTable(tables.Table):
     # export only columns
-    username = columns.Column(verbose_name="Username", accessor="user.username", visible=False)
-    form_json = columns.Column(verbose_name="Form JSON", accessor="form_json", visible=False)
+    visit_id = columns.Column("Visit ID", accessor="xform_id", visible=False)
+    username = columns.Column("Username", accessor="user.username", visible=False)
+    form_json = columns.Column("Form JSON", accessor="form_json", visible=False)
     visit_date_export = columns.DateTimeColumn(
         verbose_name="Visit date", accessor="visit_date", format="c", visible=False
     )
 
-    deliver_form = columns.Column(verbose_name="Form Name", accessor="deliver_form.name")
+    deliver_form = columns.Column("Form Name", accessor="deliver_form.name")
 
     class Meta:
         model = UserVisit
         fields = ("user.name", "visit_date", "status")
-        sequence = ("visit_date", "visit_date_export", "username", "user.name", "deliver_form", "status")
+        sequence = ("visit_id", "visit_date", "visit_date_export", "status", "username", "user.name", "deliver_form")
         empty_text = "No forms."
         orderable = False
