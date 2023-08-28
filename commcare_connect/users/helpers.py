@@ -1,5 +1,4 @@
 import requests
-
 from django.conf import settings
 
 from commcare_connect.organization.models import Organization
