@@ -1,3 +1,5 @@
+from unittest import mock
+
 import pytest
 from django.conf import settings
 from django.contrib import messages
@@ -10,9 +12,9 @@ from django.urls import reverse
 
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.forms import UserAdminChangeForm
-from commcare_connect.users.models import User
+from commcare_connect.users.models import ConnectIDUserLink, User
 from commcare_connect.users.tests.factories import UserFactory
-from commcare_connect.users.views import UserRedirectView, UserUpdateView, user_detail_view
+from commcare_connect.users.views import UserRedirectView, UserUpdateView, create_user_link_view, user_detail_view
 
 pytestmark = pytest.mark.django_db
 
@@ -106,3 +108,17 @@ class TestUserDetailView:
         assert isinstance(response, HttpResponseRedirect)
         assert response.status_code == 302
         assert response.url == f"{login_url}?next=/fake-url/"
+
+
+class TestCreateUserLinkView:
+    def test_view(self, mobile_user: User, rf: RequestFactory):
+        request = rf.post("/fake-url/", data={"commcare_username": "abc", "connect_username": mobile_user.username})
+        request.user = mobile_user
+        with mock.patch(
+            "oauth2_provider.views.mixins.ClientProtectedResourceMixin.authenticate_client"
+        ) as authenticate_client:
+            authenticate_client.return_value = True
+            response = create_user_link_view(request)
+        user_link = ConnectIDUserLink.objects.get(user=mobile_user)
+        assert response.status_code == 201
+        assert user_link.commcare_username == "abc"
