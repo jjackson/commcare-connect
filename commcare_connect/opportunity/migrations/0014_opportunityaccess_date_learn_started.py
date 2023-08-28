@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0012_uservisit_opportunity_status"),
+        ("opportunity", "0013_hqapikey_opportunity_api_key"),
     ]
 
     operations = [
