@@ -22,13 +22,13 @@ def get_organization_for_request(request, view_kwargs):
 
 def create_hq_user(user, domain, api_key):
     mobile_worker_api_url = f"{settings.COMMCARE_HQ_URL}/a/{domain}/api/v0.5/user"
-    hq_request  = requests.post(
+    hq_request = requests.post(
         mobile_worker_api_url,
         data={
             "username": user.username,
             "connect_user": user.username,
         },
-        headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"}
+        headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"},
     )
     if hq_request.status_code == 201:
         return True
