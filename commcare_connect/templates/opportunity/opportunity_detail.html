@@ -1,18 +1,43 @@
 {% extends "base.html" %}
+{% load i18n %}
 {% load django_tables2 %}
+
+{% block title %}{{ request.org }} - {{ opportunity.name }}{% endblock %}
 
 {% block content %}
   <div class="container">
     <div class="mt-2 pt-4 px-4">
       <div class="row align-items-center">
-        <div class="col-8">
+        <div class="col-6">
           <h1 class="display-5 mb-0">{{ object.name }}</h1>
         </div>
-        <div class="col-4">
-          <a class="float-end btn btn-primary rounded-circle"
-             href="{% url 'opportunity:edit' org_slug=org_slug pk=opportunity.id %}">
-            <i class="bi bi-pencil"></i>
-          </a>
+        <div class="col-6">
+          <div class="btn-toolbar justify-content-end my-2" role="toolbar">
+            <div class="btn-group" role="group" aria-label="First group">
+              <div class="btn-group" role="group">
+                <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                  {% translate "Export User Visits" %}
+                </button>
+                <ul class="dropdown-menu">
+                  <li>
+                    <a class="dropdown-item" href="{% url "opportunity:visit_export" org_slug=request.org.slug pk=opportunity.pk %}{% export_url "csv" %}">
+                      {% translate "CSV" %}
+                    </a>
+                  </li>
+                  <li>
+                    <a class="dropdown-item" href="{% url "opportunity:visit_export" org_slug=request.org.slug pk=opportunity.pk %}{% export_url "xlsx" %}">
+                      {% translate "Excel" %}
+                    </a>
+                  </li>
+                </ul>
+              </div>
+              <button type="button" class="btn btn-primary">{% translate "Import Verified Visits" %}</button>
+              <a class="float-end btn btn-primary"
+                href="{% url 'opportunity:edit' org_slug=request.org.slug pk=opportunity.id %}">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </div>
+          </div>
         </div>
       </div>
       <small title="End date"><i class="bi bi-clock"></i> Ends on <b>{{ object.end_date }}</b></small>
@@ -49,6 +74,26 @@
         </tr>
         </tbody>
       </table>
+      <h4>Learn App Modules</h4>
+
+      <table class="table border table-custom">
+        <thead class="table-light">
+        <tr>
+          <th>Name</th>
+          <th>Description</th>
+          <th>Time Estimate</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for module in object.learn_app.learn_modules.all %}
+          <tr>
+            <td>{{ module.name }}</td>
+            <td>{{ module.description }}</td>
+            <td>{{ module.time_estimate }} hour{{ module.time_estimate|pluralize:",s" }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
       <hr/>
     </div>
 
@@ -69,13 +114,13 @@
       <div class="tab-content">
         <div class="tab-pane fade show active" id="learn-tab-pane" role="tabpanel" aria-labelledby="learn-tab"
              tabindex="0">
-          <div hx-get="{% url "opportunity:user_table" org_slug=org_slug pk=opportunity.pk %}{% querystring %}"
+          <div hx-get="{% url "opportunity:user_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
                hx-trigger="load" hx-swap="outerHTML">
             {% include "tables/table_placeholder.html" with num_cols=4 %}
           </div>
         </div>
         <div class="tab-pane fade" id="deliver-tab-pane" role="tabpanel" aria-labelledby="deliver-tab" tabindex="0">
-          <div hx-get="{% url "opportunity:visit_table" org_slug=org_slug pk=opportunity.pk %}{% querystring %}"
+          <div hx-get="{% url "opportunity:visit_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
                hx-trigger="load" hx-swap="outerHTML">
             {% include "tables/table_placeholder.html" with num_cols=4 %}
           </div>
