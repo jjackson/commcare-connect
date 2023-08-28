@@ -1,7 +1,9 @@
+import requests
 from django.conf import settings
 
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app
-from commcare_connect.opportunity.models import LearnModule, Opportunity
+from commcare_connect.opportunity.models import LearnModule, Opportunity, OpportunityAccess
+from commcare_connect.users.models import User
 from config import celery_app
 
 
@@ -23,10 +25,14 @@ def create_learn_modules_assessments(opportunity_id):
 
 
 @celery_app.task()
-def add_connect_users(data_file, opportunity):
-    numbers = [line.strip() for line in f]
-    result = request.get(f"{settings.CONNECTID_URL}/users/fetch_users", auth=(settings.CONNECTID_CLIENT_ID, settings.CONNECTID_CLIENT_SECRET), params={"phone_numbers": numbers})
+def add_connect_users(user_list, opportunity):
+    numbers = [line.strip() for line in user_list]
+    result = requests.get(
+        f"{settings.CONNECTID_URL}/users/fetch_users",
+        auth=(settings.CONNECTID_CLIENT_ID, settings.CONNECTID_CLIENT_SECRET),
+        params={"phone_numbers": numbers},
+    )
     data = result.json()
     for user in data["found_users"]:
         u = User.objects.get_or_create(username=user["username"])
-        OpportunityAccess.get_or_create(user=user, opportunity=oppportunity)
+        OpportunityAccess.get_or_create(user=u, opportunity=opportunity)
