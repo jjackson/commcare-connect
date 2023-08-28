@@ -15,7 +15,6 @@ from rest_framework.decorators import api_view, authentication_classes
 
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
 
-
 from .helpers import create_hq_user
 from .models import ConnectIDUserLink
 
