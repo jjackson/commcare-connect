@@ -5,7 +5,7 @@ from commcare_connect.users.views import (
     start_learn_app,
     user_detail_view,
     user_redirect_view,
-    user_update_view
+    user_update_view,
 )
 
 app_name = "users"

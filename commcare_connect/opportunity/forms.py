@@ -84,7 +84,6 @@ class OpportunityCreationForm(forms.ModelForm):
         self.fields["deliver_form"].widget.attrs.update({"id": "deliver_form_select"})
         self.fields["api_key"] = forms.CharField(max_length=50)
 
-
     def clean(self):
         cleaned_data = super().clean()
         if cleaned_data:
