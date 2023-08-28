@@ -111,7 +111,6 @@ class TestUserDetailView:
 
 
 class TestCreateUserLinkView:
-
     def test_view(self, mobile_user: User, rf: RequestFactory):
         request = rf.post("/fake-url/", data={"commcare_username": "abc", "connect_username": mobile_user.username})
         request.user = mobile_user
