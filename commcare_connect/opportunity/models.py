@@ -57,11 +57,7 @@ class Opportunity(BaseModel):
     end_date = models.DateField(null=True)
     budget_per_visit = models.IntegerField(null=True)
     total_budget = models.IntegerField(null=True)
-    api_key = models.ForeignKey(
-        HQApiKey,
-        on_delete=models.DO_NOTHING,
-        null=True
-    )
+    api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
 
     def __str__(self):
         return self.name

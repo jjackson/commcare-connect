@@ -9,9 +9,8 @@ from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import DetailView, RedirectView, UpdateView, View
-from oauth2_provider.views.mixins import ClientProtectedResourceMixin
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
-from rest_framework import parsers
+from oauth2_provider.views.mixins import ClientProtectedResourceMixin
 from rest_framework.decorators import api_view, authentication_classes
 
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
@@ -83,13 +82,13 @@ create_user_link_view = CreateUserLinkView.as_view()
 
 
 @csrf_exempt
-@api_view(['POST'])
+@api_view(["POST"])
 @authentication_classes([OAuth2Authentication])
 def start_learn_app(request):
     opportunity_id = request.POST.get("opportunity")
-    if opportunity is None:
+    if opportunity_id is None:
         return HttpResponse("opportunity required", status=400)
-    opportunity = Opportunity.objects.get(pk=opportunity)
+    opportunity = Opportunity.objects.get(pk=opportunity_id)
     api_key = opportunity.api_key
     if api_key is None:
         return HttpResponse("Opportunity requires API Key", status=400)

@@ -6,7 +6,6 @@ from factory.fuzzy import FuzzyDate, FuzzyText
 
 from commcare_connect.opportunity.forms import OpportunityCreationForm
 from commcare_connect.opportunity.tests.factories import ApplicationFactory
-from commcare_connect.users.models import User
 
 
 class TestOpportunityCreationForm:
