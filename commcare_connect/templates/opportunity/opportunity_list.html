@@ -1,15 +1,19 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Create new Opportunity{% endblock %}
+{% block title %}{{ request.org }} - Opportunities{% endblock %}
 
 {% block content %}
   <div class="container">
-    <div class="mb-2 mt-2">
+    <div class="my-2">
+      <h1 class="display-4">Opportunities</h1>
+      <hr/>
       <a class="btn btn-primary"
-         href="{% url 'opportunity:create' org_slug=org_slug %}">Create new</a>
+         href="{% url 'opportunity:create' org_slug=request.org.slug %}" title="Add new opportunity">Add new
+      </a>
     </div>
-    <table class="table table-bordered">
+
+    <table class="table border table-custom">
       <thead class="table-light">
       <tr>
         <th>Name</th>
@@ -22,11 +26,19 @@
         <tr>
           <td>{{ opportunity.name }}</td>
           <td>
-            {% if opportunity.active %} Active {% else %} Inactive {% endif %}
+            {% if opportunity.active %}
+              <span class="badge bg-success rounded-pill">Active</span>
+            {% else %}
+              <span class="badge bg-secondary rounded-pill">Inactive</span>
+            {% endif %}
           </td>
           <td>
-            <a href="{% url 'opportunity:detail' org_slug=org_slug pk=opportunity.id %}">View</a>
-            <a href="{% url 'opportunity:edit' org_slug=org_slug pk=opportunity.id %}">Edit</a>
+            <a class="btn btn-primary btn-sm"
+               href="{% url 'opportunity:detail' org_slug=request.org.slug pk=opportunity.id %}">
+              View
+            </a>
+            <a class="btn btn-secondary btn-sm"
+               href="{% url 'opportunity:edit' org_slug=request.org.slug pk=opportunity.id %}">Edit</a>
           </td>
         </tr>
         {% empty %}

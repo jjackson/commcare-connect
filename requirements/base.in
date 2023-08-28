@@ -9,6 +9,8 @@ celery
 django-oauth-toolkit
 jsonpath-ng
 quickcache
+tablib[xlsx]
+flatten-dict
 
 # Django
 # ------------------------------------------------------------------------------
