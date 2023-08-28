@@ -11,10 +11,11 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import DetailView, RedirectView, UpdateView, View
 from oauth2_provider.views.mixins import ClientProtectedResourceMixin
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
-from rest_framework import parsers, status
+from rest_framework import parsers
 from rest_framework.decorators import api_view, authentication_classes
 
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
+
 
 from .helpers import create_hq_user
 from .models import ConnectIDUserLink
