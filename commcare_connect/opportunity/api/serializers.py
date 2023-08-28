@@ -42,7 +42,8 @@ class UserLearnProgressSerializer(serializers.Serializer):
 
 class UserVisitSerializer(serializers.ModelSerializer):
     deliver_form_name = serializers.CharField(source="deliver_form.name")
+    deliver_form_xmlns = serializers.CharField(source="deliver_form.xmlns")
 
     class Meta:
         model = UserVisit
-        fields = ["id", "status", "visit_date", "deliver_form_name"]
+        fields = ["id", "status", "visit_date", "deliver_form_name", "deliver_form_xmlns"]
