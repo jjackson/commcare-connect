@@ -8,7 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import DetailView, RedirectView, UpdateView, View
 from oauth2_provider.views.mixins import ClientProtectedResourceMixin
-from rest_framework import parsers, status
+from rest_framework import status
 
 from .models import ConnectIDUserLink
 
@@ -59,11 +59,11 @@ class CreateUserLinkView(ClientProtectedResourceMixin, View):
         commcare_username = request.POST.get("commcare_username")
         connect_username = request.POST.get("connect_username")
         if not commcare_username or not connect_username:
-            return Response("commcare_username and connect_username required", status=status.HTTP_400_BAD_REQUEST)
+            return HttpResponse("commcare_username and connect_username required", status=status.HTTP_400_BAD_REQUEST)
         try:
             user = User.objects.get(username=connect_username)
         except User.DoesNotExist:
-            return Response("connect user does not exist", status=status.HTTP_400_BAD_REQUEST)
+            return HttpResponse("connect user does not exist", status=status.HTTP_400_BAD_REQUEST)
         user_link, new = ConnectIDUserLink.objects.get_or_create(commcare_username=commcare_username, user=user)
         if new:
             return HttpResponse(status=201)

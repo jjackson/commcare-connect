@@ -111,16 +111,14 @@ class TestUserDetailView:
 
 
 class TestCreateUserLinkView:
-
     def test_view(self, mobile_user: User, rf: RequestFactory):
         request = rf.post("/fake-url/", data={"commcare_username": "abc", "connect_username": mobile_user.username})
         request.user = mobile_user
         with mock.patch(
-                "oauth2_provider.views.mixins.ClientProtectedResourceMixin.authenticate_client"
+            "oauth2_provider.views.mixins.ClientProtectedResourceMixin.authenticate_client"
         ) as authenticate_client:
             authenticate_client.return_value = True
             response = create_user_link_view(request)
-            print(response)
         user_link = ConnectIDUserLink.objects.get(user=mobile_user)
         assert response.status_code == 201
         assert user_link.commcare_username == "abc"

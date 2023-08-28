@@ -10,13 +10,14 @@ def create_learn_modules_assessments(opportunity_id):
     connect_blocks = get_connect_blocks_for_app(learn_app.cc_domain, learn_app.cc_app_id)
 
     for block in connect_blocks:
-        learn_module = LearnModule(
+        LearnModule.objects.update_or_create(
             app=learn_app,
-            description=block.description,
             name=block.name,
-            time_estimate=block.time_estimate,
+            defaults={
+                "description": block.description,
+                "time_estimate": block.time_estimate,
+            },
         )
-        learn_module.save()
 
 
 @celery_app.task()
