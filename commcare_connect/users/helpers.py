@@ -18,7 +18,7 @@ def get_organization_for_request(request, view_kwargs):
     return membership.organization if membership else None
 
 
-def create_hq_user(user, domain, app, api_key):
+def create_hq_user(user, domain, api_key):
     mobile_worker_api_url = f"{settings.COMMCARE_HQ_URL}/a/{domain}/api/v0.5/user"
     hq_request  = requests.post(mobile_worker_api_url,
                                 data={
