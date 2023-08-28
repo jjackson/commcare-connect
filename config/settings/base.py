@@ -63,6 +63,7 @@ THIRD_PARTY_APPS = [
     "rest_framework.authtoken",
     "corsheaders",
     "drf_spectacular",
+    "oauth2_provider",
     "django_tables2",
 ]
 
@@ -246,10 +247,10 @@ CELERY_TASK_SEND_SENT_EVENT = True
 # django-allauth
 # ------------------------------------------------------------------------------
 ACCOUNT_ALLOW_REGISTRATION = env.bool("DJANGO_ACCOUNT_ALLOW_REGISTRATION", True)
-ACCOUNT_AUTHENTICATION_METHOD = "email"
+ACCOUNT_AUTHENTICATION_METHOD = "username_email"
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_USER_MODEL_USERNAME_FIELD = "username"
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_ADAPTER = "commcare_connect.users.adapters.AccountAdapter"
 ACCOUNT_FORMS = {"signup": "commcare_connect.users.forms.UserSignupForm"}
@@ -263,6 +264,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.TokenAuthentication",
+        "oauth2_provider.contrib.rest_framework.OAuth2Authentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -300,3 +302,11 @@ DJANGO_TABLES2_TABLE_ATTRS = {
 # CommCare Connect Settings...
 # ------------------------------------------------------------------------------
 COMMCARE_HQ_URL = env("COMMCARE_HQ_URL", default="https://staging.commcarehq.org")
+
+OAUTH2_PROVIDER = {
+    "RESOURCE_SERVER_INTROSPECTION_URL": f"https://{env('connect_hostname', default='localhost:8080')}/o/introspect",
+    "RESOURCE_SERVER_INTROSPECTION_CREDENTIALS": (
+        env("rs_client_id", default=""),
+        env("rs_client_secret", default=""),
+    ),
+}

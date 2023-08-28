@@ -1,9 +1,16 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
+from django.http import HttpResponse
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
-from django.views.generic import DetailView, RedirectView, UpdateView
+from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import DetailView, RedirectView, UpdateView, View
+from oauth2_provider.views.mixins import ClientProtectedResourceMixin
+from rest_framework import status
+
+from .models import ConnectIDUserLink
 
 User = get_user_model()
 
@@ -44,3 +51,24 @@ class UserRedirectView(LoginRequiredMixin, RedirectView):
 
 
 user_redirect_view = UserRedirectView.as_view()
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class CreateUserLinkView(ClientProtectedResourceMixin, View):
+    def post(self, request):
+        commcare_username = request.POST.get("commcare_username")
+        connect_username = request.POST.get("connect_username")
+        if not commcare_username or not connect_username:
+            return HttpResponse("commcare_username and connect_username required", status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = User.objects.get(username=connect_username)
+        except User.DoesNotExist:
+            return HttpResponse("connect user does not exist", status=status.HTTP_400_BAD_REQUEST)
+        user_link, new = ConnectIDUserLink.objects.get_or_create(commcare_username=commcare_username, user=user)
+        if new:
+            return HttpResponse(status=201)
+        else:
+            return HttpResponse(status=200)
+
+
+create_user_link_view = CreateUserLinkView.as_view()
