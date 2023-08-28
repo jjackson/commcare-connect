@@ -144,7 +144,7 @@ class OpportunityCreationForm(forms.ModelForm):
         self.instance.modified_by = self.user.email
         self.instance.organization = organization
 
-        api_key = HQApiKey.objects.get_or_create(user=self.user, api_key=self.cleaned_data["api_key"])
+        api_key, _ = HQApiKey.objects.get_or_create(user=self.user, api_key=self.cleaned_data["api_key"])
         self.instance.api_key = api_key
         super().save(commit=commit)
 
