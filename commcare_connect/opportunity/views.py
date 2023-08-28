@@ -70,7 +70,6 @@ class OpportunityEdit(OrganizationUserMixin, UpdateView):
         return response
 
 
-
 class OpportunityDetail(OrganizationUserMixin, DetailView):
     model = Opportunity
     template_name = "opportunity/opportunity_detail.html"
