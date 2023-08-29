@@ -26,7 +26,7 @@ def create_learn_modules_assessments(opportunity_id):
 
 @celery_app.task()
 def add_connect_users(user_list, opportunity_id):
-    numbers = [line.strip() for line in user_list]
+    numbers = [line.strip() for line in user_list.splitlines() if line.strip()]
     result = requests.get(
         f"{settings.CONNECTID_URL}/users/fetch_users",
         auth=(settings.CONNECTID_CLIENT_ID, settings.CONNECTID_CLIENT_SECRET),
