@@ -29,6 +29,11 @@ class OpportunityChangeForm(forms.ModelForm):
             help_text="Enter the phone numbers of the users you want to add to this opportunity, one on each line.",
         )
 
+    def clean_users(self):
+        user_data = self.cleaned_data["users"]
+        split_users = [line.strip() for line in user_data.splitlines() if line.strip()]
+        return split_users
+
 
 class OpportunityCreationForm(forms.ModelForm):
     class Meta:

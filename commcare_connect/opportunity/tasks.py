@@ -25,12 +25,11 @@ def create_learn_modules_assessments(opportunity_id):
 
 
 @celery_app.task()
-def add_connect_users(user_list, opportunity_id):
-    numbers = [line.strip() for line in user_list.splitlines() if line.strip()]
+def add_connect_users(user_list: list[str], opportunity_id: str):
     result = requests.get(
         f"{settings.CONNECTID_URL}/users/fetch_users",
         auth=(settings.CONNECTID_CLIENT_ID, settings.CONNECTID_CLIENT_SECRET),
-        params={"phone_numbers": numbers},
+        params={"phone_numbers": user_list},
     )
     data = result.json()
     for user in data["found_users"]:
