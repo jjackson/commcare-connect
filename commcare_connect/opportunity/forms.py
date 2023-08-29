@@ -24,7 +24,16 @@ class OpportunityChangeForm(forms.ModelForm):
             Submit("submit", "Submit"),
         )
 
-        self.fields["users"] = forms.CharField(widget=forms.Textarea)
+        self.fields["users"] = forms.CharField(
+            widget=forms.Textarea,
+            help_text="Enter the phone numbers of the users you want to add to this opportunity, one on each line.",
+            required=False,
+        )
+
+    def clean_users(self):
+        user_data = self.cleaned_data["users"]
+        split_users = [line.strip() for line in user_data.splitlines() if line.strip()]
+        return split_users
 
 
 class OpportunityCreationForm(forms.ModelForm):
