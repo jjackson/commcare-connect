@@ -14,7 +14,7 @@ from commcare_connect.opportunity.export import export_user_visit_data
 from commcare_connect.opportunity.forms import OpportunityChangeForm, OpportunityCreationForm
 from commcare_connect.opportunity.models import CompletedModule, Opportunity, OpportunityAccess, UserVisit
 from commcare_connect.opportunity.tables import OpportunityAccessTable, UserVisitTable
-from commcare_connect.opportunity.tasks import create_learn_modules_assessments
+from commcare_connect.opportunity.tasks import add_connect_users, create_learn_modules_assessments
 from commcare_connect.opportunity.visit_import import ImportException, bulk_update_visit_status
 from commcare_connect.organization.decorators import org_member_required
 from commcare_connect.utils.commcarehq_api import get_applications_for_user
@@ -68,7 +68,9 @@ class OpportunityEdit(OrganizationUserMixin, UpdateView):
 
     def form_valid(self, form):
         form.instance.modified_by = self.request.user.email
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        add_connect_users.delay(form.cleaned_data["users"], form.instance)
+        return response
 
 
 class OpportunityDetail(OrganizationUserMixin, DetailView):

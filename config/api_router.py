@@ -3,7 +3,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter, SimpleRouter
 
 from commcare_connect.form_receiver.views import FormReceiver
-from commcare_connect.opportunity.api.views import OpportunityViewSet, UserLearnProgressView
+from commcare_connect.opportunity.api.views import OpportunityViewSet, UserLearnProgressView, UserVisitViewSet
 from commcare_connect.users.api.views import UserViewSet
 
 if settings.DEBUG:
@@ -13,6 +13,7 @@ else:
 
 router.register("users", UserViewSet)
 router.register("opportunity", OpportunityViewSet, basename="Opportunity")
+router.register("opportunity/(?P<opportunity_id>.+)/deliver_visit", UserVisitViewSet, basename="UserVisit")
 
 app_name = "api"
 urlpatterns = [
