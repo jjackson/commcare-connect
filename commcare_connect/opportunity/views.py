@@ -1,16 +1,18 @@
+from celery.result import AsyncResult
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.core.files.storage import storages
+from django.http import FileResponse, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
-from django.views.decorators.http import require_POST
+from django.utils.timezone import now
+from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
 
-from commcare_connect.opportunity.export import export_user_visit_data
 from commcare_connect.opportunity.forms import (
     DateRanges,
     OpportunityChangeForm,
@@ -19,7 +21,11 @@ from commcare_connect.opportunity.forms import (
 )
 from commcare_connect.opportunity.models import CompletedModule, Opportunity, OpportunityAccess, UserVisit
 from commcare_connect.opportunity.tables import OpportunityAccessTable, UserVisitTable
-from commcare_connect.opportunity.tasks import add_connect_users, create_learn_modules_assessments
+from commcare_connect.opportunity.tasks import (
+    add_connect_users,
+    create_learn_modules_assessments,
+    generate_visit_export,
+)
 from commcare_connect.opportunity.visit_import import ImportException, bulk_update_visit_status
 from commcare_connect.organization.decorators import org_member_required
 from commcare_connect.utils.commcarehq_api import get_applications_for_user
@@ -85,6 +91,7 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["export_form"] = VisitExportForm()
+        context["export_task_id"] = self.request.GET.get("export_task_id")
         return context
 
 
@@ -130,7 +137,7 @@ class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
 @org_member_required
 def export_user_visits(request, **kwargs):
     opportunity_id = kwargs["pk"]
-    opportunity = get_object_or_404(Opportunity, organization=request.org, id=opportunity_id)
+    get_object_or_404(Opportunity, organization=request.org, id=opportunity_id)
     form = VisitExportForm(data=request.POST)
     if not form.is_valid():
         messages.error(request, form.errors)
@@ -139,14 +146,48 @@ def export_user_visits(request, **kwargs):
     export_format = form.cleaned_data["format"]
     date_range = DateRanges(form.cleaned_data["date_range"])
     status = form.cleaned_data["status"]
-    dataset = export_user_visit_data(opportunity, date_range, status)
 
-    response = HttpResponse(content_type=TableExport.FORMATS[form.format])
+    result = generate_visit_export.delay(opportunity_id, date_range, status, export_format)
+    redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
+    return redirect(f"{redirect_url}?export_task_id={result.id}")
+
+
+@org_member_required
+@require_GET
+def visit_export_status(request, org_slug, task_id):
+    task_meta = AsyncResult(task_id)._get_task_meta()
+    status = task_meta.get("status")
+    progress = {
+        "complete": status == "SUCCESS",
+    }
+    if status == "FAILURE":
+        progress["error"] = task_meta.get("result")
+    return render(
+        request,
+        "opportunity/upload_progress.html",
+        {
+            "task_id": task_id,
+            "current_time": now().microsecond,
+            "progress": progress,
+        },
+    )
+
+
+@org_member_required
+@require_GET
+def download_visit_export(request, org_slug, task_id):
+    task_meta = AsyncResult(task_id)._get_task_meta()
+    saved_filename = task_meta.get("result")
+    opportunity_id = task_meta.get("args")[0]
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=opportunity_id)
     op_slug = slugify(opportunity.name)
-    filename = f"{request.org.slug}-{op_slug}-user_visit_data.{export_format}"
-    response["Content-Disposition"] = f'attachment; filename="{filename}"'
-    response.write(dataset.export(export_format))
-    return response
+    export_format = saved_filename.split(".")[-1]
+    filename = f"{org_slug}_{op_slug}_visit_export.{export_format}"
+
+    export_file = storages["default"].open(saved_filename)
+    return FileResponse(
+        export_file, as_attachment=True, filename=filename, content_type=TableExport.FORMATS[export_format]
+    )
 
 
 @org_member_required
