@@ -25,7 +25,25 @@
           </div>
         </div>
       </div>
-      <small title="End date"><i class="bi bi-clock"></i> Ends on <b>{{ object.end_date }}</b></small>
+      <div class="row">
+        <div class="col-9">
+          <small title="End date"><i class="bi bi-clock"></i> Ends on <b>{{ object.end_date }}</b></small>
+        </div>
+        <div class="col-3 d-flex">
+          {% if export_task_id %}
+            <div class="flex-grow-1 justify-content-end">
+            <div hx-get="{% url "opportunity:visit_export_status" request.org.slug export_task_id %}"
+                 hx-target="this"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+              <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
       <hr/>
       <span class="text-black-50 text-uppercase">Description</span>
       <p>

@@ -1,8 +1,13 @@
 import requests
 from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import storages
+from django.utils.timezone import now
 
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app
-from commcare_connect.opportunity.models import LearnModule, Opportunity, OpportunityAccess
+from commcare_connect.opportunity.export import export_user_visit_data
+from commcare_connect.opportunity.forms import DateRanges
+from commcare_connect.opportunity.models import LearnModule, Opportunity, OpportunityAccess, VisitValidationStatus
 from commcare_connect.users.models import User
 from config import celery_app
 
@@ -36,3 +41,13 @@ def add_connect_users(user_list, opportunity):
     for user in data["found_users"]:
         u = User.objects.get_or_create(username=user["username"])
         OpportunityAccess.get_or_create(user=u, opportunity=opportunity)
+
+
+@celery_app.task()
+def generate_visit_export(opportunity_id: int, date_range: str, status: list[str], export_format: str):
+    opportunity = Opportunity.objects.get(id=opportunity_id)
+    dataset = export_user_visit_data(opportunity, DateRanges(date_range), [VisitValidationStatus(s) for s in status])
+    content = dataset.export(export_format)
+    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_visit_export.{export_format}"
+    storages["default"].save(export_tmp_name, ContentFile(content))
+    return export_tmp_name
