@@ -24,7 +24,10 @@ class OpportunityChangeForm(forms.ModelForm):
             Submit("submit", "Submit"),
         )
 
-        self.fields["users"] = forms.CharField(widget=forms.Textarea)
+        self.fields["users"] = forms.CharField(
+            widget=forms.Textarea,
+            help_text="Enter the phone numbers of the users you want to add to this opportunity, one on each line. ",
+        )
 
 
 class OpportunityCreationForm(forms.ModelForm):
