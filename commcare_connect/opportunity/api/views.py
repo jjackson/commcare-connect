@@ -4,8 +4,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from commcare_connect.opportunity.api.serializers import OpportunitySerializer, UserLearnProgressSerializer
-from commcare_connect.opportunity.models import CompletedModule, LearnModule, Opportunity, OpportunityAccess
+from commcare_connect.opportunity.api.serializers import (
+    OpportunitySerializer,
+    UserLearnProgressSerializer,
+    UserVisitSerializer,
+)
+from commcare_connect.opportunity.models import CompletedModule, LearnModule, Opportunity, OpportunityAccess, UserVisit
 
 
 class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
@@ -18,6 +22,7 @@ class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
 
 class UserLearnProgressView(APIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = UserLearnProgressSerializer
 
     def get(self, *args, **kwargs):
         opportunity_access = get_object_or_404(OpportunityAccess, user=self.request.user, opportunity=kwargs.get("pk"))
@@ -30,3 +35,11 @@ class UserLearnProgressView(APIView):
             "total_modules": total_modules.count(),
         }
         return Response(UserLearnProgressSerializer(ret).data)
+
+
+class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
+    serializer_class = UserVisitSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return UserVisit.objects.filter(opportunity=self.kwargs.get("opportunity_id"), user=self.request.user)
