@@ -24,7 +24,7 @@ class OpportunityChangeForm(forms.ModelForm):
             Submit("submit", "Submit"),
         )
 
-        self.fields["users"] = forms.FileField()
+        self.fields["users"] = forms.CharField(widget=forms.Textarea)
 
 
 class OpportunityCreationForm(forms.ModelForm):
