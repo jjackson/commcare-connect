@@ -1,9 +1,11 @@
 from crispy_forms.helper import FormHelper, Layout
 from crispy_forms.layout import Field, Row, Submit
+from dateutil.relativedelta import relativedelta
 from django import forms
+from django.db.models import TextChoices
 from django.utils.timezone import now
 
-from commcare_connect.opportunity.models import CommCareApp, DeliverForm, HQApiKey, Opportunity
+from commcare_connect.opportunity.models import CommCareApp, DeliverForm, HQApiKey, Opportunity, VisitValidationStatus
 from commcare_connect.organization.models import Organization
 
 
@@ -156,3 +158,47 @@ class OpportunityCreationForm(forms.ModelForm):
         deliver_form.save()
 
         return self.instance
+
+
+class DateRanges(TextChoices):
+    LAST_7_DAYS = "last_7_days", "Last 7 days"
+    LAST_30_DAYS = "last_30_days", "Last 30 days"
+    LAST_90_DAYS = "last_90_days", "Last 90 days"
+    LAST_YEAR = "last_year", "Last year"
+    ALL = "all", "All"
+
+    def get_cutoff_date(self):
+        match self:
+            case DateRanges.LAST_7_DAYS:
+                return now() - relativedelta(days=7)
+            case DateRanges.LAST_30_DAYS:
+                return now() - relativedelta(days=30)
+            case DateRanges.LAST_90_DAYS:
+                return now() - relativedelta(days=90)
+            case DateRanges.LAST_YEAR:
+                return now() - relativedelta(years=1)
+            case DateRanges.ALL:
+                return None
+
+
+class VisitExportForm(forms.Form):
+    format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="xlsx")
+    date_range = forms.ChoiceField(choices=DateRanges.choices, initial=DateRanges.LAST_30_DAYS)
+    status = forms.MultipleChoiceField(choices=[("all", "All")] + VisitValidationStatus.choices, initial=["all"])
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("format")),
+            Row(Field("date_range")),
+            Row(Field("status")),
+        )
+        self.helper.form_tag = False
+
+    def clean_status(self):
+        statuses = self.cleaned_data["status"]
+        if not statuses or "all" in statuses:
+            return []
+
+        return [VisitValidationStatus(status) for status in statuses]

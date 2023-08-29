@@ -11,7 +11,12 @@ from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
 
 from commcare_connect.opportunity.export import export_user_visit_data
-from commcare_connect.opportunity.forms import OpportunityChangeForm, OpportunityCreationForm
+from commcare_connect.opportunity.forms import (
+    DateRanges,
+    OpportunityChangeForm,
+    OpportunityCreationForm,
+    VisitExportForm,
+)
 from commcare_connect.opportunity.models import CompletedModule, Opportunity, OpportunityAccess, UserVisit
 from commcare_connect.opportunity.tables import OpportunityAccessTable, UserVisitTable
 from commcare_connect.opportunity.tasks import add_connect_users, create_learn_modules_assessments
@@ -77,6 +82,11 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
     model = Opportunity
     template_name = "opportunity/opportunity_detail.html"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["export_form"] = VisitExportForm()
+        return context
+
 
 class OpportunityUserTableView(OrganizationUserMixin, SingleTableView):
     model = OpportunityAccess
@@ -121,13 +131,17 @@ class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
 def export_user_visits(request, **kwargs):
     opportunity_id = kwargs["pk"]
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=opportunity_id)
-    export_format = request.GET.get("_export", None)
-    if not TableExport.is_valid_format(export_format):
-        messages.error(request, f"Invalid export format: {export_format}")
+    form = VisitExportForm(data=request.POST)
+    if not form.is_valid():
+        messages.error(request, form.errors)
         return redirect("opportunity:detail", request.org.slug, opportunity_id)
 
-    dataset = export_user_visit_data(opportunity)
-    response = HttpResponse(content_type=TableExport.FORMATS[export_format])
+    export_format = form.cleaned_data["format"]
+    date_range = DateRanges(form.cleaned_data["date_range"])
+    status = form.cleaned_data["status"]
+    dataset = export_user_visit_data(opportunity, date_range, status)
+
+    response = HttpResponse(content_type=TableExport.FORMATS[form.format])
     op_slug = slugify(opportunity.name)
     filename = f"{request.org.slug}-{op_slug}-user_visit_data.{export_format}"
     response["Content-Disposition"] = f'attachment; filename="{filename}"'

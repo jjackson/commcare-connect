@@ -2,13 +2,21 @@ from django.utils.encoding import force_str
 from flatten_dict import flatten
 from tablib import Dataset
 
-from commcare_connect.opportunity.models import Opportunity, UserVisit
+from commcare_connect.opportunity.forms import DateRanges
+from commcare_connect.opportunity.models import Opportunity, UserVisit, VisitValidationStatus
 from commcare_connect.opportunity.tables import UserVisitTable
 
 
-def export_user_visit_data(opportunity: Opportunity) -> Dataset:
+def export_user_visit_data(
+    opportunity: Opportunity, date_range: DateRanges, status: list[VisitValidationStatus]
+) -> Dataset:
     """Export all user visits for an opportunity."""
     user_visits = UserVisit.objects.filter(opportunity=opportunity)
+    if date_range.get_cutoff_date():
+        user_visits = user_visits.filter(visit_date__gte=date_range.get_cutoff_date())
+    if status and "all" not in status:
+        user_visits = user_visits.filter(status__in=status)
+
     table = UserVisitTable(user_visits)
     exclude_columns = ("visit_date",)
     columns = [
