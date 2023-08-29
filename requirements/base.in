@@ -6,6 +6,7 @@ redis
 hiredis
 httpx[http2]
 celery
+django-oauth-toolkit
 jsonpath-ng
 quickcache
 tablib[xlsx]

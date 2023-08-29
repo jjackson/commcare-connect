@@ -18,6 +18,9 @@ def active_link(context, viewnames, css_class="active", inactive_class="", names
     if request is None:
         # Can't work without the request object.
         return ""
+    if request.resolver_match is None:
+        # Can't work without the resolver match.
+        return ""
     current_url_name = request.resolver_match.url_name
     namespaces = request.resolver_match.namespaces
     active = False

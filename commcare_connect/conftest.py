@@ -3,7 +3,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
-from commcare_connect.users.tests.factories import OrgWithUsersFactory, UserFactory
+from commcare_connect.users.tests.factories import MobileUserFactory, OrgWithUsersFactory, UserFactory
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +31,11 @@ def organization(db) -> Organization:
 @pytest.fixture
 def user(db) -> User:
     return UserFactory()
+
+
+@pytest.fixture
+def mobile_user(db) -> User:
+    return MobileUserFactory()
 
 
 @pytest.fixture
