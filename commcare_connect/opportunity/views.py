@@ -3,7 +3,9 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils.safestring import mark_safe
 from django.utils.text import slugify
+from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
@@ -13,6 +15,7 @@ from commcare_connect.opportunity.forms import OpportunityChangeForm, Opportunit
 from commcare_connect.opportunity.models import CompletedModule, Opportunity, OpportunityAccess, UserVisit
 from commcare_connect.opportunity.tables import OpportunityAccessTable, UserVisitTable
 from commcare_connect.opportunity.tasks import add_connect_users, create_learn_modules_assessments
+from commcare_connect.opportunity.visit_import import ImportException, bulk_update_visit_status
 from commcare_connect.organization.decorators import org_member_required
 from commcare_connect.utils.commcarehq_api import get_applications_for_user
 
@@ -130,3 +133,20 @@ def export_user_visits(request, **kwargs):
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     response.write(dataset.export(export_format))
     return response
+
+
+@org_member_required
+@require_POST
+def update_visit_status_import(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
+    file = request.FILES.get("visits")
+    try:
+        status = bulk_update_visit_status(opportunity, file)
+    except ImportException as e:
+        messages.error(request, e.message)
+    else:
+        message = f"Visit status updated successfully for {len(status)} visits."
+        if status.missing_visits:
+            message += status.get_missing_message()
+        messages.success(request, mark_safe(message))
+    return redirect("opportunity:detail", org_slug, pk)
