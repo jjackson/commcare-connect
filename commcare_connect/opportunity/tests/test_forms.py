@@ -1,6 +1,7 @@
 import datetime
 import random
 
+import pytest
 from factory.fuzzy import FuzzyDate, FuzzyText
 
 from commcare_connect.opportunity.forms import OpportunityCreationForm
@@ -27,6 +28,7 @@ class TestOpportunityCreationForm:
             "learn_app_passing_score": random.randint(30, 100),
             "deliver_app": self.deliver_app["id"],
             "deliver_form": deliver_form["id"],
+            "api_key": FuzzyText(length=36).fuzz(),
         }
 
     def test_with_correct_data(self):
@@ -102,3 +104,15 @@ class TestOpportunityCreationForm:
         assert not form.is_valid()
         assert len(form.errors) == 1
         assert "budget_per_visit" in form.errors
+
+    @pytest.mark.django_db
+    def test_save(self, user, organization):
+        opportunity = self._get_opportunity()
+        form = OpportunityCreationForm(
+            opportunity,
+            applications=self.applications,
+            user=user,
+            org_slug=organization.slug,
+        )
+        form.is_valid()
+        form.save()
