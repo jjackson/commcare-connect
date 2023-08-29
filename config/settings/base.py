@@ -303,13 +303,13 @@ DJANGO_TABLES2_TABLE_ATTRS = {
 # ------------------------------------------------------------------------------
 COMMCARE_HQ_URL = env("COMMCARE_HQ_URL", default="https://staging.commcarehq.org")
 
-CONNECTID_URL = env("CONNECTID_URL", default="localhost:8080")
+CONNECTID_URL = env("CONNECTID_URL", default="http://localhost:8080")
 
 CONNECTID_CLIENT_ID = env("cid_client_id", default="")
 CONNECTID_CLIENT_SECRET = env("cid_client_secret", default="")
 
 OAUTH2_PROVIDER = {
-    "RESOURCE_SERVER_INTROSPECTION_URL": f"https://{CONNECTID_URL}/o/introspect",
+    "RESOURCE_SERVER_INTROSPECTION_URL": f"{CONNECTID_URL}/o/introspect",
     "RESOURCE_SERVER_INTROSPECTION_CREDENTIALS": (
         CONNECTID_CLIENT_ID,
         CONNECTID_CLIENT_SECRET,
