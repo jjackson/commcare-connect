@@ -27,6 +27,7 @@ class OpportunityChangeForm(forms.ModelForm):
         self.fields["users"] = forms.CharField(
             widget=forms.Textarea,
             help_text="Enter the phone numbers of the users you want to add to this opportunity, one on each line.",
+            required=False,
         )
 
     def clean_users(self):
