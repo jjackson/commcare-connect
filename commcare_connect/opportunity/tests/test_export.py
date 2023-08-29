@@ -31,9 +31,9 @@ def test_export_user_visit_data(user):
     exporter = export_user_visit_data(deliver_form.opportunity)
     # TODO: update with username
     assert exporter.export("csv") == (
-        "Visit date,Username,Name of User,Form Name,Status,form.name,form.group.q\r\n"
-        f"{date1.isoformat()},,{user.name},{deliver_form.name},Pending,test_form1,\r\n"
-        f"{date2.isoformat()},,{user.name},{deliver_form.name},Pending,test_form2,b\r\n"
+        "Visit ID,Visit date,Status,Username,Name of User,Form Name,form.name,form.group.q\r\n"
+        f",{date1.isoformat()},Pending,,{user.name},{deliver_form.name},test_form1,\r\n"
+        f",{date2.isoformat()},Pending,,{user.name},{deliver_form.name},test_form2,b\r\n"
     )
 
 

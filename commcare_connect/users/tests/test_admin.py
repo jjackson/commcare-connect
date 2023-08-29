@@ -4,7 +4,7 @@ from commcare_connect.users.models import User
 
 
 class TestUserAdmin:
-    def test_changelist(self, admin_client):
+    def test_channgelist(self, admin_client):
         url = reverse("admin:users_user_changelist")
         response = admin_client.get(url)
         assert response.status_code == 200
