@@ -69,7 +69,9 @@ class OpportunityEdit(OrganizationUserMixin, UpdateView):
     def form_valid(self, form):
         form.instance.modified_by = self.request.user.email
         response = super().form_valid(form)
-        add_connect_users.delay(form.cleaned_data["users"], form.instance)
+        users = form.cleaned_data["users"]
+        if users:
+            add_connect_users.delay(users, form.instance.id)
         return response
 
 
