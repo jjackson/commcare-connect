@@ -1,6 +1,7 @@
 import pytest
 from rest_framework.test import APIClient
 
+from commcare_connect.form_receiver.tests.test_receiver_endpoint import add_credentials
 from commcare_connect.form_receiver.tests.xforms import AssessmentStubFactory, LearnModuleJsonFactory, get_form_json
 from commcare_connect.opportunity.models import Assessment, CompletedModule, LearnModule, Opportunity, UserVisit
 from commcare_connect.opportunity.tests.factories import LearnModuleFactory, OpportunityFactory
@@ -103,6 +104,6 @@ def _get_form_json(learn_app, module_id, form_block=None):
 
 
 def make_request(api_client, form_json, user, expected_status_code=200):
-    api_client.force_authenticate(user=user)
+    add_credentials(api_client, user)
     response = api_client.post("/api/receiver/", data=form_json, format="json")
     assert response.status_code == expected_status_code, response.data
