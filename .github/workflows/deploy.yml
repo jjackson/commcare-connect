@@ -18,6 +18,43 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - id: slack
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          channel-id: 'C05APTXCTSM'
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": "*CommCare Connect Deploy*"
+                  }
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": "*Status*: In Progress"
+                  }
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                      {
+                          "type": "mrkdwn",
+                          "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Deploy Run>"
+                      }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN}}
       - name: Checkout source code
         uses: actions/checkout@v3
 
@@ -34,7 +71,8 @@ jobs:
       - name: Set Version Label
         run: echo "version_label=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_ENV
 
-      - name: Deploy to EB
+      - id: deploy
+        name: Deploy to EB
         uses: einaregilsson/beanstalk-deploy@v21
         with:
           aws_access_key: ${{ env.AWS_ACCESS_KEY_ID }}
@@ -47,3 +85,42 @@ jobs:
           region: ${{ env.AWS_REGION }}
           deployment_package: deploy.zip
           wait_for_environment_recovery: 120
+
+      - uses: slackapi/slack-github-action@v1.24.0
+        if: always()
+        with:
+          channel-id: 'C05APTXCTSM'
+          update-ts: ${{ steps.slack.outputs.ts }}
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": "*CommCare Connect Deploy*"
+                  }
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
+                  "text": {
+                      "type": "mrkdwn",
+                      "text": "*Status*: ${{ steps.deploy.conclusion }}"
+                  }
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                      {
+                          "type": "mrkdwn",
+                          "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Deploy Run>"
+                      }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN}}
