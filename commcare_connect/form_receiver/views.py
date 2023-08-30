@@ -1,4 +1,5 @@
-from rest_framework import parsers, permissions, status
+from oauth2_provider.contrib.rest_framework import OAuth2Authentication, TokenHasReadWriteScope
+from rest_framework import parsers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -8,7 +9,8 @@ from commcare_connect.form_receiver.serializers import XFormSerializer
 
 class FormReceiver(APIView):
     parser_classes = [parsers.JSONParser]
-    permission_classes = [permissions.IsAuthenticated]
+    authentication_classes = [OAuth2Authentication]
+    permission_classes = [TokenHasReadWriteScope]
 
     def post(self, request):
         serializer = XFormSerializer(data=request.data)
