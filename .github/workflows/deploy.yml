@@ -47,7 +47,7 @@ jobs:
                   "elements": [
                       {
                           "type": "mrkdwn",
-                          "text": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Deploy Run>"
+                          "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Deploy Run>"
                       }
                   ]
                 }
@@ -116,7 +116,7 @@ jobs:
                   "elements": [
                       {
                           "type": "mrkdwn",
-                          "text": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Deploy Run>"
+                          "text": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Deploy Run>"
                       }
                   ]
                 }
