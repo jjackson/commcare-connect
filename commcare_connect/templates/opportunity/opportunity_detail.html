@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load i18n %}
 {% load django_tables2 %}
+{% load crispy_forms_tags %}
 
 {% block title %}{{ request.org }} - {{ opportunity.name }}{% endblock %}
 
@@ -14,23 +15,7 @@
         <div class="col-6">
           <div class="btn-toolbar justify-content-end my-2" role="toolbar">
             <div class="btn-group" role="group" aria-label="First group">
-              <div class="btn-group" role="group">
-                <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                  {% translate "Export User Visits" %}
-                </button>
-                <ul class="dropdown-menu">
-                  <li>
-                    <a class="dropdown-item" href="{% url "opportunity:visit_export" org_slug=request.org.slug pk=opportunity.pk %}{% export_url "csv" %}">
-                      {% translate "CSV" %}
-                    </a>
-                  </li>
-                  <li>
-                    <a class="dropdown-item" href="{% url "opportunity:visit_export" org_slug=request.org.slug pk=opportunity.pk %}{% export_url "xlsx" %}">
-                      {% translate "Excel" %}
-                    </a>
-                  </li>
-                </ul>
-              </div>
+              <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#exportModal">{% translate "Export User Visits" %}</button>
               <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#importModal">{% translate "Import Verified Visits" %}</button>
               <a class="float-end btn btn-primary"
                 href="{% url 'opportunity:edit' org_slug=request.org.slug pk=opportunity.id %}">
@@ -40,7 +25,25 @@
           </div>
         </div>
       </div>
-      <small title="End date"><i class="bi bi-clock"></i> Ends on <b>{{ object.end_date }}</b></small>
+      <div class="row">
+        <div class="col-9">
+          <small title="End date"><i class="bi bi-clock"></i> Ends on <b>{{ object.end_date }}</b></small>
+        </div>
+        <div class="col-3 d-flex">
+          {% if export_task_id %}
+            <div class="flex-grow-1 justify-content-end">
+            <div hx-get="{% url "opportunity:visit_export_status" request.org.slug export_task_id %}"
+                 hx-target="this"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+              <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
       <hr/>
       <span class="text-black-50 text-uppercase">Description</span>
       <p>
@@ -134,8 +137,32 @@
 {% endblock content %}
 
 {% block modal %}
+<!-- Export modal -->
+<div class="modal fade" id="exportModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h1 class="modal-title fs-5">{% translate "Export Visit Data" %}</h1>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{% url "opportunity:visit_export" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
+            enctype="multipart/form-data">
+        <div class="modal-body">
+          <div class="mb-3">
+            {% crispy export_form %}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Export</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- Import modal -->
-<div class="modal fade" id="importModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+<div class="modal fade" id="importModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
