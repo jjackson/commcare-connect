@@ -1,6 +1,5 @@
 - hosts: web0
   become: true
-  tasks:
-    - import_role:
-        name: connect
-        tasks_from: setup
+  strategy: free
+  roles:
+    - role: connect
