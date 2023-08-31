@@ -1,0 +1,13 @@
+---
+- name: Pull default Docker image
+  community.docker.docker_image:
+    name: '{{ docker_image_name }}'
+    path: /path/to/dockerfile
+    state: present
+
+- name: Create default containers
+  community.docker.docker_container:
+    name: '{{ docker_container_name }}'
+    image: '{{ docker_container_image }}'
+    command: '{{ docker_container_command }}'
+    state: present
