@@ -1,0 +1,6 @@
+---
+- name: Setup
+  import_tasks: setup.yml
+
+- name: Deploy
+  import_tasks: deploy.yml

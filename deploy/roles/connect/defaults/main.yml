@@ -15,3 +15,16 @@ log_dir: '{{ base_dir }}/log'
 
 git_repo: https://github.com/dimagi/commcare-connect.git
 git_branch: sk/deploy
+
+docker_env_file: '{{ project_dir }}/docker.env'
+dockerfile: 'Dockerfile.prod'
+docker_image_name: 'commcare_connect'
+docker_container_name: 'commcare_connect'
+
+# Django settings
+aws_region: us-east-1
+connectid_url: https://connectid.dimagi.com
+django_admin_url: admin/
+django_email_backend: anymail.backends.amazon_ses.EmailBackend
+sentry_environment: staging
+django_allow_registrations: True
