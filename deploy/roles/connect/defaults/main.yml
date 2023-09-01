@@ -1,6 +1,3 @@
-ansible_python_interpreter: /usr/bin/python3
-base_python_package: 'python3'
-
 apt_update_cache: yes
 
 app_name: commcare_connect
@@ -10,16 +7,8 @@ app_group: webapps
 project_name: commcare-connect
 base_dir: '{{home_dir}}/www'
 project_dir: '{{ base_dir }}/{{ project_name }}'
-src_dir: '{{ base_dir }}/{{ project_name }}/code_root'
-log_dir: '{{ base_dir }}/log'
-
-git_repo: https://github.com/dimagi/commcare-connect.git
-git_branch: sk/deploy
 
 docker_env_file: '{{ project_dir }}/docker.env'
-dockerfile: 'Dockerfile'
-docker_image_name: 'commcare_connect'
-docker_container_name: 'commcare_connect'
 
 # Django settings
 aws_region: us-east-1

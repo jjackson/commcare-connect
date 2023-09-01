@@ -1,7 +1,11 @@
 """Useful tasks for use when developing CommCare Connect.
 
 This uses the `Invoke` library."""
+from pathlib import Path
+
 from invoke import Context, Exit, call, task
+
+PROJECT_DIR = Path(__file__).parent
 
 
 @task
@@ -57,3 +61,39 @@ def build_js(c: Context, watch=False, prod=False):
     else:
         extra = "-watch" if watch else ""
         c.run(f"npm run dev{extra}")
+
+
+@task
+def django_settings(c: Context, verbose=False, diff=False):
+    """Update the Django settings file on prod servers"""
+    run_ansible(c, tags="django_settings", verbose=verbose, diff=diff)
+
+    val = input("Do you want to restart the Django services? [y/N] ")
+    if val.lower() == "y":
+        restart_django(c, verbose=verbose, diff=diff)
+
+
+@task
+def restart_django(c: Context, verbose=False, diff=False):
+    """Restart the Django server on prod servers"""
+    run_ansible(c, play="utils.yml", tags="restart", verbose=verbose, diff=diff)
+
+
+def run_ansible(c: Context, play="play.yml", tags=None, verbose=False, diff=False):
+    ansible_cmd = f"ansible-playbook {play} -i inventory.yml -e @vault.yml --vault-password-file=vault_password.sh"
+    if tags:
+        ansible_cmd += f" --tags {tags}"
+    if verbose:
+        ansible_cmd += " -v"
+    if diff:
+        ansible_cmd += " -D"
+
+    with c.cd(PROJECT_DIR / "deploy"):
+        c.run(ansible_cmd)
+
+
+@task
+def deploy(c: Context):
+    """Deploy the app to prod servers"""
+    with c.cd(PROJECT_DIR / "deploy"):
+        c.run("kamal deploy")
