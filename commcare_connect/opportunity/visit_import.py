@@ -36,14 +36,15 @@ class ImportStatus:
 
 
 def bulk_update_visit_status(opportunity: Opportunity, file: UploadedFile) -> ImportStatus:
+    file_format = None
     if file.content_type:
         file_format = mimetypes.guess_extension(file.content_type)
         if file_format:
             file_format = file_format[1:]
-    else:
+    if not file_format:
         file_format = file.name.split(".")[-1].lower()
     if file_format not in ("csv", "xlsx"):
-        raise ImportException("Invalid file format. Only 'CSV' and 'XLSX' are supported.")
+        raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
     imported_data = get_imported_dataset(file, file_format)
     return _bulk_update_visit_status(opportunity, imported_data)
 
