@@ -7,12 +7,13 @@ servers:
     hosts:
       - 3.90.216.194
     options:
+      # create by ansible
       env-file: '/home/connect/www/commcare-connect/docker.env'
 
 healthcheck:
   path: /
   port: 8000
-  max_attempts: 7
+  max_attempts: 10
   interval: 20s
 
 ssh:
@@ -32,4 +33,4 @@ builder:
 registry:
   server: 037129986032.dkr.ecr.us-east-1.amazonaws.com
   username: AWS
-  password: <%= %x(aws ecr get-login-password --region=us-east-1 --profile "${AWS_PROFILE:-connect-staging}") %>
+  password: <%= %x(./registry_password.sh) %>
