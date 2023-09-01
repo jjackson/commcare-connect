@@ -38,7 +38,7 @@ def add_connect_users(user_list: list[str], opportunity_id: str):
     )
     data = result.json()
     for user in data["found_users"]:
-        u = User.objects.get_or_create(username=user["username"])
+        u, _ = User.objects.get_or_create(username=user["username"])
         OpportunityAccess.objects.get_or_create(user=u, opportunity_id=opportunity_id)
 
 
