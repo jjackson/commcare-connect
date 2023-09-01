@@ -8,6 +8,7 @@
     mode: 0644
   tags:
     - deploy
+    - deploy_env
 
 - name: Build Docker image
   community.docker.docker_image:

@@ -22,10 +22,8 @@ ENV PYTHONUNBUFFERED 1
 ENV DEBUG 0
 
 RUN apt-get update \
-  # psycopg2 dependencies
-  && apt-get install -y libpq-dev \
-  # Translations dependencies
-  && apt-get install -y gettext \
+  # psycopg2, gettext etc dependencies
+  && apt-get install -y libpq-dev gettext curl \
   # cleaning up unused files
   && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
   && rm -rf /var/lib/apt/lists/*
@@ -56,5 +54,7 @@ RUN python /app/manage.py collectstatic --noinput
 RUN chown django:django -R staticfiles
 
 USER django
+
+EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint"]

@@ -17,7 +17,7 @@ git_repo: https://github.com/dimagi/commcare-connect.git
 git_branch: sk/deploy
 
 docker_env_file: '{{ project_dir }}/docker.env'
-dockerfile: 'Dockerfile.prod'
+dockerfile: 'Dockerfile'
 docker_image_name: 'commcare_connect'
 docker_container_name: 'commcare_connect'
 
