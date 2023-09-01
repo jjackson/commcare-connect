@@ -61,13 +61,25 @@
     name: '{{ app_group }}'
     system: yes
     state: present
+  tags: auth
 
 - name: Create the app user.
   user:
     name: '{{ app_user }}'
     group: '{{ app_group }}'
+    groups:
+      - docker
     shell: /bin/bash
     state: present
+  tags: auth
+
+- name: Add public key for deploy
+  authorized_key:
+    user: '{{ app_user }}'
+    state: present
+    key: "{{ lookup('community.general.onepassword', 'Deploy SSH Key', subdomain='dimagi', vault='CommCare Connect', field='public key') }}"
+    exclusive: yes
+  tags: auth
 
 - name: Create {{ base_dir }} folder.
   file:
