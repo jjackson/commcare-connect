@@ -1,0 +1,9 @@
+media
+resources
+commcare_connect/static/bundles
+node_modules
+npm-debug.log
+.env
+.direnv
+.pytest_cache
+resources
