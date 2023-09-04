@@ -9,7 +9,6 @@ from commcare_connect.users.models import User
 
 
 class TestConnectUserCreation:
-
     @pytest.mark.django_db
     def test_add_connect_user(self):
         opportunity = OpportunityFactory()
