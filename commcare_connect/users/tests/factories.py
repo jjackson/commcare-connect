@@ -6,6 +6,7 @@ from factory import Faker, RelatedFactory, SubFactory, post_generation
 from factory.django import DjangoModelFactory
 
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
+from commcare_connect.users.models import ConnectIDUserLink
 
 
 class UserFactory(DjangoModelFactory):
@@ -33,6 +34,15 @@ class UserFactory(DjangoModelFactory):
         django_get_or_create = ["email"]
 
 
+class ConnectIdUserLinkFactory(DjangoModelFactory):
+    user = SubFactory(UserFactory)
+    commcare_username = Faker("word")
+
+    class Meta:
+        model = ConnectIDUserLink
+        django_get_or_create = ["commcare_username"]
+
+
 class MobileUserFactory(DjangoModelFactory):
     username = Faker("word")
     name = Faker("name")
@@ -40,6 +50,10 @@ class MobileUserFactory(DjangoModelFactory):
     class Meta:
         model = get_user_model()
         django_get_or_create = ["username"]
+
+
+class MobileUserWithConnectIDLink(MobileUserFactory):
+    connectiduserlink = RelatedFactory(ConnectIdUserLinkFactory, "user", commcare_username="test")
 
 
 class OrganizationFactory(DjangoModelFactory):
