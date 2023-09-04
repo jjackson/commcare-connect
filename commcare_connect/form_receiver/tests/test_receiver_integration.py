@@ -14,13 +14,14 @@ def opportunity():
 
 
 @pytest.mark.django_db
-def test_form_receiver_learn_module(user: User, api_client: APIClient, opportunity: Opportunity):
+def test_form_receiver_learn_module(
+    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+):
     module_id = "learn_module_1"
     form_json = _get_form_json(opportunity.learn_app, module_id)
     assert CompletedModule.objects.count() == 0
-
     learn_module = LearnModuleFactory(app=opportunity.learn_app, slug=module_id)
-    make_request(api_client, form_json, user)
+    make_request(api_client, form_json, mobile_user_with_connect_link)
 
     assert CompletedModule.objects.count() == 1
     assert CompletedModule.objects.filter(
@@ -32,13 +33,15 @@ def test_form_receiver_learn_module(user: User, api_client: APIClient, opportuni
 
 
 @pytest.mark.django_db
-def test_form_receiver_learn_module_create(user: User, api_client: APIClient, opportunity: Opportunity):
+def test_form_receiver_learn_module_create(
+    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+):
     """Test that a new learn module is created if it doesn't exist."""
     module = LearnModuleJsonFactory()
     form_json = _get_form_json(opportunity.learn_app, module.id, module.json)
     assert CompletedModule.objects.count() == 0
 
-    make_request(api_client, form_json, user)
+    make_request(api_client, form_json, mobile_user_with_connect_link)
     assert CompletedModule.objects.count() == 1
     assert CompletedModule.objects.filter(
         module__slug=module.id,
@@ -57,7 +60,9 @@ def test_form_receiver_learn_module_create(user: User, api_client: APIClient, op
 
 
 @pytest.mark.django_db
-def test_form_receiver_assessment(user: User, api_client: APIClient, opportunity: Opportunity):
+def test_form_receiver_assessment(
+    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+):
     passing_score = opportunity.learn_app.passing_score
     score = passing_score + 5
     assessment = AssessmentStubFactory(score=score).json
@@ -68,7 +73,7 @@ def test_form_receiver_assessment(user: User, api_client: APIClient, opportunity
     )
     assert Assessment.objects.count() == 0
 
-    make_request(api_client, form_json, user)
+    make_request(api_client, form_json, mobile_user_with_connect_link)
     assert Assessment.objects.count() == 1
     assert Assessment.objects.filter(
         score=score,
@@ -81,17 +86,17 @@ def test_form_receiver_assessment(user: User, api_client: APIClient, opportunity
 
 
 @pytest.mark.django_db
-def test_receiver_deliver_form(user: User, api_client: APIClient, opportunity: Opportunity):
+def test_receiver_deliver_form(mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity):
     deliver_form = opportunity.deliver_form.first()
     form_json = get_form_json(
         xmlns=deliver_form.xmlns,
         domain=opportunity.deliver_app.cc_domain,
         app_id=opportunity.deliver_app.cc_app_id,
     )
-    assert UserVisit.objects.filter(user=user).count() == 0
+    assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 0
 
-    make_request(api_client, form_json, user)
-    assert UserVisit.objects.filter(user=user).count() == 1
+    make_request(api_client, form_json, mobile_user_with_connect_link)
+    assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 1
 
 
 def _get_form_json(learn_app, module_id, form_block=None):

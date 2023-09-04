@@ -9,6 +9,7 @@ class XFormMetadata:
     timeStart: datetime
     timeEnd: datetime
     app_build_version: str
+    username: str
 
     @property
     def duration(self):
@@ -35,6 +36,7 @@ class XFormMetadataSerializer(serializers.Serializer):
     timeStart = serializers.DateTimeField(required=True)
     timeEnd = serializers.DateTimeField(required=True)
     app_build_version = serializers.CharField(allow_null=True)
+    username = serializers.CharField()
 
 
 class XFormSerializer(serializers.Serializer):
