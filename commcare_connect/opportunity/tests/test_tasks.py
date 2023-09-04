@@ -14,7 +14,7 @@ class TestConnectUserCreation:
     def test_add_connect_user(self):
         opportunity = OpportunityFactory()
         with mock.patch("commcare_connect.opportunity.tasks.requests.get") as request:
-            request.json.return_value = {"found_users": [{"username": "test"}]}
+            request.return_value.json.return_value = {"found_users": [{"username": "test"}]}
             add_connect_users(["+15555555555"], opportunity.id)
         user = User.objects.get(username="test")
         assert len(OpportunityAccess.objects.filter(user=user, opportunity=opportunity)) == 1
