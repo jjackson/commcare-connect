@@ -223,7 +223,7 @@ wcwidth==0.2.6
     # via
     #   -c requirements/base.txt
     #   prompt-toolkit
-werkzeug[watchdog]==2.3.6
+werkzeug[watchdog]==2.3.7
     # via -r requirements/dev.in
 wheel==0.41.0
     # via pip-tools
