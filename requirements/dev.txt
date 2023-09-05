@@ -62,7 +62,7 @@ faker==19.2.0
     # via factory-boy
 filelock==3.12.2
     # via virtualenv
-flake8==6.0.0
+flake8==6.1.0
     # via
     #   -r requirements/dev.in
     #   flake8-isort
@@ -72,14 +72,26 @@ h11==0.14.0
     # via
     #   -c requirements/base.txt
     #   httpcore
+h2==4.1.0
+    # via
+    #   -c requirements/base.txt
+    #   httpx
+hpack==4.0.0
+    # via
+    #   -c requirements/base.txt
+    #   h2
 httpcore==0.17.3
     # via
     #   -c requirements/base.txt
     #   httpx
-httpx==0.24.1
+httpx[http2]==0.24.1
     # via
     #   -c requirements/base.txt
     #   pytest-httpx
+hyperframe==6.0.1
+    # via
+    #   -c requirements/base.txt
+    #   h2
 identify==2.5.26
     # via pre-commit
 idna==3.4
@@ -151,9 +163,9 @@ ptyprocess==0.7.0
     # via pexpect
 pure-eval==0.2.2
     # via stack-data
-pycodestyle==2.10.0
+pycodestyle==2.11.0
     # via flake8
-pyflakes==3.0.1
+pyflakes==3.1.0
     # via flake8
 pygments==2.15.1
     # via ipython
@@ -192,7 +204,6 @@ pyyaml==6.0.1
 six==1.16.0
     # via
     #   -c requirements/base.txt
-    #   asttokens
     #   python-dateutil
 sniffio==1.3.0
     # via
