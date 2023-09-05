@@ -38,7 +38,7 @@ django==4.2.5
     #   -c requirements/base.txt
     #   django-anymail
     #   django-storages
-django-anymail[amazon-ses]==10.0
+django-anymail[amazon-ses]==10.1
     # via -r requirements/production.in
 django-storages[boto3]==1.13.2
     # via -r requirements/production.in
