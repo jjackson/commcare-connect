@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import models
+from django.db.models import Q, UniqueConstraint
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
@@ -20,7 +21,7 @@ class User(AbstractUser):
     name = models.CharField(_("Name of User"), blank=True, max_length=255)
     first_name = None  # type: ignore
     last_name = None  # type: ignore
-    email = models.EmailField(_("email address"), unique=True)
+    email = models.EmailField(_("email address"), null=True, blank=True)
     username = models.CharField(
         _("username"),
         max_length=150,
@@ -46,6 +47,12 @@ class User(AbstractUser):
 
         """
         return reverse("users:detail", kwargs={"pk": self.id})
+
+    class Meta:
+        constraints = [UniqueConstraint(fields=["email"], name="unique_user_email", condition=Q(email__isnull=False))]
+
+    def __str__(self):
+        return self.email or self.username
 
 
 class ConnectIDUserLink(models.Model):

@@ -15,7 +15,7 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.users.models import User
 
-LEARN_MODULE_JSONPATH = parse("module where @xmlns")
+LEARN_MODULE_JSONPATH = parse("$..module")
 ASSESSMENT_JSONPATH = parse("assessment where @xmlns")
 
 

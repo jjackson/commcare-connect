@@ -5,8 +5,16 @@ from django import forms
 from django.db.models import TextChoices
 from django.utils.timezone import now
 
-from commcare_connect.opportunity.models import CommCareApp, DeliverForm, HQApiKey, Opportunity, VisitValidationStatus
+from commcare_connect.opportunity.models import (
+    CommCareApp,
+    DeliverForm,
+    HQApiKey,
+    Opportunity,
+    OpportunityAccess,
+    VisitValidationStatus,
+)
 from commcare_connect.organization.models import Organization
+from commcare_connect.users.models import User
 
 
 class OpportunityChangeForm(forms.ModelForm):
@@ -211,3 +219,11 @@ class VisitExportForm(forms.Form):
             return []
 
         return [VisitValidationStatus(status) for status in statuses]
+
+
+class OpportunityAccessCreationForm(forms.ModelForm):
+    user = forms.ModelChoiceField(queryset=User.objects.filter(username__isnull=False))
+
+    class Meta:
+        model = OpportunityAccess
+        fields = "__all__"
