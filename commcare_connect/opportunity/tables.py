@@ -15,7 +15,7 @@ class OpportunityAccessTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user.name", "learn_progress", "visit_count")
+        fields = ("user.username", "learn_progress", "visit_count")
         orderable = False
         empty_text = "No learn progress for users."
 
@@ -33,7 +33,15 @@ class UserVisitTable(tables.Table):
 
     class Meta:
         model = UserVisit
-        fields = ("user.name", "visit_date", "status")
-        sequence = ("visit_id", "visit_date", "visit_date_export", "status", "username", "user.name", "deliver_form")
+        fields = ("user.name", "username", "visit_date", "status")
+        sequence = (
+            "visit_id",
+            "visit_date",
+            "visit_date_export",
+            "status",
+            "username",
+            "user.name",
+            "deliver_form",
+        )
         empty_text = "No forms."
         orderable = False
