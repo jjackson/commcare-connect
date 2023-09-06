@@ -7,7 +7,7 @@ from commcare_connect.opportunity.models import UserVisit
 from commcare_connect.opportunity.tests.factories import DeliverFormFactory
 
 
-def test_export_user_visit_data(user):
+def test_export_user_visit_data(mobile_user_with_connect_link):
     deliver_form = DeliverFormFactory()
     date1 = now()
     date2 = now()
@@ -15,14 +15,14 @@ def test_export_user_visit_data(user):
         [
             UserVisit(
                 opportunity=deliver_form.opportunity,
-                user=user,
+                user=mobile_user_with_connect_link,
                 visit_date=date1,
                 deliver_form=deliver_form,
                 form_json={"form": {"name": "test_form1"}},
             ),
             UserVisit(
                 opportunity=deliver_form.opportunity,
-                user=user,
+                user=mobile_user_with_connect_link,
                 visit_date=date2,
                 deliver_form=deliver_form,
                 form_json={"form": {"name": "test_form2", "group": {"q": "b"}}},
@@ -30,11 +30,13 @@ def test_export_user_visit_data(user):
         ]
     )
     exporter = export_user_visit_data(deliver_form.opportunity, DateRanges.LAST_30_DAYS, [])
-    # TODO: update with username
+    username = mobile_user_with_connect_link.username
+    name = mobile_user_with_connect_link.name
+
     assert exporter.export("csv") == (
         "Visit ID,Visit date,Status,Username,Name of User,Form Name,form.name,form.group.q\r\n"
-        f",{date1.isoformat()},Pending,,{user.name},{deliver_form.name},test_form1,\r\n"
-        f",{date2.isoformat()},Pending,,{user.name},{deliver_form.name},test_form2,b\r\n"
+        f",{date1.isoformat()},Pending,{username},{name},{deliver_form.name},test_form1,\r\n"
+        f",{date2.isoformat()},Pending,{username},{name},{deliver_form.name},test_form2,b\r\n"
     )
 
 
