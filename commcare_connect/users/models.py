@@ -51,6 +51,9 @@ class User(AbstractUser):
     class Meta:
         constraints = [UniqueConstraint(fields=["email"], name="unique_user_email", condition=Q(email__isnull=False))]
 
+    def __str__(self):
+        return self.email or self.username
+
 
 class ConnectIDUserLink(models.Model):
     user = models.ForeignKey(
