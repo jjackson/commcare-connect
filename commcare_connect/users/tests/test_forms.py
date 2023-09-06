@@ -32,5 +32,5 @@ class TestUserAdminCreationForm:
 
         assert not form.is_valid()
         assert len(form.errors) == 1
-        assert "email" in form.errors
-        assert form.errors["email"][0] == _("This email has already been taken.")
+        assert "__all__" in form.errors
+        assert form.errors["__all__"][0] == _("Constraint “unique_user_email” is violated.")
