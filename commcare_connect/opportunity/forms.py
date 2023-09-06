@@ -222,9 +222,7 @@ class VisitExportForm(forms.Form):
 
 
 class OpportunityAccessCreationForm(forms.ModelForm):
-    user = forms.ChoiceField(
-        choices=[(user.pk, user.username) for user in User.objects.filter(username__isnull=False).all()]
-    )
+    user = forms.ModelChoiceField(queryset=User.objects.filter(username__isnull=False))
 
     class Meta:
         model = OpportunityAccess
