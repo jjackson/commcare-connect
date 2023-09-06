@@ -16,7 +16,7 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.users.models import User
 
 LEARN_MODULE_JSONPATH = parse("$..module")
-ASSESSMENT_JSONPATH = parse("assessment where @xmlns")
+ASSESSMENT_JSONPATH = parse("$..assessment")
 
 
 def process_xform(xform: XForm):
@@ -70,15 +70,17 @@ def process_learn_modules(user, xform: XForm, app: CommCareApp, opportunity: Opp
     :param blocks: A list of learn module form blocks."""
     for module_data in blocks:
         module = get_or_create_learn_module(app, module_data)
-        CompletedModule.objects.create(
+        CompletedModule.objects.update_or_create(
             user=user,
             module=module,
             opportunity=opportunity,
-            date=xform.received_on,
-            duration=xform.metadata.duration,
-            xform_id=xform.id,
-            app_build_id=xform.build_id,
-            app_build_version=xform.metadata.app_build_version,
+            defaults={
+                "date": xform.received_on,
+                "duration": xform.metadata.duration,
+                "xform_id": xform.id,
+                "app_build_id": xform.build_id,
+                "app_build_version": xform.metadata.app_build_version,
+            },
         )
 
 
