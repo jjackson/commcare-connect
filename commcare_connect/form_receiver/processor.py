@@ -70,18 +70,21 @@ def process_learn_modules(user, xform: XForm, app: CommCareApp, opportunity: Opp
     :param blocks: A list of learn module form blocks."""
     for module_data in blocks:
         module = get_or_create_learn_module(app, module_data)
-        CompletedModule.objects.update_or_create(
+        completed_module, created = CompletedModule.objects.get_or_create(
             user=user,
             module=module,
             opportunity=opportunity,
+            xform_id=xform.id,
             defaults={
                 "date": xform.received_on,
                 "duration": xform.metadata.duration,
-                "xform_id": xform.id,
                 "app_build_id": xform.build_id,
                 "app_build_version": xform.metadata.app_build_version,
             },
         )
+
+        if not created:
+            raise ProcessingError("Learn Module is already completed")
 
 
 def process_assessments(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, blocks: list[dict]):
@@ -99,18 +102,23 @@ def process_assessments(user, xform: XForm, app: CommCareApp, opportunity: Oppor
             raise ProcessingError("User score must be an integer")
         # TODO: should this move to the opportunity to allow better re-use of the app?
         passing_score = app.passing_score
-        Assessment.objects.create(
+        assessment, created = Assessment.objects.get_or_create(
             user=user,
             app=app,
             opportunity=opportunity,
-            date=xform.received_on,
-            score=score,
-            passing_score=passing_score,
-            passed=score >= passing_score,
             xform_id=xform.id,
-            app_build_id=xform.build_id,
-            app_build_version=xform.metadata.app_build_version,
+            defaults={
+                "date": xform.received_on,
+                "score": score,
+                "passing_score": passing_score,
+                "passed": score >= passing_score,
+                "app_build_id": xform.build_id,
+                "app_build_version": xform.metadata.app_build_version,
+            },
         )
+
+        if not created:
+            return ProcessingError("Learn Assessment is already completed")
 
 
 def process_deliver_form(user, xform):
