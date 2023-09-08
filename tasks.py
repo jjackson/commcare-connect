@@ -80,7 +80,7 @@ def restart_django(c: Context, verbose=False, diff=False):
 
 
 def run_ansible(c: Context, play="play.yml", tags=None, verbose=False, diff=False):
-    ansible_cmd = f"ansible-playbook {play} -i inventory.yml -e @vault.yml --vault-password-file=vault_password.sh"
+    ansible_cmd = f"ansible-playbook {play} -i inventory.yml"
     if tags:
         ansible_cmd += f" --tags {tags}"
     if verbose:
