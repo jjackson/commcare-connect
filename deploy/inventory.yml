@@ -2,4 +2,4 @@ webservers:
   hosts:
     web0:
       ansible_user: ubuntu
-      ansible_host: 3.90.216.194
+      ansible_host: ec2-3-90-216-194.compute-1.amazonaws.com
