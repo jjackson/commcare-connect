@@ -67,10 +67,10 @@ def build_js(c: Context, watch=False, prod=False):
 def django_settings(c: Context, verbose=False, diff=False):
     """Update the Django settings file on prod servers"""
     run_ansible(c, tags="django_settings", verbose=verbose, diff=diff)
-
-    val = input("Do you want to restart the Django services? [y/N] ")
+    print("\nSettings updated. A re-deploy is required to have the services use the new settings.")
+    val = input("Do you want to re-deploy the Django services? [y/N] ")
     if val.lower() == "y":
-        restart_django(c, verbose=verbose, diff=diff)
+        deploy(c)
 
 
 @task
