@@ -67,8 +67,6 @@ class ClaimOpportunityView(APIView):
     def post(self, *args, **kwargs):
         opportunity_access = get_object_or_404(OpportunityAccess, user=self.request.user, opportunity=kwargs.get("pk"))
         opportunity = opportunity_access.opportunity
-        if opportunity.learn_app.cc_domain != opportunity.deliver_app.cc_domain:
-            create_hq_user(self.request.user, opportunity.deliver_app.cc_domain, opportunity.api_key)
 
         claim, created = OpportunityClaim.objects.get_or_create(
             opportunity_access=opportunity_access,
@@ -79,6 +77,9 @@ class ClaimOpportunityView(APIView):
         )
 
         if not created:
-            return Response(status=400, data="Opportunity is already claimed")
+            return Response(status=200, data="Opportunity is already claimed")
+
+        if opportunity.learn_app.cc_domain != opportunity.deliver_app.cc_domain:
+            create_hq_user(self.request.user, opportunity.deliver_app.cc_domain, opportunity.api_key)
 
         return Response(status=201)
