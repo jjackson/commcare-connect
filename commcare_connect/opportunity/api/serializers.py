@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from commcare_connect.opportunity.models import CommCareApp, Opportunity, UserVisit
+from commcare_connect.opportunity.models import CommCareApp, Opportunity, OpportunityClaim, UserVisit
 
 
 class CommCareAppSerializer(serializers.ModelSerializer):
@@ -15,6 +15,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
     learn_app = CommCareAppSerializer()
     deliver_app = CommCareAppSerializer()
+    claim = serializers.SerializerMethodField()
 
     class Meta:
         model = Opportunity
@@ -32,7 +33,13 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "daily_max_visits_per_user",
             "budget_per_visit",
             "total_budget",
+            "claim",
         ]
+
+    def get_claim(self, obj):
+        opp_access_qs = self.context.get("opportunity_access")
+        opp_access = opp_access_qs.filter(opportunity=obj).first()
+        return OpportunityClaim.objects.filter(opportunity_access=opp_access).first()
 
 
 class UserLearnProgressSerializer(serializers.Serializer):
