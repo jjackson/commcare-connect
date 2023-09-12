@@ -65,6 +65,7 @@ THIRD_PARTY_APPS = [
     "drf_spectacular",
     "oauth2_provider",
     "django_tables2",
+    "phonenumber_field",
 ]
 
 LOCAL_APPS = [
@@ -315,3 +316,9 @@ OAUTH2_PROVIDER = {
         CONNECTID_CLIENT_SECRET,
     ),
 }
+
+BASE_ADDRESS = env("BASE_ADDRESS", default="http://localhost:8000")
+
+TWILIO_ACCOUNT_SID = env("TWILIO_SID", default=None)
+TWILIO_AUTH_TOKEN = env("TWILIO_TOKEN", default=None)
+TWILIO_MESSAGING_SERVICE = env("TWILIO_MESSAGING_SERVICE", default=None)

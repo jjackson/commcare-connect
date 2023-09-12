@@ -137,6 +137,11 @@ class OpportunityAccess(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     date_learn_started = models.DateTimeField(null=True)
+    accepted = models.BooleanField(default=False)
+    invite_id = models.CharField(max_length=50, null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["invite_id"])]
 
     # TODO: Convert to a field and calculate this property CompletedModule is saved
     @property
