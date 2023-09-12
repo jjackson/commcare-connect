@@ -1,7 +1,12 @@
+from uuid import uuid4
+
 import requests
+from twilio.rest import Client
+
 from django.conf import settings
 
 from commcare_connect.organization.models import Organization
+from commcare_connect.utils.sms import send_sms
 
 
 def get_organization_for_request(request, view_kwargs):
@@ -32,3 +37,12 @@ def create_hq_user(user, domain, api_key):
     if hq_request.status_code == 201:
         return True
     return False
+
+
+def invite_user(user, opportunity_access):
+    invite_id = uuid4()
+    opportunity_access.invite_id = invite_id
+    opportunity_access.save()
+    url = "https://connect.dimagi.com/opportunity/accept_invite/{invite_id}"
+    body = f"You have been invited to a new job in Commcare Connect. Click the following link to share your information with the project and find out more {url}"
+    send_sms(user.phone_number, body)

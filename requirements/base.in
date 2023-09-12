@@ -11,6 +11,7 @@ jsonpath-ng
 quickcache
 tablib[xlsx]
 flatten-dict
+twilio
 
 # Django
 # ------------------------------------------------------------------------------
@@ -20,6 +21,7 @@ django-model-utils
 django-allauth
 django-celery-beat
 django-crispy-forms
+django-phonenumber-field[phonenumberslite]
 crispy-bootstrap5
 django-redis
 # Django REST Framework

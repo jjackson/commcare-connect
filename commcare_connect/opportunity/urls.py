@@ -8,6 +8,7 @@ from commcare_connect.opportunity.views import (
     OpportunityUserLearnProgress,
     OpportunityUserTableView,
     OpportunityUserVisitTableView,
+    accept_invite,
     download_visit_export,
     export_user_visits,
     update_visit_status_import,
@@ -31,4 +32,5 @@ urlpatterns = [
         view=OpportunityUserLearnProgress.as_view(),
         name="user_learn_progress",
     ),
+    path("accept_invite/<slug:invite_id>", view=accept_invite, name="accept_invite"),
 ]
