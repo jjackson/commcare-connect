@@ -14,7 +14,7 @@ class TestConnectUserCreation:
         opportunity = OpportunityFactory()
         with (
             mock.patch("commcare_connect.opportunity.tasks.requests.get") as request,
-            mock.patch("commcare_connect.users.helpers.send_sms") as send_sms
+            mock.patch("commcare_connect.users.helpers.send_sms"),
         ):
             request.return_value.json.return_value = {
                 "found_users": [
@@ -29,7 +29,7 @@ class TestConnectUserCreation:
         user = user_list[0]
         assert user.name == "a"
         assert user.phone_number == "+15555555555"
-        assert len(OpportunityAccess.objects.filter(user=user.first(), opportunity=opportunity)) == 1
+        assert len(OpportunityAccess.objects.filter(user=user_list.first(), opportunity=opportunity)) == 1
 
         user2 = User.objects.filter(username="test2")
         assert len(user2) == 1
