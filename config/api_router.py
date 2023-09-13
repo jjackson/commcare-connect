@@ -3,7 +3,12 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter, SimpleRouter
 
 from commcare_connect.form_receiver.views import FormReceiver
-from commcare_connect.opportunity.api.views import OpportunityViewSet, UserLearnProgressView, UserVisitViewSet
+from commcare_connect.opportunity.api.views import (
+    ClaimOpportunityView,
+    OpportunityViewSet,
+    UserLearnProgressView,
+    UserVisitViewSet,
+)
 from commcare_connect.users.api.views import UserViewSet
 
 if settings.DEBUG:
@@ -19,5 +24,6 @@ app_name = "api"
 urlpatterns = [
     path("", include(router.urls)),
     path("receiver/", FormReceiver.as_view(), name="receiver"),
-    path("opportunity/<int:pk>/learn_progress", UserLearnProgressView.as_view()),
+    path("opportunity/<int:pk>/learn_progress", UserLearnProgressView.as_view(), name="learn_progress"),
+    path("opportunity/<int:pk>/claim", ClaimOpportunityView.as_view()),
 ]
