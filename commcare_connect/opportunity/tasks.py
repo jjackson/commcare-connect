@@ -39,9 +39,11 @@ def add_connect_users(user_list: list[str], opportunity_id: str):
     )
     data = result.json()
     for user in data["found_users"]:
-        u, _ = User.objects.get_or_create(username=user["username"], phone_number=user["phone_number"], name=user["name"])
-        opportunity_access = OpportunityAccess.objects.get_or_create(user=u, opportunity_id=opportunity_id)
-        invite_user(user, opportunity_access)
+        u, _ = User.objects.get_or_create(
+            username=user["username"], phone_number=user["phone_number"], name=user["name"]
+        )
+        opportunity_access, _ = OpportunityAccess.objects.get_or_create(user=u, opportunity_id=opportunity_id)
+        invite_user(u, opportunity_access)
 
 
 @celery_app.task()

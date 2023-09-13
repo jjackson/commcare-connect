@@ -12,7 +12,10 @@ class TestConnectUserCreation:
     @pytest.mark.django_db
     def test_add_connect_user(self):
         opportunity = OpportunityFactory()
-        with mock.patch("commcare_connect.opportunity.tasks.requests.get") as request:
+        with (
+            mock.patch("commcare_connect.opportunity.tasks.requests.get") as request,
+            mock.patch("commcare_connect.users.helpers.send_sms") as send_sms
+        ):
             request.return_value.json.return_value = {
                 "found_users": [
                     {"username": "test", "phone_number": "+15555555555", "name": "a"},
@@ -22,7 +25,7 @@ class TestConnectUserCreation:
             add_connect_users(["+15555555555", "+12222222222"], opportunity.id)
 
         user_list = User.objects.filter(username="test")
-        assert len(user) == 1
+        assert len(user_list) == 1
         user = user_list[0]
         assert user.name == "a"
         assert user.phone_number == "+15555555555"
