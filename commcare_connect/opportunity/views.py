@@ -217,4 +217,6 @@ def accept_invite(request, invite_id):
         return HttpResponse("This link is invalid. Please try again", status=404)
     o.accepted = True
     o.save()
-    return HttpResponse("Thank you for accepting the invitation. Open your CommCare Connect App to see more information about the opportunity and begin learning")
+    return HttpResponse(
+        "Thank you for accepting the invitation. Open your CommCare Connect App to see more information about the opportunity and begin learning"
+    )

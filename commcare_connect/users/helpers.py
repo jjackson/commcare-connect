@@ -1,8 +1,6 @@
 from uuid import uuid4
 
 import requests
-from twilio.rest import Client
-
 from django.conf import settings
 
 from commcare_connect.organization.models import Organization
