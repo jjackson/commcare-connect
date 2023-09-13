@@ -12,4 +12,14 @@
       {% crispy form %}
     </form>
   </div>
+
+  <script>
+    function calculateNewOpportunityBudget() {
+      const numUsers = document.querySelectorAll("input[name='selected_users']:checked").length
+      const budget = document.getElementById("id_budget_per_user").value
+      const calculated_budget = numUsers * budget
+
+      document.getElementById("calculated_budget_text").innerHTML = `Please confirm to add <b>${calculated_budget}</b> budget to this Opportunity.`
+    }
+  </script>
 {% endblock content %}
