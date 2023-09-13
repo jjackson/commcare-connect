@@ -191,3 +191,10 @@ class UserVisit(XFormBaseModel):
         max_length=50, choices=VisitValidationStatus.choices, default=VisitValidationStatus.pending
     )
     form_json = models.JSONField()
+
+
+class OpportunityClaim(models.Model):
+    opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE)
+    max_payments = models.IntegerField()
+    end_date = models.DateField()
+    date_claimed = models.DateField(auto_created=True)
