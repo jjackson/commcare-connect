@@ -161,7 +161,15 @@ def get_app(domain, app_id):
 
 
 def get_user(xform: XForm):
-    user = User.objects.filter(connectiduserlink__commcare_username=xform.metadata.username).first()
+    cc_username = _get_commcare_username(xform)
+    user = User.objects.filter(connectiduserlink__commcare_username=cc_username).first()
     if not user:
-        raise ProcessingError(f"Commcare User {xform.metadata.username} not found")
+        raise ProcessingError(f"Commcare User {cc_username} not found")
     return user
+
+
+def _get_commcare_username(xform: XForm):
+    username = xform.metadata.username
+    if "@" in username:
+        return username
+    return f"{username}@{xform.domain}.commcarehq.org"
