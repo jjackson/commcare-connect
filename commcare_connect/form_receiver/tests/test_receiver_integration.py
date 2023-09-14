@@ -5,12 +5,25 @@ from commcare_connect.form_receiver.tests.test_receiver_endpoint import add_cred
 from commcare_connect.form_receiver.tests.xforms import AssessmentStubFactory, LearnModuleJsonFactory, get_form_json
 from commcare_connect.opportunity.models import Assessment, CompletedModule, LearnModule, Opportunity, UserVisit
 from commcare_connect.opportunity.tests.factories import LearnModuleFactory, OpportunityFactory
-from commcare_connect.users.models import User
+from commcare_connect.users.models import ConnectIDUserLink, User
+from commcare_connect.users.tests.factories import MobileUserFactory
 
 
 @pytest.fixture()
 def opportunity():
     return OpportunityFactory()
+
+
+@pytest.fixture
+def mobile_user_with_connect_link(db, opportunity: Opportunity) -> User:
+    user = MobileUserFactory()
+    links = [ConnectIDUserLink(user=user, commcare_username=f"test@{opportunity.learn_app.cc_domain}.commcarehq.org")]
+    if opportunity.learn_app.cc_domain != opportunity.deliver_app.cc_domain:
+        links.append(
+            ConnectIDUserLink(user=user, commcare_username=f"test@{opportunity.deliver_app.cc_domain}.commcarehq.org")
+        )
+    ConnectIDUserLink.objects.bulk_create(links)
+    return user
 
 
 @pytest.mark.django_db
