@@ -1,6 +1,6 @@
 from crispy_forms.bootstrap import Modal
 from crispy_forms.helper import FormHelper, Layout
-from crispy_forms.layout import Button, Div, Field, Row, Submit
+from crispy_forms.layout import HTML, Button, Div, Field, Row, Submit
 from dateutil.relativedelta import relativedelta
 from django import forms
 from django.db.models import TextChoices
@@ -236,6 +236,7 @@ class AddBudgetExistingUsersForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
+            Row(HTML("<h3>Adding budget for existing users</h3>")),
             Row(Field("selected_users")),
             Row(
                 Field("budget_per_user", wrapper_class="form-group col-md-6 mb-0"),

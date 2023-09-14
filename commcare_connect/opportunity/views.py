@@ -229,7 +229,7 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
         form = AddBudgetExistingUsersForm(data=request.POST, opportunity_claims=opportunity_claims)
         if form.is_valid():
             selected_opp_claims = form.cleaned_data["selected_users"]
-            max_payment_increment = form.cleaned_data["budget_per_visit"]
+            max_payment_increment = form.cleaned_data["budget_per_user"]
             end_date = form.cleaned_data["end_date"]
             OpportunityClaim.objects.filter(pk__in=selected_opp_claims).update(
                 max_payments=F("max_payments") + max_payment_increment,
