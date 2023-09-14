@@ -317,8 +317,6 @@ OAUTH2_PROVIDER = {
     ),
 }
 
-BASE_ADDRESS = env("BASE_ADDRESS", default="http://localhost:8000")
-
 TWILIO_ACCOUNT_SID = env("TWILIO_SID", default=None)
 TWILIO_AUTH_TOKEN = env("TWILIO_TOKEN", default=None)
 TWILIO_MESSAGING_SERVICE = env("TWILIO_MESSAGING_SERVICE", default=None)

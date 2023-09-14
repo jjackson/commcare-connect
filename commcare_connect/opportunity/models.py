@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.db import models
 from django.utils.translation import gettext
 
@@ -138,7 +140,7 @@ class OpportunityAccess(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     date_learn_started = models.DateTimeField(null=True)
     accepted = models.BooleanField(default=False)
-    invite_id = models.CharField(max_length=50, null=True, blank=True)
+    invite_id = models.CharField(max_length=50, default=uuid4)
 
     class Meta:
         indexes = [models.Index(fields=["invite_id"])]

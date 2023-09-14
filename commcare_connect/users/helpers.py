@@ -1,6 +1,5 @@
-from uuid import uuid4
-
 import requests
+from allauth.utils import build_absolute_uri
 from django.conf import settings
 
 from commcare_connect.organization.models import Organization
@@ -38,9 +37,10 @@ def create_hq_user(user, domain, api_key):
 
 
 def invite_user(user, opportunity_access):
-    invite_id = uuid4()
-    opportunity_access.invite_id = invite_id
-    opportunity_access.save()
-    url = "https://connect.dimagi.com/opportunity/accept_invite/{invite_id}"
+    invite_id = opportunity_access.invite_id
+    location = reverse("opportunity:accept_invite", args=(invite_id,))
+    url = build_absolute_uri(None, location)
     body = f"You have been invited to a new job in Commcare Connect. Click the following link to share your information with the project and find out more {url}"
+    if not user.phone_number:
+        return
     send_sms(user.phone_number, body)
