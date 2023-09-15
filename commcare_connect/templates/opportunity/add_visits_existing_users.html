@@ -24,46 +24,38 @@
           <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
       {% endif %}
-      <table class="table table-custom border">
-        <thead class="table-secondary">
-        <tr>
-          <th></th>
-          <th>Name</th>
-          <th>Max Visits</th>
-          <th>Used Visits</th>
-          <th>End date</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for opp_claim in opportunity_claims %}
+      {% if opportunity_claims %}
+        <table class="table table-custom border">
+          <thead class="table-secondary">
           <tr>
-            <td>
-              <input type="checkbox" name="selected_users" id="id_selected_users" value="{{ opp_claim.id }}"
-                     x-model="selected_users"
-                     class="form-check-input {% if form.selected_users.errors %}is-invalid{% endif %}"/>
-            </td>
-            <td>{{ opp_claim.opportunity_access.user.username }}</td>
-            <td>{{ opp_claim.max_payments }}</td>
-            <td>{{ opp_claim.opportunity_access.visit_count }}</td>
-            <td>{{ opp_claim.end_date }}</td>
+            <th></th>
+            <th>Name</th>
+            <th>Max Visits</th>
+            <th>Used Visits</th>
+            <th>End date</th>
           </tr>
-          {% empty %}
-          <tr>
-            <td colspan="4">
-              No Opportunity Claims yet.
-              <a href="{% url "opportunity:list" org_slug=request.org.slug %}">All Opportunities</a>
-            </td>
-          </tr>
-        {% endfor %}
-        </tbody>
-        <tfoot>
-        <tr>
-          <th>
-            <label for="id_max_visits_per_user" class="form-label requiredField">
-              Max visits per user
+          </thead>
+          <tbody>
+          {% for opp_claim in opportunity_claims %}
+            <tr>
+              <td>
+                <input type="checkbox" name="selected_users" id="id_selected_users" value="{{ opp_claim.id }}"
+                       x-model="selected_users"
+                       class="form-check-input {% if form.selected_users.errors %}is-invalid{% endif %}"/>
+              </td>
+              <td>{{ opp_claim.opportunity_access.user.username }}</td>
+              <td>{{ opp_claim.max_payments }}</td>
+              <td>{{ opp_claim.opportunity_access.visit_count }}</td>
+              <td>{{ opp_claim.end_date }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        <div class="row mb-2 py-2">
+          <div class="col-sm">
+            <label for="id_additional_visits" class="form-label requiredField">
+              Additional Visits per user
             </label>
-          </th>
-          <th>
             <input type="number"
                    class="numberinput form-control {% if form.additional_visits.errors %}is-invalid{% endif %}"
                    name="additional_visits" id="id_additional_visits"
@@ -73,27 +65,32 @@
                 <strong>{{ error|escape }}</strong>
               </div>
             {% endfor %}
-          </th>
-          <th>
+          </div>
+          <div class="col-sm">
             <label for="id_end_date" class="form-label requiredField">
-              Extend Opportunity End date
+              Extended Opportunity End date
             </label>
-          </th>
-          <th>
             <input type="date" name="end_date"
-                   class="form-control dateinput {% if form.end_date.errors %}is-invalid{% endif %}" id="id_end_date"/>
+                   class="form-control dateinput {% if form.end_date.errors %}is-invalid{% endif %}"
+                   id="id_end_date"/>
             {% for error in form.end_date.errors %}
               <div class="invalid-feedback">
                 <strong>{{ error|escape }}</strong>
               </div>
             {% endfor %}
-          </th>
-        </tr>
-        </tfoot>
-      </table>
-      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#confirm-modal-add-visits">
-        Save
-      </button>
+          </div>
+        </div>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal"
+                data-bs-target="#confirm-modal-add-visits">
+          Save
+        </button>
+      {% else %}
+        <div class="text-center">
+          <b>No Opportunity Claims yet.</b> <br/>
+          <a class="btn btn-primary mt-2" href="{% url "opportunity:list" org_slug=request.org.slug %}">All
+            Opportunities</a>
+        </div>
+      {% endif %}
 
       <!-- Modal -->
       <div class="modal fade" id="confirm-modal-add-visits" tabindex="-1" aria-labelledby="exampleModalLabel"
