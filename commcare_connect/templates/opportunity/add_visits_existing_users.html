@@ -61,7 +61,13 @@
               {{ form.end_date|as_crispy_errors }}
             </td>
           </tr>
-
+        {% empty %}
+          <tr>
+            <td colspan="4">
+              No Opportunity Claims yet.
+              <a href="{% url "opportunity:list" org_slug=request.org.slug %}">All Opportunities</a>
+            </td>
+          </tr>
         {% endfor %}
         </tbody>
       </table>
