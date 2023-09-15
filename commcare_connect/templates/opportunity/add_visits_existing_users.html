@@ -10,15 +10,20 @@
     <h4>Adding Visits for Existing Users</h4>
     <form method="post"
           x-data="{
-            max_visits: 0,
-            end_date: '',
+            additionalVisits: 0,
             selected_users: [],
             isSelected (id) { return this.selected_users.find(el => el === id)},
-            calculated_budget() { return this.selected_users.length * this.max_visits * '{{ budget_per_visit }}' }
+            totalVisits() { return this.selected_users.length * this.additionalVisits },
+            calculatedBudget() { return this.totalVisits() * '{{ budget_per_visit }}' }
           }"
     >
-      {{ formset.management_form }}
       {% csrf_token %}
+      {% if form.selected_users.errors %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+          Please select users to update.
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endif %}
       <table class="table table-custom border">
         <thead class="table-secondary">
         <tr>
@@ -26,42 +31,23 @@
           <th>Name</th>
           <th>Max Visits</th>
           <th>Used Visits</th>
-          <th>Extend End date</th>
+          <th>End date</th>
         </tr>
         </thead>
         <tbody>
-        {% for form in formset %}
+        {% for opp_claim in opportunity_claims %}
           <tr>
             <td>
-              {% for hidden in form.hidden_fields %}
-                {{ hidden }}
-              {% endfor %}
-              <input type="checkbox" name="{{ form.is_selected.html_name }}"
-                     id="{{ form.is_selected.auto_id }}" value="{{ form.instance.id }}"
-                     x-model="selected_users"/>
+              <input type="checkbox" name="selected_users" id="id_selected_users" value="{{ opp_claim.id }}"
+                     x-model="selected_users"
+                     class="form-check-input {% if form.selected_users.errors %}is-invalid{% endif %}"/>
             </td>
-            <td>{{ form.instance.opportunity_access.user.username }}</td>
-            <td>
-              <input type="number" name="{{ form.max_payments.html_name }}" id="{{ form.max_payments.auto_id }}"
-                     class="numberinput form-control {% if form.max_payments.errors %} is-invalid {% endif %}"
-                     :value="isSelected('{{ form.instance.id }}') && max_visits ? max_visits : '{{ form.max_payments.value }}'"
-              />
-              {% for error in form.max_payments.errors %}
-                <div class="invalid-feedback">
-                  <strong>{{ error|escape }}</strong>
-                </div>
-              {% endfor %}
-            </td>
-            <td>{{ form.instance.opportunity_access.visit_count }}</td>
-            <td>
-              <input type="date" name="{{ form.end_date.html_name }}" id="{{ form.end_date.auto_id }}"
-                     class="dateinput form-control{% if form.end_date.errors %} is-invalid{% endif %}"
-                     :value="isSelected('{{ form.instance.id }}') && end_date ? end_date : '{{ form.end_date.value|date:"Y-m-d" }}'"
-              />
-              {{ form.end_date|as_crispy_errors }}
-            </td>
+            <td>{{ opp_claim.opportunity_access.user.username }}</td>
+            <td>{{ opp_claim.max_payments }}</td>
+            <td>{{ opp_claim.opportunity_access.visit_count }}</td>
+            <td>{{ opp_claim.end_date }}</td>
           </tr>
-        {% empty %}
+          {% empty %}
           <tr>
             <td colspan="4">
               No Opportunity Claims yet.
@@ -70,21 +56,41 @@
           </tr>
         {% endfor %}
         </tbody>
+        <tfoot>
+        <tr>
+          <th>
+            <label for="id_max_visits_per_user" class="form-label requiredField">
+              Max visits per user
+            </label>
+          </th>
+          <th>
+            <input type="number"
+                   class="numberinput form-control {% if form.additional_visits.errors %}is-invalid{% endif %}"
+                   name="additional_visits" id="id_additional_visits"
+                   x-model="additionalVisits"/>
+            {% for error in form.additional_visits.errors %}
+              <div class="invalid-feedback">
+                <strong>{{ error|escape }}</strong>
+              </div>
+            {% endfor %}
+          </th>
+          <th>
+            <label for="id_end_date" class="form-label requiredField">
+              Extend Opportunity End date
+            </label>
+          </th>
+          <th>
+            <input type="date" name="end_date"
+                   class="form-control dateinput {% if form.end_date.errors %}is-invalid{% endif %}" id="id_end_date"/>
+            {% for error in form.end_date.errors %}
+              <div class="invalid-feedback">
+                <strong>{{ error|escape }}</strong>
+              </div>
+            {% endfor %}
+          </th>
+        </tr>
+        </tfoot>
       </table>
-      <div class="row mb-2">
-        <div class="col-md-4">
-          <label for="id_max_visits_per_user" class="form-label requiredField">
-            Max visits per user
-          </label>
-          <input type="number" class="numberinput form-control" id="id_max_visits_per_user" x-model="max_visits"/>
-        </div>
-        <div class="col-md-4">
-          <label for="id_end_date" class="form-label requiredField">
-            Extend Opportunity End date
-          </label>
-          <input type="date" class="form-control dateinput" id="id_end_date" x-model="end_date"/>
-        </div>
-      </div>
       <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#confirm-modal-add-visits">
         Save
       </button>
@@ -99,7 +105,8 @@
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-              Please confirm to add <b x-text="calculated_budget()"></b> budget to this Opportunity.
+              You are about to allocate an additional <b x-text="totalVisits()"></b> visits which will result in an
+              additional budget allocation of <b x-text="calculatedBudget()"></b> to this Opportunity.
             </div>
             <div class="modal-footer">
               <button class="btn btn-primary" type="submit">Confirm</button>
