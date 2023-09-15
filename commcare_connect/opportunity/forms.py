@@ -1,6 +1,5 @@
-from crispy_forms.bootstrap import Modal
 from crispy_forms.helper import FormHelper, Layout
-from crispy_forms.layout import HTML, Button, Div, Field, Row, Submit
+from crispy_forms.layout import Field, Row, Submit
 from dateutil.relativedelta import relativedelta
 from django import forms
 from django.db.models import TextChoices
@@ -12,6 +11,7 @@ from commcare_connect.opportunity.models import (
     HQApiKey,
     Opportunity,
     OpportunityAccess,
+    OpportunityClaim,
     VisitValidationStatus,
 )
 from commcare_connect.organization.models import Organization
@@ -230,40 +230,10 @@ class OpportunityAccessCreationForm(forms.ModelForm):
         fields = "__all__"
 
 
-class AddBudgetExistingUsersForm(forms.Form):
-    def __init__(self, *args, **kwargs):
-        opportunity_claims = kwargs.pop("opportunity_claims", [])
-        super().__init__(*args, **kwargs)
-        self.helper = FormHelper(self)
-        self.helper.layout = Layout(
-            Row(HTML("<h3>Adding budget for existing users</h3>")),
-            Row(Field("selected_users")),
-            Row(
-                Field("budget_per_user", wrapper_class="form-group col-md-6 mb-0"),
-                Field("end_date", wrapper_class="form-group col-md-6 mb-0"),
-            ),
-            Button(
-                name="button",
-                value="Save",
-                css_class="btn-primary mt-3",
-                data_bs_toggle="modal",
-                data_bs_target="#add_budget_existing_users_form_modal",
-                onClick="calculateNewOpportunityBudget()",
-            ),
-            Modal(
-                Div(css_id="calculated_budget_text", css_class="mb-3"),
-                Submit(name="submit", value="Confirm"),
-                css_id="add_budget_existing_users_form_modal",
-                title="Confirm",
-            ),
-        )
+class AddBudgetExistingUsersForm(forms.ModelForm):
+    is_selected = forms.BooleanField(required=False)
 
-        users = [
-            (opportunity_claim.id, opportunity_claim.opportunity_access.user.username)
-            for opportunity_claim in opportunity_claims
-        ]
-        self.fields["selected_users"] = forms.MultipleChoiceField(widget=forms.CheckboxSelectMultiple, choices=users)
-        self.fields["budget_per_user"] = forms.IntegerField()
-        self.fields["end_date"] = forms.DateField(
-            widget=forms.DateInput(attrs={"type": "date", "class": "form-control"})
-        )
+    class Meta:
+        model = OpportunityClaim
+        fields = ("max_payments", "end_date")
+        labels = {"max_payments": "", "end_date": "", "is_selected": ""}
