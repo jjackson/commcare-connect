@@ -2,7 +2,7 @@ from celery.result import AsyncResult
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
-from django.forms import modelformset_factory
+from django.db.models import F
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -221,24 +221,22 @@ def update_visit_status_import(request, org_slug=None, pk=None):
 def add_budget_existing_users(request, org_slug=None, pk=None):
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
     opportunity_access = OpportunityAccess.objects.filter(opportunity=opportunity)
-    opportunity_claim = OpportunityClaim.objects.filter(opportunity_access__in=opportunity_access)
-    opportunity_claim_formset = modelformset_factory(
-        OpportunityClaim,
-        form=AddBudgetExistingUsersForm,
-        extra=0,
-    )
-    formset = opportunity_claim_formset(queryset=opportunity_claim)
+    opportunity_claims = OpportunityClaim.objects.filter(opportunity_access__in=opportunity_access)
+    form = AddBudgetExistingUsersForm(opportunity_claims=opportunity_claims)
 
     if request.method == "POST":
-        formset = opportunity_claim_formset(data=request.POST, queryset=opportunity_claim)
-        if formset.is_valid():
-            for form in formset:
-                if form.cleaned_data["is_selected"]:
-                    form.save()
+        form = AddBudgetExistingUsersForm(opportunity_claims=opportunity_claims, data=request.POST)
+        if form.is_valid():
+            selected_users = form.cleaned_data["selected_users"]
+            additional_visits = form.cleaned_data["additional_visits"]
+            end_date = form.cleaned_data["end_date"]
+            OpportunityClaim.objects.filter(pk__in=selected_users).update(
+                max_payments=F("max_payments") + additional_visits, end_date=end_date
+            )
             return redirect("opportunity:detail", org_slug, pk)
 
     return render(
         request,
         "opportunity/add_visits_existing_users.html",
-        {"formset": formset, "budget_per_visit": opportunity.budget_per_visit},
+        {"form": form, "opportunity_claims": opportunity_claims, "budget_per_visit": opportunity.budget_per_visit},
     )

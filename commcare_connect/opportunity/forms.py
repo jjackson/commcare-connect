@@ -11,7 +11,6 @@ from commcare_connect.opportunity.models import (
     HQApiKey,
     Opportunity,
     OpportunityAccess,
-    OpportunityClaim,
     VisitValidationStatus,
 )
 from commcare_connect.organization.models import Organization
@@ -230,10 +229,13 @@ class OpportunityAccessCreationForm(forms.ModelForm):
         fields = "__all__"
 
 
-class AddBudgetExistingUsersForm(forms.ModelForm):
-    is_selected = forms.BooleanField(required=False)
+class AddBudgetExistingUsersForm(forms.Form):
+    additional_visits = forms.IntegerField(min_value=1)
+    end_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}))
 
-    class Meta:
-        model = OpportunityClaim
-        fields = ("max_payments", "end_date")
-        labels = {"max_payments": "", "end_date": "", "is_selected": ""}
+    def __init__(self, *args, **kwargs):
+        opportunity_claims = kwargs.pop("opportunity_claims", [])
+        super().__init__(*args, **kwargs)
+
+        choices = [(opp_claim.id, opp_claim.id) for opp_claim in opportunity_claims]
+        self.fields["selected_users"] = forms.MultipleChoiceField(choices=choices, widget=forms.CheckboxSelectMultiple)
