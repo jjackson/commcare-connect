@@ -1,5 +1,5 @@
 from crispy_forms.helper import FormHelper, Layout
-from crispy_forms.layout import Field, Row, Submit
+from crispy_forms.layout import HTML, Field, Row, Submit
 from dateutil.relativedelta import relativedelta
 from django import forms
 from django.db.models import TextChoices
@@ -239,3 +239,18 @@ class AddBudgetExistingUsersForm(forms.Form):
 
         choices = [(opp_claim.id, opp_claim.id) for opp_claim in opportunity_claims]
         self.fields["selected_users"] = forms.MultipleChoiceField(choices=choices, widget=forms.CheckboxSelectMultiple)
+
+
+class AddBudgetNewUsersForm(forms.Form):
+    additional_users = forms.IntegerField()
+    end_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(HTML("<h3>Add budget for New Users</h3>")),
+            Row(Field("additional_users")),
+            Row(Field("end_date")),
+            Submit(name="submit", value="Submit"),
+        )
