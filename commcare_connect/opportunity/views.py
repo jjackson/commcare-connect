@@ -217,20 +217,6 @@ def update_visit_status_import(request, org_slug=None, pk=None):
     return redirect("opportunity:detail", org_slug, pk)
 
 
-@require_GET
-def accept_invite(request, invite_id):
-    try:
-        o = OpportunityAccess.objects.get(invite_id=invite_id)
-    except OpportunityAccess.DoesNotExist:
-        return HttpResponse("This link is invalid. Please try again", status=404)
-    o.accepted = True
-    o.save()
-    return HttpResponse(
-        "Thank you for accepting the invitation. Open your CommCare Connect App to "
-        "see more information about the opportunity and begin learning"
-    )
-
-
 @org_member_required
 def add_budget_existing_users(request, org_slug=None, pk=None):
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)

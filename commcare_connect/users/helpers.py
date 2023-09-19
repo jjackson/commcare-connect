@@ -39,7 +39,7 @@ def create_hq_user(user, domain, api_key):
 
 def invite_user(user, opportunity_access):
     invite_id = opportunity_access.invite_id
-    location = reverse("opportunity:accept_invite", args=(invite_id,))
+    location = reverse("users:accept_invite", args=(invite_id,))
     url = build_absolute_uri(None, location)
     body = (
         "You have been invited to a new job in Commcare Connect. Click the following "
