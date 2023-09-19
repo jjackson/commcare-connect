@@ -2,6 +2,7 @@ from celery.result import AsyncResult
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
+from django.db.models import F
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -14,12 +15,19 @@ from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
 
 from commcare_connect.opportunity.forms import (
+    AddBudgetExistingUsersForm,
     DateRanges,
     OpportunityChangeForm,
     OpportunityCreationForm,
     VisitExportForm,
 )
-from commcare_connect.opportunity.models import CompletedModule, Opportunity, OpportunityAccess, UserVisit
+from commcare_connect.opportunity.models import (
+    CompletedModule,
+    Opportunity,
+    OpportunityAccess,
+    OpportunityClaim,
+    UserVisit,
+)
 from commcare_connect.opportunity.tables import OpportunityAccessTable, UserVisitTable
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
@@ -219,4 +227,28 @@ def accept_invite(request, invite_id):
     o.save()
     return HttpResponse(
         "Thank you for accepting the invitation. Open your CommCare Connect App to see more information about the opportunity and begin learning"
+    )
+
+@org_member_required
+def add_budget_existing_users(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
+    opportunity_access = OpportunityAccess.objects.filter(opportunity=opportunity)
+    opportunity_claims = OpportunityClaim.objects.filter(opportunity_access__in=opportunity_access)
+    form = AddBudgetExistingUsersForm(opportunity_claims=opportunity_claims)
+
+    if request.method == "POST":
+        form = AddBudgetExistingUsersForm(opportunity_claims=opportunity_claims, data=request.POST)
+        if form.is_valid():
+            selected_users = form.cleaned_data["selected_users"]
+            additional_visits = form.cleaned_data["additional_visits"]
+            end_date = form.cleaned_data["end_date"]
+            OpportunityClaim.objects.filter(pk__in=selected_users).update(
+                max_payments=F("max_payments") + additional_visits, end_date=end_date
+            )
+            return redirect("opportunity:detail", org_slug, pk)
+
+    return render(
+        request,
+        "opportunity/add_visits_existing_users.html",
+        {"form": form, "opportunity_claims": opportunity_claims, "budget_per_visit": opportunity.budget_per_visit},
     )

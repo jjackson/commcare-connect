@@ -227,3 +227,21 @@ class OpportunityAccessCreationForm(forms.ModelForm):
     class Meta:
         model = OpportunityAccess
         fields = "__all__"
+
+
+class AddBudgetExistingUsersForm(forms.Form):
+    additional_visits = forms.IntegerField(
+        min_value=1,
+        widget=forms.NumberInput(attrs={"x-model": "additionalVisits"}),
+    )
+    end_date = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
+        label="Extended Opportunity End date",
+    )
+
+    def __init__(self, *args, **kwargs):
+        opportunity_claims = kwargs.pop("opportunity_claims", [])
+        super().__init__(*args, **kwargs)
+
+        choices = [(opp_claim.id, opp_claim.id) for opp_claim in opportunity_claims]
+        self.fields["selected_users"] = forms.MultipleChoiceField(choices=choices, widget=forms.CheckboxSelectMultiple)
