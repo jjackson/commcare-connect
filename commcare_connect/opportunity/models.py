@@ -136,7 +136,7 @@ class Assessment(XFormBaseModel):
 
 
 class OpportunityAccess(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     date_learn_started = models.DateTimeField(null=True)
     accepted = models.BooleanField(default=False)
@@ -173,6 +173,9 @@ class OpportunityAccess(models.Model):
 
         return
 
+    class Meta:
+        unique_together = ("user", "opportunity")
+
 
 class VisitValidationStatus(models.TextChoices):
     pending = "pending", gettext("Pending")
@@ -198,3 +201,10 @@ class UserVisit(XFormBaseModel):
         max_length=50, choices=VisitValidationStatus.choices, default=VisitValidationStatus.pending
     )
     form_json = models.JSONField()
+
+
+class OpportunityClaim(models.Model):
+    opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE)
+    max_payments = models.IntegerField()
+    end_date = models.DateField()
+    date_claimed = models.DateField(auto_created=True)
