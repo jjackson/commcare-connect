@@ -8,6 +8,7 @@ from commcare_connect.opportunity.views import (
     OpportunityUserLearnProgress,
     OpportunityUserTableView,
     OpportunityUserVisitTableView,
+    add_budget_existing_users,
     download_visit_export,
     export_user_visits,
     update_visit_status_import,
@@ -30,5 +31,10 @@ urlpatterns = [
         "<int:opp_id>/learn_progress/<int:pk>",
         view=OpportunityUserLearnProgress.as_view(),
         name="user_learn_progress",
+    ),
+    path(
+        "<int:pk>/add_budget",
+        view=add_budget_existing_users,
+        name="add_budget_existing_users",
     ),
 ]
