@@ -144,6 +144,7 @@ class OpportunityAccess(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["invite_id"])]
+        unique_together = ("user", "opportunity")
 
     # TODO: Convert to a field and calculate this property CompletedModule is saved
     @property
@@ -172,9 +173,6 @@ class OpportunityAccess(models.Model):
             return user_visits.first().visit_date
 
         return
-
-    class Meta:
-        unique_together = ("user", "opportunity")
 
 
 class VisitValidationStatus(models.TextChoices):
