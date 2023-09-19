@@ -53,31 +53,10 @@
         </table>
         <div class="row mb-2 py-2">
           <div class="col-sm">
-            <label for="id_additional_visits" class="form-label requiredField">
-              Additional Visits per user
-            </label>
-            <input type="number"
-                   class="numberinput form-control {% if form.additional_visits.errors %}is-invalid{% endif %}"
-                   name="additional_visits" id="id_additional_visits"
-                   x-model="additionalVisits"/>
-            {% for error in form.additional_visits.errors %}
-              <div class="invalid-feedback">
-                <strong>{{ error|escape }}</strong>
-              </div>
-            {% endfor %}
+            {{ form.additional_visits|as_crispy_field }}
           </div>
           <div class="col-sm">
-            <label for="id_end_date" class="form-label requiredField">
-              Extended Opportunity End date
-            </label>
-            <input type="date" name="end_date"
-                   class="form-control dateinput {% if form.end_date.errors %}is-invalid{% endif %}"
-                   id="id_end_date"/>
-            {% for error in form.end_date.errors %}
-              <div class="invalid-feedback">
-                <strong>{{ error|escape }}</strong>
-              </div>
-            {% endfor %}
+            {{ form.end_date|as_crispy_field }}
           </div>
         </div>
         <button type="button" class="btn btn-primary" data-bs-toggle="modal"
