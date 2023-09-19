@@ -1,4 +1,3 @@
-from oauth2_provider.contrib.rest_framework import OAuth2Authentication, TokenHasReadWriteScope
 from rest_framework import viewsets
 from rest_framework.generics import ListAPIView, get_object_or_404
 from rest_framework.permissions import IsAuthenticated
@@ -54,8 +53,7 @@ class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
 
 
 class ClaimOpportunityView(APIView):
-    authentication_classes = [OAuth2Authentication]
-    permission_classes = [TokenHasReadWriteScope]
+    permission_classes = [IsAuthenticated]
 
     def post(self, *args, **kwargs):
         opportunity_access = get_object_or_404(OpportunityAccess, user=self.request.user, opportunity=kwargs.get("pk"))
