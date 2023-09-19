@@ -230,8 +230,14 @@ class OpportunityAccessCreationForm(forms.ModelForm):
 
 
 class AddBudgetExistingUsersForm(forms.Form):
-    additional_visits = forms.IntegerField(min_value=1)
-    end_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}))
+    additional_visits = forms.IntegerField(
+        min_value=1,
+        widget=forms.NumberInput(attrs={"x-model": "additionalVisits"}),
+    )
+    end_date = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
+        label="Extended Opportunity End date",
+    )
 
     def __init__(self, *args, **kwargs):
         opportunity_claims = kwargs.pop("opportunity_claims", [])
