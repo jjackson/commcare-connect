@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from commcare_connect.opportunity.models import CommCareApp, Opportunity, OpportunityClaim, UserVisit
+from commcare_connect.opportunity.models import CommCareApp, CompletedModule, Opportunity, OpportunityClaim, UserVisit
 
 
 class CommCareAppSerializer(serializers.ModelSerializer):
@@ -42,9 +42,10 @@ class OpportunitySerializer(serializers.ModelSerializer):
         return OpportunityClaim.objects.filter(opportunity_access=opp_access).first()
 
 
-class UserLearnProgressSerializer(serializers.Serializer):
-    completed_modules = serializers.IntegerField()
-    total_modules = serializers.IntegerField()
+class UserLearnProgressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompletedModule
+        fields = ["module", "date", "duration"]
 
 
 class UserVisitSerializer(serializers.ModelSerializer):
