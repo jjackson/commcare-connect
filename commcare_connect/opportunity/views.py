@@ -226,8 +226,10 @@ def accept_invite(request, invite_id):
     o.accepted = True
     o.save()
     return HttpResponse(
-        "Thank you for accepting the invitation. Open your CommCare Connect App to see more information about the opportunity and begin learning"
+        "Thank you for accepting the invitation. Open your CommCare Connect App to "
+        "see more information about the opportunity and begin learning"
     )
+
 
 @org_member_required
 def add_budget_existing_users(request, org_slug=None, pk=None):
