@@ -36,8 +36,11 @@ cryptography==41.0.2
 django==4.2.5
     # via
     #   -c requirements/base.txt
+    #   django-allow-cidr
     #   django-anymail
     #   django-storages
+django-allow-cidr==0.7.1
+    # via -r requirements/production.in
 django-anymail[amazon-ses]==10.1
     # via -r requirements/production.in
 django-storages[boto3]==1.13.2
@@ -53,7 +56,9 @@ jmespath==1.0.1
     #   boto3
     #   botocore
 packaging==23.1
-    # via gunicorn
+    # via
+    #   django-allow-cidr
+    #   gunicorn
 psycopg2==2.9.6
     # via -r requirements/production.in
 pycparser==2.21

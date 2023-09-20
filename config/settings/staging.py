@@ -7,7 +7,10 @@ from .base import env
 # GENERAL
 # ------------------------------------------------------------------------------
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="")
-ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["commcare-connect.org"])
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=[])
+
+ALLOWED_CIDR_NETS = env.list("DJANGO_ALLOWED_CIDR_NETS", default=[])
+MIDDLEWARE.insert(0, "allow_cidr.middleware.AllowCIDRMiddleware")  # noqa: F405
 
 # DATABASES
 # ------------------------------------------------------------------------------
