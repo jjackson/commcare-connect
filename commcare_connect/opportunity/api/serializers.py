@@ -1,10 +1,12 @@
 from rest_framework import serializers
 
+from commcare_connect.cache import quickcache
 from commcare_connect.opportunity.models import (
     CommCareApp,
     CompletedModule,
     LearnModule,
     Opportunity,
+    OpportunityAccess,
     OpportunityClaim,
     UserVisit,
 )
@@ -59,22 +61,22 @@ class OpportunitySerializer(serializers.ModelSerializer):
         ]
 
     def get_claim(self, obj):
-        opp_access = self._get_opp_access(obj)
+        opp_access = _get_opp_access(self.context.get("request").user, obj)
         claim = OpportunityClaim.objects.filter(opportunity_access=opp_access)
         if claim.exists():
             return OpportunityClaimSerializer(claim.first()).data
         return None
 
     def get_learn_progress(self, obj):
-        opp_access = self._get_opp_access(obj)
+        opp_access = _get_opp_access(self.context.get("request").user, obj)
         total_modules = LearnModule.objects.filter(app=opp_access.opportunity.learn_app)
         completed_modules = CompletedModule.objects.filter(opportunity=opp_access.opportunity)
         return {"total_modules": total_modules.count(), "completed_modules": completed_modules.count()}
 
-    def _get_opp_access(self, obj):
-        opp_access_qs = self.context.get("opportunity_access")
-        opp_access = opp_access_qs.filter(opportunity=obj).first()
-        return opp_access
+
+@quickcache(vary_on=["user.pk", "obj.pk"], timeout=60 * 60)
+def _get_opp_access(user, obj):
+    return OpportunityAccess.objects.filter(user=user, opportunity=obj).first()
 
 
 class UserLearnProgressSerializer(serializers.ModelSerializer):
