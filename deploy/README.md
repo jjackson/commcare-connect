@@ -32,7 +32,7 @@ Deploying commcare-connect uses the following tools:
 (requires Ruby)
 
 ```bash
-gem install kamal
+gem install kamal -v '~> 1.0.0'
 ```
 
 ### Ansible
