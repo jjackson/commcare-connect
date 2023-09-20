@@ -1,20 +1,44 @@
 from rest_framework import serializers
 
-from commcare_connect.opportunity.models import CommCareApp, Opportunity, UserVisit
+from commcare_connect.cache import quickcache
+from commcare_connect.opportunity.models import (
+    CommCareApp,
+    CompletedModule,
+    LearnModule,
+    Opportunity,
+    OpportunityAccess,
+    OpportunityClaim,
+    UserVisit,
+)
+
+
+class LearnModuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LearnModule
+        fields = ["slug", "name", "description", "time_estimate"]
 
 
 class CommCareAppSerializer(serializers.ModelSerializer):
     organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
+    learn_modules = LearnModuleSerializer(many=True)
 
     class Meta:
         model = CommCareApp
-        fields = ["cc_domain", "cc_app_id", "name", "description", "organization"]
+        fields = ["cc_domain", "cc_app_id", "name", "description", "organization", "learn_modules"]
+
+
+class OpportunityClaimSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OpportunityClaim
+        fields = ["max_payments", "end_date", "date_claimed"]
 
 
 class OpportunitySerializer(serializers.ModelSerializer):
     organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
     learn_app = CommCareAppSerializer()
     deliver_app = CommCareAppSerializer()
+    claim = serializers.SerializerMethodField()
+    learn_progress = serializers.SerializerMethodField()
 
     class Meta:
         model = Opportunity
@@ -32,12 +56,33 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "daily_max_visits_per_user",
             "budget_per_visit",
             "total_budget",
+            "claim",
+            "learn_progress",
         ]
 
+    def get_claim(self, obj):
+        opp_access = _get_opp_access(self.context.get("request").user, obj)
+        claim = OpportunityClaim.objects.filter(opportunity_access=opp_access)
+        if claim.exists():
+            return OpportunityClaimSerializer(claim.first()).data
+        return None
 
-class UserLearnProgressSerializer(serializers.Serializer):
-    completed_modules = serializers.IntegerField()
-    total_modules = serializers.IntegerField()
+    def get_learn_progress(self, obj):
+        opp_access = _get_opp_access(self.context.get("request").user, obj)
+        total_modules = LearnModule.objects.filter(app=opp_access.opportunity.learn_app)
+        completed_modules = CompletedModule.objects.filter(opportunity=opp_access.opportunity)
+        return {"total_modules": total_modules.count(), "completed_modules": completed_modules.count()}
+
+
+@quickcache(vary_on=["user.pk", "obj.pk"], timeout=60 * 60)
+def _get_opp_access(user, obj):
+    return OpportunityAccess.objects.filter(user=user, opportunity=obj).first()
+
+
+class UserLearnProgressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompletedModule
+        fields = ["module", "date", "duration"]
 
 
 class UserVisitSerializer(serializers.ModelSerializer):

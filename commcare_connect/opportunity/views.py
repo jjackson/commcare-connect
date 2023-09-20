@@ -2,6 +2,7 @@ from celery.result import AsyncResult
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
+from django.db.models import F
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -14,12 +15,19 @@ from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
 
 from commcare_connect.opportunity.forms import (
+    AddBudgetExistingUsersForm,
     DateRanges,
     OpportunityChangeForm,
     OpportunityCreationForm,
     VisitExportForm,
 )
-from commcare_connect.opportunity.models import CompletedModule, Opportunity, OpportunityAccess, UserVisit
+from commcare_connect.opportunity.models import (
+    CompletedModule,
+    Opportunity,
+    OpportunityAccess,
+    OpportunityClaim,
+    UserVisit,
+)
 from commcare_connect.opportunity.tables import OpportunityAccessTable, UserVisitTable
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
@@ -75,14 +83,23 @@ class OpportunityEdit(OrganizationUserMixin, UpdateView):
     form_class = OpportunityChangeForm
 
     def get_success_url(self):
-        return reverse("opportunity:list", args=(self.request.org.slug,))
+        return reverse("opportunity:detail", args=(self.request.org.slug, self.object.id))
 
     def form_valid(self, form):
-        form.instance.modified_by = self.request.user.email
-        response = super().form_valid(form)
+        opportunity = form.instance
+        opportunity.modified_by = self.request.user.email
         users = form.cleaned_data["users"]
         if users:
             add_connect_users.delay(users, form.instance.id)
+        additional_users = form.cleaned_data["additional_users"]
+        if additional_users:
+            opportunity.total_budget += (
+                opportunity.budget_per_visit * opportunity.max_visits_per_user * additional_users
+            )
+        end_date = form.cleaned_data["end_date"]
+        if end_date:
+            opportunity.end_date = end_date
+        response = super().form_valid(form)
         return response
 
 
@@ -207,3 +224,28 @@ def update_visit_status_import(request, org_slug=None, pk=None):
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
     return redirect("opportunity:detail", org_slug, pk)
+
+
+@org_member_required
+def add_budget_existing_users(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
+    opportunity_access = OpportunityAccess.objects.filter(opportunity=opportunity)
+    opportunity_claims = OpportunityClaim.objects.filter(opportunity_access__in=opportunity_access)
+    form = AddBudgetExistingUsersForm(opportunity_claims=opportunity_claims)
+
+    if request.method == "POST":
+        form = AddBudgetExistingUsersForm(opportunity_claims=opportunity_claims, data=request.POST)
+        if form.is_valid():
+            selected_users = form.cleaned_data["selected_users"]
+            additional_visits = form.cleaned_data["additional_visits"]
+            end_date = form.cleaned_data["end_date"]
+            OpportunityClaim.objects.filter(pk__in=selected_users).update(
+                max_payments=F("max_payments") + additional_visits, end_date=end_date
+            )
+            return redirect("opportunity:detail", org_slug, pk)
+
+    return render(
+        request,
+        "opportunity/add_visits_existing_users.html",
+        {"form": form, "opportunity_claims": opportunity_claims, "budget_per_visit": opportunity.budget_per_visit},
+    )

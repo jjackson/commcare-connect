@@ -30,6 +30,10 @@ class OpportunityChangeForm(forms.ModelForm):
             Row(Field("name")),
             Row(Field("description")),
             Row(Field("active")),
+            Row(
+                Field("additional_users", wrapper_class="form-group col-md-6 mb-0"),
+                Field("end_date", wrapper_class="form-group col-md-6 mb-0"),
+            ),
             Row(Field("users")),
             Submit("submit", "Submit"),
         )
@@ -38,6 +42,14 @@ class OpportunityChangeForm(forms.ModelForm):
             widget=forms.Textarea,
             help_text="Enter the phone numbers of the users you want to add to this opportunity, one on each line.",
             required=False,
+        )
+        self.fields["additional_users"] = forms.IntegerField(
+            required=False, help_text="Adds budget for additional users."
+        )
+        self.fields["end_date"] = forms.DateField(
+            widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
+            required=False,
+            help_text="Extends opportunity end date for all users.",
         )
 
     def clean_users(self):
@@ -227,3 +239,21 @@ class OpportunityAccessCreationForm(forms.ModelForm):
     class Meta:
         model = OpportunityAccess
         fields = "__all__"
+
+
+class AddBudgetExistingUsersForm(forms.Form):
+    additional_visits = forms.IntegerField(
+        min_value=1,
+        widget=forms.NumberInput(attrs={"x-model": "additionalVisits"}),
+    )
+    end_date = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
+        label="Extended Opportunity End date",
+    )
+
+    def __init__(self, *args, **kwargs):
+        opportunity_claims = kwargs.pop("opportunity_claims", [])
+        super().__init__(*args, **kwargs)
+
+        choices = [(opp_claim.id, opp_claim.id) for opp_claim in opportunity_claims]
+        self.fields["selected_users"] = forms.MultipleChoiceField(choices=choices, widget=forms.CheckboxSelectMultiple)
