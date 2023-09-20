@@ -1,5 +1,5 @@
 from rest_framework import viewsets
-from rest_framework.generics import get_object_or_404
+from rest_framework.generics import ListAPIView, get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -9,7 +9,14 @@ from commcare_connect.opportunity.api.serializers import (
     UserLearnProgressSerializer,
     UserVisitSerializer,
 )
-from commcare_connect.opportunity.models import CompletedModule, LearnModule, Opportunity, OpportunityAccess, UserVisit
+from commcare_connect.opportunity.models import (
+    CompletedModule,
+    Opportunity,
+    OpportunityAccess,
+    OpportunityClaim,
+    UserVisit,
+)
+from commcare_connect.users.helpers import create_hq_user
 
 
 class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
@@ -20,21 +27,15 @@ class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
         return Opportunity.objects.filter(opportunityaccess__user=self.request.user)
 
 
-class UserLearnProgressView(APIView):
+class UserLearnProgressView(ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = UserLearnProgressSerializer
 
-    def get(self, *args, **kwargs):
-        opportunity_access = get_object_or_404(OpportunityAccess, user=self.request.user, opportunity=kwargs.get("pk"))
-        completed_modules = CompletedModule.objects.filter(
-            user=self.request.user, opportunity=opportunity_access.opportunity
+    def get_queryset(self):
+        opportunity_access = get_object_or_404(
+            OpportunityAccess, user=self.request.user, opportunity=self.kwargs.get("pk")
         )
-        total_modules = LearnModule.objects.filter(app=opportunity_access.opportunity.learn_app)
-        ret = {
-            "completed_modules": completed_modules.count(),
-            "total_modules": total_modules.count(),
-        }
-        return Response(UserLearnProgressSerializer(ret).data)
+        return CompletedModule.objects.filter(user=self.request.user, opportunity=opportunity_access.opportunity)
 
 
 class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
@@ -43,3 +44,27 @@ class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
 
     def get_queryset(self):
         return UserVisit.objects.filter(opportunity=self.kwargs.get("opportunity_id"), user=self.request.user)
+
+
+class ClaimOpportunityView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, *args, **kwargs):
+        opportunity_access = get_object_or_404(OpportunityAccess, user=self.request.user, opportunity=kwargs.get("pk"))
+        opportunity = opportunity_access.opportunity
+
+        claim, created = OpportunityClaim.objects.get_or_create(
+            opportunity_access=opportunity_access,
+            defaults={
+                "max_payments": opportunity.daily_max_visits_per_user,
+                "end_date": opportunity.end_date,
+            },
+        )
+
+        if not created:
+            return Response(status=200, data="Opportunity is already claimed")
+
+        if opportunity.learn_app.cc_domain != opportunity.deliver_app.cc_domain:
+            create_hq_user(self.request.user, opportunity.deliver_app.cc_domain, opportunity.api_key)
+
+        return Response(status=201)

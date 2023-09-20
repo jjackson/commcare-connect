@@ -53,7 +53,9 @@ class MobileUserFactory(DjangoModelFactory):
 
 
 class MobileUserWithConnectIDLink(MobileUserFactory):
-    connectiduserlink = RelatedFactory(ConnectIdUserLinkFactory, "user", commcare_username="test")
+    connectiduserlink = RelatedFactory(
+        ConnectIdUserLinkFactory, "user", commcare_username="test@ccc-test.commcarehq.org"
+    )
 
 
 class OrganizationFactory(DjangoModelFactory):

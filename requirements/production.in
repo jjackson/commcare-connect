@@ -8,3 +8,4 @@ sentry-sdk
 # ------------------------------------------------------------------------------
 django-storages[boto3]
 django-anymail[amazon-ses]
+django-allow-cidr

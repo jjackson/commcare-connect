@@ -64,6 +64,17 @@ def build_js(c: Context, watch=False, prod=False):
 
 
 @task
+def setup_ec2(c: Context, verbose=False, diff=False):
+    run_ansible(c, verbose=verbose, diff=diff)
+
+    kamal_cmd = "kamal env push"
+    if verbose:
+        kamal_cmd += " -v"
+    with c.cd(PROJECT_DIR / "deploy"):
+        c.run(kamal_cmd)
+
+
+@task
 def django_settings(c: Context, verbose=False, diff=False):
     """Update the Django settings file on prod servers"""
     run_ansible(c, tags="django_settings", verbose=verbose, diff=diff)
