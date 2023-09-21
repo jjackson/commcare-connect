@@ -12,18 +12,18 @@ Deploying commcare-connect uses the following tools:
 - [Ansible](https://www.ansible.com/)
 
   - Setup of EC2 instances
-  - Management of Docker container ENV files
 
 - [Kamal](https://kamal-deploy.org/)
 
   - Deployment of Docker containers
+  - Management of Docker env files
 
 - [1Password CLI](https://developer.1password.com/docs/cli/get-started/)
 
-  - Some secrets are stored in 1Password and retrieved using the CLI
+  - Store secrets and SSH Keys (retrieved using the 1Password CLI and Ansible module)
 
 - [AWS CLI](https://aws.amazon.com/cli/)
-  - Used to manage AWS resources
+  - Used to manage AWS resources, specifically the Container Registry
 
 ## Setup
 
@@ -37,7 +37,7 @@ gem install kamal -v '~> 1.0.0'
 
 ### Ansible
 
-This is only required if you need to update Django settings.
+This is only required if you need to set up a new EC2 instance.
 
 ```bash
 python3 -m pip install --user pipx
@@ -76,17 +76,29 @@ aws sso login --profile commcare-connect
 
 Note: If you used a different profile name you will need to set the `AWS_PROFILE` environment variable to the profile name.
 
-## Updating Django Settings
+## Django Settings
 
-The Django settings are configured using the `deploy/roles/connect/templates/docker.env.j2` file. The plain text
-settings values are in the `deploy/roles/connect/vars/main.yml` file. Secrets are stored in the 1Password under the
-`Ansible Secrets` entry.
+The Django settings (environment variables) are configured using in `config/deploy.yml` (see the `env` section).
+That file defines all the settings that are required. The values for the 'secret' settings are stored in 1Password
+and are extracted and added to the env file by Kamal when running `inv django-settings` (or `kamal envify`).
+
+Kamal uses a Ruby template (`.env.erb`) to extract the settings from 1Pasword.
+
+Secrets are stored in the 1Password under the `Connect Secrets` entry.
 
 To update the Django settings:
 
 ```bash
 inv django-settings
 ```
+
+### Adding new settings
+
+1. Add the setting to the `config/deploy.yml` file.
+2. If it is a 'secret', edit the `Connect Secrets` entry in 1Password and add a 'text' or 'password' field with
+   the name of the setting and it's value.
+3. Run `inv django-settings` to deploy the settings to the server.
+4. Deploy the app to have it pick up the new settings.
 
 ## Deploy
 
