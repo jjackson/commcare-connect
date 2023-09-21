@@ -2,19 +2,39 @@ service: commcare-connect
 
 image: commcare-connect
 
+env:
+  clear:
+    AWS_DEFAULT_REGION: us-east-1
+    DJANGO_ACCOUNT_ALLOW_REGISTRATIONS: True
+    CONNECTID_URL: https://connectid.dimagi.com
+    DJANGO_ADMIN_URL: admin/
+    DJANGO_EMAIL_BACKEND: anymail.backends.amazon_ses.EmailBackend
+    SENTRY_ENVIRONMENT: staging
+    DJANGO_DEFAULT_FROM_EMAIL: connect-devops@dimagi.com
+    DJANGO_AWS_STORAGE_BUCKET_NAME: commcare-connect-media
+    RDS_PORT: 5432
+    RDS_DB_NAME: ebdb
+  secret:
+    - CELERY_BROKER_URL
+    - CSRF_TRUSTED_ORIGINS
+    - cid_client_id
+    - cid_client_secret
+    - DJANGO_SECRET_KEY
+    - DJANGO_ALLOWED_HOSTS
+    - DJANGO_ALLOWED_CIDR_NETS
+    - REDIS_URL
+    - SENTRY_DSN
+    - RDS_HOSTNAME
+    - RDS_USERNAME
+    - RDS_PASSWORD
+
 servers:
   web:
     hosts:
       - 3.90.216.194
-    options:
-      # create by ansible
-      env-file: '/home/connect/www/commcare-connect/docker.env'
   celery:
     hosts:
       - 3.90.216.194
-    options:
-      # create by ansible
-      env-file: '/home/connect/www/commcare-connect/docker.env'
     cmd: /start_celery
     labels:
       traefik.enable: false
