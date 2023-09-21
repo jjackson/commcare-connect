@@ -1,9 +1,10 @@
 """Useful tasks for use when developing CommCare Connect.
 
 This uses the `Invoke` library."""
+import os
 from pathlib import Path
 
-from invoke import Context, Exit, call, task
+from invoke import Context, Exit, UnexpectedExit, call, task
 
 PROJECT_DIR = Path(__file__).parent
 
@@ -77,7 +78,8 @@ def setup_ec2(c: Context, verbose=False, diff=False):
 @task
 def django_settings(c: Context, verbose=False, diff=False):
     """Update the Django settings file on prod servers"""
-    run_ansible(c, tags="django_settings", verbose=verbose, diff=diff)
+    run_kamal(c, "envify")
+    os.remove(PROJECT_DIR / "deploy" / ".env")
     print("\nSettings updated. A re-deploy is required to have the services use the new settings.")
     val = input("Do you want to re-deploy the Django services? [y/N] ")
     if val.lower() == "y":
@@ -106,5 +108,20 @@ def run_ansible(c: Context, play="play.yml", tags=None, verbose=False, diff=Fals
 @task
 def deploy(c: Context):
     """Deploy the app to prod servers"""
+    run_kamal(c, "deploy")
+
+
+def run_kamal(c: Context, command: str):
+    """Run Kamal commands"""
+    _check_sso(c)
     with c.cd(PROJECT_DIR / "deploy"):
-        c.run("kamal deploy")
+        c.run(f"kamal {command}", echo=True)
+
+
+def _check_sso(c: Context):
+    """Check if SSO is enabled"""
+    profile = os.environ.get("AWS_PROFILE", "commcare-connect")
+    try:
+        c.run(f"aws sts get-caller-identity --profile {profile} &> /dev/null", hide=True)
+    except UnexpectedExit:
+        raise Exit("ERROR You must be logged into AWS. Run `aws sso login --profile commcare-connect`", -1)
