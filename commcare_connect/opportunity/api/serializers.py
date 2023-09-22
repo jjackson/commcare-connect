@@ -24,7 +24,7 @@ class CommCareAppSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CommCareApp
-        fields = ["cc_domain", "cc_app_id", "name", "description", "organization", "learn_modules"]
+        fields = ["cc_domain", "cc_app_id", "name", "description", "organization", "learn_modules", "passing_score"]
 
 
 class OpportunityClaimSerializer(serializers.ModelSerializer):
@@ -39,6 +39,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     deliver_app = CommCareAppSerializer()
     claim = serializers.SerializerMethodField()
     learn_progress = serializers.SerializerMethodField()
+    deliver_progress = serializers.SerializerMethodField()
 
     class Meta:
         model = Opportunity
@@ -58,6 +59,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "total_budget",
             "claim",
             "learn_progress",
+            "deliver_progress",
         ]
 
     def get_claim(self, obj):
@@ -73,10 +75,14 @@ class OpportunitySerializer(serializers.ModelSerializer):
         completed_modules = CompletedModule.objects.filter(opportunity=opp_access.opportunity)
         return {"total_modules": total_modules.count(), "completed_modules": completed_modules.count()}
 
+    def get_deliver_progress(self, obj):
+        opp_access = _get_opp_access(self.context.get("request").user, obj)
+        return opp_access.visit_count
 
-@quickcache(vary_on=["user.pk", "obj.pk"], timeout=60 * 60)
-def _get_opp_access(user, obj):
-    return OpportunityAccess.objects.filter(user=user, opportunity=obj).first()
+
+@quickcache(vary_on=["user.pk", "opportunity.pk"], timeout=60 * 60)
+def _get_opp_access(user, opportunity):
+    return OpportunityAccess.objects.filter(user=user, opportunity=opportunity).first()
 
 
 class UserLearnProgressSerializer(serializers.ModelSerializer):
