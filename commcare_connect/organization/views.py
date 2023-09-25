@@ -6,7 +6,7 @@ from django.utils.translation import gettext
 from rest_framework.decorators import api_view
 
 from commcare_connect.organization.decorators import org_admin_required
-from commcare_connect.organization.forms import OrganizationChangeForm, UserOrganizationMembershipFormset
+from commcare_connect.organization.forms import MembershipForm, OrganizationChangeForm
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
 
 
@@ -15,6 +15,7 @@ def organization_home(request, org_slug):
     org = get_object_or_404(Organization, slug=org_slug)
 
     form = None
+    membership_form = MembershipForm()
     if request.method == "POST":
         form = OrganizationChangeForm(request.POST, instance=org)
         if form.is_valid():
@@ -27,10 +28,7 @@ def organization_home(request, org_slug):
     return render(
         request,
         "organization/organization_home.html",
-        {
-            "organization": org,
-            "form": form,
-        },
+        {"organization": org, "form": form, "membership_form": membership_form},
     )
 
 
@@ -38,16 +36,12 @@ def organization_home(request, org_slug):
 @login_required
 def add_members_form(request, org_slug):
     org = get_object_or_404(Organization, slug=org_slug)
-    formset = UserOrganizationMembershipFormset()
+    form = MembershipForm(request.POST or None)
 
-    for form in formset:
-        if form.is_valid():
-            form.instance.organization = org
-            form.save()
-    if formset.is_valid():
-        formset.save()
-    else:
-        messages.error(request, message=formset.error_messages)
+    if form.is_valid():
+        form.instance.organization = org
+        form.save()
+
     return redirect(reverse("organization:home", args=(org_slug,)))
 
 
