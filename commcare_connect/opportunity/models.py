@@ -176,6 +176,22 @@ class VisitValidationStatus(models.TextChoices):
     rejected = "rejected", gettext("Rejected")
 
 
+class Payment(models.Model):
+    amount = models.PositiveIntegerField()
+    date_paid = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(User, on_delete=models.DO_NOTHING, null=True, blank=True)
+    opportunity = models.ForeignKey(
+        Opportunity,
+        on_delete=models.CASCADE,
+    )
+
+
+class PaymentUnit(models.Model):
+    amount = models.PositiveIntegerField()
+    name = models.TextField()
+    description = models.TextField()
+
+
 class UserVisit(XFormBaseModel):
     opportunity = models.ForeignKey(
         Opportunity,
@@ -194,6 +210,7 @@ class UserVisit(XFormBaseModel):
         max_length=50, choices=VisitValidationStatus.choices, default=VisitValidationStatus.pending
     )
     form_json = models.JSONField()
+    payment_unit = models.ForeignKey(PaymentUnit, on_delete=models.DO_NOTHING, null=True, blank=True)
 
 
 class OpportunityClaim(models.Model):

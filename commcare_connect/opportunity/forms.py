@@ -11,6 +11,7 @@ from commcare_connect.opportunity.models import (
     HQApiKey,
     Opportunity,
     OpportunityAccess,
+    Payment,
     VisitValidationStatus,
 )
 from commcare_connect.organization.models import Organization
@@ -245,3 +246,24 @@ class AddBudgetExistingUsersForm(forms.Form):
 
         choices = [(opp_claim.id, opp_claim.id) for opp_claim in opportunity_claims]
         self.fields["selected_users"] = forms.MultipleChoiceField(choices=choices, widget=forms.CheckboxSelectMultiple)
+
+
+class PaymentForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        self.opp = kwargs.pop("opportunity_id")
+        super().__init__(*args, **kwargs)
+        self.fields["user"] = forms.ChoiceField(
+            choices=[
+                (o.user.pk, o.user.username)
+                for o in OpportunityAccess.objects.filter(opportunity=self.opp).select_related("user")
+            ]
+        )
+
+    class Meta:
+        model = Payment
+        fields = ["amount"]
+
+    def save(self, commit=True):
+        self.instance.user = self.cleaned_data["user"]
+        self.instance.opportunity = self.opp
+        return super().save(commit=commit)
