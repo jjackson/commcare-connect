@@ -49,4 +49,5 @@ class UserOrganizationMembership(models.Model):
 
     class Meta:
         db_table = "organization_membership"
+        unique_together = ("user", "organization")
         indexes = [models.Index(fields=["invite_id"])]
