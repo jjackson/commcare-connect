@@ -179,11 +179,7 @@ class VisitValidationStatus(models.TextChoices):
 class Payment(models.Model):
     amount = models.PositiveIntegerField()
     date_paid = models.DateTimeField(auto_now_add=True)
-    user = models.ForeignKey(User, on_delete=models.DO_NOTHING, null=True, blank=True)
-    opportunity = models.ForeignKey(
-        Opportunity,
-        on_delete=models.CASCADE,
-    )
+    opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.DO_NOTHING, null=True, blank=True)
 
 
 class PaymentUnit(models.Model):

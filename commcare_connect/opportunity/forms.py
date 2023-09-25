@@ -254,7 +254,7 @@ class PaymentForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["user"] = forms.ChoiceField(
             choices=[
-                (o.user.pk, o.user.username)
+                (o.pk, o.user.username)
                 for o in OpportunityAccess.objects.filter(opportunity=self.opp).select_related("user")
             ]
         )
@@ -264,6 +264,5 @@ class PaymentForm(forms.ModelForm):
         fields = ["amount"]
 
     def save(self, commit=True):
-        self.instance.user = self.cleaned_data["user"]
-        self.instance.opportunity = self.opp
+        self.instance.opportunity_acccess_id = self.cleaned_data["user"]
         return super().save(commit=commit)
