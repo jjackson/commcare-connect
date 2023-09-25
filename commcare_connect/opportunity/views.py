@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
 from django.db.models import F
+from django.forms import modelformset_factory
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -19,6 +20,7 @@ from commcare_connect.opportunity.forms import (
     DateRanges,
     OpportunityChangeForm,
     OpportunityCreationForm,
+    PaymentForm,
     VisitExportForm,
 )
 from commcare_connect.opportunity.models import (
@@ -26,9 +28,10 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    Payment,
     UserVisit,
 )
-from commcare_connect.opportunity.tables import OpportunityAccessTable, UserVisitTable
+from commcare_connect.opportunity.tables import OpportunityAccessTable, PaymentTable, UserVisitTable
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     create_learn_modules_assessments,
@@ -127,6 +130,18 @@ class OpportunityUserVisitTableView(OrganizationUserMixin, SingleTableView):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
         return UserVisit.objects.filter(opportunity=opportunity).order_by("visit_date")
+
+
+class OpportunityPaymentTableView(OrganizationUserMixin, SingleTableView):
+    model = Payment
+    paginate_by = 25
+    table_class = PaymentTable
+    template_name = "tables/single_table.html"
+
+    def get_queryset(self):
+        opportunity_id = self.kwargs["pk"]
+        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        return Payment.objects.filter(opportunity=opportunity).order_by("date_paid")
 
 
 class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
@@ -240,3 +255,18 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
         "opportunity/add_visits_existing_users.html",
         {"form": form, "opportunity_claims": opportunity_claims, "budget_per_visit": opportunity.budget_per_visit},
     )
+
+
+@org_member_required
+def add_payment(request, org_slug=None, pk=None):
+    PaymentFormset = modelformset_factory(Payment, form=PaymentForm)
+
+    if request.method == "POST":
+        formset = PaymentFormset(request.POST, form_kwargs={"opportunity_id": pk})
+        if formset.is_valid():
+            formset.save()
+            return redirect("opportunity:detail", org_slug, pk)
+
+    else:
+        formset = PaymentFormset(queryset=Payment.objects.none(), form_kwargs={"opportunity_id": pk})
+    return render(request, "opportunity/add_payment.html", {"formset": formset})
