@@ -65,7 +65,6 @@ THIRD_PARTY_APPS = [
     "drf_spectacular",
     "oauth2_provider",
     "django_tables2",
-    "phonenumber_field",
 ]
 
 LOCAL_APPS = [

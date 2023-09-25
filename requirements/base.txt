@@ -86,7 +86,6 @@ django==4.2.5
     #   django-crispy-forms
     #   django-model-utils
     #   django-oauth-toolkit
-    #   django-phonenumber-field
     #   django-redis
     #   django-tables2
     #   django-timezone-field
@@ -107,8 +106,6 @@ django-environ==0.10.0
 django-model-utils==4.3.1
     # via -r requirements/base.in
 django-oauth-toolkit==2.3.0
-    # via -r requirements/base.in
-django-phonenumber-field[phonenumberslite]==7.1.0
     # via -r requirements/base.in
 django-redis==5.3.0
     # via -r requirements/base.in
@@ -174,8 +171,6 @@ oauthlib==3.2.2
     #   requests-oauthlib
 openpyxl==3.1.2
     # via tablib
-phonenumberslite==8.13.20
-    # via django-phonenumber-field
 pillow==10.0.0
     # via -r requirements/base.in
 ply==3.11
