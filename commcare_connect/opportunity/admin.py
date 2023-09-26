@@ -9,6 +9,7 @@ from commcare_connect.opportunity.models import (
     LearnModule,
     Opportunity,
     OpportunityAccess,
+    OpportunityClaim,
     UserVisit,
 )
 
@@ -22,6 +23,7 @@ admin.site.register(LearnModule)
 admin.site.register(CompletedModule)
 admin.site.register(Assessment)
 admin.site.register(UserVisit)
+admin.site.register(OpportunityClaim)
 
 
 @admin.register(OpportunityAccess)

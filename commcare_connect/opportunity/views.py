@@ -83,14 +83,23 @@ class OpportunityEdit(OrganizationUserMixin, UpdateView):
     form_class = OpportunityChangeForm
 
     def get_success_url(self):
-        return reverse("opportunity:list", args=(self.request.org.slug,))
+        return reverse("opportunity:detail", args=(self.request.org.slug, self.object.id))
 
     def form_valid(self, form):
-        form.instance.modified_by = self.request.user.email
-        response = super().form_valid(form)
+        opportunity = form.instance
+        opportunity.modified_by = self.request.user.email
         users = form.cleaned_data["users"]
         if users:
             add_connect_users.delay(users, form.instance.id)
+        additional_users = form.cleaned_data["additional_users"]
+        if additional_users:
+            opportunity.total_budget += (
+                opportunity.budget_per_visit * opportunity.max_visits_per_user * additional_users
+            )
+        end_date = form.cleaned_data["end_date"]
+        if end_date:
+            opportunity.end_date = end_date
+        response = super().form_valid(form)
         return response
 
 

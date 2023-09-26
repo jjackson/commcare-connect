@@ -13,15 +13,39 @@
           <h1 class="display-5 mb-0">{{ object.name }}</h1>
         </div>
         <div class="col-6">
-          <div class="btn-toolbar justify-content-end my-2" role="toolbar">
-            <div class="btn-group" role="group" aria-label="First group">
-              <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#exportModal">{% translate "Export User Visits" %}</button>
-              <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#importModal">{% translate "Import Verified Visits" %}</button>
-              <a class="float-end btn btn-primary"
-                href="{% url 'opportunity:edit' org_slug=request.org.slug pk=opportunity.id %}">
-                <i class="bi bi-pencil"></i>
-              </a>
-            </div>
+          <div class="dropdown float-end">
+            <button class="btn btn-primary btn-sm rounded-circle" type="button" id="opportunity_details_dropdown"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+              <i class="bi bi-three-dots-vertical"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="opportunity_details_dropdown">
+              <li>
+                <a class="dropdown-item"
+                   href="{% url 'opportunity:edit' org_slug=request.org.slug pk=opportunity.id %}">
+                  <i class="bi bi-pencil-fill pe-2"></i> Edit
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item"
+                   href="{% url 'opportunity:add_budget_existing_users' org_slug=request.org.slug pk=opportunity.id %}">
+                  <i class="bi bi-plus-circle-fill pe-2"></i>
+                  Add Budget
+                </a>
+              </li>
+              <li class="dropdown-divider"></li>
+              <li>
+                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportModal">
+                  <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
+                  {% translate "Export User Visits" %}
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#importModal">
+                  <i class="bi bi-file-earmark-arrow-up-fill pe-2"></i>
+                  {% translate "Import Verified Visits" %}
+                </a>
+              </li>
+            </ul>
           </div>
         </div>
       </div>
