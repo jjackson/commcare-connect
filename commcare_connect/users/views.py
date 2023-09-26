@@ -93,7 +93,7 @@ def start_learn_app(request):
         return HttpResponse("Opportunity requires API Key", status=400)
     app = opportunity.learn_app
     domain = app.cc_domain
-    user_created = create_hq_user(request.user, domain, app, api_key)
+    user_created = create_hq_user(request.user, domain, api_key)
     if not user_created:
         return HttpResponse("Failed to create user", status=400)
     ConnectIDUserLink.objects.create(commcare_username=request.user.username, user=request.user)
