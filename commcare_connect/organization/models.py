@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -38,6 +40,8 @@ class UserOrganizationMembership(models.Model):
         related_name="memberships",
     )
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.MEMBER)
+    invite_id = models.CharField(max_length=50, default=uuid4)
+    accepted = models.BooleanField(default=False)
 
     @property
     def is_admin(self):
@@ -45,3 +49,5 @@ class UserOrganizationMembership(models.Model):
 
     class Meta:
         db_table = "organization_membership"
+        unique_together = ("user", "organization")
+        indexes = [models.Index(fields=["invite_id"])]
