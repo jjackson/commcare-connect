@@ -26,7 +26,7 @@ def send_org_invite(membership_id, host_user_id):
     Thank You,
     Commcare Connect"""
     send_mail(
-        subject=f"{host_user.name} has invite you to join {membership.organization.name}",
+        subject=f"{host_user.name} has invite you to join '{membership.organization.name}' on CommCare Connect",
         message=message,
         recipient_list=[membership.user.email],
         from_email=settings.DEFAULT_FROM_EMAIL,
