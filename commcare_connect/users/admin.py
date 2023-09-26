@@ -5,6 +5,7 @@ from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
 from commcare_connect.users.forms import OrganizationCreationForm, UserAdminChangeForm, UserAdminCreationForm
+from commcare_connect.users.models import ConnectIDUserLink
 
 User = get_user_model()
 
@@ -56,3 +57,6 @@ class OrganizationAdmin(admin.ModelAdmin):
     search_fields = ["name"]
     ordering = ["name"]
     inlines = [UserOrganizationMembershipInline]
+
+
+admin.site.register(ConnectIDUserLink)

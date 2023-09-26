@@ -33,7 +33,7 @@ urlpatterns = [
         name="user_learn_progress",
     ),
     path(
-        "<int:pk>/add_budget",
+        "<int:pk>/add_budget_existing_users",
         view=add_budget_existing_users,
         name="add_budget_existing_users",
     ),

@@ -26,12 +26,6 @@ class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         return Opportunity.objects.filter(opportunityaccess__user=self.request.user)
 
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        opportunity_access = OpportunityAccess.objects.filter(user=self.request.user)
-        context.update({"opportunity_access": opportunity_access})
-        return context
-
 
 class UserLearnProgressView(ListAPIView):
     permission_classes = [IsAuthenticated]
