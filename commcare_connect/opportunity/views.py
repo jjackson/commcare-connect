@@ -28,7 +28,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     UserVisit,
 )
-from commcare_connect.opportunity.tables import OpportunityAccessTable, UserVisitTable
+from commcare_connect.opportunity.tables import OpportunityAccessTable, UserStatusTable, UserVisitTable
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     create_learn_modules_assessments,
@@ -249,3 +249,15 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
         "opportunity/add_visits_existing_users.html",
         {"form": form, "opportunity_claims": opportunity_claims, "budget_per_visit": opportunity.budget_per_visit},
     )
+
+
+class OpportunityUserStatusTableView(OrganizationUserMixin, SingleTableView):
+    model = OpportunityAccess
+    paginate_by = 25
+    table_class = UserStatusTable
+    template_name = "tables/single_table.html"
+
+    def get_queryset(self):
+        opportunity_id = self.kwargs["pk"]
+        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        return OpportunityAccess.objects.filter(opportunity=opportunity).order_by("user__name")

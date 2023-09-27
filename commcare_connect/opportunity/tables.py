@@ -45,3 +45,11 @@ class UserVisitTable(tables.Table):
         )
         empty_text = "No forms."
         orderable = False
+
+
+class UserStatusTable(tables.Table):
+    class Meta:
+        model = OpportunityAccess
+        fields = ("user.username", "accepted")
+        empty_text = "No users invited for this opportunity."
+        orderable = False
