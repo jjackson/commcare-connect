@@ -2,4 +2,4 @@ webservers:
   hosts:
     web0:
       ansible_user: ubuntu
-      ansible_host: 54.242.82.68
+      ansible_host: 54.172.148.144
