@@ -64,7 +64,7 @@ See https://developer.1password.com/docs/ssh/agent for more details.
 To test that this is working you can run:
 
 ```bash
-ssh connect@54.242.82.68
+ssh connect@54.172.148.144
 ```
 
 #### AWS CLI
