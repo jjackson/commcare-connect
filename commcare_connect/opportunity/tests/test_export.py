@@ -26,6 +26,8 @@ def test_export_user_visit_data(mobile_user_with_connect_link):
                 user=mobile_user_with_connect_link,
                 visit_date=date2,
                 deliver_unit=deliver_unit,
+                entity_id="abc",
+                entity_name="A B C",
                 form_json={"form": {"name": "test_form2", "group": {"q": "b"}}},
             ),
         ]
@@ -35,9 +37,9 @@ def test_export_user_visit_data(mobile_user_with_connect_link):
     name = mobile_user_with_connect_link.name
 
     assert exporter.export("csv") == (
-        "Visit ID,Visit date,Status,Username,Name of User,Unit Name,form.name,form.group.q\r\n"
-        f",{date1.isoformat()},Pending,{username},{name},{deliver_unit.name},test_form1,\r\n"
-        f",{date2.isoformat()},Pending,{username},{name},{deliver_unit.name},test_form2,b\r\n"
+        "Visit ID,Visit date,Status,Username,Name of User,Unit Name,Entity ID,Entity Name,form.name,form.group.q\r\n"
+        f",{date1.isoformat()},Pending,{username},{name},{deliver_unit.name},,,test_form1,\r\n"
+        f",{date2.isoformat()},Pending,{username},{name},{deliver_unit.name},abc,A B C,test_form2,b\r\n"
     )
 
 
@@ -57,7 +59,7 @@ def test_export_user_visit_data(mobile_user_with_connect_link):
     ],
 )
 def test_get_flattened_dataset(data, expected):
-    headers = ["header1", "header2", "header3"]
+    headers = ["header1", "header2"]
     data = [
         ["value1", "value2", data],
     ]
