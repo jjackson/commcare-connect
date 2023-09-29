@@ -29,7 +29,7 @@ class UserVisitTable(tables.Table):
         verbose_name="Visit date", accessor="visit_date", format="c", visible=False
     )
 
-    deliver_form = columns.Column("Form Name", accessor="deliver_form.name")
+    deliver_unit = columns.Column("Unit Name", accessor="deliver_unit.name")
 
     class Meta:
         model = UserVisit
@@ -41,7 +41,7 @@ class UserVisitTable(tables.Table):
             "status",
             "username",
             "user.name",
-            "deliver_form",
+            "deliver_unit",
         )
         empty_text = "No forms."
         orderable = False
