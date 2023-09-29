@@ -175,6 +175,19 @@ class OpportunityAccess(models.Model):
         return
 
 
+class DeliverUnit(models.Model):
+    app = models.ForeignKey(
+        CommCareApp,
+        on_delete=models.CASCADE,
+        related_name="deliver_units",
+    )
+    slug = models.SlugField()
+    name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.name
+
+
 class VisitValidationStatus(models.TextChoices):
     pending = "pending", gettext("Pending")
     approved = "approved", gettext("Approved")
@@ -194,6 +207,9 @@ class UserVisit(XFormBaseModel):
         DeliverForm,
         on_delete=models.PROTECT,
     )
+    deliver_unit = models.ForeignKey(DeliverUnit, on_delete=models.PROTECT)
+    entity_id = models.CharField(max_length=64, null=True, blank=True)
+    entity_name = models.CharField(max_length=255, null=True, blank=True)
     visit_date = models.DateTimeField()
     status = models.CharField(
         max_length=50, choices=VisitValidationStatus.choices, default=VisitValidationStatus.pending
