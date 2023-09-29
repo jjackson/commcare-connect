@@ -53,6 +53,17 @@ ASSESSMENT_XML_TEMPLATE = (
     % CCC_LEARN_XMLNS
 )
 
+DELIVER_UNIT_XML_TEMPLATE = (
+    """<data>
+<deliver xmlns="%s" id="{id}">
+    <name>{name}</name>
+    <entity_id>{entity_id}</entity_id>
+    <entity_name>{entity_name}</entity_name>
+</deliver>
+</data>"""
+    % CCC_LEARN_XMLNS
+)
+
 
 def get_form_json(xmlns=DEFAULT_XMLNS, form_block=None, **kwargs):
     form = deepcopy(MOCK_FORM)
@@ -78,15 +89,11 @@ class LearnModuleJsonFactory(factory.StubFactory):
 
     @factory.lazy_attribute
     def json(self):
-        return _get_learn_module_json(self)
-
-
-def _get_learn_module_json(stub):
-    xml = MODULE_XML_TEMPLATE.format(
-        id=stub.id, name=stub.name, description=stub.description, time_estimate=stub.time_estimate
-    )
-    _, module = xml2json(xml)
-    return module
+        xml = MODULE_XML_TEMPLATE.format(
+            id=self.id, name=self.name, description=self.description, time_estimate=self.time_estimate
+        )
+        _, module = xml2json(xml)
+        return module
 
 
 class AssessmentStubFactory(factory.StubFactory):
@@ -95,10 +102,21 @@ class AssessmentStubFactory(factory.StubFactory):
 
     @factory.lazy_attribute
     def json(self):
-        return _get_assessment_json(self)
+        xml = ASSESSMENT_XML_TEMPLATE.format(id=self.id, score=self.score)
+        _, module = xml2json(xml)
+        return module
 
 
-def _get_assessment_json(stub):
-    xml = ASSESSMENT_XML_TEMPLATE.format(id=stub.id, score=stub.score)
-    _, module = xml2json(xml)
-    return module
+class DeliverUnitStubFactory(factory.StubFactory):
+    id = factory.Faker("slug")
+    name = factory.Faker("name")
+    entity_id = factory.Faker("uuid4")
+    entity_name = factory.Faker("name")
+
+    @factory.lazy_attribute
+    def json(self):
+        xml = DELIVER_UNIT_XML_TEMPLATE.format(
+            id=self.id, name=self.name, entity_id=self.entity_id, entity_name=self.entity_name
+        )
+        _, module = xml2json(xml)
+        return module

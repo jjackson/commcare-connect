@@ -2,9 +2,14 @@ import pytest
 from rest_framework.test import APIClient
 
 from commcare_connect.form_receiver.tests.test_receiver_endpoint import add_credentials
-from commcare_connect.form_receiver.tests.xforms import AssessmentStubFactory, LearnModuleJsonFactory, get_form_json
+from commcare_connect.form_receiver.tests.xforms import (
+    AssessmentStubFactory,
+    DeliverUnitStubFactory,
+    LearnModuleJsonFactory,
+    get_form_json,
+)
 from commcare_connect.opportunity.models import Assessment, CompletedModule, LearnModule, Opportunity, UserVisit
-from commcare_connect.opportunity.tests.factories import LearnModuleFactory, OpportunityFactory
+from commcare_connect.opportunity.tests.factories import DeliverUnitFactory, LearnModuleFactory, OpportunityFactory
 from commcare_connect.users.models import ConnectIDUserLink, User
 from commcare_connect.users.tests.factories import MobileUserFactory
 
@@ -100,16 +105,21 @@ def test_form_receiver_assessment(
 
 @pytest.mark.django_db
 def test_receiver_deliver_form(mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity):
-    deliver_form = opportunity.deliver_form.first()
+    deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app)
+    stub = DeliverUnitStubFactory(id=deliver_unit.slug)
     form_json = get_form_json(
-        xmlns=deliver_form.xmlns,
-        domain=opportunity.deliver_app.cc_domain,
-        app_id=opportunity.deliver_app.cc_app_id,
+        form_block=stub.json,
+        domain=deliver_unit.app.cc_domain,
+        app_id=deliver_unit.app.cc_app_id,
     )
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 0
 
     make_request(api_client, form_json, mobile_user_with_connect_link)
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 1
+    visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
+    assert visit.deliver_unit == deliver_unit
+    assert visit.entity_id == stub.entity_id
+    assert visit.entity_name == stub.entity_name
 
 
 def _get_form_json(learn_app, module_id, form_block=None):
@@ -124,4 +134,5 @@ def _get_form_json(learn_app, module_id, form_block=None):
 def make_request(api_client, form_json, user, expected_status_code=200):
     add_credentials(api_client, user)
     response = api_client.post("/api/receiver/", data=form_json, format="json")
+    print(response.data)
     assert response.status_code == expected_status_code, response.data
