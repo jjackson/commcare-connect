@@ -88,24 +88,6 @@ async def _get_commcare_app_json(client, domain):
     response = await client.get(f"{settings.COMMCARE_HQ_URL}/a/{domain}/api/v0.5/application/")
     data = response.json()
 
-    def _get_name(block: dict):
-        name_data = block.get("name", {})
-        for lang in ["en"] + list(name_data):
-            if lang in name_data:
-                return name_data[lang]
-
     for application in data.get("objects", []):
-        forms = [
-            {
-                "module": _get_name(module),
-                "id": form.get("unique_id"),
-                "name": _get_name(form),
-                "xmlns": form.get("xmlns"),
-            }
-            for module in application.get("modules", [])
-            for form in module.get("forms", [])
-        ]
-        applications.append(
-            {"id": application.get("id"), "name": application.get("name"), "domain": domain, "forms": forms}
-        )
+        applications.append({"id": application.get("id"), "name": application.get("name"), "domain": domain})
     return applications
