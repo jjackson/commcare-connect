@@ -66,4 +66,11 @@ class Migration(migrations.Migration):
             name="deliver_unit",
             field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, to="opportunity.deliverunit"),
         ),
+        migrations.RemoveField(
+            model_name="uservisit",
+            name="deliver_form",
+        ),
+        migrations.DeleteModel(
+            name="DeliverForm",
+        ),
     ]
