@@ -30,6 +30,8 @@ class UserVisitTable(tables.Table):
     )
 
     deliver_unit = columns.Column("Unit Name", accessor="deliver_unit.name")
+    entity_id = columns.Column("Entity ID", accessor="entity_id", visible=False)
+    entity_name = columns.Column("Entity Name", accessor="entity_name")
 
     class Meta:
         model = UserVisit
