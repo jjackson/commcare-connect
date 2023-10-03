@@ -31,7 +31,7 @@ from commcare_connect.opportunity.models import (
     Payment,
     UserVisit,
 )
-from commcare_connect.opportunity.tables import OpportunityAccessTable, PaymentTable, UserVisitTable
+from commcare_connect.opportunity.tables import OpportunityAccessTable, PaymentTable, UserStatusTable, UserVisitTable
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     create_learn_modules_assessments,
@@ -279,3 +279,15 @@ def add_payment(request, org_slug=None, pk=None):
     else:
         formset = PaymentFormset(queryset=Payment.objects.none(), form_kwargs={"opportunity_id": pk})
     return render(request, "opportunity/add_payment.html", {"formset": formset})
+
+
+class OpportunityUserStatusTableView(OrganizationUserMixin, SingleTableView):
+    model = OpportunityAccess
+    paginate_by = 25
+    table_class = UserStatusTable
+    template_name = "tables/single_table.html"
+
+    def get_queryset(self):
+        opportunity_id = self.kwargs["pk"]
+        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        return OpportunityAccess.objects.filter(opportunity=opportunity).order_by("user__name")
