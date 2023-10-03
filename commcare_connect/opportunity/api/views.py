@@ -71,6 +71,6 @@ class ClaimOpportunityView(APIView):
             if not user_created:
                 return Response("Failed to create user", status=400)
             ConnectIDUserLink.objects.create(
-                commcare_username=self.request.user.username, user=self.request.user, domain=domain
+                commcare_username=self.request.user.username.lower(), user=self.request.user, domain=domain
             )
         return Response(status=201)
