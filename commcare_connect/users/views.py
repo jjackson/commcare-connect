@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET
 from django.views.generic import DetailView, RedirectView, UpdateView, View
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from oauth2_provider.views.mixins import ClientProtectedResourceMixin
@@ -93,10 +94,11 @@ def start_learn_app(request):
         return HttpResponse("Opportunity requires API Key", status=400)
     app = opportunity.learn_app
     domain = app.cc_domain
-    user_created = create_hq_user(request.user, domain, app, api_key)
-    if not user_created:
-        return HttpResponse("Failed to create user", status=400)
-    ConnectIDUserLink.objects.create(commcare_username=request.user.username, user=request.user)
+    if not ConnectIDUserLink.objects.filter(user=request.user, domain=domain).exists():
+        user_created = create_hq_user(request.user, domain, api_key)
+        if not user_created:
+            return HttpResponse("Failed to create user", status=400)
+        ConnectIDUserLink.objects.create(commcare_username=request.user.username, user=request.user, domain=domain)
     try:
         access_object = OpportunityAccess.objects.get(user=request.user, opportunity=opportunity)
     except OpportunityAccess.DoesNotExist:
@@ -104,3 +106,17 @@ def start_learn_app(request):
     access_object.date_learn_started = datetime.utcnow()
     access_object.save()
     return HttpResponse(status=200)
+
+
+@require_GET
+def accept_invite(request, invite_id):
+    try:
+        o = OpportunityAccess.objects.get(invite_id=invite_id)
+    except OpportunityAccess.DoesNotExist:
+        return HttpResponse("This link is invalid. Please try again", status=404)
+    o.accepted = True
+    o.save()
+    return HttpResponse(
+        "Thank you for accepting the invitation. Open your CommCare Connect App to "
+        "see more information about the opportunity and begin learning"
+    )

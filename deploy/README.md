@@ -32,7 +32,7 @@ Deploying commcare-connect uses the following tools:
 (requires Ruby)
 
 ```bash
-gem install kamal
+gem install kamal -v '~> 1.0.0'
 ```
 
 ### Ansible
@@ -64,7 +64,7 @@ See https://developer.1password.com/docs/ssh/agent for more details.
 To test that this is working you can run:
 
 ```bash
-ssh connect@3.90.216.194
+ssh connect@54.172.148.144
 ```
 
 #### AWS CLI
@@ -79,8 +79,8 @@ Note: If you used a different profile name you will need to set the `AWS_PROFILE
 ## Updating Django Settings
 
 The Django settings are configured using the `deploy/roles/connect/templates/docker.env.j2` file. The plain text
-settings values are in the `deploy/roles/connect/vars/main.yml` file. Secrets are stored in the Ansible vault file
-`deploy/vault.yml`.
+settings values are in the `deploy/roles/connect/vars/main.yml` file. Secrets are stored in the 1Password under the
+`Ansible Secrets` entry.
 
 To update the Django settings:
 

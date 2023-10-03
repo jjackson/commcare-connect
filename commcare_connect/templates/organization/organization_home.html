@@ -22,6 +22,11 @@
 
       <section class="shadow-sm p-3 mb-5 bg-white rounded">
         <h3>{% translate "Members" %}</h3>
+        <form method="post" action="{% url 'organization:add_members' org_slug=organization.slug %}">
+          {% csrf_token %}
+          {% crispy membership_form %}
+        </form>
+
         <div class='table'>
           <table class="table pg-table">
             <thead>

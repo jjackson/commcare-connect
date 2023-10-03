@@ -33,8 +33,8 @@ class User(AbstractUser):
         },
         null=True,
     )
+    phone_number = models.CharField(max_length=15, null=True, blank=True)
 
-    USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
 
     objects = UserManager()
@@ -61,6 +61,7 @@ class ConnectIDUserLink(models.Model):
         on_delete=models.CASCADE,
     )
     commcare_username = models.TextField()
+    domain = models.CharField(max_length=255, null=True, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["user", "commcare_username"], name="connect_user")]
