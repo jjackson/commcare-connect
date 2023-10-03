@@ -53,3 +53,11 @@ class PaymentTable(tables.Table):
         fields = ("user.username", "amount", "date_paid")
         orderable = False
         empty_text = "No payments"
+
+
+class UserStatusTable(tables.Table):
+    class Meta:
+        model = OpportunityAccess
+        fields = ("user.username", "accepted")
+        empty_text = "No users invited for this opportunity."
+        orderable = False
