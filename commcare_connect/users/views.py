@@ -98,7 +98,9 @@ def start_learn_app(request):
         user_created = create_hq_user(request.user, domain, api_key)
         if not user_created:
             return HttpResponse("Failed to create user", status=400)
-        ConnectIDUserLink.objects.create(commcare_username=request.user.username, user=request.user, domain=domain)
+        ConnectIDUserLink.objects.create(
+            commcare_username=request.user.username.lower(), user=request.user, domain=domain
+        )
     try:
         access_object = OpportunityAccess.objects.get(user=request.user, opportunity=opportunity)
     except OpportunityAccess.DoesNotExist:
