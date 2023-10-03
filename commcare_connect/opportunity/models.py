@@ -216,4 +216,4 @@ class OpportunityClaim(models.Model):
     opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE)
     max_payments = models.IntegerField()
     end_date = models.DateField()
-    date_claimed = models.DateField(auto_created=True)
+    date_claimed = models.DateField(auto_now_add=True)
