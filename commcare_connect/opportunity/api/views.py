@@ -17,6 +17,7 @@ from commcare_connect.opportunity.models import (
     UserVisit,
 )
 from commcare_connect.users.helpers import create_hq_user
+from commcare_connect.users.models import ConnectIDUserLink
 
 
 class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
@@ -25,12 +26,6 @@ class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         return Opportunity.objects.filter(opportunityaccess__user=self.request.user)
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        opportunity_access = OpportunityAccess.objects.filter(user=self.request.user)
-        context.update({"opportunity_access": opportunity_access})
-        return context
 
 
 class UserLearnProgressView(ListAPIView):
@@ -70,7 +65,12 @@ class ClaimOpportunityView(APIView):
         if not created:
             return Response(status=200, data="Opportunity is already claimed")
 
-        if opportunity.learn_app.cc_domain != opportunity.deliver_app.cc_domain:
-            create_hq_user(self.request.user, opportunity.deliver_app.cc_domain, opportunity.api_key)
-
+        domain = opportunity.deliver_app.cc_domain
+        if not ConnectIDUserLink.objects.filter(user=self.request.user, domain=domain).exists():
+            user_created = create_hq_user(self.request.user, domain, opportunity.api_key)
+            if not user_created:
+                return Response("Failed to create user", status=400)
+            ConnectIDUserLink.objects.create(
+                commcare_username=self.request.user.username, user=self.request.user, domain=domain
+            )
         return Response(status=201)

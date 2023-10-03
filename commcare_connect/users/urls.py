@@ -1,6 +1,7 @@
 from django.urls import path
 
 from commcare_connect.users.views import (
+    accept_invite,
     create_user_link_view,
     start_learn_app,
     user_detail_view,
@@ -15,4 +16,5 @@ urlpatterns = [
     path("<int:pk>/", view=user_detail_view, name="detail"),
     path("create_user_link/", view=create_user_link_view, name="create_user_link"),
     path("start_learn_app/", view=start_learn_app, name="start_learn_app"),
+    path("accept_invite/<slug:invite_id>", view=accept_invite, name="accept_invite"),
 ]

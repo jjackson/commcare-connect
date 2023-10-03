@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.db import models
 from django.utils.translation import gettext
 
@@ -137,6 +139,12 @@ class OpportunityAccess(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     date_learn_started = models.DateTimeField(null=True)
+    accepted = models.BooleanField(default=False)
+    invite_id = models.CharField(max_length=50, default=uuid4)
+
+    class Meta:
+        indexes = [models.Index(fields=["invite_id"])]
+        unique_together = ("user", "opportunity")
 
     # TODO: Convert to a field and calculate this property CompletedModule is saved
     @property
@@ -165,9 +173,6 @@ class OpportunityAccess(models.Model):
             return user_visits.first().visit_date
 
         return
-
-    class Meta:
-        unique_together = ("user", "opportunity")
 
 
 class VisitValidationStatus(models.TextChoices):

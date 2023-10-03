@@ -8,6 +8,7 @@ from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app
 from commcare_connect.opportunity.export import export_user_visit_data
 from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import LearnModule, Opportunity, OpportunityAccess, VisitValidationStatus
+from commcare_connect.users.helpers import invite_user
 from commcare_connect.users.models import User
 from config import celery_app
 
@@ -38,8 +39,11 @@ def add_connect_users(user_list: list[str], opportunity_id: str):
     )
     data = result.json()
     for user in data["found_users"]:
-        u, _ = User.objects.get_or_create(username=user["username"])
-        OpportunityAccess.objects.get_or_create(user=u, opportunity_id=opportunity_id)
+        u, _ = User.objects.get_or_create(
+            username=user["username"], phone_number=user["phone_number"], name=user["name"]
+        )
+        opportunity_access, _ = OpportunityAccess.objects.get_or_create(user=u, opportunity_id=opportunity_id)
+        invite_user(u, opportunity_access)
 
 
 @celery_app.task()

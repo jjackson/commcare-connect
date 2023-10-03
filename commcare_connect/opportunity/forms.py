@@ -31,6 +31,10 @@ class OpportunityChangeForm(forms.ModelForm):
             Row(Field("name")),
             Row(Field("description")),
             Row(Field("active")),
+            Row(
+                Field("additional_users", wrapper_class="form-group col-md-6 mb-0"),
+                Field("end_date", wrapper_class="form-group col-md-6 mb-0"),
+            ),
             Row(Field("users")),
             Submit("submit", "Submit"),
         )
@@ -39,6 +43,14 @@ class OpportunityChangeForm(forms.ModelForm):
             widget=forms.Textarea,
             help_text="Enter the phone numbers of the users you want to add to this opportunity, one on each line.",
             required=False,
+        )
+        self.fields["additional_users"] = forms.IntegerField(
+            required=False, help_text="Adds budget for additional users."
+        )
+        self.fields["end_date"] = forms.DateField(
+            widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
+            required=False,
+            help_text="Extends opportunity end date for all users.",
         )
 
     def clean_users(self):
