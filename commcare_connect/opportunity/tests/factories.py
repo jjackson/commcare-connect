@@ -90,3 +90,11 @@ class UserVisitFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.UserVisit"
+
+
+class OpportunityAccessFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    user = SubFactory("commcare_connect.users.tests.factories.UserFactory")
+
+    class Meta:
+        model = "opportunity.OpportunityAccess"

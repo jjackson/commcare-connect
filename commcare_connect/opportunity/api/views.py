@@ -1,3 +1,5 @@
+import datetime
+
 from rest_framework import viewsets
 from rest_framework.generics import ListAPIView, get_object_or_404
 from rest_framework.permissions import IsAuthenticated
@@ -54,14 +56,19 @@ class ClaimOpportunityView(APIView):
         opportunity_access = get_object_or_404(OpportunityAccess, user=self.request.user, opportunity=kwargs.get("pk"))
         opportunity = opportunity_access.opportunity
 
+        if opportunity.remaining_budget <= 0:
+            return Response(status=200, data="Opportunity cannot be claimed. (Budget Exhausted)")
+        if opportunity.end_date < datetime.date.today():
+            return Response(status=200, data="Opportunity cannot be claimed. (End date reached)")
+
+        max_payments = min(opportunity.remaining_budget, opportunity.daily_max_visits_per_user)
         claim, created = OpportunityClaim.objects.get_or_create(
             opportunity_access=opportunity_access,
             defaults={
-                "max_payments": opportunity.daily_max_visits_per_user,
+                "max_payments": max_payments,
                 "end_date": opportunity.end_date,
             },
         )
-
         if not created:
             return Response(status=200, data="Opportunity is already claimed")
 
