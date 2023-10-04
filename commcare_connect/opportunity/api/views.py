@@ -1,7 +1,7 @@
 import datetime
 
 from rest_framework import viewsets
-from rest_framework.generics import ListAPIView, get_object_or_404
+from rest_framework.generics import ListAPIView, RetrieveAPIView, get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -50,12 +50,12 @@ class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
         return UserVisit.objects.filter(opportunity=self.kwargs.get("opportunity_id"), user=self.request.user)
 
 
-class DeliveryProgressView(ListAPIView):
+class DeliveryProgressView(RetrieveAPIView):
     serializer_class = DeliveryProgressSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        OpportunityAccess.objects.filter(user=self.request.user, opportunity=self.kwargs.get("opportunity_id"))
+    def get_object(self):
+        return OpportunityAccess.objects.get(user=self.request.user, opportunity=self.kwargs.get("pk"))
 
 
 class ClaimOpportunityView(APIView):
