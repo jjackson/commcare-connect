@@ -192,6 +192,12 @@ class VisitValidationStatus(models.TextChoices):
     rejected = "rejected", gettext("Rejected")
 
 
+class Payment(models.Model):
+    amount = models.PositiveIntegerField()
+    date_paid = models.DateTimeField(auto_now_add=True)
+    opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.DO_NOTHING, null=True, blank=True)
+
+
 class UserVisit(XFormBaseModel):
     opportunity = models.ForeignKey(
         Opportunity,

@@ -34,15 +34,28 @@
               </li>
               <li class="dropdown-divider"></li>
               <li>
-                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportModal">
+                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportVisitModal">
                   <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
                   {% translate "Export User Visits" %}
                 </a>
               </li>
               <li>
-                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#importModal">
+                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#importVisitModal">
                   <i class="bi bi-file-earmark-arrow-up-fill pe-2"></i>
                   {% translate "Import Verified Visits" %}
+                </a>
+              </li>
+              <li class="dropdown-divider"></li>
+              <li>
+                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportPaymentModal">
+                  <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
+                  {% translate "Export Users for Payment" %}
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#importPaymentModal">
+                  <i class="bi bi-file-earmark-arrow-up-fill pe-2"></i>
+                  {% translate "Import Payment Records" %}
                 </a>
               </li>
             </ul>
@@ -56,7 +69,7 @@
         <div class="col-3 d-flex">
           {% if export_task_id %}
             <div class="flex-grow-1 justify-content-end">
-            <div hx-get="{% url "opportunity:visit_export_status" request.org.slug export_task_id %}"
+            <div hx-get="{% url "opportunity:export_status" request.org.slug export_task_id %}"
                  hx-target="this"
                  hx-trigger="load"
                  hx-swap="outerHTML">
@@ -142,6 +155,12 @@
                   type="button" role="tab" aria-controls="user-status-tab-pane" aria-selected="false">User Status
           </button>
         </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="payment-tab" data-bs-toggle="tab" data-bs-target="#payment-tab-pane"
+                  type="button" role="tab" aria-controls="payment-tab-pane" aria-selected="false">Payments
+
+          </button>
+        </li>
       </ul>
       <div class="tab-content">
         <div class="tab-pane fade show active" id="learn-tab-pane" role="tabpanel" aria-labelledby="learn-tab"
@@ -155,6 +174,12 @@
           <div hx-get="{% url "opportunity:visit_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
                hx-trigger="load" hx-swap="outerHTML">
             {% include "tables/table_placeholder.html" with num_cols=4 %}
+          </div>
+        </div>
+        <div class="tab-pane fade" id="payment-tab-pane" role="tabpanel" aria-labelledby="payment-tab" tabindex="0">
+          <div hx-get="{% url "opportunity:payment_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
+               hx-trigger="load" hx-swap="outerHTML">
+            {% include "tables/table_placeholder.html" with num_cols=2 %}
           </div>
         </div>
         <div class="tab-pane fade" id="user-status-tab-pane" role="tabpanel" aria-labelledby="user-status-tab" tabindex="0">
@@ -173,7 +198,7 @@
 
 {% block modal %}
 <!-- Export modal -->
-<div class="modal fade" id="exportModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="exportVisitModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
@@ -184,7 +209,7 @@
             enctype="multipart/form-data">
         <div class="modal-body">
           <div class="mb-3">
-            {% crispy export_form %}
+            {% crispy visit_export_form %}
           </div>
         </div>
         <div class="modal-footer">
@@ -197,7 +222,7 @@
 </div>
 
 <!-- Import modal -->
-<div class="modal fade" id="importModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="importVisitModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
@@ -215,6 +240,62 @@
                 {% blocktrans %}
                   The file must contain at least the "Visit ID" and "Status" column.
                   The import is case-insensitive.
+                {% endblocktrans %}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Import</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Export modal -->
+<div class="modal fade" id="exportPaymentModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h1 class="modal-title fs-5">{% translate "Export Users for Payment" %}</h1>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{% url "opportunity:payment_export" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
+            enctype="multipart/form-data">
+        <div class="modal-body">
+          <div class="mb-3">
+            {% crispy payment_export_form %}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Export</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Import modal -->
+<div class="modal fade" id="importPaymentModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h1 class="modal-title fs-5">{% translate "Import Payment Records" %}</h1>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{% url "opportunity:payment_import" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
+            enctype="multipart/form-data">
+        <div class="modal-body">
+          <div class="mb-3">
+            {% csrf_token %}
+            <input class="form-control" type="file" id="importFile" name="payments">
+            <div class="col-auto">
+              <span id="importFileHelp" class="form-text">
+                {% blocktrans %}
+                  The file must contain at least the "Phone Number" and "Amount" column.
                 {% endblocktrans %}
               </span>
             </div>

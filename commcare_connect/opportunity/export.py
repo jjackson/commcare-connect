@@ -3,7 +3,7 @@ from flatten_dict import flatten
 from tablib import Dataset
 
 from commcare_connect.opportunity.forms import DateRanges
-from commcare_connect.opportunity.models import Opportunity, UserVisit, VisitValidationStatus
+from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, UserVisit, VisitValidationStatus
 from commcare_connect.opportunity.tables import UserVisitTable
 
 
@@ -57,3 +57,14 @@ def get_flattened_dataset(headers: list[str], data: list[list]) -> Dataset:
 
 def _schema_sort(item):
     return len(item.split(".")), item
+
+
+def export_empty_payment_table(opportunity: Opportunity) -> Dataset:
+    headers = ["Phone Number", "Name", "Payment Amount"]
+    dataset = Dataset(title="Export", headers=headers)
+
+    access_objects = OpportunityAccess.objects.filter(opportunity=opportunity).select_related("user")
+    for access in access_objects:
+        row = (access.user.phone_number, access.user.name, "")
+        dataset.append(row)
+    return dataset
