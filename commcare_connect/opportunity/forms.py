@@ -11,7 +11,6 @@ from commcare_connect.opportunity.models import (
     HQApiKey,
     Opportunity,
     OpportunityAccess,
-    Payment,
     VisitValidationStatus,
 )
 from commcare_connect.organization.models import Organization
@@ -234,6 +233,18 @@ class VisitExportForm(forms.Form):
         return [VisitValidationStatus(status) for status in statuses]
 
 
+class PaymentExportForm(forms.Form):
+    format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="xlsx")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("format")),
+        )
+        self.helper.form_tag = False
+
+
 class OpportunityAccessCreationForm(forms.ModelForm):
     user = forms.ModelChoiceField(queryset=User.objects.filter(username__isnull=False))
 
@@ -258,23 +269,3 @@ class AddBudgetExistingUsersForm(forms.Form):
 
         choices = [(opp_claim.id, opp_claim.id) for opp_claim in opportunity_claims]
         self.fields["selected_users"] = forms.MultipleChoiceField(choices=choices, widget=forms.CheckboxSelectMultiple)
-
-
-class PaymentForm(forms.ModelForm):
-    def __init__(self, *args, **kwargs):
-        self.opp = kwargs.pop("opportunity_id")
-        super().__init__(*args, **kwargs)
-        self.fields["user"] = forms.ChoiceField(
-            choices=[
-                (o.pk, o.user.username)
-                for o in OpportunityAccess.objects.filter(opportunity=self.opp).select_related("user")
-            ]
-        )
-
-    class Meta:
-        model = Payment
-        fields = ["amount"]
-
-    def save(self, commit=True):
-        self.instance.opportunity_acccess_id = self.cleaned_data["user"]
-        return super().save(commit=commit)

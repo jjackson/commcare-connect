@@ -5,7 +5,7 @@ from django.core.files.storage import storages
 from django.utils.timezone import now
 
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app
-from commcare_connect.opportunity.export import export_user_visit_data
+from commcare_connect.opportunity.export import export_empty_payment_table, export_user_visit_data
 from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import LearnModule, Opportunity, OpportunityAccess, VisitValidationStatus
 from commcare_connect.users.helpers import invite_user
@@ -52,5 +52,15 @@ def generate_visit_export(opportunity_id: int, date_range: str, status: list[str
     dataset = export_user_visit_data(opportunity, DateRanges(date_range), [VisitValidationStatus(s) for s in status])
     content = dataset.export(export_format)
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_visit_export.{export_format}"
+    storages["default"].save(export_tmp_name, ContentFile(content))
+    return export_tmp_name
+
+
+@celery_app.task()
+def generate_payment_export(opportunity_id: int, export_format: str):
+    opportunity = Opportunity.objects.get(id=opportunity_id)
+    dataset = export_empty_payment_table(opportunity)
+    content = dataset.export("xlsx")
+    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_export.{export_format}"
     storages["default"].save(export_tmp_name, ContentFile(content))
     return export_tmp_name
