@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from django.db import models
+from django.db.models import Sum
 from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization
@@ -63,6 +64,16 @@ class Opportunity(BaseModel):
 
     def __str__(self):
         return self.name
+
+    @property
+    def remaining_budget(self) -> int:
+        opp_access = OpportunityAccess.objects.filter(opportunity=self)
+        used_budget = OpportunityClaim.objects.filter(opportunity_access__in=opp_access).aggregate(
+            Sum("max_payments")
+        )["max_payments__sum"]
+        if used_budget is None:
+            used_budget = 0
+        return self.total_budget - used_budget
 
 
 class DeliverForm(models.Model):
