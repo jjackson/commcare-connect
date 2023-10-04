@@ -112,8 +112,8 @@ class DeliveryProgressSerializer(serializers.Serializer):
     payments = serializers.SerializerMethodField()
 
     def get_payments(self, obj):
-        return [PaymentSerializer(payment) for payment in obj.payment_set.all()]
+        return PaymentSerializer(obj.payment_set.all(), many=True)
 
     def get_deliveries(self, obj):
         deliveries = UserVisit.objects.filter(opportunity=obj.opportunity, user=obj.user)
-        return [UserVisitSerializer(user_visit) for user_visit in deliveries]
+        return UserVisitSerializer(deliveries, many=True)
