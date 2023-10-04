@@ -187,12 +187,6 @@ class Payment(models.Model):
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.DO_NOTHING, null=True, blank=True)
 
 
-class PaymentUnit(models.Model):
-    amount = models.PositiveIntegerField()
-    name = models.TextField()
-    description = models.TextField()
-
-
 class UserVisit(XFormBaseModel):
     opportunity = models.ForeignKey(
         Opportunity,
@@ -211,7 +205,6 @@ class UserVisit(XFormBaseModel):
         max_length=50, choices=VisitValidationStatus.choices, default=VisitValidationStatus.pending
     )
     form_json = models.JSONField()
-    payment_unit = models.ForeignKey(PaymentUnit, on_delete=models.DO_NOTHING, null=True, blank=True)
 
 
 class OpportunityClaim(models.Model):
