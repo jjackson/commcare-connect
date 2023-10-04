@@ -42,8 +42,6 @@
             <a class="btn btn-secondary btn-sm"
                href="{% url 'opportunity:add_budget_existing_users' org_slug=request.org.slug pk=opportunity.id %}">Add
               Budget</a>
-            <a class="btn btn-secondary btn-sm"
-               href="{% url 'opportunity:add_payment' org_slug=request.org.slug pk=opportunity.id %}">Add Payment</a>
           </td>
         </tr>
         {% empty %}
