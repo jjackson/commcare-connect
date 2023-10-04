@@ -8,6 +8,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    Payment,
     UserVisit,
 )
 
@@ -98,3 +99,21 @@ class UserVisitSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserVisit
         fields = ["id", "status", "visit_date", "deliver_form_name", "deliver_form_xmlns"]
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ["amount", "date_paid"]
+
+
+class DeliveryProgressSerializer(serializers.Serializer):
+    deliveries = serializers.SerializerMethodField()
+    payments = serializers.SerializerMethodField()
+
+    def get_payments(self, obj):
+        return PaymentSerializer(obj.payment_set.all(), many=True)
+
+    def get_deliveries(self, obj):
+        deliveries = UserVisit.objects.filter(opportunity=obj.opportunity, user=obj.user)
+        return UserVisitSerializer(deliveries, many=True)

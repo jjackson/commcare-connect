@@ -1,6 +1,6 @@
 from django_tables2 import columns, tables, utils
 
-from commcare_connect.opportunity.models import OpportunityAccess, UserVisit
+from commcare_connect.opportunity.models import OpportunityAccess, Payment, UserVisit
 
 
 class OpportunityAccessTable(tables.Table):
@@ -45,6 +45,14 @@ class UserVisitTable(tables.Table):
         )
         empty_text = "No forms."
         orderable = False
+
+
+class PaymentTable(tables.Table):
+    class Meta:
+        model = Payment
+        fields = ("user.username", "amount", "date_paid")
+        orderable = False
+        empty_text = "No payments"
 
 
 class UserStatusTable(tables.Table):

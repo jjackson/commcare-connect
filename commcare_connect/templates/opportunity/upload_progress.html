@@ -1,6 +1,6 @@
 <div {% if not progress.complete %}
   hx-target="this"
-  hx-get="{% url 'opportunity:visit_export_status' request.org.slug task_id %}"
+  hx-get="{% url 'opportunity:export_status' request.org.slug task_id %}"
   hx-trigger="load delay:1s"
   hx-swap="outerHTML"
 {% endif %}
@@ -17,7 +17,7 @@
     Preparing export, hang tight... {{ progress.progress.description }}
   {% else %}
     All done!
-    <a class="link" href="{% url 'opportunity:download_visit_export' request.org.slug task_id %}">Download your
+    <a class="link" href="{% url 'opportunity:download_export' request.org.slug task_id %}">Download your
       export</a>
   {% endif %}
 </div>

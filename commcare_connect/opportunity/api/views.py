@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from commcare_connect.opportunity.api.serializers import (
+    DeliveryProgressSerializer,
     OpportunitySerializer,
     UserLearnProgressSerializer,
     UserVisitSerializer,
@@ -47,6 +48,14 @@ class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
 
     def get_queryset(self):
         return UserVisit.objects.filter(opportunity=self.kwargs.get("opportunity_id"), user=self.request.user)
+
+
+class DeliveryProgressView(ListAPIView):
+    serializer_class = DeliveryProgressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        OpportunityAccess.objects.filter(user=self.request.user, opportunity=self.kwargs.get("opportunity_id"))
 
 
 class ClaimOpportunityView(APIView):
