@@ -22,8 +22,9 @@ def create_learn_modules_assessments(opportunity_id):
     for block in connect_blocks:
         LearnModule.objects.update_or_create(
             app=learn_app,
-            name=block.name,
+            slug=block.id,
             defaults={
+                "name": block.name,
                 "description": block.description,
                 "time_estimate": block.time_estimate,
             },
