@@ -111,4 +111,4 @@ SPECTACULAR_SETTINGS["SERVERS"] = [  # noqa: F405
 # ------------------------------------------------------------------------------
 CSRF_TRUSTED_ORIGINS = ["https://*.127.0.0.1"] + env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
-DEFAULT_HTTP_PROTOCOL = "https"
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = "https"
