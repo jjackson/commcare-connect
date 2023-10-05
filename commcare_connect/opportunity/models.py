@@ -67,13 +67,23 @@ class Opportunity(BaseModel):
 
     @property
     def remaining_budget(self) -> int:
+        return self.total_budget - self.claimed_budget
+
+    @property
+    def claimed_budget(self):
         opp_access = OpportunityAccess.objects.filter(opportunity=self)
         used_budget = OpportunityClaim.objects.filter(opportunity_access__in=opp_access).aggregate(
             Sum("max_payments")
         )["max_payments__sum"]
         if used_budget is None:
             used_budget = 0
-        return self.total_budget - used_budget
+        return used_budget
+
+    @property
+    def utilised_budget(self):
+        # Todo: Exclude extra visits from this count
+        user_visits = UserVisit.objects.filter(opportunity=self).count()
+        return user_visits
 
 
 class DeliverForm(models.Model):
