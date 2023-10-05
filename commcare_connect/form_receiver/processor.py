@@ -161,7 +161,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         or counts["total"] >= claim.max_payments
         or datetime.date.today() > claim.end_date
     ):
-        user_visit.status = VisitValidationStatus.extra
+        user_visit.status = VisitValidationStatus.over_limit
     user_visit.save()
 
 

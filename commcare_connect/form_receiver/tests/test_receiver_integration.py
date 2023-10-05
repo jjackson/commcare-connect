@@ -174,7 +174,7 @@ def test_receiver_deliver_form_daily_visits_reached(
     make_request(api_client, form_json, mobile_user_with_connect_link)
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 1
     visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
-    assert visit.status == VisitValidationStatus.extra
+    assert visit.status == VisitValidationStatus.over_limit
 
 
 @pytest.mark.django_db
@@ -186,7 +186,7 @@ def test_receiver_deliver_form_max_visits_reached(
     make_request(api_client, form_json, mobile_user_with_connect_link)
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 1
     visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
-    assert visit.status == VisitValidationStatus.extra
+    assert visit.status == VisitValidationStatus.over_limit
 
 
 @pytest.mark.django_db
@@ -200,7 +200,7 @@ def test_receiver_deliver_form_end_date_reached(
     make_request(api_client, form_json, mobile_user_with_connect_link)
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 1
     visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
-    assert visit.status == VisitValidationStatus.extra
+    assert visit.status == VisitValidationStatus.over_limit
 
 
 def _get_form_json(learn_app, module_id, form_block=None):
