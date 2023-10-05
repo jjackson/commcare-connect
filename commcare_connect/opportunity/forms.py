@@ -7,7 +7,6 @@ from django.utils.timezone import now
 
 from commcare_connect.opportunity.models import (
     CommCareApp,
-    DeliverForm,
     HQApiKey,
     Opportunity,
     OpportunityAccess,
@@ -97,25 +96,17 @@ class OpportunityCreationForm(forms.ModelForm):
             Row(Field("learn_app_description")),
             Row(Field("learn_app_passing_score")),
             Row(Field("deliver_app")),
-            Row(Field("deliver_form")),
             Row(Field("api_key")),
             Submit("submit", "Submit"),
         )
 
-        app_choices = []
-        form_choices = []
-        for app in self.applications:
-            app_choices.append((app["id"], app["name"]))
-            for form in app["forms"]:
-                form_choices.append((form["id"], form["name"]))
+        app_choices = [(app["id"], app["name"]) for app in self.applications]
 
         self.fields["learn_app"] = forms.ChoiceField(choices=app_choices)
         self.fields["learn_app_description"] = forms.CharField(widget=forms.Textarea)
         self.fields["learn_app_passing_score"] = forms.IntegerField(max_value=100, min_value=0)
         self.fields["deliver_app"] = forms.ChoiceField(choices=app_choices)
         self.fields["deliver_app"].widget.attrs.update({"id": "deliver_app_select"})
-        self.fields["deliver_form"] = forms.ChoiceField(choices=form_choices)
-        self.fields["deliver_form"].widget.attrs.update({"id": "deliver_form_select"})
         self.fields["api_key"] = forms.CharField(max_length=50)
 
     def clean(self):
@@ -139,7 +130,6 @@ class OpportunityCreationForm(forms.ModelForm):
 
     def save(self, commit=True):
         organization = Organization.objects.filter(slug=self.org_slug).first()
-        deliver_form = DeliverForm()
 
         for app in self.applications:
             if app["id"] == self.cleaned_data["learn_app"]:
@@ -168,12 +158,6 @@ class OpportunityCreationForm(forms.ModelForm):
                     },
                 )
 
-                for form in app["forms"]:
-                    if form["id"] == self.cleaned_data["deliver_form"]:
-                        deliver_form.xmlns = form["xmlns"]
-                        deliver_form.name = form["name"]
-                        deliver_form.app = self.instance.deliver_app
-
         self.instance.created_by = self.user.email
         self.instance.modified_by = self.user.email
         self.instance.organization = organization
@@ -181,10 +165,6 @@ class OpportunityCreationForm(forms.ModelForm):
         api_key, _ = HQApiKey.objects.get_or_create(user=self.user, api_key=self.cleaned_data["api_key"])
         self.instance.api_key = api_key
         super().save(commit=commit)
-
-        deliver_form.opportunity = self.instance
-        deliver_form.clean()
-        deliver_form.save()
 
         return self.instance
 

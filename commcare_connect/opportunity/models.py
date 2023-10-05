@@ -76,26 +76,6 @@ class Opportunity(BaseModel):
         return self.total_budget - used_budget
 
 
-class DeliverForm(models.Model):
-    app = models.ForeignKey(
-        CommCareApp,
-        on_delete=models.CASCADE,
-        related_name="deliver_form",
-        related_query_name="deliver_form",
-    )
-    opportunity = models.ForeignKey(
-        Opportunity,
-        on_delete=models.CASCADE,
-        related_name="deliver_form",
-        related_query_name="deliver_form",
-    )
-    name = models.CharField(max_length=255)
-    xmlns = models.CharField(max_length=255)
-
-    def __str__(self):
-        return self.name
-
-
 class LearnModule(models.Model):
     app = models.ForeignKey(
         CommCareApp,
@@ -169,23 +149,30 @@ class OpportunityAccess(models.Model):
 
     @property
     def visit_count(self):
-        deliver_forms = self.opportunity.deliver_form.all()
-        user_visits = UserVisit.objects.filter(user=self.user_id, deliver_form__in=deliver_forms).order_by(
-            "visit_date"
-        )
+        user_visits = UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity).order_by("visit_date")
         return user_visits.count()
 
     @property
     def last_visit_date(self):
-        deliver_forms = self.opportunity.deliver_form.all()
-        user_visits = UserVisit.objects.filter(user=self.user_id, deliver_form__in=deliver_forms).order_by(
-            "visit_date"
-        )
+        user_visits = UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity).order_by("visit_date")
 
         if user_visits.exists():
             return user_visits.first().visit_date
 
         return
+
+
+class DeliverUnit(models.Model):
+    app = models.ForeignKey(
+        CommCareApp,
+        on_delete=models.CASCADE,
+        related_name="deliver_units",
+    )
+    slug = models.SlugField()
+    name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.name
 
 
 class VisitValidationStatus(models.TextChoices):
@@ -209,10 +196,9 @@ class UserVisit(XFormBaseModel):
         User,
         on_delete=models.CASCADE,
     )
-    deliver_form = models.ForeignKey(
-        DeliverForm,
-        on_delete=models.PROTECT,
-    )
+    deliver_unit = models.ForeignKey(DeliverUnit, on_delete=models.PROTECT)
+    entity_id = models.CharField(max_length=64, null=True, blank=True)
+    entity_name = models.CharField(max_length=255, null=True, blank=True)
     visit_date = models.DateTimeField()
     status = models.CharField(
         max_length=50, choices=VisitValidationStatus.choices, default=VisitValidationStatus.pending

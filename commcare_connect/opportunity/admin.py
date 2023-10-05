@@ -5,7 +5,7 @@ from commcare_connect.opportunity.models import (
     Assessment,
     CommCareApp,
     CompletedModule,
-    DeliverForm,
+    DeliverUnit,
     LearnModule,
     Opportunity,
     OpportunityAccess,
@@ -18,7 +18,7 @@ from commcare_connect.opportunity.models import (
 
 admin.site.register(Opportunity)
 admin.site.register(CommCareApp)
-admin.site.register(DeliverForm)
+admin.site.register(DeliverUnit)
 admin.site.register(LearnModule)
 admin.site.register(CompletedModule)
 admin.site.register(Assessment)
