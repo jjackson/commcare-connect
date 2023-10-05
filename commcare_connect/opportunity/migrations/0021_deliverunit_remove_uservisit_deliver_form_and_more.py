@@ -32,7 +32,7 @@ class Migration(migrations.Migration):
             name="DeliverUnit",
             fields=[
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                ("slug", models.SlugField()),
+                ("slug", models.SlugField(max_length=100)),
                 ("name", models.CharField(max_length=255)),
                 (
                     "app",
