@@ -138,7 +138,7 @@ class OpportunityAccess(models.Model):
     def visit_count(self):
         user_visits = (
             UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
-            .exclude(status=VisitValidationStatus.extra)
+            .exclude(status=VisitValidationStatus.over_limit)
             .order_by("visit_date")
         )
         return user_visits.count()
@@ -147,7 +147,7 @@ class OpportunityAccess(models.Model):
     def last_visit_date(self):
         user_visits = (
             UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
-            .exclude(status=VisitValidationStatus.extra)
+            .exclude(status=VisitValidationStatus.over_limit)
             .order_by("visit_date")
         )
 
@@ -174,7 +174,7 @@ class VisitValidationStatus(models.TextChoices):
     pending = "pending", gettext("Pending")
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
-    extra = "extra", gettext("Extra")
+    over_limit = "over_limit", gettext("Over Limit")
 
 
 class UserVisit(XFormBaseModel):
