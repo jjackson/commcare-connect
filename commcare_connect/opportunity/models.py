@@ -168,7 +168,7 @@ class DeliverUnit(models.Model):
         on_delete=models.CASCADE,
         related_name="deliver_units",
     )
-    slug = models.SlugField()
+    slug = models.SlugField(max_length=100)
     name = models.CharField(max_length=255)
 
     def __str__(self):
