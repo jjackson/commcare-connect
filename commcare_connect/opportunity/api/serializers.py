@@ -93,12 +93,12 @@ class UserLearnProgressSerializer(serializers.ModelSerializer):
 
 
 class UserVisitSerializer(serializers.ModelSerializer):
-    deliver_form_name = serializers.CharField(source="deliver_form.name")
-    deliver_form_xmlns = serializers.CharField(source="deliver_form.xmlns")
+    deliver_unit_name = serializers.CharField(source="deliver_unit.name")
+    deliver_unit_slug = serializers.CharField(source="deliver_unit.slug")
 
     class Meta:
         model = UserVisit
-        fields = ["id", "status", "visit_date", "deliver_form_name", "deliver_form_xmlns"]
+        fields = ["id", "status", "visit_date", "deliver_unit_name", "deliver_unit_slug"]
 
 
 class PaymentSerializer(serializers.ModelSerializer):
