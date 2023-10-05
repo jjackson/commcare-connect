@@ -24,7 +24,7 @@ def migrate_deliver_form_to_deliver_unit(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0018_merge_20230919_2049"),
+        ("opportunity", "0020_payment"),
     ]
 
     operations = [
