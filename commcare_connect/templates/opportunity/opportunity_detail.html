@@ -86,34 +86,52 @@
       <p>
         {{ object.description }}
       </p>
-      <table class="table table-borderless">
-        <tbody>
-        <tr>
-          <th scope="row">Learn App</th>
-          <td>{{ object.learn_app.name }}</td>
-        </tr>
-        <tr>
-          <th scope="row">Deliver App</th>
-          <td>{{ object.deliver_app.name }}</td>
-        </tr>
-        <tr>
-          <th scope="row">Max Visits per user</th>
-          <td>{{ object.max_visits_per_user }}</td>
-        </tr>
-        <tr>
-          <th scope="row">Daily Visits per user</th>
-          <td>{{ object.daily_max_visits_per_user }}</td>
-        </tr>
-        <tr>
-          <th scope="row">Total Budget</th>
-          <td>{{ object.total_budget }}</td>
-        </tr>
-        <tr>
-          <th scope="row">Budget per visit</th>
-          <td>{{ object.budget_per_visit }}</td>
-        </tr>
-        </tbody>
-      </table>
+      <div class="row">
+        <div class="col-md-6">
+          <table class="table table-borderless">
+            <tbody>
+            <tr>
+              <th scope="row">Learn App</th>
+              <td>{{ object.learn_app.name }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Deliver App</th>
+              <td>{{ object.deliver_app.name }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Max Visits per user</th>
+              <td>{{ object.max_visits_per_user }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Daily Visits per user</th>
+              <td>{{ object.daily_max_visits_per_user }}</td>
+            </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="col-md-6">
+          <table class="table table-borderless">
+            <tbody>
+            <tr>
+              <th scope="row">Total Budget</th>
+              <td>{{ object.total_budget }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Budget per visit</th>
+              <td>{{ object.budget_per_visit }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Budget Claimed</th>
+              <td>{{ object.claimed_budget }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Budget Utilised</th>
+              <td>{{ object.utilised_budget }}</td>
+            </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
       <h4>Learn App Modules</h4>
 
       <table class="table border table-custom">
@@ -189,9 +207,6 @@
           </div>
         </div>
       </div>
-    </div>
-    <div class="pt-2 px-4">
-
     </div>
   </div>
 {% endblock content %}
