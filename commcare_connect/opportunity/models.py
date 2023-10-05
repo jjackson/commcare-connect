@@ -81,7 +81,9 @@ class Opportunity(BaseModel):
 
     @property
     def utilised_budget(self):
-        user_visits = UserVisit.objects.filter(opportunity=self).exclude(status=VisitValidationStatus.extra).count()
+        user_visits = (
+            UserVisit.objects.filter(opportunity=self).exclude(status=VisitValidationStatus.over_limit).count()
+        )
         return user_visits
 
 
@@ -199,7 +201,7 @@ class VisitValidationStatus(models.TextChoices):
     pending = "pending", gettext("Pending")
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
-    extra = "extra", gettext("Extra")
+    over_limit = "over_limit", gettext("Over Limit")
 
 
 class Payment(models.Model):
