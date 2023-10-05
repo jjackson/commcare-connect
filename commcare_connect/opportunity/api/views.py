@@ -86,7 +86,6 @@ class ClaimOpportunityView(APIView):
             user_created = create_hq_user(self.request.user, domain, opportunity.api_key)
             if not user_created:
                 return Response("Failed to create user", status=400)
-            ConnectIDUserLink.objects.create(
-                commcare_username=self.request.user.username.lower(), user=self.request.user, domain=domain
-            )
+            cc_username = f"{self.request.user.username.lower()}@{domain}.commcarehq.org"
+            ConnectIDUserLink.objects.create(commcare_username=cc_username, user=self.request.user, domain=domain)
         return Response(status=201)
