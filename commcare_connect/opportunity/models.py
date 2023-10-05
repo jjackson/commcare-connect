@@ -136,12 +136,20 @@ class OpportunityAccess(models.Model):
 
     @property
     def visit_count(self):
-        user_visits = UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity).order_by("visit_date")
+        user_visits = (
+            UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
+            .exclude(status=VisitValidationStatus.extra)
+            .order_by("visit_date")
+        )
         return user_visits.count()
 
     @property
     def last_visit_date(self):
-        user_visits = UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity).order_by("visit_date")
+        user_visits = (
+            UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
+            .exclude(status=VisitValidationStatus.extra)
+            .order_by("visit_date")
+        )
 
         if user_visits.exists():
             return user_visits.first().visit_date
