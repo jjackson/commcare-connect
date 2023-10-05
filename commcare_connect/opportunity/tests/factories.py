@@ -1,4 +1,4 @@
-from factory import CREATE_STRATEGY, DictFactory, Faker, RelatedFactory, SelfAttribute, SubFactory
+from factory import CREATE_STRATEGY, DictFactory, Faker, SelfAttribute, SubFactory
 from factory.django import DjangoModelFactory
 
 from commcare_connect.opportunity.models import VisitValidationStatus
@@ -44,12 +44,6 @@ class OpportunityFactory(DjangoModelFactory):
     budget_per_visit = Faker("pyint", min_value=100, max_value=1000)
     total_budget = Faker("pyint", min_value=1000, max_value=10000)
 
-    deliver_form = RelatedFactory(
-        "commcare_connect.opportunity.tests.factories.DeliverFormFactory",
-        factory_related_name="opportunity",
-        app=SelfAttribute("..deliver_app"),
-    )
-
     class Meta:
         model = "opportunity.Opportunity"
 
@@ -65,25 +59,21 @@ class LearnModuleFactory(DjangoModelFactory):
         model = "opportunity.LearnModule"
 
 
-class DeliverFormFactory(DjangoModelFactory):
+class DeliverUnitFactory(DjangoModelFactory):
     app = SubFactory(CommCareAppFactory)
-    opportunity = SubFactory(
-        OpportunityFactory,
-        deliver_app=SelfAttribute("..app"),
-        organization=SelfAttribute("..app.organization"),
-        deliver_form=None,
-    )
+    slug = Faker("pystr")
     name = Faker("name")
-    xmlns = Faker("url")
 
     class Meta:
-        model = "opportunity.DeliverForm"
+        model = "opportunity.DeliverUnit"
 
 
 class UserVisitFactory(DjangoModelFactory):
     opportunity = SubFactory(OpportunityFactory)
     user = SubFactory("commcare_connect.users.tests.factories.UserFactory")
-    deliver_form = SubFactory(DeliverFormFactory, opportunity=SelfAttribute("..opportunity"))
+    deliver_unit = SubFactory(DeliverUnitFactory)
+    entity_id = Faker("uuid4")
+    entity_name = Faker("name")
     status = Faker("enum", enum_cls=VisitValidationStatus)
     visit_date = Faker("date")
     form_json = Faker("pydict", value_types=[str, int, float, bool])
