@@ -18,7 +18,13 @@ from commcare_connect.opportunity.models import (
     UserVisit,
     VisitValidationStatus,
 )
-from commcare_connect.opportunity.tests.factories import DeliverUnitFactory, LearnModuleFactory, OpportunityFactory
+from commcare_connect.opportunity.tests.factories import (
+    DeliverUnitFactory,
+    LearnModuleFactory,
+    OpportunityAccessFactory,
+    OpportunityClaimFactory,
+    OpportunityFactory,
+)
 from commcare_connect.users.models import ConnectIDUserLink, User
 from commcare_connect.users.tests.factories import MobileUserFactory
 
@@ -114,6 +120,12 @@ def test_form_receiver_assessment(
 
 @pytest.mark.django_db
 def test_receiver_deliver_form(mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity):
+    opp_access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user_with_connect_link)
+    OpportunityClaimFactory(
+        max_payments=opportunity.max_visits_per_user,
+        end_date=opportunity.end_date,
+        opportunity_access=opp_access,
+    )
     deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app)
     stub = DeliverUnitStubFactory(id=deliver_unit.slug)
     form_json = get_form_json(
@@ -133,14 +145,15 @@ def test_receiver_deliver_form(mobile_user_with_connect_link: User, api_client: 
 
 def _create_opp_and_form_json(
     opportunity,
+    user,
     max_visits_per_user=100,
     daily_max_per_user=10,
     end_date=datetime.date.today(),
 ):
-    opportunity.max_visits_per_user = max_visits_per_user
     opportunity.daily_max_visits_per_user = daily_max_per_user
-    opportunity.end_date = end_date
     opportunity.save()
+    opp_access = OpportunityAccessFactory(opportunity=opportunity, user=user)
+    OpportunityClaimFactory(max_payments=max_visits_per_user, end_date=end_date, opportunity_access=opp_access)
 
     deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app)
     stub = DeliverUnitStubFactory(id=deliver_unit.slug)
@@ -156,7 +169,7 @@ def _create_opp_and_form_json(
 def test_receiver_deliver_form_daily_visits_reached(
     mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
 ):
-    form_json = _create_opp_and_form_json(opportunity, daily_max_per_user=0)
+    form_json = _create_opp_and_form_json(opportunity, user=mobile_user_with_connect_link, daily_max_per_user=0)
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 0
     make_request(api_client, form_json, mobile_user_with_connect_link)
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 1
@@ -168,7 +181,7 @@ def test_receiver_deliver_form_daily_visits_reached(
 def test_receiver_deliver_form_max_visits_reached(
     mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
 ):
-    form_json = _create_opp_and_form_json(opportunity, max_visits_per_user=0)
+    form_json = _create_opp_and_form_json(opportunity, user=mobile_user_with_connect_link, max_visits_per_user=0)
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 0
     make_request(api_client, form_json, mobile_user_with_connect_link)
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 1
@@ -180,7 +193,9 @@ def test_receiver_deliver_form_max_visits_reached(
 def test_receiver_deliver_form_end_date_reached(
     mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
 ):
-    form_json = _create_opp_and_form_json(opportunity, end_date=datetime.date.today() - datetime.timedelta(days=100))
+    form_json = _create_opp_and_form_json(
+        opportunity, user=mobile_user_with_connect_link, end_date=datetime.date.today() - datetime.timedelta(days=100)
+    )
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 0
     make_request(api_client, form_json, mobile_user_with_connect_link)
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 1
