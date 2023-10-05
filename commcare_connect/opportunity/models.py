@@ -166,7 +166,7 @@ class VisitValidationStatus(models.TextChoices):
     pending = "pending", gettext("Pending")
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
-    extra = "extra", "extra"
+    extra = "extra", gettext("Extra")
 
 
 class UserVisit(XFormBaseModel):
