@@ -14,6 +14,7 @@ from commcare_connect.opportunity.models import (
     DeliverUnit,
     LearnModule,
     Opportunity,
+    OpportunityClaim,
     UserVisit,
     VisitValidationStatus,
 )
@@ -140,6 +141,9 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     counts = UserVisit.objects.filter(opportunity=opportunity, user=user).aggregate(
         daily=Count("pk", filter=Q(visit_date__date=datetime.date.today())), total=Sum("pk", default=0)
     )
+    claim = OpportunityClaim.objects.filter(
+        opportunity_access__opportunity=opportunity, opportunity_access__user=user
+    ).first()
     user_visit = UserVisit(
         opportunity=opportunity,
         user=user,
@@ -154,8 +158,8 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     )
     if (
         counts["daily"] >= opportunity.daily_max_visits_per_user
-        or counts["total"] >= opportunity.max_visits_per_user
-        or datetime.date.today() > opportunity.end_date
+        or counts["total"] >= claim.max_payments
+        or datetime.date.today() > claim.end_date
     ):
         user_visit.status = VisitValidationStatus.extra
     user_visit.save()

@@ -80,3 +80,21 @@ class UserVisitFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.UserVisit"
+
+
+class OpportunityAccessFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    user = SubFactory("commcare_connect.users.tests.factories.UserFactory")
+
+    class Meta:
+        model = "opportunity.OpportunityAccess"
+
+
+class OpportunityClaimFactory(DjangoModelFactory):
+    opportunity_access = SubFactory(OpportunityAccessFactory)
+    max_payments = Faker("pyint", min_value=1, max_value=100)
+    end_date = Faker("date")
+    date_claimed = Faker("date")
+
+    class Meta:
+        model = "opportunity.OpportunityClaim"
