@@ -1,10 +1,13 @@
+import datetime
+
 from rest_framework import viewsets
-from rest_framework.generics import ListAPIView, get_object_or_404
+from rest_framework.generics import ListAPIView, RetrieveAPIView, get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from commcare_connect.opportunity.api.serializers import (
+    DeliveryProgressSerializer,
     OpportunitySerializer,
     UserLearnProgressSerializer,
     UserVisitSerializer,
@@ -18,6 +21,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.users.helpers import create_hq_user
+from commcare_connect.users.models import ConnectIDUserLink
 
 
 class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
@@ -50,6 +54,14 @@ class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
         ).exclude(status=VisitValidationStatus.over_limit)
 
 
+class DeliveryProgressView(RetrieveAPIView):
+    serializer_class = DeliveryProgressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return OpportunityAccess.objects.get(user=self.request.user, opportunity=self.kwargs.get("pk"))
+
+
 class ClaimOpportunityView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -57,18 +69,27 @@ class ClaimOpportunityView(APIView):
         opportunity_access = get_object_or_404(OpportunityAccess, user=self.request.user, opportunity=kwargs.get("pk"))
         opportunity = opportunity_access.opportunity
 
+        if opportunity.remaining_budget <= 0:
+            return Response(status=200, data="Opportunity cannot be claimed. (Budget Exhausted)")
+        if opportunity.end_date < datetime.date.today():
+            return Response(status=200, data="Opportunity cannot be claimed. (End date reached)")
+
+        max_payments = min(opportunity.remaining_budget, opportunity.daily_max_visits_per_user)
         claim, created = OpportunityClaim.objects.get_or_create(
             opportunity_access=opportunity_access,
             defaults={
-                "max_payments": opportunity.daily_max_visits_per_user,
+                "max_payments": max_payments,
                 "end_date": opportunity.end_date,
             },
         )
-
         if not created:
             return Response(status=200, data="Opportunity is already claimed")
 
-        if opportunity.learn_app.cc_domain != opportunity.deliver_app.cc_domain:
-            create_hq_user(self.request.user, opportunity.deliver_app.cc_domain, opportunity.api_key)
-
+        domain = opportunity.deliver_app.cc_domain
+        if not ConnectIDUserLink.objects.filter(user=self.request.user, domain=domain).exists():
+            user_created = create_hq_user(self.request.user, domain, opportunity.api_key)
+            if not user_created:
+                return Response("Failed to create user", status=400)
+            cc_username = f"{self.request.user.username.lower()}@{domain}.commcarehq.org"
+            ConnectIDUserLink.objects.create(commcare_username=cc_username, user=self.request.user, domain=domain)
         return Response(status=201)

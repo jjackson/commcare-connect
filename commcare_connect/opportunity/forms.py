@@ -213,6 +213,18 @@ class VisitExportForm(forms.Form):
         return [VisitValidationStatus(status) for status in statuses]
 
 
+class PaymentExportForm(forms.Form):
+    format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="xlsx")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("format")),
+        )
+        self.helper.form_tag = False
+
+
 class OpportunityAccessCreationForm(forms.ModelForm):
     user = forms.ModelChoiceField(queryset=User.objects.filter(username__isnull=False))
 

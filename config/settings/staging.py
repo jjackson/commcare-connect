@@ -110,3 +110,5 @@ SPECTACULAR_SETTINGS["SERVERS"] = [  # noqa: F405
 # CommCareConnect
 # ------------------------------------------------------------------------------
 CSRF_TRUSTED_ORIGINS = ["https://*.127.0.0.1"] + env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = "https"
