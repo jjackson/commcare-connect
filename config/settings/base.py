@@ -309,7 +309,7 @@ CONNECTID_CLIENT_ID = env("cid_client_id", default="")
 CONNECTID_CLIENT_SECRET = env("cid_client_secret", default="")
 
 OAUTH2_PROVIDER = {
-    "ACCESS_TOKEN_EXPIRE_SECONDS": "1209600",  # seconds in two weeks
+    "ACCESS_TOKEN_EXPIRE_SECONDS": 1209600,  # seconds in two weeks
     "RESOURCE_SERVER_INTROSPECTION_URL": f"{CONNECTID_URL}/o/introspect/",
     "RESOURCE_SERVER_INTROSPECTION_CREDENTIALS": (
         CONNECTID_CLIENT_ID,
