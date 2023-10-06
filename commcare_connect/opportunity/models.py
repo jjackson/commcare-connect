@@ -71,6 +71,14 @@ class Opportunity(BaseModel):
 
     @property
     def claimed_budget(self):
+        return self.claimed_visits * self.budget_per_visit
+
+    @property
+    def utilised_budget(self):
+        return self.approved_visits * self.budget_per_visit
+
+    @property
+    def claimed_visits(self):
         opp_access = OpportunityAccess.objects.filter(opportunity=self)
         used_budget = OpportunityClaim.objects.filter(opportunity_access__in=opp_access).aggregate(
             Sum("max_payments")
@@ -78,13 +86,6 @@ class Opportunity(BaseModel):
         if used_budget is None:
             used_budget = 0
         return used_budget
-
-    @property
-    def utilised_budget(self):
-        user_visits = (
-            UserVisit.objects.filter(opportunity=self).exclude(status=VisitValidationStatus.over_limit).count()
-        )
-        return user_visits
 
     @property
     def approved_visits(self):

@@ -106,6 +106,10 @@
               <th scope="row">Daily Visits per user</th>
               <td>{{ object.daily_max_visits_per_user }}</td>
             </tr>
+            <tr>
+              <th scope="row">Total Budget</th>
+              <td>{{ object.total_budget }}</td>
+            </tr>
             </tbody>
           </table>
         </div>
@@ -113,20 +117,20 @@
           <table class="table table-borderless">
             <tbody>
             <tr>
-              <th scope="row">Total Budget</th>
-              <td>{{ object.total_budget }}</td>
-            </tr>
-            <tr>
               <th scope="row">Budget per visit</th>
               <td>{{ object.budget_per_visit }}</td>
             </tr>
             <tr>
-              <th scope="row">Budget Claimed</th>
+              <th scope="row">Claimed Budget</th>
               <td>{{ object.claimed_budget }}</td>
             </tr>
             <tr>
-              <th scope="row">Budget Utilised</th>
+              <th scope="row">Utilised Budget</th>
               <td>{{ object.utilised_budget }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Claimed Visits</th>
+              <td>{{ object.claimed_visits }}</td>
             </tr>
             <tr>
               <th scope="row">Approved Visits</th>
