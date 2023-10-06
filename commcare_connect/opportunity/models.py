@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from django.db import models
+from django.db.models import Sum
 from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization
@@ -63,6 +64,16 @@ class Opportunity(BaseModel):
 
     def __str__(self):
         return self.name
+
+    @property
+    def remaining_budget(self) -> int:
+        opp_access = OpportunityAccess.objects.filter(opportunity=self)
+        used_budget = OpportunityClaim.objects.filter(opportunity_access__in=opp_access).aggregate(
+            Sum("max_payments")
+        )["max_payments__sum"]
+        if used_budget is None:
+            used_budget = 0
+        return self.total_budget - used_budget
 
 
 class LearnModule(models.Model):
@@ -130,7 +141,9 @@ class OpportunityAccess(models.Model):
     @property
     def learn_progress(self):
         learn_modules = LearnModule.objects.filter(app=self.opportunity.learn_app)
-        completed_modules = CompletedModule.objects.filter(module__in=learn_modules).count()
+        completed_modules = CompletedModule.objects.filter(
+            opportunity=self.opportunity, module__in=learn_modules
+        ).count()
         percentage = (completed_modules / learn_modules.count()) * 100
         return round(percentage, 2)
 
@@ -163,7 +176,7 @@ class DeliverUnit(models.Model):
         on_delete=models.CASCADE,
         related_name="deliver_units",
     )
-    slug = models.SlugField()
+    slug = models.SlugField(max_length=100)
     name = models.CharField(max_length=255)
 
     def __str__(self):
@@ -175,6 +188,12 @@ class VisitValidationStatus(models.TextChoices):
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
     over_limit = "over_limit", gettext("Over Limit")
+
+
+class Payment(models.Model):
+    amount = models.PositiveIntegerField()
+    date_paid = models.DateTimeField(auto_now_add=True)
+    opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.DO_NOTHING, null=True, blank=True)
 
 
 class UserVisit(XFormBaseModel):
@@ -200,4 +219,4 @@ class OpportunityClaim(models.Model):
     opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE)
     max_payments = models.IntegerField()
     end_date = models.DateField()
-    date_claimed = models.DateField(auto_created=True)
+    date_claimed = models.DateField(auto_now_add=True)

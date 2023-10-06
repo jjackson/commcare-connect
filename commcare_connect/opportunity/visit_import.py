@@ -7,11 +7,19 @@ from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
 from tablib import Dataset
 
-from commcare_connect.opportunity.models import Opportunity, UserVisit, VisitValidationStatus
+from commcare_connect.opportunity.models import (
+    Opportunity,
+    OpportunityAccess,
+    Payment,
+    UserVisit,
+    VisitValidationStatus,
+)
 from commcare_connect.utils.itertools import batched
 
 VISIT_ID_COL = "visit id"
 STATUS_COL = "status"
+PHONE_COL = "phone number"
+AMOUNT_COL = "payment amount"
 REQUIRED_COLS = [VISIT_ID_COL, STATUS_COL]
 
 
@@ -22,7 +30,7 @@ class ImportException(Exception):
 
 
 @dataclass
-class ImportStatus:
+class VisitImportStatus:
     seen_visits: set[str]
     missing_visits: set[str]
 
@@ -35,7 +43,21 @@ class ImportStatus:
         return f"<br>{len(self.missing_visits)} visits were not found:<br>{'<br>'.join(missing)}"
 
 
-def bulk_update_visit_status(opportunity: Opportunity, file: UploadedFile) -> ImportStatus:
+@dataclass
+class PaymentImportStatus:
+    seen_users: set[str]
+    missing_users: set[str]
+
+    def __len__(self):
+        return len(self.seen_users)
+
+    def get_missing_message(self):
+        joined = ", ".join(self.missing_visits)
+        missing = textwrap.wrap(joined, width=115, break_long_words=False, break_on_hyphens=False)
+        return f"<br>{len(self.missing_users)} phone numbers were not found:<br>{'<br>'.join(missing)}"
+
+
+def bulk_update_visit_status(opportunity: Opportunity, file: UploadedFile) -> VisitImportStatus:
     file_format = None
     if file.content_type:
         file_format = mimetypes.guess_extension(file.content_type)
@@ -67,7 +89,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
             UserVisit.objects.bulk_update(to_update, fields=["status"])
             missing_visits |= set(visit_batch) - seen_visits
 
-    return ImportStatus(seen_visits, missing_visits)
+    return VisitImportStatus(seen_visits, missing_visits)
 
 
 def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:
@@ -105,3 +127,56 @@ def _get_header_index(headers: list[str], col_name: str) -> int:
         return headers.index(col_name)
     except ValueError:
         raise ImportException(f"Missing required column(s): '{col_name}'")
+
+
+def bulk_update_payment_status(opportunity: Opportunity, file: UploadedFile) -> PaymentImportStatus:
+    file_format = None
+    if file.content_type:
+        file_format = mimetypes.guess_extension(file.content_type)
+        if file_format:
+            file_format = file_format[1:]
+    if not file_format:
+        file_format = file.name.split(".")[-1].lower()
+    if file_format not in ("csv", "xlsx"):
+        raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
+    imported_data = get_imported_dataset(file, file_format)
+    return _bulk_update_payments(opportunity, imported_data)
+
+
+def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> PaymentImportStatus:
+    headers = [header.lower() for header in imported_data.headers or []]
+    if not headers:
+        raise ImportException("The uploaded file did not contain any headers")
+
+    phone_col_index = _get_header_index(headers, PHONE_COL)
+    amount_col_index = _get_header_index(headers, AMOUNT_COL)
+    invalid_rows = []
+    payments = {}
+    for row in imported_data:
+        row = list(row)
+        phone = str(row[phone_col_index])
+        amount_raw = row[amount_col_index]
+        if amount_raw:
+            if not phone:
+                invalid_rows.append((row, "phone number required"))
+            try:
+                amount = int(amount_raw)
+            except ValueError:
+                invalid_rows.append((row, "amount must be an integer"))
+            payments[phone] = amount
+
+    if invalid_rows:
+        raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
+
+    seen_users = set()
+    missing_users = set()
+    with transaction.atomic():
+        phone_numbers = list(payments)
+        users = OpportunityAccess.objects.filter(
+            user__phone_number__in=phone_numbers, opportunity=opportunity
+        ).select_related("user")
+        for access in users:
+            Payment.objects.create(opportunity_access=access, amount=payments[access.user.phone_number])
+            seen_users.add(access.user.phone_number)
+    missing_users = set(phone_numbers) - seen_users
+    return PaymentImportStatus(seen_users, missing_users)

@@ -24,7 +24,7 @@ def migrate_deliver_form_to_deliver_unit(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0018_merge_20230919_2049"),
+        ("opportunity", "0020_payment"),
     ]
 
     operations = [
@@ -32,7 +32,7 @@ class Migration(migrations.Migration):
             name="DeliverUnit",
             fields=[
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                ("slug", models.SlugField()),
+                ("slug", models.SlugField(max_length=100)),
                 ("name", models.CharField(max_length=255)),
                 (
                     "app",
