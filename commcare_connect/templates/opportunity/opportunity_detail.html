@@ -234,7 +234,7 @@
         <div class="modal-body">
           <div class="mb-3">
             {% csrf_token %}
-            <input class="form-control" type="file" id="importFile" name="visits">
+            <input class="form-control" type="file" id="importFile" name="visits" required>
             <div class="col-auto">
               <span id="importFileHelp" class="form-text">
                 {% blocktrans %}
