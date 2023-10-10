@@ -1,7 +1,7 @@
 import requests
 from django.conf import settings
 from django.core.files.base import ContentFile
-from django.core.files.storage import storages
+from django.core.files.storage import default_storage
 from django.utils.timezone import now
 
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app
@@ -53,7 +53,9 @@ def generate_visit_export(opportunity_id: int, date_range: str, status: list[str
     dataset = export_user_visit_data(opportunity, DateRanges(date_range), [VisitValidationStatus(s) for s in status])
     content = dataset.export(export_format)
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_visit_export.{export_format}"
-    storages["default"].save(export_tmp_name, ContentFile(content))
+    if isinstance(content, str):
+        content = content.encode()
+    default_storage.save(export_tmp_name, ContentFile(content))
     return export_tmp_name
 
 
@@ -63,5 +65,5 @@ def generate_payment_export(opportunity_id: int, export_format: str):
     dataset = export_empty_payment_table(opportunity)
     content = dataset.export(export_format)
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_export.{export_format}"
-    storages["default"].save(export_tmp_name, ContentFile(content))
+    default_storage.save(export_tmp_name, ContentFile(content))
     return export_tmp_name
