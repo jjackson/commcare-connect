@@ -2,6 +2,7 @@ from unittest import mock
 
 import pytest
 
+from commcare_connect.connect_id_client.models import ConnectIdUser
 from commcare_connect.opportunity.models import OpportunityAccess
 from commcare_connect.opportunity.tasks import add_connect_users
 from commcare_connect.opportunity.tests.factories import OpportunityFactory
@@ -13,15 +14,13 @@ class TestConnectUserCreation:
     def test_add_connect_user(self):
         opportunity = OpportunityFactory()
         with (
-            mock.patch("commcare_connect.opportunity.tasks.requests.get") as request,
+            mock.patch("commcare_connect.opportunity.tasks.fetch_users") as fetch_users,
             mock.patch("commcare_connect.users.helpers.send_sms"),
         ):
-            request.return_value.json.return_value = {
-                "found_users": [
-                    {"username": "test", "phone_number": "+15555555555", "name": "a"},
-                    {"username": "test2", "phone_number": "+12222222222", "name": "b"},
-                ]
-            }
+            fetch_users.return_value = [
+                ConnectIdUser(username="test", phone_number="+15555555555", name="a"),
+                ConnectIdUser(username="test2", phone_number="+12222222222", name="b"),
+            ]
             add_connect_users(["+15555555555", "+12222222222"], opportunity.id)
 
         user_list = User.objects.filter(username="test")
