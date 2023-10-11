@@ -65,5 +65,7 @@ def generate_payment_export(opportunity_id: int, export_format: str):
     dataset = export_empty_payment_table(opportunity)
     content = dataset.export(export_format)
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_export.{export_format}"
+    if isinstance(content, str):
+        content = content.encode()
     default_storage.save(export_tmp_name, ContentFile(content))
     return export_tmp_name
