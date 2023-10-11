@@ -18,7 +18,7 @@ from commcare_connect.utils.itertools import batched
 
 VISIT_ID_COL = "visit id"
 STATUS_COL = "status"
-PHONE_COL = "phone number"
+USERNAME_COL = "username"
 AMOUNT_COL = "payment amount"
 REQUIRED_COLS = [VISIT_ID_COL, STATUS_COL]
 
@@ -54,7 +54,7 @@ class PaymentImportStatus:
     def get_missing_message(self):
         joined = ", ".join(self.missing_visits)
         missing = textwrap.wrap(joined, width=115, break_long_words=False, break_on_hyphens=False)
-        return f"<br>{len(self.missing_users)} phone numbers were not found:<br>{'<br>'.join(missing)}"
+        return f"<br>{len(self.missing_users)} usernames were not found:<br>{'<br>'.join(missing)}"
 
 
 def bulk_update_visit_status(opportunity: Opportunity, file: UploadedFile) -> VisitImportStatus:
@@ -148,22 +148,22 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     if not headers:
         raise ImportException("The uploaded file did not contain any headers")
 
-    phone_col_index = _get_header_index(headers, PHONE_COL)
+    username_col_index = _get_header_index(headers, USERNAME_COL)
     amount_col_index = _get_header_index(headers, AMOUNT_COL)
     invalid_rows = []
     payments = {}
     for row in imported_data:
         row = list(row)
-        phone = str(row[phone_col_index])
+        username = str(row[username_col_index])
         amount_raw = row[amount_col_index]
         if amount_raw:
-            if not phone:
-                invalid_rows.append((row, "phone number required"))
+            if not username:
+                invalid_rows.append((row, "username required"))
             try:
                 amount = int(amount_raw)
             except ValueError:
                 invalid_rows.append((row, "amount must be an integer"))
-            payments[phone] = amount
+            payments[username] = amount
 
     if invalid_rows:
         raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
@@ -171,12 +171,12 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     seen_users = set()
     missing_users = set()
     with transaction.atomic():
-        phone_numbers = list(payments)
-        users = OpportunityAccess.objects.filter(
-            user__phone_number__in=phone_numbers, opportunity=opportunity
-        ).select_related("user")
+        usernames = list(payments)
+        users = OpportunityAccess.objects.filter(user__username__in=usernames, opportunity=opportunity).select_related(
+            "user"
+        )
         for access in users:
-            Payment.objects.create(opportunity_access=access, amount=payments[access.user.phone_number])
-            seen_users.add(access.user.phone_number)
-    missing_users = set(phone_numbers) - seen_users
+            Payment.objects.create(opportunity_access=access, amount=payments[access.user.username])
+            seen_users.add(access.user.username)
+    missing_users = set(usernames) - seen_users
     return PaymentImportStatus(seen_users, missing_users)
