@@ -89,11 +89,9 @@ class Opportunity(BaseModel):
 
     @property
     def approved_visits(self):
-        approved_user_visits = (
-            UserVisit.objects.filter(opportunity=self, status=VisitValidationStatus.approved)
-            .exclude(status=VisitValidationStatus.over_limit)
-            .count()
-        )
+        approved_user_visits = UserVisit.objects.filter(
+            opportunity=self, status=VisitValidationStatus.approved
+        ).count()
         return approved_user_visits
 
 
