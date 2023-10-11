@@ -142,7 +142,7 @@ class OpportunityAccess(models.Model):
     def learn_progress(self):
         learn_modules = LearnModule.objects.filter(app=self.opportunity.learn_app)
         completed_modules = CompletedModule.objects.filter(
-            opportunity=self.opportunity, module__in=learn_modules
+            opportunity=self.opportunity, module__in=learn_modules, user=self.user
         ).count()
         percentage = (completed_modules / learn_modules.count()) * 100
         return round(percentage, 2)
