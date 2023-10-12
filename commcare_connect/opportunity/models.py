@@ -162,6 +162,13 @@ class OpportunityAccess(models.Model):
         return
 
 
+class PaymentUnit(models.Model):
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
+    amount = models.PositiveIntegerField()
+    name = models.CharField()
+    description = models.TextField()
+
+
 class DeliverUnit(models.Model):
     app = models.ForeignKey(
         CommCareApp,
@@ -170,6 +177,7 @@ class DeliverUnit(models.Model):
     )
     slug = models.SlugField(max_length=100)
     name = models.CharField(max_length=255)
+    payment_unit = models.ForeignKey(PaymentUnit, on_delete=models.CASCADE, null=True)
 
     def __str__(self):
         return self.name
@@ -185,6 +193,7 @@ class Payment(models.Model):
     amount = models.PositiveIntegerField()
     date_paid = models.DateTimeField(auto_now_add=True)
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.DO_NOTHING, null=True, blank=True)
+    payment_unit = models.ForeignKey(PaymentUnit, on_delete=models.CASCADE, null=True)
 
 
 class UserVisit(XFormBaseModel):
