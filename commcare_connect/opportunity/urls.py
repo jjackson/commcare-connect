@@ -17,6 +17,7 @@ from commcare_connect.opportunity.views import (
     export_users_for_payment,
     payment_import,
     update_visit_status_import,
+    payment_unit_create,
 )
 
 app_name = "opportunity"
@@ -45,4 +46,5 @@ urlpatterns = [
     path("<int:pk>/payment_table/", view=OpportunityPaymentTableView.as_view(), name="payment_table"),
     path("<int:pk>/payment_export/", view=export_users_for_payment, name="payment_export"),
     path("<int:pk>/payment_import/", view=payment_import, name="payment_import"),
+    path("<int:pk>/payment_unit_create/", view=payment_unit_create, name="payment_unit_create"),
 ]

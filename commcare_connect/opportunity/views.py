@@ -21,6 +21,7 @@ from commcare_connect.opportunity.forms import (
     OpportunityCreationForm,
     PaymentExportForm,
     VisitExportForm,
+    PaymentUnitForm,
 )
 from commcare_connect.opportunity.models import (
     CompletedModule,
@@ -29,6 +30,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     Payment,
     UserVisit,
+    DeliverUnit,
 )
 from commcare_connect.opportunity.tables import OpportunityAccessTable, PaymentTable, UserStatusTable, UserVisitTable
 from commcare_connect.opportunity.tasks import (
@@ -306,3 +308,26 @@ def payment_import(request, org_slug=None, pk=None):
         message = f"Payment status updated successfully for {len(status)} users."
         messages.success(request, mark_safe(message))
     return redirect("opportunity:detail", org_slug, pk)
+
+def payment_unit_create(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
+    deliver_units = DeliverUnit.objects.filter(app=opportunity.deliver_app, payment_unit__isnull=True)
+
+    form = PaymentUnitForm(deliver_units=deliver_units)
+
+    if request.method == "POST":
+        form = PaymentUnitForm(deliver_units=deliver_units, data=request.POST)
+        if form.is_valid():
+            form.instance.opportunity = opportunity
+            form.save()
+            deliver_units = form.cleaned_data["deliver_units"]
+            DeliverUnit.objects.filter(id__in=deliver_units, payment_unit__isnull=True).update(
+                payment_unit=form.instance.id
+            )
+            return redirect("opportunity:detail", org_slug=request.org.slug, pk=opportunity.id)
+
+    return render(
+        request,
+        "form.html",
+        dict(title=f"{request.org.slug} - Payment Unit", form_title="Payment Unit Create", form=form),
+    )
