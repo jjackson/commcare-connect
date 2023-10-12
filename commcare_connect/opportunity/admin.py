@@ -10,6 +10,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    PaymentUnit,
     UserVisit,
 )
 
@@ -24,6 +25,7 @@ admin.site.register(CompletedModule)
 admin.site.register(Assessment)
 admin.site.register(UserVisit)
 admin.site.register(OpportunityClaim)
+admin.site.register(PaymentUnit)
 
 
 @admin.register(OpportunityAccess)
