@@ -216,7 +216,7 @@
         <div class="tab-pane fade" id="payment-tab-pane" role="tabpanel" aria-labelledby="payment-tab" tabindex="0">
           <div hx-get="{% url "opportunity:payment_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
                hx-trigger="load" hx-swap="outerHTML">
-            {% include "tables/table_placeholder.html" with num_cols=2 %}
+            {% include "tables/table_placeholder.html" with num_cols=4 %}
           </div>
         </div>
         <div class="tab-pane fade" id="user-status-tab-pane" role="tabpanel" aria-labelledby="user-status-tab" tabindex="0">
@@ -332,7 +332,7 @@
             <div class="col-auto">
               <span id="importFileHelp" class="form-text">
                 {% blocktrans %}
-                  The file must contain at least the "Phone Number" and "Amount" column.
+                  The file must contain at least the "Username" and "Amount" column.
                 {% endblocktrans %}
               </span>
             </div>
