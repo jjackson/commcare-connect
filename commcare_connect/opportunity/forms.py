@@ -11,6 +11,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     VisitValidationStatus,
+    PaymentUnit,
 )
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
@@ -249,3 +250,25 @@ class AddBudgetExistingUsersForm(forms.Form):
 
         choices = [(opp_claim.id, opp_claim.id) for opp_claim in opportunity_claims]
         self.fields["selected_users"] = forms.MultipleChoiceField(choices=choices, widget=forms.CheckboxSelectMultiple)
+
+
+class PaymentUnitForm(forms.ModelForm):
+    class Meta:
+        model = PaymentUnit
+        fields = ["name", "description", "amount"]
+
+    def __init__(self, *args, **kwargs):
+        deliver_units = kwargs.pop("deliver_units", [])
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("name")),
+            Row(Field("description")),
+            Row(Field("amount")),
+            Row(Field("deliver_units")),
+            Submit(name="submit", value="Submit"),
+        )
+
+        choices = [(deliver_unit.id, deliver_unit.name) for deliver_unit in deliver_units]
+        self.fields["deliver_units"] = forms.MultipleChoiceField(choices=choices, widget=forms.CheckboxSelectMultiple)
