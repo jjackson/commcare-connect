@@ -88,3 +88,14 @@ class OpportunityAccessFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.OpportunityAccess"
+
+
+class CompletedModuleFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    user = SubFactory("commcare_connect.users.tests.factories.UserFactory")
+    date = Faker("date")
+    module = SubFactory(LearnModuleFactory, app=SelfAttribute("..opportunity.learn_app"))
+    duration = Faker("time_delta")
+
+    class Meta:
+        model = "opportunity.CompletedModule"
