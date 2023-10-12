@@ -272,3 +272,7 @@ class PaymentUnitForm(forms.ModelForm):
 
         choices = [(deliver_unit.id, deliver_unit.name) for deliver_unit in deliver_units]
         self.fields["deliver_units"] = forms.MultipleChoiceField(choices=choices, widget=forms.CheckboxSelectMultiple)
+        if PaymentUnit.objects.filter(pk=self.instance.pk).exists():
+            self.fields["deliver_units"].initial = [
+                deliver_unit.pk for deliver_unit in self.instance.deliver_units.all()
+            ]
