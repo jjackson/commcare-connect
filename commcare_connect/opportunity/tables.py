@@ -1,6 +1,6 @@
 from django_tables2 import columns, tables, utils
 
-from commcare_connect.opportunity.models import OpportunityAccess, Payment, UserVisit
+from commcare_connect.opportunity.models import OpportunityAccess, Payment, PaymentUnit, UserVisit
 
 
 class OpportunityAccessTable(tables.Table):
@@ -62,4 +62,12 @@ class UserStatusTable(tables.Table):
         model = OpportunityAccess
         fields = ("user.username", "accepted")
         empty_text = "No users invited for this opportunity."
+        orderable = False
+
+
+class PaymentUnitTable(tables.Table):
+    class Meta:
+        model = PaymentUnit
+        fields = ("name", "amount")
+        empty_text = "No payment units for this opportunity."
         orderable = False
