@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from commcare_connect.cache import quickcache
 from commcare_connect.opportunity.models import (
+    Assessment,
     CommCareApp,
     CompletedModule,
     LearnModule,
@@ -86,10 +87,27 @@ def _get_opp_access(user, opportunity):
     return OpportunityAccess.objects.filter(user=user, opportunity=opportunity).first()
 
 
-class UserLearnProgressSerializer(serializers.ModelSerializer):
+class CompletedModuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompletedModule
         fields = ["module", "date", "duration"]
+
+
+class AssessmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Assessment
+        fields = ["date", "score", "passing_score", "passed"]
+
+
+class UserLearnProgressSerializer(serializers.Serializer):
+    completed_modules = serializers.SerializerMethodField()
+    assessments = serializers.SerializerMethodField()
+
+    def get_completed_modules(self, obj: dict):
+        return CompletedModuleSerializer(obj.get("completed_modules"), many=True).data
+
+    def get_assessments(self, obj: dict):
+        return AssessmentSerializer(obj.get("assessments"), many=True).data
 
 
 class UserVisitSerializer(serializers.ModelSerializer):
