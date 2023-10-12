@@ -66,6 +66,13 @@ class UserStatusTable(tables.Table):
 
 
 class PaymentUnitTable(tables.Table):
+    details = columns.LinkColumn(
+        "opportunity:edit_payment_unit",
+        verbose_name="",
+        text="Edit",
+        args=[utils.A("opportunity.organization.slug"), utils.A("opportunity.id"), utils.A("pk")],
+    )
+
     class Meta:
         model = PaymentUnit
         fields = ("name", "amount")
