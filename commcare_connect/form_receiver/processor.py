@@ -75,8 +75,8 @@ def process_learn_modules(user, xform: XForm, app: CommCareApp, opportunity: Opp
             user=user,
             module=module,
             opportunity=opportunity,
-            xform_id=xform.id,
             defaults={
+                "xform_id": xform.id,
                 "date": xform.received_on,
                 "duration": xform.metadata.duration,
                 "app_build_id": xform.build_id,
