@@ -10,8 +10,8 @@ from commcare_connect.opportunity.models import (
     HQApiKey,
     Opportunity,
     OpportunityAccess,
-    VisitValidationStatus,
     PaymentUnit,
+    VisitValidationStatus,
 )
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
