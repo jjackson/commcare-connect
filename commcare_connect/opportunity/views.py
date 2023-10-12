@@ -20,19 +20,26 @@ from commcare_connect.opportunity.forms import (
     OpportunityChangeForm,
     OpportunityCreationForm,
     PaymentExportForm,
-    VisitExportForm,
     PaymentUnitForm,
+    VisitExportForm,
 )
 from commcare_connect.opportunity.models import (
     CompletedModule,
+    DeliverUnit,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
     Payment,
+    PaymentUnit,
     UserVisit,
-    DeliverUnit,
 )
-from commcare_connect.opportunity.tables import OpportunityAccessTable, PaymentTable, UserStatusTable, UserVisitTable
+from commcare_connect.opportunity.tables import (
+    OpportunityAccessTable,
+    PaymentTable,
+    PaymentUnitTable,
+    UserStatusTable,
+    UserVisitTable,
+)
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     create_learn_modules_and_deliver_units,
@@ -309,6 +316,7 @@ def payment_import(request, org_slug=None, pk=None):
         messages.success(request, mark_safe(message))
     return redirect("opportunity:detail", org_slug, pk)
 
+
 def payment_unit_create(request, org_slug=None, pk=None):
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
     deliver_units = DeliverUnit.objects.filter(app=opportunity.deliver_app, payment_unit__isnull=True)
@@ -331,3 +339,15 @@ def payment_unit_create(request, org_slug=None, pk=None):
         "form.html",
         dict(title=f"{request.org.slug} - Payment Unit", form_title="Payment Unit Create", form=form),
     )
+
+
+class OpportunityPaymentUnitTableView(OrganizationUserMixin, SingleTableView):
+    model = PaymentUnit
+    paginate_by = 25
+    table_class = PaymentUnitTable
+    template_name = "tables/single_table.html"
+
+    def get_queryset(self):
+        opportunity_id = self.kwargs["pk"]
+        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        return PaymentUnit.objects.filter(opportunity=opportunity)
