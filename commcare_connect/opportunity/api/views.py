@@ -42,7 +42,8 @@ class UserLearnProgressView(RetrieveAPIView):
         )
         return dict(
             completed_modules=CompletedModule.objects.filter(
-                user=self.request.user, opportunity=opportunity_access.opportunity
+                user=self.request.user,
+                opportunity=opportunity_access.opportunity,
             ),
             assessments=Assessment.objects.filter(user=self.request.user, opportunity=opportunity_access.opportunity),
         )
