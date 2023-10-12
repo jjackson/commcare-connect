@@ -317,6 +317,7 @@ def payment_import(request, org_slug=None, pk=None):
     return redirect("opportunity:detail", org_slug, pk)
 
 
+@org_member_required
 def add_payment_unit(request, org_slug=None, pk=None):
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
     deliver_units = DeliverUnit.objects.filter(app=opportunity.deliver_app, payment_unit__isnull=True)
