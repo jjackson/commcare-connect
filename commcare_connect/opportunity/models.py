@@ -149,12 +149,20 @@ class OpportunityAccess(models.Model):
 
     @property
     def visit_count(self):
-        user_visits = UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity).order_by("visit_date")
+        user_visits = (
+            UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
+            .exclude(status=VisitValidationStatus.over_limit)
+            .order_by("visit_date")
+        )
         return user_visits.count()
 
     @property
     def last_visit_date(self):
-        user_visits = UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity).order_by("visit_date")
+        user_visits = (
+            UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
+            .exclude(status=VisitValidationStatus.over_limit)
+            .order_by("visit_date")
+        )
 
         if user_visits.exists():
             return user_visits.first().visit_date
@@ -179,6 +187,7 @@ class VisitValidationStatus(models.TextChoices):
     pending = "pending", gettext("Pending")
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
+    over_limit = "over_limit", gettext("Over Limit")
 
 
 class Payment(models.Model):
