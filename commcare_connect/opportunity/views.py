@@ -33,7 +33,7 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.tables import OpportunityAccessTable, PaymentTable, UserStatusTable, UserVisitTable
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
-    create_learn_modules_assessments,
+    create_learn_modules_and_deliver_units,
     generate_payment_export,
     generate_visit_export,
 )
@@ -66,11 +66,6 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
     def get_success_url(self):
         return reverse("opportunity:list", args=(self.request.org.slug,))
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["applications"] = get_applications_for_user(self.request.user)
-        return context
-
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["applications"] = get_applications_for_user(self.request.user)
@@ -80,7 +75,7 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
 
     def form_valid(self, form: OpportunityCreationForm) -> HttpResponse:
         response = super().form_valid(form)
-        create_learn_modules_assessments.delay(self.object.id)
+        create_learn_modules_and_deliver_units.delay(self.object.id)
         return response
 
 

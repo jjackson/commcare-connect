@@ -5,7 +5,6 @@ from commcare_connect.opportunity.models import OpportunityAccess, Payment, User
 
 class OpportunityAccessTable(tables.Table):
     learn_progress = columns.Column(verbose_name="Modules Completed")
-    last_visit_date = columns.DateColumn(accessor="last_visit_date", default="N/A")
     details = columns.LinkColumn(
         "opportunity:user_learn_progress",
         verbose_name="",
@@ -15,7 +14,7 @@ class OpportunityAccessTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user.username", "learn_progress", "visit_count")
+        fields = ("user.username", "learn_progress")
         orderable = False
         empty_text = "No learn progress for users."
 
@@ -29,7 +28,9 @@ class UserVisitTable(tables.Table):
         verbose_name="Visit date", accessor="visit_date", format="c", visible=False
     )
 
-    deliver_form = columns.Column("Form Name", accessor="deliver_form.name")
+    deliver_unit = columns.Column("Unit Name", accessor="deliver_unit.name")
+    entity_id = columns.Column("Entity ID", accessor="entity_id", visible=False)
+    entity_name = columns.Column("Entity Name", accessor="entity_name")
 
     class Meta:
         model = UserVisit
@@ -41,7 +42,7 @@ class UserVisitTable(tables.Table):
             "status",
             "username",
             "user.name",
-            "deliver_form",
+            "deliver_unit",
         )
         empty_text = "No forms."
         orderable = False
@@ -50,7 +51,7 @@ class UserVisitTable(tables.Table):
 class PaymentTable(tables.Table):
     class Meta:
         model = Payment
-        fields = ("user.username", "amount", "date_paid")
+        fields = ("opportunity_access.user.name", "opportunity_access.user.username", "amount", "date_paid")
         orderable = False
         empty_text = "No payments"
 
