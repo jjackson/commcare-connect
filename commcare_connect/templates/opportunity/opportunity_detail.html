@@ -93,34 +93,60 @@
       <p>
         {{ object.description }}
       </p>
-      <table class="table table-borderless">
-        <tbody>
-        <tr>
-          <th scope="row">Learn App</th>
-          <td>{{ object.learn_app.name }}</td>
-        </tr>
-        <tr>
-          <th scope="row">Deliver App</th>
-          <td>{{ object.deliver_app.name }}</td>
-        </tr>
-        <tr>
-          <th scope="row">Max Visits per user</th>
-          <td>{{ object.max_visits_per_user }}</td>
-        </tr>
-        <tr>
-          <th scope="row">Daily Visits per user</th>
-          <td>{{ object.daily_max_visits_per_user }}</td>
-        </tr>
-        <tr>
-          <th scope="row">Total Budget</th>
-          <td>{{ object.total_budget }}</td>
-        </tr>
-        <tr>
-          <th scope="row">Budget per visit</th>
-          <td>{{ object.budget_per_visit }}</td>
-        </tr>
-        </tbody>
-      </table>
+      <div class="row">
+        <div class="col-md-6">
+          <table class="table table-borderless">
+            <tbody>
+            <tr>
+              <th scope="row">Learn App</th>
+              <td>{{ object.learn_app.name }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Deliver App</th>
+              <td>{{ object.deliver_app.name }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Max Visits per user</th>
+              <td>{{ object.max_visits_per_user }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Daily Visits per user</th>
+              <td>{{ object.daily_max_visits_per_user }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Total Budget</th>
+              <td>{{ object.total_budget }}</td>
+            </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="col-md-6">
+          <table class="table table-borderless">
+            <tbody>
+            <tr>
+              <th scope="row">Budget per visit</th>
+              <td>{{ object.budget_per_visit }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Claimed Budget</th>
+              <td>{{ object.claimed_budget }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Utilised Budget</th>
+              <td>{{ object.utilised_budget }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Claimed Visits</th>
+              <td>{{ object.claimed_visits }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Approved Visits</th>
+              <td>{{ object.approved_visits }}</td>
+            </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
       <div class="accordion" id="accordionExample">
         <div class="accordion-item">
           <h2 class="accordion-header" id="headingOne">
@@ -227,7 +253,7 @@
         <div class="tab-pane fade" id="payment-tab-pane" role="tabpanel" aria-labelledby="payment-tab" tabindex="0">
           <div hx-get="{% url "opportunity:payment_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
                hx-trigger="load" hx-swap="outerHTML">
-            {% include "tables/table_placeholder.html" with num_cols=2 %}
+            {% include "tables/table_placeholder.html" with num_cols=4 %}
           </div>
         </div>
         <div class="tab-pane fade" id="user-status-tab-pane" role="tabpanel" aria-labelledby="user-status-tab" tabindex="0">
@@ -243,9 +269,6 @@
           </div>
         </div>
       </div>
-    </div>
-    <div class="pt-2 px-4">
-
     </div>
   </div>
 {% endblock content %}
@@ -349,7 +372,7 @@
             <div class="col-auto">
               <span id="importFileHelp" class="form-text">
                 {% blocktrans %}
-                  The file must contain at least the "Phone Number" and "Amount" column.
+                  The file must contain at least the "Username" and "Amount" column.
                 {% endblocktrans %}
               </span>
             </div>

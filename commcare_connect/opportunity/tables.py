@@ -6,7 +6,6 @@ from commcare_connect.opportunity.models import OpportunityAccess, Payment, Paym
 
 class OpportunityAccessTable(tables.Table):
     learn_progress = columns.Column(verbose_name="Modules Completed")
-    last_visit_date = columns.DateColumn(accessor="last_visit_date", default="N/A")
     details = columns.LinkColumn(
         "opportunity:user_learn_progress",
         verbose_name="",
@@ -16,7 +15,7 @@ class OpportunityAccessTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user.username", "learn_progress", "visit_count")
+        fields = ("user.username", "learn_progress")
         orderable = False
         empty_text = "No learn progress for users."
 
@@ -53,7 +52,7 @@ class UserVisitTable(tables.Table):
 class PaymentTable(tables.Table):
     class Meta:
         model = Payment
-        fields = ("user.username", "amount", "date_paid")
+        fields = ("opportunity_access.user.name", "opportunity_access.user.username", "amount", "date_paid")
         orderable = False
         empty_text = "No payments"
 
