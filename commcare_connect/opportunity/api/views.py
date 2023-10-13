@@ -1,7 +1,7 @@
 import datetime
 
 from rest_framework import viewsets
-from rest_framework.generics import ListAPIView, RetrieveAPIView, get_object_or_404
+from rest_framework.generics import RetrieveAPIView, get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,6 +13,7 @@ from commcare_connect.opportunity.api.serializers import (
     UserVisitSerializer,
 )
 from commcare_connect.opportunity.models import (
+    Assessment,
     CompletedModule,
     Opportunity,
     OpportunityAccess,
@@ -32,15 +33,20 @@ class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
         return Opportunity.objects.filter(opportunityaccess__user=self.request.user)
 
 
-class UserLearnProgressView(ListAPIView):
+class UserLearnProgressView(RetrieveAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = UserLearnProgressSerializer
 
-    def get_queryset(self):
+    def get_object(self):
         opportunity_access = get_object_or_404(
             OpportunityAccess, user=self.request.user, opportunity=self.kwargs.get("pk")
         )
-        return CompletedModule.objects.filter(user=self.request.user, opportunity=opportunity_access.opportunity)
+        return dict(
+            completed_modules=CompletedModule.objects.filter(
+                user=self.request.user, opportunity=opportunity_access.opportunity
+            ),
+            assessments=Assessment.objects.filter(user=self.request.user, opportunity=opportunity_access.opportunity),
+        )
 
 
 class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
