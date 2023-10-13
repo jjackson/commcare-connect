@@ -1,3 +1,4 @@
+from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
 
 from commcare_connect.opportunity.models import OpportunityAccess, Payment, PaymentUnit, UserVisit
@@ -66,6 +67,7 @@ class UserStatusTable(tables.Table):
 
 
 class PaymentUnitTable(tables.Table):
+    deliver_units = columns.Column("Deliver Units")
     details = columns.LinkColumn(
         "opportunity:edit_payment_unit",
         verbose_name="",
@@ -78,3 +80,7 @@ class PaymentUnitTable(tables.Table):
         fields = ("name", "amount")
         empty_text = "No payment units for this opportunity."
         orderable = False
+
+    def render_deliver_units(self, record):
+        deliver_units = "".join([f"<li>{d.name}</li>" for d in record.deliver_units.all()])
+        return mark_safe(f"<ul>{deliver_units}</ul>")
