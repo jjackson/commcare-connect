@@ -131,3 +131,5 @@ SPECTACULAR_SETTINGS["SERVERS"] = [  # noqa: F405
 ]
 # Your stuff...
 # ------------------------------------------------------------------------------
+
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = "https"

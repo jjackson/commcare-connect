@@ -1,3 +1,6 @@
+import datetime
+
+from django.db.models import Count, Q, Sum
 from jsonpath_ng import JSONPathError
 from jsonpath_ng.ext import parse
 
@@ -8,15 +11,18 @@ from commcare_connect.opportunity.models import (
     Assessment,
     CommCareApp,
     CompletedModule,
-    DeliverForm,
+    DeliverUnit,
     LearnModule,
     Opportunity,
+    OpportunityClaim,
     UserVisit,
+    VisitValidationStatus,
 )
 from commcare_connect.users.models import User
 
 LEARN_MODULE_JSONPATH = parse("$..module")
 ASSESSMENT_JSONPATH = parse("$..assessment")
+DELIVER_UNIT_JSONPATH = parse("$..deliver")
 
 
 def process_xform(xform: XForm):
@@ -24,13 +30,13 @@ def process_xform(xform: XForm):
     app = get_app(xform.domain, xform.app_id)
     user = get_user(xform)
 
-    if process_deliver_form(user, xform):
-        return
+    opportunity = get_opportunity(deliver_app=app)
+    if opportunity:
+        process_deliver_form(user, xform, app, opportunity)
 
-    opportunity = get_opportunity_for_learn_app(app)
-    if not opportunity:
-        raise ProcessingError(f"No active opportunities found for CommCare app {app.cc_app_id}.")
-    process_learn_form(user, xform, app, opportunity)
+    opportunity = get_opportunity(learn_app=app)
+    if opportunity:
+        process_learn_form(user, xform, app, opportunity)
 
 
 def process_learn_form(user, xform: XForm, app: CommCareApp, opportunity: Opportunity):
@@ -74,8 +80,8 @@ def process_learn_modules(user, xform: XForm, app: CommCareApp, opportunity: Opp
             user=user,
             module=module,
             opportunity=opportunity,
-            xform_id=xform.id,
             defaults={
+                "xform_id": xform.id,
                 "date": xform.received_on,
                 "duration": xform.metadata.duration,
                 "app_build_id": xform.build_id,
@@ -121,35 +127,71 @@ def process_assessments(user, xform: XForm, app: CommCareApp, opportunity: Oppor
             return ProcessingError("Learn Assessment is already completed")
 
 
-def process_deliver_form(user, xform):
-    try:
-        deliver_form = DeliverForm.objects.filter(
-            xmlns=xform.xmlns, app__cc_domain=xform.domain, app__cc_app_id=xform.app_id
-        ).get()
-    except DeliverForm.DoesNotExist:
-        return False
-    except DeliverForm.MultipleObjectsReturned:
-        raise ProcessingError(f"Multiple deliver forms found for this app and XMLNS: {xform.app_id}, {xform.xmlns}")
+def process_deliver_form(user, xform: XForm, app: CommCareApp, opportunity: Opportunity):
+    matches = [
+        match.value for match in DELIVER_UNIT_JSONPATH.find(xform.form) if match.value["@xmlns"] == CCC_LEARN_XMLNS
+    ]
+    if matches:
+        for deliver_unit_block in matches:
+            process_deliver_unit(user, xform, app, opportunity, deliver_unit_block)
 
-    UserVisit.objects.create(
-        opportunity=deliver_form.opportunity,
+
+def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, deliver_unit_block: dict):
+    deliver_unit = get_or_create_deliver_unit(app, deliver_unit_block)
+    counts = UserVisit.objects.filter(opportunity=opportunity, user=user).aggregate(
+        daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)), total=Sum("pk", default=0)
+    )
+    claim = OpportunityClaim.objects.filter(
+        opportunity_access__opportunity=opportunity, opportunity_access__user=user
+    ).first()
+    user_visit = UserVisit(
+        opportunity=opportunity,
         user=user,
-        deliver_form=deliver_form,
+        deliver_unit=deliver_unit,
+        entity_id=deliver_unit_block.get("entity_id"),
+        entity_name=deliver_unit_block.get("entity_name"),
         visit_date=xform.metadata.timeStart,
         xform_id=xform.id,
         app_build_id=xform.build_id,
         app_build_version=xform.metadata.app_build_version,
         form_json=xform.raw_form,
     )
-    return True
+    if (
+        counts["daily"] >= opportunity.daily_max_visits_per_user
+        or counts["total"] >= claim.max_payments
+        or datetime.date.today() > claim.end_date
+    ):
+        user_visit.status = VisitValidationStatus.over_limit
+    user_visit.save()
 
 
-def get_opportunity_for_learn_app(app):
+def get_or_create_deliver_unit(app, unit_data):
+    unit, _ = DeliverUnit.objects.get_or_create(
+        app=app,
+        slug=unit_data["@id"],
+        defaults={
+            "name": unit_data["name"],
+        },
+    )
+    return unit
+
+
+def get_opportunity(*, learn_app=None, deliver_app=None):
+    if not learn_app and not deliver_app:
+        raise ValueError("One of learn_app or deliver_app must be provided")
+
+    kwargs = {}
+    if learn_app:
+        kwargs = {"learn_app": learn_app}
+    if deliver_app:
+        kwargs = {"deliver_app": deliver_app}
+
     try:
-        return Opportunity.objects.get(learn_app=app, active=True)
+        return Opportunity.objects.get(active=True, **kwargs)
     except Opportunity.DoesNotExist:
         pass
     except Opportunity.MultipleObjectsReturned:
+        app = learn_app or deliver_app
         raise ProcessingError(f"Multiple active opportunities found for CommCare app {app.cc_app_id}.")
 
 

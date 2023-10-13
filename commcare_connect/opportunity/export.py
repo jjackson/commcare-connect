@@ -18,13 +18,17 @@ def export_user_visit_data(
         user_visits = user_visits.filter(status__in=status)
 
     table = UserVisitTable(user_visits)
-    exclude_columns = ("visit_date",)
+    exclude_columns = ("visit_date", "form_json")
     columns = [
         column
         for column in table.columns.iterall()
         if not (column.column.exclude_from_export or column.name in exclude_columns)
     ]
-    base_data = [[row.get_cell_value(column.name) for column in columns] for row in table.rows]
+    base_data = [
+        # form_json must be the last column in the row
+        [row.get_cell_value(column.name) for column in columns] + [row.get_cell_value("form_json")]
+        for row in table.rows
+    ]
     base_headers = [force_str(column.header, strings_only=True) for column in columns]
     return get_flattened_dataset(base_headers, base_data)
 
@@ -45,7 +49,7 @@ def get_flattened_dataset(headers: list[str], data: list[list]) -> Dataset:
         schema.update(flat_json.keys())
 
     schema = sorted(schema, key=_schema_sort)
-    headers = headers[:-1] + schema
+    headers = headers + schema
     dataset = Dataset(title="Export", headers=headers)
 
     for row, flat_json in zip(data, flat_data):
@@ -60,11 +64,11 @@ def _schema_sort(item):
 
 
 def export_empty_payment_table(opportunity: Opportunity) -> Dataset:
-    headers = ["Phone Number", "Name", "Payment Amount"]
+    headers = ["Username", "Phone Number", "Name", "Payment Amount"]
     dataset = Dataset(title="Export", headers=headers)
 
     access_objects = OpportunityAccess.objects.filter(opportunity=opportunity).select_related("user")
     for access in access_objects:
-        row = (access.user.phone_number, access.user.name, "")
+        row = (access.user.username, access.user.phone_number, access.user.name, "")
         dataset.append(row)
     return dataset
