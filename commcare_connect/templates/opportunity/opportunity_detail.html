@@ -114,27 +114,64 @@
         </tr>
         </tbody>
       </table>
-      <h4>Learn App Modules</h4>
-
-      <table class="table border table-custom">
-        <thead class="table-light">
-        <tr>
-          <th>Name</th>
-          <th>Description</th>
-          <th>Time Estimate</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for module in object.learn_app.learn_modules.all %}
-          <tr>
-            <td>{{ module.name }}</td>
-            <td>{{ module.description }}</td>
-            <td>{{ module.time_estimate }} hour{{ module.time_estimate|pluralize:",s" }}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      <hr/>
+      <div class="accordion" id="accordionExample">
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="headingOne">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#learn-app-modules" aria-expanded="true" aria-controls="collapseOne">
+              Learn App Modules
+            </button>
+          </h2>
+          <div id="learn-app-modules" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
+            <div class="accordion-body p-0 m-0">
+              <table class="table table-borderless table-custom">
+                <thead class="table-light">
+                <tr>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th>Time Estimate</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for module in object.learn_app.learn_modules.all %}
+                  <tr>
+                    <td>{{ module.name }}</td>
+                    <td>{{ module.description }}</td>
+                    <td>{{ module.time_estimate }} hour{{ module.time_estimate|pluralize:",s" }}</td>
+                  </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="headingTwo">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#deliver-units" aria-expanded="false" aria-controls="collapseTwo">
+              Deliver Units
+            </button>
+          </h2>
+          <div id="deliver-units" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#accordionExample">
+            <div class="accordion-body p-0 m-0">
+              <table class="table table-borderless table-custom">
+                <thead class="table-light">
+                <tr>
+                  <th>Name</th>
+                  <th>ID</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for unit in object.deliver_app.deliver_units.all %}
+                  <tr>
+                    <td>{{ unit.name }}</td>
+                    <td>{{ unit.slug }}</td>
+                  </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="pt-2 px-4">
@@ -179,7 +216,7 @@
         <div class="tab-pane fade" id="payment-tab-pane" role="tabpanel" aria-labelledby="payment-tab" tabindex="0">
           <div hx-get="{% url "opportunity:payment_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
                hx-trigger="load" hx-swap="outerHTML">
-            {% include "tables/table_placeholder.html" with num_cols=2 %}
+            {% include "tables/table_placeholder.html" with num_cols=4 %}
           </div>
         </div>
         <div class="tab-pane fade" id="user-status-tab-pane" role="tabpanel" aria-labelledby="user-status-tab" tabindex="0">
@@ -234,7 +271,7 @@
         <div class="modal-body">
           <div class="mb-3">
             {% csrf_token %}
-            <input class="form-control" type="file" id="importFile" name="visits">
+            <input class="form-control" type="file" id="importFile" name="visits" required>
             <div class="col-auto">
               <span id="importFileHelp" class="form-text">
                 {% blocktrans %}
@@ -295,7 +332,7 @@
             <div class="col-auto">
               <span id="importFileHelp" class="form-text">
                 {% blocktrans %}
-                  The file must contain at least the "Phone Number" and "Amount" column.
+                  The file must contain at least the "Username" and "Amount" column.
                 {% endblocktrans %}
               </span>
             </div>
