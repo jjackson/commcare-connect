@@ -1,3 +1,6 @@
+import datetime
+
+from django.db.models import Count, Q, Sum
 from jsonpath_ng import JSONPathError
 from jsonpath_ng.ext import parse
 
@@ -11,7 +14,9 @@ from commcare_connect.opportunity.models import (
     DeliverUnit,
     LearnModule,
     Opportunity,
+    OpportunityClaim,
     UserVisit,
+    VisitValidationStatus,
 )
 from commcare_connect.users.models import User
 
@@ -133,7 +138,13 @@ def process_deliver_form(user, xform: XForm, app: CommCareApp, opportunity: Oppo
 
 def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, deliver_unit_block: dict):
     deliver_unit = get_or_create_deliver_unit(app, deliver_unit_block)
-    UserVisit.objects.create(
+    counts = UserVisit.objects.filter(opportunity=opportunity, user=user).aggregate(
+        daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)), total=Sum("pk", default=0)
+    )
+    claim = OpportunityClaim.objects.filter(
+        opportunity_access__opportunity=opportunity, opportunity_access__user=user
+    ).first()
+    user_visit = UserVisit(
         opportunity=opportunity,
         user=user,
         deliver_unit=deliver_unit,
@@ -145,6 +156,13 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         app_build_version=xform.metadata.app_build_version,
         form_json=xform.raw_form,
     )
+    if (
+        counts["daily"] >= opportunity.daily_max_visits_per_user
+        or counts["total"] >= claim.max_payments
+        or datetime.date.today() > claim.end_date
+    ):
+        user_visit.status = VisitValidationStatus.over_limit
+    user_visit.save()
 
 
 def get_or_create_deliver_unit(app, unit_data):
