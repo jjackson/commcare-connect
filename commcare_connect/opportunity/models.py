@@ -165,7 +165,7 @@ class OpportunityAccess(models.Model):
 class PaymentUnit(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
     amount = models.PositiveIntegerField()
-    name = models.CharField()
+    name = models.CharField(max_length=255)
     description = models.TextField()
 
 
