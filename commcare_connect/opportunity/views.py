@@ -333,12 +333,13 @@ def add_payment_unit(request, org_slug=None, pk=None):
             DeliverUnit.objects.filter(id__in=deliver_units, payment_unit__isnull=True).update(
                 payment_unit=form.instance.id
             )
+            messages.success(request, f"Payment unit {form.instance.name} created.")
             return redirect("opportunity:detail", org_slug=request.org.slug, pk=opportunity.id)
 
     return render(
         request,
         "form.html",
-        dict(title=f"{request.org.slug} - Payment Unit", form_title="Payment Unit Create", form=form),
+        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Payment Unit Create", form=form),
     )
 
 
@@ -359,14 +360,13 @@ def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
             # Remove deliver units which are not selected anymore
             removed_deliver_units = payment_unit_deliver_units - {int(deliver_unit) for deliver_unit in deliver_units}
             DeliverUnit.objects.filter(id__in=removed_deliver_units).update(payment_unit=None)
-            return redirect(
-                "opportunity:edit_payment_unit", org_slug=request.org.slug, opp_id=opportunity.id, pk=form.instance.id
-            )
+            messages.success(request, f"Payment unit {form.instance.name} updated.")
+            return redirect("opportunity:detail", org_slug=request.org.slug, pk=opportunity.id)
 
     return render(
         request,
         "form.html",
-        dict(title=f"{request.org.slug} - Payment Unit", form_title="Payment Unit Edit", form=form),
+        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Payment Unit Edit", form=form),
     )
 
 
