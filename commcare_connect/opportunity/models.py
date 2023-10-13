@@ -67,13 +67,32 @@ class Opportunity(BaseModel):
 
     @property
     def remaining_budget(self) -> int:
+        return self.total_budget - self.claimed_budget
+
+    @property
+    def claimed_budget(self):
+        return self.claimed_visits * self.budget_per_visit
+
+    @property
+    def utilised_budget(self):
+        return self.approved_visits * self.budget_per_visit
+
+    @property
+    def claimed_visits(self):
         opp_access = OpportunityAccess.objects.filter(opportunity=self)
         used_budget = OpportunityClaim.objects.filter(opportunity_access__in=opp_access).aggregate(
             Sum("max_payments")
         )["max_payments__sum"]
         if used_budget is None:
             used_budget = 0
-        return self.total_budget - used_budget
+        return used_budget
+
+    @property
+    def approved_visits(self):
+        approved_user_visits = UserVisit.objects.filter(
+            opportunity=self, status=VisitValidationStatus.approved
+        ).count()
+        return approved_user_visits
 
 
 class LearnModule(models.Model):
@@ -142,19 +161,27 @@ class OpportunityAccess(models.Model):
     def learn_progress(self):
         learn_modules = LearnModule.objects.filter(app=self.opportunity.learn_app)
         completed_modules = CompletedModule.objects.filter(
-            opportunity=self.opportunity, module__in=learn_modules
+            opportunity=self.opportunity, module__in=learn_modules, user=self.user
         ).count()
         percentage = (completed_modules / learn_modules.count()) * 100
         return round(percentage, 2)
 
     @property
     def visit_count(self):
-        user_visits = UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity).order_by("visit_date")
+        user_visits = (
+            UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
+            .exclude(status=VisitValidationStatus.over_limit)
+            .order_by("visit_date")
+        )
         return user_visits.count()
 
     @property
     def last_visit_date(self):
-        user_visits = UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity).order_by("visit_date")
+        user_visits = (
+            UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
+            .exclude(status=VisitValidationStatus.over_limit)
+            .order_by("visit_date")
+        )
 
         if user_visits.exists():
             return user_visits.first().visit_date
@@ -193,6 +220,7 @@ class VisitValidationStatus(models.TextChoices):
     pending = "pending", gettext("Pending")
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
+    over_limit = "over_limit", gettext("Over Limit")
 
 
 class Payment(models.Model):

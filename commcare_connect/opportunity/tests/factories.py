@@ -41,7 +41,7 @@ class OpportunityFactory(DjangoModelFactory):
     max_visits_per_user = Faker("pyint", min_value=1, max_value=100)
     daily_max_visits_per_user = Faker("pyint", min_value=1, max_value=SelfAttribute("..max_visits_per_user"))
     end_date = Faker("date")
-    budget_per_visit = Faker("pyint", min_value=100, max_value=1000)
+    budget_per_visit = Faker("pyint", min_value=1, max_value=10)
     total_budget = Faker("pyint", min_value=1000, max_value=10000)
 
     class Meta:
@@ -88,3 +88,24 @@ class OpportunityAccessFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.OpportunityAccess"
+
+
+class OpportunityClaimFactory(DjangoModelFactory):
+    opportunity_access = SubFactory(OpportunityAccessFactory)
+    max_payments = Faker("pyint", min_value=1, max_value=100)
+    end_date = Faker("date")
+    date_claimed = Faker("date")
+
+    class Meta:
+        model = "opportunity.OpportunityClaim"
+
+
+class CompletedModuleFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    user = SubFactory("commcare_connect.users.tests.factories.UserFactory")
+    date = Faker("date")
+    module = SubFactory(LearnModuleFactory, app=SelfAttribute("..opportunity.learn_app"))
+    duration = Faker("time_delta")
+
+    class Meta:
+        model = "opportunity.CompletedModule"

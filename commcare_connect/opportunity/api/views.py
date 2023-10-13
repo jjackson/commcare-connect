@@ -19,6 +19,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     OpportunityClaim,
     UserVisit,
+    VisitValidationStatus,
 )
 from commcare_connect.users.helpers import create_hq_user
 from commcare_connect.users.models import ConnectIDUserLink
@@ -54,7 +55,10 @@ class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return UserVisit.objects.filter(opportunity=self.kwargs.get("opportunity_id"), user=self.request.user)
+        return UserVisit.objects.filter(
+            opportunity=self.kwargs.get("opportunity_id"),
+            user=self.request.user,
+        ).exclude(status=VisitValidationStatus.over_limit)
 
 
 class DeliveryProgressView(RetrieveAPIView):
