@@ -6,6 +6,7 @@ from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
+from commcare_connect.utils.currency_codes import CurrencyChoices
 from commcare_connect.utils.db import BaseModel
 
 
@@ -61,6 +62,7 @@ class Opportunity(BaseModel):
     budget_per_visit = models.IntegerField(null=True)
     total_budget = models.IntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
+    currency = models.CharField(max_length=3, choices=CurrencyChoices.choices, default=CurrencyChoices.USD)
 
     def __str__(self):
         return self.name
@@ -151,6 +153,7 @@ class OpportunityAccess(models.Model):
     date_learn_started = models.DateTimeField(null=True)
     accepted = models.BooleanField(default=False)
     invite_id = models.CharField(max_length=50, default=uuid4)
+    payment_accrued = models.PositiveIntegerField(default=0)
 
     class Meta:
         indexes = [models.Index(fields=["invite_id"])]
