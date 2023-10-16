@@ -69,6 +69,7 @@ class OpportunityCreationForm(forms.ModelForm):
             "daily_max_visits_per_user",
             "budget_per_visit",
             "total_budget",
+            "currency",
         ]
         widgets = {
             "end_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
@@ -90,8 +91,9 @@ class OpportunityCreationForm(forms.ModelForm):
                 Field("daily_max_visits_per_user", wrapper_class="form-group col-md-6 mb-0"),
             ),
             Row(
-                Field("total_budget", wrapper_class="form-group col-md-6 mb-0"),
-                Field("budget_per_visit", wrapper_class="form-group col-md-6 mb-0"),
+                Field("currency", wrapper_class="form-group col-md-2 mb-0"),
+                Field("total_budget", wrapper_class="form-group col-md-5 mb-0"),
+                Field("budget_per_visit", wrapper_class="form-group col-md-5 mb-0"),
             ),
             Row(Field("learn_app")),
             Row(Field("learn_app_description")),
