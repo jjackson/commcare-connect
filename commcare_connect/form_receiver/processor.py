@@ -1,6 +1,6 @@
 import datetime
 
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Q
 from jsonpath_ng import JSONPathError
 from jsonpath_ng.ext import parse
 
@@ -139,7 +139,7 @@ def process_deliver_form(user, xform: XForm, app: CommCareApp, opportunity: Oppo
 def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, deliver_unit_block: dict):
     deliver_unit = get_or_create_deliver_unit(app, deliver_unit_block)
     counts = UserVisit.objects.filter(opportunity=opportunity, user=user).aggregate(
-        daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)), total=Sum("pk", default=0)
+        daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)), total=Count("*")
     )
     claim = OpportunityClaim.objects.filter(
         opportunity_access__opportunity=opportunity, opportunity_access__user=user
