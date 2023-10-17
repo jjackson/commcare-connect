@@ -185,11 +185,13 @@ class OpportunityAccess(models.Model):
             .exclude(status=VisitValidationStatus.over_limit)
             .order_by("visit_date")
         )
-
         if user_visits.exists():
             return user_visits.first().visit_date
-
         return
+
+    @property
+    def total_paid(self):
+        return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0)
 
 
 class PaymentUnit(models.Model):

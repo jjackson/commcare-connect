@@ -29,7 +29,6 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
-    Payment,
     PaymentUnit,
     UserVisit,
 )
@@ -151,7 +150,7 @@ class OpportunityUserVisitTableView(OrganizationUserMixin, SingleTableView):
 
 
 class OpportunityPaymentTableView(OrganizationUserMixin, SingleTableView):
-    model = Payment
+    model = OpportunityAccess
     paginate_by = 25
     table_class = PaymentTable
     template_name = "tables/single_table.html"
@@ -159,7 +158,7 @@ class OpportunityPaymentTableView(OrganizationUserMixin, SingleTableView):
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        return Payment.objects.filter(opportunity_access__opportunity=opportunity).order_by("date_paid")
+        return OpportunityAccess.objects.filter(opportunity=opportunity)
 
 
 class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):

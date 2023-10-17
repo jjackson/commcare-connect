@@ -1,7 +1,7 @@
 from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
 
-from commcare_connect.opportunity.models import OpportunityAccess, Payment, PaymentUnit, UserVisit
+from commcare_connect.opportunity.models import OpportunityAccess, PaymentUnit, UserVisit
 
 
 class OpportunityAccessTable(tables.Table):
@@ -51,8 +51,8 @@ class UserVisitTable(tables.Table):
 
 class PaymentTable(tables.Table):
     class Meta:
-        model = Payment
-        fields = ("opportunity_access.user.name", "opportunity_access.user.username", "amount", "date_paid")
+        model = OpportunityAccess
+        fields = ("user.name", "user.username", "payment_accrued", "total_paid")
         orderable = False
         empty_text = "No payments"
 
@@ -60,7 +60,7 @@ class PaymentTable(tables.Table):
 class UserStatusTable(tables.Table):
     class Meta:
         model = OpportunityAccess
-        fields = ("user.username", "accepted")
+        fields = ("user.username", "accepted", "payment_accrued", "total_paid")
         empty_text = "No users invited for this opportunity."
         orderable = False
 
