@@ -14,7 +14,7 @@ class OpportunityAccessTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user.username", "learn_progress")
+        fields = ("user.name", "user.username", "learn_progress")
         orderable = False
         empty_text = "No learn progress for users."
 
@@ -59,6 +59,6 @@ class PaymentTable(tables.Table):
 class UserStatusTable(tables.Table):
     class Meta:
         model = OpportunityAccess
-        fields = ("user.username", "accepted")
+        fields = ("user.name", "user.username", "accepted")
         empty_text = "No users invited for this opportunity."
         orderable = False
