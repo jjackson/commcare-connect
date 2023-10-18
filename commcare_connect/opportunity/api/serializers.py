@@ -117,7 +117,7 @@ class UserVisitSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserVisit
-        fields = ["id", "status", "visit_date", "deliver_unit_name", "deliver_unit_slug"]
+        fields = ["id", "status", "visit_date", "deliver_unit_name", "deliver_unit_slug", "entity_id", "entity_name"]
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -129,6 +129,8 @@ class PaymentSerializer(serializers.ModelSerializer):
 class DeliveryProgressSerializer(serializers.Serializer):
     deliveries = serializers.SerializerMethodField()
     payments = serializers.SerializerMethodField()
+    max_payments = serializers.IntegerField(source="opportunityclaim.max_payments")
+    payment_accrued = serializers.IntegerField()
 
     def get_payments(self, obj):
         return PaymentSerializer(obj.payment_set.all(), many=True).data
