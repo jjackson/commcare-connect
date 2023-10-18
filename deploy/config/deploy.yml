@@ -22,7 +22,7 @@ servers:
 healthcheck:
   path: /
   port: 8000
-  max_attempts: 10
+  max_attempts: 20
   interval: 20s
 
 ssh:
