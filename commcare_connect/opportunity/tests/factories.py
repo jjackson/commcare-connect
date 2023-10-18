@@ -59,10 +59,21 @@ class LearnModuleFactory(DjangoModelFactory):
         model = "opportunity.LearnModule"
 
 
+class PaymentUnitFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    name = Faker("name")
+    description = Faker("text")
+    amount = Faker("pyint", min_value=1, max_value=10)
+
+    class Meta:
+        model = "opportunity.PaymentUnit"
+
+
 class DeliverUnitFactory(DjangoModelFactory):
     app = SubFactory(CommCareAppFactory)
     slug = Faker("pystr")
     name = Faker("name")
+    payment_unit = SubFactory(PaymentUnitFactory)
 
     class Meta:
         model = "opportunity.DeliverUnit"
@@ -84,7 +95,7 @@ class UserVisitFactory(DjangoModelFactory):
 
 class OpportunityAccessFactory(DjangoModelFactory):
     opportunity = SubFactory(OpportunityFactory)
-    user = SubFactory("commcare_connect.users.tests.factories.UserFactory")
+    user = SubFactory("commcare_connect.users.tests.factories.MobileUserFactory")
 
     class Meta:
         model = "opportunity.OpportunityAccess"

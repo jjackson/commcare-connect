@@ -61,6 +61,7 @@ class Opportunity(BaseModel):
     budget_per_visit = models.IntegerField(null=True)
     total_budget = models.IntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
+    currency = models.CharField(max_length=3, null=True)
 
     def __str__(self):
         return self.name
@@ -151,6 +152,7 @@ class OpportunityAccess(models.Model):
     date_learn_started = models.DateTimeField(null=True)
     accepted = models.BooleanField(default=False)
     invite_id = models.CharField(max_length=50, default=uuid4)
+    payment_accrued = models.PositiveIntegerField(default=0)
 
     class Meta:
         indexes = [models.Index(fields=["invite_id"])]
@@ -182,11 +184,13 @@ class OpportunityAccess(models.Model):
             .exclude(status=VisitValidationStatus.over_limit)
             .order_by("visit_date")
         )
-
         if user_visits.exists():
             return user_visits.first().visit_date
-
         return
+
+    @property
+    def total_paid(self):
+        return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0)
 
 
 class PaymentUnit(models.Model):
