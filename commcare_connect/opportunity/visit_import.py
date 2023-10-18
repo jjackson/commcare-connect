@@ -107,9 +107,7 @@ def update_payment_accrued(opportunity: Opportunity, users):
             payment_unit_deliver_units = {deliver_unit.id for deliver_unit in payment_unit.deliver_units.all()}
             for entity_id, visits in itertools.groupby(user_visits, key=lambda x: x.entity_id):
                 deliver_units = {v.deliver_unit.id for v in visits}
-                if payment_unit_deliver_units.issubset(deliver_units) or deliver_units.issubset(
-                    payment_unit_deliver_units
-                ):
+                if payment_unit_deliver_units.issubset(deliver_units):
                     payment_accrued += payment_unit.amount
         access.payment_accrued = payment_accrued
         access.save()
