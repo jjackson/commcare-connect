@@ -1,4 +1,5 @@
 import codecs
+import itertools
 import mimetypes
 import textwrap
 from dataclasses import dataclass
@@ -79,7 +80,8 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
     with transaction.atomic():
         for visit_batch in batched(visit_ids, 100):
             to_update = []
-            for visit in UserVisit.objects.filter(xform_id__in=visit_batch, opportunity=opportunity):
+            visits = UserVisit.objects.filter(xform_id__in=visit_batch, opportunity=opportunity)
+            for visit in visits:
                 seen_visits.add(visit.xform_id)
                 status = status_by_visit_id[visit.xform_id]
                 if visit.status != status:
@@ -88,8 +90,27 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
 
             UserVisit.objects.bulk_update(to_update, fields=["status"])
             missing_visits |= set(visit_batch) - seen_visits
+            update_payment_accrued(opportunity, users={visit.user_id for visit in visits})
 
     return VisitImportStatus(seen_visits, missing_visits)
+
+
+def update_payment_accrued(opportunity: Opportunity, users):
+    payment_units = opportunity.paymentunit_set.all()
+    for user in users:
+        user_visits = UserVisit.objects.filter(
+            opportunity=opportunity, user=user, status=VisitValidationStatus.approved
+        ).order_by("entity_id")
+        access = OpportunityAccess.objects.get(user=user, opportunity=opportunity)
+        payment_accrued = 0
+        for payment_unit in payment_units:
+            payment_unit_deliver_units = {deliver_unit.id for deliver_unit in payment_unit.deliver_units.all()}
+            for entity_id, visits in itertools.groupby(user_visits, key=lambda x: x.entity_id):
+                deliver_units = {v.deliver_unit.id for v in visits}
+                if payment_unit_deliver_units.issubset(deliver_units):
+                    payment_accrued += payment_unit.amount
+        access.payment_accrued = payment_accrued
+        access.save()
 
 
 def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:

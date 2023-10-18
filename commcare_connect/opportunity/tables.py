@@ -49,12 +49,29 @@ class UserVisitTable(tables.Table):
         orderable = False
 
 
-class PaymentTable(tables.Table):
+class OpportunityPaymentTable(tables.Table):
+    view_payments = columns.LinkColumn(
+        "opportunity:user_payments_table",
+        verbose_name="",
+        text="View Details",
+        args=[utils.A("opportunity.organization.slug"), utils.A("opportunity.id"), utils.A("pk")],
+    )
+
+    class Meta:
+        model = OpportunityAccess
+        fields = ("user.name", "user.username", "payment_accrued", "total_paid")
+        orderable = False
+        empty_text = "No user have payments accrued yet."
+
+
+class UserPaymentsTable(tables.Table):
+    payment_unit_name = columns.Column("Payment Unit Name", accessor="payment_unit.name")
+
     class Meta:
         model = Payment
-        fields = ("opportunity_access.user.name", "opportunity_access.user.username", "amount", "date_paid")
+        fields = ("amount", "date_paid")
         orderable = False
-        empty_text = "No payments"
+        empty_text = "No payments made for this user"
 
 
 class UserStatusTable(tables.Table):
