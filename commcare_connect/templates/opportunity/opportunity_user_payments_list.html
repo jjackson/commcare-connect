@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ request.org }} - Opportunities{% endblock %}
+
+{% block content %}
+  <div class="container">
+    <div class="my-2">
+      <h3 class="display-6">Payments for User {{ object_list.0.opportunity_access.user.name }}</h3>
+      {% load django_tables2 %}
+      {% render_table table %}
+    </div>
+  </div>
+{% endblock content %}
