@@ -158,7 +158,9 @@ class OpportunityPaymentTableView(OrganizationUserMixin, SingleTableView):
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        return OpportunityAccess.objects.filter(opportunity=opportunity)
+        return OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0).order_by(
+            "payment_accrued"
+        )
 
 
 class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
