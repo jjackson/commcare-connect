@@ -81,7 +81,7 @@ class ClaimOpportunityView(APIView):
         if opportunity.end_date < datetime.date.today():
             return Response(status=200, data="Opportunity cannot be claimed. (End date reached)")
 
-        max_payments = min(opportunity.remaining_budget, opportunity.daily_max_visits_per_user)
+        max_payments = min(opportunity.remaining_budget, opportunity.max_visits_per_user)
         claim, created = OpportunityClaim.objects.get_or_create(
             opportunity_access=opportunity_access,
             defaults={
