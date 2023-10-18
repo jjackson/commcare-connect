@@ -29,6 +29,7 @@ class TestOpportunityCreationForm:
             "deliver_app": self.deliver_app["id"],
             "deliver_form": deliver_form["id"],
             "api_key": FuzzyText(length=36).fuzz(),
+            "currency": FuzzyText(length=3).fuzz(),
         }
 
     def test_with_correct_data(self):
