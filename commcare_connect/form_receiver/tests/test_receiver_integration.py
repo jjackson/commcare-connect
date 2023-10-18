@@ -23,15 +23,9 @@ from commcare_connect.opportunity.tests.factories import (
     LearnModuleFactory,
     OpportunityAccessFactory,
     OpportunityClaimFactory,
-    OpportunityFactory,
 )
 from commcare_connect.users.models import ConnectIDUserLink, User
 from commcare_connect.users.tests.factories import MobileUserFactory
-
-
-@pytest.fixture()
-def opportunity():
-    return OpportunityFactory()
 
 
 @pytest.fixture

@@ -1,6 +1,7 @@
 import pytest
 from rest_framework.test import APIClient, APIRequestFactory
 
+from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, OpportunityFactory
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import (
@@ -38,9 +39,16 @@ def user(db) -> User:
     return UserFactory()
 
 
+@pytest.fixture()
+def opportunity():
+    return OpportunityFactory()
+
+
 @pytest.fixture
-def mobile_user(db) -> User:
-    return MobileUserFactory()
+def mobile_user(db, opportunity) -> User:
+    user = MobileUserFactory()
+    OpportunityAccessFactory(user=user, opportunity=opportunity)
+    return user
 
 
 @pytest.fixture
