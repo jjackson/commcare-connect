@@ -115,7 +115,7 @@
             </tr>
             <tr>
               <th scope="row">Total Budget</th>
-              <td>{{ object.total_budget }} {{ object.currency }}</td>
+              <td>{{ object.total_budget }} {{ object.currency|default_if_none:"" }}</td>
             </tr>
             </tbody>
           </table>
@@ -125,15 +125,15 @@
             <tbody>
             <tr>
               <th scope="row">Budget per visit</th>
-              <td>{{ object.budget_per_visit }} {{ object.currency }}</td>
+              <td>{{ object.budget_per_visit }} {{ object.currency|default_if_none:"" }}</td>
             </tr>
             <tr>
               <th scope="row">Claimed Budget</th>
-              <td>{{ object.claimed_budget }} {{ object.currency }}</td>
+              <td>{{ object.claimed_budget }} {{ object.currency|default_if_none:"" }}</td>
             </tr>
             <tr>
               <th scope="row">Utilised Budget</th>
-              <td>{{ object.utilised_budget }} {{ object.currency }}</td>
+              <td>{{ object.utilised_budget }} {{ object.currency|default_if_none:"" }}</td>
             </tr>
             <tr>
               <th scope="row">Claimed Visits</th>
