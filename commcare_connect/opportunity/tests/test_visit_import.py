@@ -4,12 +4,7 @@ import pytest
 from tablib import Dataset
 
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, UserVisit, VisitValidationStatus
-from commcare_connect.opportunity.tests.factories import (
-    DeliverUnitFactory,
-    OpportunityFactory,
-    PaymentUnitFactory,
-    UserVisitFactory,
-)
+from commcare_connect.opportunity.tests.factories import DeliverUnitFactory, PaymentUnitFactory, UserVisitFactory
 from commcare_connect.opportunity.visit_import import (
     ImportException,
     _bulk_update_visit_status,
@@ -20,9 +15,10 @@ from commcare_connect.users.models import User
 
 
 @pytest.mark.django_db
-def test_bulk_update_visit_status():
-    opportunity = OpportunityFactory()
-    visits = UserVisitFactory.create_batch(5, opportunity=opportunity, status=VisitValidationStatus.pending.value)
+def test_bulk_update_visit_status(opportunity: Opportunity, mobile_user: User):
+    visits = UserVisitFactory.create_batch(
+        5, opportunity=opportunity, status=VisitValidationStatus.pending.value, user=mobile_user
+    )
     dataset = Dataset(headers=["visit id", "status"])
     dataset.extend([[visit.xform_id, VisitValidationStatus.approved.value] for visit in visits])
 
