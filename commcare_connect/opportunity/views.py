@@ -29,13 +29,15 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    Payment,
     PaymentUnit,
     UserVisit,
 )
 from commcare_connect.opportunity.tables import (
     OpportunityAccessTable,
-    PaymentTable,
+    OpportunityPaymentTable,
     PaymentUnitTable,
+    UserPaymentsTable,
     UserStatusTable,
     UserVisitTable,
 )
@@ -152,7 +154,7 @@ class OpportunityUserVisitTableView(OrganizationUserMixin, SingleTableView):
 class OpportunityPaymentTableView(OrganizationUserMixin, SingleTableView):
     model = OpportunityAccess
     paginate_by = 25
-    table_class = PaymentTable
+    table_class = OpportunityPaymentTable
     template_name = "tables/single_table.html"
 
     def get_queryset(self):
@@ -161,6 +163,20 @@ class OpportunityPaymentTableView(OrganizationUserMixin, SingleTableView):
         return OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0).order_by(
             "payment_accrued"
         )
+
+
+class UserPaymentsTableView(OrganizationUserMixin, SingleTableView):
+    model = Payment
+    paginate_by = 25
+    table_class = UserPaymentsTable
+    template_name = "opportunity/opportunity_user_payments_list.html"
+
+    def get_queryset(self):
+        opportunity_id = self.kwargs["opp_id"]
+        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        access_id = self.kwargs["pk"]
+        access = get_object_or_404(OpportunityAccess, opportunity=opportunity, pk=access_id)
+        return Payment.objects.filter(opportunity_access=access)
 
 
 class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
