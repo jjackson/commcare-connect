@@ -130,7 +130,7 @@ class DeliveryProgressSerializer(serializers.Serializer):
     deliveries = serializers.SerializerMethodField()
     payments = serializers.SerializerMethodField()
     max_payments = serializers.IntegerField(source="opportunityclaim.max_payments")
-    payment_accrued = serializers.IntegerField(source="payment_accrued")
+    payment_accrued = serializers.IntegerField()
 
     def get_payments(self, obj):
         return PaymentSerializer(obj.payment_set.all(), many=True).data
