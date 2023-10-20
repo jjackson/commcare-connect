@@ -72,6 +72,7 @@ class UserPaymentsTable(tables.Table):
         fields = ("amount", "date_paid")
         orderable = False
         empty_text = "No payments made for this user"
+        template_name = "django_tables2/bootstrap5.html"
 
 
 class UserStatusTable(tables.Table):
