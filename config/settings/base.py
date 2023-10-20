@@ -290,7 +290,7 @@ CACHES = {
     }
 }
 
-DJANGO_TABLES2_TEMPLATE = "django_tables2/bootstrap5.html"
+DJANGO_TABLES2_TEMPLATE = "tables/tabbed_table.html"
 DJANGO_TABLES2_TABLE_ATTRS = {
     "class": "table border table-custom",
     "thead": {
