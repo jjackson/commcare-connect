@@ -11,6 +11,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     Payment,
     UserVisit,
+    VisitValidationStatus,
 )
 
 
@@ -131,10 +132,13 @@ class DeliveryProgressSerializer(serializers.Serializer):
     payments = serializers.SerializerMethodField()
     max_payments = serializers.IntegerField(source="opportunityclaim.max_payments")
     payment_accrued = serializers.IntegerField()
+    end_date = serializers.DateField(source="opportunityclaim.end_date")
 
     def get_payments(self, obj):
         return PaymentSerializer(obj.payment_set.all(), many=True).data
 
     def get_deliveries(self, obj):
-        deliveries = UserVisit.objects.filter(opportunity=obj.opportunity, user=obj.user)
+        deliveries = UserVisit.objects.filter(opportunity=obj.opportunity, user=obj.user).exclude(
+            status=VisitValidationStatus.over_limit
+        )
         return UserVisitSerializer(deliveries, many=True).data
