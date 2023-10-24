@@ -1,9 +1,8 @@
-import requests
-from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.utils.timezone import now
 
+from commcare_connect.connect_id_client import fetch_users
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
 from commcare_connect.opportunity.export import export_empty_payment_table, export_user_visit_data
 from commcare_connect.opportunity.forms import DateRanges
@@ -44,15 +43,9 @@ def create_learn_modules_and_deliver_units(opportunity_id):
 
 @celery_app.task()
 def add_connect_users(user_list: list[str], opportunity_id: str):
-    result = requests.get(
-        f"{settings.CONNECTID_URL}/users/fetch_users",
-        auth=(settings.CONNECTID_CLIENT_ID, settings.CONNECTID_CLIENT_SECRET),
-        params={"phone_numbers": user_list},
-    )
-    data = result.json()
-    for user in data["found_users"]:
+    for user in fetch_users(user_list):
         u, _ = User.objects.update_or_create(
-            username=user["username"], defaults={"phone_number": user["phone_number"], "name": user["name"]}
+            username=user.username, defaults={"phone_number": user.phone_number, "name": user.name}
         )
         opportunity_access, _ = OpportunityAccess.objects.get_or_create(user=u, opportunity_id=opportunity_id)
         invite_user(u, opportunity_access)
