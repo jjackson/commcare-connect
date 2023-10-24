@@ -1,7 +1,7 @@
 import datetime
 
 from rest_framework import viewsets
-from rest_framework.generics import ListAPIView, RetrieveAPIView, get_object_or_404
+from rest_framework.generics import RetrieveAPIView, get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,11 +13,13 @@ from commcare_connect.opportunity.api.serializers import (
     UserVisitSerializer,
 )
 from commcare_connect.opportunity.models import (
+    Assessment,
     CompletedModule,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
     UserVisit,
+    VisitValidationStatus,
 )
 from commcare_connect.users.helpers import create_hq_user
 from commcare_connect.users.models import ConnectIDUserLink
@@ -31,15 +33,21 @@ class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
         return Opportunity.objects.filter(opportunityaccess__user=self.request.user)
 
 
-class UserLearnProgressView(ListAPIView):
+class UserLearnProgressView(RetrieveAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = UserLearnProgressSerializer
 
-    def get_queryset(self):
+    def get_object(self):
         opportunity_access = get_object_or_404(
             OpportunityAccess, user=self.request.user, opportunity=self.kwargs.get("pk")
         )
-        return CompletedModule.objects.filter(user=self.request.user, opportunity=opportunity_access.opportunity)
+        return dict(
+            completed_modules=CompletedModule.objects.filter(
+                user=self.request.user,
+                opportunity=opportunity_access.opportunity,
+            ),
+            assessments=Assessment.objects.filter(user=self.request.user, opportunity=opportunity_access.opportunity),
+        )
 
 
 class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
@@ -47,7 +55,10 @@ class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return UserVisit.objects.filter(opportunity=self.kwargs.get("opportunity_id"), user=self.request.user)
+        return UserVisit.objects.filter(
+            opportunity=self.kwargs.get("opportunity_id"),
+            user=self.request.user,
+        ).exclude(status=VisitValidationStatus.over_limit)
 
 
 class DeliveryProgressView(RetrieveAPIView):
@@ -70,7 +81,7 @@ class ClaimOpportunityView(APIView):
         if opportunity.end_date < datetime.date.today():
             return Response(status=200, data="Opportunity cannot be claimed. (End date reached)")
 
-        max_payments = min(opportunity.remaining_budget, opportunity.daily_max_visits_per_user)
+        max_payments = min(opportunity.remaining_budget, opportunity.max_visits_per_user)
         claim, created = OpportunityClaim.objects.get_or_create(
             opportunity_access=opportunity_access,
             defaults={

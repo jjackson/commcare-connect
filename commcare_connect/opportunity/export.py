@@ -64,11 +64,11 @@ def _schema_sort(item):
 
 
 def export_empty_payment_table(opportunity: Opportunity) -> Dataset:
-    headers = ["Phone Number", "Name", "Payment Amount"]
+    headers = ["Username", "Phone Number", "Name", "Payment Amount"]
     dataset = Dataset(title="Export", headers=headers)
 
     access_objects = OpportunityAccess.objects.filter(opportunity=opportunity).select_related("user")
     for access in access_objects:
-        row = (access.user.phone_number, access.user.name, "")
+        row = (access.user.username, access.user.phone_number, access.user.name, "")
         dataset.append(row)
     return dataset
