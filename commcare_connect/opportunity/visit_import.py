@@ -1,4 +1,5 @@
 import codecs
+import itertools
 import mimetypes
 import textwrap
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ from commcare_connect.utils.itertools import batched
 
 VISIT_ID_COL = "visit id"
 STATUS_COL = "status"
-PHONE_COL = "phone number"
+USERNAME_COL = "username"
 AMOUNT_COL = "payment amount"
 REQUIRED_COLS = [VISIT_ID_COL, STATUS_COL]
 
@@ -54,7 +55,7 @@ class PaymentImportStatus:
     def get_missing_message(self):
         joined = ", ".join(self.missing_visits)
         missing = textwrap.wrap(joined, width=115, break_long_words=False, break_on_hyphens=False)
-        return f"<br>{len(self.missing_users)} phone numbers were not found:<br>{'<br>'.join(missing)}"
+        return f"<br>{len(self.missing_users)} usernames were not found:<br>{'<br>'.join(missing)}"
 
 
 def bulk_update_visit_status(opportunity: Opportunity, file: UploadedFile) -> VisitImportStatus:
@@ -79,7 +80,8 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
     with transaction.atomic():
         for visit_batch in batched(visit_ids, 100):
             to_update = []
-            for visit in UserVisit.objects.filter(xform_id__in=visit_batch, opportunity=opportunity):
+            visits = UserVisit.objects.filter(xform_id__in=visit_batch, opportunity=opportunity)
+            for visit in visits:
                 seen_visits.add(visit.xform_id)
                 status = status_by_visit_id[visit.xform_id]
                 if visit.status != status:
@@ -88,8 +90,27 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
 
             UserVisit.objects.bulk_update(to_update, fields=["status"])
             missing_visits |= set(visit_batch) - seen_visits
+            update_payment_accrued(opportunity, users={visit.user_id for visit in visits})
 
     return VisitImportStatus(seen_visits, missing_visits)
+
+
+def update_payment_accrued(opportunity: Opportunity, users):
+    payment_units = opportunity.paymentunit_set.all()
+    for user in users:
+        user_visits = UserVisit.objects.filter(
+            opportunity=opportunity, user=user, status=VisitValidationStatus.approved
+        ).order_by("entity_id")
+        access = OpportunityAccess.objects.get(user=user, opportunity=opportunity)
+        payment_accrued = 0
+        for payment_unit in payment_units:
+            payment_unit_deliver_units = {deliver_unit.id for deliver_unit in payment_unit.deliver_units.all()}
+            for entity_id, visits in itertools.groupby(user_visits, key=lambda x: x.entity_id):
+                deliver_units = {v.deliver_unit.id for v in visits}
+                if payment_unit_deliver_units.issubset(deliver_units):
+                    payment_accrued += payment_unit.amount
+        access.payment_accrued = payment_accrued
+        access.save()
 
 
 def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:
@@ -104,7 +125,7 @@ def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:
     for row in dataset:
         row = list(row)
         visit_id = str(row[visit_col_index])
-        status_raw = row[status_col_index].lower()
+        status_raw = row[status_col_index].lower().replace(" ", "_")
         try:
             status_by_visit_id[visit_id] = VisitValidationStatus[status_raw]
         except KeyError:
@@ -148,22 +169,22 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     if not headers:
         raise ImportException("The uploaded file did not contain any headers")
 
-    phone_col_index = _get_header_index(headers, PHONE_COL)
+    username_col_index = _get_header_index(headers, USERNAME_COL)
     amount_col_index = _get_header_index(headers, AMOUNT_COL)
     invalid_rows = []
     payments = {}
     for row in imported_data:
         row = list(row)
-        phone = str(row[phone_col_index])
+        username = str(row[username_col_index])
         amount_raw = row[amount_col_index]
         if amount_raw:
-            if not phone:
-                invalid_rows.append((row, "phone number required"))
+            if not username:
+                invalid_rows.append((row, "username required"))
             try:
                 amount = int(amount_raw)
             except ValueError:
                 invalid_rows.append((row, "amount must be an integer"))
-            payments[phone] = amount
+            payments[username] = amount
 
     if invalid_rows:
         raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
@@ -171,12 +192,12 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     seen_users = set()
     missing_users = set()
     with transaction.atomic():
-        phone_numbers = list(payments)
-        users = OpportunityAccess.objects.filter(
-            user__phone_number__in=phone_numbers, opportunity=opportunity
-        ).select_related("user")
+        usernames = list(payments)
+        users = OpportunityAccess.objects.filter(user__username__in=usernames, opportunity=opportunity).select_related(
+            "user"
+        )
         for access in users:
-            Payment.objects.create(opportunity_access=access, amount=payments[access.user.phone_number])
-            seen_users.add(access.user.phone_number)
-    missing_users = set(phone_numbers) - seen_users
+            Payment.objects.create(opportunity_access=access, amount=payments[access.user.username])
+            seen_users.add(access.user.username)
+    missing_users = set(usernames) - seen_users
     return PaymentImportStatus(seen_users, missing_users)

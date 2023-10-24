@@ -61,19 +61,39 @@ class Opportunity(BaseModel):
     budget_per_visit = models.IntegerField(null=True)
     total_budget = models.IntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
+    currency = models.CharField(max_length=3, null=True)
 
     def __str__(self):
         return self.name
 
     @property
     def remaining_budget(self) -> int:
+        return self.total_budget - self.claimed_budget
+
+    @property
+    def claimed_budget(self):
+        return self.claimed_visits * self.budget_per_visit
+
+    @property
+    def utilised_budget(self):
+        return self.approved_visits * self.budget_per_visit
+
+    @property
+    def claimed_visits(self):
         opp_access = OpportunityAccess.objects.filter(opportunity=self)
         used_budget = OpportunityClaim.objects.filter(opportunity_access__in=opp_access).aggregate(
             Sum("max_payments")
         )["max_payments__sum"]
         if used_budget is None:
             used_budget = 0
-        return self.total_budget - used_budget
+        return used_budget
+
+    @property
+    def approved_visits(self):
+        approved_user_visits = UserVisit.objects.filter(
+            opportunity=self, status=VisitValidationStatus.approved
+        ).count()
+        return approved_user_visits
 
 
 class LearnModule(models.Model):
@@ -132,6 +152,7 @@ class OpportunityAccess(models.Model):
     date_learn_started = models.DateTimeField(null=True)
     accepted = models.BooleanField(default=False)
     invite_id = models.CharField(max_length=50, default=uuid4)
+    payment_accrued = models.PositiveIntegerField(default=0)
 
     class Meta:
         indexes = [models.Index(fields=["invite_id"])]
@@ -142,24 +163,41 @@ class OpportunityAccess(models.Model):
     def learn_progress(self):
         learn_modules = LearnModule.objects.filter(app=self.opportunity.learn_app)
         completed_modules = CompletedModule.objects.filter(
-            opportunity=self.opportunity, module__in=learn_modules
+            opportunity=self.opportunity, module__in=learn_modules, user=self.user
         ).count()
         percentage = (completed_modules / learn_modules.count()) * 100
         return round(percentage, 2)
 
     @property
     def visit_count(self):
-        user_visits = UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity).order_by("visit_date")
+        user_visits = (
+            UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
+            .exclude(status=VisitValidationStatus.over_limit)
+            .order_by("visit_date")
+        )
         return user_visits.count()
 
     @property
     def last_visit_date(self):
-        user_visits = UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity).order_by("visit_date")
-
+        user_visits = (
+            UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
+            .exclude(status=VisitValidationStatus.over_limit)
+            .order_by("visit_date")
+        )
         if user_visits.exists():
             return user_visits.first().visit_date
-
         return
+
+    @property
+    def total_paid(self):
+        return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0)
+
+
+class PaymentUnit(models.Model):
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
+    amount = models.PositiveIntegerField()
+    name = models.CharField(max_length=255)
+    description = models.TextField()
 
 
 class DeliverUnit(models.Model):
@@ -170,6 +208,13 @@ class DeliverUnit(models.Model):
     )
     slug = models.SlugField(max_length=100)
     name = models.CharField(max_length=255)
+    payment_unit = models.ForeignKey(
+        PaymentUnit,
+        on_delete=models.CASCADE,
+        related_name="deliver_units",
+        related_query_name="deliver_unit",
+        null=True,
+    )
 
     def __str__(self):
         return self.name
@@ -179,12 +224,20 @@ class VisitValidationStatus(models.TextChoices):
     pending = "pending", gettext("Pending")
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
+    over_limit = "over_limit", gettext("Over Limit")
 
 
 class Payment(models.Model):
     amount = models.PositiveIntegerField()
     date_paid = models.DateTimeField(auto_now_add=True)
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.DO_NOTHING, null=True, blank=True)
+    payment_unit = models.ForeignKey(
+        PaymentUnit,
+        on_delete=models.CASCADE,
+        related_name="payments",
+        related_query_name="payment",
+        null=True,
+    )
 
 
 class UserVisit(XFormBaseModel):

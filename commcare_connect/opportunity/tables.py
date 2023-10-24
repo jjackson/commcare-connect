@@ -1,11 +1,11 @@
+from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
 
-from commcare_connect.opportunity.models import OpportunityAccess, Payment, UserVisit
+from commcare_connect.opportunity.models import OpportunityAccess, Payment, PaymentUnit, UserVisit
 
 
 class OpportunityAccessTable(tables.Table):
     learn_progress = columns.Column(verbose_name="Modules Completed")
-    last_visit_date = columns.DateColumn(accessor="last_visit_date", default="N/A")
     details = columns.LinkColumn(
         "opportunity:user_learn_progress",
         verbose_name="",
@@ -15,7 +15,7 @@ class OpportunityAccessTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user.username", "learn_progress", "visit_count")
+        fields = ("user.name", "user.username", "learn_progress")
         orderable = False
         empty_text = "No learn progress for users."
 
@@ -49,17 +49,55 @@ class UserVisitTable(tables.Table):
         orderable = False
 
 
-class PaymentTable(tables.Table):
+class OpportunityPaymentTable(tables.Table):
+    view_payments = columns.LinkColumn(
+        "opportunity:user_payments_table",
+        verbose_name="",
+        text="View Details",
+        args=[utils.A("opportunity.organization.slug"), utils.A("opportunity.id"), utils.A("pk")],
+    )
+
+    class Meta:
+        model = OpportunityAccess
+        fields = ("user.name", "user.username", "payment_accrued", "total_paid")
+        orderable = False
+        empty_text = "No user have payments accrued yet."
+
+
+class UserPaymentsTable(tables.Table):
+    payment_unit_name = columns.Column("Payment Unit Name", accessor="payment_unit.name")
+
     class Meta:
         model = Payment
-        fields = ("user.username", "amount", "date_paid")
+        fields = ("amount", "date_paid")
         orderable = False
-        empty_text = "No payments"
+        empty_text = "No payments made for this user"
+        template_name = "django_tables2/bootstrap5.html"
 
 
 class UserStatusTable(tables.Table):
     class Meta:
         model = OpportunityAccess
-        fields = ("user.username", "accepted")
+        fields = ("user.name", "user.username", "accepted")
         empty_text = "No users invited for this opportunity."
         orderable = False
+
+
+class PaymentUnitTable(tables.Table):
+    deliver_units = columns.Column("Deliver Units")
+    details = columns.LinkColumn(
+        "opportunity:edit_payment_unit",
+        verbose_name="",
+        text="Edit",
+        args=[utils.A("opportunity.organization.slug"), utils.A("opportunity.id"), utils.A("pk")],
+    )
+
+    class Meta:
+        model = PaymentUnit
+        fields = ("name", "amount")
+        empty_text = "No payment units for this opportunity."
+        orderable = False
+
+    def render_deliver_units(self, record):
+        deliver_units = "".join([f"<li>{d.name}</li>" for d in record.deliver_units.all()])
+        return mark_safe(f"<ul>{deliver_units}</ul>")

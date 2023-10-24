@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from commcare_connect.cache import quickcache
 from commcare_connect.opportunity.models import (
+    Assessment,
     CommCareApp,
     CompletedModule,
     LearnModule,
@@ -10,6 +11,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     Payment,
     UserVisit,
+    VisitValidationStatus,
 )
 
 
@@ -61,6 +63,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "claim",
             "learn_progress",
             "deliver_progress",
+            "currency",
         ]
 
     def get_claim(self, obj):
@@ -73,7 +76,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     def get_learn_progress(self, obj):
         opp_access = _get_opp_access(self.context.get("request").user, obj)
         total_modules = LearnModule.objects.filter(app=opp_access.opportunity.learn_app)
-        completed_modules = CompletedModule.objects.filter(opportunity=opp_access.opportunity)
+        completed_modules = CompletedModule.objects.filter(opportunity=opp_access.opportunity, user=opp_access.user)
         return {"total_modules": total_modules.count(), "completed_modules": completed_modules.count()}
 
     def get_deliver_progress(self, obj):
@@ -86,10 +89,27 @@ def _get_opp_access(user, opportunity):
     return OpportunityAccess.objects.filter(user=user, opportunity=opportunity).first()
 
 
-class UserLearnProgressSerializer(serializers.ModelSerializer):
+class CompletedModuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompletedModule
         fields = ["module", "date", "duration"]
+
+
+class AssessmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Assessment
+        fields = ["date", "score", "passing_score", "passed"]
+
+
+class UserLearnProgressSerializer(serializers.Serializer):
+    completed_modules = serializers.SerializerMethodField()
+    assessments = serializers.SerializerMethodField()
+
+    def get_completed_modules(self, obj: dict):
+        return CompletedModuleSerializer(obj.get("completed_modules"), many=True).data
+
+    def get_assessments(self, obj: dict):
+        return AssessmentSerializer(obj.get("assessments"), many=True).data
 
 
 class UserVisitSerializer(serializers.ModelSerializer):
@@ -98,7 +118,7 @@ class UserVisitSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserVisit
-        fields = ["id", "status", "visit_date", "deliver_unit_name", "deliver_unit_slug"]
+        fields = ["id", "status", "visit_date", "deliver_unit_name", "deliver_unit_slug", "entity_id", "entity_name"]
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -110,10 +130,15 @@ class PaymentSerializer(serializers.ModelSerializer):
 class DeliveryProgressSerializer(serializers.Serializer):
     deliveries = serializers.SerializerMethodField()
     payments = serializers.SerializerMethodField()
+    max_payments = serializers.IntegerField(source="opportunityclaim.max_payments")
+    payment_accrued = serializers.IntegerField()
+    end_date = serializers.DateField(source="opportunityclaim.end_date")
 
     def get_payments(self, obj):
         return PaymentSerializer(obj.payment_set.all(), many=True).data
 
     def get_deliveries(self, obj):
-        deliveries = UserVisit.objects.filter(opportunity=obj.opportunity, user=obj.user)
+        deliveries = UserVisit.objects.filter(opportunity=obj.opportunity, user=obj.user).exclude(
+            status=VisitValidationStatus.over_limit
+        )
         return UserVisitSerializer(deliveries, many=True).data
