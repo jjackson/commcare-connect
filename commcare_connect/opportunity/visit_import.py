@@ -8,6 +8,8 @@ from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
 from tablib import Dataset
 
+from commcare_connect.connect_id_client import send_message_bulk
+from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
@@ -192,12 +194,26 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     seen_users = set()
     missing_users = set()
     with transaction.atomic():
+        messages = []
         usernames = list(payments)
         users = OpportunityAccess.objects.filter(user__username__in=usernames, opportunity=opportunity).select_related(
             "user"
         )
         for access in users:
-            Payment.objects.create(opportunity_access=access, amount=payments[access.user.username])
-            seen_users.add(access.user.username)
+            username = access.user.username
+            amount = payments[username]
+            Payment.objects.create(opportunity_access=access, amount=amount)
+            seen_users.add(username)
+            messages.append(
+                Message(
+                    usernames=[username],
+                    title="Payment received",
+                    body=(
+                        f"You have received a payment of {access.opportunity.currency} {amount} for "
+                        f"{access.opportunity.name}. Click on this notification for more information on the payment."
+                    ),
+                )
+            )
+        send_message_bulk(messages)
     missing_users = set(usernames) - seen_users
     return PaymentImportStatus(seen_users, missing_users)
