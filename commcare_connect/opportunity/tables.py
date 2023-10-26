@@ -65,8 +65,6 @@ class OpportunityPaymentTable(tables.Table):
 
 
 class UserPaymentsTable(tables.Table):
-    payment_unit_name = columns.Column("Payment Unit Name", accessor="payment_unit.name")
-
     class Meta:
         model = Payment
         fields = ("amount", "date_paid")
