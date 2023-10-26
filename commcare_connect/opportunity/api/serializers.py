@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import serializers
 
 from commcare_connect.cache import quickcache
@@ -24,10 +25,14 @@ class LearnModuleSerializer(serializers.ModelSerializer):
 class CommCareAppSerializer(serializers.ModelSerializer):
     organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
     learn_modules = LearnModuleSerializer(many=True)
+    install_url = serializers.SerializerMethodField()
 
     class Meta:
         model = CommCareApp
         fields = ["cc_domain", "cc_app_id", "name", "description", "organization", "learn_modules", "passing_score"]
+
+    def get_install_url(self, obj):
+        return f"{settings.COMMCARE_HQ_URL}/a/{obj.cc_domain}/apps/download/{obj.cc_app_id}/media_profile.ccpr"
 
 
 class OpportunityClaimSerializer(serializers.ModelSerializer):
