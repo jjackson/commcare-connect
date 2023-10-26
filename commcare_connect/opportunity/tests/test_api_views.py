@@ -3,11 +3,24 @@ import datetime
 import pytest
 from rest_framework.test import APIClient
 
-from commcare_connect.opportunity.models import Assessment, CompletedModule, Opportunity, OpportunityClaim
+from commcare_connect.opportunity.api.serializers import (
+    DeliveryProgressSerializer,
+    PaymentSerializer,
+    UserVisitSerializer,
+)
+from commcare_connect.opportunity.models import (
+    Assessment,
+    CompletedModule,
+    Opportunity,
+    OpportunityAccess,
+    OpportunityClaim,
+    Payment,
+)
 from commcare_connect.opportunity.tests.factories import (
     LearnModuleFactory,
     OpportunityAccessFactory,
     OpportunityFactory,
+    UserVisitFactory,
 )
 from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import ConnectIdUserLinkFactory
@@ -127,3 +140,23 @@ def test_opportunity_list_endpoint(
         "deliver_progress",
         "currency",
     ]
+
+
+def test_delivery_progress_endpoint(
+    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
+    UserVisitFactory.create(opportunity=opportunity, user=mobile_user_with_connect_link)
+    api_client.force_authenticate(mobile_user_with_connect_link)
+    response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
+    assert response.status_code == 200
+    assert response.data.keys() == DeliveryProgressSerializer().get_fields().keys()
+    assert len(response.data["deliveries"]) == 1
+    assert len(response.data["payments"]) == 0
+    assert response.data["deliveries"][0].keys() == UserVisitSerializer().get_fields().keys()
+
+    Payment.objects.create(amount=10, date_paid=datetime.date.today(), opportunity_access=access)
+    response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
+    assert response.status_code == 200
+    assert len(response.data["payments"]) == 1
+    assert response.data["payments"][0].keys() == PaymentSerializer().get_fields().keys()
