@@ -3,7 +3,7 @@ import datetime
 import pytest
 from rest_framework.test import APIClient
 
-from commcare_connect.opportunity.models import Assessment, CompletedModule, OpportunityClaim
+from commcare_connect.opportunity.models import Assessment, CompletedModule, Opportunity, OpportunityClaim
 from commcare_connect.opportunity.tests.factories import (
     LearnModuleFactory,
     OpportunityAccessFactory,
@@ -99,3 +99,31 @@ def test_learn_progress_endpoint(mobile_user: User, api_client: APIClient):
     assert len(response.data["assessments"]) == 1
     assert list(response.data["completed_modules"][0].keys()) == ["module", "date", "duration"]
     assert list(response.data["assessments"][0].keys()) == ["date", "score", "passing_score", "passed"]
+
+
+def test_opportunity_list_endpoint(
+    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    api_client.force_authenticate(mobile_user_with_connect_link)
+    response = api_client.get("/api/opportunity/")
+    assert response.status_code == 200
+    assert len(response.data) == 1
+    assert list(response.data[0].keys()) == [
+        "id",
+        "name",
+        "description",
+        "date_created",
+        "date_modified",
+        "organization",
+        "learn_app",
+        "deliver_app",
+        "end_date",
+        "max_visits_per_user",
+        "daily_max_visits_per_user",
+        "budget_per_visit",
+        "total_budget",
+        "claim",
+        "learn_progress",
+        "deliver_progress",
+        "currency",
+    ]
