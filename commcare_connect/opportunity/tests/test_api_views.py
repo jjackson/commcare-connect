@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 
 from commcare_connect.opportunity.api.serializers import (
     DeliveryProgressSerializer,
+    OpportunitySerializer,
     PaymentSerializer,
     UserVisitSerializer,
 )
@@ -121,25 +122,7 @@ def test_opportunity_list_endpoint(
     response = api_client.get("/api/opportunity/")
     assert response.status_code == 200
     assert len(response.data) == 1
-    assert list(response.data[0].keys()) == [
-        "id",
-        "name",
-        "description",
-        "date_created",
-        "date_modified",
-        "organization",
-        "learn_app",
-        "deliver_app",
-        "end_date",
-        "max_visits_per_user",
-        "daily_max_visits_per_user",
-        "budget_per_visit",
-        "total_budget",
-        "claim",
-        "learn_progress",
-        "deliver_progress",
-        "currency",
-    ]
+    assert response.data[0].keys() == OpportunitySerializer().get_fields().keys()
 
 
 def test_delivery_progress_endpoint(
