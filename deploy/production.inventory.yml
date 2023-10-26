@@ -1,0 +1,6 @@
+webservers:
+  hosts:
+    web0:
+      ansible_user: ubuntu
+      ansible_host: 54.146.23.50
+      secrets_file: 'Ansible Secrets - Production'
