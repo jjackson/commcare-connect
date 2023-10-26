@@ -52,12 +52,6 @@ class MobileUserFactory(DjangoModelFactory):
         django_get_or_create = ["username"]
 
 
-class MobileUserWithConnectIDLink(MobileUserFactory):
-    connectiduserlink = RelatedFactory(
-        ConnectIdUserLinkFactory, "user", commcare_username="test@ccc-test.commcarehq.org"
-    )
-
-
 class OrganizationFactory(DjangoModelFactory):
     name = Faker("company")
 
