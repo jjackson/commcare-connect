@@ -29,7 +29,16 @@ class CommCareAppSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CommCareApp
-        fields = ["cc_domain", "cc_app_id", "name", "description", "organization", "learn_modules", "passing_score"]
+        fields = [
+            "cc_domain",
+            "cc_app_id",
+            "name",
+            "description",
+            "organization",
+            "learn_modules",
+            "passing_score",
+            "install_url",
+        ]
 
     def get_install_url(self, obj):
         return f"{settings.COMMCARE_HQ_URL}/a/{obj.cc_domain}/apps/download/{obj.cc_app_id}/media_profile.ccpr"
