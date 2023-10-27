@@ -3,3 +3,4 @@ webservers:
     web0:
       ansible_user: ubuntu
       ansible_host: 54.172.148.144
+      secrets_file: 'Ansible Secrets - Staging'
