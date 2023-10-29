@@ -40,9 +40,9 @@
       <a class="navbar-brand" href="{% url 'home' %}">CommCare Connect</a>
       {% if request.org %}
         {% if request.org_membership.is_admin %}
-        <a class="navbar-brand abs" href="{% url 'organization:home' request.org.slug %}">{{ request.org.name }}</a>
+          <a class="navbar-brand abs" href="{% url 'organization:home' request.org.slug %}">{{ request.org.name }}</a>
         {% else %}
-        <a class="navbar-brand abs" href="">{{ request.org.name }}</a>
+          <a class="navbar-brand abs" href="">{{ request.org.name }}</a>
         {% endif %}
       {% endif %}
 
@@ -58,7 +58,7 @@
           {% endif %}
         </ul>
         <ul class="navbar-nav ms-auto">
-            {% if request.user.is_authenticated %}
+          {% if request.user.is_authenticated %}
             <li class="nav-item">
               <a class="nav-link {% active_link "users:detail" %}"
                  href="{% url 'users:detail' request.user.pk %}">{% translate "My Profile" %}</a>
@@ -68,6 +68,23 @@
               <a class="nav-link {% active_link "account_logout" %}"
                  href="{% url 'account_logout' %}">{% translate "Sign Out" %}</a>
             </li>
+            {% if request.org %}
+              <li class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                   aria-expanded="false">
+                  {{ request.org.name }}
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  {% for membership in request.user.memberships.all %}
+                    <li>
+                      <a
+                        class="dropdown-item {% if request.org.slug == membership.organization.slug %} active {% endif %}"
+                        href="{% url 'opportunity:list' membership.organization.slug %}">{{ membership.organization.name }}</a>
+                    </li>
+                  {% endfor %}
+                </ul>
+              </li>
+            {% endif %}
           {% else %}
             {% if ACCOUNT_ALLOW_REGISTRATION %}
               <li class="nav-item">
