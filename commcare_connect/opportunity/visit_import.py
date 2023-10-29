@@ -125,7 +125,7 @@ def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:
     for row in dataset:
         row = list(row)
         visit_id = str(row[visit_col_index])
-        status_raw = row[status_col_index].lower()
+        status_raw = row[status_col_index].lower().replace(" ", "_")
         try:
             status_by_visit_id[visit_id] = VisitValidationStatus[status_raw]
         except KeyError:

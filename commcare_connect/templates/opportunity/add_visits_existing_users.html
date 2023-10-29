@@ -30,6 +30,7 @@
           <tr>
             <th></th>
             <th>Name</th>
+            <th>Username</th>
             <th>Max Visits</th>
             <th>Used Visits</th>
             <th>End date</th>
@@ -43,6 +44,7 @@
                        x-model="selected_users"
                        class="form-check-input {% if form.selected_users.errors %}is-invalid{% endif %}"/>
               </td>
+              <td>{{ opp_claim.opportunity_access.user.name }}</td>
               <td>{{ opp_claim.opportunity_access.user.username }}</td>
               <td>{{ opp_claim.max_payments }}</td>
               <td>{{ opp_claim.opportunity_access.visit_count }}</td>

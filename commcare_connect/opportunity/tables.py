@@ -65,13 +65,12 @@ class OpportunityPaymentTable(tables.Table):
 
 
 class UserPaymentsTable(tables.Table):
-    payment_unit_name = columns.Column("Payment Unit Name", accessor="payment_unit.name")
-
     class Meta:
         model = Payment
         fields = ("amount", "date_paid")
         orderable = False
         empty_text = "No payments made for this user"
+        template_name = "django_tables2/bootstrap5.html"
 
 
 class UserStatusTable(tables.Table):
