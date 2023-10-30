@@ -16,5 +16,5 @@ urlpatterns = [
     path("<int:pk>/", view=user_detail_view, name="detail"),
     path("create_user_link/", view=create_user_link_view, name="create_user_link"),
     path("start_learn_app/", view=start_learn_app, name="start_learn_app"),
-    path("accept_invite/<slug:invite_id>", view=accept_invite, name="accept_invite"),
+    path("accept_invite/<slug:invite_id>/", view=accept_invite, name="accept_invite"),
 ]
