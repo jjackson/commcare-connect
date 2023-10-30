@@ -1,0 +1,16 @@
+servers:
+  web:
+    hosts:
+      - 54.172.148.144
+    options:
+      # create by ansible
+      env-file: '/home/connect/www/commcare-connect/docker.env'
+  celery:
+    hosts:
+      - 54.172.148.144
+    options:
+      # create by ansible
+      env-file: '/home/connect/www/commcare-connect/docker.env'
+    cmd: /start_celery
+    labels:
+      traefik.enable: false
