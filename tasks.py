@@ -67,10 +67,10 @@ def build_js(c: Context, watch=False, prod=False):
 
 
 @task
-def setup_ec2(c: Context, verbose=False, diff=False):
-    run_ansible(c, verbose=verbose, diff=diff)
+def setup_ec2(c: Context, env="staging", verbose=False, diff=False):
+    run_ansible(c, env=env, verbose=verbose, diff=diff)
 
-    kamal_cmd = "kamal env push"
+    kamal_cmd = f"kamal env push -d {env}"
     if verbose:
         kamal_cmd += " -v"
     with c.cd(PROJECT_DIR / "deploy"):
@@ -78,23 +78,23 @@ def setup_ec2(c: Context, verbose=False, diff=False):
 
 
 @task
-def django_settings(c: Context, verbose=False, diff=False):
+def django_settings(c: Context, env="staging", verbose=False, diff=False):
     """Update the Django settings file on prod servers"""
-    run_ansible(c, tags="django_settings", verbose=verbose, diff=diff)
+    run_ansible(c, env=env, tags="django_settings", verbose=verbose, diff=diff)
     print("\nSettings updated. A re-deploy is required to have the services use the new settings.")
     val = input("Do you want to re-deploy the Django services? [y/N] ")
     if val.lower() == "y":
-        deploy(c)
+        deploy(c, env=env)
 
 
 @task
-def restart_django(c: Context, verbose=False, diff=False):
+def restart_django(c: Context, env="staging", verbose=False, diff=False):
     """Restart the Django server on prod servers"""
-    run_ansible(c, play="utils.yml", tags="restart", verbose=verbose, diff=diff)
+    run_ansible(c, play="utils.yml", env=env, tags="restart", verbose=verbose, diff=diff)
 
 
-def run_ansible(c: Context, play="play.yml", tags=None, verbose=False, diff=False):
-    ansible_cmd = f"ansible-playbook {play} -i inventory.yml"
+def run_ansible(c: Context, play="play.yml", env="staging", tags=None, verbose=False, diff=False):
+    ansible_cmd = f"ansible-playbook {play} -i {env}.inventory.yml"
     if tags:
         ansible_cmd += f" --tags {tags}"
     if verbose:
@@ -107,7 +107,7 @@ def run_ansible(c: Context, play="play.yml", tags=None, verbose=False, diff=Fals
 
 
 @task
-def deploy(c: Context):
+def deploy(c: Context, env="staging"):
     """Deploy the app to prod servers"""
     with c.cd(PROJECT_DIR / "deploy"):
-        c.run("kamal deploy")
+        c.run(f"kamal deploy -d {env}")
