@@ -97,10 +97,10 @@ def send_notification_inactive_users(opportunity_id: int):
         ):
             message = Message(
                 usernames=[access.user.username],
-                title=gettext("You have been inactive for Learning"),
+                title=gettext(f"Resume your learning journey for {opportunity.name}"),
                 body=gettext(
-                    f"You have not completed your learning for {opportunity.name}. \
-                    Please complete the learning modules to start delivering visits."
+                    f"You have not completed your learning for {opportunity.name}."
+                    "Please complete the learning modules to start delivering visits."
                 ),
             )
             send_message(message)
@@ -114,10 +114,10 @@ def send_notification_inactive_users(opportunity_id: int):
         ):
             message = Message(
                 usernames=[access.user.username],
-                title=gettext("You have been inactive for Delivery"),
+                title=gettext(f"Resume your job for {opportunity.name}"),
                 body=gettext(
-                    f"You have not completed your delivery visits for {opportunity.name}. \
-                    Please complete all the deliver visits to avail the payment."
+                    f"You have not completed your delivery visits for {opportunity.name}."
+                    "Please complete all the deliver visits to avail the payment."
                 ),
             )
             send_message(message)

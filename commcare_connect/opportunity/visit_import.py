@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
+from django.utils.translation import gettext
 from tablib import Dataset
 
 from commcare_connect.connect_id_client import send_message_bulk
@@ -207,8 +208,8 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
             messages.append(
                 Message(
                     usernames=[username],
-                    title="Payment received",
-                    body=(
+                    title=gettext("Payment received"),
+                    body=gettext(
                         f"You have received a payment of {access.opportunity.currency} {amount} for "
                         f"{access.opportunity.name}. Click on this notification for more information on the payment."
                     ),
