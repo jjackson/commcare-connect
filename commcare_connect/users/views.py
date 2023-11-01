@@ -105,6 +105,7 @@ def start_learn_app(request):
     except OpportunityAccess.DoesNotExist:
         return HttpResponse("user has no access to opportunity", status=400)
     access_object.date_learn_started = datetime.utcnow()
+    access_object.accepted = True
     access_object.save()
     return HttpResponse(status=200)
 
