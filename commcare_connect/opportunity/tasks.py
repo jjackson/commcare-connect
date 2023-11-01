@@ -1,16 +1,23 @@
+import datetime
+
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.utils.timezone import now
+from django.utils.translation import gettext
 
-from commcare_connect.connect_id_client import fetch_users
+from commcare_connect.connect_id_client import fetch_users, send_message
+from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
 from commcare_connect.opportunity.export import export_empty_payment_table, export_user_visit_data
 from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import (
+    CompletedModule,
     DeliverUnit,
     LearnModule,
     Opportunity,
     OpportunityAccess,
+    OpportunityClaim,
+    UserVisit,
     VisitValidationStatus,
 )
 from commcare_connect.users.helpers import invite_user
@@ -73,3 +80,44 @@ def generate_payment_export(opportunity_id: int, export_format: str):
         content = content.encode()
     default_storage.save(export_tmp_name, ContentFile(content))
     return export_tmp_name
+
+
+@celery_app.task()
+def send_notification_inactive_users(opportunity_id: int):
+    opportunity = Opportunity.objects.get(opportunity_id=opportunity_id)
+    opportunity_accesses = OpportunityAccess.objects.filter(opportunity_id=opportunity_id)
+    for access in opportunity_accesses:
+        last_user_learn_module = (
+            CompletedModule.objects.filter(user=access.user, opportunity_id=opportunity_id).order_by("date").last()
+        )
+        has_started_deliver = OpportunityClaim.objects.exists(access=access)
+        if (
+            last_user_learn_module.date <= datetime.date.today() - datetime.timedelta(days=3)
+            and not has_started_deliver
+        ):
+            message = Message(
+                usernames=[access.user.username],
+                title=gettext("You have been inactive for Learning"),
+                body=gettext(
+                    f"You have not completed your learning for {opportunity.name}. \
+                    Please complete the learning modules to start delivering visits."
+                ),
+            )
+            send_message(message)
+
+        last_user_deliver_visit = (
+            UserVisit.objects.filter(user=access.user, opportunity_id=opportunity_id).order_by("visit_date").last()
+        )
+        if (
+            last_user_deliver_visit.visit_date <= datetime.date.today() - datetime.timedelta(days=2)
+            and has_started_deliver
+        ):
+            message = Message(
+                usernames=[access.user.username],
+                title=gettext("You have been inactive for Delivery"),
+                body=gettext(
+                    f"You have not completed your delivery visits for {opportunity.name}. \
+                    Please complete all the deliver visits to avail the payment."
+                ),
+            )
+            send_message(message)
