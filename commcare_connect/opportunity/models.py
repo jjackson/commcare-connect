@@ -192,6 +192,13 @@ class OpportunityAccess(models.Model):
     def total_paid(self):
         return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0)
 
+    @property
+    def display_name(self):
+        if self.accepted:
+            return self.user.name
+        else:
+            return "---"
+
 
 class PaymentUnit(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
