@@ -1,3 +1,5 @@
+import json
+
 from celery.result import AsyncResult
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -11,6 +13,7 @@ from django.utils.text import slugify
 from django.utils.timezone import now
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
+from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
 
@@ -86,6 +89,14 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
     def form_valid(self, form: OpportunityCreationForm) -> HttpResponse:
         response = super().form_valid(form)
         create_learn_modules_and_deliver_units.delay(self.object.id)
+        interval = IntervalSchedule.objects.get_or_create(every=1, period=IntervalSchedule.DAYS)
+        PeriodicTask.objects.create(
+            interval=interval,
+            name=f"{self.object.name}_inactive_notifications",
+            task="commcare_connect.opportunity.task.send_notification_inactive_users",
+            args=json.dumps([self.object.id]),
+            expires=self.object.end_date,
+        )
         return response
 
 
