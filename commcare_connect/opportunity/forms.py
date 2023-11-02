@@ -64,6 +64,7 @@ class OpportunityCreationForm(forms.ModelForm):
         fields = [
             "name",
             "description",
+            "short_description",
             "end_date",
             "max_visits_per_user",
             "daily_max_visits_per_user",
@@ -85,6 +86,7 @@ class OpportunityCreationForm(forms.ModelForm):
         self.helper.layout = Layout(
             Row(Field("name")),
             Row(Field("description")),
+            Row(Field("short_description")),
             Row(Field("end_date")),
             Row(
                 Field("max_visits_per_user", wrapper_class="form-group col-md-4 mb-0", x_model="maxVisits"),
