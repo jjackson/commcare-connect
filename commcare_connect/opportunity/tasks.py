@@ -22,6 +22,7 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.users.helpers import invite_user
 from commcare_connect.users.models import User
+from commcare_connect.utils.datetime import is_date_before
 from config import celery_app
 
 
@@ -83,53 +84,48 @@ def generate_payment_export(opportunity_id: int, export_format: str):
 
 
 @celery_app.task()
-def send_notification_inactive_users(opportunity_id: int):
-    opportunity_accesses = OpportunityAccess.objects.filter(opportunity_id=opportunity_id).select_related(
-        "opportunity"
-    )
+def send_notification_inactive_users():
+    opportunity_accesses = OpportunityAccess.objects.filter(
+        opportunity__active=True,
+        opportunity__end_date__gt=datetime.date.today(),
+    ).select_related("opportunity")
     messages = []
     for access in opportunity_accesses:
-        last_user_learn_module = (
-            CompletedModule.objects.filter(user=access.user, opportunity_id=opportunity_id).order_by("date").last()
-        )
-        has_started_deliver = OpportunityClaim.objects.filter(opportunity_access=access).exists()
-        if (
-            last_user_learn_module
-            and last_user_learn_module.date <= now() - datetime.timedelta(days=3)
-            and not has_started_deliver
-        ):
-            messages.append(
-                Message(
-                    usernames=[access.user.username],
-                    title=gettext(f"Resume your learning journey for {access.opportunity.name}"),
-                    body=gettext(
-                        f"You have not completed your learning for {access.opportunity.name}."
-                        "Please complete the learning modules to start delivering visits."
-                    ),
-                )
-            )
-
-        last_user_deliver_visit = (
-            UserVisit.objects.filter(
-                user=access.user,
-                opportunity_id=opportunity_id,
-            )
-            .order_by("visit_date")
-            .last()
-        )
-        if (
-            last_user_deliver_visit
-            and last_user_deliver_visit.visit_date <= now() - datetime.timedelta(days=2)
-            and has_started_deliver
-        ):
-            messages.append(
-                Message(
-                    usernames=[access.user.username],
-                    title=gettext(f"Resume your job for {access.opportunity.name}"),
-                    body=gettext(
-                        f"You have not completed your delivery visits for {access.opportunity.name}."
-                        "Please complete all the deliver visits to avail the payment."
-                    ),
-                )
-            )
+        has_claimed_opportunity = OpportunityClaim.objects.filter(opportunity_access=access).exists()
+        if has_claimed_opportunity:
+            message = _get_deliver_message(access)
+        else:
+            message = _get_learn_message(access)
+        if isinstance(message, Message):
+            messages.append(message)
     send_message_bulk(messages)
+
+
+def _get_learn_message(access: OpportunityAccess):
+    last_user_learn_module = (
+        CompletedModule.objects.filter(user=access.user, opportunity=access.opportunity).order_by("date").last()
+    )
+    if last_user_learn_module and is_date_before(last_user_learn_module.date, days=3):
+        return Message(
+            usernames=[access.user.username],
+            title=gettext(f"Resume your learning journey for {access.opportunity.name}"),
+            body=gettext(
+                f"You have not completed your learning for {access.opportunity.name}."
+                "Please complete the learning modules to start delivering visits."
+            ),
+        )
+
+
+def _get_deliver_message(access: OpportunityAccess):
+    last_user_deliver_visit = (
+        UserVisit.objects.filter(user=access.user, opportunity=access.opportunity).order_by("visit_date").last()
+    )
+    if last_user_deliver_visit and is_date_before(last_user_deliver_visit.visit_date, days=2):
+        return Message(
+            usernames=[access.user.username],
+            title=gettext(f"Resume your job for {access.opportunity.name}"),
+            body=gettext(
+                f"You have not completed your delivery visits for {access.opportunity.name}."
+                "To maximise your payout complete all the required service delivery."
+            ),
+        )
