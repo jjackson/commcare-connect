@@ -96,7 +96,10 @@ class OpportunityCreationForm(forms.ModelForm):
             Row(
                 Field("max_users", wrapper_class="form-group col-md-4 mb-0", x_model="maxUsers"),
                 Field(
-                    "total_budget", wrapper_class="form-group col-md-4 mb-0", disabled=True, x_model="totalBudget()"
+                    "total_budget",
+                    wrapper_class="form-group col-md-4 mb-0",
+                    readonly=True,
+                    x_model="totalBudget()",
                 ),
                 Field("currency", wrapper_class="form-group col-md-4 mb-0"),
             ),
@@ -116,6 +119,7 @@ class OpportunityCreationForm(forms.ModelForm):
         self.fields["deliver_app"] = forms.ChoiceField(choices=app_choices)
         self.fields["deliver_app"].widget.attrs.update({"id": "deliver_app_select"})
         self.fields["api_key"] = forms.CharField(max_length=50)
+        self.fields["total_budget"].widget.attrs.update({"class": "form-control-plaintext"})
         self.fields["max_users"] = forms.IntegerField()
 
     def clean(self):
