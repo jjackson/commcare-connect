@@ -43,6 +43,7 @@ class Opportunity(BaseModel):
     )
     name = models.CharField(max_length=255)
     description = models.TextField()
+    short_description = models.CharField(max_length=50, null=True)
     active = models.BooleanField(default=True)
     learn_app = models.ForeignKey(
         CommCareApp,

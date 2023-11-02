@@ -35,6 +35,7 @@ class OpportunityFactory(DjangoModelFactory):
     organization = SubFactory(OrganizationFactory)
     name = Faker("name")
     description = Faker("text")
+    short_description = Faker("pystr", max_chars=50)
     active = True
     learn_app = SubFactory(CommCareAppFactory, organization=SelfAttribute("..organization"))
     deliver_app = SubFactory(CommCareAppFactory, organization=SelfAttribute("..organization"))

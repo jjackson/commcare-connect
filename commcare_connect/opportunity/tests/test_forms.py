@@ -18,6 +18,7 @@ class TestOpportunityCreationForm:
         return {
             "name": "Test opportunity",
             "description": FuzzyText(length=150).fuzz(),
+            "short_description": FuzzyText(length=50).fuzz(),
             "end_date": FuzzyDate(start_date=datetime.date.today()).fuzz(),
             "max_visits_per_user": 100,
             "daily_max_visits_per_user": 10,

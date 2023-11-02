@@ -64,6 +64,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "id",
             "name",
             "description",
+            "short_description",
             "date_created",
             "date_modified",
             "organization",
