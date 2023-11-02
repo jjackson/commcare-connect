@@ -7,7 +7,14 @@
 {% block content %}
   <div class="container">
     <h1 class="display-5">Create Opportunity</h1>
-    <form method="post">
+    <form method="post"
+          x-data="{
+            visitBudget: 0,
+            maxUsers: 0,
+            maxVisits: 0,
+            totalBudget() {return this.visitBudget * this.maxUsers * this.maxVisits}
+          }"
+          >
       {% csrf_token %}
       {% crispy form %}
     </form>
