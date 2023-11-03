@@ -28,7 +28,7 @@ def delete_send_inactive_notification_periodic_task(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0024_opportunity_currency_and_more"),
+        ("opportunity", "0025_opportunity_short_description"),
     ]
 
     operations = [
