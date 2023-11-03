@@ -91,14 +91,23 @@ def send_notification_inactive_users():
     ).select_related("opportunity")
     messages = []
     for access in opportunity_accesses:
-        has_claimed_opportunity = OpportunityClaim.objects.filter(opportunity_access=access).exists()
-        if has_claimed_opportunity:
+        message = _get_inactive_message(access)
+        if message:
+            messages.append(message)
+    send_message_bulk(messages)
+
+
+def _get_inactive_message(access: OpportunityAccess):
+    has_claimed_opportunity = OpportunityClaim.objects.filter(opportunity_access=access).exists()
+    if has_claimed_opportunity:
+        message = _check_deliver_inactive(access)
+    else:
+        # Send notification if user has completed learn modules and has not claimed the opportunity
+        if access.learn_progress == 100:
             message = _get_deliver_message(access)
         else:
             message = _get_learn_message(access)
-        if isinstance(message, Message):
-            messages.append(message)
-    send_message_bulk(messages)
+    return message
 
 
 def _get_learn_message(access: OpportunityAccess):
@@ -116,16 +125,20 @@ def _get_learn_message(access: OpportunityAccess):
         )
 
 
-def _get_deliver_message(access: OpportunityAccess):
+def _check_deliver_inactive(access: OpportunityAccess):
     last_user_deliver_visit = (
         UserVisit.objects.filter(user=access.user, opportunity=access.opportunity).order_by("visit_date").last()
     )
     if last_user_deliver_visit and is_date_before(last_user_deliver_visit.visit_date, days=2):
-        return Message(
-            usernames=[access.user.username],
-            title=gettext(f"Resume your job for {access.opportunity.name}"),
-            body=gettext(
-                f"You have not completed your delivery visits for {access.opportunity.name}."
-                "To maximise your payout complete all the required service delivery."
-            ),
-        )
+        return _get_deliver_message(access)
+
+
+def _get_deliver_message(access: OpportunityAccess):
+    return Message(
+        usernames=[access.user.username],
+        title=gettext(f"Resume your job for {access.opportunity.name}"),
+        body=gettext(
+            f"You have not completed your delivery visits for {access.opportunity.name}."
+            "To maximise your payout complete all the required service delivery."
+        ),
+    )
