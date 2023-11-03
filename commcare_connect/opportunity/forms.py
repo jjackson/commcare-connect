@@ -64,6 +64,7 @@ class OpportunityCreationForm(forms.ModelForm):
         fields = [
             "name",
             "description",
+            "short_description",
             "end_date",
             "max_visits_per_user",
             "daily_max_visits_per_user",
@@ -85,15 +86,22 @@ class OpportunityCreationForm(forms.ModelForm):
         self.helper.layout = Layout(
             Row(Field("name")),
             Row(Field("description")),
+            Row(Field("short_description")),
             Row(Field("end_date")),
             Row(
-                Field("max_visits_per_user", wrapper_class="form-group col-md-6 mb-0"),
-                Field("daily_max_visits_per_user", wrapper_class="form-group col-md-6 mb-0"),
+                Field("max_visits_per_user", wrapper_class="form-group col-md-4 mb-0", x_model="maxVisits"),
+                Field("daily_max_visits_per_user", wrapper_class="form-group col-md-4 mb-0"),
+                Field("budget_per_visit", wrapper_class="form-group col-md-4 mb-0", x_model="visitBudget"),
             ),
             Row(
-                Field("currency", wrapper_class="form-group col-md-2 mb-0"),
-                Field("total_budget", wrapper_class="form-group col-md-5 mb-0"),
-                Field("budget_per_visit", wrapper_class="form-group col-md-5 mb-0"),
+                Field("max_users", wrapper_class="form-group col-md-4 mb-0", x_model="maxUsers"),
+                Field(
+                    "total_budget",
+                    wrapper_class="form-group col-md-4 mb-0",
+                    readonly=True,
+                    x_model="totalBudget()",
+                ),
+                Field("currency", wrapper_class="form-group col-md-4 mb-0"),
             ),
             Row(Field("learn_app")),
             Row(Field("learn_app_description")),
@@ -111,6 +119,8 @@ class OpportunityCreationForm(forms.ModelForm):
         self.fields["deliver_app"] = forms.ChoiceField(choices=app_choices)
         self.fields["deliver_app"].widget.attrs.update({"id": "deliver_app_select"})
         self.fields["api_key"] = forms.CharField(max_length=50)
+        self.fields["total_budget"].widget.attrs.update({"class": "form-control-plaintext"})
+        self.fields["max_users"] = forms.IntegerField()
 
     def clean(self):
         cleaned_data = super().clean()

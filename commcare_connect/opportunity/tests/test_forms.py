@@ -18,11 +18,13 @@ class TestOpportunityCreationForm:
         return {
             "name": "Test opportunity",
             "description": FuzzyText(length=150).fuzz(),
+            "short_description": FuzzyText(length=50).fuzz(),
             "end_date": FuzzyDate(start_date=datetime.date.today()).fuzz(),
             "max_visits_per_user": 100,
             "daily_max_visits_per_user": 10,
             "total_budget": 100,
             "budget_per_visit": 10,
+            "max_users": 10,
             "learn_app": self.learn_app["id"],
             "learn_app_description": FuzzyText(length=150).fuzz(),
             "learn_app_passing_score": random.randint(30, 100),

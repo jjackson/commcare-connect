@@ -43,6 +43,7 @@ class Opportunity(BaseModel):
     )
     name = models.CharField(max_length=255)
     description = models.TextField()
+    short_description = models.CharField(max_length=50, null=True)
     active = models.BooleanField(default=True)
     learn_app = models.ForeignKey(
         CommCareApp,
@@ -191,6 +192,13 @@ class OpportunityAccess(models.Model):
     @property
     def total_paid(self):
         return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0)
+
+    @property
+    def display_name(self):
+        if self.accepted:
+            return self.user.name
+        else:
+            return "---"
 
 
 class PaymentUnit(models.Model):
