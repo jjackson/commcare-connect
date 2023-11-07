@@ -12,6 +12,7 @@
           x-data="{
             additionalVisits: 0,
             selected_users: [],
+            end_date: '',
             isSelected (id) { return this.selected_users.find(el => el === id)},
             totalVisits() { return this.selected_users.length * this.additionalVisits },
             calculatedBudget() { return this.totalVisits() * '{{ budget_per_visit }}' }
@@ -85,6 +86,10 @@
             <div class="modal-body">
               You are about to allocate an additional <b x-text="totalVisits()"></b> visits which will result in an
               additional budget allocation of <b x-text="calculatedBudget()"></b> to this Opportunity.
+              <div x-show="!!end_date">
+                You are changing the end date for the selected users to <b
+                x-text="new Date(end_date).toLocaleDateString()"></b>.
+              </div>
             </div>
             <div class="modal-footer">
               <button class="btn btn-primary" type="submit">Confirm</button>
