@@ -55,7 +55,7 @@ class TestConnectUserCreation:
 def test_send_inactive_notification_learn_inactive_message(mobile_user: User, opportunity: Opportunity):
     learn_modules = LearnModuleFactory.create_batch(2, app=opportunity.learn_app)
     CompletedModuleFactory.create(
-        date=datetime.datetime.now() - datetime.timedelta(days=100),
+        date=datetime.datetime.now() - datetime.timedelta(days=3),
         user=mobile_user,
         opportunity=opportunity,
         module=learn_modules[0],
