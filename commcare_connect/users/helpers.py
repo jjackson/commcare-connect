@@ -2,7 +2,10 @@ import requests
 from allauth.utils import build_absolute_uri
 from django.conf import settings
 from django.urls import reverse
+from django.utils.translation import gettext
 
+from commcare_connect.connect_id_client import send_message
+from commcare_connect.connect_id_client.models import Message
 from commcare_connect.organization.models import Organization
 from commcare_connect.utils.sms import send_sms
 
@@ -48,3 +51,13 @@ def invite_user(user, opportunity_access):
     if not user.phone_number:
         return
     send_sms(user.phone_number, body)
+    message = Message(
+        usernames=[user.username],
+        title=gettext(
+            f"You have been invited to a CommCare Connect opportunity - {opportunity_access.opportunity.name}"
+        ),
+        body=gettext(
+            f"You have been invited to a new job in Commcare Connect - {opportunity_access.opportunity.name}"
+        ),
+    )
+    send_message(message)
