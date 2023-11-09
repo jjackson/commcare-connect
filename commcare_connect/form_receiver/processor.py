@@ -1,6 +1,7 @@
 import datetime
 
 from django.db.models import Count, Q
+from django.utils.timezone import now
 from jsonpath_ng import JSONPathError
 from jsonpath_ng.ext import parse
 
@@ -190,7 +191,7 @@ def get_opportunity(*, learn_app=None, deliver_app=None):
         kwargs = {"deliver_app": deliver_app}
 
     try:
-        return Opportunity.objects.get(active=True, **kwargs)
+        return Opportunity.objects.get(active=True, end_date__gt=now().date(), **kwargs)
     except Opportunity.DoesNotExist:
         pass
     except Opportunity.MultipleObjectsReturned:
