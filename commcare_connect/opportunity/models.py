@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from django.db import models
 from django.db.models import Sum
+from django.utils.timezone import now
 from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization
@@ -95,6 +96,10 @@ class Opportunity(BaseModel):
             opportunity=self, status=VisitValidationStatus.approved
         ).count()
         return approved_user_visits
+
+    @property
+    def is_active(self):
+        return self.active and self.end_date > now().date()
 
 
 class LearnModule(models.Model):
