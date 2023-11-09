@@ -15,14 +15,14 @@ def create_send_inactive_notification_periodic_task(apps, schema_editor):
     PeriodicTask.objects.update_or_create(
         crontab=schedule,
         name="send_inactive_notifications",
-        task="commcare_connect.opportunity.task.send_notification_inactive_users",
+        task="commcare_connect.opportunity.tasks.send_notification_inactive_users",
     )
 
 
 def delete_send_inactive_notification_periodic_task(apps, schema_editor):
     PeriodicTask.objects.get(
         name="send_inactive_notifications",
-        task="commcare_connect.opportunity.task.send_notification_inactive_users",
+        task="commcare_connect.opportunity.tasks.send_notification_inactive_users",
     ).delete()
 
 
