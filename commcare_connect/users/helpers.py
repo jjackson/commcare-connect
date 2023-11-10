@@ -1,3 +1,5 @@
+import logging
+
 import requests
 from allauth.utils import build_absolute_uri
 from django.conf import settings
@@ -37,6 +39,7 @@ def create_hq_user(user, domain, api_key):
     )
     if hq_request.status_code == 201:
         return True
+    logging.info(f"Create User Response: {hq_request.text}")
     return False
 
 
