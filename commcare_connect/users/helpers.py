@@ -1,4 +1,4 @@
-import requests
+import httpx
 from allauth.utils import build_absolute_uri
 from django.conf import settings
 from django.urls import reverse
@@ -7,6 +7,7 @@ from django.utils.translation import gettext
 from commcare_connect.connect_id_client import send_message
 from commcare_connect.connect_id_client.models import Message
 from commcare_connect.organization.models import Organization
+from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 from commcare_connect.utils.sms import send_sms
 
 
@@ -27,7 +28,7 @@ def get_organization_for_request(request, view_kwargs):
 
 def create_hq_user(user, domain, api_key):
     mobile_worker_api_url = f"{settings.COMMCARE_HQ_URL}/a/{domain}/api/v0.5/user/"
-    hq_request = requests.post(
+    hq_request = httpx.post(
         mobile_worker_api_url,
         json={
             "username": user.username,
@@ -35,9 +36,14 @@ def create_hq_user(user, domain, api_key):
         },
         headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"},
     )
-    if hq_request.status_code == 201:
-        return True
-    return False
+    try:
+        hq_request.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise CommCareHQAPIException(
+            f"{e.response.status_code} Error response {e.response.text} while creating user {user.username}"
+        )
+
+    return hq_request.status_code == 201
 
 
 def invite_user(user, opportunity_access):
