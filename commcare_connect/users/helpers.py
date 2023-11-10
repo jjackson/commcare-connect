@@ -36,8 +36,6 @@ def create_hq_user(user, domain, api_key):
         },
         headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"},
     )
-    if hq_request.status_code == 201:
-        return True
     try:
         hq_request.raise_for_status()
     except httpx.HTTPStatusError as e:
@@ -45,7 +43,7 @@ def create_hq_user(user, domain, api_key):
             f"{e.response.status_code} Error response {e.response.text} while creating user {user.username}"
         )
 
-    return False
+    return hq_request.status_code == 201
 
 
 def invite_user(user, opportunity_access):
