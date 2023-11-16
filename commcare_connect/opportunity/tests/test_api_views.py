@@ -96,8 +96,7 @@ def test_claim_endpoint_uneven_visits(mobile_user: User, api_client: APIClient):
     api_client.force_authenticate(mobile_user)
     response = api_client.post(f"/api/opportunity/{opportunity.id}/claim")
     assert response.status_code == 201
-    claim = OpportunityClaim.objects.filter(opportunity_access=opportunity_access)
-    assert claim.exists()
+    claim = OpportunityClaim.objects.get(opportunity_access=opportunity_access)
     assert claim.max_payments == 1
 
 
