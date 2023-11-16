@@ -13,10 +13,9 @@ from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import ConnectIdUserLinkFactory
 
 
-def _setup_opportunity_and_access(mobile_user: User, total_budget, end_date, claimed_budget=0, budget_per_visit=10):
+def _setup_opportunity_and_access(mobile_user: User, total_budget, end_date, budget_per_visit=10):
     opportunity = OpportunityFactory(
         total_budget=total_budget,
-        claimed_budget=claimed_budget,
         max_visits_per_user=100,
         end_date=end_date,
         budget_per_visit=budget_per_visit,
@@ -77,9 +76,8 @@ def test_claim_endpoint_already_claimed_opportunity(mobile_user: User, api_clien
 def test_claim_endpoint_less_budget_than_visit(mobile_user: User, api_client: APIClient):
     opportunity, opportunity_access = _setup_opportunity_and_access(
         mobile_user,
-        total_budget=10,
+        total_budget=1,
         end_date=datetime.date.today() + datetime.timedelta(days=100),
-        claimed_budget=9,
         budget_per_visit=2,
     )
     api_client.force_authenticate(mobile_user)
@@ -91,9 +89,8 @@ def test_claim_endpoint_less_budget_than_visit(mobile_user: User, api_client: AP
 def test_claim_endpoint_uneven_visits(mobile_user: User, api_client: APIClient):
     opportunity, opportunity_access = _setup_opportunity_and_access(
         mobile_user,
-        total_budget=10,
+        total_budget=3,
         end_date=datetime.date.today() + datetime.timedelta(days=100),
-        claimed_budget=7,
         budget_per_visit=2,
     )
     api_client.force_authenticate(mobile_user)
