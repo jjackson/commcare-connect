@@ -284,6 +284,8 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
             OpportunityClaim.objects.filter(pk__in=selected_users).update(
                 max_payments=F("max_payments") + additional_visits, end_date=end_date
             )
+            opportunity.total_budget += additional_visits * opportunity.budget_per_visit * len(selected_users)
+            opportunity.save()
             return redirect("opportunity:detail", org_slug, pk)
 
     return render(
