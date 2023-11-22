@@ -26,8 +26,8 @@ class CommCareAppSerializer(serializers.ModelSerializer):
     organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
     learn_modules = LearnModuleSerializer(many=True)
     install_url = serializers.SerializerMethodField()
-    passing_score = serializers.IntegerField(source="passing_score", default=-1)
-    description = serializers.CharField(source="description", default="")
+    passing_score = serializers.IntegerField(default=-1)
+    description = serializers.CharField(default="")
 
     class Meta:
         model = CommCareApp
