@@ -87,7 +87,7 @@ def generate_payment_export(opportunity_id: int, export_format: str):
 def send_notification_inactive_users():
     opportunity_accesses = OpportunityAccess.objects.filter(
         opportunity__active=True,
-        opportunity__end_date__gt=datetime.date.today(),
+        opportunity__end_date__gte=datetime.date.today(),
     ).select_related("opportunity")
     messages = []
     for access in opportunity_accesses:
