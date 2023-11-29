@@ -11,7 +11,6 @@ servers:
     options:
       # create by ansible
       env-file: '/home/connect/www/commcare-connect/docker.env'
-      memory: '1g'
     cmd: /start_celery
     labels:
       traefik.enable: false
