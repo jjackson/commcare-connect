@@ -279,11 +279,12 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
         if form.is_valid():
             selected_users = form.cleaned_data["selected_users"]
             additional_visits = form.cleaned_data["additional_visits"]
+            update_kwargs = {"max_payments": F("max_payments") + additional_visits}
             if form.cleaned_data["end_date"]:
-                end_date = form.cleaned_data["end_date"]
-            OpportunityClaim.objects.filter(pk__in=selected_users).update(
-                max_payments=F("max_payments") + additional_visits, end_date=end_date
-            )
+                update_kwargs.update({"end_date": form.cleaned_data["end_date"]})
+            OpportunityClaim.objects.filter(pk__in=selected_users).update(**update_kwargs)
+            opportunity.total_budget += additional_visits * opportunity.budget_per_visit * len(selected_users)
+            opportunity.save()
             return redirect("opportunity:detail", org_slug, pk)
 
     return render(
