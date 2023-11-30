@@ -65,6 +65,12 @@
                   {% translate "Import Payment Records" %}
                 </a>
               </li>
+              <li>
+                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportUserStatusModal">
+                  <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
+                  {% translate "Export Users Status" %}
+                </a>
+              </li>
             </ul>
           </div>
         </div>
@@ -274,7 +280,7 @@
 {% endblock content %}
 
 {% block modal %}
-<!-- Export modal -->
+<!-- User Visit Export modal -->
 <div class="modal fade" id="exportVisitModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -298,7 +304,7 @@
   </div>
 </div>
 
-<!-- Import modal -->
+<!-- User Visit Import modal -->
 <div class="modal fade" id="importVisitModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -331,7 +337,7 @@
   </div>
 </div>
 
-<!-- Export modal -->
+<!-- Payment Export modal -->
 <div class="modal fade" id="exportPaymentModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -355,7 +361,7 @@
   </div>
 </div>
 
-<!-- Import modal -->
+<!-- Payment Import modal -->
 <div class="modal fade" id="importPaymentModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -386,4 +392,27 @@
     </div>
   </div>
 </div>
+  <!-- User status Export modal -->
+  <div class="modal fade" id="exportUserStatusModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h1 class="modal-title fs-5">{% translate "Export User Status" %}</h1>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form action="{% url "opportunity:user_status_export" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
+              enctype="multipart/form-data">
+          <div class="modal-body">
+            <div class="mb-3">
+              {% crispy user_status_export_form %}
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="submit" class="btn btn-primary">Export</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 {% endblock modal %}
