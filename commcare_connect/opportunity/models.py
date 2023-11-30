@@ -205,6 +205,14 @@ class OpportunityAccess(models.Model):
         else:
             return "---"
 
+    @property
+    def completed_learning(self):
+        return self.learn_progress == 100
+
+    @property
+    def is_claimed(self):
+        return hasattr(self, "opportunityclaim") and self.opportunityclaim is not None
+
 
 class PaymentUnit(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)

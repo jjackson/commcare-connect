@@ -74,12 +74,32 @@ class UserPaymentsTable(tables.Table):
         template_name = "django_tables2/bootstrap5.html"
 
 
+class BooleanAggregateColumn(columns.BooleanColumn):
+    def render_footer(self, bound_column, table):
+        return sum(1 if bound_column.accessor.resolve(row) else 0 for row in table.data)
+
+
 class UserStatusTable(tables.Table):
-    display_name = columns.Column(verbose_name="Name")
+    display_name = columns.Column(verbose_name="Name", footer="Total")
+    accepted = BooleanAggregateColumn(verbose_name="Accepted")
+    claimed = BooleanAggregateColumn(verbose_name="Claimed", accessor="is_claimed")
+    started_learning = BooleanAggregateColumn(verbose_name="Started Learning", accessor="learn_progress")
+    completed_learning = BooleanAggregateColumn(verbose_name="Completed Learning", accessor="completed_learning")
+    started_delivery = BooleanAggregateColumn(verbose_name="Started Delivery", accessor="visit_count")
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "user.username", "accepted")
+        fields = ("display_name", "user.username", "accepted", "last_visit_date")
+        sequence = (
+            "display_name",
+            "user.username",
+            "accepted",
+            "started_learning",
+            "completed_learning",
+            "claimed",
+            "started_delivery",
+            "last_visit_date",
+        )
         empty_text = "No users invited for this opportunity."
         orderable = False
 
