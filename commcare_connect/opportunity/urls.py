@@ -17,6 +17,7 @@ from commcare_connect.opportunity.views import (
     download_export,
     edit_payment_unit,
     export_status,
+    export_user_status,
     export_user_visits,
     export_users_for_payment,
     payment_import,
@@ -53,4 +54,5 @@ urlpatterns = [
     path("<int:pk>/payment_unit_table/", view=OpportunityPaymentUnitTableView.as_view(), name="payment_unit_table"),
     path("<int:opp_id>/payment_unit/<int:pk>/edit", view=edit_payment_unit, name="edit_payment_unit"),
     path("<int:opp_id>/user_payment_table/<int:pk>", view=UserPaymentsTableView.as_view(), name="user_payments_table"),
+    path("<int:pk>/user_status_export/", view=export_user_status, name="user_status_export"),
 ]
