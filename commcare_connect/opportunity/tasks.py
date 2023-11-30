@@ -8,7 +8,11 @@ from django.utils.translation import gettext
 from commcare_connect.connect_id_client import fetch_users, send_message_bulk
 from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
-from commcare_connect.opportunity.export import export_empty_payment_table, export_user_visit_data
+from commcare_connect.opportunity.export import (
+    export_empty_payment_table,
+    export_user_status_table,
+    export_user_visit_data,
+)
 from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import (
     CompletedModule,
@@ -77,6 +81,18 @@ def generate_payment_export(opportunity_id: int, export_format: str):
     dataset = export_empty_payment_table(opportunity)
     content = dataset.export(export_format)
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_export.{export_format}"
+    if isinstance(content, str):
+        content = content.encode()
+    default_storage.save(export_tmp_name, ContentFile(content))
+    return export_tmp_name
+
+
+@celery_app.task()
+def generate_user_status_export(opportunity_id: int, export_format: str):
+    opportunity = Opportunity.objects.get(id=opportunity_id)
+    dataset = export_user_status_table(opportunity)
+    content = dataset.export(export_format)
+    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_user_status.{export_format}"
     if isinstance(content, str):
         content = content.encode()
     default_storage.save(export_tmp_name, ContentFile(content))
