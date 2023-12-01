@@ -74,18 +74,23 @@ class UserPaymentsTable(tables.Table):
         template_name = "django_tables2/bootstrap5.html"
 
 
-class BooleanAggregateColumn(columns.BooleanColumn):
+class AggregateColumn(columns.Column):
     def render_footer(self, bound_column, table):
         return sum(1 if bound_column.accessor.resolve(row) else 0 for row in table.data)
+
+
+class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
+    pass
 
 
 class UserStatusTable(tables.Table):
     display_name = columns.Column(verbose_name="Name", footer="Total")
     accepted = BooleanAggregateColumn(verbose_name="Accepted")
-    claimed = BooleanAggregateColumn(verbose_name="Claimed", accessor="is_claimed")
-    started_learning = BooleanAggregateColumn(verbose_name="Started Learning", accessor="learn_progress")
-    completed_learning = BooleanAggregateColumn(verbose_name="Completed Learning", accessor="completed_learning")
-    started_delivery = BooleanAggregateColumn(verbose_name="Started Delivery", accessor="visit_count")
+    claimed = AggregateColumn(verbose_name="Job Claimed", accessor="opportunityclaim.date_claimed")
+    started_learning = AggregateColumn(verbose_name="Started Learning", accessor="date_learn_started")
+    completed_learning = AggregateColumn(verbose_name="Completed Learning", accessor="date_learn_completed")
+    learn_passed = BooleanAggregateColumn(verbose_name="Learn Passed", accessor="has_passed_learn")
+    started_delivery = AggregateColumn(verbose_name="Started Delivery", accessor="date_deliver_started")
 
     class Meta:
         model = OpportunityAccess
@@ -96,6 +101,7 @@ class UserStatusTable(tables.Table):
             "accepted",
             "started_learning",
             "completed_learning",
+            "learn_passed",
             "claimed",
             "started_delivery",
             "last_visit_date",

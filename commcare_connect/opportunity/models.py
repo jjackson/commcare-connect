@@ -206,12 +206,25 @@ class OpportunityAccess(models.Model):
             return "---"
 
     @property
-    def completed_learning(self):
-        return self.learn_progress == 100
+    def date_learn_completed(self):
+        if self.learn_progress != 100:
+            return ""
+        module = CompletedModule.objects.filter(user=self.user, opportunity=self.opportunity).order_by("date").last()
+        return module.date
 
     @property
-    def is_claimed(self):
-        return hasattr(self, "opportunityclaim") and self.opportunityclaim is not None
+    def date_deliver_started(self):
+        user_visit = (
+            UserVisit.objects.filter(user=self.user, opportunity=self.opportunity).order_by("visit_date").first()
+        )
+        return user_visit.visit_date if user_visit else ""
+
+    @property
+    def has_passed_learn(self):
+        assessment = Assessment.objects.filter(user=self.user, opportunity=self.opportunity, passed=True).order_by(
+            "date"
+        )
+        return assessment is not None
 
 
 class PaymentUnit(models.Model):
