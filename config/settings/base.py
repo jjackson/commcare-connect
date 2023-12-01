@@ -135,7 +135,6 @@ STORAGES = {
 }
 WHITENOISE_MANIFEST_STRICT = False  # don't 500 on missing staticfiles
 
-
 # MEDIA
 # ------------------------------------------------------------------------------
 MEDIA_ROOT = str(APPS_DIR / "media")
@@ -295,6 +294,9 @@ DJANGO_TABLES2_TABLE_ATTRS = {
     "class": "table border table-custom",
     "thead": {
         "class": "table-secondary",
+    },
+    "tfoot": {
+        "class": "table-light fw-bold",
     },
 }
 
