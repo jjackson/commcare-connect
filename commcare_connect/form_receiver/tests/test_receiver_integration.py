@@ -15,6 +15,7 @@ from commcare_connect.opportunity.models import (
     CompletedModule,
     LearnModule,
     Opportunity,
+    OpportunityClaim,
     UserVisit,
     VisitValidationStatus,
 )
@@ -122,7 +123,10 @@ def _create_opp_and_form_json(
 ):
     opportunity.daily_max_visits_per_user = daily_max_per_user
     opportunity.save()
-
+    OpportunityClaim.objects.filter(
+        opportunity_access__opportunity=opportunity,
+        opportunity_access__user=user,
+    ).update(max_payments=max_visits_per_user, end_date=end_date)
     deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app)
     stub = DeliverUnitStubFactory(id=deliver_unit.slug)
     form_json = get_form_json(
