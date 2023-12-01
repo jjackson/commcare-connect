@@ -1,12 +1,16 @@
 import pytest
 from rest_framework.test import APIClient, APIRequestFactory
 
-from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, OpportunityFactory
+from commcare_connect.opportunity.tests.factories import (
+    OpportunityAccessFactory,
+    OpportunityClaimFactory,
+    OpportunityFactory,
+)
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import (
+    ConnectIdUserLinkFactory,
     MobileUserFactory,
-    MobileUserWithConnectIDLink,
     OrgWithUsersFactory,
     UserFactory,
 )
@@ -52,8 +56,20 @@ def mobile_user(db, opportunity) -> User:
 
 
 @pytest.fixture
-def mobile_user_with_connect_link(db) -> User:
-    return MobileUserWithConnectIDLink()
+def mobile_user_with_connect_link(db, opportunity) -> User:
+    user = MobileUserFactory()
+    access = OpportunityAccessFactory(user=user, opportunity=opportunity)
+    OpportunityClaimFactory(
+        max_payments=opportunity.max_visits_per_user,
+        end_date=opportunity.end_date,
+        opportunity_access=access,
+    )
+    ConnectIdUserLinkFactory(user=user, commcare_username=f"test@{opportunity.learn_app.cc_domain}.commcarehq.org")
+    if opportunity.learn_app.cc_domain != opportunity.deliver_app.cc_domain:
+        ConnectIdUserLinkFactory(
+            user=user, commcare_username=f"test@{opportunity.deliver_app.cc_domain}.commcarehq.org"
+        )
+    return user
 
 
 @pytest.fixture
