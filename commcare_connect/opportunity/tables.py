@@ -90,7 +90,7 @@ class UserStatusTable(tables.Table):
     started_learning = AggregateColumn(verbose_name="Started Learning", accessor="date_learn_started")
     completed_learning = AggregateColumn(verbose_name="Completed Learning", accessor="date_learn_completed")
     passed_assessment = BooleanAggregateColumn(verbose_name="Passed Assessment")
-    started_delivery = AggregateColumn(verbose_name="Started Delivery")
+    started_delivery = AggregateColumn(verbose_name="Started Delivery", accessor="date_deliver_started")
     last_visit_date = columns.Column(accessor="last_visit_date_d")
 
     class Meta:
