@@ -191,7 +191,7 @@ class OpportunityAccess(models.Model):
             .order_by("visit_date")
         )
         if user_visits.exists():
-            return user_visits.first().visit_date
+            return user_visits.last().visit_date
         return
 
     @property
