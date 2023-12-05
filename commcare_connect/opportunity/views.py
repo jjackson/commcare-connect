@@ -23,6 +23,7 @@ from commcare_connect.opportunity.forms import (
     PaymentUnitForm,
     VisitExportForm,
 )
+from commcare_connect.opportunity.helpers import get_annotated_opportunity_access
 from commcare_connect.opportunity.models import (
     CompletedModule,
     DeliverUnit,
@@ -305,7 +306,8 @@ class OpportunityUserStatusTableView(OrganizationUserMixin, SingleTableView):
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        return OpportunityAccess.objects.filter(opportunity=opportunity).order_by("user__name")
+        access_objects = get_annotated_opportunity_access(opportunity)
+        return access_objects
 
 
 @org_member_required
