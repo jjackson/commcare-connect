@@ -89,8 +89,9 @@ class UserStatusTable(tables.Table):
     claimed = AggregateColumn(verbose_name="Job Claimed", accessor="opportunityclaim.date_claimed")
     started_learning = AggregateColumn(verbose_name="Started Learning", accessor="date_learn_started")
     completed_learning = AggregateColumn(verbose_name="Completed Learning", accessor="date_learn_completed")
-    learn_passed = BooleanAggregateColumn(verbose_name="Learn Passed", accessor="has_passed_learn")
-    started_delivery = AggregateColumn(verbose_name="Started Delivery", accessor="date_deliver_started")
+    passed_assessment = BooleanAggregateColumn(verbose_name="Passed Assessment")
+    started_delivery = AggregateColumn(verbose_name="Started Delivery")
+    last_visit_date = columns.Column(accessor="last_visit_date_d")
 
     class Meta:
         model = OpportunityAccess
@@ -101,7 +102,7 @@ class UserStatusTable(tables.Table):
             "accepted",
             "started_learning",
             "completed_learning",
-            "learn_passed",
+            "passed_assessment",
             "claimed",
             "started_delivery",
             "last_visit_date",
