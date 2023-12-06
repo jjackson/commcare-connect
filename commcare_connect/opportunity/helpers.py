@@ -26,5 +26,6 @@ def get_annotated_opportunity_access(opportunity: Opportunity):
                 output_field=DateTimeField(),
             ),
         )
+        .order_by("user__name")
     )
     return access_objects
