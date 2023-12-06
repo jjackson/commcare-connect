@@ -121,3 +121,16 @@ class CompletedModuleFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.CompletedModule"
+
+
+class AssessmentFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    user = SubFactory("commcare_connect.users.tests.factories.UserFactory")
+    app = SubFactory(CommCareAppFactory)
+    passed = True
+    score = Faker("pyint", min_value=75, max_value=100)
+    passing_score = Faker("pyint", min_value=1, max_value=50)
+    date = Faker("date")
+
+    class Meta:
+        model = "opportunity.Assessment"
