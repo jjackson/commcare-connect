@@ -7,7 +7,7 @@ from .models import UserOrganizationMembership
 
 
 def _request_user_is_member(request):
-    return request.org and request.org_membership
+    return (request.org and request.org_membership) or request.user.is_superuser
 
 
 def _request_user_is_admin(request):
