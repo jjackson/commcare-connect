@@ -3,8 +3,9 @@ from flatten_dict import flatten
 from tablib import Dataset
 
 from commcare_connect.opportunity.forms import DateRanges
+from commcare_connect.opportunity.helpers import get_annotated_opportunity_access
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, UserVisit, VisitValidationStatus
-from commcare_connect.opportunity.tables import UserVisitTable
+from commcare_connect.opportunity.tables import UserStatusTable, UserVisitTable
 
 
 def export_user_visit_data(
@@ -71,4 +72,16 @@ def export_empty_payment_table(opportunity: Opportunity) -> Dataset:
     for access in access_objects:
         row = (access.user.username, access.user.phone_number, access.user.name, "")
         dataset.append(row)
+    return dataset
+
+
+def export_user_status_table(opportunity: Opportunity) -> Dataset:
+    access_objects = get_annotated_opportunity_access(opportunity)
+    table = UserStatusTable(access_objects)
+
+    columns = [column for column in table.columns.iterall()]
+    headers = [force_str(column.header, strings_only=True) for column in columns]
+    dataset = Dataset(title="User status export", headers=headers)
+    for row in table.rows:
+        dataset.append([row.get_cell_value(column.name) for column in columns])
     return dataset
