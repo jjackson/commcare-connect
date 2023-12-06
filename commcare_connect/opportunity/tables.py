@@ -74,12 +74,39 @@ class UserPaymentsTable(tables.Table):
         template_name = "django_tables2/bootstrap5.html"
 
 
+class AggregateColumn(columns.Column):
+    def render_footer(self, bound_column, table):
+        return sum(1 if bound_column.accessor.resolve(row) else 0 for row in table.data)
+
+
+class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
+    pass
+
+
 class UserStatusTable(tables.Table):
-    display_name = columns.Column(verbose_name="Name")
+    display_name = columns.Column(verbose_name="Name", footer="Total")
+    accepted = BooleanAggregateColumn(verbose_name="Accepted")
+    claimed = AggregateColumn(verbose_name="Job Claimed", accessor="opportunityclaim.date_claimed")
+    started_learning = AggregateColumn(verbose_name="Started Learning", accessor="date_learn_started")
+    completed_learning = AggregateColumn(verbose_name="Completed Learning", accessor="date_learn_completed")
+    passed_assessment = BooleanAggregateColumn(verbose_name="Passed Assessment")
+    started_delivery = AggregateColumn(verbose_name="Started Delivery", accessor="date_deliver_started")
+    last_visit_date = columns.Column(accessor="last_visit_date_d")
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "user.username", "accepted")
+        fields = ("display_name", "user.username", "accepted", "last_visit_date")
+        sequence = (
+            "display_name",
+            "user.username",
+            "accepted",
+            "started_learning",
+            "completed_learning",
+            "passed_assessment",
+            "claimed",
+            "started_delivery",
+            "last_visit_date",
+        )
         empty_text = "No users invited for this opportunity."
         orderable = False
 
