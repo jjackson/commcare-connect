@@ -1,4 +1,4 @@
-from django.db.models import BooleanField, Case, Count, Max, Min, Q, When
+from django.db.models import Case, Count, Max, Min, Q, Sum, When
 
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
 
@@ -13,10 +13,11 @@ def get_annotated_opportunity_access(opportunity: Opportunity):
             date_deliver_started=Min(
                 "user__uservisit__visit_date", filter=Q(user__uservisit__opportunity=opportunity)
             ),
-            passed_assessment=Case(
-                When(Q(user__assessments__opportunity=opportunity, user__assessments__passed=True), then=True),
-                default=False,
-                output_field=BooleanField(),
+            passed_assessment=Sum(
+                Case(
+                    When(Q(user__assessments__opportunity=opportunity, user__assessments__passed=True), then=1),
+                    default=0,
+                )
             ),
             completed_modules_count=Count(
                 "user__completed_modules", filter=Q(user__completed_modules__opportunity=opportunity)
