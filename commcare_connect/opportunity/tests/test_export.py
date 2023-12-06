@@ -1,10 +1,21 @@
 import pytest
 from django.utils.timezone import now
+from tablib import Dataset
 
-from commcare_connect.opportunity.export import export_user_visit_data, get_flattened_dataset
+from commcare_connect.opportunity.export import export_user_status_table, export_user_visit_data, get_flattened_dataset
 from commcare_connect.opportunity.forms import DateRanges
-from commcare_connect.opportunity.models import UserVisit
-from commcare_connect.opportunity.tests.factories import DeliverUnitFactory, OpportunityFactory
+from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, OpportunityClaim, UserVisit
+from commcare_connect.opportunity.tests.factories import (
+    AssessmentFactory,
+    CompletedModuleFactory,
+    DeliverUnitFactory,
+    LearnModuleFactory,
+    OpportunityAccessFactory,
+    OpportunityClaimFactory,
+    OpportunityFactory,
+    UserVisitFactory,
+)
+from commcare_connect.users.tests.factories import MobileUserFactory
 
 
 def test_export_user_visit_data(mobile_user_with_connect_link):
@@ -66,3 +77,43 @@ def test_get_flattened_dataset(data, expected):
     dataset = get_flattened_dataset(headers, data)
     assert dataset.headers == ["header1", "header2"] + [x[0] for x in expected]
     assert dataset[0] == ("value1", "value2") + tuple(x[1] for x in expected)
+
+
+@pytest.mark.django_db
+def test_export_user_status_table_data(opportunity: Opportunity):
+    LearnModuleFactory.create_batch(3, app=opportunity.learn_app)
+    mobile_users = MobileUserFactory.create_batch(2)
+    prepared_dateset = Dataset()
+    prepared_dateset.headers = (
+        "Name",
+        "Username",
+        "Accepted",
+        "Started Learning",
+        "Completed Learning",
+        "Passed Assessment",
+        "Job Claimed",
+        "Started Delivery",
+        "Last visit date",
+    )
+    for mobile_user in sorted(mobile_users, key=lambda x: x.name):
+        date = now()
+        try:
+            access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
+        except OpportunityAccess.DoesNotExist:
+            access = OpportunityAccessFactory(
+                opportunity=opportunity,
+                user=mobile_user,
+                accepted=True,
+                date_learn_started=date,
+            )
+        if not OpportunityClaim.objects.filter(opportunity_access=access).exists():
+            OpportunityClaimFactory(opportunity_access=access, max_payments=10, date_claimed=date)
+        for learn_module in opportunity.learn_app.learn_modules.all():
+            CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
+        AssessmentFactory(app=opportunity.learn_app, opportunity=opportunity, user=mobile_user, passed=True, date=date)
+        UserVisitFactory.create_batch(1, opportunity=opportunity, user=mobile_user, visit_date=date)
+        prepared_dateset.append(
+            (mobile_user.name, mobile_user.username, True, date, date, True, date.date(), date, date)
+        )
+    dataset = export_user_status_table(opportunity)
+    assert prepared_dateset.export("csv") == dataset.export("csv")
