@@ -75,8 +75,7 @@ class UserPaymentsTable(tables.Table):
 
 
 class AggregateColumn(columns.Column):
-    def render_footer(self, bound_column, table):
-        return sum(1 if bound_column.accessor.resolve(row) else 0 for row in table.data)
+    pass
 
 
 class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
