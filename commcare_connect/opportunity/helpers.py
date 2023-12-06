@@ -1,31 +1,29 @@
-from django.db.models import BooleanField, Case, Count, DateTimeField, Max, Min, Q, When
+from django.db.models import BooleanField, Case, Count, Max, Min, Q, When
 
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
 
 
 def get_annotated_opportunity_access(opportunity: Opportunity):
+    learn_modules_count = opportunity.learn_app.learn_modules.count()
     access_objects = (
         OpportunityAccess.objects.filter(opportunity=opportunity)
         .select_related("user", "opportunityclaim")
         .annotate(
             last_visit_date_d=Max("user__uservisit__visit_date", filter=Q(user__uservisit__opportunity=opportunity)),
-            learn_progress_d=(Count("user__completed_modules") / Count("opportunity__learn_app__learn_modules")) * 100,
+            learn_progress_d=(
+                (Count("user__completed_modules", filter=Q(user__completed_modules__opportunity=opportunity)) * 100)
+                / learn_modules_count
+            ),
             date_deliver_started=Min(
                 "user__uservisit__visit_date", filter=Q(user__uservisit__opportunity=opportunity)
             ),
             passed_assessment=Case(
-                When(Q(user__assessments__opportunity=opportunity), then=True),
+                When(Q(user__assessments__opportunity=opportunity, user__assessments__passed=True), then=True),
                 default=False,
                 output_field=BooleanField(),
             ),
         )
-        .annotate(
-            date_learn_completed=Case(
-                When(learn_progress_d=100, then=Max("user__completed_modules__date")),
-                default=None,
-                output_field=DateTimeField(),
-            ),
-        )
+        .annotate(date_learn_completed=Case(When(learn_progress_d=100, then=Max("user__completed_modules__date"))))
         .order_by("user__name")
     )
     return access_objects
