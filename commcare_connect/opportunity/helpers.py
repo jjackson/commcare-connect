@@ -10,10 +10,6 @@ def get_annotated_opportunity_access(opportunity: Opportunity):
         .select_related("user", "opportunityclaim")
         .annotate(
             last_visit_date_d=Max("user__uservisit__visit_date", filter=Q(user__uservisit__opportunity=opportunity)),
-            learn_progress_d=(
-                (Count("user__completed_modules", filter=Q(user__completed_modules__opportunity=opportunity)) * 100)
-                / learn_modules_count
-            ),
             date_deliver_started=Min(
                 "user__uservisit__visit_date", filter=Q(user__uservisit__opportunity=opportunity)
             ),
@@ -22,8 +18,19 @@ def get_annotated_opportunity_access(opportunity: Opportunity):
                 default=False,
                 output_field=BooleanField(),
             ),
+            completed_modules_count=Count(
+                "user__completed_modules", filter=Q(user__completed_modules__opportunity=opportunity)
+            ),
         )
-        .annotate(date_learn_completed=Case(When(learn_progress_d=100, then=Max("user__completed_modules__date"))))
+        .annotate(
+            date_learn_completed=Case(
+                When(
+                    Q(completed_modules_count=learn_modules_count),
+                    then=Max("user__completed_modules__date"),
+                )
+            )
+        )
         .order_by("user__name")
     )
+
     return access_objects
