@@ -15,6 +15,7 @@ from commcare_connect.opportunity.tests.factories import (
     OpportunityFactory,
     UserVisitFactory,
 )
+from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import MobileUserFactory
 
 
@@ -79,12 +80,9 @@ def test_get_flattened_dataset(data, expected):
     assert dataset[0] == ("value1", "value2") + tuple(x[1] for x in expected)
 
 
-@pytest.mark.django_db
-def test_export_user_status_table_data(opportunity: Opportunity):
-    LearnModuleFactory.create_batch(3, app=opportunity.learn_app)
-    mobile_users = MobileUserFactory.create_batch(2)
-    prepared_dateset = Dataset()
-    prepared_dateset.headers = (
+def _get_prepared_dataset_for_user_status_test(rows):
+    prepared_dataset = Dataset()
+    prepared_dataset.headers = (
         "Name",
         "Username",
         "Accepted",
@@ -95,25 +93,68 @@ def test_export_user_status_table_data(opportunity: Opportunity):
         "Started Delivery",
         "Last visit date",
     )
+    for row in rows:
+        prepared_dataset.append(row)
+    return prepared_dataset
+
+
+def _setup_user_access_and_claim(opportunity: Opportunity, mobile_user: User, date):
+    try:
+        access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
+    except OpportunityAccess.DoesNotExist:
+        access = OpportunityAccessFactory(
+            opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date
+        )
+    if not OpportunityClaim.objects.filter(opportunity_access=access).exists():
+        OpportunityClaimFactory(opportunity_access=access, max_payments=10, date_claimed=date)
+
+
+@pytest.mark.django_db
+def test_export_user_status_table_learn_data_only(opportunity: Opportunity):
+    LearnModuleFactory.create_batch(3, app=opportunity.learn_app)
+    mobile_users = MobileUserFactory.create_batch(2)
+    rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
         date = now()
-        try:
-            access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
-        except OpportunityAccess.DoesNotExist:
-            access = OpportunityAccessFactory(
-                opportunity=opportunity,
-                user=mobile_user,
-                accepted=True,
-                date_learn_started=date,
-            )
-        if not OpportunityClaim.objects.filter(opportunity_access=access).exists():
-            OpportunityClaimFactory(opportunity_access=access, max_payments=10, date_claimed=date)
+        _setup_user_access_and_claim(opportunity, mobile_user, date)
+        for learn_module in opportunity.learn_app.learn_modules.all()[2:]:
+            CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
+        rows.append((mobile_user.name, mobile_user.username, True, date, "", False, date.date(), "", ""))
+    dataset = export_user_status_table(opportunity)
+    prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
+    assert prepared_test_dataset.export("csv") == dataset.export("csv")
+
+
+@pytest.mark.django_db
+def test_export_user_status_table_learn_assessment_data_only(opportunity: Opportunity):
+    LearnModuleFactory.create_batch(3, app=opportunity.learn_app)
+    mobile_users = MobileUserFactory.create_batch(2)
+    rows = []
+    for mobile_user in sorted(mobile_users, key=lambda x: x.name):
+        date = now()
+        _setup_user_access_and_claim(opportunity, mobile_user, date)
+        for learn_module in opportunity.learn_app.learn_modules.all():
+            CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
+        AssessmentFactory(app=opportunity.learn_app, opportunity=opportunity, user=mobile_user, passed=True, date=date)
+        rows.append((mobile_user.name, mobile_user.username, True, date, date, True, date.date(), "", ""))
+    dataset = export_user_status_table(opportunity)
+    prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
+    assert prepared_test_dataset.export("csv") == dataset.export("csv")
+
+
+@pytest.mark.django_db
+def test_export_user_status_table_data(opportunity: Opportunity):
+    LearnModuleFactory.create_batch(3, app=opportunity.learn_app)
+    mobile_users = MobileUserFactory.create_batch(2)
+    rows = []
+    for mobile_user in sorted(mobile_users, key=lambda x: x.name):
+        date = now()
+        _setup_user_access_and_claim(opportunity, mobile_user, date)
         for learn_module in opportunity.learn_app.learn_modules.all():
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
         AssessmentFactory(app=opportunity.learn_app, opportunity=opportunity, user=mobile_user, passed=True, date=date)
         UserVisitFactory.create_batch(1, opportunity=opportunity, user=mobile_user, visit_date=date)
-        prepared_dateset.append(
-            (mobile_user.name, mobile_user.username, True, date, date, True, date.date(), date, date)
-        )
+        rows.append((mobile_user.name, mobile_user.username, True, date, date, True, date.date(), date, date))
     dataset = export_user_status_table(opportunity)
-    assert prepared_dateset.export("csv") == dataset.export("csv")
+    prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
+    assert prepared_test_dataset.export("csv") == dataset.export("csv")
