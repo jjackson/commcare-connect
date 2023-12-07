@@ -128,3 +128,16 @@ class PaymentUnitTable(tables.Table):
     def render_deliver_units(self, record):
         deliver_units = "".join([f"<li>{d.name}</li>" for d in record.deliver_units.all()])
         return mark_safe(f"<ul>{deliver_units}</ul>")
+
+
+class PaymentAndVerificationTable(tables.Table):
+    visits_completed = columns.Column()
+    visits_approved = columns.Column()
+    visits_pending = columns.Column()
+    visits_rejected = columns.Column()
+    visits_over_limit = columns.Column()
+
+    class Meta:
+        model = OpportunityAccess
+        fields = ("display_name", "user.username")
+        orderable = False
