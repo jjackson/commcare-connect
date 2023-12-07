@@ -30,7 +30,9 @@ def get_annotated_opportunity_access(opportunity: Opportunity):
             date_learn_completed=Case(
                 When(
                     Q(completed_modules_count=learn_modules_count),
-                    then=Max("user__completed_modules__date"),
+                    then=Max(
+                        "user__completed_modules__date", filter=Q(user__completed_modules__opportunity=opportunity)
+                    ),
                 )
             )
         )
