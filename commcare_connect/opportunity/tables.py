@@ -75,7 +75,8 @@ class UserPaymentsTable(tables.Table):
 
 
 class AggregateColumn(columns.Column):
-    pass
+    def render_footer(self, bound_column, table):
+        return sum(1 if bound_column.accessor.resolve(row) else 0 for row in table.data)
 
 
 class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
@@ -85,7 +86,7 @@ class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
 class UserStatusTable(tables.Table):
     display_name = columns.Column(verbose_name="Name", footer="Total")
     accepted = BooleanAggregateColumn(verbose_name="Accepted")
-    claimed = AggregateColumn(verbose_name="Job Claimed", accessor="opportunityclaim.date_claimed")
+    claimed = AggregateColumn(verbose_name="Job Claimed", accessor="job_claimed")
     started_learning = AggregateColumn(verbose_name="Started Learning", accessor="date_learn_started")
     completed_learning = AggregateColumn(verbose_name="Completed Learning", accessor="date_learn_completed")
     passed_assessment = BooleanAggregateColumn(verbose_name="Passed Assessment")

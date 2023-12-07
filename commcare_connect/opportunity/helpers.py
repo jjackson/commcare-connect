@@ -22,6 +22,7 @@ def get_annotated_opportunity_access(opportunity: Opportunity):
             completed_modules_count=Count(
                 "user__completed_modules", filter=Q(user__completed_modules__opportunity=opportunity)
             ),
+            job_claimed=Case(When(Q(opportunityclaim__isnull=False), then="opportunityclaim__date_claimed")),
         )
         .annotate(
             date_learn_completed=Case(
