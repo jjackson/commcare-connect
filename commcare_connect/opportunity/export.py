@@ -1,3 +1,5 @@
+import datetime
+
 from django.utils.encoding import force_str
 from flatten_dict import flatten
 from tablib import Dataset
@@ -83,5 +85,11 @@ def export_user_status_table(opportunity: Opportunity) -> Dataset:
     headers = [force_str(column.header, strings_only=True) for column in columns]
     dataset = Dataset(title="User status export", headers=headers)
     for row in table.rows:
-        dataset.append([row.get_cell_value(column.name) for column in columns])
+        row_value = []
+        for column in columns:
+            col_value = row.get_cell_value(column.name)
+            if isinstance(col_value, datetime.datetime):
+                col_value = col_value.replace(tzinfo=None)
+            row_value.append(col_value)
+        dataset.append(row_value)
     return dataset
