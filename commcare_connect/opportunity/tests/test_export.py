@@ -1,3 +1,5 @@
+import datetime
+
 import pytest
 from django.utils.timezone import now
 from tablib import Dataset
@@ -103,7 +105,7 @@ def test_export_user_status_table_no_data_only(opportunity: Opportunity):
     mobile_users = MobileUserFactory.create_batch(2)
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
-        date = now()
+        date = datetime.datetime.now()
         OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date)
         rows.append((mobile_user.name, mobile_user.username, True, date, "", False, "", "", ""))
     dataset = export_user_status_table(opportunity)
@@ -117,7 +119,7 @@ def test_export_user_status_table_learn_data_only(opportunity: Opportunity):
     mobile_users = MobileUserFactory.create_batch(2)
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
-        date = now()
+        date = datetime.datetime.now()
         OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date)
         for learn_module in opportunity.learn_app.learn_modules.all()[2:]:
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
@@ -133,7 +135,7 @@ def test_export_user_status_table_learn_assessment_data_only(opportunity: Opport
     mobile_users = MobileUserFactory.create_batch(2)
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
-        date = now()
+        date = datetime.datetime.now()
         OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date)
         for learn_module in opportunity.learn_app.learn_modules.all():
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
@@ -150,7 +152,7 @@ def test_export_user_status_table_data(opportunity: Opportunity):
     mobile_users = MobileUserFactory.create_batch(2)
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
-        date = now()
+        date = datetime.datetime.now()
         access = OpportunityAccessFactory(
             opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date
         )
