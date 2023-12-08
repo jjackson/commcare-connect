@@ -16,6 +16,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     OpportunityClaim,
     Payment,
+    VisitValidationStatus,
 )
 from commcare_connect.opportunity.tests.factories import (
     LearnModuleFactory,
@@ -161,9 +162,12 @@ def test_delivery_progress_endpoint(
     mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
-    UserVisitFactory.create(opportunity=opportunity, user=mobile_user_with_connect_link)
+    UserVisitFactory.create(
+        opportunity=opportunity, user=mobile_user_with_connect_link, status=VisitValidationStatus.pending
+    )
     api_client.force_authenticate(mobile_user_with_connect_link)
     response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
+
     assert response.status_code == 200
     assert response.data.keys() == DeliveryProgressSerializer().get_fields().keys()
     assert len(response.data["deliveries"]) == 1
