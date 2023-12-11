@@ -19,12 +19,6 @@ from commcare_connect.opportunity.models import (
 
 admin.site.register(Opportunity)
 admin.site.register(CommCareApp)
-admin.site.register(DeliverUnit)
-admin.site.register(LearnModule)
-admin.site.register(CompletedModule)
-admin.site.register(Assessment)
-admin.site.register(UserVisit)
-admin.site.register(OpportunityClaim)
 admin.site.register(PaymentUnit)
 
 
@@ -40,3 +34,38 @@ class OpportunityAccessAdmin(admin.ModelAdmin):
     @admin.display(description="Username")
     def get_username(self, obj):
         return obj.user.username
+
+
+@admin.register(LearnModule)
+@admin.register(DeliverUnit)
+class LearnModuleAndDeliverUnitAdmin(admin.ModelAdmin):
+    list_display = ["name", "slug", "app"]
+    search_fields = ["name"]
+
+
+@admin.register(OpportunityClaim)
+class OpportunityClaimAdmin(admin.ModelAdmin):
+    list_display = ["get_username", "get_opp_name", "opportunity_access"]
+
+    @admin.display(description="Opportunity Name")
+    def get_opp_name(self, obj):
+        return obj.opportunity_access.opportunity.name
+
+    @admin.display(description="Username")
+    def get_username(self, obj):
+        return obj.opportunity_access.user.username
+
+
+@admin.register(CompletedModule)
+class CompletedModuleAdmin(admin.ModelAdmin):
+    list_display = ["module", "user", "opportunity", "date"]
+
+
+@admin.register(UserVisit)
+class UserVisitAdmin(admin.ModelAdmin):
+    list_display = ["deliver_unit", "user", "opportunity", "status"]
+
+
+@admin.register(Assessment)
+class AssessmentAdmin(admin.ModelAdmin):
+    list_display = ["app", "user", "opportunity", "date", "passed"]

@@ -59,4 +59,7 @@ class OrganizationAdmin(admin.ModelAdmin):
     inlines = [UserOrganizationMembershipInline]
 
 
-admin.site.register(ConnectIDUserLink)
+@admin.register(ConnectIDUserLink)
+class ConnectIDUserLinkAdmin(admin.ModelAdmin):
+    list_display = ["user", "commcare_username", "domain"]
+    ordering = ["user"]
