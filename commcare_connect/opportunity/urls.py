@@ -17,6 +17,7 @@ from commcare_connect.opportunity.views import (
     add_payment_unit,
     download_export,
     edit_payment_unit,
+    export_payment_and_verification,
     export_status,
     export_user_status,
     export_user_visits,
@@ -60,5 +61,10 @@ urlpatterns = [
         "<int:pk>/payment_verification_table/",
         view=OpportunityPaymentAndVerificationTableView.as_view(),
         name="payment_and_verification_table",
+    ),
+    path(
+        "<int:pk>/payment_verification_export/",
+        view=export_payment_and_verification,
+        name="export_payment_and_verification",
     ),
 ]

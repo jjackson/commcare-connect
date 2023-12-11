@@ -47,6 +47,7 @@ from commcare_connect.opportunity.tables import (
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     create_learn_modules_and_deliver_units,
+    generate_payment_and_verification_export,
     generate_payment_export,
     generate_user_status_export,
     generate_visit_export,
@@ -467,10 +468,24 @@ class OpportunityPaymentAndVerificationTableView(OrganizationUserMixin, SingleTa
                     ),
                     distinct=True,
                 ),
-                visits_completed=F("visits_approved")
-                + F("visits_rejected")
-                + F("visits_over_limit")
-                + F("visits_pending"),
+                visits_completed=(
+                    F("visits_approved") + F("visits_rejected") + F("visits_over_limit") + F("visits_pending")
+                ),
             )
         )
         return access_objects
+
+
+@org_member_required
+def export_payment_and_verification(request, **kwargs):
+    opportunity_id = kwargs["pk"]
+    get_object_or_404(Opportunity, organization=request.org, id=opportunity_id)
+    form = PaymentExportForm(data=request.POST)
+    if not form.is_valid():
+        messages.error(request, form.errors)
+        return redirect("opportunity:detail", request.org.slug, opportunity_id)
+
+    export_format = form.cleaned_data["format"]
+    result = generate_payment_and_verification_export.delay(opportunity_id, export_format)
+    redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
+    return redirect(f"{redirect_url}?export_task_id={result.id}")
