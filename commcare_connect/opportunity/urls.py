@@ -5,6 +5,7 @@ from commcare_connect.opportunity.views import (
     OpportunityDetail,
     OpportunityEdit,
     OpportunityList,
+    OpportunityPaymentAndVerificationTableView,
     OpportunityPaymentTableView,
     OpportunityPaymentUnitTableView,
     OpportunityUserLearnProgress,
@@ -55,4 +56,9 @@ urlpatterns = [
     path("<int:opp_id>/payment_unit/<int:pk>/edit", view=edit_payment_unit, name="edit_payment_unit"),
     path("<int:opp_id>/user_payment_table/<int:pk>", view=UserPaymentsTableView.as_view(), name="user_payments_table"),
     path("<int:pk>/user_status_export/", view=export_user_status, name="user_status_export"),
+    path(
+        "<int:pk>/payment_verification_table/",
+        view=OpportunityPaymentAndVerificationTableView.as_view(),
+        name="payment_and_verification_table",
+    ),
 ]
