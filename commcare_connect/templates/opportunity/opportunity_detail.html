@@ -71,6 +71,12 @@
                   {% translate "Export Users Status" %}
                 </a>
               </li>
+              <li>
+                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportPaymentAndVerificationModal">
+                  <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
+                  {% translate "Export Payment and Verification" %}
+                </a>
+              </li>
             </ul>
           </div>
         </div>
@@ -412,6 +418,30 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <form action="{% url "opportunity:user_status_export" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
+              enctype="multipart/form-data">
+          <div class="modal-body">
+            <div class="mb-3">
+              {% crispy user_status_export_form %}
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="submit" class="btn btn-primary">Export</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payments and Verification Export modal -->
+  <div class="modal fade" id="exportPaymentAndVerificationModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h1 class="modal-title fs-5">{% translate "Export Payments and Verification" %}</h1>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form action="{% url "opportunity:export_payment_and_verification" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
               enctype="multipart/form-data">
           <div class="modal-body">
             <div class="mb-3">
