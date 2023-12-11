@@ -3,9 +3,12 @@ from flatten_dict import flatten
 from tablib import Dataset
 
 from commcare_connect.opportunity.forms import DateRanges
-from commcare_connect.opportunity.helpers import get_annotated_opportunity_access
+from commcare_connect.opportunity.helpers import (
+    get_annotated_opportunity_access,
+    get_annotated_opportunity_access_payment_and_verification,
+)
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, UserVisit, VisitValidationStatus
-from commcare_connect.opportunity.tables import UserStatusTable, UserVisitTable
+from commcare_connect.opportunity.tables import PaymentAndVerificationTable, UserStatusTable, UserVisitTable
 
 
 def export_user_visit_data(
@@ -82,6 +85,21 @@ def export_user_status_table(opportunity: Opportunity) -> Dataset:
     columns = [column for column in table.columns.iterall()]
     headers = [force_str(column.header, strings_only=True) for column in columns]
     dataset = Dataset(title="User status export", headers=headers)
+    for row in table.rows:
+        dataset.append([row.get_cell_value(column.name) for column in columns])
+    return dataset
+
+
+def export_payment_and_verification_table(opportunity: Opportunity) -> Dataset:
+    access_objects = get_annotated_opportunity_access_payment_and_verification(opportunity)
+    table = PaymentAndVerificationTable(access_objects)
+    return get_dataset(table, export_title="Payment and Verification export")
+
+
+def get_dataset(table, export_title):
+    columns = [column for column in table.columns.iterall()]
+    headers = [force_str(column.header, strings_only=True) for column in columns]
+    dataset = Dataset(title=export_title, headers=headers)
     for row in table.rows:
         dataset.append([row.get_cell_value(column.name) for column in columns])
     return dataset
