@@ -24,6 +24,7 @@ from commcare_connect.opportunity.views import (
     export_users_for_payment,
     payment_import,
     update_visit_status_import,
+    user_visits_list,
 )
 
 app_name = "opportunity"
@@ -67,4 +68,5 @@ urlpatterns = [
         view=export_payment_and_verification,
         name="export_payment_and_verification",
     ),
+    path("<int:opp_id>/user_visits/<int:pk>/", view=user_visits_list, name="user_visits_list"),
 ]
