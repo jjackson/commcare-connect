@@ -489,3 +489,18 @@ def export_payment_and_verification(request, **kwargs):
     result = generate_payment_and_verification_export.delay(opportunity_id, export_format)
     redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
     return redirect(f"{redirect_url}?export_task_id={result.id}")
+
+
+@org_member_required
+def user_visits_list(request, org_slug=None, opp_id=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=opp_id)
+    opportunity_access = get_object_or_404(OpportunityAccess, pk=pk, opportunity=opportunity)
+    user_visits = UserVisit.objects.filter(user=opportunity_access.user, opportunity=opportunity).order_by(
+        "visit_date"
+    )
+    user_visits_table = UserVisitTable(user_visits)
+    return render(
+        request,
+        "opportunity/user_visits_list.html",
+        context=dict(table=user_visits_table, user_name=opportunity_access.display_name),
+    )

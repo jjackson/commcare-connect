@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load django_tables2 %}
+
+{% block content %}
+  <div class="container">
+    <h2>User Visits for {{ user_name }}</h2>
+    {% render_table table %}
+  </div>
+{% endblock content %}
