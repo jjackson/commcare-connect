@@ -130,7 +130,7 @@ class PaymentUnitTable(tables.Table):
         return mark_safe(f"<ul>{deliver_units}</ul>")
 
 
-class PaymentAndVerificationTable(tables.Table):
+class VerificationStatusTable(tables.Table):
     name = columns.Column("Name of the User", accessor="display_name")
     visits_completed = columns.Column("Completed Visits")
     visits_approved = columns.Column("Approved Visits")

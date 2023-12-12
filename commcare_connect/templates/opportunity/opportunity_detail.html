@@ -74,7 +74,7 @@
               <li>
                 <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportPaymentAndVerificationModal">
                   <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
-                  {% translate "Export Payment and Verification" %}
+                  {% translate "Export Verification Status" %}
                 </a>
               </li>
             </ul>
@@ -244,12 +244,15 @@
         </li>
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="payment-tab" data-bs-toggle="tab" data-bs-target="#payment-tab-pane"
-                  type="button" role="tab" aria-controls="payment-tab-pane" aria-selected="false">Payments
+                  type="button" role="tab" aria-controls="payment-tab-pane" aria-selected="false">
+            {% translate "Payment Status" %}
           </button>
         </li>
         <li class="nav-item" role="presentation">
-          <button class="nav-link" id="payment-and-verification-tab" data-bs-toggle="tab" data-bs-target="#payment-and-verification-tab-pane"
-                  type="button" role="tab" aria-controls="payment-and-verification-tab-pane" aria-selected="false">Payments and Verification
+          <button class="nav-link" id="payment-and-verification-tab" data-bs-toggle="tab"
+                  data-bs-target="#payment-and-verification-tab-pane" type="button" role="tab"
+                  aria-controls="payment-and-verification-tab-pane" aria-selected="false">
+            {% translate "Verification Status" %}
           </button>
         </li>
       </ul>

@@ -13,7 +13,7 @@ CSRF_TRUSTED_ORIGINS = ["https://*.127.0.0.1", "https://*.loca.lt"] + env.list("
 
 # django-debug-toolbar
 # ------------------------------------------------------------------------------
-INSTALLED_APPS += ["debug_toolbar"]  # noqa: F405
+INSTALLED_APPS += ["debug_toolbar", "django_extensions"]  # noqa: F405
 MIDDLEWARE += ["debug_toolbar.middleware.DebugToolbarMiddleware"]  # noqa: F405
 DEBUG_TOOLBAR_CONFIG = {
     "DISABLE_PANELS": ["debug_toolbar.panels.redirects.RedirectsPanel"],
@@ -21,10 +21,9 @@ DEBUG_TOOLBAR_CONFIG = {
 }
 INTERNAL_IPS = ["127.0.0.1", "10.0.2.2"]
 
-
 # Celery
 # ------------------------------------------------------------------------------
-CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_ALWAYS_EAGER = False
 CELERY_TASK_EAGER_PROPAGATES = True
 
 # CommCareConnect
