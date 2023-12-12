@@ -5,7 +5,23 @@
 
 {% block content %}
   <div class="container">
-    <h2>User Visits for {{ user_name }}</h2>
+    <nav class="mt-2 small" aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item">
+          <a href="{% url 'opportunity:list' org_slug=request.org.slug %}">
+            Opportunities
+          </a>
+        </li>
+        <li class="breadcrumb-item">
+          <a href="{% url 'opportunity:detail' org_slug=request.org.slug pk=opportunity.pk %}">
+            {{ opportunity.name }}
+          </a>
+        </li>
+        <li class="breadcrumb-item active" aria-current="page">User Visits</li>
+      </ol>
+    </nav>
+    <h2 class="mb-2">User Visits for {{ user_name }}</h2>
+    <hr/>
     {% render_table table %}
   </div>
 {% endblock content %}
