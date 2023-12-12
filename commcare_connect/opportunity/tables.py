@@ -131,13 +131,31 @@ class PaymentUnitTable(tables.Table):
 
 
 class PaymentAndVerificationTable(tables.Table):
-    visits_completed = columns.Column()
-    visits_approved = columns.Column()
-    visits_pending = columns.Column()
-    visits_rejected = columns.Column()
-    visits_over_limit = columns.Column()
+    name = columns.Column("Name of the User", accessor="display_name")
+    visits_completed = columns.Column("Completed Visits")
+    visits_approved = columns.Column("Approved Visits")
+    visits_pending = columns.Column("Pending Visits")
+    visits_rejected = columns.Column("Rejected Visits")
+    visits_over_limit = columns.Column("Over Limit Visits")
+    details = columns.LinkColumn(
+        "opportunity:user_visits_list",
+        verbose_name="",
+        text="View Details",
+        args=[utils.A("opportunity.organization.slug"), utils.A("opportunity.id"), utils.A("pk")],
+    )
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "user.username")
+        fields = ("user.username", "last_visit_date")
         orderable = False
+        sequence = (
+            "name",
+            "user.username",
+            "visits_completed",
+            "visits_approved",
+            "visits_pending",
+            "visits_rejected",
+            "visits_over_limit",
+            "last_visit_date",
+            "details",
+        )
