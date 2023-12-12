@@ -502,5 +502,5 @@ def user_visits_list(request, org_slug=None, opp_id=None, pk=None):
     return render(
         request,
         "opportunity/user_visits_list.html",
-        context=dict(table=user_visits_table, user_name=opportunity_access.display_name),
+        context=dict(opportunity=opportunity, table=user_visits_table, user_name=opportunity_access.display_name),
     )
