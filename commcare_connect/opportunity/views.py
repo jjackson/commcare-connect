@@ -145,18 +145,6 @@ class OpportunityUserTableView(OrganizationUserMixin, SingleTableView):
         return OpportunityAccess.objects.filter(opportunity=opportunity).order_by("user__name")
 
 
-class OpportunityUserVisitTableView(OrganizationUserMixin, SingleTableView):
-    model = UserVisit
-    paginate_by = 25
-    table_class = UserVisitTable
-    template_name = "tables/single_table.html"
-
-    def get_queryset(self):
-        opportunity_id = self.kwargs["pk"]
-        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        return UserVisit.objects.filter(opportunity=opportunity).order_by("visit_date")
-
-
 class OpportunityPaymentTableView(OrganizationUserMixin, SingleTableView):
     model = OpportunityAccess
     paginate_by = 25
