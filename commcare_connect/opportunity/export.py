@@ -92,7 +92,7 @@ def export_user_status_table(opportunity: Opportunity) -> Dataset:
 
 def export_payment_and_verification_table(opportunity: Opportunity) -> Dataset:
     access_objects = get_annotated_opportunity_access_payment_and_verification(opportunity)
-    table = VerificationStatusTable(access_objects)
+    table = VerificationStatusTable(access_objects, exclude=("details",))
     return get_dataset(table, export_title="Payment and Verification export")
 
 
