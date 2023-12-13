@@ -423,7 +423,7 @@ def export_user_status(request, **kwargs):
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 
 
-class OpportunityPaymentAndVerificationTableView(OrganizationUserMixin, SingleTableView):
+class OpportunityDeliverStatusTable(OrganizationUserMixin, SingleTableView):
     model = OpportunityAccess
     paginate_by = 25
     table_class = VerificationStatusTable
@@ -477,7 +477,7 @@ class OpportunityPaymentAndVerificationTableView(OrganizationUserMixin, SingleTa
 
 
 @org_member_required
-def export_payment_and_verification(request, **kwargs):
+def export_deliver_status(request, **kwargs):
     opportunity_id = kwargs["pk"]
     get_object_or_404(Opportunity, organization=request.org, id=opportunity_id)
     form = PaymentExportForm(data=request.POST)

@@ -74,7 +74,7 @@
               <li>
                 <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportPaymentAndVerificationModal">
                   <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
-                  {% translate "Export Verification Status" %}
+                  {% translate "Export Deliver Status" %}
                 </a>
               </li>
             </ul>
@@ -228,8 +228,8 @@
           </button>
         </li>
         <li class="nav-item" role="presentation">
-          <button class="nav-link" id="deliver-tab" data-bs-toggle="tab" data-bs-target="#deliver-tab-pane"
-                  type="button" role="tab" aria-controls="deliver-tab-pane" aria-selected="false">Deliver Forms
+          <button class="nav-link" id="deliver-status-tab" data-bs-toggle="tab" data-bs-target="#deliver-status-tab-pane"
+                  type="button" role="tab" aria-controls="deliver-status-tab-pane" aria-selected="false">Deliver Status
           </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -248,13 +248,6 @@
             {% translate "Payment Status" %}
           </button>
         </li>
-        <li class="nav-item" role="presentation">
-          <button class="nav-link" id="payment-and-verification-tab" data-bs-toggle="tab"
-                  data-bs-target="#payment-and-verification-tab-pane" type="button" role="tab"
-                  aria-controls="payment-and-verification-tab-pane" aria-selected="false">
-            {% translate "Verification Status" %}
-          </button>
-        </li>
       </ul>
       <div class="tab-content">
         <div class="tab-pane fade show active" id="learn-tab-pane" role="tabpanel" aria-labelledby="learn-tab"
@@ -264,8 +257,8 @@
             {% include "tables/table_placeholder.html" with num_cols=4 %}
           </div>
         </div>
-        <div class="tab-pane fade" id="deliver-tab-pane" role="tabpanel" aria-labelledby="deliver-tab" tabindex="0">
-          <div hx-get="{% url "opportunity:visit_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
+        <div class="tab-pane fade" id="deliver-status-tab-pane" role="tabpanel" aria-labelledby="deliver-status-tab" tabindex="0">
+          <div hx-get="{% url "opportunity:deliver_status_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
                hx-trigger="load" hx-swap="outerHTML">
             {% include "tables/table_placeholder.html" with num_cols=4 %}
           </div>
@@ -284,12 +277,6 @@
         </div>
         <div class="tab-pane fade" id="payment-units-tab-pane" role="tabpanel" aria-labelledby="payment-units-tab" tabindex="0">
           <div hx-get="{% url "opportunity:payment_unit_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
-               hx-trigger="load" hx-swap="outerHTML">
-            {% include "tables/table_placeholder.html" with num_cols=4 %}
-          </div>
-        </div>
-        <div class="tab-pane fade" id="payment-and-verification-tab-pane" role="tabpanel" aria-labelledby="payment-and-verification-tab" tabindex="0">
-          <div hx-get="{% url "opportunity:payment_and_verification_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
                hx-trigger="load" hx-swap="outerHTML">
             {% include "tables/table_placeholder.html" with num_cols=4 %}
           </div>
