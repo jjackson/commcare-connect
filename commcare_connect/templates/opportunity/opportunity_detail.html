@@ -431,7 +431,7 @@
           <h1 class="modal-title fs-5">{% translate "Export Payments and Verification" %}</h1>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <form action="{% url "opportunity:export_payment_and_verification" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
+        <form action="{% url 'opportunity:deliver_status_export' org_slug=request.org.slug pk=opportunity.pk %}" method="post"
               enctype="multipart/form-data">
           <div class="modal-body">
             <div class="mb-3">
