@@ -21,6 +21,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    Payment,
     UserVisit,
     VisitValidationStatus,
 )
@@ -158,3 +159,23 @@ def _get_deliver_message(access: OpportunityAccess):
             "To maximise your payout complete all the required service delivery."
         ),
     )
+
+
+@celery_app.task()
+def send_payment_notification(opportunity_id: int, access_ids: list[int]):
+    opportunity = Opportunity.objects.get(pk=opportunity_id)
+    messages = []
+    for payment in Payment.objects.filter(opportunity_access__in=access_ids).select_related(
+        "opportunity_access__user"
+    ):
+        messages.append(
+            Message(
+                usernames=[payment.opportunity_access.user.username],
+                title=gettext("Payment received"),
+                body=gettext(
+                    f"You have received a payment of {opportunity.currency} {payment.amount} for "
+                    f"{opportunity.name}. Click on this notification for more information on the payment."
+                ),
+            )
+        )
+    send_message_bulk(messages)
