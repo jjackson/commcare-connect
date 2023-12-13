@@ -173,8 +173,7 @@ def send_payment_notification(opportunity_id: int, access_ids: list[int]):
                 usernames=[payment.opportunity_access.user.username],
                 title=gettext("Payment received"),
                 body=gettext(
-                    f"You have received a payment of {opportunity.currency} {payment.amount} for "
-                    f"{opportunity.name}. Click on this notification for more information on the payment."
+                    f"You have received a payment of {opportunity.currency} {payment.amount} for {opportunity.name}."
                 ),
             )
         )
