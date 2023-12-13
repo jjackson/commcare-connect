@@ -56,15 +56,7 @@ urlpatterns = [
     path("<int:opp_id>/payment_unit/<int:pk>/edit", view=edit_payment_unit, name="edit_payment_unit"),
     path("<int:opp_id>/user_payment_table/<int:pk>", view=UserPaymentsTableView.as_view(), name="user_payments_table"),
     path("<int:pk>/user_status_export/", view=export_user_status, name="user_status_export"),
-    path(
-        "<int:pk>/deliver_status_table/",
-        view=OpportunityDeliverStatusTable.as_view(),
-        name="deliver_status_table",
-    ),
-    path(
-        "<int:pk>/payment_verification_export/",
-        view=export_deliver_status,
-        name="export_payment_and_verification",
-    ),
+    path("<int:pk>/deliver_status_table/", view=OpportunityDeliverStatusTable.as_view(), name="deliver_status_table"),
+    path("<int:pk>/deliver_status_export/", view=export_deliver_status, name="deliver_status_export"),
     path("<int:opp_id>/user_visits/<int:pk>/", view=user_visits_list, name="user_visits_list"),
 ]
