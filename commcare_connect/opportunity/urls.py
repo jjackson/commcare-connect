@@ -2,10 +2,10 @@ from django.urls import path
 
 from commcare_connect.opportunity.views import (
     OpportunityCreate,
+    OpportunityDeliverStatusTable,
     OpportunityDetail,
     OpportunityEdit,
     OpportunityList,
-    OpportunityPaymentAndVerificationTableView,
     OpportunityPaymentTableView,
     OpportunityPaymentUnitTableView,
     OpportunityUserLearnProgress,
@@ -17,7 +17,7 @@ from commcare_connect.opportunity.views import (
     add_payment_unit,
     download_export,
     edit_payment_unit,
-    export_payment_and_verification,
+    export_deliver_status,
     export_status,
     export_user_status,
     export_user_visits,
@@ -59,13 +59,13 @@ urlpatterns = [
     path("<int:opp_id>/user_payment_table/<int:pk>", view=UserPaymentsTableView.as_view(), name="user_payments_table"),
     path("<int:pk>/user_status_export/", view=export_user_status, name="user_status_export"),
     path(
-        "<int:pk>/payment_verification_table/",
-        view=OpportunityPaymentAndVerificationTableView.as_view(),
-        name="payment_and_verification_table",
+        "<int:pk>/deliver_status_table/",
+        view=OpportunityDeliverStatusTable.as_view(),
+        name="deliver_status_table",
     ),
     path(
         "<int:pk>/payment_verification_export/",
-        view=export_payment_and_verification,
+        view=export_deliver_status,
         name="export_payment_and_verification",
     ),
     path("<int:opp_id>/user_visits/<int:pk>/", view=user_visits_list, name="user_visits_list"),
