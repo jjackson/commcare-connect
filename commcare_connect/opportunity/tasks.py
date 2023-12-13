@@ -10,8 +10,8 @@ from commcare_connect.connect_id_client import fetch_users, send_message_bulk
 from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
 from commcare_connect.opportunity.export import (
+    export_deliver_status_table,
     export_empty_payment_table,
-    export_payment_and_verification_table,
     export_user_status_table,
     export_user_visit_data,
 )
@@ -104,7 +104,7 @@ def generate_user_status_export(opportunity_id: int, export_format: str):
 @celery_app.task()
 def generate_payment_and_verification_export(opportunity_id: int, export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
-    dataset = export_payment_and_verification_table(opportunity)
+    dataset = export_deliver_status_table(opportunity)
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_and_verification.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
