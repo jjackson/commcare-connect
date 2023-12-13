@@ -162,12 +162,10 @@ def _get_deliver_message(access: OpportunityAccess):
 
 
 @celery_app.task()
-def send_payment_notification(opportunity_id: int, access_ids: list[int]):
+def send_payment_notification(opportunity_id: int, payment_ids: list[int]):
     opportunity = Opportunity.objects.get(pk=opportunity_id)
     messages = []
-    for payment in Payment.objects.filter(opportunity_access__in=access_ids).select_related(
-        "opportunity_access__user"
-    ):
+    for payment in Payment.objects.filter(pk__in=payment_ids).select_related("opportunity_access__user"):
         messages.append(
             Message(
                 usernames=[payment.opportunity_access.user.username],
