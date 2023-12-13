@@ -36,13 +36,13 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
+    DeliverStatusTable,
     OpportunityAccessTable,
     OpportunityPaymentTable,
     PaymentUnitTable,
     UserPaymentsTable,
     UserStatusTable,
     UserVisitTable,
-    VerificationStatusTable,
 )
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
@@ -414,7 +414,7 @@ def export_user_status(request, **kwargs):
 class OpportunityDeliverStatusTable(OrganizationUserMixin, SingleTableView):
     model = OpportunityAccess
     paginate_by = 25
-    table_class = VerificationStatusTable
+    table_class = DeliverStatusTable
     template_name = "tables/single_table.html"
 
     def get_queryset(self):
