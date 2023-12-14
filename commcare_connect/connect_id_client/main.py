@@ -24,22 +24,18 @@ def send_message(message: Message):
 def send_message_bulk(messages: list[Message]) -> MessagingBulkResponse:
     """Send a push notification to multiple users."""
     json = {"messages": [message.asdict() for message in messages]}
-    response = _make_request(POST, "/messaging/send_bulk/", json=json)
+    response = _make_request(POST, "/messaging/send_bulk/", json=json, timeout=30)
     data = response.json()
     return MessagingBulkResponse.build(**data)
 
 
-def _make_request(method, path, params=None, json=None) -> Response:
+def _make_request(method, path, params=None, json=None, timeout=5) -> Response:
     if json and not method == "POST":
         raise ValueError("json can only be used with POST requests")
 
     auth = BasicAuth(settings.CONNECTID_CLIENT_ID, settings.CONNECTID_CLIENT_SECRET)
     response = httpx.request(
-        method,
-        f"{settings.CONNECTID_URL}{path}",
-        params=params,
-        json=json,
-        auth=auth,
+        method, f"{settings.CONNECTID_URL}{path}", params=params, json=json, auth=auth, timeout=timeout
     )
     response.raise_for_status()
     return response
