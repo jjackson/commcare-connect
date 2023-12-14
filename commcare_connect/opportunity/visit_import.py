@@ -191,7 +191,7 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
         raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
 
     seen_users = set()
-    payment_ids = set()
+    payment_ids = []
     with transaction.atomic():
         usernames = list(payments)
         users = OpportunityAccess.objects.filter(user__username__in=usernames, opportunity=opportunity).select_related(
@@ -202,7 +202,7 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
             amount = payments[username]
             payment = Payment.objects.create(opportunity_access=access, amount=amount)
             seen_users.add(username)
-            payment_ids.add(payment.pk)
+            payment_ids.append(payment.pk)
     missing_users = set(usernames) - seen_users
-    send_payment_notification.delay(opportunity.id, list(payment_ids))
+    send_payment_notification.delay(opportunity.id, payment_ids)
     return PaymentImportStatus(seen_users, missing_users)
