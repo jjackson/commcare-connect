@@ -5,7 +5,7 @@ from tablib import Dataset
 from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.helpers import (
     get_annotated_opportunity_access,
-    get_annotated_opportunity_access_payment_and_verification,
+    get_annotated_opportunity_access_deliver_status,
 )
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, UserVisit, VisitValidationStatus
 from commcare_connect.opportunity.tables import DeliverStatusTable, UserStatusTable, UserVisitTable
@@ -91,7 +91,7 @@ def export_user_status_table(opportunity: Opportunity) -> Dataset:
 
 
 def export_deliver_status_table(opportunity: Opportunity) -> Dataset:
-    access_objects = get_annotated_opportunity_access_payment_and_verification(opportunity)
+    access_objects = get_annotated_opportunity_access_deliver_status(opportunity)
     table = DeliverStatusTable(access_objects, exclude=("details",))
     return get_dataset(table, export_title="Payment and Verification export")
 
