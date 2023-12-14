@@ -176,7 +176,7 @@ def test_export_user_status_table_data(opportunity: Opportunity):
 
 
 @pytest.mark.django_db
-def test_export_deliver_status_date(opportunity: Opportunity):
+def test_export_deliver_status_data(opportunity: Opportunity):
     mobile_users = MobileUserFactory.create_batch(5)
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
