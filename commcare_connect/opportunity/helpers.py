@@ -37,7 +37,7 @@ def get_annotated_opportunity_access(opportunity: Opportunity):
     return access_objects
 
 
-def get_annotated_opportunity_access_payment_and_verification(opportunity: Opportunity):
+def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
     access_objects = (
         OpportunityAccess.objects.filter(opportunity=opportunity)
         .select_related("user")
