@@ -6,11 +6,8 @@ from dataclasses import dataclass
 
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
-from django.utils.translation import gettext
 from tablib import Dataset
 
-from commcare_connect.connect_id_client import send_message_bulk
-from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
@@ -18,6 +15,7 @@ from commcare_connect.opportunity.models import (
     UserVisit,
     VisitValidationStatus,
 )
+from commcare_connect.opportunity.tasks import send_payment_notification
 from commcare_connect.utils.itertools import batched
 
 VISIT_ID_COL = "visit id"
@@ -193,9 +191,8 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
         raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
 
     seen_users = set()
-    missing_users = set()
+    payment_ids = []
     with transaction.atomic():
-        messages = []
         usernames = list(payments)
         users = OpportunityAccess.objects.filter(user__username__in=usernames, opportunity=opportunity).select_related(
             "user"
@@ -203,18 +200,9 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
         for access in users:
             username = access.user.username
             amount = payments[username]
-            Payment.objects.create(opportunity_access=access, amount=amount)
+            payment = Payment.objects.create(opportunity_access=access, amount=amount)
             seen_users.add(username)
-            messages.append(
-                Message(
-                    usernames=[username],
-                    title=gettext("Payment received"),
-                    body=gettext(
-                        f"You have received a payment of {access.opportunity.currency} {amount} for "
-                        f"{access.opportunity.name}. Click on this notification for more information on the payment."
-                    ),
-                )
-            )
-        send_message_bulk(messages)
+            payment_ids.append(payment.pk)
     missing_users = set(usernames) - seen_users
+    send_payment_notification.delay(opportunity.id, payment_ids)
     return PaymentImportStatus(seen_users, missing_users)
