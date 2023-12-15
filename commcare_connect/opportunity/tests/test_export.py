@@ -196,7 +196,7 @@ def test_export_deliver_status_data(opportunity: Opportunity):
                 user_visits_count.get("pending", 0),
                 user_visits_count.get("rejected", 0),
                 user_visits_count.get("over_limit", 0),
-                access.last_visit_date,
+                access.last_visit_date.replace(tzinfo=None),
             )
         )
 
