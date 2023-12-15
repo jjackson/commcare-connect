@@ -2,7 +2,7 @@ from celery.result import AsyncResult
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
-from django.db.models import Count, F, Q
+from django.db.models import F
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -23,7 +23,10 @@ from commcare_connect.opportunity.forms import (
     PaymentUnitForm,
     VisitExportForm,
 )
-from commcare_connect.opportunity.helpers import get_annotated_opportunity_access
+from commcare_connect.opportunity.helpers import (
+    get_annotated_opportunity_access,
+    get_annotated_opportunity_access_deliver_status,
+)
 from commcare_connect.opportunity.models import (
     CompletedModule,
     DeliverUnit,
@@ -33,7 +36,6 @@ from commcare_connect.opportunity.models import (
     Payment,
     PaymentUnit,
     UserVisit,
-    VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
     DeliverStatusTable,
@@ -420,47 +422,7 @@ class OpportunityDeliverStatusTable(OrganizationUserMixin, SingleTableView):
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        access_objects = (
-            OpportunityAccess.objects.filter(opportunity=opportunity)
-            .select_related("user")
-            .annotate(
-                visits_pending=Count(
-                    "user__uservisit",
-                    filter=Q(
-                        user__uservisit__opportunity=opportunity,
-                        user__uservisit__status=VisitValidationStatus.pending,
-                    ),
-                    distinct=True,
-                ),
-                visits_approved=Count(
-                    "user__uservisit",
-                    filter=Q(
-                        user__uservisit__opportunity=opportunity,
-                        user__uservisit__status=VisitValidationStatus.approved,
-                    ),
-                    distinct=True,
-                ),
-                visits_rejected=Count(
-                    "user__uservisit",
-                    filter=Q(
-                        user__uservisit__opportunity=opportunity,
-                        user__uservisit__status=VisitValidationStatus.rejected,
-                    ),
-                    distinct=True,
-                ),
-                visits_over_limit=Count(
-                    "user__uservisit",
-                    filter=Q(
-                        user__uservisit__opportunity=opportunity,
-                        user__uservisit__status=VisitValidationStatus.over_limit,
-                    ),
-                    distinct=True,
-                ),
-                visits_completed=(
-                    F("visits_approved") + F("visits_rejected") + F("visits_over_limit") + F("visits_pending")
-                ),
-            )
-        )
+        access_objects = get_annotated_opportunity_access_deliver_status(opportunity)
         return access_objects
 
 
