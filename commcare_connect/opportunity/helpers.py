@@ -84,5 +84,6 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
             + F("visits_over_limit")
             + F("visits_pending"),
         )
+        .order_by("user__name")
     )
     return access_objects
