@@ -2,7 +2,7 @@ from celery.result import AsyncResult
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
-from django.db.models import F
+from django.db.models import Count, F, Q
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -33,8 +33,10 @@ from commcare_connect.opportunity.models import (
     Payment,
     PaymentUnit,
     UserVisit,
+    VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
+    DeliverStatusTable,
     OpportunityAccessTable,
     OpportunityPaymentTable,
     PaymentUnitTable,
@@ -45,6 +47,7 @@ from commcare_connect.opportunity.tables import (
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     create_learn_modules_and_deliver_units,
+    generate_payment_and_verification_export,
     generate_payment_export,
     generate_user_status_export,
     generate_visit_export,
@@ -140,18 +143,6 @@ class OpportunityUserTableView(OrganizationUserMixin, SingleTableView):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
         return OpportunityAccess.objects.filter(opportunity=opportunity).order_by("user__name")
-
-
-class OpportunityUserVisitTableView(OrganizationUserMixin, SingleTableView):
-    model = UserVisit
-    paginate_by = 25
-    table_class = UserVisitTable
-    template_name = "tables/single_table.html"
-
-    def get_queryset(self):
-        opportunity_id = self.kwargs["pk"]
-        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        return UserVisit.objects.filter(opportunity=opportunity).order_by("visit_date")
 
 
 class OpportunityPaymentTableView(OrganizationUserMixin, SingleTableView):
@@ -418,3 +409,86 @@ def export_user_status(request, **kwargs):
     result = generate_user_status_export.delay(opportunity_id, export_format)
     redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
     return redirect(f"{redirect_url}?export_task_id={result.id}")
+
+
+class OpportunityDeliverStatusTable(OrganizationUserMixin, SingleTableView):
+    model = OpportunityAccess
+    paginate_by = 25
+    table_class = DeliverStatusTable
+    template_name = "tables/single_table.html"
+
+    def get_queryset(self):
+        opportunity_id = self.kwargs["pk"]
+        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        access_objects = (
+            OpportunityAccess.objects.filter(opportunity=opportunity)
+            .select_related("user")
+            .annotate(
+                visits_pending=Count(
+                    "user__uservisit",
+                    filter=Q(
+                        user__uservisit__opportunity=opportunity,
+                        user__uservisit__status=VisitValidationStatus.pending,
+                    ),
+                    distinct=True,
+                ),
+                visits_approved=Count(
+                    "user__uservisit",
+                    filter=Q(
+                        user__uservisit__opportunity=opportunity,
+                        user__uservisit__status=VisitValidationStatus.approved,
+                    ),
+                    distinct=True,
+                ),
+                visits_rejected=Count(
+                    "user__uservisit",
+                    filter=Q(
+                        user__uservisit__opportunity=opportunity,
+                        user__uservisit__status=VisitValidationStatus.rejected,
+                    ),
+                    distinct=True,
+                ),
+                visits_over_limit=Count(
+                    "user__uservisit",
+                    filter=Q(
+                        user__uservisit__opportunity=opportunity,
+                        user__uservisit__status=VisitValidationStatus.over_limit,
+                    ),
+                    distinct=True,
+                ),
+                visits_completed=(
+                    F("visits_approved") + F("visits_rejected") + F("visits_over_limit") + F("visits_pending")
+                ),
+            )
+        )
+        return access_objects
+
+
+@org_member_required
+def export_deliver_status(request, **kwargs):
+    opportunity_id = kwargs["pk"]
+    get_object_or_404(Opportunity, organization=request.org, id=opportunity_id)
+    form = PaymentExportForm(data=request.POST)
+    if not form.is_valid():
+        messages.error(request, form.errors)
+        return redirect("opportunity:detail", request.org.slug, opportunity_id)
+
+    export_format = form.cleaned_data["format"]
+    result = generate_payment_and_verification_export.delay(opportunity_id, export_format)
+    redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
+    return redirect(f"{redirect_url}?export_task_id={result.id}")
+
+
+@org_member_required
+def user_visits_list(request, org_slug=None, opp_id=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=opp_id)
+    opportunity_access = get_object_or_404(OpportunityAccess, pk=pk, opportunity=opportunity)
+    user_visits = UserVisit.objects.filter(user=opportunity_access.user, opportunity=opportunity).order_by(
+        "visit_date"
+    )
+    user_visits_table = UserVisitTable(user_visits)
+    return render(
+        request,
+        "opportunity/user_visits_list.html",
+        context=dict(opportunity=opportunity, table=user_visits_table, user_name=opportunity_access.display_name),
+    )

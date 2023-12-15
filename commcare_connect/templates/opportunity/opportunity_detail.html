@@ -71,6 +71,12 @@
                   {% translate "Export Users Status" %}
                 </a>
               </li>
+              <li>
+                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportPaymentAndVerificationModal">
+                  <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
+                  {% translate "Export Deliver Status" %}
+                </a>
+              </li>
             </ul>
           </div>
         </div>
@@ -218,12 +224,12 @@
         <li class="nav-item" role="presentation">
           <button class="nav-link active" id="learn-tab" data-bs-toggle="tab" data-bs-target="#learn-tab-pane"
                   type="button" role="tab" aria-controls="learn-tab-pane" aria-selected="true">
-            Learn App Progress
+            Learn Status
           </button>
         </li>
         <li class="nav-item" role="presentation">
-          <button class="nav-link" id="deliver-tab" data-bs-toggle="tab" data-bs-target="#deliver-tab-pane"
-                  type="button" role="tab" aria-controls="deliver-tab-pane" aria-selected="false">Deliver Forms
+          <button class="nav-link" id="deliver-status-tab" data-bs-toggle="tab" data-bs-target="#deliver-status-tab-pane"
+                  type="button" role="tab" aria-controls="deliver-status-tab-pane" aria-selected="false">Deliver Status
           </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -238,7 +244,8 @@
         </li>
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="payment-tab" data-bs-toggle="tab" data-bs-target="#payment-tab-pane"
-                  type="button" role="tab" aria-controls="payment-tab-pane" aria-selected="false">Payments
+                  type="button" role="tab" aria-controls="payment-tab-pane" aria-selected="false">
+            {% translate "Payment Status" %}
           </button>
         </li>
       </ul>
@@ -250,8 +257,8 @@
             {% include "tables/table_placeholder.html" with num_cols=4 %}
           </div>
         </div>
-        <div class="tab-pane fade" id="deliver-tab-pane" role="tabpanel" aria-labelledby="deliver-tab" tabindex="0">
-          <div hx-get="{% url "opportunity:visit_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
+        <div class="tab-pane fade" id="deliver-status-tab-pane" role="tabpanel" aria-labelledby="deliver-status-tab" tabindex="0">
+          <div hx-get="{% url "opportunity:deliver_status_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
                hx-trigger="load" hx-swap="outerHTML">
             {% include "tables/table_placeholder.html" with num_cols=4 %}
           </div>
@@ -401,6 +408,30 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <form action="{% url "opportunity:user_status_export" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
+              enctype="multipart/form-data">
+          <div class="modal-body">
+            <div class="mb-3">
+              {% crispy user_status_export_form %}
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="submit" class="btn btn-primary">Export</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payments and Verification Export modal -->
+  <div class="modal fade" id="exportPaymentAndVerificationModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h1 class="modal-title fs-5">{% translate "Export Payments and Verification" %}</h1>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form action="{% url 'opportunity:deliver_status_export' org_slug=request.org.slug pk=opportunity.pk %}" method="post"
               enctype="multipart/form-data">
           <div class="modal-body">
             <div class="mb-3">

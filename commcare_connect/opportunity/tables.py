@@ -129,3 +129,34 @@ class PaymentUnitTable(tables.Table):
     def render_deliver_units(self, record):
         deliver_units = "".join([f"<li>{d.name}</li>" for d in record.deliver_units.all()])
         return mark_safe(f"<ul>{deliver_units}</ul>")
+
+
+class DeliverStatusTable(tables.Table):
+    name = columns.Column("Name of the User", accessor="display_name")
+    visits_completed = columns.Column("Completed Visits")
+    visits_approved = columns.Column("Approved Visits")
+    visits_pending = columns.Column("Pending Visits")
+    visits_rejected = columns.Column("Rejected Visits")
+    visits_over_limit = columns.Column("Over Limit Visits")
+    details = columns.LinkColumn(
+        "opportunity:user_visits_list",
+        verbose_name="",
+        text="View Details",
+        args=[utils.A("opportunity.organization.slug"), utils.A("opportunity.id"), utils.A("pk")],
+    )
+
+    class Meta:
+        model = OpportunityAccess
+        fields = ("user.username", "last_visit_date")
+        orderable = False
+        sequence = (
+            "name",
+            "user.username",
+            "visits_completed",
+            "visits_approved",
+            "visits_pending",
+            "visits_rejected",
+            "visits_over_limit",
+            "last_visit_date",
+            "details",
+        )
