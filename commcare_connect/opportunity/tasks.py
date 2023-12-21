@@ -1,12 +1,14 @@
 import datetime
 
+from allauth.utils import build_absolute_uri
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.urls import reverse
 from django.utils.timezone import now
 from django.utils.translation import gettext
 from tablib import Dataset
 
-from commcare_connect.connect_id_client import fetch_users, send_message_bulk
+from commcare_connect.connect_id_client import fetch_users, send_message, send_message_bulk
 from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
 from commcare_connect.opportunity.export import (
@@ -27,9 +29,9 @@ from commcare_connect.opportunity.models import (
     UserVisit,
     VisitValidationStatus,
 )
-from commcare_connect.users.helpers import invite_user
 from commcare_connect.users.models import User
 from commcare_connect.utils.datetime import is_date_before
+from commcare_connect.utils.sms import send_sms
 from config import celery_app
 
 
@@ -63,7 +65,31 @@ def add_connect_users(user_list: list[str], opportunity_id: str):
             username=user.username, defaults={"phone_number": user.phone_number, "name": user.name}
         )
         opportunity_access, _ = OpportunityAccess.objects.get_or_create(user=u, opportunity_id=opportunity_id)
-        invite_user(u, opportunity_access)
+        invite_user.delay(u, opportunity_access)
+
+
+@celery_app.task()
+def invite_user(user, opportunity_access):
+    invite_id = opportunity_access.invite_id
+    location = reverse("users:accept_invite", args=(invite_id,))
+    url = build_absolute_uri(None, location)
+    body = (
+        "You have been invited to a new job in Commcare Connect. Click the following "
+        f"link to share your information with the project and find out more {url}"
+    )
+    if not user.phone_number:
+        return
+    send_sms(user.phone_number, body)
+    message = Message(
+        usernames=[user.username],
+        title=gettext(
+            f"You have been invited to a CommCare Connect opportunity - {opportunity_access.opportunity.name}"
+        ),
+        body=gettext(
+            f"You have been invited to a new job in Commcare Connect - {opportunity_access.opportunity.name}"
+        ),
+    )
+    send_message(message)
 
 
 @celery_app.task()
