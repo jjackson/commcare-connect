@@ -29,6 +29,7 @@ class UserVisitTable(tables.Table):
     visit_date_export = columns.DateTimeColumn(
         verbose_name="Visit date", accessor="visit_date", format="c", visible=False
     )
+    reason = columns.Column("Rejected Reason", accessor="reason", visible=False)
 
     deliver_unit = columns.Column("Unit Name", accessor="deliver_unit.name")
     entity_id = columns.Column("Entity ID", accessor="entity_id", visible=False)
