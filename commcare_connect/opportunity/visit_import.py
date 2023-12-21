@@ -22,6 +22,7 @@ VISIT_ID_COL = "visit id"
 STATUS_COL = "status"
 USERNAME_COL = "username"
 AMOUNT_COL = "payment amount"
+REASON_COL = "rejected reason"
 REQUIRED_COLS = [VISIT_ID_COL, STATUS_COL]
 
 
@@ -74,7 +75,7 @@ def bulk_update_visit_status(opportunity: Opportunity, file: UploadedFile) -> Vi
 
 
 def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
-    status_by_visit_id = get_status_by_visit_id(dataset)
+    status_by_visit_id, reasons_by_visit_id = get_status_by_visit_id(dataset)
     visit_ids = list(status_by_visit_id)
     missing_visits = set()
     seen_visits = set()
@@ -87,6 +88,9 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                 status = status_by_visit_id[visit.xform_id]
                 if visit.status != status:
                     visit.status = status
+                    reason = reasons_by_visit_id.get(visit.xform_id)
+                    if visit.status == VisitValidationStatus.rejected and reason:
+                        visit.reason = reason
                     to_update.append(visit)
 
             UserVisit.objects.bulk_update(to_update, fields=["status"])
@@ -121,7 +125,9 @@ def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:
 
     visit_col_index = _get_header_index(headers, VISIT_ID_COL)
     status_col_index = _get_header_index(headers, STATUS_COL)
+    reason_col_index = _get_header_index(headers, REASON_COL)
     status_by_visit_id = {}
+    reason_by_visit_id = {}
     invalid_rows = []
     for row in dataset:
         row = list(row)
@@ -131,10 +137,12 @@ def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:
             status_by_visit_id[visit_id] = VisitValidationStatus[status_raw]
         except KeyError:
             invalid_rows.append((row, f"status must be one of {VisitValidationStatus.values}"))
+        if status_raw == VisitValidationStatus.rejected:
+            reason_by_visit_id[visit_id] = str(row[reason_col_index])
 
     if invalid_rows:
         raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
-    return status_by_visit_id
+    return status_by_visit_id, reason_by_visit_id
 
 
 def get_imported_dataset(file, file_format):
