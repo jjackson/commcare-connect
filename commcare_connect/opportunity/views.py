@@ -23,6 +23,10 @@ from commcare_connect.opportunity.forms import (
     PaymentUnitForm,
     VisitExportForm,
 )
+from commcare_connect.opportunity.helpers import (
+    get_annotated_opportunity_access,
+    get_annotated_opportunity_access_deliver_status,
+)
 from commcare_connect.opportunity.models import (
     CompletedModule,
     DeliverUnit,
@@ -34,6 +38,7 @@ from commcare_connect.opportunity.models import (
     UserVisit,
 )
 from commcare_connect.opportunity.tables import (
+    DeliverStatusTable,
     OpportunityAccessTable,
     OpportunityPaymentTable,
     PaymentUnitTable,
@@ -44,7 +49,9 @@ from commcare_connect.opportunity.tables import (
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     create_learn_modules_and_deliver_units,
+    generate_payment_and_verification_export,
     generate_payment_export,
+    generate_user_status_export,
     generate_visit_export,
 )
 from commcare_connect.opportunity.visit_import import (
@@ -124,6 +131,7 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
         context["visit_export_form"] = VisitExportForm()
         context["payment_export_form"] = PaymentExportForm()
         context["export_task_id"] = self.request.GET.get("export_task_id")
+        context["user_status_export_form"] = PaymentExportForm()
         return context
 
 
@@ -139,18 +147,6 @@ class OpportunityUserTableView(OrganizationUserMixin, SingleTableView):
         return OpportunityAccess.objects.filter(opportunity=opportunity).order_by("user__name")
 
 
-class OpportunityUserVisitTableView(OrganizationUserMixin, SingleTableView):
-    model = UserVisit
-    paginate_by = 25
-    table_class = UserVisitTable
-    template_name = "tables/single_table.html"
-
-    def get_queryset(self):
-        opportunity_id = self.kwargs["pk"]
-        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        return UserVisit.objects.filter(opportunity=opportunity).order_by("visit_date")
-
-
 class OpportunityPaymentTableView(OrganizationUserMixin, SingleTableView):
     model = OpportunityAccess
     paginate_by = 25
@@ -161,7 +157,7 @@ class OpportunityPaymentTableView(OrganizationUserMixin, SingleTableView):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
         return OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0).order_by(
-            "payment_accrued"
+            "-payment_accrued"
         )
 
 
@@ -279,11 +275,12 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
         if form.is_valid():
             selected_users = form.cleaned_data["selected_users"]
             additional_visits = form.cleaned_data["additional_visits"]
+            update_kwargs = {"max_payments": F("max_payments") + additional_visits}
             if form.cleaned_data["end_date"]:
-                end_date = form.cleaned_data["end_date"]
-            OpportunityClaim.objects.filter(pk__in=selected_users).update(
-                max_payments=F("max_payments") + additional_visits, end_date=end_date
-            )
+                update_kwargs.update({"end_date": form.cleaned_data["end_date"]})
+            OpportunityClaim.objects.filter(pk__in=selected_users).update(**update_kwargs)
+            opportunity.total_budget += additional_visits * opportunity.budget_per_visit * len(selected_users)
+            opportunity.save()
             return redirect("opportunity:detail", org_slug, pk)
 
     return render(
@@ -302,7 +299,8 @@ class OpportunityUserStatusTableView(OrganizationUserMixin, SingleTableView):
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        return OpportunityAccess.objects.filter(opportunity=opportunity).order_by("user__name")
+        access_objects = get_annotated_opportunity_access(opportunity)
+        return access_objects
 
 
 @org_member_required
@@ -398,3 +396,61 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, SingleTableView):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
         return PaymentUnit.objects.filter(opportunity=opportunity)
+
+
+@org_member_required
+def export_user_status(request, **kwargs):
+    opportunity_id = kwargs["pk"]
+    get_object_or_404(Opportunity, organization=request.org, id=opportunity_id)
+    form = PaymentExportForm(data=request.POST)
+    if not form.is_valid():
+        messages.error(request, form.errors)
+        return redirect("opportunity:detail", request.org.slug, opportunity_id)
+
+    export_format = form.cleaned_data["format"]
+    result = generate_user_status_export.delay(opportunity_id, export_format)
+    redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
+    return redirect(f"{redirect_url}?export_task_id={result.id}")
+
+
+class OpportunityDeliverStatusTable(OrganizationUserMixin, SingleTableView):
+    model = OpportunityAccess
+    paginate_by = 25
+    table_class = DeliverStatusTable
+    template_name = "tables/single_table.html"
+
+    def get_queryset(self):
+        opportunity_id = self.kwargs["pk"]
+        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        access_objects = get_annotated_opportunity_access_deliver_status(opportunity)
+        return access_objects
+
+
+@org_member_required
+def export_deliver_status(request, **kwargs):
+    opportunity_id = kwargs["pk"]
+    get_object_or_404(Opportunity, organization=request.org, id=opportunity_id)
+    form = PaymentExportForm(data=request.POST)
+    if not form.is_valid():
+        messages.error(request, form.errors)
+        return redirect("opportunity:detail", request.org.slug, opportunity_id)
+
+    export_format = form.cleaned_data["format"]
+    result = generate_payment_and_verification_export.delay(opportunity_id, export_format)
+    redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
+    return redirect(f"{redirect_url}?export_task_id={result.id}")
+
+
+@org_member_required
+def user_visits_list(request, org_slug=None, opp_id=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=opp_id)
+    opportunity_access = get_object_or_404(OpportunityAccess, pk=pk, opportunity=opportunity)
+    user_visits = UserVisit.objects.filter(user=opportunity_access.user, opportunity=opportunity).order_by(
+        "visit_date"
+    )
+    user_visits_table = UserVisitTable(user_visits)
+    return render(
+        request,
+        "opportunity/user_visits_list.html",
+        context=dict(opportunity=opportunity, table=user_visits_table, user_name=opportunity_access.display_name),
+    )

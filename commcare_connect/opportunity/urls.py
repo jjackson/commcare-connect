@@ -2,6 +2,7 @@ from django.urls import path
 
 from commcare_connect.opportunity.views import (
     OpportunityCreate,
+    OpportunityDeliverStatusTable,
     OpportunityDetail,
     OpportunityEdit,
     OpportunityList,
@@ -10,17 +11,19 @@ from commcare_connect.opportunity.views import (
     OpportunityUserLearnProgress,
     OpportunityUserStatusTableView,
     OpportunityUserTableView,
-    OpportunityUserVisitTableView,
     UserPaymentsTableView,
     add_budget_existing_users,
     add_payment_unit,
     download_export,
     edit_payment_unit,
+    export_deliver_status,
     export_status,
+    export_user_status,
     export_user_visits,
     export_users_for_payment,
     payment_import,
     update_visit_status_import,
+    user_visits_list,
 )
 
 app_name = "opportunity"
@@ -30,7 +33,6 @@ urlpatterns = [
     path("<int:pk>/edit", view=OpportunityEdit.as_view(), name="edit"),
     path("<int:pk>/", view=OpportunityDetail.as_view(), name="detail"),
     path("<int:pk>/user_table/", view=OpportunityUserTableView.as_view(), name="user_table"),
-    path("<int:pk>/visit_table/", view=OpportunityUserVisitTableView.as_view(), name="visit_table"),
     path("<int:pk>/user_status_table/", view=OpportunityUserStatusTableView.as_view(), name="user_status_table"),
     path("<int:pk>/visit_export/", view=export_user_visits, name="visit_export"),
     path("export_status/<slug:task_id>", view=export_status, name="export_status"),
@@ -53,4 +55,8 @@ urlpatterns = [
     path("<int:pk>/payment_unit_table/", view=OpportunityPaymentUnitTableView.as_view(), name="payment_unit_table"),
     path("<int:opp_id>/payment_unit/<int:pk>/edit", view=edit_payment_unit, name="edit_payment_unit"),
     path("<int:opp_id>/user_payment_table/<int:pk>", view=UserPaymentsTableView.as_view(), name="user_payments_table"),
+    path("<int:pk>/user_status_export/", view=export_user_status, name="user_status_export"),
+    path("<int:pk>/deliver_status_table/", view=OpportunityDeliverStatusTable.as_view(), name="deliver_status_table"),
+    path("<int:pk>/deliver_status_export/", view=export_deliver_status, name="deliver_status_export"),
+    path("<int:opp_id>/user_visits/<int:pk>/", view=user_visits_list, name="user_visits_list"),
 ]

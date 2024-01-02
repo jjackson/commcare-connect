@@ -76,12 +76,16 @@ class ClaimOpportunityView(APIView):
         opportunity_access = get_object_or_404(OpportunityAccess, user=self.request.user, opportunity=kwargs.get("pk"))
         opportunity = opportunity_access.opportunity
 
-        if opportunity.remaining_budget <= 0:
-            return Response(status=200, data="Opportunity cannot be claimed. (Budget Exhausted)")
+        if OpportunityClaim.objects.filter(opportunity_access=opportunity_access).exists():
+            return Response(status=200, data="Opportunity is already claimed")
+        if opportunity.remaining_budget < opportunity.budget_per_visit:
+            return Response(status=400, data="Opportunity cannot be claimed. (Budget Exhausted)")
         if opportunity.end_date < datetime.date.today():
-            return Response(status=200, data="Opportunity cannot be claimed. (End date reached)")
+            return Response(status=400, data="Opportunity cannot be claimed. (End date reached)")
 
-        max_payments = min(opportunity.remaining_budget, opportunity.max_visits_per_user)
+        max_payments = min(
+            opportunity.remaining_budget // opportunity.budget_per_visit, opportunity.max_visits_per_user
+        )
         claim, created = OpportunityClaim.objects.get_or_create(
             opportunity_access=opportunity_access,
             defaults={

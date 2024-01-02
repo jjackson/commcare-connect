@@ -26,6 +26,7 @@ class CommCareAppSerializer(serializers.ModelSerializer):
     organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
     learn_modules = LearnModuleSerializer(many=True)
     install_url = serializers.SerializerMethodField()
+    passing_score = serializers.SerializerMethodField()
 
     class Meta:
         model = CommCareApp
@@ -42,6 +43,11 @@ class CommCareAppSerializer(serializers.ModelSerializer):
 
     def get_install_url(self, obj):
         return f"{settings.COMMCARE_HQ_URL}/a/{obj.cc_domain}/apps/download/{obj.cc_app_id}/media_profile.ccpr"
+
+    def get_passing_score(self, obj):
+        if obj.passing_score is None:
+            return -1
+        return obj.passing_score
 
 
 class OpportunityClaimSerializer(serializers.ModelSerializer):

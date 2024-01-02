@@ -35,10 +35,13 @@ def create_hq_user(user, domain, api_key):
             "connect_username": user.username,
         },
         headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"},
+        timeout=10,
     )
     try:
         hq_request.raise_for_status()
     except httpx.HTTPStatusError as e:
+        if e.response.status_code == 400 and "already exists" in e.response.text:
+            return True
         raise CommCareHQAPIException(
             f"{e.response.status_code} Error response {e.response.text} while creating user {user.username}"
         )

@@ -99,7 +99,7 @@ class Opportunity(BaseModel):
 
     @property
     def is_active(self):
-        return self.active and self.end_date > now().date()
+        return self.active and self.end_date >= now().date()
 
 
 class LearnModule(models.Model):
@@ -194,7 +194,7 @@ class OpportunityAccess(models.Model):
             .order_by("visit_date")
         )
         if user_visits.exists():
-            return user_visits.first().visit_date
+            return user_visits.last().visit_date
         return
 
     @property

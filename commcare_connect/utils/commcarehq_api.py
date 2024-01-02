@@ -73,11 +73,10 @@ def get_applications_for_user(user):
 
 @async_to_sync
 async def _get_applications_for_domains(social_token, domains):
-    async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {social_token}"}) as client:
+    async with httpx.AsyncClient(timeout=300, headers={"Authorization": f"Bearer {social_token}"}) as client:
         tasks = []
         for domain in domains:
             tasks.append(asyncio.ensure_future(_get_commcare_app_json(client, domain)))
-
         domain_apps = await asyncio.gather(*tasks)
     applications = list(itertools.chain.from_iterable(domain_apps))
     return applications

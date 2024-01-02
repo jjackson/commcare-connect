@@ -4,11 +4,17 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.utils.timezone import now
 from django.utils.translation import gettext
+from tablib import Dataset
 
 from commcare_connect.connect_id_client import fetch_users, send_message_bulk
 from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
-from commcare_connect.opportunity.export import export_empty_payment_table, export_user_visit_data
+from commcare_connect.opportunity.export import (
+    export_deliver_status_table,
+    export_empty_payment_table,
+    export_user_status_table,
+    export_user_visit_data,
+)
 from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import (
     CompletedModule,
@@ -17,6 +23,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    Payment,
     UserVisit,
     VisitValidationStatus,
 )
@@ -84,10 +91,38 @@ def generate_payment_export(opportunity_id: int, export_format: str):
 
 
 @celery_app.task()
+def generate_user_status_export(opportunity_id: int, export_format: str):
+    opportunity = Opportunity.objects.get(id=opportunity_id)
+    dataset = export_user_status_table(opportunity)
+    content = dataset.export(export_format)
+    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_user_status.{export_format}"
+    if isinstance(content, str):
+        content = content.encode()
+    default_storage.save(export_tmp_name, ContentFile(content))
+    return export_tmp_name
+
+
+@celery_app.task()
+def generate_payment_and_verification_export(opportunity_id: int, export_format: str):
+    opportunity = Opportunity.objects.get(id=opportunity_id)
+    dataset = export_deliver_status_table(opportunity)
+    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_and_verification.{export_format}"
+    save_export(dataset, export_tmp_name, export_format)
+    return export_tmp_name
+
+
+def save_export(dataset: Dataset, file_name: str, export_format: str):
+    content = dataset.export(export_format)
+    if isinstance(content, str):
+        content = content.encode()
+    default_storage.save(file_name, ContentFile(content))
+
+
+@celery_app.task()
 def send_notification_inactive_users():
     opportunity_accesses = OpportunityAccess.objects.filter(
         opportunity__active=True,
-        opportunity__end_date__gt=datetime.date.today(),
+        opportunity__end_date__gte=datetime.date.today(),
     ).select_related("opportunity")
     messages = []
     for access in opportunity_accesses:
@@ -142,3 +177,20 @@ def _get_deliver_message(access: OpportunityAccess):
             "To maximise your payout complete all the required service delivery."
         ),
     )
+
+
+@celery_app.task()
+def send_payment_notification(opportunity_id: int, payment_ids: list[int]):
+    opportunity = Opportunity.objects.get(pk=opportunity_id)
+    messages = []
+    for payment in Payment.objects.filter(pk__in=payment_ids).select_related("opportunity_access__user"):
+        messages.append(
+            Message(
+                usernames=[payment.opportunity_access.user.username],
+                title=gettext("Payment received"),
+                body=gettext(
+                    f"You have received a payment of {opportunity.currency} {payment.amount} for {opportunity.name}."
+                ),
+            )
+        )
+    send_message_bulk(messages)
