@@ -135,7 +135,6 @@ STORAGES = {
 }
 WHITENOISE_MANIFEST_STRICT = False  # don't 500 on missing staticfiles
 
-
 # MEDIA
 # ------------------------------------------------------------------------------
 MEDIA_ROOT = str(APPS_DIR / "media")
@@ -238,8 +237,8 @@ CELERY_RESULT_BACKEND_MAX_RETRIES = 10
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
-CELERY_TASK_TIME_LIMIT = 5 * 60
-CELERY_TASK_SOFT_TIME_LIMIT = 60
+# CELERY_TASK_TIME_LIMIT = 5 * 60
+# CELERY_TASK_SOFT_TIME_LIMIT = 60
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_WORKER_SEND_TASK_EVENTS = True
 CELERY_TASK_SEND_SENT_EVENT = True
@@ -295,6 +294,9 @@ DJANGO_TABLES2_TABLE_ATTRS = {
     "class": "table border table-custom",
     "thead": {
         "class": "table-secondary",
+    },
+    "tfoot": {
+        "class": "table-light fw-bold",
     },
 }
 
