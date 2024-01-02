@@ -65,14 +65,15 @@
                   {% translate "Import Payment Records" %}
                 </a>
               </li>
+              <li class="dropdown-divider"></li>
               <li>
                 <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportUserStatusModal">
                   <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
-                  {% translate "Export Users Status" %}
+                  {% translate "Export User Status" %}
                 </a>
               </li>
               <li>
-                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportPaymentAndVerificationModal">
+                <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportDeliverStatusModal">
                   <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
                   {% translate "Export Deliver Status" %}
                 </a>
@@ -344,29 +345,9 @@
   </div>
 </div>
 
-<!-- Payment Export modal -->
-<div class="modal fade" id="exportPaymentModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h1 class="modal-title fs-5">{% translate "Export Users for Payment" %}</h1>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <form action="{% url "opportunity:payment_export" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
-            enctype="multipart/form-data">
-        <div class="modal-body">
-          <div class="mb-3">
-            {% crispy payment_export_form %}
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          <button type="submit" class="btn btn-primary">Export</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
+  <!-- Payment Export modal -->
+  {% url "opportunity:payment_export" org_slug=request.org.slug pk=opportunity.pk as payment_export_url %}
+  {% include "export_modal.html" with modal_id="exportPaymentModal" modal_title=_("Export Users for Payment") export_url=payment_export_url %}
 
 <!-- Payment Import modal -->
 <div class="modal fade" id="importPaymentModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
@@ -399,51 +380,11 @@
     </div>
   </div>
 </div>
-  <!-- User status Export modal -->
-  <div class="modal fade" id="exportUserStatusModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h1 class="modal-title fs-5">{% translate "Export User Status" %}</h1>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <form action="{% url "opportunity:user_status_export" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
-              enctype="multipart/form-data">
-          <div class="modal-body">
-            <div class="mb-3">
-              {% crispy user_status_export_form %}
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="submit" class="btn btn-primary">Export</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
+  <!-- User Status Export Modal -->
+  {% url 'opportunity:user_status_export' org_slug=request.org.slug pk=opportunity.pk as user_status_export_url %}
+  {% include "export_modal.html" with modal_id="exportUserStatusModal" modal_title=_("Export User Status") export_url=user_status_export_url %}
 
-  <!-- Payments and Verification Export modal -->
-  <div class="modal fade" id="exportPaymentAndVerificationModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h1 class="modal-title fs-5">{% translate "Export Payments and Verification" %}</h1>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <form action="{% url 'opportunity:deliver_status_export' org_slug=request.org.slug pk=opportunity.pk %}" method="post"
-              enctype="multipart/form-data">
-          <div class="modal-body">
-            <div class="mb-3">
-              {% crispy user_status_export_form %}
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="submit" class="btn btn-primary">Export</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
+  <!-- Deliver Status Export Modal -->
+  {% url 'opportunity:deliver_status_export' org_slug=request.org.slug pk=opportunity.pk as deliver_status_export_url %}
+  {% include "export_modal.html" with modal_id="exportDeliverStatusModal" modal_title=_("Export Deliver Status") export_url=deliver_status_export_url %}
 {% endblock modal %}
