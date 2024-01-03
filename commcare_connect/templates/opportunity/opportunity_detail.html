@@ -347,7 +347,7 @@
 
   <!-- Payment Export modal -->
   {% url "opportunity:payment_export" org_slug=request.org.slug pk=opportunity.pk as payment_export_url %}
-  {% include "export_modal.html" with modal_id="exportPaymentModal" modal_title=_("Export Users for Payment") export_url=payment_export_url %}
+  {% include "export_modal.html" with modal_id="exportPaymentModal" modal_title=_("Export Users for Payment") export_url=payment_export_url export_form=export_form %}
 
 <!-- Payment Import modal -->
 <div class="modal fade" id="importPaymentModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
@@ -382,9 +382,9 @@
 </div>
   <!-- User Status Export Modal -->
   {% url 'opportunity:user_status_export' org_slug=request.org.slug pk=opportunity.pk as user_status_export_url %}
-  {% include "export_modal.html" with modal_id="exportUserStatusModal" modal_title=_("Export User Status") export_url=user_status_export_url %}
+  {% include "export_modal.html" with modal_id="exportUserStatusModal" modal_title=_("Export User Status") export_url=user_status_export_url export_form=export_form %}
 
   <!-- Deliver Status Export Modal -->
   {% url 'opportunity:deliver_status_export' org_slug=request.org.slug pk=opportunity.pk as deliver_status_export_url %}
-  {% include "export_modal.html" with modal_id="exportDeliverStatusModal" modal_title=_("Export Deliver Status") export_url=deliver_status_export_url %}
+  {% include "export_modal.html" with modal_id="exportDeliverStatusModal" modal_title=_("Export Deliver Status") export_url=deliver_status_export_url export_form=export_form %}
 {% endblock modal %}

@@ -129,9 +129,8 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["visit_export_form"] = VisitExportForm()
-        context["payment_export_form"] = PaymentExportForm()
         context["export_task_id"] = self.request.GET.get("export_task_id")
-        context["user_status_export_form"] = PaymentExportForm()
+        context["export_form"] = PaymentExportForm()
         return context
 
 
