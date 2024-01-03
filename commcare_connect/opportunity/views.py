@@ -49,7 +49,7 @@ from commcare_connect.opportunity.tables import (
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     create_learn_modules_and_deliver_units,
-    generate_payment_and_verification_export,
+    generate_deliver_status_export,
     generate_payment_export,
     generate_user_status_export,
     generate_visit_export,
@@ -435,7 +435,7 @@ def export_deliver_status(request, **kwargs):
         return redirect("opportunity:detail", request.org.slug, opportunity_id)
 
     export_format = form.cleaned_data["format"]
-    result = generate_payment_and_verification_export.delay(opportunity_id, export_format)
+    result = generate_deliver_status_export.delay(opportunity_id, export_format)
     redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 

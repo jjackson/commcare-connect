@@ -94,10 +94,10 @@ def generate_user_status_export(opportunity_id: int, export_format: str):
 
 
 @celery_app.task()
-def generate_payment_and_verification_export(opportunity_id: int, export_format: str):
+def generate_deliver_status_export(opportunity_id: int, export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     dataset = export_deliver_status_table(opportunity)
-    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_and_verification.{export_format}"
+    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_deliver_status.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
 
