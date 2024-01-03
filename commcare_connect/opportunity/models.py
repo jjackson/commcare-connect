@@ -168,10 +168,13 @@ class OpportunityAccess(models.Model):
     @property
     def learn_progress(self):
         learn_modules = LearnModule.objects.filter(app=self.opportunity.learn_app)
+        learn_modules_count = learn_modules.count()
+        if learn_modules_count <= 0:
+            return 0
         completed_modules = CompletedModule.objects.filter(
             opportunity=self.opportunity, module__in=learn_modules, user=self.user
         ).count()
-        percentage = (completed_modules / learn_modules.count()) * 100
+        percentage = (completed_modules / learn_modules_count) * 100
         return round(percentage, 2)
 
     @property
