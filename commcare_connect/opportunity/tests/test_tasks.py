@@ -22,18 +22,8 @@ class TestConnectUserCreation:
         opportunity = OpportunityFactory()
         with (
             mock.patch("commcare_connect.opportunity.tasks.fetch_users") as fetch_users,
-            mock.patch("commcare_connect.users.helpers.send_sms"),
+            mock.patch("commcare_connect.opportunity.tasks.invite_user"),
         ):
-            httpx_mock.add_response(
-                method="POST",
-                json={
-                    "all_success": True,
-                    "responses": [
-                        {"username": "test", "status": "success"},
-                        {"username": "test2", "status": "success"},
-                    ],
-                },
-            )
             fetch_users.return_value = [
                 ConnectIdUser(username="test", phone_number="+15555555555", name="a"),
                 ConnectIdUser(username="test2", phone_number="+12222222222", name="b"),
