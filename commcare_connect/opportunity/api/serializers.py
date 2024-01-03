@@ -139,7 +139,16 @@ class UserVisitSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserVisit
-        fields = ["id", "status", "visit_date", "deliver_unit_name", "deliver_unit_slug", "entity_id", "entity_name"]
+        fields = [
+            "id",
+            "status",
+            "visit_date",
+            "deliver_unit_name",
+            "deliver_unit_slug",
+            "entity_id",
+            "entity_name",
+            "reason",
+        ]
 
 
 class PaymentSerializer(serializers.ModelSerializer):
