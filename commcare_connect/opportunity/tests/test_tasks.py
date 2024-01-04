@@ -2,6 +2,7 @@ import datetime
 from unittest import mock
 
 import pytest
+from django.utils.timezone import now
 
 from commcare_connect.connect_id_client.models import ConnectIdUser
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
@@ -45,7 +46,7 @@ class TestConnectUserCreation:
 def test_send_inactive_notification_learn_inactive_message(mobile_user: User, opportunity: Opportunity):
     learn_modules = LearnModuleFactory.create_batch(2, app=opportunity.learn_app)
     CompletedModuleFactory.create(
-        date=datetime.datetime.now() - datetime.timedelta(days=3),
+        date=now() - datetime.timedelta(days=3),
         user=mobile_user,
         opportunity=opportunity,
         module=learn_modules[0],
@@ -63,13 +64,11 @@ def test_send_inactive_notification_deliver_inactive_message(mobile_user: User, 
             user=mobile_user,
             opportunity=opportunity,
             module=learn_module,
-            date=datetime.datetime.now() - datetime.timedelta(days=2),
+            date=now() - datetime.timedelta(days=2),
         )
     access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
     OpportunityClaimFactory.create(opportunity_access=access, end_date=opportunity.end_date)
-    UserVisitFactory.create(
-        user=mobile_user, opportunity=opportunity, visit_date=datetime.datetime.now() - datetime.timedelta(days=2)
-    )
+    UserVisitFactory.create(user=mobile_user, opportunity=opportunity, visit_date=now() - datetime.timedelta(days=2))
 
     message = _get_inactive_message(access)
     assert message.usernames[0] == mobile_user.username
@@ -83,7 +82,7 @@ def test_send_inactive_notification_not_claimed_deliver_message(mobile_user: Use
             user=mobile_user,
             opportunity=opportunity,
             module=learn_module,
-            date=datetime.datetime.now() - datetime.timedelta(days=2),
+            date=now() - datetime.timedelta(days=2),
         )
     access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
     message = _get_inactive_message(access)
@@ -98,12 +97,10 @@ def test_send_inactive_notification_active_user(mobile_user: User, opportunity: 
             user=mobile_user,
             opportunity=opportunity,
             module=learn_module,
-            date=datetime.datetime.now() - datetime.timedelta(days=2),
+            date=now() - datetime.timedelta(days=2),
         )
     access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
     OpportunityClaimFactory.create(opportunity_access=access, end_date=opportunity.end_date)
-    UserVisitFactory.create(
-        user=mobile_user, opportunity=opportunity, visit_date=datetime.datetime.now() - datetime.timedelta(days=1)
-    )
+    UserVisitFactory.create(user=mobile_user, opportunity=opportunity, visit_date=now() - datetime.timedelta(days=1))
     message = _get_inactive_message(access)
     assert message is None
