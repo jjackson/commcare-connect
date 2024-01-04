@@ -93,7 +93,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                         visit.reason = reason
                     to_update.append(visit)
 
-            UserVisit.objects.bulk_update(to_update, fields=["status"])
+            UserVisit.objects.bulk_update(to_update, fields=["status", "reason"])
             missing_visits |= set(visit_batch) - seen_visits
             update_payment_accrued(opportunity, users={visit.user_id for visit in visits})
 
@@ -137,7 +137,7 @@ def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:
             status_by_visit_id[visit_id] = VisitValidationStatus[status_raw]
         except KeyError:
             invalid_rows.append((row, f"status must be one of {VisitValidationStatus.values}"))
-        if status_raw == VisitValidationStatus.rejected:
+        if status_raw == VisitValidationStatus.rejected.value:
             reason_by_visit_id[visit_id] = str(row[reason_col_index])
 
     if invalid_rows:
