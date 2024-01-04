@@ -37,7 +37,7 @@ from config import celery_app
 
 @celery_app.task()
 def create_learn_modules_and_deliver_units(opportunity_id):
-    opportunity = Opportunity.objects.filter(id=opportunity_id).first()
+    opportunity = Opportunity.objects.get(id=opportunity_id)
     learn_app = opportunity.learn_app
     deliver_app = opportunity.deliver_app
     learn_app_connect_blocks = get_connect_blocks_for_app(learn_app.cc_domain, learn_app.cc_app_id)
@@ -98,11 +98,8 @@ def invite_user(user_id, opportunity_access_id):
 def generate_visit_export(opportunity_id: int, date_range: str, status: list[str], export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     dataset = export_user_visit_data(opportunity, DateRanges(date_range), [VisitValidationStatus(s) for s in status])
-    content = dataset.export(export_format)
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_visit_export.{export_format}"
-    if isinstance(content, str):
-        content = content.encode()
-    default_storage.save(export_tmp_name, ContentFile(content))
+    save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
 
 
@@ -110,11 +107,8 @@ def generate_visit_export(opportunity_id: int, date_range: str, status: list[str
 def generate_payment_export(opportunity_id: int, export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     dataset = export_empty_payment_table(opportunity)
-    content = dataset.export(export_format)
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_export.{export_format}"
-    if isinstance(content, str):
-        content = content.encode()
-    default_storage.save(export_tmp_name, ContentFile(content))
+    save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
 
 
@@ -122,19 +116,16 @@ def generate_payment_export(opportunity_id: int, export_format: str):
 def generate_user_status_export(opportunity_id: int, export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     dataset = export_user_status_table(opportunity)
-    content = dataset.export(export_format)
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_user_status.{export_format}"
-    if isinstance(content, str):
-        content = content.encode()
-    default_storage.save(export_tmp_name, ContentFile(content))
+    save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
 
 
 @celery_app.task()
-def generate_payment_and_verification_export(opportunity_id: int, export_format: str):
+def generate_deliver_status_export(opportunity_id: int, export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     dataset = export_deliver_status_table(opportunity)
-    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_and_verification.{export_format}"
+    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_deliver_status.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
 
