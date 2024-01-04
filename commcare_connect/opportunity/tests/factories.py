@@ -1,3 +1,5 @@
+from datetime import timezone
+
 from factory import CREATE_STRATEGY, DictFactory, Faker, SelfAttribute, SubFactory
 from factory.django import DjangoModelFactory
 
@@ -87,7 +89,7 @@ class UserVisitFactory(DjangoModelFactory):
     entity_id = Faker("uuid4")
     entity_name = Faker("name")
     status = Faker("enum", enum_cls=VisitValidationStatus)
-    visit_date = Faker("date")
+    visit_date = Faker("date_time", tzinfo=timezone.utc)
     form_json = Faker("pydict", value_types=[str, int, float, bool])
 
     class Meta:
@@ -115,7 +117,7 @@ class OpportunityClaimFactory(DjangoModelFactory):
 class CompletedModuleFactory(DjangoModelFactory):
     opportunity = SubFactory(OpportunityFactory)
     user = SubFactory("commcare_connect.users.tests.factories.UserFactory")
-    date = Faker("date")
+    date = Faker("date_time", tzinfo=timezone.utc)
     module = SubFactory(LearnModuleFactory, app=SelfAttribute("..opportunity.learn_app"))
     duration = Faker("time_delta")
 
@@ -130,7 +132,7 @@ class AssessmentFactory(DjangoModelFactory):
     passed = True
     score = Faker("pyint", min_value=75, max_value=100)
     passing_score = Faker("pyint", min_value=1, max_value=50)
-    date = Faker("date")
+    date = Faker("date_time", tzinfo=timezone.utc)
 
     class Meta:
         model = "opportunity.Assessment"

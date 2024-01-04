@@ -1,9 +1,6 @@
-from collections.abc import Sequence
-from typing import Any
-
 from django.contrib.auth import get_user_model
-from factory import Faker, RelatedFactory, SubFactory, post_generation
-from factory.django import DjangoModelFactory
+from factory import Faker, RelatedFactory, SubFactory
+from factory.django import DjangoModelFactory, Password
 
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
 from commcare_connect.users.models import ConnectIDUserLink
@@ -12,22 +9,16 @@ from commcare_connect.users.models import ConnectIDUserLink
 class UserFactory(DjangoModelFactory):
     email = Faker("email")
     name = Faker("name")
-
-    @post_generation
-    def password(self, create: bool, extracted: Sequence[Any], **kwargs):
-        password = (
-            extracted
-            if extracted
-            else Faker(
-                "password",
-                length=42,
-                special_chars=True,
-                digits=True,
-                upper_case=True,
-                lower_case=True,
-            ).evaluate(None, None, extra={"locale": None})
+    password = Password(
+        Faker(
+            "password",
+            length=42,
+            special_chars=True,
+            digits=True,
+            upper_case=True,
+            lower_case=True,
         )
-        self.set_password(password)
+    )
 
     class Meta:
         model = get_user_model()
@@ -71,3 +62,6 @@ class MembershipFactory(DjangoModelFactory):
 class OrgWithUsersFactory(OrganizationFactory):
     admin = RelatedFactory(MembershipFactory, "organization", role="admin")
     member = RelatedFactory(MembershipFactory, "organization", role="member")
+
+    class Meta:
+        skip_postgeneration_save = True
