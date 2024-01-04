@@ -89,6 +89,7 @@ class UserVisitFactory(DjangoModelFactory):
     status = Faker("enum", enum_cls=VisitValidationStatus)
     visit_date = Faker("date")
     form_json = Faker("pydict", value_types=[str, int, float, bool])
+    xform_id = Faker("uuid4")
 
     class Meta:
         model = "opportunity.UserVisit"
