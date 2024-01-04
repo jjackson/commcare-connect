@@ -1,12 +1,26 @@
 import re
+from itertools import chain
 
 import pytest
 from tablib import Dataset
 
-from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, UserVisit, VisitValidationStatus
-from commcare_connect.opportunity.tests.factories import DeliverUnitFactory, PaymentUnitFactory, UserVisitFactory
+from commcare_connect.conftest import MobileUserFactory
+from commcare_connect.opportunity.models import (
+    Opportunity,
+    OpportunityAccess,
+    Payment,
+    UserVisit,
+    VisitValidationStatus,
+)
+from commcare_connect.opportunity.tests.factories import (
+    DeliverUnitFactory,
+    OpportunityAccessFactory,
+    PaymentUnitFactory,
+    UserVisitFactory,
+)
 from commcare_connect.opportunity.visit_import import (
     ImportException,
+    _bulk_update_payments,
     _bulk_update_visit_status,
     get_status_by_visit_id,
     update_payment_accrued,
@@ -79,3 +93,23 @@ def test_get_status_by_visit_id(headers, rows, expected):
     else:
         actual = get_status_by_visit_id(dataset)
         assert actual == expected
+
+
+@pytest.mark.django_db
+def test_bulk_update_payments(opportunity: Opportunity):
+    mobile_user_seen = MobileUserFactory.create_batch(5)
+    mobile_user_missing = MobileUserFactory.create_batch(5)
+    access_objects = []
+    for mobile_user in mobile_user_seen:
+        access_objects.append(OpportunityAccessFactory(opportunity=opportunity, user=mobile_user))
+    dataset = Dataset(headers=["Username", "Phone Number", "Name", "Payment Amount"])
+    for mobile_user in chain(mobile_user_seen, mobile_user_missing):
+        dataset.append((mobile_user.username, mobile_user.phone_number, mobile_user.name, 50))
+
+    payment_import_status = _bulk_update_payments(opportunity, dataset)
+    assert payment_import_status.seen_users == {user.username for user in mobile_user_seen}
+    assert payment_import_status.missing_users == {user.username for user in mobile_user_missing}
+    assert Payment.objects.filter(opportunity_access__opportunity=opportunity).count() == 5
+    for access in access_objects:
+        payment = Payment.objects.get(opportunity_access=access)
+        assert payment.amount == 50
