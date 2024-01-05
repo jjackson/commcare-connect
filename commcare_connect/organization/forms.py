@@ -1,8 +1,10 @@
 from crispy_forms import helper, layout
 from django import forms
+from django.db.models import Q
 from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
+from commcare_connect.users.models import User
 
 
 class OrganizationChangeForm(forms.ModelForm):
@@ -30,7 +32,12 @@ class MembershipForm(forms.ModelForm):
         labels = {"user": "", "role": ""}
 
     def __init__(self, *args, **kwargs):
+        self.organization = kwargs.pop("organization")
         super().__init__(*args, **kwargs)
+
+        self.fields["user"].queryset = User.objects.exclude(
+            Q(email__isnull=True) | Q(memberships__organization=self.organization)
+        )
 
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
