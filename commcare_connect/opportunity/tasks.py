@@ -71,7 +71,7 @@ def add_connect_users(user_list: list[str], opportunity_id: str):
 @celery_app.task()
 def invite_user(user_id, opportunity_access_id):
     user = User.objects.get(pk=user_id)
-    opportunity_access = OpportunityAccess.get(pk=opportunity_access_id).select_related("opportunity")
+    opportunity_access = OpportunityAccess.objects.get(pk=opportunity_access_id)
     invite_id = opportunity_access.invite_id
     location = reverse("users:accept_invite", args=(invite_id,))
     url = build_absolute_uri(None, location)
