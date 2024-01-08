@@ -15,7 +15,7 @@ def organization_home(request, org_slug):
     org = get_object_or_404(Organization, slug=org_slug)
 
     form = None
-    membership_form = MembershipForm()
+    membership_form = MembershipForm(organization=org)
     if request.method == "POST":
         form = OrganizationChangeForm(request.POST, instance=org)
         if form.is_valid():
@@ -36,7 +36,7 @@ def organization_home(request, org_slug):
 @login_required
 def add_members_form(request, org_slug):
     org = get_object_or_404(Organization, slug=org_slug)
-    form = MembershipForm(request.POST or None)
+    form = MembershipForm(request.POST or None, organization=org)
 
     if form.is_valid():
         form.instance.organization = org
