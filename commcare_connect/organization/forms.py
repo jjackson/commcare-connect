@@ -1,6 +1,5 @@
 from crispy_forms import helper, layout
 from django import forms
-from django.db.models import Q
 from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
@@ -35,8 +34,8 @@ class MembershipForm(forms.ModelForm):
         self.organization = kwargs.pop("organization")
         super().__init__(*args, **kwargs)
 
-        self.fields["user"].queryset = User.objects.exclude(
-            Q(email__isnull=True) | Q(memberships__organization=self.organization)
+        self.fields["user"].queryset = User.objects.filter(email__isnull=False).exclude(
+            memberships__organization=self.organization
         )
 
         self.helper = helper.FormHelper(self)
