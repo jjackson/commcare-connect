@@ -183,7 +183,7 @@ class UserPaymentsTableView(OrganizationUserMixin, SingleTableView):
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
         access_id = self.kwargs["pk"]
         access = get_object_or_404(OpportunityAccess, opportunity=opportunity, pk=access_id)
-        return Payment.objects.filter(opportunity_access=access).order_by("date_paid")
+        return Payment.objects.filter(opportunity_access=access).order_by("-date_paid")
 
 
 class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
