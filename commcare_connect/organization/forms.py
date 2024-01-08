@@ -3,6 +3,7 @@ from django import forms
 from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
+from commcare_connect.users.models import User
 
 
 class OrganizationChangeForm(forms.ModelForm):
@@ -30,7 +31,12 @@ class MembershipForm(forms.ModelForm):
         labels = {"user": "", "role": ""}
 
     def __init__(self, *args, **kwargs):
+        self.organization = kwargs.pop("organization")
         super().__init__(*args, **kwargs)
+
+        self.fields["user"].queryset = User.objects.filter(email__isnull=False).exclude(
+            memberships__organization=self.organization
+        )
 
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
