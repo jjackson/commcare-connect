@@ -11,12 +11,12 @@ class OpportunityAccessTable(tables.Table):
         "opportunity:user_learn_progress",
         verbose_name="",
         text="View Details",
-        args=[utils.A("opportunity.organization.slug"), utils.A("opportunity.id"), utils.A("pk")],
+        args=[utils.A("opportunity__organization__slug"), utils.A("opportunity__id"), utils.A("pk")],
     )
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "user.username", "learn_progress")
+        fields = ("display_name", "user__username", "learn_progress")
         orderable = False
         empty_text = "No learn progress for users."
 
@@ -24,27 +24,27 @@ class OpportunityAccessTable(tables.Table):
 class UserVisitTable(tables.Table):
     # export only columns
     visit_id = columns.Column("Visit ID", accessor="xform_id", visible=False)
-    username = columns.Column("Username", accessor="user.username", visible=False)
+    username = columns.Column("Username", accessor="user__username", visible=False)
     form_json = columns.Column("Form JSON", accessor="form_json", visible=False)
     visit_date_export = columns.DateTimeColumn(
         verbose_name="Visit date", accessor="visit_date", format="c", visible=False
     )
     reason = columns.Column("Rejected Reason", accessor="reason", visible=False)
 
-    deliver_unit = columns.Column("Unit Name", accessor="deliver_unit.name")
+    deliver_unit = columns.Column("Unit Name", accessor="deliver_unit__name")
     entity_id = columns.Column("Entity ID", accessor="entity_id", visible=False)
     entity_name = columns.Column("Entity Name", accessor="entity_name")
 
     class Meta:
         model = UserVisit
-        fields = ("user.name", "username", "visit_date", "status")
+        fields = ("user__name", "username", "visit_date", "status")
         sequence = (
             "visit_id",
             "visit_date",
             "visit_date_export",
             "status",
             "username",
-            "user.name",
+            "user__name",
             "deliver_unit",
         )
         empty_text = "No forms."
@@ -56,12 +56,12 @@ class OpportunityPaymentTable(tables.Table):
         "opportunity:user_payments_table",
         verbose_name="",
         text="View Details",
-        args=[utils.A("opportunity.organization.slug"), utils.A("opportunity.id"), utils.A("pk")],
+        args=[utils.A("opportunity__organization__slug"), utils.A("opportunity__id"), utils.A("pk")],
     )
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user.name", "user.username", "payment_accrued", "total_paid")
+        fields = ("user__name", "user__username", "payment_accrued", "total_paid")
         orderable = False
         empty_text = "No user have payments accrued yet."
 
@@ -96,10 +96,10 @@ class UserStatusTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "user.username", "accepted", "last_visit_date")
+        fields = ("display_name", "user__username", "accepted", "last_visit_date")
         sequence = (
             "display_name",
-            "user.username",
+            "user__username",
             "accepted",
             "started_learning",
             "completed_learning",
@@ -118,7 +118,7 @@ class PaymentUnitTable(tables.Table):
         "opportunity:edit_payment_unit",
         verbose_name="",
         text="Edit",
-        args=[utils.A("opportunity.organization.slug"), utils.A("opportunity.id"), utils.A("pk")],
+        args=[utils.A("opportunity__organization__slug"), utils.A("opportunity__id"), utils.A("pk")],
     )
 
     class Meta:
@@ -143,16 +143,16 @@ class DeliverStatusTable(tables.Table):
         "opportunity:user_visits_list",
         verbose_name="",
         text="View Details",
-        args=[utils.A("opportunity.organization.slug"), utils.A("opportunity.id"), utils.A("pk")],
+        args=[utils.A("opportunity__organization__slug"), utils.A("opportunity__id"), utils.A("pk")],
     )
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user.username", "last_visit_date")
+        fields = ("user__username", "last_visit_date")
         orderable = False
         sequence = (
             "name",
-            "user.username",
+            "user__username",
             "visits_completed",
             "visits_approved",
             "visits_pending",

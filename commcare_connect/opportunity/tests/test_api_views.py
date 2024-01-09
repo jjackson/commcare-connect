@@ -1,6 +1,7 @@
 import datetime
 
 import pytest
+from django.utils.timezone import now
 from rest_framework.test import APIClient
 
 from commcare_connect.opportunity.api.serializers import (
@@ -125,14 +126,14 @@ def test_learn_progress_endpoint(mobile_user: User, api_client: APIClient):
         module=learn_module,
         user=mobile_user,
         opportunity=opportunity,
-        date=datetime.datetime.now(),
+        date=now(),
         duration=datetime.timedelta(hours=10),
     )
     Assessment.objects.create(
         user=mobile_user,
         app=opportunity.learn_app,
         opportunity=opportunity,
-        date=datetime.datetime.now(),
+        date=now(),
         score=100,
         passing_score=opportunity.learn_app.passing_score,
         passed=True,
