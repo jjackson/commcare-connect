@@ -1,6 +1,7 @@
 import datetime
 from unittest import mock
 
+from django.utils.timezone import now
 from rest_framework.test import APIClient, APIRequestFactory
 
 from commcare_connect.form_receiver.exceptions import ProcessingError
@@ -41,6 +42,6 @@ def test_process_xform_error(user: User, api_client: APIClient):
 
 def add_credentials(api_client: APIClient, user: User):
     token = user.oauth2_provider_accesstoken.create(
-        expires=datetime.datetime.now() + datetime.timedelta(hours=1), token="token", scope="read write"
+        expires=now() + datetime.timedelta(hours=1), token="token", scope="read write"
     )
     api_client.credentials(Authorization=f"Bearer {token}")

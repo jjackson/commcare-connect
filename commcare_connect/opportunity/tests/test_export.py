@@ -1,5 +1,3 @@
-import datetime
-
 import pytest
 from django.utils.timezone import now
 from tablib import Dataset
@@ -116,9 +114,9 @@ def test_export_user_status_table_no_data_only(opportunity: Opportunity):
     mobile_users = MobileUserFactory.create_batch(2)
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
-        date = datetime.datetime.now()
+        date = now()
         OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date)
-        rows.append((mobile_user.name, mobile_user.username, True, date, "", False, "", "", ""))
+        rows.append((mobile_user.name, mobile_user.username, True, date.replace(tzinfo=None), "", False, "", "", ""))
     dataset = export_user_status_table(opportunity)
     prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
     assert prepared_test_dataset.export("csv") == dataset.export("csv")
@@ -130,11 +128,11 @@ def test_export_user_status_table_learn_data_only(opportunity: Opportunity):
     mobile_users = MobileUserFactory.create_batch(2)
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
-        date = datetime.datetime.now()
+        date = now()
         OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date)
         for learn_module in opportunity.learn_app.learn_modules.all()[2:]:
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
-        rows.append((mobile_user.name, mobile_user.username, True, date, "", False, "", "", ""))
+        rows.append((mobile_user.name, mobile_user.username, True, date.replace(tzinfo=None), "", False, "", "", ""))
     dataset = export_user_status_table(opportunity)
     prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
     assert prepared_test_dataset.export("csv") == dataset.export("csv")
@@ -146,12 +144,24 @@ def test_export_user_status_table_learn_assessment_data_only(opportunity: Opport
     mobile_users = MobileUserFactory.create_batch(2)
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
-        date = datetime.datetime.now()
+        date = now()
         OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date)
         for learn_module in opportunity.learn_app.learn_modules.all():
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
         AssessmentFactory(app=opportunity.learn_app, opportunity=opportunity, user=mobile_user, passed=True, date=date)
-        rows.append((mobile_user.name, mobile_user.username, True, date, date, True, "", "", ""))
+        rows.append(
+            (
+                mobile_user.name,
+                mobile_user.username,
+                True,
+                date.replace(tzinfo=None),
+                date.replace(tzinfo=None),
+                True,
+                "",
+                "",
+                "",
+            )
+        )
     dataset = export_user_status_table(opportunity)
     prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
     assert prepared_test_dataset.export("csv") == dataset.export("csv")
@@ -163,7 +173,7 @@ def test_export_user_status_table_data(opportunity: Opportunity):
     mobile_users = MobileUserFactory.create_batch(2)
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
-        date = datetime.datetime.now()
+        date = now()
         access = OpportunityAccessFactory(
             opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date
         )
@@ -172,7 +182,19 @@ def test_export_user_status_table_data(opportunity: Opportunity):
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
         AssessmentFactory(app=opportunity.learn_app, opportunity=opportunity, user=mobile_user, passed=True, date=date)
         UserVisitFactory.create_batch(1, opportunity=opportunity, user=mobile_user, visit_date=date)
-        rows.append((mobile_user.name, mobile_user.username, True, date, date, True, date.date(), date, date))
+        rows.append(
+            (
+                mobile_user.name,
+                mobile_user.username,
+                True,
+                date.replace(tzinfo=None),
+                date.replace(tzinfo=None),
+                True,
+                date.date(),
+                date.replace(tzinfo=None),
+                date.replace(tzinfo=None),
+            )
+        )
     dataset = export_user_status_table(opportunity)
     prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
     assert prepared_test_dataset.export("csv") == dataset.export("csv")

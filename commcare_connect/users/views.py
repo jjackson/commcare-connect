@@ -1,11 +1,10 @@
-from datetime import datetime
-
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
 from django.http import HttpResponse
 from django.urls import reverse
 from django.utils.decorators import method_decorator
+from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
@@ -104,7 +103,7 @@ def start_learn_app(request):
         access_object = OpportunityAccess.objects.get(user=request.user, opportunity=opportunity)
     except OpportunityAccess.DoesNotExist:
         return HttpResponse("user has no access to opportunity", status=400)
-    access_object.date_learn_started = datetime.utcnow()
+    access_object.date_learn_started = now()
     access_object.accepted = True
     access_object.save()
     return HttpResponse(status=200)
