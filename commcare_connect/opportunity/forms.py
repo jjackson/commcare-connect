@@ -26,6 +26,8 @@ class OpportunityChangeForm(forms.ModelForm):
             "active",
             "currency",
             "short_description",
+            "max_visits_per_user",
+            "daily_max_visits_per_user",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -37,6 +39,10 @@ class OpportunityChangeForm(forms.ModelForm):
             Row(Field("active")),
             Row(Field("description")),
             Row(Field("short_description")),
+            Row(
+                Field("max_visits_per_user", wrapper_class="form-group col-md-6 mb-0"),
+                Field("daily_max_visits_per_user", wrapper_class="form-group col-md-6 mb-0"),
+            ),
             Row(Field("currency")),
             Row(
                 Field("additional_users", wrapper_class="form-group col-md-6 mb-0"),
