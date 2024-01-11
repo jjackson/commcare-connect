@@ -207,7 +207,7 @@ def test_export_deliver_status_data(opportunity: Opportunity):
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
         access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True)
         user_visits = UserVisitFactory.create_batch(20, opportunity=opportunity, user=mobile_user)
-        user_visits_count = {"approved": 0, "pending": 0, "rejected": 0, "over_limit": 0}
+        user_visits_count = {"approved": 0, "pending": 0, "rejected": 0, "over_limit": 0, "duplicate": 0}
         for user_visit in user_visits:
             user_visits_count[user_visit.status.value] += 1
         rows.append(
@@ -219,6 +219,7 @@ def test_export_deliver_status_data(opportunity: Opportunity):
                 user_visits_count.get("pending", 0),
                 user_visits_count.get("rejected", 0),
                 user_visits_count.get("over_limit", 0),
+                user_visits_count.get("duplicate", 0),
                 access.last_visit_date.replace(tzinfo=None),
             )
         )
