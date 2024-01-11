@@ -2,6 +2,7 @@ import codecs
 import itertools
 import mimetypes
 import textwrap
+from collections import Counter
 from dataclasses import dataclass
 
 from django.core.files.uploadedfile import UploadedFile
@@ -79,6 +80,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
     visit_ids = list(status_by_visit_id)
     missing_visits = set()
     seen_visits = set()
+    user_ids = set()
     with transaction.atomic():
         for visit_batch in batched(visit_ids, 100):
             to_update = []
@@ -95,7 +97,8 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
 
             UserVisit.objects.bulk_update(to_update, fields=["status", "reason"])
             missing_visits |= set(visit_batch) - seen_visits
-            update_payment_accrued(opportunity, users={visit.user_id for visit in visits})
+            user_ids.add(visit.user_id)
+        update_payment_accrued(opportunity, users=user_ids)
 
     return VisitImportStatus(seen_visits, missing_visits)
 
@@ -111,9 +114,10 @@ def update_payment_accrued(opportunity: Opportunity, users):
         for payment_unit in payment_units:
             payment_unit_deliver_units = {deliver_unit.id for deliver_unit in payment_unit.deliver_units.all()}
             for entity_id, visits in itertools.groupby(user_visits, key=lambda x: x.entity_id):
-                deliver_units = {v.deliver_unit.id for v in visits}
-                if payment_unit_deliver_units.issubset(deliver_units):
-                    payment_accrued += payment_unit.amount
+                unit_counts = Counter(v.deliver_unit_id for v in visits)
+                number_completed = min(unit_counts[deliver_id] for deliver_id in payment_unit_deliver_units)
+                if number_completed > 0:
+                    payment_accrued += payment_unit.amount * number_completed
         access.payment_accrued = payment_accrued
         access.save()
 
