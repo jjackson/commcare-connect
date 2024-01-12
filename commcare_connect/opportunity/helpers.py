@@ -79,10 +79,19 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
                 ),
                 distinct=True,
             ),
+            visits_duplicate=Count(
+                "user__uservisit",
+                filter=Q(
+                    user__uservisit__opportunity=opportunity,
+                    user__uservisit__status=VisitValidationStatus.duplicate,
+                ),
+                distinct=True,
+            ),
             visits_completed=F("visits_approved")
             + F("visits_rejected")
             + F("visits_over_limit")
-            + F("visits_pending"),
+            + F("visits_pending")
+            + F("visits_duplicate"),
         )
         .order_by("user__name")
     )
