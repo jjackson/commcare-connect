@@ -21,6 +21,7 @@ def test_deliver_status_query_no_visits(opportunity: Opportunity):
         assert access.visits_pending == 0
         assert access.visits_over_limit == 0
         assert access.visits_completed == 0
+        assert access.visits_duplicate == 0
 
 
 @pytest.mark.django_db
@@ -30,7 +31,7 @@ def test_deliver_status_query(opportunity: Opportunity):
     for mobile_user in mobile_users:
         OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True)
         user_visits = UserVisitFactory.create_batch(20, opportunity=opportunity, user=mobile_user)
-        count_by_status = dict(approved=0, pending=0, rejected=0, over_limit=0, completed=0)
+        count_by_status = dict(approved=0, pending=0, rejected=0, over_limit=0, completed=0, duplicate=0)
         for user_visit in user_visits:
             count_by_status[user_visit.status.value] += 1
         count_by_status["completed"] = len(user_visits)
@@ -45,6 +46,7 @@ def test_deliver_status_query(opportunity: Opportunity):
         assert user_visit_counts[username]["pending"] == access.visits_pending
         assert user_visit_counts[username]["over_limit"] == access.visits_over_limit
         assert user_visit_counts[username]["completed"] == access.visits_completed
+        assert user_visit_counts[username]["duplicate"] == access.visits_duplicate
 
 
 @pytest.mark.django_db
@@ -65,3 +67,4 @@ def test_deliver_status_query_visits_another_opportunity(opportunity: Opportunit
         assert access.visits_pending == 0
         assert access.visits_over_limit == 0
         assert access.visits_completed == 0
+        assert access.visits_duplicate == 0

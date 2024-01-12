@@ -241,6 +241,7 @@ class VisitValidationStatus(models.TextChoices):
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
     over_limit = "over_limit", gettext("Over Limit")
+    duplicate = "duplicate", gettext("Duplicate")
 
 
 class Payment(models.Model):
