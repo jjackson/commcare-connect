@@ -2,7 +2,7 @@ from celery.result import AsyncResult
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
-from django.db.models import BooleanField, Case, F, Q, When
+from django.db.models import F
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -73,18 +73,7 @@ class OpportunityList(OrganizationUserMixin, ListView):
     paginate_by = 10
 
     def get_queryset(self):
-        return (
-            Opportunity.objects.filter(organization=self.request.org)
-            .annotate(
-                is_active_val=Case(
-                    When(Q(end_date__gte=now()) & Q(active=True), then=True),
-                    default=False,
-                    output_field=BooleanField(),
-                )
-            )
-            .order_by("name")
-            .order_by("-is_active_val")
-        )
+        return Opportunity.objects.filter(organization=self.request.org).order_by("name")
 
 
 class OpportunityCreate(OrganizationUserMixin, CreateView):
