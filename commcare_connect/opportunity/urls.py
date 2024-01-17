@@ -22,6 +22,7 @@ from commcare_connect.opportunity.views import (
     export_user_visits,
     export_users_for_payment,
     payment_import,
+    send_message_mobile_users,
     update_visit_status_import,
     user_visits_list,
 )
@@ -59,4 +60,5 @@ urlpatterns = [
     path("<int:pk>/deliver_status_table/", view=OpportunityDeliverStatusTable.as_view(), name="deliver_status_table"),
     path("<int:pk>/deliver_status_export/", view=export_deliver_status, name="deliver_status_export"),
     path("<int:opp_id>/user_visits/<int:pk>/", view=user_visits_list, name="user_visits_list"),
+    path("<int:pk>/send_message", view=send_message_mobile_users, name="send_message_mobile_users"),
 ]
