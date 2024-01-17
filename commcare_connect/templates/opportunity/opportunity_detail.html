@@ -39,6 +39,12 @@
                   Add Payment Unit
                 </a>
               </li>
+              <li>
+                <a class="dropdown-item" href="{% url "opportunity:send_message_mobile_users" org_slug=request.org.slug pk=opportunity.pk %}">
+                  <i class="bi bi-send-fill pe-2"></i>
+                  {% translate "Send Message" %}
+                </a>
+              </li>
               <li class="dropdown-divider"></li>
               <li>
                 <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportVisitModal">
