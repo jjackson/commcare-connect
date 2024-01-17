@@ -469,19 +469,23 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
         .values_list("user", flat=True)
     )
     users = User.objects.filter(pk__in=user_ids)
-    form = SendMessageMobileUsersForm(users=users.all(), data=request.POST or None)
+    form = SendMessageMobileUsersForm(users=users, data=request.POST or None)
 
     if form.is_valid():
-        selected_users = users.filter(pk__in=form.cleaned_data["selected_users"])
+        selected_user_ids = set(map(int, form.cleaned_data["selected_users"]))
+        selected_users = [user for user in users if user.pk in selected_user_ids]
         title = form.cleaned_data["title"]
         body = form.cleaned_data["body"]
         message_type = form.cleaned_data["message_type"]
         if "notification" in message_type:
             message = Message(usernames=[user.username for user in selected_users], title=title, body=body)
+            # TODO: make celery task
             send_message(message)
         if "sms" in message_type:
             for user in selected_users:
+                # TODO: make celery task
                 send_sms(user.phone_number, body)
+        return redirect("opportunity:detail", org_slug=request.org.slug, pk=pk)
 
     return render(
         request,
