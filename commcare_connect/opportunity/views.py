@@ -14,6 +14,8 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
 
+from commcare_connect.connect_id_client.main import send_message
+from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     DateRanges,
@@ -21,6 +23,7 @@ from commcare_connect.opportunity.forms import (
     OpportunityCreationForm,
     PaymentExportForm,
     PaymentUnitForm,
+    SendMessageMobileUsersForm,
     VisitExportForm,
 )
 from commcare_connect.opportunity.helpers import (
@@ -59,8 +62,10 @@ from commcare_connect.opportunity.visit_import import (
     bulk_update_payment_status,
     bulk_update_visit_status,
 )
-from commcare_connect.organization.decorators import org_member_required
+from commcare_connect.organization.decorators import org_admin_required, org_member_required
+from commcare_connect.users.models import User
 from commcare_connect.utils.commcarehq_api import get_applications_for_user
+from commcare_connect.utils.sms import send_sms
 
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -452,4 +457,34 @@ def user_visits_list(request, org_slug=None, opp_id=None, pk=None):
         request,
         "opportunity/user_visits_list.html",
         context=dict(opportunity=opportunity, table=user_visits_table, user_name=opportunity_access.display_name),
+    )
+
+
+@org_admin_required
+def send_message_mobile_users(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, pk=pk, organization=request.org)
+    user_ids = (
+        OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True)
+        .prefetch_related("user")
+        .values_list("user", flat=True)
+    )
+    users = User.objects.filter(pk__in=user_ids)
+    form = SendMessageMobileUsersForm(users=users.all(), data=request.POST or None)
+
+    if form.is_valid():
+        selected_users = users.filter(pk__in=form.cleaned_data["selected_users"])
+        title = form.cleaned_data["title"]
+        body = form.cleaned_data["body"]
+        message_type = form.cleaned_data["message_type"]
+        if "notification" in message_type:
+            message = Message(usernames=[user.username for user in selected_users], title=title, body=body)
+            send_message(message)
+        if "sms" in message_type:
+            for user in selected_users:
+                send_sms(user.phone_number, body)
+
+    return render(
+        request,
+        "form.html",
+        context=dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Send Message", form=form),
     )
