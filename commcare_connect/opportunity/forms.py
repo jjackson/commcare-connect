@@ -306,7 +306,11 @@ class PaymentUnitForm(forms.ModelForm):
 
 
 class SendMessageMobileUsersForm(forms.Form):
-    title = forms.CharField()
+    title = forms.CharField(
+        initial="Notification from CommCare Connect",
+        empty_value="Notification from CommCare Connect",
+        required=False,
+    )
     body = forms.CharField(widget=forms.Textarea)
     message_type = forms.MultipleChoiceField(
         choices=[("notification", "Push Notification"), ("sms", "SMS")],
@@ -328,5 +332,7 @@ class SendMessageMobileUsersForm(forms.Form):
 
         choices = [(user.pk, f"{user.name} - {user.username}") for user in users]
         self.fields["selected_users"] = forms.MultipleChoiceField(
-            choices=choices, help_text="Use Ctrl-click to select multiple users"
+            choices=choices,
+            help_text="Use Ctrl-click to select multiple users",
+            widget=forms.CheckboxSelectMultiple,
         )
