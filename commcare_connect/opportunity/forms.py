@@ -307,9 +307,9 @@ class PaymentUnitForm(forms.ModelForm):
 
 class SendMessageMobileUsersForm(forms.Form):
     title = forms.CharField(
-        initial="Notification from CommCare Connect",
         empty_value="Notification from CommCare Connect",
         required=False,
+        widget=forms.TextInput(attrs={"placeholder": "Notification from CommCare Connect"}),
     )
     body = forms.CharField(widget=forms.Textarea)
     message_type = forms.MultipleChoiceField(
