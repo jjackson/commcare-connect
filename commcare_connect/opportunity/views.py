@@ -73,7 +73,7 @@ class OpportunityList(OrganizationUserMixin, ListView):
     paginate_by = 10
 
     def get_queryset(self):
-        return Opportunity.objects.filter(organization=self.request.org)
+        return Opportunity.objects.filter(organization=self.request.org).order_by("name")
 
 
 class OpportunityCreate(OrganizationUserMixin, CreateView):
@@ -171,7 +171,7 @@ class UserPaymentsTableView(OrganizationUserMixin, SingleTableView):
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
         access_id = self.kwargs["pk"]
         access = get_object_or_404(OpportunityAccess, opportunity=opportunity, pk=access_id)
-        return Payment.objects.filter(opportunity_access=access)
+        return Payment.objects.filter(opportunity_access=access).order_by("-date_paid")
 
 
 class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
@@ -394,7 +394,7 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, SingleTableView):
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        return PaymentUnit.objects.filter(opportunity=opportunity)
+        return PaymentUnit.objects.filter(opportunity=opportunity).order_by("name")
 
 
 @org_member_required
