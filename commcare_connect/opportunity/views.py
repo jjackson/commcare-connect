@@ -14,8 +14,6 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
 
-from commcare_connect.connect_id_client.main import send_message
-from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     DateRanges,
@@ -56,6 +54,8 @@ from commcare_connect.opportunity.tasks import (
     generate_payment_export,
     generate_user_status_export,
     generate_visit_export,
+    send_push_notification_task,
+    send_sms_task,
 )
 from commcare_connect.opportunity.visit_import import (
     ImportException,
@@ -65,7 +65,6 @@ from commcare_connect.opportunity.visit_import import (
 from commcare_connect.organization.decorators import org_admin_required, org_member_required
 from commcare_connect.users.models import User
 from commcare_connect.utils.commcarehq_api import get_applications_for_user
-from commcare_connect.utils.sms import send_sms
 
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -472,19 +471,14 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
     form = SendMessageMobileUsersForm(users=users, data=request.POST or None)
 
     if form.is_valid():
-        selected_user_ids = set(map(int, form.cleaned_data["selected_users"]))
-        selected_users = [user for user in users if user.pk in selected_user_ids]
+        selected_user_ids = form.cleaned_data["selected_users"]
         title = form.cleaned_data["title"]
         body = form.cleaned_data["body"]
         message_type = form.cleaned_data["message_type"]
         if "notification" in message_type:
-            message = Message(usernames=[user.username for user in selected_users], title=title, body=body)
-            # TODO: make celery task
-            send_message(message)
+            send_push_notification_task.delay(selected_user_ids, title, body)
         if "sms" in message_type:
-            for user in selected_users:
-                # TODO: make celery task
-                send_sms(user.phone_number, body)
+            send_sms_task.delay(selected_user_ids, body)
         return redirect("opportunity:detail", org_slug=request.org.slug, pk=pk)
 
     return render(
