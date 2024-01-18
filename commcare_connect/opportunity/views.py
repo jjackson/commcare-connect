@@ -489,6 +489,12 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
 
     return render(
         request,
-        "form.html",
-        context=dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Send Message", form=form),
+        "opportunity/send_message.html",
+        context=dict(
+            title=f"{request.org.slug} - {opportunity.name}",
+            form_title="Send Message",
+            form=form,
+            users=users,
+            user_ids=list(user_ids),
+        ),
     )
