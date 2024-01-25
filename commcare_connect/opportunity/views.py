@@ -462,10 +462,8 @@ def user_visits_list(request, org_slug=None, opp_id=None, pk=None):
 @org_admin_required
 def send_message_mobile_users(request, org_slug=None, pk=None):
     opportunity = get_object_or_404(Opportunity, pk=pk, organization=request.org)
-    user_ids = (
-        OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True)
-        .prefetch_related("user")
-        .values_list("user", flat=True)
+    user_ids = OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True).values_list(
+        "user_id", flat=True
     )
     users = User.objects.filter(pk__in=user_ids)
     form = SendMessageMobileUsersForm(users=users, data=request.POST or None)
