@@ -180,6 +180,7 @@ class UserPaymentsTableView(OrganizationUserMixin, SingleTableView):
         self.access = get_object_or_404(OpportunityAccess, opportunity=self.opportunity, pk=access_id)
         return Payment.objects.filter(opportunity_access=self.access).order_by("-date_paid")
 
+
 class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
     template_name = "opportunity/user_learn_progress.html"
 
