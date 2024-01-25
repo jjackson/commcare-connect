@@ -77,7 +77,7 @@ class OpportunityList(OrganizationUserMixin, ListView):
     paginate_by = 10
 
     def get_queryset(self):
-        return Opportunity.objects.filter(organization=self.request.org)
+        return Opportunity.objects.filter(organization=self.request.org).order_by("name")
 
 
 class OpportunityCreate(OrganizationUserMixin, CreateView):
@@ -170,12 +170,19 @@ class UserPaymentsTableView(OrganizationUserMixin, SingleTableView):
     table_class = UserPaymentsTable
     template_name = "opportunity/opportunity_user_payments_list.html"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["latest_payment"] = self.object_list.all().first()
+        context["access"] = self.access
+        context["opportunity"] = self.opportunity
+        return context
+
     def get_queryset(self):
         opportunity_id = self.kwargs["opp_id"]
-        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        self.opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
         access_id = self.kwargs["pk"]
-        access = get_object_or_404(OpportunityAccess, opportunity=opportunity, pk=access_id)
-        return Payment.objects.filter(opportunity_access=access)
+        self.access = get_object_or_404(OpportunityAccess, opportunity=self.opportunity, pk=access_id)
+        return Payment.objects.filter(opportunity_access=self.access).order_by("-date_paid")
 
 
 class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
@@ -398,7 +405,7 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, SingleTableView):
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
-        return PaymentUnit.objects.filter(opportunity=opportunity)
+        return PaymentUnit.objects.filter(opportunity=opportunity).order_by("name")
 
 
 @org_member_required
@@ -457,6 +464,16 @@ def user_visits_list(request, org_slug=None, opp_id=None, pk=None):
         "opportunity/user_visits_list.html",
         context=dict(opportunity=opportunity, table=user_visits_table, user_name=opportunity_access.display_name),
     )
+
+
+@org_member_required
+@require_POST
+def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, pk=opp_id)
+    opportunity_access = get_object_or_404(OpportunityAccess, pk=access_id, opportunity=opportunity)
+    payment = get_object_or_404(Payment, opportunity_access=opportunity_access, pk=pk)
+    payment.delete()
+    return redirect("opportunity:user_payments_table", org_slug=org_slug, opp_id=opp_id, pk=access_id)
 
 
 @org_admin_required
