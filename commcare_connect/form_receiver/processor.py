@@ -145,6 +145,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         .aggregate(
             daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)),
             total=Count("*"),
+            entity=Count("pk", filter=Q(entity_id=deliver_unit_block.get("entity_id"), deliver_unit=deliver_unit)),
         )
     )
     claim = OpportunityClaim.objects.get(opportunity_access__opportunity=opportunity, opportunity_access__user=user)
@@ -166,6 +167,8 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         or datetime.date.today() > claim.end_date
     ):
         user_visit.status = VisitValidationStatus.over_limit
+    if counts["entity"] > 0:
+        user_visit.status = VisitValidationStatus.duplicate
     user_visit.save()
 
 

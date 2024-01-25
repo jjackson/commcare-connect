@@ -81,6 +81,23 @@ def test_payment_accrued(opportunity: Opportunity, mobile_user: User):
     assert access.payment_accrued == sum(payment_unit.amount for payment_unit in payment_units)
 
 
+@pytest.mark.django_db
+def test_duplicate_payment(opportunity: Opportunity, mobile_user: User):
+    payment_unit = PaymentUnitFactory.create(opportunity=opportunity)
+    deliver_unit = DeliverUnitFactory(payment_unit=payment_unit, app=opportunity.deliver_app)
+    UserVisitFactory.create_batch(
+        2,
+        opportunity=opportunity,
+        user=mobile_user,
+        deliver_unit=deliver_unit,
+        entity_id=deliver_unit.payment_unit.name,
+        status=VisitValidationStatus.approved.value,
+    )
+    update_payment_accrued(opportunity, {mobile_user.id})
+    access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
+    assert access.payment_accrued == payment_unit.amount * 2
+
+
 @pytest.mark.parametrize(
     "headers,rows,expected",
     [

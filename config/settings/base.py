@@ -249,6 +249,8 @@ ACCOUNT_ALLOW_REGISTRATION = env.bool("DJANGO_ACCOUNT_ALLOW_REGISTRATION", True)
 ACCOUNT_AUTHENTICATION_METHOD = "username_email"
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
+# ensures that user display is resolved from the user.__str__ method
+ACCOUNT_USER_DISPLAY = str
 ACCOUNT_USER_MODEL_USERNAME_FIELD = "username"
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_ADAPTER = "commcare_connect.users.adapters.AccountAdapter"

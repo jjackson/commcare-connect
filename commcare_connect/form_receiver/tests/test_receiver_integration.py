@@ -1,4 +1,6 @@
 import datetime
+from copy import deepcopy
+from uuid import uuid4
 
 import pytest
 from rest_framework.test import APIClient
@@ -173,6 +175,18 @@ def test_receiver_deliver_form_end_date_reached(
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 1
     visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
     assert visit.status == VisitValidationStatus.over_limit
+
+
+def test_receiver_duplicate(mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity):
+    form_json = _create_opp_and_form_json(opportunity, user=mobile_user_with_connect_link)
+    make_request(api_client, form_json, mobile_user_with_connect_link)
+    visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
+    assert visit.status == VisitValidationStatus.pending
+    duplicate_json = deepcopy(form_json)
+    duplicate_json["id"] = str(uuid4())
+    api_client.post("/api/receiver/", data=duplicate_json, format="json")
+    visit = UserVisit.objects.get(xform_id=duplicate_json["id"])
+    assert visit.status == VisitValidationStatus.duplicate
 
 
 def _get_form_json(learn_app, module_id, form_block=None):
