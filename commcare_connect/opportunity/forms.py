@@ -1,5 +1,5 @@
 from crispy_forms.helper import FormHelper, Layout
-from crispy_forms.layout import Field, Row, Submit
+from crispy_forms.layout import HTML, Field, Row, Submit
 from dateutil.relativedelta import relativedelta
 from django import forms
 from django.db.models import TextChoices
@@ -20,7 +20,15 @@ from commcare_connect.users.models import User
 class OpportunityChangeForm(forms.ModelForm):
     class Meta:
         model = Opportunity
-        fields = ["name", "description", "active"]
+        fields = [
+            "name",
+            "description",
+            "active",
+            "currency",
+            "short_description",
+            "max_visits_per_user",
+            "daily_max_visits_per_user",
+        ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -28,12 +36,19 @@ class OpportunityChangeForm(forms.ModelForm):
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Row(Field("name")),
-            Row(Field("description")),
             Row(Field("active")),
+            Row(Field("description")),
+            Row(Field("short_description")),
+            Row(
+                Field("max_visits_per_user", wrapper_class="form-group col-md-6 mb-0"),
+                Field("daily_max_visits_per_user", wrapper_class="form-group col-md-6 mb-0"),
+            ),
+            Row(Field("currency")),
             Row(
                 Field("additional_users", wrapper_class="form-group col-md-6 mb-0"),
                 Field("end_date", wrapper_class="form-group col-md-6 mb-0"),
             ),
+            HTML("<hr />"),
             Row(Field("users")),
             Submit("submit", "Submit"),
         )
