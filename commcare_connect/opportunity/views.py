@@ -28,7 +28,6 @@ from commcare_connect.opportunity.helpers import (
     get_annotated_opportunity_access_deliver_status,
 )
 from commcare_connect.opportunity.models import (
-    CompletedModule,
     DeliverUnit,
     Opportunity,
     OpportunityAccess,
@@ -179,14 +178,6 @@ class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
 
     def get_queryset(self):
         return OpportunityAccess.objects.filter(opportunity_id=self.kwargs.get("opp_id"))
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["completed_modules"] = CompletedModule.objects.filter(
-            user=self.object.user,
-            opportunity_id=self.kwargs.get("opp_id"),
-        )
-        return context
 
 
 @org_member_required
