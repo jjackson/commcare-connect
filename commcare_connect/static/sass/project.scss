@@ -1,5 +1,7 @@
 @import 'custom_bootstrap_vars';
+@import '~bootswatch/dist/spacelab/variables';
 @import '~bootstrap/scss/bootstrap';
+@import '~bootswatch/dist/spacelab/bootswatch';
 
 $bootstrap-icons-font-dir: '~bootstrap-icons/font/fonts';
 @import '~bootstrap-icons/font/bootstrap-icons';
@@ -58,4 +60,13 @@ $red: #b94a48;
     transform: translateX(-50%);
     text-align: center;
   }
+}
+
+.form-label {
+  font-weight: bold;
+}
+
+.asteriskField {
+  color: $red;
+  margin-left: 5px;
 }

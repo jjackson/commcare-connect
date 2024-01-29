@@ -6,9 +6,7 @@
 {% block head_title %}{% translate "Signup" %}{% endblock %}
 
 {% block inner %}
-<h1>{% translate "Sign Up" %}</h1>
-
-<p>{% blocktranslate %}Already have an account? Then please <a href="{{ login_url }}">sign in</a>.{% endblocktranslate %}</p>
+<h1 class="mb-4 text-center">{% translate "Sign Up" %}</h1>
 
 <form class="signup" id="signup_form" method="post" action="{% url 'account_signup' %}">
   {% csrf_token %}
@@ -16,7 +14,13 @@
   {% if redirect_field_value %}
   <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
   {% endif %}
-  <button class="btn btn-primary" type="submit">{% translate "Sign Up" %} &raquo;</button>
+
+  <button class="btn btn-primary mt-1 w-100" type="submit">{% translate "Sign Up" %} &raquo;</button>
+
 </form>
+
+<div class="text-center mt-2">
+  <small>{% blocktranslate %}Already have an account? Then please <a href="{{ login_url }}">sign in</a>.{% endblocktranslate %}</small>
+</div>
 
 {% endblock %}
