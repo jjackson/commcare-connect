@@ -34,7 +34,6 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     Payment,
     PaymentUnit,
-    UserVisit,
 )
 from commcare_connect.opportunity.tables import (
     DeliverStatusTable,
@@ -435,9 +434,7 @@ def export_deliver_status(request, **kwargs):
 def user_visits_list(request, org_slug=None, opp_id=None, pk=None):
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=opp_id)
     opportunity_access = get_object_or_404(OpportunityAccess, pk=pk, opportunity=opportunity)
-    user_visits = UserVisit.objects.filter(user=opportunity_access.user, opportunity=opportunity).order_by(
-        "visit_date"
-    )
+    user_visits = opportunity_access.uservisit_set.order_by("visit_date")
     user_visits_table = UserVisitTable(user_visits)
     return render(
         request,
