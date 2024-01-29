@@ -470,3 +470,9 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
     payment = get_object_or_404(Payment, opportunity_access=opportunity_access, pk=pk)
     payment.delete()
     return redirect("opportunity:user_payments_table", org_slug=org_slug, opp_id=opp_id, pk=access_id)
+
+
+@org_member_required
+def user_profile(request, org_slug=None, opp_id=None, pk=None):
+    access = get_object_or_404(OpportunityAccess, pk=pk, accepted=True)
+    return render(request, "opportunity/user_profile.html", context=dict(access=access))
