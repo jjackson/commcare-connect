@@ -71,6 +71,11 @@ def get_applications_for_user(user):
     return _get_applications_for_domains(social_token, domains)
 
 
+def get_applications_for_user_by_domain(user, domain):
+    social_token = refresh_access_token(user)
+    return _get_applications_for_domains(social_token, [domain])
+
+
 @async_to_sync
 async def _get_applications_for_domains(social_token, domains):
     async with httpx.AsyncClient(timeout=300, headers={"Authorization": f"Bearer {social_token}"}) as client:
@@ -88,5 +93,5 @@ async def _get_commcare_app_json(client, domain):
     data = response.json()
 
     for application in data.get("objects", []):
-        applications.append({"id": application.get("id"), "name": application.get("name"), "domain": domain})
+        applications.append({"id": application.get("id"), "name": application.get("name")})
     return applications

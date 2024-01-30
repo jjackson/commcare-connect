@@ -17,6 +17,7 @@ from django_tables2.export import TableExport
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     DateRanges,
+    LearnDeliverDropdownForm,
     OpportunityChangeForm,
     OpportunityCreationForm,
     PaymentExportForm,
@@ -60,7 +61,7 @@ from commcare_connect.opportunity.visit_import import (
     bulk_update_visit_status,
 )
 from commcare_connect.organization.decorators import org_member_required
-from commcare_connect.utils.commcarehq_api import get_applications_for_user
+from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -85,7 +86,7 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["applications"] = get_applications_for_user(self.request.user)
+        kwargs["domains"] = get_domains_for_user(self.request.user)
         kwargs["user"] = self.request.user
         kwargs["org_slug"] = self.request.org.slug
         return kwargs
@@ -470,3 +471,10 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
     payment = get_object_or_404(Payment, opportunity_access=opportunity_access, pk=pk)
     payment.delete()
     return redirect("opportunity:user_payments_table", org_slug=org_slug, opp_id=opp_id, pk=access_id)
+
+
+@org_member_required
+def get_application(request, org_slug=None):
+    domain = request.GET["domain"]
+    applications = get_applications_for_user_by_domain(request.user, domain)
+    return HttpResponse(LearnDeliverDropdownForm(applications=applications).as_p())
