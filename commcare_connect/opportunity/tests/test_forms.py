@@ -1,4 +1,5 @@
 import datetime
+import json
 import random
 
 import pytest
@@ -14,7 +15,6 @@ class TestOpportunityCreationForm:
     applications = [learn_app, deliver_app]
 
     def _get_opportunity(self):
-        deliver_form = self.deliver_app["forms"][0]
         return {
             "name": "Test opportunity",
             "description": FuzzyText(length=150).fuzz(),
@@ -25,50 +25,47 @@ class TestOpportunityCreationForm:
             "total_budget": 100,
             "budget_per_visit": 10,
             "max_users": 10,
-            "learn_app": self.learn_app["id"],
+            "domain": "test_domain",
+            "learn_app": json.dumps(self.learn_app),
             "learn_app_description": FuzzyText(length=150).fuzz(),
             "learn_app_passing_score": random.randint(30, 100),
-            "deliver_app": self.deliver_app["id"],
-            "deliver_form": deliver_form["id"],
+            "deliver_app": json.dumps(self.deliver_app),
             "api_key": FuzzyText(length=36).fuzz(),
             "currency": FuzzyText(length=3).fuzz(),
         }
 
-    def test_with_correct_data(self):
+    def test_with_correct_data(self, organization):
         opportunity = self._get_opportunity()
         form = OpportunityCreationForm(
-            opportunity,
-            applications=self.applications,
+            opportunity, domains=["test_domain", "test_domain2"], org_slug=organization.slug
         )
 
         assert form.is_valid()
+        print(form.errors)
         assert len(form.errors) == 0
 
-    def test_incorrect_end_date(self):
+    def test_incorrect_end_date(self, organization):
         opportunity = self._get_opportunity()
         opportunity.update(
             end_date=datetime.date.today() - datetime.timedelta(days=20),
         )
 
         form = OpportunityCreationForm(
-            opportunity,
-            applications=self.applications,
+            opportunity, domains=["test_domain", "test_domain2"], org_slug=organization.slug
         )
 
         assert not form.is_valid()
         assert len(form.errors) == 1
         assert "end_date" in form.errors
 
-    def test_same_learn_deliver_apps(self):
+    def test_same_learn_deliver_apps(self, organization):
         opportunity = self._get_opportunity()
         opportunity.update(
-            deliver_app=self.learn_app["id"],
-            deliver_form=self.learn_app["forms"][0]["id"],
+            deliver_app=json.dumps(self.learn_app),
         )
 
         form = OpportunityCreationForm(
-            opportunity,
-            applications=self.applications,
+            opportunity, domains=["test_domain", "test_domain2"], org_slug=organization.slug
         )
 
         assert not form.is_valid()
@@ -76,7 +73,7 @@ class TestOpportunityCreationForm:
         assert "learn_app" in form.errors
         assert "deliver_app" in form.errors
 
-    def test_daily_max_visits_greater_than_max_visits(self):
+    def test_daily_max_visits_greater_than_max_visits(self, organization):
         opportunity = self._get_opportunity()
         opportunity.update(
             daily_max_visits_per_user=1000,
@@ -84,15 +81,14 @@ class TestOpportunityCreationForm:
         )
 
         form = OpportunityCreationForm(
-            opportunity,
-            applications=self.applications,
+            opportunity, domains=["test_domain", "test_domain2"], org_slug=organization.slug
         )
 
         assert not form.is_valid()
         assert len(form.errors) == 1
         assert "daily_max_visits_per_user" in form.errors
 
-    def test_budget_per_visit_greater_than_total_budget(self):
+    def test_budget_per_visit_greater_than_total_budget(self, organization):
         opportunity = self._get_opportunity()
         opportunity.update(
             budget_per_visit=1000,
@@ -100,8 +96,7 @@ class TestOpportunityCreationForm:
         )
 
         form = OpportunityCreationForm(
-            opportunity,
-            applications=self.applications,
+            opportunity, domains=["test_domain", "test_domain2"], org_slug=organization.slug
         )
 
         assert not form.is_valid()
@@ -112,10 +107,7 @@ class TestOpportunityCreationForm:
     def test_save(self, user, organization):
         opportunity = self._get_opportunity()
         form = OpportunityCreationForm(
-            opportunity,
-            applications=self.applications,
-            user=user,
-            org_slug=organization.slug,
+            opportunity, domains=["test_domain", "test_domain2"], user=user, org_slug=organization.slug
         )
         form.is_valid()
         form.save()
