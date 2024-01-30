@@ -1,3 +1,4 @@
+from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
 
@@ -19,6 +20,9 @@ class OpportunityAccessTable(tables.Table):
         fields = ("display_name", "user__username", "learn_progress")
         orderable = False
         empty_text = "No learn progress for users."
+
+    def render_display_name(self, record):
+        return _get_profile_link_html(record)
 
 
 class UserVisitTable(tables.Table):
@@ -52,6 +56,7 @@ class UserVisitTable(tables.Table):
 
 
 class OpportunityPaymentTable(tables.Table):
+    display_name = columns.Column(verbose_name="Name")
     view_payments = columns.LinkColumn(
         "opportunity:user_payments_table",
         verbose_name="",
@@ -61,9 +66,12 @@ class OpportunityPaymentTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user__name", "user__username", "payment_accrued", "total_paid")
+        fields = ("display_name", "user__username", "payment_accrued", "total_paid")
         orderable = False
         empty_text = "No user have payments accrued yet."
+
+    def render_display_name(self, record):
+        return _get_profile_link_html(record)
 
 
 class UserPaymentsTable(tables.Table):
@@ -110,6 +118,9 @@ class UserStatusTable(tables.Table):
         )
         empty_text = "No users invited for this opportunity."
         orderable = False
+
+    def render_display_name(self, record):
+        return _get_profile_link_html(record)
 
 
 class PaymentUnitTable(tables.Table):
@@ -163,3 +174,17 @@ class DeliverStatusTable(tables.Table):
             "last_visit_date",
             "details",
         )
+
+    def render_name(self, record):
+        return _get_profile_link_html(record)
+
+
+def _get_profile_link_html(access: OpportunityAccess):
+    name = access.display_name
+    if name == "---":
+        return name
+    url = reverse(
+        "opportunity:user_profile",
+        args=(access.opportunity.organization.slug, access.opportunity_id, access.id),
+    )
+    return mark_safe(f"<a href='{url}'>{name}</a>")
