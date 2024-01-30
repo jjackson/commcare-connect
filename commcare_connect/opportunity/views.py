@@ -1,3 +1,5 @@
+import json
+
 from celery.result import AsyncResult
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -6,6 +8,7 @@ from django.db.models import F
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 from django.utils.timezone import now
@@ -17,7 +20,6 @@ from django_tables2.export import TableExport
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     DateRanges,
-    LearnDeliverDropdownForm,
     OpportunityChangeForm,
     OpportunityCreationForm,
     PaymentExportForm,
@@ -473,8 +475,14 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
     return redirect("opportunity:user_payments_table", org_slug=org_slug, opp_id=opp_id, pk=access_id)
 
 
+# used for loading learn_app and deliver_app dropdowns
 @org_member_required
 def get_application(request, org_slug=None):
-    domain = request.GET["domain"]
+    domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
     applications = get_applications_for_user_by_domain(request.user, domain)
-    return HttpResponse(LearnDeliverDropdownForm(applications=applications))
+    options = []
+    for app in applications:
+        value = json.dumps(app)
+        name = app["name"]
+        options.append(format_html("<option value='{}'>{}</option>", value, name))
+    return HttpResponse("\n".join(options))

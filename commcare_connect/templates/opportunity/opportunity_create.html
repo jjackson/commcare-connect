@@ -14,7 +14,7 @@
             maxVisits: 0,
             totalBudget() {return this.visitBudget * this.maxUsers * this.maxVisits}
           }"
-          >
+          hx-ext="loading-states">
       {% csrf_token %}
       {% crispy form %}
     </form>

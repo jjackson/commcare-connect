@@ -1,7 +1,7 @@
 import json
 
 from crispy_forms.helper import FormHelper, Layout
-from crispy_forms.layout import HTML, Field, Row, Submit
+from crispy_forms.layout import HTML, Field, Fieldset, Row, Submit
 from dateutil.relativedelta import relativedelta
 from django import forms
 from django.db.models import TextChoices
@@ -121,31 +121,52 @@ class OpportunityCreationForm(forms.ModelForm):
                 ),
                 Field("currency", wrapper_class="form-group col-md-4 mb-0"),
             ),
-            Row(Field("domain")),
-            Row(Field("learn_app")),
-            Row(Field("learn_app_description")),
-            Row(Field("learn_app_passing_score")),
-            Row(Field("deliver_app")),
+            Fieldset(
+                "Learn App",
+                Row(Field("learn_app_domain")),
+                Row(Field("learn_app")),
+                Row(Field("learn_app_description")),
+                Row(Field("learn_app_passing_score")),
+            ),
+            Fieldset(
+                "Deliver App",
+                Row(Field("deliver_app_domain")),
+                Row(Field("deliver_app")),
+            ),
             Row(Field("api_key")),
             Submit("submit", "Submit"),
         )
 
         domain_choices = [(domain, domain) for domain in self.domains]
-        self.fields["domain"] = forms.ChoiceField(
+        self.fields["learn_app_domain"] = forms.ChoiceField(
             choices=domain_choices,
             widget=forms.Select(
                 attrs={
                     "hx-get": reverse("opportunity:get_applications_by_domain", args=(self.org_slug,)),
-                    "hx-include": "#id_domain",
+                    "hx-include": "#id_learn_app_domain",
                     "hx-trigger": "load, change",
-                    "hx-swap": "none",
-                    "hx-indicator": "#id_domain",
+                    "hx-indicator": "#id_learn_app_domain",
+                    "hx-target": "#id_learn_app",
+                    "data-loading-disable": True,
                 }
             ),
         )
         self.fields["learn_app"] = forms.Field(widget=forms.Select)
         self.fields["learn_app_description"] = forms.CharField(widget=forms.Textarea)
         self.fields["learn_app_passing_score"] = forms.IntegerField(max_value=100, min_value=0)
+        self.fields["deliver_app_domain"] = forms.ChoiceField(
+            choices=domain_choices,
+            widget=forms.Select(
+                attrs={
+                    "hx-get": reverse("opportunity:get_applications_by_domain", args=(self.org_slug,)),
+                    "hx-include": "#id_deliver_app_domain",
+                    "hx-trigger": "load, change",
+                    "hx-indicator": "#id_deliver_app_domain",
+                    "hx-target": "#id_deliver_app",
+                    "data-loading-disable": True,
+                }
+            ),
+        )
         self.fields["deliver_app"] = forms.Field(widget=forms.Select)
         self.fields["api_key"] = forms.CharField(max_length=50)
         self.fields["total_budget"].widget.attrs.update({"class": "form-control-plaintext"})
@@ -178,10 +199,11 @@ class OpportunityCreationForm(forms.ModelForm):
         organization = Organization.objects.get(slug=self.org_slug)
         learn_app = self.cleaned_data["learn_app"]
         deliver_app = self.cleaned_data["deliver_app"]
-        domain = self.cleaned_data["domain"]
+        learn_app_domain = self.cleaned_data["learn_app_domain"]
+        deliver_app_domain = self.cleaned_data["deliver_app_domain"]
         self.instance.learn_app, _ = CommCareApp.objects.get_or_create(
             cc_app_id=learn_app["id"],
-            cc_domain=domain,
+            cc_domain=learn_app_domain,
             organization=organization,
             defaults={
                 "name": learn_app["name"],
@@ -193,7 +215,7 @@ class OpportunityCreationForm(forms.ModelForm):
         )
         self.instance.deliver_app, _ = CommCareApp.objects.get_or_create(
             cc_app_id=deliver_app["id"],
-            cc_domain=domain,
+            cc_domain=deliver_app_domain,
             organization=organization,
             defaults={
                 "name": deliver_app["name"],
@@ -317,23 +339,3 @@ class PaymentUnitForm(forms.ModelForm):
             self.fields["deliver_units"].initial = [
                 deliver_unit.pk for deliver_unit in self.instance.deliver_units.all()
             ]
-
-
-# Used for HTMX element rendering
-class LearnDeliverDropdownForm(forms.Form):
-    learn_app = forms.ChoiceField()
-    deliver_app = forms.ChoiceField()
-
-    def __init__(self, *args, **kwargs):
-        applications = kwargs.pop("applications", [])
-        super().__init__(*args, **kwargs)
-
-        app_choices = [(json.dumps(app), app["name"]) for app in applications]
-        self.fields["learn_app"] = forms.ChoiceField(
-            choices=app_choices,
-            widget=forms.Select(attrs={"hx-swap-oob": "#id_learn_app"}),
-        )
-        self.fields["deliver_app"] = forms.ChoiceField(
-            choices=app_choices,
-            widget=forms.Select(attrs={"hx-swap-oob": "#id_learn_app"}),
-        )
