@@ -477,4 +477,4 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
 def get_application(request, org_slug=None):
     domain = request.GET["domain"]
     applications = get_applications_for_user_by_domain(request.user, domain)
-    return HttpResponse(LearnDeliverDropdownForm(applications=applications).as_p())
+    return HttpResponse(LearnDeliverDropdownForm(applications=applications))
