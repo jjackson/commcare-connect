@@ -1,4 +1,5 @@
 from django.urls import reverse
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
 
@@ -20,9 +21,6 @@ class OpportunityAccessTable(tables.Table):
         fields = ("display_name", "user__username", "learn_progress")
         orderable = False
         empty_text = "No learn progress for users."
-
-    def render_display_name(self, record):
-        return _get_profile_link_html(record)
 
 
 class UserVisitTable(tables.Table):
@@ -70,9 +68,6 @@ class OpportunityPaymentTable(tables.Table):
         orderable = False
         empty_text = "No user have payments accrued yet."
 
-    def render_display_name(self, record):
-        return _get_profile_link_html(record)
-
 
 class UserPaymentsTable(tables.Table):
     class Meta:
@@ -101,6 +96,7 @@ class UserStatusTable(tables.Table):
     passed_assessment = BooleanAggregateColumn(verbose_name="Passed Assessment")
     started_delivery = AggregateColumn(verbose_name="Started Delivery", accessor="date_deliver_started")
     last_visit_date = columns.Column(accessor="last_visit_date_d")
+    view_profile = columns.Column("View Profile", empty_values=())
 
     class Meta:
         model = OpportunityAccess
@@ -119,8 +115,18 @@ class UserStatusTable(tables.Table):
         empty_text = "No users invited for this opportunity."
         orderable = False
 
-    def render_display_name(self, record):
-        return _get_profile_link_html(record)
+    def render_view_profile(self, record):
+        if not record.accepted:
+            return "---"
+        url = reverse(
+            "opportunity:user_profile",
+            kwargs={
+                "org_slug": record.opportunity.organization.slug,
+                "opp_id": record.opportunity_id,
+                "pk": record.id,
+            },
+        )
+        return format_html('<a href="{}">View Profile</a>', url)
 
 
 class PaymentUnitTable(tables.Table):
@@ -172,19 +178,4 @@ class DeliverStatusTable(tables.Table):
             "visits_over_limit",
             "visits_duplicate",
             "last_visit_date",
-            "details",
         )
-
-    def render_name(self, record):
-        return _get_profile_link_html(record)
-
-
-def _get_profile_link_html(access: OpportunityAccess):
-    name = access.display_name
-    if name == "---":
-        return name
-    url = reverse(
-        "opportunity:user_profile",
-        args=(access.opportunity.organization.slug, access.opportunity_id, access.id),
-    )
-    return mark_safe(f"<a href='{url}'>{name}</a>")
