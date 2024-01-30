@@ -21,6 +21,7 @@ from commcare_connect.opportunity.views import (
     export_user_status,
     export_user_visits,
     export_users_for_payment,
+    get_application,
     payment_delete,
     payment_import,
     update_visit_status_import,
@@ -61,4 +62,5 @@ urlpatterns = [
     path("<int:pk>/deliver_status_export/", view=export_deliver_status, name="deliver_status_export"),
     path("<int:opp_id>/user_visits/<int:pk>/", view=user_visits_list, name="user_visits_list"),
     path("<int:opp_id>/payment/<int:access_id>/delete/<int:pk>/", view=payment_delete, name="payment_delete"),
+    path("applications/", get_application, name="get_applications_by_domain"),
 ]
