@@ -10,6 +10,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    Payment,
     PaymentUnit,
     UserVisit,
 )
@@ -26,6 +27,7 @@ admin.site.register(PaymentUnit)
 class OpportunityAccessAdmin(admin.ModelAdmin):
     form = OpportunityAccessCreationForm
     list_display = ["get_opp_name", "get_username"]
+    actions = ["clear_user_progress"]
 
     @admin.display(description="Opportunity Name")
     def get_opp_name(self, obj):
@@ -34,6 +36,15 @@ class OpportunityAccessAdmin(admin.ModelAdmin):
     @admin.display(description="Username")
     def get_username(self, obj):
         return obj.user.username
+
+    @admin.action(description="Clear User Progress")
+    def clear_user_progress(self, request, queryset):
+        for access in queryset:
+            UserVisit.objects.filter(user=access.user).delete()
+            Payment.objects.filter(opportunity_access=access).delete()
+            OpportunityClaim.objects.filter(opportunity_access=access).delete()
+            CompletedModule.objects.filter(user=access.user).delete()
+            Assessment.objects.filter(user=access.user).delete()
 
 
 @admin.register(LearnModule)
