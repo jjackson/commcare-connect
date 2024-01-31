@@ -4,7 +4,7 @@ from django_tables2 import columns, tables, utils
 from commcare_connect.opportunity.models import OpportunityAccess, Payment, PaymentUnit, UserVisit
 
 
-class OpportunityAccessTable(tables.Table):
+class LearnStatusTable(tables.Table):
     display_name = columns.Column(verbose_name="Name")
     learn_progress = columns.Column(verbose_name="Modules Completed")
     details = columns.LinkColumn(
