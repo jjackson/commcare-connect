@@ -125,6 +125,18 @@ class UserStatusTable(tables.Table):
     def render_username(self, record, value):
         return username_with_popup(self, value)
 
+    def render_started_learning(self, record, value):
+        return date_with_time_popup(self, value)
+
+    def render_completed_learning(self, record, value):
+        return date_with_time_popup(self, value)
+
+    def render_started_delivery(self, record, value):
+        return date_with_time_popup(self, value)
+
+    def render_last_visit_date(self, record, value):
+        return date_with_time_popup(self, value)
+
 
 class PaymentUnitTable(tables.Table):
     deliver_units = columns.Column("Deliver Units")
@@ -182,6 +194,9 @@ class DeliverStatusTable(tables.Table):
     def render_username(self, record, value):
         return username_with_popup(self, value)
 
+    def render_last_visit_date(self, record, value):
+        return date_with_time_popup(self, value)
+
 
 def popup_html(value, popup_title, popup_direction="top", popup_class=""):
     return format_html(
@@ -197,3 +212,12 @@ def username_with_popup(table, username):
     if table.exclude and "username_popup" in table.exclude:
         return username
     return popup_html("", username, popup_class="bi bi-info-circle-fill text-primary")
+
+
+def date_with_time_popup(table, date):
+    if table.exclude and "date_popup" in table.exclude:
+        return date
+    return popup_html(
+        date.strftime("%d %b, %Y"),
+        date.strftime("%d %b %Y, %I:%M%p"),
+    )
