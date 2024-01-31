@@ -67,7 +67,6 @@ class OpportunityPaymentTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user__name", "payment_accrued", "total_paid")
         fields = ("user__name", "username", "payment_accrued", "total_paid")
         orderable = False
         empty_text = "No user have payments accrued yet."
