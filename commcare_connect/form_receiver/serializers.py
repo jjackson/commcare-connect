@@ -10,6 +10,7 @@ class XFormMetadata:
     timeEnd: datetime
     app_build_version: str
     username: str
+    location: str
 
     @property
     def duration(self):
