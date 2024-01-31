@@ -6,8 +6,6 @@ from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.utils import timezone
 
-from commcare_connect.cache import quickcache
-
 
 class CommCareHQAPIException(Exception):
     pass
@@ -50,11 +48,10 @@ def refresh_access_token(user, force=False):
     return social_token
 
 
-@quickcache(["user.pk"], timeout=60 * 60)
 def get_domains_for_user(user):
     social_token = refresh_access_token(user)
     response = httpx.get(
-        f"{settings.COMMCARE_HQ_URL}/api/v0.5/user_domains/",
+        f"{settings.COMMCARE_HQ_URL}/api/v0.5/user_domains/?limit=100",
         headers={"Authorization": f"Bearer {social_token}"},
     )
     data = response.json()
