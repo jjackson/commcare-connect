@@ -13,13 +13,23 @@ from commcare_connect.opportunity.models import (
     PaymentUnit,
     UserVisit,
 )
+from commcare_connect.opportunity.tasks import create_learn_modules_and_deliver_units
 
 # Register your models here.
 
 
-admin.site.register(Opportunity)
 admin.site.register(CommCareApp)
 admin.site.register(PaymentUnit)
+
+
+@admin.register(Opportunity)
+class OpportunityAdmin(admin.ModelAdmin):
+    actions = ["refresh_learn_and_deliver_modules"]
+
+    @admin.action(description="Refresh Learn and Deliver Modules")
+    def refresh_learn_and_deliver_modules(self, request, queryset):
+        for opp in queryset:
+            create_learn_modules_and_deliver_units.delay(opp.id)
 
 
 @admin.register(OpportunityAccess)
