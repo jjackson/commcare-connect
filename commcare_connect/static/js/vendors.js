@@ -15,3 +15,9 @@ function refreshTooltips() {
   );
 }
 window.refreshTooltips = refreshTooltips;
+
+function copyText(event) {
+  event.preventDefault();
+  navigator.clipboard.writeText(event.target.dataset.copy);
+}
+window.copyText = copyText;

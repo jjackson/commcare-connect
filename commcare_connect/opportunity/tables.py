@@ -197,12 +197,13 @@ class DeliverStatusTable(tables.Table):
         return date_with_time_popup(self, value)
 
 
-def popup_html(value, popup_title, popup_direction="top", popup_class=""):
+def popup_html(value, popup_title, popup_direction="top", popup_class="", popup_attributes=""):
     return format_html(
-        "<span class='{}' data-bs-toggle='tooltip' data-bs-placement='{}' data-bs-title='{}'>{}</span>",
+        "<span class='{}' data-bs-toggle='tooltip' data-bs-placement='{}' data-bs-title='{}' {}>{}</span>",
         popup_class,
         popup_direction,
         popup_title,
+        popup_attributes,
         value,
     )
 
@@ -210,7 +211,12 @@ def popup_html(value, popup_title, popup_direction="top", popup_class=""):
 def username_with_popup(table, username):
     if table.exclude and "username_popup" in table.exclude:
         return username
-    return popup_html("", username, popup_class="bi bi-info-circle-fill text-primary")
+    return popup_html(
+        "",
+        username,
+        popup_class="bi bi-info-circle-fill text-primary",
+        popup_attributes=f"onclick=copyText(event) data-copy={username}",
+    )
 
 
 def date_with_time_popup(table, date):
