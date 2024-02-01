@@ -44,6 +44,7 @@
   "dependencies": {
     "alpinejs": "^3.13.0",
     "bootstrap-icons": "^1.10.5",
-    "htmx.org": "^1.9.4"
+    "htmx.org": "^1.9.4",
+    "mapbox-gl": "^3.1.2"
   }
 }
