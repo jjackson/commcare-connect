@@ -275,6 +275,7 @@ class UserVisit(XFormBaseModel):
     )
     form_json = models.JSONField()
     reason = models.CharField(max_length=300, null=True)
+    location = models.CharField(null=True)
 
 
 class OpportunityClaim(models.Model):
