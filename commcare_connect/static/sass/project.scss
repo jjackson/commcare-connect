@@ -39,6 +39,11 @@ $red: #b94a48;
   color: $red;
 }
 
+.htmx-request {
+  transition: all 500ms ease-in;
+  opacity: 0.5;
+}
+
 @media (min-width: 768px) {
   .navbar-brand.abs {
     position: absolute;

@@ -1,3 +1,5 @@
+import json
+
 from celery.result import AsyncResult
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -6,6 +8,7 @@ from django.db.models import F
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 from django.utils.timezone import now
@@ -60,7 +63,7 @@ from commcare_connect.opportunity.visit_import import (
     bulk_update_visit_status,
 )
 from commcare_connect.organization.decorators import org_member_required
-from commcare_connect.utils.commcarehq_api import get_applications_for_user
+from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -85,7 +88,7 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["applications"] = get_applications_for_user(self.request.user)
+        kwargs["domains"] = get_domains_for_user(self.request.user)
         kwargs["user"] = self.request.user
         kwargs["org_slug"] = self.request.org.slug
         return kwargs
@@ -166,12 +169,19 @@ class UserPaymentsTableView(OrganizationUserMixin, SingleTableView):
     table_class = UserPaymentsTable
     template_name = "opportunity/opportunity_user_payments_list.html"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["latest_payment"] = self.object_list.all().first()
+        context["access"] = self.access
+        context["opportunity"] = self.opportunity
+        return context
+
     def get_queryset(self):
         opportunity_id = self.kwargs["opp_id"]
-        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        self.opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
         access_id = self.kwargs["pk"]
-        access = get_object_or_404(OpportunityAccess, opportunity=opportunity, pk=access_id)
-        return Payment.objects.filter(opportunity_access=access).order_by("-date_paid")
+        self.access = get_object_or_404(OpportunityAccess, opportunity=self.opportunity, pk=access_id)
+        return Payment.objects.filter(opportunity_access=self.access).order_by("-date_paid")
 
 
 class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
@@ -453,3 +463,26 @@ def user_visits_list(request, org_slug=None, opp_id=None, pk=None):
         "opportunity/user_visits_list.html",
         context=dict(opportunity=opportunity, table=user_visits_table, user_name=opportunity_access.display_name),
     )
+
+
+@org_member_required
+@require_POST
+def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, pk=opp_id)
+    opportunity_access = get_object_or_404(OpportunityAccess, pk=access_id, opportunity=opportunity)
+    payment = get_object_or_404(Payment, opportunity_access=opportunity_access, pk=pk)
+    payment.delete()
+    return redirect("opportunity:user_payments_table", org_slug=org_slug, opp_id=opp_id, pk=access_id)
+
+
+# used for loading learn_app and deliver_app dropdowns
+@org_member_required
+def get_application(request, org_slug=None):
+    domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
+    applications = get_applications_for_user_by_domain(request.user, domain)
+    options = []
+    for app in applications:
+        value = json.dumps(app)
+        name = app["name"]
+        options.append(format_html("<option value='{}'>{}</option>", value, name))
+    return HttpResponse("\n".join(options))
