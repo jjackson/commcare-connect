@@ -4,53 +4,63 @@
 {% block title %}{{ request.org }} - Opportunities{% endblock %}
 
 {% block content %}
-  <div class="container">
-    <div class="my-2">
-      <h1 class="display-4">Opportunities</h1>
-      <hr/>
-      <a class="btn btn-primary"
-         href="{% url 'opportunity:create' org_slug=request.org.slug %}" title="Add new opportunity">Add new
-      </a>
+  <div class="container bg-white">
+    <div class="mt-5 py-3">
+      <h1> Opportunities
+        <span class="float-end">
+          <a class="btn btn-primary"
+             href="{% url 'opportunity:create' org_slug=request.org.slug %}" title="Add new opportunity"><span
+            class="bi bi-plus"></span> Add new
+          </a>
+        </span>
+      </h1>
+    </div>
+    <div class="pb-4">
+      <table class="table border table-responsive">
+        <thead class="table-light">
+        <tr>
+          <th>Name</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for opportunity in page_obj %}
+          <tr>
+            <td>{{ opportunity.name }}</td>
+            <td>
+              {% if opportunity.is_active %}
+                <span class="badge bg-success rounded-pill">Active</span>
+              {% else %}
+                <span class="badge bg-secondary rounded-pill">Inactive</span>
+              {% endif %}
+            </td>
+            <td width="300">
+              <div class="float-end">
+                <a class="btn btn-primary btn-sm"
+                   href="{% url 'opportunity:detail' org_slug=request.org.slug pk=opportunity.id %}">
+                  <span class="bi bi-eye"></span><span class="d-none d-md-inline">&nbsp;View</span>
+                </a>
+                <a class="btn btn-warning btn-sm"
+                   href="{% url 'opportunity:edit' org_slug=request.org.slug pk=opportunity.id %}"><span
+                  class="bi bi-pen"></span><span class="d-none d-md-inline">&nbsp;Edit</span></a>
+                <a class="btn btn-primary btn-sm"
+                   href="{% url 'opportunity:add_budget_existing_users' org_slug=request.org.slug pk=opportunity.id %}"><span
+                  class="bi bi-plus"></span><span class="d-none d-md-inline">&nbsp;Add Budget</span>
+                </a>
+              </div>
+
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="3">No opportunities yet.</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
     </div>
 
-    <table class="table border table-custom">
-      <thead class="table-light">
-      <tr>
-        <th>Name</th>
-        <th>Status</th>
-        <th></th>
-      </tr>
-      </thead>
-      <tbody>
-      {% for opportunity in page_obj %}
-        <tr>
-          <td>{{ opportunity.name }}</td>
-          <td>
-            {% if opportunity.is_active %}
-              <span class="badge bg-success rounded-pill">Active</span>
-            {% else %}
-              <span class="badge bg-secondary rounded-pill">Inactive</span>
-            {% endif %}
-          </td>
-          <td>
-            <a class="btn btn-primary btn-sm"
-               href="{% url 'opportunity:detail' org_slug=request.org.slug pk=opportunity.id %}">
-              View
-            </a>
-            <a class="btn btn-secondary btn-sm"
-               href="{% url 'opportunity:edit' org_slug=request.org.slug pk=opportunity.id %}">Edit</a>
-            <a class="btn btn-secondary btn-sm"
-               href="{% url 'opportunity:add_budget_existing_users' org_slug=request.org.slug pk=opportunity.id %}">Add
-              Budget</a>
-          </td>
-        </tr>
-        {% empty %}
-        <tr>
-          <td colspan="3">No opportunities yet.</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
 
     {% if page_obj.has_other_pages %}
       <nav aria-label="Page navigation">

@@ -8,24 +8,11 @@ $bootstrap-icons-font-dir: '~bootstrap-icons/font/fonts';
 
 // project specific CSS goes here
 
-.table-custom {
-  th:first-child,
-  td:first-child {
-    padding-left: 2rem !important;
-  }
-
-  th:last-child,
-  td:last-child {
-    padding-right: 2rem !important;
-  }
-}
-
 ///////////////
 // Variables //
 ///////////////
 
 // Alert colors
-
 $white: #fff;
 $mint-green: #d6e9c6;
 $black: #000;

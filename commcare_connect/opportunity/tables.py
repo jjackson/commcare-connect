@@ -19,6 +19,7 @@ class OpportunityAccessTable(tables.Table):
         fields = ("display_name", "user__username", "learn_progress")
         orderable = False
         empty_text = "No learn progress for users."
+        attrs = {"thead": {"class": ""}, "class": "table table-bordered table-responsive"}
 
 
 class UserVisitTable(tables.Table):
@@ -49,6 +50,7 @@ class UserVisitTable(tables.Table):
         )
         empty_text = "No forms."
         orderable = False
+        attrs = {"thead": {"class": ""}, "class": "table table-bordered table-responsive"}
 
 
 class OpportunityPaymentTable(tables.Table):
@@ -64,6 +66,7 @@ class OpportunityPaymentTable(tables.Table):
         fields = ("user__name", "user__username", "payment_accrued", "total_paid")
         orderable = False
         empty_text = "No user have payments accrued yet."
+        attrs = {"thead": {"class": ""}, "class": "table table-bordered table-responsive"}
 
 
 class UserPaymentsTable(tables.Table):
@@ -73,6 +76,7 @@ class UserPaymentsTable(tables.Table):
         orderable = False
         empty_text = "No payments made for this user"
         template_name = "django_tables2/bootstrap5.html"
+        attrs = {"thead": {"class": ""}, "class": "table table-bordered table-responsive"}
 
 
 class AggregateColumn(columns.Column):
@@ -110,6 +114,7 @@ class UserStatusTable(tables.Table):
         )
         empty_text = "No users invited for this opportunity."
         orderable = False
+        attrs = {"thead": {"class": ""}, "class": "table table-bordered table-responsive"}
 
 
 class PaymentUnitTable(tables.Table):
@@ -126,6 +131,7 @@ class PaymentUnitTable(tables.Table):
         fields = ("name", "amount")
         empty_text = "No payment units for this opportunity."
         orderable = False
+        attrs = {"thead": {"class": ""}, "class": "table table-bordered table-responsive"}
 
     def render_deliver_units(self, record):
         deliver_units = "".join([f"<li>{d.name}</li>" for d in record.deliver_units.all()])
@@ -163,3 +169,4 @@ class DeliverStatusTable(tables.Table):
             "last_visit_date",
             "details",
         )
+        attrs = {"thead": {"class": ""}, "class": "table table-bordered table-responsive"}

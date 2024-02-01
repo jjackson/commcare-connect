@@ -5,11 +5,13 @@
 {% block title %}{{ request.org }} - {{ opportunity.name }}{% endblock %}
 
 {% block content %}
-  <div class="container">
-    <h1 class="display-5">Edit Opportunity</h1>
-    <form method="post">
-      {% csrf_token %}
-      {% crispy form %}
-    </form>
+  <div class="container bg-white">
+    <div class="col-12 ">
+      <h1 class="py-4">Edit Opportunity</h1>
+      <form method="post">
+        {% csrf_token %}
+        {% crispy form %}
+      </form>
+    </div>
   </div>
 {% endblock content %}
