@@ -38,7 +38,7 @@ class XFormMetadataSerializer(serializers.Serializer):
     timeEnd = serializers.DateTimeField(required=True)
     app_build_version = serializers.CharField(allow_null=True)
     username = serializers.CharField()
-    location = serializers.CharField()
+    location = serializers.CharField(allow_null=True)
 
 
 class XFormSerializer(serializers.Serializer):
