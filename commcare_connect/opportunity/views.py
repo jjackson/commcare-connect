@@ -17,6 +17,7 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
 
+from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     DateRanges,
@@ -39,6 +40,7 @@ from commcare_connect.opportunity.models import (
     Payment,
     PaymentUnit,
     UserVisit,
+    VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
     DeliverStatusTable,
@@ -486,3 +488,37 @@ def get_application(request, org_slug=None):
         name = app["name"]
         options.append(format_html("<option value='{}'>{}</option>", value, name))
     return HttpResponse("\n".join(options))
+
+
+@org_member_required
+def visit_verification(request, org_slug=None, pk=None):
+    user_visit = get_object_or_404(UserVisit, pk=pk)
+    serializer = XFormSerializer(data=user_visit.form_json)
+    access_id = OpportunityAccess.objects.get(user=user_visit.user, opportunity=user_visit.opportunity).id
+    serializer.is_valid()
+    xform = serializer.save()
+    return render(
+        request,
+        "opportunity/visit_verification.html",
+        context={"visit": user_visit, "xform": xform, "access_id": access_id},
+    )
+
+
+@org_member_required
+def approve_visit(request, org_slug=None, pk=None):
+    user_visit = UserVisit.objects.get(pk=pk)
+    user_visit.status = VisitValidationStatus.approved
+    user_visit.save()
+    opp_id = user_visit.opportunity_id
+    access_id = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id).id
+    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity.id, pk=access_id)
+
+
+@org_member_required
+def reject_visit(request, org_slug=None, pk=None):
+    user_visit = UserVisit.objects.get(pk=pk)
+    user_visit.status = VisitValidationStatus.rejected
+    user_visit.save()
+    opp_id = user_visit.opportunity_id
+    access_id = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id).id
+    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity.id, pk=access_id)
