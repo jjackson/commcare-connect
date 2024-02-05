@@ -69,6 +69,7 @@ class OpportunityChangeForm(forms.ModelForm):
             required=False,
             help_text="Extends opportunity end date for all users.",
         )
+        self.initial["end_date"] = self.instance.end_date.isoformat()
 
     def clean_users(self):
         user_data = self.cleaned_data["users"]
