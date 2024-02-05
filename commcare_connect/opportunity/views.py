@@ -1,4 +1,5 @@
 import json
+from functools import reduce
 
 from celery.result import AsyncResult
 from django.contrib import messages
@@ -478,7 +479,28 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
 @org_member_required
 def user_profile(request, org_slug=None, opp_id=None, pk=None):
     access = get_object_or_404(OpportunityAccess, pk=pk, accepted=True)
-    return render(request, "opportunity/user_profile.html", context=dict(access=access))
+    user_visits = UserVisit.objects.filter(user=access.user, opportunity=access.opportunity)
+    user_visit_data = []
+    for user_visit in user_visits:
+        if not user_visit.location:
+            continue
+        lat, lng, elevation, precision = user_visit.location.split(" ")
+        user_visit_data.append(
+            dict(entity_name=user_visit.entity_name, visit_date=user_visit.visit_date.date(), lat=lat, lng=lng)
+        )
+    # user for centering the User visits map
+    lat_avg = reduce(lambda x, y: x + float(y["lat"]), user_visit_data, 0.0) / len(user_visit_data)
+    lng_avg = reduce(lambda x, y: x + float(y["lng"]), user_visit_data, 0.0) / len(user_visit_data)
+    return render(
+        request,
+        "opportunity/user_profile.html",
+        context=dict(
+            access=access,
+            user_visits=user_visit_data,
+            lat_avg=lat_avg,
+            lng_avg=lng_avg,
+        ),
+    )
 
 
 # used for loading learn_app and deliver_app dropdowns
