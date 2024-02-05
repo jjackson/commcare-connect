@@ -6,7 +6,6 @@ from commcare_connect.opportunity.models import OpportunityAccess, Payment, Paym
 
 class LearnStatusTable(tables.Table):
     display_name = columns.Column(verbose_name="Name")
-    username = columns.Column(accessor="user.username")
     learn_progress = columns.Column(verbose_name="Modules Completed")
     details = columns.LinkColumn(
         "opportunity:user_learn_progress",
@@ -18,12 +17,9 @@ class LearnStatusTable(tables.Table):
     class Meta:
         model = OpportunityAccess
         fields = ("display_name", "learn_progress")
-        sequence = ("display_name", "username", "learn_progress")
+        sequence = ("display_name", "learn_progress")
         orderable = False
         empty_text = "No learn progress for users."
-
-    def render_username(self, record, value):
-        return username_with_popup(self, value)
 
 
 class UserVisitTable(tables.Table):
@@ -57,7 +53,7 @@ class UserVisitTable(tables.Table):
 
 
 class OpportunityPaymentTable(tables.Table):
-    username = columns.Column(accessor="user.username")
+    username = columns.Column(accessor="user.username", visible=False)
     view_payments = columns.LinkColumn(
         "opportunity:user_payments_table",
         verbose_name="",
@@ -70,9 +66,6 @@ class OpportunityPaymentTable(tables.Table):
         fields = ("user__name", "username", "payment_accrued", "total_paid")
         orderable = False
         empty_text = "No user have payments accrued yet."
-
-    def render_username(self, record, value):
-        return username_with_popup(self, value)
 
 
 class UserPaymentsTable(tables.Table):
@@ -95,7 +88,7 @@ class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
 
 class UserStatusTable(tables.Table):
     display_name = columns.Column(verbose_name="Name", footer="Total")
-    username = AggregateColumn(accessor="user.username")
+    username = columns.Column(accessor="user.username", visible=False)
     accepted = BooleanAggregateColumn(verbose_name="Accepted")
     claimed = AggregateColumn(verbose_name="Job Claimed", accessor="job_claimed")
     started_learning = AggregateColumn(verbose_name="Started Learning", accessor="date_learn_started")
@@ -120,9 +113,6 @@ class UserStatusTable(tables.Table):
         )
         empty_text = "No users invited for this opportunity."
         orderable = False
-
-    def render_username(self, record, value):
-        return username_with_popup(self, value)
 
     def render_started_learning(self, record, value):
         return date_with_time_popup(self, value)
@@ -159,7 +149,7 @@ class PaymentUnitTable(tables.Table):
 
 class DeliverStatusTable(tables.Table):
     display_name = columns.Column("Name of the User")
-    username = columns.Column(accessor="user.username")
+    username = columns.Column(accessor="user.username", visible=False)
     visits_completed = columns.Column("Completed Visits")
     visits_approved = columns.Column("Approved Visits")
     visits_pending = columns.Column("Pending Visits")
@@ -190,9 +180,6 @@ class DeliverStatusTable(tables.Table):
             "details",
         )
 
-    def render_username(self, record, value):
-        return username_with_popup(self, value)
-
     def render_last_visit_date(self, record, value):
         return date_with_time_popup(self, value)
 
@@ -205,17 +192,6 @@ def popup_html(value, popup_title, popup_direction="top", popup_class="", popup_
         popup_title,
         popup_attributes,
         value,
-    )
-
-
-def username_with_popup(table, username):
-    if table.exclude and "username_popup" in table.exclude:
-        return username
-    return popup_html(
-        "",
-        username,
-        popup_class="bi bi-info-circle-fill text-primary",
-        popup_attributes=f"onclick=copyText(event) data-copy={username}",
     )
 
 
