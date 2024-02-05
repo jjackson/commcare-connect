@@ -1,6 +1,7 @@
 const path = require('path');
 const BundleTracker = require('webpack-bundle-tracker');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const Dotenv = require('dotenv-webpack');
 
 module.exports = {
   target: 'web',
@@ -21,6 +22,7 @@ module.exports = {
       filename: 'webpack-stats.json',
     }),
     new MiniCssExtractPlugin({ filename: 'css/[name].css' }),
+    new Dotenv({ path: './.env' }),
   ],
   module: {
     rules: [
