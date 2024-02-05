@@ -1,3 +1,5 @@
+import json
+
 from celery.result import AsyncResult
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -6,6 +8,7 @@ from django.db.models import F
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 from django.utils.timezone import now
@@ -60,7 +63,7 @@ from commcare_connect.opportunity.visit_import import (
     bulk_update_visit_status,
 )
 from commcare_connect.organization.decorators import org_member_required
-from commcare_connect.utils.commcarehq_api import get_applications_for_user
+from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -85,7 +88,7 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["applications"] = get_applications_for_user(self.request.user)
+        kwargs["domains"] = get_domains_for_user(self.request.user)
         kwargs["user"] = self.request.user
         kwargs["org_slug"] = self.request.org.slug
         return kwargs
@@ -476,3 +479,16 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
 def user_profile(request, org_slug=None, opp_id=None, pk=None):
     access = get_object_or_404(OpportunityAccess, pk=pk, accepted=True)
     return render(request, "opportunity/user_profile.html", context=dict(access=access))
+
+
+# used for loading learn_app and deliver_app dropdowns
+@org_member_required
+def get_application(request, org_slug=None):
+    domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
+    applications = get_applications_for_user_by_domain(request.user, domain)
+    options = []
+    for app in applications:
+        value = json.dumps(app)
+        name = app["name"]
+        options.append(format_html("<option value='{}'>{}</option>", value, name))
+    return HttpResponse("\n".join(options))
