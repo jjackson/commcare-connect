@@ -18,6 +18,7 @@ FORM_META = {
     "timeStart": "2023-06-07T12:34:10.178000Z",
     "userID": "66da891a459b2781c28bf2e0c50cbe67",
     "username": "test",
+    "location": "20.090209 40.09320 20 40",
 }
 
 MOCK_FORM = {

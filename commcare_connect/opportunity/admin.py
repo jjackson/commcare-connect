@@ -10,22 +10,34 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    Payment,
     PaymentUnit,
     UserVisit,
 )
+from commcare_connect.opportunity.tasks import create_learn_modules_and_deliver_units
 
 # Register your models here.
 
 
-admin.site.register(Opportunity)
 admin.site.register(CommCareApp)
 admin.site.register(PaymentUnit)
+
+
+@admin.register(Opportunity)
+class OpportunityAdmin(admin.ModelAdmin):
+    actions = ["refresh_learn_and_deliver_modules"]
+
+    @admin.action(description="Refresh Learn and Deliver Modules")
+    def refresh_learn_and_deliver_modules(self, request, queryset):
+        for opp in queryset:
+            create_learn_modules_and_deliver_units.delay(opp.id)
 
 
 @admin.register(OpportunityAccess)
 class OpportunityAccessAdmin(admin.ModelAdmin):
     form = OpportunityAccessCreationForm
     list_display = ["get_opp_name", "get_username"]
+    actions = ["clear_user_progress"]
 
     @admin.display(description="Opportunity Name")
     def get_opp_name(self, obj):
@@ -34,6 +46,15 @@ class OpportunityAccessAdmin(admin.ModelAdmin):
     @admin.display(description="Username")
     def get_username(self, obj):
         return obj.user.username
+
+    @admin.action(description="Clear User Progress")
+    def clear_user_progress(self, request, queryset):
+        for access in queryset:
+            UserVisit.objects.filter(user=access.user, opportunity=access.opportunity).delete()
+            Payment.objects.filter(opportunity_access=access).delete()
+            OpportunityClaim.objects.filter(opportunity_access=access).delete()
+            CompletedModule.objects.filter(user=access.user, opportunity=access.opportunity).delete()
+            Assessment.objects.filter(user=access.user, opportunity=access.opportunity).delete()
 
 
 @admin.register(LearnModule)

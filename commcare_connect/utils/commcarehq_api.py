@@ -1,14 +1,10 @@
-import asyncio
 import datetime
-import itertools
 
 import httpx
 from allauth.socialaccount.models import SocialAccount, SocialApp, SocialToken
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.utils import timezone
-
-from commcare_connect.cache import quickcache
 
 
 class CommCareHQAPIException(Exception):
@@ -52,11 +48,10 @@ def refresh_access_token(user, force=False):
     return social_token
 
 
-@quickcache(["user.pk"], timeout=60 * 60)
 def get_domains_for_user(user):
     social_token = refresh_access_token(user)
     response = httpx.get(
-        f"{settings.COMMCARE_HQ_URL}/api/v0.5/user_domains/",
+        f"{settings.COMMCARE_HQ_URL}/api/v0.5/user_domains/?limit=100",
         headers={"Authorization": f"Bearer {social_token}"},
     )
     data = response.json()
@@ -64,21 +59,15 @@ def get_domains_for_user(user):
     return domains
 
 
-@quickcache(["user.pk"], timeout=60 * 60)
-def get_applications_for_user(user):
+def get_applications_for_user_by_domain(user, domain):
     social_token = refresh_access_token(user)
-    domains = get_domains_for_user(user)
-    return _get_applications_for_domains(social_token, domains)
+    return _get_applications_for_domain(social_token, domain)
 
 
 @async_to_sync
-async def _get_applications_for_domains(social_token, domains):
+async def _get_applications_for_domain(social_token, domain):
     async with httpx.AsyncClient(timeout=300, headers={"Authorization": f"Bearer {social_token}"}) as client:
-        tasks = []
-        for domain in domains:
-            tasks.append(asyncio.ensure_future(_get_commcare_app_json(client, domain)))
-        domain_apps = await asyncio.gather(*tasks)
-    applications = list(itertools.chain.from_iterable(domain_apps))
+        applications = await _get_commcare_app_json(client, domain)
     return applications
 
 
@@ -88,5 +77,5 @@ async def _get_commcare_app_json(client, domain):
     data = response.json()
 
     for application in data.get("objects", []):
-        applications.append({"id": application.get("id"), "name": application.get("name"), "domain": domain})
+        applications.append({"id": application.get("id"), "name": application.get("name")})
     return applications
