@@ -295,7 +295,12 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
     return render(
         request,
         "opportunity/add_visits_existing_users.html",
-        {"form": form, "opportunity_claims": opportunity_claims, "budget_per_visit": opportunity.budget_per_visit},
+        {
+            "form": form,
+            "opportunity_claims": opportunity_claims,
+            "budget_per_visit": opportunity.budget_per_visit,
+            "opportunity": opportunity,
+        },
     )
 
 
