@@ -6,246 +6,257 @@
 {% block title %}{{ request.org }} - {{ opportunity.name }}{% endblock %}
 
 {% block content %}
-  <div class="mt-2 pt-4 ">
-    <div class="row align-items-center">
-      <div class="col-6">
-        <h1 class="display-5 mb-0">{{ object.name }}</h1>
+  <nav class="mt-2 small" aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{% url 'opportunity:list' org_slug=request.org.slug %}">
+          Opportunities
+        </a>
+      </li>
+      <li class="breadcrumb-item active" aria-current="page">{{ object.name }}</li>
+    </ol>
+  </nav>
+  <div class="row align-items-center">
+    <div class="col-6">
+      <h1 class="mb-0">{{ object.name }}</h1>
+    </div>
+    <div class="col-6">
+      <div class="dropdown float-end">
+        <button class="btn btn-primary btn-sm rounded-circle" type="button" id="opportunity_details_dropdown"
+                data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="opportunity_details_dropdown">
+          <li>
+            <a class="dropdown-item"
+               href="{% url 'opportunity:edit' org_slug=request.org.slug pk=opportunity.id %}">
+              <i class="bi bi-pencil-fill pe-2"></i> Edit
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item"
+               href="{% url 'opportunity:add_budget_existing_users' org_slug=request.org.slug pk=opportunity.id %}">
+              <i class="bi bi-plus-circle-fill pe-2"></i>
+              Add Budget
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item"
+               href="{% url 'opportunity:add_payment_unit' org_slug=request.org.slug pk=opportunity.id %}">
+              <i class="bi bi-plus-circle-fill pe-2"></i>
+              Add Payment Unit
+            </a>
+          </li>
+          <li class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportVisitModal">
+              <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
+              {% translate "Export User Visits" %}
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#importVisitModal">
+              <i class="bi bi-file-earmark-arrow-up-fill pe-2"></i>
+              {% translate "Import Verified Visits" %}
+            </a>
+          </li>
+          <li class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportPaymentModal">
+              <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
+              {% translate "Export Users for Payment" %}
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#importPaymentModal">
+              <i class="bi bi-file-earmark-arrow-up-fill pe-2"></i>
+              {% translate "Import Payment Records" %}
+            </a>
+          </li>
+          <li class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportUserStatusModal">
+              <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
+              {% translate "Export User Status" %}
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportDeliverStatusModal">
+              <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
+              {% translate "Export Deliver Status" %}
+            </a>
+          </li>
+        </ul>
       </div>
-      <div class="col-6">
-        <div class="dropdown float-end">
-          <button class="btn btn-primary btn-sm rounded-circle" type="button" id="opportunity_details_dropdown"
-                  data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="bi bi-three-dots-vertical"></i>
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="opportunity_details_dropdown">
-            <li>
-              <a class="dropdown-item"
-                 href="{% url 'opportunity:edit' org_slug=request.org.slug pk=opportunity.id %}">
-                <i class="bi bi-pencil-fill pe-2"></i> Edit
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item"
-                 href="{% url 'opportunity:add_budget_existing_users' org_slug=request.org.slug pk=opportunity.id %}">
-                <i class="bi bi-plus-circle-fill pe-2"></i>
-                Add Budget
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item"
-                 href="{% url 'opportunity:add_payment_unit' org_slug=request.org.slug pk=opportunity.id %}">
-                <i class="bi bi-plus-circle-fill pe-2"></i>
-                Add Payment Unit
-              </a>
-            </li>
-            <li class="dropdown-divider"></li>
-            <li>
-              <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportVisitModal">
-                <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
-                {% translate "Export User Visits" %}
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#importVisitModal">
-                <i class="bi bi-file-earmark-arrow-up-fill pe-2"></i>
-                {% translate "Import Verified Visits" %}
-              </a>
-            </li>
-            <li class="dropdown-divider"></li>
-            <li>
-              <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportPaymentModal">
-                <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
-                {% translate "Export Users for Payment" %}
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#importPaymentModal">
-                <i class="bi bi-file-earmark-arrow-up-fill pe-2"></i>
-                {% translate "Import Payment Records" %}
-              </a>
-            </li>
-            <li class="dropdown-divider"></li>
-            <li>
-              <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportUserStatusModal">
-                <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
-                {% translate "Export User Status" %}
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportDeliverStatusModal">
-                <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
-                {% translate "Export Deliver Status" %}
-              </a>
-            </li>
-          </ul>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-9">
+      <small title="End date"><i class="bi bi-clock"></i> Ends on <b>{{ object.end_date }}</b></small>
+    </div>
+    <div class="col-3 d-flex">
+      {% if export_task_id %}
+        <div class="flex-grow-1 justify-content-end">
+        <div hx-get="{% url "opportunity:export_status" request.org.slug export_task_id %}"
+             hx-target="this"
+             hx-trigger="load"
+             hx-swap="outerHTML">
+          <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+        </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+  <hr/>
+  <span class="text-black-50 text-uppercase">Description</span>
+  <p>
+    {{ object.description }}
+  </p>
+  <div class="row">
+    <div class="col-md-6">
+      <table class="table table-borderless table-responsive shadow">
+        <tbody>
+        <tr>
+          <th scope="row">Learn App</th>
+          <td>{{ object.learn_app.name }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Deliver App</th>
+          <td>{{ object.deliver_app.name }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Max Visits per user</th>
+          <td>{{ object.max_visits_per_user }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Daily Visits per user</th>
+          <td>{{ object.daily_max_visits_per_user }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Total Budget</th>
+          <td>{{ object.total_budget }} {{ object.currency|default_if_none:"" }}</td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="col-md-6">
+      <table class="table table-borderless table-responsive shadow">
+        <tbody>
+        <tr>
+          <th scope="row">Budget per visit</th>
+          <td>{{ object.budget_per_visit }} {{ object.currency|default_if_none:"" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Claimed Budget</th>
+          <td>{{ object.claimed_budget }} {{ object.currency|default_if_none:"" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Utilised Budget</th>
+          <td>{{ object.utilised_budget }} {{ object.currency|default_if_none:"" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Claimed Visits</th>
+          <td>{{ object.claimed_visits }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Approved Visits</th>
+          <td>{{ object.approved_visits }}</td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="accordion shadow" id="accordionExample">
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="headingOne">
+        <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#learn-app-modules" aria-expanded="true" aria-controls="collapseOne">
+          Learn App Modules
+        </button>
+      </h2>
+      <div id="learn-app-modules" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
+        <div class="accordion-body p-0 m-0">
+          <table class="table table-bordered table-responsive mb-0">
+            <thead>
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Time Estimate</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for module in object.learn_app.learn_modules.all %}
+              <tr>
+                <td>{{ module.name }}</td>
+                <td>{{ module.description }}</td>
+                <td>{{ module.time_estimate }} hour{{ module.time_estimate|pluralize:",s" }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
-    <div class="row">
-      <div class="col-9">
-        <small title="End date"><i class="bi bi-clock"></i> Ends on <b>{{ object.end_date }}</b></small>
-      </div>
-      <div class="col-3 d-flex">
-        {% if export_task_id %}
-          <div class="flex-grow-1 justify-content-end">
-          <div hx-get="{% url "opportunity:export_status" request.org.slug export_task_id %}"
-               hx-target="this"
-               hx-trigger="load"
-               hx-swap="outerHTML">
-            <div class="spinner-border" role="status">
-              <span class="visually-hidden">Loading...</span>
-            </div>
-          </div>
-          </div>
-        {% endif %}
-      </div>
-    </div>
-    <hr/>
-    <span class="text-black-50 text-uppercase">Description</span>
-    <p>
-      {{ object.description }}
-    </p>
-    <div class="row">
-      <div class="col-md-6">
-        <table class="table table-borderless table-responsive">
-          <tbody>
-          <tr>
-            <th scope="row">Learn App</th>
-            <td>{{ object.learn_app.name }}</td>
-          </tr>
-          <tr>
-            <th scope="row">Deliver App</th>
-            <td>{{ object.deliver_app.name }}</td>
-          </tr>
-          <tr>
-            <th scope="row">Max Visits per user</th>
-            <td>{{ object.max_visits_per_user }}</td>
-          </tr>
-          <tr>
-            <th scope="row">Daily Visits per user</th>
-            <td>{{ object.daily_max_visits_per_user }}</td>
-          </tr>
-          <tr>
-            <th scope="row">Total Budget</th>
-            <td>{{ object.total_budget }} {{ object.currency|default_if_none:"" }}</td>
-          </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="col-md-6">
-        <table class="table table-borderless table-responsive">
-          <tbody>
-          <tr>
-            <th scope="row">Budget per visit</th>
-            <td>{{ object.budget_per_visit }} {{ object.currency|default_if_none:"" }}</td>
-          </tr>
-          <tr>
-            <th scope="row">Claimed Budget</th>
-            <td>{{ object.claimed_budget }} {{ object.currency|default_if_none:"" }}</td>
-          </tr>
-          <tr>
-            <th scope="row">Utilised Budget</th>
-            <td>{{ object.utilised_budget }} {{ object.currency|default_if_none:"" }}</td>
-          </tr>
-          <tr>
-            <th scope="row">Claimed Visits</th>
-            <td>{{ object.claimed_visits }}</td>
-          </tr>
-          <tr>
-            <th scope="row">Approved Visits</th>
-            <td>{{ object.approved_visits }}</td>
-          </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div class="accordion" id="accordionExample">
-      <div class="accordion-item">
-        <h2 class="accordion-header" id="headingOne">
-          <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#learn-app-modules" aria-expanded="true" aria-controls="collapseOne">
-            Learn App Modules
-          </button>
-        </h2>
-        <div id="learn-app-modules" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
-          <div class="accordion-body p-0 m-0">
-            <table class="table table-bordered table-responsive mb-0">
-              <thead>
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="headingTwo">
+        <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#deliver-units" aria-expanded="false" aria-controls="collapseTwo">
+          Deliver Units
+        </button>
+      </h2>
+      <div id="deliver-units" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#accordionExample">
+        <div class="accordion-body p-0 m-0">
+          <table class="table table-bordered table-responsive mb-0">
+            <thead>
+            <tr>
+              <th>Name</th>
+              <th>ID</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for unit in object.deliver_app.deliver_units.all %}
               <tr>
-                <th>Name</th>
-                <th>Description</th>
-                <th>Time Estimate</th>
+                <td>{{ unit.name }}</td>
+                <td>{{ unit.slug }}</td>
               </tr>
-              </thead>
-              <tbody>
-              {% for module in object.learn_app.learn_modules.all %}
-                <tr>
-                  <td>{{ module.name }}</td>
-                  <td>{{ module.description }}</td>
-                  <td>{{ module.time_estimate }} hour{{ module.time_estimate|pluralize:",s" }}</td>
-                </tr>
-              {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      <div class="accordion-item">
-        <h2 class="accordion-header" id="headingTwo">
-          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#deliver-units" aria-expanded="false" aria-controls="collapseTwo">
-            Deliver Units
-          </button>
-        </h2>
-        <div id="deliver-units" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#accordionExample">
-          <div class="accordion-body p-0 m-0">
-            <table class="table table-bordered table-responsive  mb-0">
-              <thead>
-              <tr>
-                <th>Name</th>
-                <th>ID</th>
-              </tr>
-              </thead>
-              <tbody>
-              {% for unit in object.deliver_app.deliver_units.all %}
-                <tr>
-                  <td>{{ unit.name }}</td>
-                  <td>{{ unit.slug }}</td>
-                </tr>
-              {% endfor %}
-              </tbody>
-            </table>
-          </div>
+            {% endfor %}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="pt-4">
-    <ul class="nav nav-tabs" role="tablist">
+  <div class="mt-4 shadow">
+    <ul class="nav nav-tabs fw-bold bg-primary-subtle" role="tablist">
       <li class="nav-item" role="presentation">
         <button class="nav-link active" id="learn-tab" data-bs-toggle="tab" data-bs-target="#learn-tab-pane"
                 type="button" role="tab" aria-controls="learn-tab-pane" aria-selected="true">
-          Learn Status
+          <i class="bi bi-mortarboard-fill"></i> Learn Status
         </button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="deliver-status-tab" data-bs-toggle="tab" data-bs-target="#deliver-status-tab-pane"
-                type="button" role="tab" aria-controls="deliver-status-tab-pane" aria-selected="false">Deliver Status
+                type="button" role="tab" aria-controls="deliver-status-tab-pane" aria-selected="false">
+          <i class="bi bi-journal-text"></i> Deliver Status
         </button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="user-status-tab" data-bs-toggle="tab" data-bs-target="#user-status-tab-pane"
-                type="button" role="tab" aria-controls="user-status-tab-pane" aria-selected="false">User Status
+                type="button" role="tab" aria-controls="user-status-tab-pane" aria-selected="false">
+          <i class="bi bi-person-lines-fill"></i> User Status
         </button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="payment-units-tab" data-bs-toggle="tab" data-bs-target="#payment-units-tab-pane"
-                type="button" role="tab" aria-controls="payment-units-tab-pane" aria-selected="false">Payment Units
+                type="button" role="tab" aria-controls="payment-units-tab-pane" aria-selected="false">
+          <i class="bi bi-wallet"></i> Payment Units
         </button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="payment-tab" data-bs-toggle="tab" data-bs-target="#payment-tab-pane"
                 type="button" role="tab" aria-controls="payment-tab-pane" aria-selected="false">
-          {% translate "Payment Status" %}
+          <i class="bi bi-cash-stack"></i> {% translate "Payment Status" %}
         </button>
       </li>
     </ul>
@@ -290,9 +301,9 @@
 <div class="modal fade" id="exportVisitModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
-      <div class="modal-header">
-        <h1 class="modal-title fs-5">{% translate "Export Visit Data" %}</h1>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-header bg-primary">
+        <h1 class="modal-title fs-5 text-white">{% translate "Export Visit Data" %}</h1>
+        <button type="button" class="btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form action="{% url "opportunity:visit_export" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
             enctype="multipart/form-data">
@@ -303,7 +314,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          <button type="submit" class="btn btn-primary">Export</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-filetype-xls"></i> Export</button>
         </div>
       </form>
     </div>
@@ -314,9 +325,9 @@
 <div class="modal fade" id="importVisitModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
-      <div class="modal-header">
-        <h1 class="modal-title fs-5">{% translate "Import Verified Visits" %}</h1>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-header bg-primary">
+        <h1 class="modal-title fs-5 text-white">{% translate "Import Verified Visits" %}</h1>
+        <button type="button" class="btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form action="{% url "opportunity:visit_import" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
             enctype="multipart/form-data">
@@ -336,7 +347,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          <button type="submit" class="btn btn-primary">Import</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-cloud-arrow-up"></i> Import</button>
         </div>
       </form>
     </div>
@@ -351,9 +362,9 @@
 <div class="modal fade" id="importPaymentModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
-      <div class="modal-header">
-        <h1 class="modal-title fs-5">{% translate "Import Payment Records" %}</h1>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <div class="modal-header bg-primary">
+        <h1 class="modal-title fs-5 text-white">{% translate "Import Payment Records" %}</h1>
+        <button type="button" class="btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form action="{% url "opportunity:payment_import" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
             enctype="multipart/form-data">
@@ -372,7 +383,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          <button type="submit" class="btn btn-primary">Import</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-cloud-arrow-up"></i> Import</button>
         </div>
       </form>
     </div>

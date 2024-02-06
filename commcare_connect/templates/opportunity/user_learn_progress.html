@@ -3,9 +3,24 @@
 {% load crispy_forms_tags %}
 
 {% block content %}
-  <div class="container">
-    <h2>Learn Progress for {{ object.user.name }}</h2>
-    <table class="table table-bordered table-condensed">
+  <nav class="mt-2 small" aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{% url 'opportunity:list' org_slug=request.org.slug %}">
+          Opportunities
+        </a>
+      </li>
+      <li class="breadcrumb-item">
+        <a href="{% url 'opportunity:detail' org_slug=request.org.slug pk=object.pk %}">
+          The Opportunity
+        </a>
+      </li>
+      <li class="breadcrumb-item active" aria-current="page">Learn Progress</li>
+    </ol>
+  </nav>
+  <h2 class="mb-2">Learn Progress for {{ object.user.name }}</h2>
+  <hr/>
+  <table class="table table-bordered table-responsive table-condensed">
       <thead>
       <tr>
         <th>Module Name</th>
@@ -25,5 +40,4 @@
       {% endfor %}
       </tbody>
     </table>
-  </div>
 {% endblock content %}

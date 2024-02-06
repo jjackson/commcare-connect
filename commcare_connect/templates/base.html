@@ -16,7 +16,9 @@
     <!-- Your stuff: Third-party CSS libraries go here -->
 
     <!-- This file stores project-specific CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pace-js@latest/pace-theme-default.min.css">
     <link rel="stylesheet" href="{% static 'bundles/css/project.css' %}">
+
   {% endblock %}
   <!-- Le javascript
   ================================================== -->
@@ -27,6 +29,8 @@
     <!-- place project specific Javascript in this file -->
     <script src="{% static 'bundles/js/project-bundle.js' %}" defer></script>
     <script src="https://unpkg.com/htmx.org/dist/ext/loading-states.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pace-js@latest/pace.min.js"></script>
+
   {% endblock javascript %}
 </head>
 <body class="bg-light">
