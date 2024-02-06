@@ -30,10 +30,13 @@
       <div id="user-visit-map" class="mt-3 rounded border" style="height: 300px;"></div>
     </div>
   </div>
+{% endblock content %}
+
+{% block inline_javascript %}
+{{ block.super }}
   {{ user_visits|json_script:"userVisits" }}
   <script>
-    window.onload = renderUserVisit;
-    function renderUserVisit() {
+    window.addEventListener('DOMContentLoaded', () => {
       const userVisits = JSON.parse(document.getElementById('userVisits').textContent);
       const map = new mapboxgl.Map({
         container: 'user-visit-map',
@@ -48,6 +51,6 @@
           .setPopup(new mapboxgl.Popup().setHTML(`${loc.entity_name}<br />${loc.visit_date}`))
           .addTo(map)
       })
-    }
+    });
   </script>
-{% endblock content %}
+{% endblock %}
