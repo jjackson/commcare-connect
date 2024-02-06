@@ -14,6 +14,7 @@ from commcare_connect.opportunity.views import (
     UserPaymentsTableView,
     add_budget_existing_users,
     add_payment_unit,
+    approve_visit,
     download_export,
     edit_payment_unit,
     export_deliver_status,
@@ -24,9 +25,12 @@ from commcare_connect.opportunity.views import (
     get_application,
     payment_delete,
     payment_import,
+    reject_visit,
+    send_message_mobile_users,
     update_visit_status_import,
     user_profile,
     user_visits_list,
+    visit_verification,
 )
 
 app_name = "opportunity"
@@ -64,5 +68,9 @@ urlpatterns = [
     path("<int:opp_id>/user_visits/<int:pk>/", view=user_visits_list, name="user_visits_list"),
     path("<int:opp_id>/payment/<int:access_id>/delete/<int:pk>/", view=payment_delete, name="payment_delete"),
     path("<int:opp_id>/user_profile/<int:pk>/", view=user_profile, name="user_profile"),
+    path("<int:pk>/send_message", view=send_message_mobile_users, name="send_message_mobile_users"),
     path("applications/", get_application, name="get_applications_by_domain"),
+    path("verification/<int:pk>/", view=visit_verification, name="visit_verification"),
+    path("approve/<int:pk>/", view=approve_visit, name="approve_visit"),
+    path("reject/<int:pk>/", view=reject_visit, name="reject_visit"),
 ]
