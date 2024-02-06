@@ -25,6 +25,7 @@ from commcare_connect.opportunity.forms import (
     OpportunityCreationForm,
     PaymentExportForm,
     PaymentUnitForm,
+    SendMessageMobileUsersForm,
     VisitExportForm,
 )
 from commcare_connect.opportunity.helpers import (
@@ -58,13 +59,16 @@ from commcare_connect.opportunity.tasks import (
     generate_payment_export,
     generate_user_status_export,
     generate_visit_export,
+    send_push_notification_task,
+    send_sms_task,
 )
 from commcare_connect.opportunity.visit_import import (
     ImportException,
     bulk_update_payment_status,
     bulk_update_visit_status,
 )
-from commcare_connect.organization.decorators import org_member_required
+from commcare_connect.organization.decorators import org_admin_required, org_member_required
+from commcare_connect.users.models import User
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 
 
@@ -475,6 +479,39 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
     payment = get_object_or_404(Payment, opportunity_access=opportunity_access, pk=pk)
     payment.delete()
     return redirect("opportunity:user_payments_table", org_slug=org_slug, opp_id=opp_id, pk=access_id)
+
+
+@org_admin_required
+def send_message_mobile_users(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, pk=pk, organization=request.org)
+    user_ids = OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True).values_list(
+        "user_id", flat=True
+    )
+    users = User.objects.filter(pk__in=user_ids)
+    form = SendMessageMobileUsersForm(users=users, data=request.POST or None)
+
+    if form.is_valid():
+        selected_user_ids = form.cleaned_data["selected_users"]
+        title = form.cleaned_data["title"]
+        body = form.cleaned_data["body"]
+        message_type = form.cleaned_data["message_type"]
+        if "notification" in message_type:
+            send_push_notification_task.delay(selected_user_ids, title, body)
+        if "sms" in message_type:
+            send_sms_task.delay(selected_user_ids, body)
+        return redirect("opportunity:detail", org_slug=request.org.slug, pk=pk)
+
+    return render(
+        request,
+        "opportunity/send_message.html",
+        context=dict(
+            title=f"{request.org.slug} - {opportunity.name}",
+            form_title="Send Message",
+            form=form,
+            users=users,
+            user_ids=list(user_ids),
+        ),
+    )
 
 
 # used for loading learn_app and deliver_app dropdowns
