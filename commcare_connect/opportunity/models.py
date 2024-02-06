@@ -267,14 +267,17 @@ class UserVisit(XFormBaseModel):
         on_delete=models.CASCADE,
     )
     deliver_unit = models.ForeignKey(DeliverUnit, on_delete=models.PROTECT)
-    entity_id = models.CharField(max_length=64, null=True, blank=True)
+    entity_id = models.CharField(max_length=255, null=True, blank=True)
     entity_name = models.CharField(max_length=255, null=True, blank=True)
     visit_date = models.DateTimeField()
     status = models.CharField(
         max_length=50, choices=VisitValidationStatus.choices, default=VisitValidationStatus.pending
     )
     form_json = models.JSONField()
-    reason = models.CharField(max_length=300, null=True)
+    reason = models.CharField(max_length=300, null=True, blank=True)
+    location = models.CharField(null=True)
+    flagged = models.BooleanField(default=False)
+    flag_reason = models.JSONField(null=True, blank=True)
 
 
 class OpportunityClaim(models.Model):
