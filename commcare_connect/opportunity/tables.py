@@ -3,7 +3,13 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
 
-from commcare_connect.opportunity.models import OpportunityAccess, Payment, PaymentUnit, UserVisit
+from commcare_connect.opportunity.models import (
+    OpportunityAccess,
+    Payment,
+    PaymentUnit,
+    UserVisit,
+    VisitValidationStatus,
+)
 
 
 class OpportunityAccessTable(tables.Table):
@@ -23,6 +29,13 @@ class OpportunityAccessTable(tables.Table):
         empty_text = "No learn progress for users."
 
 
+def show_warning(record):
+    if record.status not in (VisitValidationStatus.approved, VisitValidationStatus.rejected):
+        if record.flagged:
+            return "table-warning"
+    return ""
+
+
 class UserVisitTable(tables.Table):
     # export only columns
     visit_id = columns.Column("Visit ID", accessor="xform_id", visible=False)
@@ -36,6 +49,18 @@ class UserVisitTable(tables.Table):
     deliver_unit = columns.Column("Unit Name", accessor="deliver_unit__name")
     entity_id = columns.Column("Entity ID", accessor="entity_id", visible=False)
     entity_name = columns.Column("Entity Name", accessor="entity_name")
+    flag_reason = columns.Column("Flags", accessor="flag_reason", empty_values=({}, None))
+    details = columns.LinkColumn(
+        "opportunity:visit_verification",
+        verbose_name="",
+        text="Review",
+        attrs={"a": {"class": "btn btn-sm btn-primary"}},
+        args=[utils.A("opportunity__organization__slug"), utils.A("pk")],
+    )
+
+    def render_flag_reason(self, value):
+        short = [flag[0] for flag in value.get("flags")]
+        return ", ".join(short)
 
     class Meta:
         model = UserVisit
@@ -51,6 +76,7 @@ class UserVisitTable(tables.Table):
         )
         empty_text = "No forms."
         orderable = False
+        row_attrs = {"class": show_warning}
 
 
 class OpportunityPaymentTable(tables.Table):

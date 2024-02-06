@@ -18,6 +18,7 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
 
+from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     DateRanges,
@@ -25,6 +26,7 @@ from commcare_connect.opportunity.forms import (
     OpportunityCreationForm,
     PaymentExportForm,
     PaymentUnitForm,
+    SendMessageMobileUsersForm,
     VisitExportForm,
 )
 from commcare_connect.opportunity.helpers import (
@@ -40,6 +42,7 @@ from commcare_connect.opportunity.models import (
     Payment,
     PaymentUnit,
     UserVisit,
+    VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
     DeliverStatusTable,
@@ -57,13 +60,16 @@ from commcare_connect.opportunity.tasks import (
     generate_payment_export,
     generate_user_status_export,
     generate_visit_export,
+    send_push_notification_task,
+    send_sms_task,
 )
 from commcare_connect.opportunity.visit_import import (
     ImportException,
     bulk_update_payment_status,
     bulk_update_visit_status,
 )
-from commcare_connect.organization.decorators import org_member_required
+from commcare_connect.organization.decorators import org_admin_required, org_member_required
+from commcare_connect.users.models import User
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 
 
@@ -503,6 +509,39 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
     )
 
 
+@org_admin_required
+def send_message_mobile_users(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, pk=pk, organization=request.org)
+    user_ids = OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True).values_list(
+        "user_id", flat=True
+    )
+    users = User.objects.filter(pk__in=user_ids)
+    form = SendMessageMobileUsersForm(users=users, data=request.POST or None)
+
+    if form.is_valid():
+        selected_user_ids = form.cleaned_data["selected_users"]
+        title = form.cleaned_data["title"]
+        body = form.cleaned_data["body"]
+        message_type = form.cleaned_data["message_type"]
+        if "notification" in message_type:
+            send_push_notification_task.delay(selected_user_ids, title, body)
+        if "sms" in message_type:
+            send_sms_task.delay(selected_user_ids, body)
+        return redirect("opportunity:detail", org_slug=request.org.slug, pk=pk)
+
+    return render(
+        request,
+        "opportunity/send_message.html",
+        context=dict(
+            title=f"{request.org.slug} - {opportunity.name}",
+            form_title="Send Message",
+            form=form,
+            users=users,
+            user_ids=list(user_ids),
+        ),
+    )
+
+
 # used for loading learn_app and deliver_app dropdowns
 @org_member_required
 def get_application(request, org_slug=None):
@@ -514,3 +553,37 @@ def get_application(request, org_slug=None):
         name = app["name"]
         options.append(format_html("<option value='{}'>{}</option>", value, name))
     return HttpResponse("\n".join(options))
+
+
+@org_member_required
+def visit_verification(request, org_slug=None, pk=None):
+    user_visit = get_object_or_404(UserVisit, pk=pk)
+    serializer = XFormSerializer(data=user_visit.form_json)
+    access_id = OpportunityAccess.objects.get(user=user_visit.user, opportunity=user_visit.opportunity).id
+    serializer.is_valid()
+    xform = serializer.save()
+    return render(
+        request,
+        "opportunity/visit_verification.html",
+        context={"visit": user_visit, "xform": xform, "access_id": access_id},
+    )
+
+
+@org_member_required
+def approve_visit(request, org_slug=None, pk=None):
+    user_visit = UserVisit.objects.get(pk=pk)
+    user_visit.status = VisitValidationStatus.approved
+    user_visit.save()
+    opp_id = user_visit.opportunity_id
+    access_id = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id).id
+    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity.id, pk=access_id)
+
+
+@org_member_required
+def reject_visit(request, org_slug=None, pk=None):
+    user_visit = UserVisit.objects.get(pk=pk)
+    user_visit.status = VisitValidationStatus.rejected
+    user_visit.save()
+    opp_id = user_visit.opportunity_id
+    access_id = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id).id
+    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity.id, pk=access_id)
