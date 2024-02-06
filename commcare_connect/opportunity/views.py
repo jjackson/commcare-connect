@@ -1,3 +1,5 @@
+import json
+
 from celery.result import AsyncResult
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -6,6 +8,7 @@ from django.db.models import F
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 from django.utils.timezone import now
@@ -14,6 +17,7 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
 
+from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     DateRanges,
@@ -37,6 +41,7 @@ from commcare_connect.opportunity.models import (
     Payment,
     PaymentUnit,
     UserVisit,
+    VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
     DeliverStatusTable,
@@ -64,7 +69,7 @@ from commcare_connect.opportunity.visit_import import (
 )
 from commcare_connect.organization.decorators import org_admin_required, org_member_required
 from commcare_connect.users.models import User
-from commcare_connect.utils.commcarehq_api import get_applications_for_user
+from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -89,7 +94,7 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["applications"] = get_applications_for_user(self.request.user)
+        kwargs["domains"] = get_domains_for_user(self.request.user)
         kwargs["user"] = self.request.user
         kwargs["org_slug"] = self.request.org.slug
         return kwargs
@@ -507,3 +512,50 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
             user_ids=list(user_ids),
         ),
     )
+
+
+# used for loading learn_app and deliver_app dropdowns
+@org_member_required
+def get_application(request, org_slug=None):
+    domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
+    applications = get_applications_for_user_by_domain(request.user, domain)
+    options = []
+    for app in applications:
+        value = json.dumps(app)
+        name = app["name"]
+        options.append(format_html("<option value='{}'>{}</option>", value, name))
+    return HttpResponse("\n".join(options))
+
+
+@org_member_required
+def visit_verification(request, org_slug=None, pk=None):
+    user_visit = get_object_or_404(UserVisit, pk=pk)
+    serializer = XFormSerializer(data=user_visit.form_json)
+    access_id = OpportunityAccess.objects.get(user=user_visit.user, opportunity=user_visit.opportunity).id
+    serializer.is_valid()
+    xform = serializer.save()
+    return render(
+        request,
+        "opportunity/visit_verification.html",
+        context={"visit": user_visit, "xform": xform, "access_id": access_id},
+    )
+
+
+@org_member_required
+def approve_visit(request, org_slug=None, pk=None):
+    user_visit = UserVisit.objects.get(pk=pk)
+    user_visit.status = VisitValidationStatus.approved
+    user_visit.save()
+    opp_id = user_visit.opportunity_id
+    access_id = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id).id
+    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity.id, pk=access_id)
+
+
+@org_member_required
+def reject_visit(request, org_slug=None, pk=None):
+    user_visit = UserVisit.objects.get(pk=pk)
+    user_visit.status = VisitValidationStatus.rejected
+    user_visit.save()
+    opp_id = user_visit.opportunity_id
+    access_id = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id).id
+    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity.id, pk=access_id)
