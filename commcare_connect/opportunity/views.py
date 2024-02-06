@@ -16,6 +16,7 @@ from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
+from geopy import distance
 
 from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.forms import (
@@ -497,10 +498,38 @@ def visit_verification(request, org_slug=None, pk=None):
     access_id = OpportunityAccess.objects.get(user=user_visit.user, opportunity=user_visit.opportunity).id
     serializer.is_valid()
     xform = serializer.save()
+    user_forms = []
+    other_forms = []
+    lat = None
+    lon = None
+    if user_visit.location:
+        locations = (
+            UserVisit.objects.filter(opportunity=user_visit.opportunity)
+            .values("entity_id", "location", "user_id")
+            .exclude(pk=pk)
+        )
+        lat, lon, *_ = user_visit.location.split(" ")
+        for loc in locations:
+            other_lat, other_lon, *_ = loc["location"].split(" ")
+            dist = distance.distance((lat, lon), (other_lat, other_lon))
+            if user_visit.user_id == loc["user_id"]:
+                user_forms.append((loc, dist.m, other_lat, other_lon))
+            else:
+                other_forms.append((loc, dist.m, other_lat, other_lon))
+            user_forms.sort(key=lambda x: x[1])
+            other_forms.sort(key=lambda x: x[1])
     return render(
         request,
         "opportunity/visit_verification.html",
-        context={"visit": user_visit, "xform": xform, "access_id": access_id},
+        context={
+            "visit": user_visit,
+            "xform": xform,
+            "access_id": access_id,
+            "user_forms": json.dumps(user_forms[:5]),
+            "other_forms": json.dumps(other_forms[:5]),
+            "visit_lat": lat,
+            "visit_lon": lon,
+        },
     )
 
 
