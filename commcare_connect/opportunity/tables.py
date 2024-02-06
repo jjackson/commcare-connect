@@ -1,4 +1,5 @@
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
 
 from commcare_connect.opportunity.models import (
@@ -170,7 +171,7 @@ class PaymentUnitTable(tables.Table):
 
     def render_deliver_units(self, record):
         deliver_units = "".join([f"<li>{d.name}</li>" for d in record.deliver_units.all()])
-        return format_html("<ul>{}</ul>", deliver_units)
+        return mark_safe(f"<ul>{deliver_units}</ul>")
 
 
 class DeliverStatusTable(tables.Table):
