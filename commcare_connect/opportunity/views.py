@@ -542,19 +542,20 @@ def visit_verification(request, org_slug=None, pk=None):
     if user_visit.location:
         locations = (
             UserVisit.objects.filter(opportunity=user_visit.opportunity)
-            .values("entity_id", "location", "user_id")
+            .values("entity_id", "location", "user_id", "entity_name")
             .exclude(pk=pk)
         )
         lat, lon, *_ = user_visit.location.split(" ")
         for loc in locations:
             other_lat, other_lon, *_ = loc["location"].split(" ")
             dist = distance.distance((lat, lon), (other_lat, other_lon))
-            if user_visit.user_id == loc["user_id"]:
-                user_forms.append((loc, dist.m, other_lat, other_lon))
-            else:
-                other_forms.append((loc, dist.m, other_lat, other_lon))
-            user_forms.sort(key=lambda x: x[1])
-            other_forms.sort(key=lambda x: x[1])
+            if dist.m <= 250:
+                if user_visit.user_id == loc["user_id"]:
+                    user_forms.append((loc, dist.m, other_lat, other_lon))
+                else:
+                    other_forms.append((loc, dist.m, other_lat, other_lon))
+        user_forms.sort(key=lambda x: x[1])
+        other_forms.sort(key=lambda x: x[1])
     return render(
         request,
         "opportunity/visit_verification.html",
