@@ -98,6 +98,21 @@ class Opportunity(BaseModel):
         return approved_user_visits
 
     @property
+    def allotted_visits(self):
+        # Logic to calculate allotted visits
+        return 10  # Example fixed value
+
+    @property
+    def allotted_visits_per_user(self):
+        # Logic to calculate allotted visits per user
+        return 2  # Example fixed value
+
+    @property
+    def budget_per_user(self):
+        # Logic to calculate budget per user
+        return self.allotted_visits_per_user * self.budget_per_visit  # Example
+
+    @property
     def is_active(self):
         return self.active and self.end_date >= now().date()
 
