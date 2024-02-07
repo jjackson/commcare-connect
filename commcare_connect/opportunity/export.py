@@ -24,7 +24,7 @@ def export_user_visit_data(
         user_visits = user_visits.filter(status__in=status)
 
     table = UserVisitTable(user_visits)
-    exclude_columns = ("visit_date", "form_json")
+    exclude_columns = ("visit_date", "form_json", "details")
     columns = [
         column
         for column in table.columns.iterall()
@@ -82,13 +82,13 @@ def export_empty_payment_table(opportunity: Opportunity) -> Dataset:
 
 def export_user_status_table(opportunity: Opportunity) -> Dataset:
     access_objects = get_annotated_opportunity_access(opportunity)
-    table = UserStatusTable(access_objects)
+    table = UserStatusTable(access_objects, exclude=("date_popup"))
     return get_dataset(table, export_title="User status export")
 
 
 def export_deliver_status_table(opportunity: Opportunity) -> Dataset:
     access_objects = get_annotated_opportunity_access_deliver_status(opportunity)
-    table = DeliverStatusTable(access_objects, exclude=("details",))
+    table = DeliverStatusTable(access_objects, exclude=("details", "date_popup"))
     return get_dataset(table, export_title="Payment and Verification export")
 
 

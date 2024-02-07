@@ -213,3 +213,17 @@ def send_payment_notification(opportunity_id: int, payment_ids: list[int]):
             )
         )
     send_message_bulk(messages)
+
+
+@celery_app.task()
+def send_push_notification_task(user_ids: list[int], title: str, body: str):
+    usernames = list(User.objects.filter(id__in=user_ids).values_list("username", flat=True))
+    message = Message(usernames, title=title, body=body)
+    send_message(message)
+
+
+@celery_app.task()
+def send_sms_task(user_ids: list[int], body: str):
+    user_phone_numbers = User.objects.filter(id__in=user_ids).values_list("phone_number", flat=True)
+    for phone_number in user_phone_numbers:
+        send_sms(phone_number, body)

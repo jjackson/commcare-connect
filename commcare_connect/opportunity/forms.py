@@ -69,6 +69,7 @@ class OpportunityChangeForm(forms.ModelForm):
             required=False,
             help_text="Extends opportunity end date for all users.",
         )
+        self.initial["end_date"] = self.instance.end_date.isoformat()
 
     def clean_users(self):
         user_data = self.cleaned_data["users"]
@@ -127,11 +128,13 @@ class OpportunityCreationForm(forms.ModelForm):
                 Row(Field("learn_app")),
                 Row(Field("learn_app_description")),
                 Row(Field("learn_app_passing_score")),
+                data_loading_states=True,
             ),
             Fieldset(
                 "Deliver App",
                 Row(Field("deliver_app_domain")),
                 Row(Field("deliver_app")),
+                data_loading_states=True,
             ),
             Row(Field("api_key")),
             Submit("submit", "Submit"),
@@ -144,14 +147,15 @@ class OpportunityCreationForm(forms.ModelForm):
                 attrs={
                     "hx-get": reverse("opportunity:get_applications_by_domain", args=(self.org_slug,)),
                     "hx-include": "#id_learn_app_domain",
-                    "hx-trigger": "load, change",
-                    "hx-indicator": "#id_learn_app_domain",
+                    "hx-trigger": "load delay:0.3s, change",
                     "hx-target": "#id_learn_app",
                     "data-loading-disable": True,
                 }
             ),
         )
-        self.fields["learn_app"] = forms.Field(widget=forms.Select)
+        self.fields["learn_app"] = forms.Field(
+            widget=forms.Select(choices=[(None, "Loading...")], attrs={"data-loading-disable": True})
+        )
         self.fields["learn_app_description"] = forms.CharField(widget=forms.Textarea)
         self.fields["learn_app_passing_score"] = forms.IntegerField(max_value=100, min_value=0)
         self.fields["deliver_app_domain"] = forms.ChoiceField(
@@ -160,14 +164,15 @@ class OpportunityCreationForm(forms.ModelForm):
                 attrs={
                     "hx-get": reverse("opportunity:get_applications_by_domain", args=(self.org_slug,)),
                     "hx-include": "#id_deliver_app_domain",
-                    "hx-trigger": "load, change",
-                    "hx-indicator": "#id_deliver_app_domain",
+                    "hx-trigger": "load delay:0.3s, change",
                     "hx-target": "#id_deliver_app",
                     "data-loading-disable": True,
                 }
             ),
         )
-        self.fields["deliver_app"] = forms.Field(widget=forms.Select)
+        self.fields["deliver_app"] = forms.Field(
+            widget=forms.Select(choices=[(None, "Loading...")], attrs={"data-loading-disable": True})
+        )
         self.fields["api_key"] = forms.CharField(max_length=50)
         self.fields["total_budget"].widget.attrs.update({"class": "form-control-plaintext"})
         self.fields["max_users"] = forms.IntegerField()
@@ -339,3 +344,31 @@ class PaymentUnitForm(forms.ModelForm):
             self.fields["deliver_units"].initial = [
                 deliver_unit.pk for deliver_unit in self.instance.deliver_units.all()
             ]
+
+
+class SendMessageMobileUsersForm(forms.Form):
+    title = forms.CharField(
+        empty_value="Notification from CommCare Connect",
+        required=False,
+    )
+    body = forms.CharField(widget=forms.Textarea)
+    message_type = forms.MultipleChoiceField(
+        choices=[("notification", "Push Notification"), ("sms", "SMS")],
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    def __init__(self, *args, **kwargs):
+        users = kwargs.pop("users", [])
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("selected_users")),
+            Row(Field("title")),
+            Row(Field("body")),
+            Row(Field("message_type")),
+            Submit(name="submit", value="Submit"),
+        )
+
+        choices = [(user.pk, user.username) for user in users]
+        self.fields["selected_users"] = forms.MultipleChoiceField(choices=choices)
