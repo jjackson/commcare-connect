@@ -1,7 +1,9 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
 from django.http import HttpResponse
+from django.shortcuts import render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.timezone import now
@@ -13,6 +15,7 @@ from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from oauth2_provider.views.mixins import ClientProtectedResourceMixin
 from rest_framework.decorators import api_view, authentication_classes
 
+from commcare_connect.connect_id_client.main import fetch_demo_user_tokens
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
 
 from .helpers import create_hq_user
@@ -121,3 +124,11 @@ def accept_invite(request, invite_id):
         "Thank you for accepting the invitation. Open your CommCare Connect App to "
         "see more information about the opportunity and begin learning"
     )
+
+
+@login_required
+@user_passes_test(lambda user: user.is_superuser)
+@require_GET
+def demo_user_tokens(request):
+    users = fetch_demo_user_tokens()
+    return render(request, "users/demo_tokens.html", {"demo_users": users})

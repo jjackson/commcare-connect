@@ -274,7 +274,10 @@ class UserVisit(XFormBaseModel):
         max_length=50, choices=VisitValidationStatus.choices, default=VisitValidationStatus.pending
     )
     form_json = models.JSONField()
-    reason = models.CharField(max_length=300, null=True)
+    reason = models.CharField(max_length=300, null=True, blank=True)
+    location = models.CharField(null=True)
+    flagged = models.BooleanField(default=False)
+    flag_reason = models.JSONField(null=True, blank=True)
 
 
 class OpportunityClaim(models.Model):

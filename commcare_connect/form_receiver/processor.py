@@ -160,6 +160,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         app_build_id=xform.build_id,
         app_build_version=xform.metadata.app_build_version,
         form_json=xform.raw_form,
+        location=xform.metadata.location,
     )
     if (
         counts["daily"] >= opportunity.daily_max_visits_per_user
@@ -167,8 +168,17 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         or datetime.date.today() > claim.end_date
     ):
         user_visit.status = VisitValidationStatus.over_limit
+    flags = []
     if counts["entity"] > 0:
         user_visit.status = VisitValidationStatus.duplicate
+        flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
+    if xform.metadata.duration < datetime.timedelta(seconds=60):
+        flags.append(["duration", "The form was completed too quickly."])
+    if xform.metadata.location is None:
+        flags.append(["gps", "GPS data is missing"])
+    if flags:
+        user_visit.flagged = True
+        user_visit.flag_reason = {"flags": flags}
     user_visit.save()
 
 
