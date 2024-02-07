@@ -125,52 +125,62 @@
   <div class="row">
     <div class="col-md-6">
       <table class="table table-borderless table-responsive shadow">
+        <thead>
+        <tr>
+          <th colspan="2" class="text-center fs-4 pb-3">Visits</th>
+        </tr>
+        </thead>
         <tbody>
         <tr>
-          <th scope="row">Learn App</th>
-          <td>{{ object.learn_app.name }}</td>
+          <th scope="row">Total Visits Allotted</th>
+          <td>{{ object.allotted_visits }}</td>
         </tr>
         <tr>
-          <th scope="row">Deliver App</th>
-          <td>{{ object.deliver_app.name }}</td>
+          <th scope="row">Total Visits Claimed</th>
+          <td>{{ object.claimed_visits }}</td>
         </tr>
         <tr>
-          <th scope="row">Max Visits per user</th>
-          <td>{{ object.max_visits_per_user }}</td>
+          <th scope="row">Total Visits Approved</th>
+          <td>{{ object.approved_visits }}</td>
         </tr>
         <tr>
-          <th scope="row">Daily Visits per user</th>
+          <th scope="row">Allotted Visits per user</th>
           <td>{{ object.daily_max_visits_per_user }}</td>
         </tr>
         <tr>
-          <th scope="row">Total Budget</th>
-          <td>{{ object.total_budget }} {{ object.currency|default_if_none:"" }}</td>
+          <th scope="row">Daily Max Visits per user</th>
+          <td>{{ object.max_visits_per_user }}</td>
         </tr>
         </tbody>
       </table>
     </div>
     <div class="col-md-6">
       <table class="table table-borderless table-responsive shadow">
+        <thead>
+        <tr>
+          <th colspan="2" class="text-center fs-4 pb-3">Budget</th>
+        </tr>
+        </thead>
         <tbody>
         <tr>
-          <th scope="row">Budget per visit</th>
-          <td>{{ object.budget_per_visit }} {{ object.currency|default_if_none:"" }}</td>
+          <th scope="row">Total Budget</th>
+          <td>{{ object.total_budget }} {{ object.currency|default_if_none:"" }}</td>
         </tr>
         <tr>
-          <th scope="row">Claimed Budget</th>
+          <th scope="row">Budget per user</th>
+          <td>{{ object.budget_per_user }} {{ object.currency|default_if_none:"" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Budget Claimed</th>
           <td>{{ object.claimed_budget }} {{ object.currency|default_if_none:"" }}</td>
         </tr>
         <tr>
-          <th scope="row">Utilised Budget</th>
+          <th scope="row">Budget Utilised</th>
           <td>{{ object.utilised_budget }} {{ object.currency|default_if_none:"" }}</td>
         </tr>
         <tr>
-          <th scope="row">Claimed Visits</th>
-          <td>{{ object.claimed_visits }}</td>
-        </tr>
-        <tr>
-          <th scope="row">Approved Visits</th>
-          <td>{{ object.approved_visits }}</td>
+          <th scope="row">Budget per visit</th>
+          <td>{{ object.budget_per_visit }} {{ object.currency|default_if_none:"" }}</td>
         </tr>
         </tbody>
       </table>
@@ -180,7 +190,7 @@
     <div class="accordion-item">
       <h2 class="accordion-header" id="headingOne">
         <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#learn-app-modules" aria-expanded="true" aria-controls="collapseOne">
-          Learn App Modules
+          Learn App  - {{ object.learn_app.name }}
         </button>
       </h2>
       <div id="learn-app-modules" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
@@ -209,7 +219,7 @@
     <div class="accordion-item">
       <h2 class="accordion-header" id="headingTwo">
         <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#deliver-units" aria-expanded="false" aria-controls="collapseTwo">
-          Deliver Units
+          Deliver App - {{ object.deliver_app.name }}
         </button>
       </h2>
       <div id="deliver-units" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#accordionExample">
@@ -217,8 +227,8 @@
           <table class="table table-bordered table-responsive mb-0">
             <thead>
             <tr>
-              <th>Name</th>
-              <th>ID</th>
+              <th>Deliver Unit Name</th>
+              <th>Deliver Unit ID</th>
             </tr>
             </thead>
             <tbody>
@@ -233,13 +243,34 @@
         </div>
       </div>
     </div>
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="headingTwo">
+        <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#payment-units" aria-expanded="false" aria-controls="collapseTwo">
+          Payment Units
+        </button>
+      </h2>
+      <div id="payment-units" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#accordionExample">
+        <div class="accordion-body p-0 m-0">
+          <div hx-get="{% url "opportunity:payment_unit_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
+               hx-trigger="load" hx-swap="outerHTML">
+            {% include "tables/table_placeholder.html" with num_cols=4 %}
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="mt-4 shadow mb-5">
     <ul class="nav nav-tabs fw-bold bg-primary-subtle" role="tablist">
       <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="learn-tab" data-bs-toggle="tab" data-bs-target="#learn-tab-pane"
-                type="button" role="tab" aria-controls="learn-tab-pane" aria-selected="true">
+        <button class="nav-link active" id="user-status-tab" data-bs-toggle="tab" data-bs-target="#user-status-tab-pane"
+                type="button" role="tab" aria-controls="user-status-tab-pane" aria-selected="true">
+          <i class="bi bi-person-lines-fill"></i> User Status
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="learn-tab" data-bs-toggle="tab" data-bs-target="#learn-tab-pane"
+                type="button" role="tab" aria-controls="learn-tab-pane" aria-selected="false">
           <i class="bi bi-mortarboard-fill"></i> Learn Status
         </button>
       </li>
@@ -250,18 +281,6 @@
         </button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="user-status-tab" data-bs-toggle="tab" data-bs-target="#user-status-tab-pane"
-                type="button" role="tab" aria-controls="user-status-tab-pane" aria-selected="false">
-          <i class="bi bi-person-lines-fill"></i> User Status
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="payment-units-tab" data-bs-toggle="tab" data-bs-target="#payment-units-tab-pane"
-                type="button" role="tab" aria-controls="payment-units-tab-pane" aria-selected="false">
-          <i class="bi bi-wallet"></i> Payment Units
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
         <button class="nav-link" id="payment-tab" data-bs-toggle="tab" data-bs-target="#payment-tab-pane"
                 type="button" role="tab" aria-controls="payment-tab-pane" aria-selected="false">
           <i class="bi bi-cash-stack"></i> {% translate "Payment Status" %}
@@ -269,7 +288,14 @@
       </li>
     </ul>
     <div class="tab-content">
-      <div class="tab-pane fade show active" id="learn-tab-pane" role="tabpanel" aria-labelledby="learn-tab"
+      <div class="tab-pane fade show active" id="user-status-tab-pane" role="tabpanel" aria-labelledby="user-status-tab"
+           tabindex="0" hx-on::after-request="refreshTooltips()">
+        <div hx-get="{% url "opportunity:user_status_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
+             hx-trigger="load" hx-swap="outerHTML">
+          {% include "tables/table_placeholder.html" with num_cols=4 %}
+        </div>
+      </div>
+      <div class="tab-pane fade" id="learn-tab-pane" role="tabpanel" aria-labelledby="learn-tab"
            tabindex="0" hx-on::after-request="refreshTooltips()">
         <div hx-get="{% url "opportunity:user_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
              hx-trigger="load" hx-swap="outerHTML">
@@ -286,19 +312,6 @@
       <div class="tab-pane fade" id="payment-tab-pane" role="tabpanel" aria-labelledby="payment-tab"
            tabindex="0" hx-on::after-request="refreshTooltips()">
         <div hx-get="{% url "opportunity:payment_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
-             hx-trigger="load" hx-swap="outerHTML">
-          {% include "tables/table_placeholder.html" with num_cols=4 %}
-        </div>
-      </div>
-      <div class="tab-pane fade" id="user-status-tab-pane" role="tabpanel" aria-labelledby="user-status-tab"
-           tabindex="0" hx-on::after-request="refreshTooltips()">
-        <div hx-get="{% url "opportunity:user_status_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
-             hx-trigger="load" hx-swap="outerHTML">
-          {% include "tables/table_placeholder.html" with num_cols=4 %}
-        </div>
-      </div>
-      <div class="tab-pane fade" id="payment-units-tab-pane" role="tabpanel" aria-labelledby="payment-units-tab" tabindex="0">
-        <div hx-get="{% url "opportunity:payment_unit_table" org_slug=request.org.slug pk=opportunity.pk %}{% querystring %}"
              hx-trigger="load" hx-swap="outerHTML">
           {% include "tables/table_placeholder.html" with num_cols=4 %}
         </div>
