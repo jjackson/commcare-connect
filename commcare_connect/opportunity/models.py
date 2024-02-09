@@ -103,14 +103,9 @@ class Opportunity(BaseModel):
         return 10  # Example fixed value
 
     @property
-    def allotted_visits_per_user(self):
-        # Logic to calculate allotted visits per user
-        return 2  # Example fixed value
-
-    @property
     def budget_per_user(self):
         # Logic to calculate budget per user
-        return self.allotted_visits_per_user * self.budget_per_visit  # Example
+        return self.max_visits_per_user * self.budget_per_visit  # Example
 
     @property
     def is_active(self):
