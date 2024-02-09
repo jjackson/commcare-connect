@@ -4,6 +4,22 @@
 {% block title %}{{ request.org }} - {{access.display_name}}{% endblock %}
 
 {% block content %}
+    <nav class="mt-2 small" aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item">
+          <a href="{% url 'opportunity:list' org_slug=request.org.slug %}">
+            Opportunities
+          </a>
+        </li>
+        <li class="breadcrumb-item">
+          <a href="{% url 'opportunity:detail' org_slug=request.org.slug pk=access.opportunity_id %}">
+            {{ access.opportunity.name }}
+          </a>
+        </li>
+        <li class="breadcrumb-item active" aria-current="page">User Profile</li>
+      </ol>
+    </nav>
+
   <div class="card w-50 mx-auto">
     <div class="card-body">
       <h1 class="display-4 mb-0 text-center">{{access.display_name}}</h1>
