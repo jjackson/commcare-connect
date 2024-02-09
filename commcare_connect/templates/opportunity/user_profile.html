@@ -54,20 +54,20 @@
   <script type="module">
     window.addEventListener('DOMContentLoaded', () => {
       mapboxgl.accessToken = "{{ MAPBOX_TOKEN }}";
-      const userVisits = JSON.parse(document.getElementById('userVisits').textContent);
       const map = new mapboxgl.Map({
         container: 'user-visit-map',
         style: 'mapbox://styles/mapbox/satellite-streets-v12',
         center: [{{ lng_avg }}, {{ lat_avg }}],
-        zoom: 10,
-        attributioncontrol: false
+        zoom: 14,
       });
+      const userVisits = JSON.parse(document.getElementById('userVisits').textContent);
       userVisits.forEach(loc => {
         new mapboxgl.Marker()
           .setLngLat([loc.lng, loc.lat])
           .setPopup(new mapboxgl.Popup().setHTML(`${loc.entity_name}<br />${loc.visit_date}`))
           .addTo(map)
       })
+      addAccuracyCircles(map, userVisits);
     });
   </script>
 {% endblock %}

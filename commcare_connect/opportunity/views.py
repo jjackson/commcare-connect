@@ -491,9 +491,15 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
     for user_visit in user_visits:
         if not user_visit.location:
             continue
-        lat, lng, elevation, precision = user_visit.location.split(" ")
+        lat, lng, elevation, precision = list(map(float, user_visit.location.split(" ")))
         user_visit_data.append(
-            dict(entity_name=user_visit.entity_name, visit_date=user_visit.visit_date.date(), lat=lat, lng=lng)
+            dict(
+                entity_name=user_visit.entity_name,
+                visit_date=user_visit.visit_date.date(),
+                lat=lat,
+                lng=lng,
+                precision=precision,
+            )
         )
     # user for centering the User visits map
     lat_avg = reduce(lambda x, y: x + float(y["lat"]), user_visit_data, 0.0) / len(user_visit_data)
