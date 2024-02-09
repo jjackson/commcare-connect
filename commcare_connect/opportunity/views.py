@@ -47,7 +47,7 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.opportunity.tables import (
     DeliverStatusTable,
-    OpportunityAccessTable,
+    LearnStatusTable,
     OpportunityPaymentTable,
     PaymentUnitTable,
     UserPaymentsTable,
@@ -145,10 +145,10 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
         return context
 
 
-class OpportunityUserTableView(OrganizationUserMixin, SingleTableView):
+class OpportunityLearnStatusTableView(OrganizationUserMixin, SingleTableView):
     model = OpportunityAccess
     paginate_by = 25
-    table_class = OpportunityAccessTable
+    table_class = LearnStatusTable
     template_name = "tables/single_table.html"
 
     def get_queryset(self):
