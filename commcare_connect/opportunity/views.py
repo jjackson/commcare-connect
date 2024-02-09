@@ -2,6 +2,7 @@ import json
 from functools import reduce
 
 from celery.result import AsyncResult
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
@@ -505,6 +506,7 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
             user_visits=user_visit_data,
             lat_avg=lat_avg,
             lng_avg=lng_avg,
+            MAPBOX_TOKEN=settings.MAPBOX_TOKEN,
         ),
     )
 
