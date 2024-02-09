@@ -35,8 +35,9 @@
 {% block inline_javascript %}
 {{ block.super }}
   {{ user_visits|json_script:"userVisits" }}
-  <script>
+  <script type="module">
     window.addEventListener('DOMContentLoaded', () => {
+      mapboxgl.accessToken = "{{ MAPBOX_TOKEN }}";
       const userVisits = JSON.parse(document.getElementById('userVisits').textContent);
       const map = new mapboxgl.Map({
         container: 'user-visit-map',
