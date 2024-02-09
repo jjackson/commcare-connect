@@ -293,9 +293,9 @@ CACHES = {
 
 DJANGO_TABLES2_TEMPLATE = "tables/tabbed_table.html"
 DJANGO_TABLES2_TABLE_ATTRS = {
-    "class": "table border table-custom",
+    "class": "table table-bordered mb-0",
     "thead": {
-        "class": "table-secondary",
+        "class": "",
     },
     "tfoot": {
         "class": "table-light fw-bold",
