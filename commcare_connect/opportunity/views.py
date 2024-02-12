@@ -66,6 +66,7 @@ from commcare_connect.opportunity.visit_import import (
     ImportException,
     bulk_update_payment_status,
     bulk_update_visit_status,
+    update_payment_accrued,
 )
 from commcare_connect.organization.decorators import org_admin_required, org_member_required
 from commcare_connect.users.models import User
@@ -547,8 +548,9 @@ def approve_visit(request, org_slug=None, pk=None):
     user_visit.status = VisitValidationStatus.approved
     user_visit.save()
     opp_id = user_visit.opportunity_id
-    access_id = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id).id
-    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity.id, pk=access_id)
+    access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id)
+    update_payment_accrued(opportunity=access.opportunity, users=[access.user])
+    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity.id, pk=access.id)
 
 
 @org_member_required
