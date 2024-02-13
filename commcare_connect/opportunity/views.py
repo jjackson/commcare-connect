@@ -36,6 +36,7 @@ from commcare_connect.opportunity.helpers import (
     get_annotated_opportunity_access_deliver_status,
 )
 from commcare_connect.opportunity.models import (
+    BlobMeta,
     CompletedModule,
     DeliverUnit,
     Opportunity,
@@ -625,3 +626,10 @@ def reject_visit(request, org_slug=None, pk=None):
     access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=user_visit.opportunity_id)
     update_payment_accrued(opportunity=access.opportunity, users=[access.user])
     return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity_id, pk=access.id)
+
+
+@org_member_required
+def fetch_attachment(self, blob_id):
+    blob_meta = BlobMeta.objects.get(blob_id)
+    attachment = storages["default"].open(blob_id)
+    return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
