@@ -7,5 +7,4 @@ import mapboxgl from 'mapbox-gl';
 window.Alpine = Alpine;
 Alpine.start();
 
-mapboxgl.accessToken = process.env.MAPBOX_TOKEN;
 window.mapboxgl = mapboxgl;

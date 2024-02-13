@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ request.org }} - {{access.display_name}}{% endblock %}
+
+{% block content %}
+    <nav class="mt-2 small" aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item">
+          <a href="{% url 'opportunity:list' org_slug=request.org.slug %}">
+            Opportunities
+          </a>
+        </li>
+        <li class="breadcrumb-item">
+          <a href="{% url 'opportunity:detail' org_slug=request.org.slug pk=access.opportunity_id %}">
+            {{ access.opportunity.name }}
+          </a>
+        </li>
+        <li class="breadcrumb-item active" aria-current="page">User Profile</li>
+      </ol>
+    </nav>
+
+  <div class="card w-50 mx-auto">
+    <div class="card-body">
+      <h1 class="display-4 mb-0 text-center">{{access.display_name}}</h1>
+      <div class="text-uppercase mb-2 text-center"><small>{{access.user.username}}</small></div>
+      <hr />
+      <div class="text-center">
+        <div class="row mb-1 pb-1">
+          <div class="col fw-bold">Phone</div>
+          <div class="col">{{access.user.phone_number}}</div>
+        </div>
+        <div class="row mb-1 pb-1">
+          <div class="col fw-bold">Learn Progress</div>
+          <div class="col">{{access.learn_progress}}%</div>
+        </div>
+        <div class="row mb-1 pb-1">
+          <div class="col fw-bold">Total Visits</div>
+          <div class="col">{{access.visit_count}}</div>
+        </div>
+        <div class="row">
+          <div class="col fw-bold">Last Visit Date</div>
+          <div class="col">{{access.last_visit_date}}</div>
+        </div>
+      </div>
+      <div id="user-visit-map" class="mt-3 rounded border" style="height: 300px;"></div>
+    </div>
+  </div>
+{% endblock content %}
+
+{% block inline_javascript %}
+{{ block.super }}
+  {{ user_visits|json_script:"userVisits" }}
+  <script type="module">
+    window.addEventListener('DOMContentLoaded', () => {
+      mapboxgl.accessToken = "{{ MAPBOX_TOKEN }}";
+      const userVisits = JSON.parse(document.getElementById('userVisits').textContent);
+      const map = new mapboxgl.Map({
+        container: 'user-visit-map',
+        style: 'mapbox://styles/mapbox/satellite-streets-v12',
+        center: [{{ lng_avg }}, {{ lat_avg }}],
+        zoom: 10,
+        attributioncontrol: false
+      });
+      userVisits.forEach(loc => {
+        new mapboxgl.Marker()
+          .setLngLat([loc.lng, loc.lat])
+          .setPopup(new mapboxgl.Popup().setHTML(`${loc.entity_name}<br />${loc.visit_date}`))
+          .addTo(map)
+      })
+    });
+  </script>
+{% endblock %}
