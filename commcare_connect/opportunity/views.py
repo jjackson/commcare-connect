@@ -496,8 +496,11 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
             dict(entity_name=user_visit.entity_name, visit_date=user_visit.visit_date.date(), lat=lat, lng=lng)
         )
     # user for centering the User visits map
-    lat_avg = reduce(lambda x, y: x + float(y["lat"]), user_visit_data, 0.0) / len(user_visit_data)
-    lng_avg = reduce(lambda x, y: x + float(y["lng"]), user_visit_data, 0.0) / len(user_visit_data)
+    lat_avg = 0.0
+    lng_avg = 0.0
+    if user_visit_data:
+        lat_avg = reduce(lambda x, y: x + float(y["lat"]), user_visit_data, 0.0) / len(user_visit_data)
+        lng_avg = reduce(lambda x, y: x + float(y["lng"]), user_visit_data, 0.0) / len(user_visit_data)
     return render(
         request,
         "opportunity/user_profile.html",
