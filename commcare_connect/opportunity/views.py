@@ -558,6 +558,6 @@ def reject_visit(request, org_slug=None, pk=None):
     user_visit = UserVisit.objects.get(pk=pk)
     user_visit.status = VisitValidationStatus.rejected
     user_visit.save()
-    opp_id = user_visit.opportunity_id
-    access_id = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id).id
-    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity.id, pk=access_id)
+    access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=user_visit.opportunity_id)
+    update_payment_accrued(opportunity=access.opportunity, users=[access.user])
+    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity_id, pk=access.id)
