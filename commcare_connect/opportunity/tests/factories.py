@@ -91,7 +91,7 @@ class UserVisitFactory(DjangoModelFactory):
     entity_name = Faker("name")
     status = Faker("enum", enum_cls=VisitValidationStatus)
     visit_date = Faker("date_time", tzinfo=timezone.utc)
-    form_json = Faker("pydict", value_types=[str, int, float, bool, dict])
+    form_json = Faker("pydict", value_types=[str, int, float, bool])
     xform_id = Faker("uuid4")
 
     class Meta:
