@@ -1,6 +1,8 @@
 import json
+from functools import reduce
 
 from celery.result import AsyncResult
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
@@ -479,6 +481,37 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
     payment = get_object_or_404(Payment, opportunity_access=opportunity_access, pk=pk)
     payment.delete()
     return redirect("opportunity:user_payments_table", org_slug=org_slug, opp_id=opp_id, pk=access_id)
+
+
+@org_member_required
+def user_profile(request, org_slug=None, opp_id=None, pk=None):
+    access = get_object_or_404(OpportunityAccess, pk=pk, accepted=True)
+    user_visits = UserVisit.objects.filter(user=access.user, opportunity=access.opportunity)
+    user_visit_data = []
+    for user_visit in user_visits:
+        if not user_visit.location:
+            continue
+        lat, lng, elevation, precision = user_visit.location.split(" ")
+        user_visit_data.append(
+            dict(entity_name=user_visit.entity_name, visit_date=user_visit.visit_date.date(), lat=lat, lng=lng)
+        )
+    # user for centering the User visits map
+    lat_avg = 0.0
+    lng_avg = 0.0
+    if user_visit_data:
+        lat_avg = reduce(lambda x, y: x + float(y["lat"]), user_visit_data, 0.0) / len(user_visit_data)
+        lng_avg = reduce(lambda x, y: x + float(y["lng"]), user_visit_data, 0.0) / len(user_visit_data)
+    return render(
+        request,
+        "opportunity/user_profile.html",
+        context=dict(
+            access=access,
+            user_visits=user_visit_data,
+            lat_avg=lat_avg,
+            lng_avg=lng_avg,
+            MAPBOX_TOKEN=settings.MAPBOX_TOKEN,
+        ),
+    )
 
 
 @org_admin_required
