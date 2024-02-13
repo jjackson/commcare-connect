@@ -92,6 +92,7 @@
 {{ block.super }}
 <script type="text/javascript">
   window.addEventListener('DOMContentLoaded', function() {
+      mapboxgl.accessToken = "{{ MAPBOX_TOKEN }}";
       const map = new mapboxgl.Map({
           container: 'user-visit-map',
           style: 'mapbox://styles/mapbox/satellite-streets-v12',
