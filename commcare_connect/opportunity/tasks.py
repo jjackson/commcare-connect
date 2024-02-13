@@ -1,8 +1,11 @@
 import datetime
 
+import httpx
 from allauth.utils import build_absolute_uri
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.db import IntegrityError, transaction
 from django.urls import reverse
 from django.utils.timezone import now
 from django.utils.translation import gettext
@@ -19,6 +22,7 @@ from commcare_connect.opportunity.export import (
 )
 from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import (
+    BlobMeta,
     CompletedModule,
     DeliverUnit,
     LearnModule,
@@ -227,3 +231,31 @@ def send_sms_task(user_ids: list[int], body: str):
     user_phone_numbers = User.objects.filter(id__in=user_ids).values_list("phone_number", flat=True)
     for phone_number in user_phone_numbers:
         send_sms(phone_number, body)
+
+
+@celery_app.task()
+def download_user_visit_attachments(user_visit_id: id):
+    user_visit = UserVisit.objects.get(id=user_visit_id)
+    api_key = user_visit.opportunity.api_key
+    blobs = user_visit.form_json.get("attachments", {})
+    domain = user_visit.opportunity.deliver_app.cc_domain
+    form_id = user_visit.xform_id
+    for name, blob in blobs.items():
+        if name == "form.xml":
+            continue
+        url = f"{settings.COMMCARE_HQ_URL}/a/{domain}/api/form/attachment/{user_visit.xform_id}/{name}"
+
+        blob_meta = BlobMeta(
+            name=name, parent_id=form_id, content_length=blob["length"], content_type=blob["content_type"]
+        )
+        with transaction.atomic():
+            try:
+                blob_meta.save()
+            except IntegrityError:
+                # attachment already exists
+                continue
+            response = httpx.get(
+                url,
+                headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"},
+            )
+            default_storage.save(blob_meta.blob_id, ContentFile(response.content, name))

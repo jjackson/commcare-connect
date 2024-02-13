@@ -25,6 +25,14 @@ class CommCareAppFactory(DjangoModelFactory):
         model = "opportunity.CommCareApp"
 
 
+class HQApiKeyFactory(DjangoModelFactory):
+    api_key = Faker("uuid4")
+    user = SubFactory("commcare_connect.users.tests.factories.UserFactory")
+
+    class Meta:
+        model = "opportunity.HQApiKey"
+
+
 class OpportunityFactory(DjangoModelFactory):
     organization = SubFactory(OrganizationFactory)
     name = Faker("name")
@@ -38,6 +46,7 @@ class OpportunityFactory(DjangoModelFactory):
     end_date = Faker("future_date")
     budget_per_visit = Faker("pyint", min_value=1, max_value=10)
     total_budget = Faker("pyint", min_value=1000, max_value=10000)
+    api_key = SubFactory(HQApiKeyFactory)
 
     class Meta:
         model = "opportunity.Opportunity"
@@ -82,7 +91,7 @@ class UserVisitFactory(DjangoModelFactory):
     entity_name = Faker("name")
     status = Faker("enum", enum_cls=VisitValidationStatus)
     visit_date = Faker("date_time", tzinfo=timezone.utc)
-    form_json = Faker("pydict", value_types=[str, int, float, bool])
+    form_json = Faker("pydict", value_types=[str, int, float, bool, dict])
     xform_id = Faker("uuid4")
 
     class Meta:

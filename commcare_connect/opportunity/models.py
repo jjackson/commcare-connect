@@ -285,3 +285,20 @@ class OpportunityClaim(models.Model):
     max_payments = models.IntegerField()
     end_date = models.DateField()
     date_claimed = models.DateField(auto_now_add=True)
+
+
+class BlobMeta(models.Model):
+    name = models.CharField(max_length=255)
+    parent_id = models.CharField(
+        max_length=255,
+        help_text="Parent primary key or unique identifier",
+    )
+    blob_id = models.CharField(max_length=255, default=uuid4().hex)
+    content_length = models.IntegerField()
+    content_type = models.CharField(max_length=255, null=True)
+
+    class Meta:
+        unique_together = [
+            ("parent_id", "name"),
+        ]
+        indexes = [models.Index(fields=["blob_id"])]
