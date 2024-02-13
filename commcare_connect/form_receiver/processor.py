@@ -185,7 +185,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
                 continue
             lat, lon, *_ = visit["location"].split(" ")
             dist = distance((lat, lon), (cur_lat, cur_lon))
-            if dist <= 10:
+            if dist.m <= 10:
                 flags.append(["location", "Visit location is too close to another visit"])
                 break
     if flags:
