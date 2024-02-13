@@ -601,6 +601,7 @@ def visit_verification(request, org_slug=None, pk=None):
             "other_forms": json.dumps(other_forms[:5]),
             "visit_lat": lat,
             "visit_lon": lon,
+            "MAPBOX_TOKEN": settings.MAPBOX_TOKEN,
         },
     )
 
