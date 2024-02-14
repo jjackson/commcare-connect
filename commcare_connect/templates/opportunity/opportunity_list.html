@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "opportunity/base.html" %}
 {% load static %}
 
 {% block title %}{{ request.org }} - Opportunities{% endblock %}
@@ -32,7 +32,7 @@
               {% if opportunity.is_active %}
                 <span class="badge bg-success rounded-pill">Active</span>
               {% else %}
-                <span class="badge bg-secondary rounded-pill">Inactive</span>
+                <span class="badge bg-secondary text-white rounded-pill">Inactive</span>
               {% endif %}
             </td>
             <td width="300">

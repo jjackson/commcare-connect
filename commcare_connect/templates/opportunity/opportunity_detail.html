@@ -1,21 +1,16 @@
-{% extends "base.html" %}
+{% extends "opportunity/base.html" %}
 {% load i18n %}
 {% load django_tables2 %}
 {% load crispy_forms_tags %}
 
 {% block title %}{{ request.org }} - {{ opportunity.name }}{% endblock %}
 
+{% block breadcrumbs_inner %}
+  {{ block.super }}
+  <li class="breadcrumb-item active" aria-current="page">{{ object.name }}</li>
+{% endblock %}
+
 {% block content %}
-  <nav class="mt-2 small" aria-label="breadcrumb">
-    <ol class="breadcrumb bg-white fw-bold">
-      <li class="breadcrumb-item">
-        <a href="{% url 'opportunity:list' org_slug=request.org.slug %}">
-          Opportunities
-        </a>
-      </li>
-      <li class="breadcrumb-item active" aria-current="page">{{ object.name }}</li>
-    </ol>
-  </nav>
   <div class="row align-items-center">
     <div class="col-6">
       <h1 class="mb-0">{{ object.name }}</h1>

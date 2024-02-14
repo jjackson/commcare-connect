@@ -1,24 +1,19 @@
-{% extends "base.html" %}
+{% extends "opportunity/base.html" %}
 {% load static %}
 
 {% block title %}{{ request.org }} - Opportunities{% endblock %}
 
+{% block breadcrumbs_inner %}
+  {{ block.super }}
+  <li class="breadcrumb-item">
+    <a href="{% url 'opportunity:detail' org_slug=request.org.slug pk=opportunity.pk %}">
+      {{ opportunity.name }}
+    </a>
+  </li>
+  <li class="breadcrumb-item active" aria-current="page">User Payments</li>
+{% endblock %}
+
 {% block content %}
-  <nav class="mt-2 small" aria-label="breadcrumb">
-    <ol class="breadcrumb bg-white fw-bold">
-      <li class="breadcrumb-item">
-        <a href="{% url 'opportunity:list' org_slug=request.org.slug %}">
-          Opportunities
-        </a>
-      </li>
-      <li class="breadcrumb-item">
-        <a href="{% url 'opportunity:detail' org_slug=request.org.slug pk=opportunity.pk %}">
-          {{ opportunity.name }}
-        </a>
-      </li>
-      <li class="breadcrumb-item active" aria-current="page">User Payments</li>
-    </ol>
-  </nav>
   <h2 class="mb-2">Payments for User {{ access.display_name }}</h2>
   <hr>
   {% if latest_payment %}

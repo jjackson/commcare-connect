@@ -1,4 +1,9 @@
 @import 'custom_bootstrap_vars';
+
+//bootswatch color customization
+$yellow: #e2872c;
+$dropdown-link-color: #373737;
+
 @import '~bootswatch/dist/flatly/variables';
 @import '~bootstrap/scss/bootstrap';
 @import '~bootswatch/dist/lumen/bootswatch';

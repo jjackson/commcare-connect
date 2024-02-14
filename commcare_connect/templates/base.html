@@ -79,7 +79,7 @@
                    aria-expanded="false">
                   {{ request.org.name }}
                 </a>
-                <ul class="dropdown-menu dropdown-menu-end">
+                <ul class="dropdown-menu dropdown-menu-end bg-light">
                   {% for membership in request.user.memberships.all %}
                     <li>
                       <a
@@ -120,6 +120,8 @@
       </div>
     {% endfor %}
   {% endif %}
+
+  {% block breadcrumbs %}{% endblock %}
 
   {% block content %}
     <p>Use this document as a way to quick start any new project.</p>
