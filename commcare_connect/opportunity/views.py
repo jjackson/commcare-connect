@@ -1,4 +1,8 @@
+import json
+from functools import reduce
+
 from celery.result import AsyncResult
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
@@ -6,6 +10,7 @@ from django.db.models import F
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 from django.utils.timezone import now
@@ -13,7 +18,9 @@ from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
+from geopy import distance
 
+from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     DateRanges,
@@ -21,6 +28,7 @@ from commcare_connect.opportunity.forms import (
     OpportunityCreationForm,
     PaymentExportForm,
     PaymentUnitForm,
+    SendMessageMobileUsersForm,
     VisitExportForm,
 )
 from commcare_connect.opportunity.helpers import (
@@ -28,16 +36,19 @@ from commcare_connect.opportunity.helpers import (
     get_annotated_opportunity_access_deliver_status,
 )
 from commcare_connect.opportunity.models import (
+    BlobMeta,
     DeliverUnit,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
     Payment,
     PaymentUnit,
+    UserVisit,
+    VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
     DeliverStatusTable,
-    OpportunityAccessTable,
+    LearnStatusTable,
     OpportunityPaymentTable,
     PaymentUnitTable,
     UserPaymentsTable,
@@ -51,14 +62,18 @@ from commcare_connect.opportunity.tasks import (
     generate_payment_export,
     generate_user_status_export,
     generate_visit_export,
+    send_push_notification_task,
+    send_sms_task,
 )
 from commcare_connect.opportunity.visit_import import (
     ImportException,
     bulk_update_payment_status,
     bulk_update_visit_status,
+    update_payment_accrued,
 )
-from commcare_connect.organization.decorators import org_member_required
-from commcare_connect.utils.commcarehq_api import get_applications_for_user
+from commcare_connect.organization.decorators import org_admin_required, org_member_required
+from commcare_connect.users.models import User
+from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -83,7 +98,7 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["applications"] = get_applications_for_user(self.request.user)
+        kwargs["domains"] = get_domains_for_user(self.request.user)
         kwargs["user"] = self.request.user
         kwargs["org_slug"] = self.request.org.slug
         return kwargs
@@ -132,10 +147,10 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
         return context
 
 
-class OpportunityUserTableView(OrganizationUserMixin, SingleTableView):
+class OpportunityLearnStatusTableView(OrganizationUserMixin, SingleTableView):
     model = OpportunityAccess
     paginate_by = 25
-    table_class = OpportunityAccessTable
+    table_class = LearnStatusTable
     template_name = "tables/single_table.html"
 
     def get_queryset(self):
@@ -164,12 +179,19 @@ class UserPaymentsTableView(OrganizationUserMixin, SingleTableView):
     table_class = UserPaymentsTable
     template_name = "opportunity/opportunity_user_payments_list.html"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["latest_payment"] = self.object_list.all().first()
+        context["access"] = self.access
+        context["opportunity"] = self.opportunity
+        return context
+
     def get_queryset(self):
         opportunity_id = self.kwargs["opp_id"]
-        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        self.opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
         access_id = self.kwargs["pk"]
-        access = get_object_or_404(OpportunityAccess, opportunity=opportunity, pk=access_id)
-        return Payment.objects.filter(opportunity_access=access).order_by("-date_paid")
+        self.access = get_object_or_404(OpportunityAccess, opportunity=self.opportunity, pk=access_id)
+        return Payment.objects.filter(opportunity_access=self.access).order_by("-date_paid")
 
 
 class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
@@ -441,3 +463,164 @@ def user_visits_list(request, org_slug=None, opp_id=None, pk=None):
         "opportunity/user_visits_list.html",
         context=dict(opportunity=opportunity, table=user_visits_table, user_name=opportunity_access.display_name),
     )
+
+
+@org_member_required
+@require_POST
+def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, pk=opp_id)
+    opportunity_access = get_object_or_404(OpportunityAccess, pk=access_id, opportunity=opportunity)
+    payment = get_object_or_404(Payment, opportunity_access=opportunity_access, pk=pk)
+    payment.delete()
+    return redirect("opportunity:user_payments_table", org_slug=org_slug, opp_id=opp_id, pk=access_id)
+
+
+@org_member_required
+def user_profile(request, org_slug=None, opp_id=None, pk=None):
+    access = get_object_or_404(OpportunityAccess, pk=pk, accepted=True)
+    user_visits = UserVisit.objects.filter(user=access.user, opportunity=access.opportunity)
+    user_visit_data = []
+    for user_visit in user_visits:
+        if not user_visit.location:
+            continue
+        lat, lng, elevation, precision = user_visit.location.split(" ")
+        user_visit_data.append(
+            dict(entity_name=user_visit.entity_name, visit_date=user_visit.visit_date.date(), lat=lat, lng=lng)
+        )
+    # user for centering the User visits map
+    lat_avg = 0.0
+    lng_avg = 0.0
+    if user_visit_data:
+        lat_avg = reduce(lambda x, y: x + float(y["lat"]), user_visit_data, 0.0) / len(user_visit_data)
+        lng_avg = reduce(lambda x, y: x + float(y["lng"]), user_visit_data, 0.0) / len(user_visit_data)
+    return render(
+        request,
+        "opportunity/user_profile.html",
+        context=dict(
+            access=access,
+            user_visits=user_visit_data,
+            lat_avg=lat_avg,
+            lng_avg=lng_avg,
+            MAPBOX_TOKEN=settings.MAPBOX_TOKEN,
+        ),
+    )
+
+
+@org_admin_required
+def send_message_mobile_users(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, pk=pk, organization=request.org)
+    user_ids = OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True).values_list(
+        "user_id", flat=True
+    )
+    users = User.objects.filter(pk__in=user_ids)
+    form = SendMessageMobileUsersForm(users=users, data=request.POST or None)
+
+    if form.is_valid():
+        selected_user_ids = form.cleaned_data["selected_users"]
+        title = form.cleaned_data["title"]
+        body = form.cleaned_data["body"]
+        message_type = form.cleaned_data["message_type"]
+        if "notification" in message_type:
+            send_push_notification_task.delay(selected_user_ids, title, body)
+        if "sms" in message_type:
+            send_sms_task.delay(selected_user_ids, body)
+        return redirect("opportunity:detail", org_slug=request.org.slug, pk=pk)
+
+    return render(
+        request,
+        "opportunity/send_message.html",
+        context=dict(
+            title=f"{request.org.slug} - {opportunity.name}",
+            form_title="Send Message",
+            form=form,
+            users=users,
+            user_ids=list(user_ids),
+        ),
+    )
+
+
+# used for loading learn_app and deliver_app dropdowns
+@org_member_required
+def get_application(request, org_slug=None):
+    domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
+    applications = get_applications_for_user_by_domain(request.user, domain)
+    options = []
+    for app in applications:
+        value = json.dumps(app)
+        name = app["name"]
+        options.append(format_html("<option value='{}'>{}</option>", value, name))
+    return HttpResponse("\n".join(options))
+
+
+@org_member_required
+def visit_verification(request, org_slug=None, pk=None):
+    user_visit = get_object_or_404(UserVisit, pk=pk)
+    serializer = XFormSerializer(data=user_visit.form_json)
+    access_id = OpportunityAccess.objects.get(user=user_visit.user, opportunity=user_visit.opportunity).id
+    serializer.is_valid()
+    xform = serializer.save()
+    user_forms = []
+    other_forms = []
+    lat = None
+    lon = None
+    if user_visit.location:
+        locations = (
+            UserVisit.objects.filter(opportunity=user_visit.opportunity)
+            .values("entity_id", "location", "user_id", "entity_name")
+            .exclude(pk=pk)
+        )
+        lat, lon, *_ = user_visit.location.split(" ")
+        for loc in locations:
+            if loc.get("location") is None:
+                continue
+            other_lat, other_lon, *_ = loc["location"].split(" ")
+            dist = distance.distance((lat, lon), (other_lat, other_lon))
+            if dist.m <= 250:
+                if user_visit.user_id == loc["user_id"]:
+                    user_forms.append((loc, dist.m, other_lat, other_lon))
+                else:
+                    other_forms.append((loc, dist.m, other_lat, other_lon))
+        user_forms.sort(key=lambda x: x[1])
+        other_forms.sort(key=lambda x: x[1])
+    return render(
+        request,
+        "opportunity/visit_verification.html",
+        context={
+            "visit": user_visit,
+            "xform": xform,
+            "access_id": access_id,
+            "user_forms": json.dumps(user_forms[:5]),
+            "other_forms": json.dumps(other_forms[:5]),
+            "visit_lat": lat,
+            "visit_lon": lon,
+            "MAPBOX_TOKEN": settings.MAPBOX_TOKEN,
+        },
+    )
+
+
+@org_member_required
+def approve_visit(request, org_slug=None, pk=None):
+    user_visit = UserVisit.objects.get(pk=pk)
+    user_visit.status = VisitValidationStatus.approved
+    user_visit.save()
+    opp_id = user_visit.opportunity_id
+    access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id)
+    update_payment_accrued(opportunity=access.opportunity, users=[access.user])
+    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity.id, pk=access.id)
+
+
+@org_member_required
+def reject_visit(request, org_slug=None, pk=None):
+    user_visit = UserVisit.objects.get(pk=pk)
+    user_visit.status = VisitValidationStatus.rejected
+    user_visit.save()
+    access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=user_visit.opportunity_id)
+    update_payment_accrued(opportunity=access.opportunity, users=[access.user])
+    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity_id, pk=access.id)
+
+
+@org_member_required
+def fetch_attachment(self, org_slug, blob_id):
+    blob_meta = BlobMeta.objects.get(blob_id=blob_id)
+    attachment = storages["default"].open(blob_id)
+    return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)

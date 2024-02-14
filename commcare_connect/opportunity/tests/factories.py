@@ -1,24 +1,16 @@
 from datetime import timezone
 
-from factory import CREATE_STRATEGY, DictFactory, Faker, SelfAttribute, SubFactory
+from factory import DictFactory, Faker, SelfAttribute, SubFactory
 from factory.django import DjangoModelFactory
 
 from commcare_connect.opportunity.models import VisitValidationStatus
 from commcare_connect.users.tests.factories import OrganizationFactory
 
 
-class ApplicationFormsFactory(DictFactory):
-    id = Faker("pystr")
-    name = Faker("name")
-    xmlns = Faker("url")
-    module = Faker("pystr")
-
-
 class ApplicationFactory(DictFactory):
     id = Faker("pystr")
     name = Faker("name")
     domain = Faker("name")
-    forms = ApplicationFormsFactory.generate_batch(CREATE_STRATEGY, 5)
 
 
 class CommCareAppFactory(DjangoModelFactory):
@@ -31,6 +23,14 @@ class CommCareAppFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.CommCareApp"
+
+
+class HQApiKeyFactory(DjangoModelFactory):
+    api_key = Faker("uuid4")
+    user = SubFactory("commcare_connect.users.tests.factories.UserFactory")
+
+    class Meta:
+        model = "opportunity.HQApiKey"
 
 
 class OpportunityFactory(DjangoModelFactory):
@@ -46,6 +46,7 @@ class OpportunityFactory(DjangoModelFactory):
     end_date = Faker("future_date")
     budget_per_visit = Faker("pyint", min_value=1, max_value=10)
     total_budget = Faker("pyint", min_value=1000, max_value=10000)
+    api_key = SubFactory(HQApiKeyFactory)
 
     class Meta:
         model = "opportunity.Opportunity"

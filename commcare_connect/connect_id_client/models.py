@@ -12,6 +12,12 @@ class ConnectIdUser:
         return f"{self.name} ({self.username})"
 
 
+@dataclasses.dataclass
+class DemoUser:
+    token: str
+    phone_number: str
+
+
 class MessageStatus(StrEnum):
     success = "success"
     error = "error"

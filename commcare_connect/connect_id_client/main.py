@@ -2,7 +2,13 @@ import httpx
 from django.conf import settings
 from httpx import BasicAuth, Response
 
-from commcare_connect.connect_id_client.models import ConnectIdUser, Message, MessagingBulkResponse, MessagingResponse
+from commcare_connect.connect_id_client.models import (
+    ConnectIdUser,
+    DemoUser,
+    Message,
+    MessagingBulkResponse,
+    MessagingResponse,
+)
 
 GET = "GET"
 POST = "POST"
@@ -12,6 +18,12 @@ def fetch_users(phone_number_list: list[str]) -> list[ConnectIdUser]:
     response = _make_request(GET, "/users/fetch_users", params={"phone_numbers": phone_number_list})
     data = response.json()
     return [ConnectIdUser(**user_dict) for user_dict in data["found_users"]]
+
+
+def fetch_demo_user_tokens() -> list[DemoUser]:
+    response = _make_request(GET, "/users/demo_users")
+    data = response.json()
+    return [DemoUser(**user_dict) for user_dict in data["demo_users"]]
 
 
 def send_message(message: Message):

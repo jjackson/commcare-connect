@@ -94,10 +94,10 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                     if visit.status == VisitValidationStatus.rejected and reason:
                         visit.reason = reason
                     to_update.append(visit)
+                user_ids.add(visit.user_id)
 
             UserVisit.objects.bulk_update(to_update, fields=["status", "reason"])
             missing_visits |= set(visit_batch) - seen_visits
-            user_ids.add(visit.user_id)
         update_payment_accrued(opportunity, users=user_ids)
 
     return VisitImportStatus(seen_visits, missing_visits)

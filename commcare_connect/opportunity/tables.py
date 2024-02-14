@@ -1,10 +1,18 @@
+from django.urls import reverse
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
 
-from commcare_connect.opportunity.models import OpportunityAccess, Payment, PaymentUnit, UserVisit
+from commcare_connect.opportunity.models import (
+    OpportunityAccess,
+    Payment,
+    PaymentUnit,
+    UserVisit,
+    VisitValidationStatus,
+)
 
 
-class OpportunityAccessTable(tables.Table):
+class LearnStatusTable(tables.Table):
     display_name = columns.Column(verbose_name="Name")
     learn_progress = columns.Column(verbose_name="Modules Completed")
     details = columns.LinkColumn(
@@ -16,9 +24,17 @@ class OpportunityAccessTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "user__username", "learn_progress")
+        fields = ("display_name", "learn_progress")
+        sequence = ("display_name", "learn_progress")
         orderable = False
         empty_text = "No learn progress for users."
+
+
+def show_warning(record):
+    if record.status not in (VisitValidationStatus.approved, VisitValidationStatus.rejected):
+        if record.flagged:
+            return "table-warning"
+    return ""
 
 
 class UserVisitTable(tables.Table):
@@ -34,6 +50,18 @@ class UserVisitTable(tables.Table):
     deliver_unit = columns.Column("Unit Name", accessor="deliver_unit__name")
     entity_id = columns.Column("Entity ID", accessor="entity_id", visible=False)
     entity_name = columns.Column("Entity Name", accessor="entity_name")
+    flag_reason = columns.Column("Flags", accessor="flag_reason", empty_values=({}, None))
+    details = columns.LinkColumn(
+        "opportunity:visit_verification",
+        verbose_name="",
+        text="Review",
+        attrs={"a": {"class": "btn btn-sm btn-primary"}},
+        args=[utils.A("opportunity__organization__slug"), utils.A("pk")],
+    )
+
+    def render_flag_reason(self, value):
+        short = [flag[0] for flag in value.get("flags")]
+        return ", ".join(short)
 
     class Meta:
         model = UserVisit
@@ -49,9 +77,12 @@ class UserVisitTable(tables.Table):
         )
         empty_text = "No forms."
         orderable = False
+        row_attrs = {"class": show_warning}
 
 
 class OpportunityPaymentTable(tables.Table):
+    display_name = columns.Column(verbose_name="Name")
+    username = columns.Column(accessor="user.username", visible=False)
     view_payments = columns.LinkColumn(
         "opportunity:user_payments_table",
         verbose_name="",
@@ -61,7 +92,7 @@ class OpportunityPaymentTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user__name", "user__username", "payment_accrued", "total_paid")
+        fields = ("display_name", "username", "payment_accrued", "total_paid")
         orderable = False
         empty_text = "No user have payments accrued yet."
 
@@ -86,6 +117,7 @@ class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
 
 class UserStatusTable(tables.Table):
     display_name = columns.Column(verbose_name="Name", footer="Total")
+    username = columns.Column(accessor="user.username", visible=False)
     accepted = BooleanAggregateColumn(verbose_name="Accepted")
     claimed = AggregateColumn(verbose_name="Job Claimed", accessor="job_claimed")
     started_learning = AggregateColumn(verbose_name="Started Learning", accessor="date_learn_started")
@@ -93,13 +125,14 @@ class UserStatusTable(tables.Table):
     passed_assessment = BooleanAggregateColumn(verbose_name="Passed Assessment")
     started_delivery = AggregateColumn(verbose_name="Started Delivery", accessor="date_deliver_started")
     last_visit_date = columns.Column(accessor="last_visit_date_d")
+    view_profile = columns.Column("View Profile", empty_values=())
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "user__username", "accepted", "last_visit_date")
+        fields = ("display_name", "accepted", "last_visit_date")
         sequence = (
             "display_name",
-            "user__username",
+            "username",
             "accepted",
             "started_learning",
             "completed_learning",
@@ -110,6 +143,31 @@ class UserStatusTable(tables.Table):
         )
         empty_text = "No users invited for this opportunity."
         orderable = False
+
+    def render_view_profile(self, record):
+        if not record.accepted:
+            return "---"
+        url = reverse(
+            "opportunity:user_profile",
+            kwargs={
+                "org_slug": record.opportunity.organization.slug,
+                "opp_id": record.opportunity_id,
+                "pk": record.id,
+            },
+        )
+        return format_html('<a href="{}">View Profile</a>', url)
+
+    def render_started_learning(self, record, value):
+        return date_with_time_popup(self, value)
+
+    def render_completed_learning(self, record, value):
+        return date_with_time_popup(self, value)
+
+    def render_started_delivery(self, record, value):
+        return date_with_time_popup(self, value)
+
+    def render_last_visit_date(self, record, value):
+        return date_with_time_popup(self, value)
 
 
 class PaymentUnitTable(tables.Table):
@@ -133,7 +191,8 @@ class PaymentUnitTable(tables.Table):
 
 
 class DeliverStatusTable(tables.Table):
-    name = columns.Column("Name of the User", accessor="display_name")
+    display_name = columns.Column("Name of the User")
+    username = columns.Column(accessor="user.username", visible=False)
     visits_completed = columns.Column("Completed Visits")
     visits_approved = columns.Column("Approved Visits")
     visits_pending = columns.Column("Pending Visits")
@@ -149,11 +208,11 @@ class DeliverStatusTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user__username", "last_visit_date")
+        fields = ("last_visit_date",)
         orderable = False
         sequence = (
-            "name",
-            "user__username",
+            "display_name",
+            "username",
             "visits_completed",
             "visits_approved",
             "visits_pending",
@@ -161,5 +220,27 @@ class DeliverStatusTable(tables.Table):
             "visits_over_limit",
             "visits_duplicate",
             "last_visit_date",
-            "details",
         )
+
+    def render_last_visit_date(self, record, value):
+        return date_with_time_popup(self, value)
+
+
+def popup_html(value, popup_title, popup_direction="top", popup_class="", popup_attributes=""):
+    return format_html(
+        "<span class='{}' data-bs-toggle='tooltip' data-bs-placement='{}' data-bs-title='{}' {}>{}</span>",
+        popup_class,
+        popup_direction,
+        popup_title,
+        popup_attributes,
+        value,
+    )
+
+
+def date_with_time_popup(table, date):
+    if table.exclude and "date_popup" in table.exclude:
+        return date
+    return popup_html(
+        date.strftime("%d %b, %Y"),
+        date.strftime("%d %b %Y, %I:%M%p"),
+    )
