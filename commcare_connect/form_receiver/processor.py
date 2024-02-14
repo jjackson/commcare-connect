@@ -2,6 +2,7 @@ import datetime
 
 from django.db.models import Count, Q
 from django.utils.timezone import now
+from geopy.distance import distance
 from jsonpath_ng import JSONPathError
 from jsonpath_ng.ext import parse
 
@@ -19,6 +20,7 @@ from commcare_connect.opportunity.models import (
     UserVisit,
     VisitValidationStatus,
 )
+from commcare_connect.opportunity.tasks import download_user_visit_attachments
 from commcare_connect.users.models import User
 
 LEARN_MODULE_JSONPATH = parse("$..module")
@@ -160,6 +162,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         app_build_id=xform.build_id,
         app_build_version=xform.metadata.app_build_version,
         form_json=xform.raw_form,
+        location=xform.metadata.location,
     )
     if (
         counts["daily"] >= opportunity.daily_max_visits_per_user
@@ -167,9 +170,30 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         or datetime.date.today() > claim.end_date
     ):
         user_visit.status = VisitValidationStatus.over_limit
+    user_visits = UserVisit.objects.filter(opportunity=opportunity).values("location")
+    flags = []
     if counts["entity"] > 0:
         user_visit.status = VisitValidationStatus.duplicate
+        flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
+    if xform.metadata.duration < datetime.timedelta(seconds=60):
+        flags.append(["duration", "The form was completed too quickly."])
+    if xform.metadata.location is None:
+        flags.append(["gps", "GPS data is missing"])
+    else:
+        cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
+        for visit in user_visits:
+            if visit.get("location") is None:
+                continue
+            lat, lon, *_ = visit["location"].split(" ")
+            dist = distance((lat, lon), (cur_lat, cur_lon))
+            if dist.m <= 10:
+                flags.append(["location", "Visit location is too close to another visit"])
+                break
+    if flags:
+        user_visit.flagged = True
+        user_visit.flag_reason = {"flags": flags}
     user_visit.save()
+    download_user_visit_attachments.delay(user_visit.id)
 
 
 def get_or_create_deliver_unit(app, unit_data):

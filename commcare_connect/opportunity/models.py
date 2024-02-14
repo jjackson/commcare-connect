@@ -270,14 +270,21 @@ class UserVisit(XFormBaseModel):
     )
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE, null=True)
     deliver_unit = models.ForeignKey(DeliverUnit, on_delete=models.PROTECT)
-    entity_id = models.CharField(max_length=64, null=True, blank=True)
+    entity_id = models.CharField(max_length=255, null=True, blank=True)
     entity_name = models.CharField(max_length=255, null=True, blank=True)
     visit_date = models.DateTimeField()
     status = models.CharField(
         max_length=50, choices=VisitValidationStatus.choices, default=VisitValidationStatus.pending
     )
     form_json = models.JSONField()
-    reason = models.CharField(max_length=300, null=True)
+    reason = models.CharField(max_length=300, null=True, blank=True)
+    location = models.CharField(null=True)
+    flagged = models.BooleanField(default=False)
+    flag_reason = models.JSONField(null=True, blank=True)
+
+    @property
+    def images(self):
+        return BlobMeta.objects.filter(parent_id=self.xform_id, content_type__startswith="image/")
 
 
 class OpportunityClaim(models.Model):
@@ -285,3 +292,20 @@ class OpportunityClaim(models.Model):
     max_payments = models.IntegerField()
     end_date = models.DateField()
     date_claimed = models.DateField(auto_now_add=True)
+
+
+class BlobMeta(models.Model):
+    name = models.CharField(max_length=255)
+    parent_id = models.CharField(
+        max_length=255,
+        help_text="Parent primary key or unique identifier",
+    )
+    blob_id = models.CharField(max_length=255, default=uuid4)
+    content_length = models.IntegerField()
+    content_type = models.CharField(max_length=255, null=True)
+
+    class Meta:
+        unique_together = [
+            ("parent_id", "name"),
+        ]
+        indexes = [models.Index(fields=["blob_id"])]

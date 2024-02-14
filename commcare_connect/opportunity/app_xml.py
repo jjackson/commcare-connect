@@ -51,7 +51,7 @@ def get_form_xml_for_app(domain: str, app_id: str) -> list[str]:
             "app_id": app_id,
             "latest": latest,
         }
-        response = httpx.get(ccz_url, params=params)
+        response = httpx.get(ccz_url, params=params, timeout=30)
         if not response.is_success:
             continue
 
