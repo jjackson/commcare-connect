@@ -629,7 +629,7 @@ def reject_visit(request, org_slug=None, pk=None):
 
 
 @org_member_required
-def fetch_attachment(self, blob_id):
-    blob_meta = BlobMeta.objects.get(blob_id)
+def fetch_attachment(self, org_slug, blob_id):
+    blob_meta = BlobMeta.objects.get(blob_id=blob_id)
     attachment = storages["default"].open(blob_id)
     return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
