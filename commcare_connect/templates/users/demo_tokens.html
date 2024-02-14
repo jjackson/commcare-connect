@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+
+{% block title %}Demo Tokens{% endblock %}
+
+{% block content %}
+<div class="container">
+  <ul>
+  {% for user in demo_users %}
+  <li>{{ user.phone_number }} - {{ user.token }}</li>
+  {% endfor %}
+  </ul>
+</div>
+{% endblock content %}

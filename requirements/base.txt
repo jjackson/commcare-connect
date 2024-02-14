@@ -125,6 +125,10 @@ frozenlist==1.4.0
     # via
     #   aiohttp
     #   aiosignal
+geographiclib==2.0
+    # via geopy
+geopy==2.4.1
+    # via -r requirements/base.in
 h11==0.14.0
     # via httpcore
 h2==4.1.0

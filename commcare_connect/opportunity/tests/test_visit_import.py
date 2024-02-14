@@ -67,28 +67,33 @@ def test_bulk_update_reason(opportunity: Opportunity, mobile_user: User):
 
 
 @pytest.mark.django_db
-def test_payment_accrued(opportunity: Opportunity, mobile_user: User):
-    access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
+def test_payment_accrued(opportunity: Opportunity):
     payment_units = PaymentUnitFactory.create_batch(2, opportunity=opportunity)
     deliver_units = []
     for payment_unit in payment_units:
         deliver_units += DeliverUnitFactory.create_batch(2, payment_unit=payment_unit, app=opportunity.deliver_app)
 
-    visits = []
-    for deliver_unit in deliver_units:
-        visits.append(
-            UserVisitFactory(
-                opportunity=opportunity,
-                user=mobile_user,
-                deliver_unit=deliver_unit,
-                entity_id=deliver_unit.payment_unit.name,
-                status=VisitValidationStatus.approved.value,
-                opportunity_access=access,
+    mobile_users = MobileUserFactory.create_batch(5)
+    access_objects = []
+    for mobile_user in mobile_users:
+        access = OpportunityAccessFactory(user=mobile_user, opportunity=opportunity, accepted=True)
+        access_objects.append(access)
+        visits = []
+        for deliver_unit in deliver_units:
+            visits.append(
+                UserVisitFactory(
+                    opportunity=opportunity,
+                    user=mobile_user,
+                    deliver_unit=deliver_unit,
+                    entity_id=deliver_unit.payment_unit.name,
+                    status=VisitValidationStatus.approved.value,
+                    opportunity_access=access,
+                )
             )
-        )
-    update_payment_accrued(opportunity, {mobile_user.id})
-    access.refresh_from_db()
-    assert access.payment_accrued == sum(payment_unit.amount for payment_unit in payment_units)
+    update_payment_accrued(opportunity, {mobile_user.id for mobile_user in mobile_users})
+    for access in access_objects:
+        access.refresh_from_db()
+        assert access.payment_accrued == sum(payment_unit.amount for payment_unit in payment_units)
 
 
 @pytest.mark.django_db
