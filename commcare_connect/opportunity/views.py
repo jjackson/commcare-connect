@@ -581,6 +581,8 @@ def visit_verification(request, org_slug=None, pk=None):
         )
         lat, lon, *_ = user_visit.location.split(" ")
         for loc in locations:
+            if loc.get("location") is None:
+                continue
             other_lat, other_lon, *_ = loc["location"].split(" ")
             dist = distance.distance((lat, lon), (other_lat, other_lon))
             if dist.m <= 250:
