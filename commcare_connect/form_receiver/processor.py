@@ -20,6 +20,7 @@ from commcare_connect.opportunity.models import (
     UserVisit,
     VisitValidationStatus,
 )
+from commcare_connect.opportunity.tasks import download_user_visit_attachments
 from commcare_connect.users.models import User
 
 LEARN_MODULE_JSONPATH = parse("$..module")
@@ -192,6 +193,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         user_visit.flagged = True
         user_visit.flag_reason = {"flags": flags}
     user_visit.save()
+    download_user_visit_attachments.delay(user_visit.id)
 
 
 def get_or_create_deliver_unit(app, unit_data):
