@@ -22,6 +22,7 @@ from commcare_connect.opportunity.views import (
     export_user_status,
     export_user_visits,
     export_users_for_payment,
+    fetch_attachment,
     get_application,
     payment_delete,
     payment_import,
@@ -73,4 +74,5 @@ urlpatterns = [
     path("verification/<int:pk>/", view=visit_verification, name="visit_verification"),
     path("approve/<int:pk>/", view=approve_visit, name="approve_visit"),
     path("reject/<int:pk>/", view=reject_visit, name="reject_visit"),
+    path("fetch_attachment/<blob_id>", view=fetch_attachment, name="fetch_attachment"),
 ]
