@@ -5,7 +5,7 @@ from allauth.utils import build_absolute_uri
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.urls import reverse
 from django.utils.timezone import now
 from django.utils.translation import gettext
@@ -245,17 +245,15 @@ def download_user_visit_attachments(user_visit_id: id):
             continue
         url = f"{settings.COMMCARE_HQ_URL}/a/{domain}/api/form/attachment/{user_visit.xform_id}/{name}"
 
-        blob_meta = BlobMeta(
-            name=name, parent_id=form_id, content_length=blob["length"], content_type=blob["content_type"]
-        )
         with transaction.atomic():
-            try:
-                blob_meta.save()
-            except IntegrityError:
+            blob_meta, created = BlobMeta.objects.get_or_create(
+                name=name, parent_id=form_id, content_length=blob["length"], content_type=blob["content_type"]
+            )
+            if not created:
                 # attachment already exists
                 continue
             response = httpx.get(
                 url,
                 headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"},
             )
-            default_storage.save(blob_meta.blob_id, ContentFile(response.content, name))
+            default_storage.save(str(blob_meta.blob_id), ContentFile(response.content, name))
