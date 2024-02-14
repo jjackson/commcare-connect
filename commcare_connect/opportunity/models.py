@@ -1,3 +1,4 @@
+import math
 from uuid import uuid4
 
 from django.db import models
@@ -96,6 +97,14 @@ class Opportunity(BaseModel):
             opportunity=self, status=VisitValidationStatus.approved
         ).count()
         return approved_user_visits
+
+    @property
+    def allotted_visits(self):
+        return math.floor(self.total_budget / self.budget_per_visit)
+
+    @property
+    def budget_per_user(self):
+        return self.max_visits_per_user * self.budget_per_visit
 
     @property
     def is_active(self):

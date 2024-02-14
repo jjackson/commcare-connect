@@ -1,19 +1,26 @@
-{% extends "base.html" %}
+{% extends "opportunity/base.html" %}
 {% load static %}
 
 {% block title %}{{ request.org }} - Opportunities{% endblock %}
 
+{% block breadcrumbs_inner %}
+  {{ block.super }}
+  <li class="breadcrumb-item">
+    <a href="{% url 'opportunity:detail' org_slug=request.org.slug pk=opportunity.pk %}">
+      {{ opportunity.name }}
+    </a>
+  </li>
+  <li class="breadcrumb-item active" aria-current="page">User Payments</li>
+{% endblock %}
+
 {% block content %}
-  <div class="container">
-    <div class="my-2">
-      <h3 class="display-6">Payments for User {{ access.display_name }}</h3>
-      {% if latest_payment %}
-        <button class="btn btn-danger mb-2" data-bs-toggle="modal" data-bs-target="#rollbackConfirmModal">Rollback Last Payment</button>
-      {% endif %}
-      {% load django_tables2 %}
-      {% render_table table %}
-    </div>
-  </div>
+  <h2 class="mb-2">Payments for User {{ access.display_name }}</h2>
+  <hr>
+  {% if latest_payment %}
+    <button class="btn btn-danger mb-2" data-bs-toggle="modal" data-bs-target="#rollbackConfirmModal">Rollback Last Payment</button>
+  {% endif %}
+  {% load django_tables2 %}
+  {% render_table table %}
   {% if latest_payment %}
   <div class="modal fade" id="rollbackConfirmModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
     <div class="modal-dialog">

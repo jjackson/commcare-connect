@@ -5,11 +5,10 @@
 {% if title %}{% block title %}{{ title }}{% endblock %} {% endif %}
 
 {% block content %}
-  <div class="container">
-    {% if form_title %}<h1 class="display-5">{{ form_title }}</h1>{% endif %}
-    <form method="post">
-      {% csrf_token %}
-      {% crispy form %}
-    </form>
-  </div>
+  {% if form_title %}<h2 class="my-2 pt-3">{{ form_title }}</h2>{% endif %}
+  <hr/>
+  <form method="post">
+    {% csrf_token %}
+    {% crispy form %}
+  </form>
 {% endblock content %}
