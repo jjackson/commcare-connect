@@ -85,12 +85,16 @@
     {% endif %}
     {% if visit.images %}
     <h2 class="mb-2">Images</h2>
-    {% for image in visit.images %}
-    <img src=" {% url 'opportunity:fetch_attachment' org_slug=request.org.slug blob_id=image.blob_id  %}"/>
-    {% endfor %}
+    <dl>
+      {% for image in visit.images %}
+      <dd ><img style="max-width: 100%; max-height: 500px;" src=" {% url 'opportunity:fetch_attachment' org_slug=request.org.slug blob_id=image.blob_id  %}"/></dd>
+      {% endfor %}
+    </dl>
     {% endif %}
+    <div id="action-buttons" style="margin-bottom: 25px;">
     <a class="btn btn-success" href="{% url 'opportunity:approve_visit' org_slug=request.org.slug pk=visit.id  %}" role="button">Approve</a>
     <a class="btn btn-danger" href="{% url 'opportunity:reject_visit' org_slug=request.org.slug pk=visit.id  %}" role="button">Reject</a>
+    </div>
   </div>
 {% endblock content %}
 

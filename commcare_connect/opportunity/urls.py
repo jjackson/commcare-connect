@@ -74,5 +74,5 @@ urlpatterns = [
     path("verification/<int:pk>/", view=visit_verification, name="visit_verification"),
     path("approve/<int:pk>/", view=approve_visit, name="approve_visit"),
     path("reject/<int:pk>/", view=reject_visit, name="reject_visit"),
-    path("fetch_attachment/<blob_id>/", view=fetch_attachment, name="fetch_attachment"),
+    path("fetch_attachment/<blob_id>", view=fetch_attachment, name="fetch_attachment"),
 ]
