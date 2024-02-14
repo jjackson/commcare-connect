@@ -2,6 +2,7 @@
 {% load static %}
 {% load crispy_forms_tags %}
 {% load django_tables2 %}
+{% load duration_minutes %}
 
 {% block breadcrumbs_inner %}
   {{ block.super }}
@@ -26,18 +27,18 @@
       <div class="col-md-6">
         <table class="table table-borderless">
           <tbody>
-          <tr>
-            <th scope="row">Start Time</th>
-            <td>{{ xform.metadata.timeStart }}</td>
-          </tr>
-          <tr>
-            <th scope="row">End Time</th>
-            <td>{{ xform.metadata.timeEnd }}</td>
-          </tr>
-          <tr>
-            <th scope="row">Duration</th>
-            <td>{{ xform.metadata.duration }}</td>
-          </tr>
+            <tr>
+              <th scope="row">Start Time</th>
+              <td>{{ xform.metadata.timeStart }}</td>
+            </tr>
+            <tr>
+              <th scope="row">End Time</th>
+              <td>{{ xform.metadata.timeEnd }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Duration</th>
+              <td>{{ xform.metadata.duration|duration_minutes }}</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -60,6 +61,7 @@
         </table>
       </div>
     </div>
+    {% if visit.flag_reason %}
     <h2 class="mb-2">Flags</h2>
     <div class="">
       <table class="table table-borderless">
@@ -72,9 +74,55 @@
         </tbody>
       </table>
     </div>
-    <a class="btn btn-success" href="{% url 'opportunity:approve_visit' org_slug=request.org.slug pk=visit.id %}"
-       role="button">Approve</a>
-    <a class="btn btn-danger" href="{% url 'opportunity:reject_visit' org_slug=request.org.slug pk=visit.id %}"
-       role="button">Reject</a>
+    {% endif %}
+    {% if visit.location %}
+    <h2 class="mb-2">Map</h2>
+    <div id="user-visit-map" style="height: 300px; margin-bottom: 25px;" ></div>
+    {% endif %}
+    {% if visit.images %}
+    <h2 class="mb-2">Images</h2>
+    <dl>
+      {% for image in visit.images %}
+      <dd ><img style="max-width: 100%; max-height: 500px;" src=" {% url 'opportunity:fetch_attachment' org_slug=request.org.slug blob_id=image.blob_id  %}"/></dd>
+      {% endfor %}
+    </dl>
+    {% endif %}
+    <div id="action-buttons" style="margin-bottom: 25px;">
+    <a class="btn btn-success" href="{% url 'opportunity:approve_visit' org_slug=request.org.slug pk=visit.id  %}" role="button">Approve</a>
+    <a class="btn btn-danger" href="{% url 'opportunity:reject_visit' org_slug=request.org.slug pk=visit.id  %}" role="button">Reject</a>
+    </div>
   </div>
 {% endblock content %}
+
+{% block inline_javascript %}
+{{ block.super }}
+<script type="text/javascript">
+  window.addEventListener('DOMContentLoaded', function() {
+      mapboxgl.accessToken = "{{ MAPBOX_TOKEN }}";
+      const map = new mapboxgl.Map({
+          container: 'user-visit-map',
+          style: 'mapbox://styles/mapbox/satellite-streets-v12',
+          center: [{{ visit_lon }}, {{ visit_lat }}],
+          zoom: 9,
+      });
+      new mapboxgl.Marker({"color": "green"})
+          .setLngLat([{{ visit_lon }}, {{ visit_lat }}])
+          .setPopup(new mapboxgl.Popup().setHTML("{{visit.entity_name}}"))
+          .addTo(map);
+      userForms = {{ user_forms|safe }}
+      userForms.forEach(loc => {
+          marker = new mapboxgl.Marker()
+              .setLngLat([loc[3], loc[2]])
+              .setPopup(new mapboxgl.Popup().setHTML(loc[0]["entity_name"]))
+              .addTo(map);
+      })
+      otherForms = {{ other_forms|safe }}
+      otherForms.forEach(loc => {
+          marker = new mapboxgl.Marker({"color": "red"})
+              .setLngLat([loc[3], loc[2]])
+              .setPopup(new mapboxgl.Popup().setHTML(loc[0]["entity_name"]))
+              .addTo(map);
+      })
+  })
+</script>
+{% endblock %}

@@ -5,8 +5,12 @@ import pytest
 from django.utils.timezone import now
 
 from commcare_connect.connect_id_client.models import ConnectIdUser
-from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
-from commcare_connect.opportunity.tasks import _get_inactive_message, add_connect_users
+from commcare_connect.opportunity.models import BlobMeta, Opportunity, OpportunityAccess
+from commcare_connect.opportunity.tasks import (
+    _get_inactive_message,
+    add_connect_users,
+    download_user_visit_attachments,
+)
 from commcare_connect.opportunity.tests.factories import (
     CompletedModuleFactory,
     LearnModuleFactory,
@@ -104,3 +108,35 @@ def test_send_inactive_notification_active_user(mobile_user: User, opportunity: 
     UserVisitFactory.create(user=mobile_user, opportunity=opportunity, visit_date=now() - datetime.timedelta(days=1))
     message = _get_inactive_message(access)
     assert message is None
+
+
+def test_download_attachments(mobile_user: User, opportunity: Opportunity):
+    learn_modules = LearnModuleFactory.create_batch(2, app=opportunity.learn_app)
+    for learn_module in learn_modules:
+        CompletedModuleFactory.create(
+            user=mobile_user,
+            opportunity=opportunity,
+            module=learn_module,
+            date=now() - datetime.timedelta(days=2),
+        )
+    access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
+    OpportunityClaimFactory.create(opportunity_access=access, end_date=opportunity.end_date)
+    user_visit = UserVisitFactory.create(
+        user=mobile_user,
+        opportunity=opportunity,
+        form_json={"attachments": {"myimage.jpg": {"content_type": "image/jpeg", "length": 20}}},
+    )
+    with mock.patch("commcare_connect.opportunity.tasks.httpx.get") as get_response, mock.patch(
+        "commcare_connect.opportunity.tasks.default_storage.save"
+    ) as save_blob:
+        get_response.return_value.content = b"asdas"
+        download_user_visit_attachments(user_visit.id)
+        blob_meta = BlobMeta.objects.first()
+
+        assert blob_meta.name == "myimage.jpg"
+        assert blob_meta.parent_id == user_visit.xform_id
+        assert blob_meta.content_length == 20
+        assert blob_meta.content_type == "image/jpeg"
+        blob_id, content_file = save_blob.call_args_list[0].args
+        assert str(blob_id) == blob_meta.blob_id
+        assert content_file.read() == b"asdas"
