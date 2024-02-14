@@ -6,7 +6,7 @@
 {% block breadcrumbs_inner %}
   {{ block.super }}
   <li class="breadcrumb-item">
-    <a href="{% url 'opportunity:detail' org_slug=request.org.slug pk=object.pk %}">
+    <a href="{% url 'opportunity:detail' org_slug=request.org.slug pk=object.opportunity_id %}">
       {{ object.opportunity.name }}
     </a>
   </li>

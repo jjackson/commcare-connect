@@ -103,7 +103,7 @@
           container: 'user-visit-map',
           style: 'mapbox://styles/mapbox/satellite-streets-v12',
           center: [{{ visit_lon }}, {{ visit_lat }}],
-          zoom: 9,
+          zoom: 15,
       });
       new mapboxgl.Marker({"color": "green"})
           .setLngLat([{{ visit_lon }}, {{ visit_lat }}])
