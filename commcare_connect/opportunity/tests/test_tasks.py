@@ -138,5 +138,5 @@ def test_download_attachments(mobile_user: User, opportunity: Opportunity):
         assert blob_meta.content_length == 20
         assert blob_meta.content_type == "image/jpeg"
         blob_id, content_file = save_blob.call_args_list[0].args
-        assert blob_id == blob_meta.blob_id
+        assert str(blob_id) == blob_meta.blob_id
         assert content_file.read() == b"asdas"
