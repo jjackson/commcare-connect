@@ -77,7 +77,17 @@
     {% endif %}
     {% if visit.location %}
     <h2 class="mb-2">Map</h2>
+    <div id="map-container" style="position: relative">
     <div id="user-visit-map" style="height: 300px; margin-bottom: 25px;" ></div>
+    <div id="menu" class="btn-group btn-group-toggle" data-toggle="buttons" style="position: absolute; top: 0; left: 0;">
+      <label class="btn btn-secondary active">
+        <input type="radio" name="options" id="streets-v12" autocomplete="off" checked> Streets
+      </label>
+      <label class="btn btn-secondary">
+        <input type="radio" name="options" id="satellite-streets-v12" autocomplete="off"> Satellite
+      </label>
+    </div>
+    </div>
     {% endif %}
     {% if visit.images %}
     <h2 class="mb-2">Images</h2>
@@ -101,28 +111,134 @@
       mapboxgl.accessToken = "{{ MAPBOX_TOKEN }}";
       const map = new mapboxgl.Map({
           container: 'user-visit-map',
-          style: 'mapbox://styles/mapbox/satellite-streets-v12',
+          style: 'mapbox://styles/mapbox/streets-v12',
           center: [{{ visit_lon }}, {{ visit_lat }}],
-          zoom: 15,
+          zoom: 16,
       });
-      new mapboxgl.Marker({"color": "green"})
+      circles = []
+      marker = new mapboxgl.Marker({"color": "green"})
           .setLngLat([{{ visit_lon }}, {{ visit_lat }}])
-          .setPopup(new mapboxgl.Popup().setHTML("{{visit.entity_name}}"))
+          .setPopup(new mapboxgl.Popup().setHTML(
+              `
+              <table><tbody>
+              <tr><th>Name</th><td>{{visit.entity_name}}</td></tr>
+              <tr><th>User</th><td>{{visit.user__name}}</td></tr>
+              <tr><th>Date</th><td>{{visit.visit_date}}</td></tr>
+              <tr><th>Status</th><td>{{visit.get_status_display}}</td></tr>
+              </tbody></table>
+              `
+          ))
           .addTo(map);
-      userForms = {{ user_forms|safe }}
-      userForms.forEach(loc => {
-          marker = new mapboxgl.Marker()
-              .setLngLat([loc[3], loc[2]])
-              .setPopup(new mapboxgl.Popup().setHTML(loc[0]["entity_name"]))
-              .addTo(map);
+      marker.getElement().onmouseenter = (event) => {
+          map.setLayoutProperty(
+              'circles',
+              'visibility',
+              'visible'
+          );
+      };
+      marker.getElement().onmouseleave = (event) => {
+          map.setLayoutProperty(
+              'circles',
+              'visibility',
+              'none'
+          );
+      };
+      circles.push(circle([{{ visit_lon }}, {{ visit_lat }}], {{ visit_precision }}, {units: 'meters'}))
+      {% for visit in user_forms %}
+      marker = new mapboxgl.Marker({"scale": 0.75})
+          .setLngLat([{{ visit.3 }}, {{ visit.2 }}])
+          .setPopup(new mapboxgl.Popup().setHTML(
+              `
+                  <table><tbody>
+                  <tr><th>Name</th><td>{{visit.0.entity_name}}</td></tr>
+                  <tr><th>User</th><td>{{visit.0.user__name}}</td></tr>
+                  <tr><th>Date</th><td>{{visit.0.visit_date}}</td></tr>
+                  <tr><th>Status</th><td>{{visit.0.get_status_display}}</td></tr>
+                  </tbody></table>
+                  <a href="{% url 'opportunity:visit_verification' org_slug=request.org.slug pk=visit.0.pk %}">View Form</a>
+                  `
+          ))
+          .addTo(map);
+     marker.getElement().onmouseenter = (event) => {
+         map.setLayoutProperty(
+             'circles',
+             'visibility',
+             'visible'
+         );
+      };
+      marker.getElement().onmouseleave = (event) => {
+          map.setLayoutProperty(
+              'circles',
+              'visibility',
+              'none'
+          );
+      };
+      circles.push(circle([{{ visit.3 }}, {{ visit.2 }}], {{ visit.4}}, {units: 'meters'}))
+      {% endfor %}
+      {% for visit in other_forms %}
+      new mapboxgl.Marker({"color": "red", "scale": 0.75})
+          .setLngLat([{{ visit.3 }}, {{ visit.2 }}])
+          .setPopup(new mapboxgl.Popup().setHTML(
+              `
+                  <table><tbody>
+                  <tr><th>Name</th><td>{{visit.0.entity_name}}</td></tr>
+                  <tr><th>User</th><td>{{visit.0.user__name}}</td></tr>
+                  <tr><th>Date</th><td>{{visit.0.visit_date}}</td></tr>
+                  <tr><th>Status</th><td>{{visit.0.get_status_display}}</td></tr>
+                  </tbody></table>
+                  <a href="{% url 'opportunity:visit_verification' org_slug=request.org.slug pk=visit.0.pk %}">View Form</a>
+                  `
+          ))
+          .addTo(map);
+     marker.getElement().onmouseenter = (event) => {
+         map.setLayoutProperty(
+             'circles',
+             'visibility',
+             'visible'
+         );
+      };
+      marker.getElement().onmouseleave = (event) => {
+          map.setLayoutProperty(
+              'circles',
+              'visibility',
+              'none'
+          );
+      };
+      circles.push(circle([{{ visit.3 }}, {{ visit.2 }}], {{ visit.4}}, {units: 'meters'}))
+      {% endfor %}
+
+      map.on('style.load', () => {
+          map.addLayer({
+              "id": "circles",
+              "type": "fill",
+              "source": {
+                  "type": "geojson",
+                  "data": {
+                      "type": "FeatureCollection",
+                      "features": circles,
+                  }
+              },
+              "layout": {
+                  "visibility": "none"
+              },
+              "paint": {
+                  "fill-antialias": true,
+                  "fill-opacity": 0.3,
+                  "fill-color": "yellow",
+                  "fill-outline-color": "#000",
+              }
+          });
       })
-      otherForms = {{ other_forms|safe }}
-      otherForms.forEach(loc => {
-          marker = new mapboxgl.Marker({"color": "red"})
-              .setLngLat([loc[3], loc[2]])
-              .setPopup(new mapboxgl.Popup().setHTML(loc[0]["entity_name"]))
-              .addTo(map);
-      })
+
+      const styleList = document.getElementById('menu');
+      const inputs = styleList.getElementsByTagName('input');
+
+      for (const input of inputs) {
+          input.onclick = (click) => {
+              const styleId = click.target.id;
+              map.setStyle('mapbox://styles/mapbox/' + styleId);
+          };
+      }
   })
 </script>
 {% endblock %}

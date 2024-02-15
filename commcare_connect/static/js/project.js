@@ -16,6 +16,7 @@ function refreshTooltips() {
 window.refreshTooltips = refreshTooltips;
 
 window.mapboxgl = mapboxgl;
+window.circle = circle;
 
 /**
  * Add gps data accuracy circles on the visit markers on a mapbox map.
