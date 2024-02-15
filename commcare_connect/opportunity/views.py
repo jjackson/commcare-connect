@@ -588,20 +588,20 @@ def visit_verification(request, org_slug=None, pk=None):
     if user_visit.location:
         locations = (
             UserVisit.objects.filter(opportunity=user_visit.opportunity)
-            .values("entity_id", "location", "user_id", "entity_name")
+            .values("entity_id", "location", "user_id", "entity_name", "user__name", "pk", "status", "visit_date")
             .exclude(pk=pk)
         )
-        lat, lon, *_ = user_visit.location.split(" ")
+        lat, lon, _, precision = user_visit.location.split(" ")
         for loc in locations:
             if loc.get("location") is None:
                 continue
-            other_lat, other_lon, *_ = loc["location"].split(" ")
+            other_lat, other_lon, _, other_precision = loc["location"].split(" ")
             dist = distance.distance((lat, lon), (other_lat, other_lon))
             if dist.m <= 250:
                 if user_visit.user_id == loc["user_id"]:
-                    user_forms.append((loc, dist.m, other_lat, other_lon))
+                    user_forms.append((loc, dist.m, other_lat, other_lon, other_precision))
                 else:
-                    other_forms.append((loc, dist.m, other_lat, other_lon))
+                    other_forms.append((loc, dist.m, other_lat, other_lon, other_precision))
         user_forms.sort(key=lambda x: x[1])
         other_forms.sort(key=lambda x: x[1])
     return render(
@@ -611,10 +611,11 @@ def visit_verification(request, org_slug=None, pk=None):
             "visit": user_visit,
             "xform": xform,
             "access_id": access_id,
-            "user_forms": json.dumps(user_forms[:5]),
-            "other_forms": json.dumps(other_forms[:5]),
+            "user_forms": user_forms[:5],
+            "other_forms": other_forms[:5],
             "visit_lat": lat,
             "visit_lon": lon,
+            "visit_precision": precision,
             "MAPBOX_TOKEN": settings.MAPBOX_TOKEN,
         },
     )
