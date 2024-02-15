@@ -586,19 +586,15 @@ def visit_verification(request, org_slug=None, pk=None):
     lat = None
     lon = None
     if user_visit.location:
-        locations = (
-            UserVisit.objects.filter(opportunity=user_visit.opportunity)
-            .values("entity_id", "location", "user_id", "entity_name", "user__name", "pk", "status", "visit_date")
-            .exclude(pk=pk)
-        )
+        locations = UserVisit.objects.filter(opportunity=user_visit.opportunity).exclude(pk=pk).select_related("user")
         lat, lon, _, precision = user_visit.location.split(" ")
         for loc in locations:
-            if loc.get("location") is None:
+            if loc.location is None:
                 continue
-            other_lat, other_lon, _, other_precision = loc["location"].split(" ")
+            other_lat, other_lon, _, other_precision = loc.location.split(" ")
             dist = distance.distance((lat, lon), (other_lat, other_lon))
             if dist.m <= 250:
-                if user_visit.user_id == loc["user_id"]:
+                if user_visit.user_id == loc.user_id:
                     user_forms.append((loc, dist.m, other_lat, other_lon, other_precision))
                 else:
                     other_forms.append((loc, dist.m, other_lat, other_lon, other_precision))
