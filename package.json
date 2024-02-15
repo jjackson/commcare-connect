@@ -43,6 +43,7 @@
     "dev-watch": "webpack --mode development --config webpack/base.config.js --watch"
   },
   "dependencies": {
+    "@turf/circle": "^6.5.0",
     "alpinejs": "^3.13.0",
     "bootstrap-icons": "^1.10.5",
     "bootswatch": "^5.3.2",
