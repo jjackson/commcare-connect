@@ -478,7 +478,7 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
 @org_member_required
 def user_profile(request, org_slug=None, opp_id=None, pk=None):
     access = get_object_or_404(OpportunityAccess, pk=pk, accepted=True)
-    user_visits = UserVisit.objects.filter(user=access.user, opportunity=access.opportunity)
+    user_visits = UserVisit.objects.filter(opportunity_access=access)
     user_visit_data = []
     for user_visit in user_visits:
         if not user_visit.location:
