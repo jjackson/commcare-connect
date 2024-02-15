@@ -115,7 +115,7 @@
           center: [{{ visit_lon }}, {{ visit_lat }}],
           zoom: 16,
       });
-      markers = []
+      circles = []
       marker = new mapboxgl.Marker({"color": "green"})
           .setLngLat([{{ visit_lon }}, {{ visit_lat }}])
           .setPopup(new mapboxgl.Popup().setHTML(
@@ -124,26 +124,26 @@
               <tr><th>Name</th><td>{{visit.entity_name}}</td></tr>
               <tr><th>User</th><td>{{visit.user__name}}</td></tr>
               <tr><th>Date</th><td>{{visit.visit_date}}</td></tr>
-              <tr><th>Status</th><td>{{visit.status}}</td></tr>
+              <tr><th>Status</th><td>{{visit.get_status_display}}</td></tr>
               </tbody></table>
               `
           ))
           .addTo(map);
       marker.getElement().onmouseenter = (event) => {
           map.setLayoutProperty(
-              'circle-{{ visit.pk }}',
+              'circles',
               'visibility',
               'visible'
           );
       };
       marker.getElement().onmouseleave = (event) => {
           map.setLayoutProperty(
-              'circle-{{ visit.pk }}',
+              'circles',
               'visibility',
               'none'
           );
       };
-      markers.push({lon: {{ visit_lon }}, lat: {{ visit_lat }}, precision: {{ visit_precision }}, pk: {{ visit.pk }}})
+      circles.push(circle([{{ visit_lon }}, {{ visit_lat }}], {{ visit_precision }}, {units: 'meters'}))
       {% for visit in user_forms %}
       marker = new mapboxgl.Marker({"scale": 0.75})
           .setLngLat([{{ visit.3 }}, {{ visit.2 }}])
@@ -153,7 +153,7 @@
                   <tr><th>Name</th><td>{{visit.0.entity_name}}</td></tr>
                   <tr><th>User</th><td>{{visit.0.user__name}}</td></tr>
                   <tr><th>Date</th><td>{{visit.0.visit_date}}</td></tr>
-                  <tr><th>Status</th><td>{{visit.0.status}}</td></tr>
+                  <tr><th>Status</th><td>{{visit.0.get_status_display}}</td></tr>
                   </tbody></table>
                   <a href="{% url 'opportunity:visit_verification' org_slug=request.org.slug pk=visit.0.pk %}">View Form</a>
                   `
@@ -161,19 +161,19 @@
           .addTo(map);
      marker.getElement().onmouseenter = (event) => {
          map.setLayoutProperty(
-             'circle-{{ visit.0.pk }}',
+             'circles',
              'visibility',
              'visible'
          );
       };
       marker.getElement().onmouseleave = (event) => {
           map.setLayoutProperty(
-              'circle-{{ visit.0.pk }}',
+              'circles',
               'visibility',
               'none'
           );
       };
-      markers.push({lon: {{ visit.3 }}, lat: {{ visit.2 }}, precision: {{ visit.4}}, pk: {{ visit.0.pk }}})
+      circles.push(circle([{{ visit.3 }}, {{ visit.2 }}], {{ visit.4}}, {units: 'meters'}))
       {% endfor %}
       {% for visit in other_forms %}
       new mapboxgl.Marker({"color": "red", "scale": 0.75})
@@ -184,7 +184,7 @@
                   <tr><th>Name</th><td>{{visit.0.entity_name}}</td></tr>
                   <tr><th>User</th><td>{{visit.0.user__name}}</td></tr>
                   <tr><th>Date</th><td>{{visit.0.visit_date}}</td></tr>
-                  <tr><th>Status</th><td>{{visit.0.status}}</td></tr>
+                  <tr><th>Status</th><td>{{visit.0.get_status_display}}</td></tr>
                   </tbody></table>
                   <a href="{% url 'opportunity:visit_verification' org_slug=request.org.slug pk=visit.0.pk %}">View Form</a>
                   `
@@ -192,41 +192,41 @@
           .addTo(map);
      marker.getElement().onmouseenter = (event) => {
          map.setLayoutProperty(
-             'circle-{{ visit.0.pk }}',
+             'circles',
              'visibility',
              'visible'
          );
       };
       marker.getElement().onmouseleave = (event) => {
           map.setLayoutProperty(
-              'circle-{{ visit.0.pk }}',
+              'circles',
               'visibility',
               'none'
           );
       };
-      markers.push({lon: {{ visit.3 }}, lat: {{ visit.2 }}, precision: {{ visit.4}}, pk: {{ visit.0.pk }}})
+      circles.push(circle([{{ visit.3 }}, {{ visit.2 }}], {{ visit.4}}, {units: 'meters'}))
       {% endfor %}
 
       map.on('style.load', () => {
-          markers.forEach((marker) => {
-              outline = circle([marker.lon, marker.lat], marker.precision, {units: 'meters'})
-              map.addLayer({
-                  "id": `circle-${marker.pk}`,
-                  "type": "fill",
-                  "source": {
-                      "type": "geojson",
-                      "data": outline,
-                  },
-                  "layout": {
-                      "visibility": "none"
-                  },
-                  "paint": {
-                      "fill-antialias": true,
-                      "fill-opacity": 0.3,
-                      "fill-color": "yellow",
-                      "fill-outline-color": "#000",
+          map.addLayer({
+              "id": "circles",
+              "type": "fill",
+              "source": {
+                  "type": "geojson",
+                  "data": {
+                      "type": "FeatureCollection",
+                      "features": circles,
                   }
-              });
+              },
+              "layout": {
+                  "visibility": "none"
+              },
+              "paint": {
+                  "fill-antialias": true,
+                  "fill-opacity": 0.3,
+                  "fill-color": "yellow",
+                  "fill-outline-color": "#000",
+              }
           });
       })
 
