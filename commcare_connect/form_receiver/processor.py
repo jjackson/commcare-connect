@@ -170,7 +170,6 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         or datetime.date.today() > claim.end_date
     ):
         user_visit.status = VisitValidationStatus.over_limit
-    user_visits = UserVisit.objects.filter(opportunity=opportunity).values("location")
     flags = []
     if counts["entity"] > 0:
         user_visit.status = VisitValidationStatus.duplicate
@@ -180,6 +179,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     if xform.metadata.location is None:
         flags.append(["gps", "GPS data is missing"])
     else:
+        user_visits = UserVisit.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit).values("location")
         cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
         for visit in user_visits:
             if visit.get("location") is None:
