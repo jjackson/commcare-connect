@@ -585,6 +585,7 @@ def visit_verification(request, org_slug=None, pk=None):
     other_forms = []
     lat = None
     lon = None
+    precision = None
     if user_visit.location:
         locations = UserVisit.objects.filter(opportunity=user_visit.opportunity).exclude(pk=pk).select_related("user")
         lat, lon, _, precision = user_visit.location.split(" ")
