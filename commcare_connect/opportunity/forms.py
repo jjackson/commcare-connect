@@ -353,6 +353,7 @@ class PaymentUnitForm(forms.ModelForm):
                 "Any one of these Deliver Units combined with all the required "
                 "Deliver Units will accrue payment. Multiple Deliver Units can be selected."
             ),
+            required=False,
         )
         if PaymentUnit.objects.filter(pk=self.instance.pk).exists():
             deliver_units = self.instance.deliver_units.all()
