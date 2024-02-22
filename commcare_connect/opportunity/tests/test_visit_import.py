@@ -135,6 +135,43 @@ def test_payment_accrued_optional_deliver_units(opportunity: Opportunity):
         assert access.payment_accrued == sum(payment_unit.amount for payment_unit in payment_units)
 
 
+@pytest.mark.django_db
+def test_payment_accrued_assymetric_optional_deliver_units(opportunity: Opportunity, mobile_user: User):
+    payment_unit = PaymentUnitFactory.create(opportunity=opportunity)
+    deliver_unit = DeliverUnitFactory(payment_unit=payment_unit, app=opportunity.deliver_app, optional=False)
+    UserVisitFactory.create_batch(
+        2,
+        opportunity=opportunity,
+        user=mobile_user,
+        deliver_unit=deliver_unit,
+        entity_id=payment_unit.name,
+        status=VisitValidationStatus.approved.value,
+    )
+    optional_deliver_unit = DeliverUnitFactory(payment_unit=payment_unit, app=opportunity.deliver_app, optional=True)
+    UserVisitFactory.create_batch(
+        1,
+        opportunity=opportunity,
+        user=mobile_user,
+        deliver_unit=optional_deliver_unit,
+        entity_id=payment_unit.name,
+        status=VisitValidationStatus.approved.value,
+    )
+    update_payment_accrued(opportunity, {mobile_user.id})
+    access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
+    assert access.payment_accrued == payment_unit.amount * 1
+    UserVisitFactory.create_batch(
+        2,
+        opportunity=opportunity,
+        user=mobile_user,
+        deliver_unit=optional_deliver_unit,
+        entity_id=payment_unit.name,
+        status=VisitValidationStatus.approved.value,
+    )
+    update_payment_accrued(opportunity, {mobile_user.id})
+    access.refresh_from_db()
+    assert access.payment_accrued == payment_unit.amount * 2
+
+
 @pytest.mark.parametrize(
     "headers,rows,expected",
     [
