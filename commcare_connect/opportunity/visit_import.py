@@ -119,15 +119,14 @@ def update_payment_accrued(opportunity: Opportunity, users):
             for _, visits in itertools.groupby(user_visits, key=lambda visit: visit["entity_id"]):
                 unit_counts = Counter(v["deliver_unit_id"] for v in visits)
                 # The min unit count is the completed required deliver units for an entity_id
-                required_completed = min(unit_counts[deliver_id] for deliver_id in required_deliver_units)
-                completed = required_completed > 0
+                number_completed = min(unit_counts[deliver_id] for deliver_id in required_deliver_units)
                 if optional_deliver_units:
                     # The max completed unit count confirms that an optional
                     # deliver unit was completed by the user
                     optional_completed = max(unit_counts[deliver_id] for deliver_id in optional_deliver_units)
-                    completed = completed and optional_completed > 0
-                if completed:
-                    payment_accrued += payment_unit.amount * required_completed
+                    number_completed = min(number_completed, optional_completed)
+                if number_completed > 0:
+                    payment_accrued += payment_unit.amount * number_completed
         access.payment_accrued = payment_accrued
         access.save()
 
