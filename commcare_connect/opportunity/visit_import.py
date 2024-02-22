@@ -106,18 +106,28 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
 def update_payment_accrued(opportunity: Opportunity, users):
     payment_units = opportunity.paymentunit_set.all()
     for user in users:
-        user_visits = UserVisit.objects.filter(
-            opportunity=opportunity, user=user, status=VisitValidationStatus.approved
-        ).order_by("entity_id")
+        user_visits = (
+            UserVisit.objects.filter(opportunity=opportunity, user=user, status=VisitValidationStatus.approved)
+            .order_by("entity_id")
+            .values("entity_id", "deliver_unit_id")
+        )
         access = OpportunityAccess.objects.get(user=user, opportunity=opportunity)
         payment_accrued = 0
         for payment_unit in payment_units:
-            payment_unit_deliver_units = {deliver_unit.id for deliver_unit in payment_unit.deliver_units.all()}
-            for entity_id, visits in itertools.groupby(user_visits, key=lambda x: x.entity_id):
-                unit_counts = Counter(v.deliver_unit_id for v in visits)
-                number_completed = min(unit_counts[deliver_id] for deliver_id in payment_unit_deliver_units)
-                if number_completed > 0:
-                    payment_accrued += payment_unit.amount * number_completed
+            required_deliver_units = payment_unit.deliver_units.filter(optional=False).values_list("id", flat=True)
+            optional_deliver_units = payment_unit.deliver_units.filter(optional=True).values_list("id", flat=True)
+            for _, visits in itertools.groupby(user_visits, key=lambda visit: visit["entity_id"]):
+                unit_counts = Counter(v["deliver_unit_id"] for v in visits)
+                # The min unit count is the completed required deliver units for an entity_id
+                required_completed = min(unit_counts[deliver_id] for deliver_id in required_deliver_units)
+                completed = required_completed > 0
+                if optional_deliver_units:
+                    # The max completed unit count confirms that an optional
+                    # deliver unit was completed by the user
+                    optional_completed = max(unit_counts[deliver_id] for deliver_id in optional_deliver_units)
+                    completed = completed and optional_completed > 0
+                if completed:
+                    payment_accrued += payment_unit.amount * required_completed
         access.payment_accrued = payment_accrued
         access.save()
 
