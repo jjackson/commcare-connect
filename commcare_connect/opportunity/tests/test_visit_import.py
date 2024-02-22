@@ -159,11 +159,12 @@ def test_payment_accrued_assymetric_optional_deliver_units(opportunity: Opportun
     update_payment_accrued(opportunity, {mobile_user.id})
     access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
     assert access.payment_accrued == payment_unit.amount * 1
+    optional_deliver_unit_2 = DeliverUnitFactory(payment_unit=payment_unit, app=opportunity.deliver_app, optional=True)
     UserVisitFactory.create_batch(
-        2,
+        1,
         opportunity=opportunity,
         user=mobile_user,
-        deliver_unit=optional_deliver_unit,
+        deliver_unit=optional_deliver_unit_2,
         entity_id=payment_unit.name,
         status=VisitValidationStatus.approved.value,
     )
