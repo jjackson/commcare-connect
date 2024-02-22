@@ -121,9 +121,9 @@ def update_payment_accrued(opportunity: Opportunity, users):
                 # The min unit count is the completed required deliver units for an entity_id
                 number_completed = min(unit_counts[deliver_id] for deliver_id in required_deliver_units)
                 if optional_deliver_units:
-                    # The max completed unit count confirms that an optional
-                    # deliver unit was completed by the user
-                    optional_completed = max(unit_counts[deliver_id] for deliver_id in optional_deliver_units)
+                    # The sum calculates the number of optional deliver units completed and to process
+                    # duplicates with extra optional deliver units
+                    optional_completed = sum(unit_counts[deliver_id] for deliver_id in optional_deliver_units)
                     number_completed = min(number_completed, optional_completed)
                 if number_completed > 0:
                     payment_accrued += payment_unit.amount * number_completed
