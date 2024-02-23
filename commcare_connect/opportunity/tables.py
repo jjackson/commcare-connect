@@ -125,7 +125,7 @@ class UserStatusTable(tables.Table):
     passed_assessment = BooleanAggregateColumn(verbose_name="Passed Assessment")
     started_delivery = AggregateColumn(verbose_name="Started Delivery", accessor="date_deliver_started")
     last_visit_date = columns.Column(accessor="last_visit_date_d")
-    view_profile = columns.Column("View Profile", empty_values=())
+    view_profile = AggregateColumn("View Profile", empty_values=(), footer=lambda table: len(table.rows))
 
     class Meta:
         model = OpportunityAccess
