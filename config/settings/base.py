@@ -293,9 +293,9 @@ CACHES = {
 
 DJANGO_TABLES2_TEMPLATE = "tables/tabbed_table.html"
 DJANGO_TABLES2_TABLE_ATTRS = {
-    "class": "table border table-custom",
+    "class": "table table-bordered mb-0",
     "thead": {
-        "class": "table-secondary",
+        "class": "",
     },
     "tfoot": {
         "class": "table-light fw-bold",
@@ -324,3 +324,4 @@ OAUTH2_PROVIDER = {
 TWILIO_ACCOUNT_SID = env("TWILIO_SID", default=None)
 TWILIO_AUTH_TOKEN = env("TWILIO_TOKEN", default=None)
 TWILIO_MESSAGING_SERVICE = env("TWILIO_MESSAGING_SERVICE", default=None)
+MAPBOX_TOKEN = env("MAPBOX_TOKEN", default=None)

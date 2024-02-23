@@ -12,6 +12,7 @@ quickcache
 tablib[xlsx]
 flatten-dict
 twilio
+geopy
 
 # Django
 # ------------------------------------------------------------------------------

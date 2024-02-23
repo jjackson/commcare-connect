@@ -16,7 +16,9 @@
     <!-- Your stuff: Third-party CSS libraries go here -->
 
     <!-- This file stores project-specific CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pace-js@latest/pace-theme-default.min.css">
     <link rel="stylesheet" href="{% static 'bundles/css/project.css' %}">
+
   {% endblock %}
   <!-- Le javascript
   ================================================== -->
@@ -26,12 +28,15 @@
     <script src="{% static 'bundles/js/vendors-bundle.js' %}" defer></script>
     <!-- place project specific Javascript in this file -->
     <script src="{% static 'bundles/js/project-bundle.js' %}" defer></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/loading-states.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pace-js@latest/pace.min.js"></script>
+
   {% endblock javascript %}
 </head>
-<body>
+<body class="bg-light">
 <div class="mb-1">
-  <nav class="navbar navbar-expand-md navbar-light bg-light">
-    <div class="container-fluid">
+  <nav class="navbar navbar-expand-lg bg-primary" data-bs-theme="dark">
+    <div class="container">
       <button class="navbar-toggler navbar-toggler-right" type="button" data-bs-toggle="collapse"
               data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false"
               aria-label="Toggle navigation">
@@ -74,7 +79,7 @@
                    aria-expanded="false">
                   {{ request.org.name }}
                 </a>
-                <ul class="dropdown-menu dropdown-menu-end">
+                <ul class="dropdown-menu dropdown-menu-end bg-light">
                   {% for membership in request.user.memberships.all %}
                     <li>
                       <a
@@ -103,7 +108,6 @@
       </div>
     </div>
   </nav>
-
 </div>
 
 <div class="container">
@@ -116,6 +120,8 @@
       </div>
     {% endfor %}
   {% endif %}
+
+  {% block breadcrumbs %}{% endblock %}
 
   {% block content %}
     <p>Use this document as a way to quick start any new project.</p>
