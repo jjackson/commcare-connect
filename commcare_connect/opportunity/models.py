@@ -1,3 +1,4 @@
+import math
 from uuid import uuid4
 
 from django.db import models
@@ -96,6 +97,14 @@ class Opportunity(BaseModel):
             opportunity=self, status=VisitValidationStatus.approved
         ).count()
         return approved_user_visits
+
+    @property
+    def allotted_visits(self):
+        return math.floor(self.total_budget / self.budget_per_visit)
+
+    @property
+    def budget_per_user(self):
+        return self.max_visits_per_user * self.budget_per_visit
 
     @property
     def is_active(self):
@@ -279,9 +288,30 @@ class UserVisit(XFormBaseModel):
     flagged = models.BooleanField(default=False)
     flag_reason = models.JSONField(null=True, blank=True)
 
+    @property
+    def images(self):
+        return BlobMeta.objects.filter(parent_id=self.xform_id, content_type__startswith="image/")
+
 
 class OpportunityClaim(models.Model):
     opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE)
     max_payments = models.IntegerField()
     end_date = models.DateField()
     date_claimed = models.DateField(auto_now_add=True)
+
+
+class BlobMeta(models.Model):
+    name = models.CharField(max_length=255)
+    parent_id = models.CharField(
+        max_length=255,
+        help_text="Parent primary key or unique identifier",
+    )
+    blob_id = models.CharField(max_length=255, default=uuid4)
+    content_length = models.IntegerField()
+    content_type = models.CharField(max_length=255, null=True)
+
+    class Meta:
+        unique_together = [
+            ("parent_id", "name"),
+        ]
+        indexes = [models.Index(fields=["blob_id"])]

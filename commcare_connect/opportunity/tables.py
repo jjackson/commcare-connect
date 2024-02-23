@@ -1,3 +1,4 @@
+from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
@@ -80,6 +81,7 @@ class UserVisitTable(tables.Table):
 
 
 class OpportunityPaymentTable(tables.Table):
+    display_name = columns.Column(verbose_name="Name")
     username = columns.Column(accessor="user__username", visible=False)
     view_payments = columns.LinkColumn(
         "opportunity:user_payments_table",
@@ -90,7 +92,7 @@ class OpportunityPaymentTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user__name", "username", "payment_accrued", "total_paid")
+        fields = ("display_name", "username", "payment_accrued", "total_paid")
         orderable = False
         empty_text = "No user have payments accrued yet."
 
@@ -123,6 +125,7 @@ class UserStatusTable(tables.Table):
     passed_assessment = BooleanAggregateColumn(verbose_name="Passed Assessment")
     started_delivery = AggregateColumn(verbose_name="Started Delivery", accessor="date_deliver_started")
     last_visit_date = columns.Column(accessor="last_visit_date_d")
+    view_profile = AggregateColumn("View Profile", empty_values=(), footer=lambda table: len(table.rows))
 
     class Meta:
         model = OpportunityAccess
@@ -140,6 +143,19 @@ class UserStatusTable(tables.Table):
         )
         empty_text = "No users invited for this opportunity."
         orderable = False
+
+    def render_view_profile(self, record):
+        if not record.accepted:
+            return "---"
+        url = reverse(
+            "opportunity:user_profile",
+            kwargs={
+                "org_slug": record.opportunity.organization.slug,
+                "opp_id": record.opportunity_id,
+                "pk": record.id,
+            },
+        )
+        return format_html('<a href="{}">View Profile</a>', url)
 
     def render_started_learning(self, record, value):
         return date_with_time_popup(self, value)
@@ -204,7 +220,6 @@ class DeliverStatusTable(tables.Table):
             "visits_over_limit",
             "visits_duplicate",
             "last_visit_date",
-            "details",
         )
 
     def render_last_visit_date(self, record, value):
