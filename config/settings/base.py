@@ -223,6 +223,12 @@ LOGGING = {
         "level": env("DJANGO_TEMPLATE_LOG_LEVEL", default="WARN"),
         "propagate": False,
     },
+    "loggers": {
+        "django.security.DisallowedHost": {
+            "handlers": ["null"],
+            "propagate": False,
+        },
+    },
 }
 
 # Celery
