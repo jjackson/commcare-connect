@@ -223,6 +223,13 @@ class PaymentUnit(models.Model):
     amount = models.PositiveIntegerField()
     name = models.CharField(max_length=255)
     description = models.TextField()
+    parent_payment_unit = models.ForeignKey(
+        "self",
+        on_delete=models.DO_NOTHING,
+        related_name="child_payment_units",
+        blank=True,
+        null=True,
+    )
 
 
 class DeliverUnit(models.Model):
