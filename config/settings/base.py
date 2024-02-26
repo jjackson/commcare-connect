@@ -215,13 +215,22 @@ LOGGING = {
             "level": "DEBUG",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
-        }
+        },
+        "null": {
+            "class": "logging.NullHandler",
+        },
     },
     "root": {"level": "INFO", "handlers": ["console"]},
     "django.template": {
         "handlers": ["console"],
         "level": env("DJANGO_TEMPLATE_LOG_LEVEL", default="WARN"),
         "propagate": False,
+    },
+    "loggers": {
+        "django.security.DisallowedHost": {
+            "handlers": ["null"],
+            "propagate": False,
+        },
     },
 }
 
