@@ -3,7 +3,7 @@ webservers:
     web0:
       ansible_host: 54.146.23.50
     celery0:
-      ansible_host: 54.166.178.28
+      ansible_host: 3.87.17.68
   vars:
     ansible_user: ubuntu
     secrets_file: 'Ansible Secrets - Production'
