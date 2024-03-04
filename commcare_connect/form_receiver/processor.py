@@ -13,6 +13,7 @@ from commcare_connect.opportunity.models import (
     Assessment,
     CommCareApp,
     CompletedModule,
+    CompletedWork,
     DeliverUnit,
     LearnModule,
     Opportunity,
@@ -151,6 +152,14 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         )
     )
     claim = OpportunityClaim.objects.get(opportunity_access__opportunity=opportunity, opportunity_access__user=user)
+    entity_id = deliver_unit_block.get("entity_id")
+    entity_name = deliver_unit_block.get("entity_name")
+    completed_work, _ = CompletedWork.objects.get_or_create(
+        opportunity=opportunity,
+        entity_id=entity_id,
+        entity_name=entity_name,
+        payment_unit=deliver_unit.payment_unit,
+    )
     user_visit = UserVisit(
         opportunity=opportunity,
         user=user,
@@ -163,6 +172,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         app_build_version=xform.metadata.app_build_version,
         form_json=xform.raw_form,
         location=xform.metadata.location,
+        completed_work=completed_work,
     )
     if (
         counts["daily"] >= opportunity.daily_max_visits_per_user
