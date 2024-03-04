@@ -82,7 +82,7 @@ class UserVisitTable(tables.Table):
 
 class OpportunityPaymentTable(tables.Table):
     display_name = columns.Column(verbose_name="Name")
-    username = columns.Column(accessor="user.username", visible=False)
+    username = columns.Column(accessor="user__username", visible=False)
     view_payments = columns.LinkColumn(
         "opportunity:user_payments_table",
         verbose_name="",
@@ -117,7 +117,7 @@ class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
 
 class UserStatusTable(tables.Table):
     display_name = columns.Column(verbose_name="Name", footer="Total")
-    username = columns.Column(accessor="user.username", visible=False)
+    username = columns.Column(accessor="user__username", visible=False)
     accepted = BooleanAggregateColumn(verbose_name="Accepted")
     claimed = AggregateColumn(verbose_name="Job Claimed", accessor="job_claimed")
     started_learning = AggregateColumn(verbose_name="Started Learning", accessor="date_learn_started")
@@ -192,7 +192,7 @@ class PaymentUnitTable(tables.Table):
 
 class DeliverStatusTable(tables.Table):
     display_name = columns.Column("Name of the User")
-    username = columns.Column(accessor="user.username", visible=False)
+    username = columns.Column(accessor="user__username", visible=False)
     visits_completed = columns.Column("Completed Visits")
     visits_approved = columns.Column("Approved Visits")
     visits_pending = columns.Column("Pending Visits")

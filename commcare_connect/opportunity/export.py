@@ -50,6 +50,7 @@ def get_flattened_dataset(headers: list[str], data: list[list]) -> Dataset:
     flat_data = []
     for row in data:
         form_json = row.pop()
+        form_json.pop("attachments", None)
         flat_json = flatten(form_json, reducer="dot", enumerate_types=(list,))
         flat_data.append(flat_json)
         schema.update(flat_json.keys())
