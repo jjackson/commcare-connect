@@ -21,7 +21,10 @@ class Command(BaseCommand):
             for _, visits in groupby(user_visits, key=lambda x: x.entity_id):
                 for visit in visits:
                     completed_work, _ = CompletedWork.objects.get_or_create(
-                        payment_unit=payment_unit, entity_id=visit.entity_id, entity_name=visit.entity_name
+                        opportunity=payment_unit.opportunity,
+                        payment_unit=payment_unit,
+                        entity_id=visit.entity_id,
+                        entity_name=visit.entity_name,
                     )
                     visit.completed_work = completed_work
                     visit.save()
