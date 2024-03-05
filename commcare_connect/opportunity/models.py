@@ -273,7 +273,7 @@ class CompletedWorkStatus(models.TextChoices):
 
 
 class CompletedWork(models.Model):
-    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
+    opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE)
     payment_unit = models.ForeignKey(PaymentUnit, on_delete=models.DO_NOTHING)
     status = models.CharField(max_length=50, choices=CompletedWorkStatus.choices, default=CompletedWorkStatus.pending)
     last_modified = models.DateTimeField(auto_now=True)
