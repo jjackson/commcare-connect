@@ -17,6 +17,7 @@ from commcare_connect.opportunity.models import (
     DeliverUnit,
     LearnModule,
     Opportunity,
+    OpportunityAccess,
     OpportunityClaim,
     UserVisit,
     VisitValidationStatus,
@@ -142,6 +143,7 @@ def process_deliver_form(user, xform: XForm, app: CommCareApp, opportunity: Oppo
 
 def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, deliver_unit_block: dict):
     deliver_unit = get_or_create_deliver_unit(app, deliver_unit_block)
+    access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
     counts = (
         UserVisit.objects.filter(opportunity=opportunity, user=user)
         .exclude(status=VisitValidationStatus.over_limit)
@@ -155,17 +157,19 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     entity_id = deliver_unit_block.get("entity_id")
     entity_name = deliver_unit_block.get("entity_name")
     completed_work, _ = CompletedWork.objects.get_or_create(
-        opportunity=opportunity,
+        opportunity_access=access,
         entity_id=entity_id,
-        entity_name=entity_name,
         payment_unit=deliver_unit.payment_unit,
+        defaults={
+            "entity_name": entity_name,
+        },
     )
     user_visit = UserVisit(
         opportunity=opportunity,
         user=user,
         deliver_unit=deliver_unit,
-        entity_id=deliver_unit_block.get("entity_id"),
-        entity_name=deliver_unit_block.get("entity_name"),
+        entity_id=entity_id,
+        entity_name=entity_name,
         visit_date=xform.metadata.timeStart,
         xform_id=xform.id,
         app_build_id=xform.build_id,
