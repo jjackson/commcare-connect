@@ -373,7 +373,7 @@ class PaymentUnitForm(forms.ModelForm):
             ]
             payment_units_initial = []
             for payment_unit in payment_units:
-                if payment_unit.parent_payment_unit and payment_unit.parent_payment_unit.pk == self.instance.pk:
+                if payment_unit.parent_payment_unit_id and payment_unit.parent_payment_unit_id == self.instance.pk:
                     payment_units_initial.append(payment_unit.pk)
             self.fields["payment_units"].initial = payment_units_initial
 
