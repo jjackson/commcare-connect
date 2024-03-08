@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
-from django.db.models import F
+from django.db.models import F, Q
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -395,14 +395,20 @@ def add_payment_unit(request, org_slug=None, pk=None):
 def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=opp_id)
     payment_unit = get_object_or_404(PaymentUnit, id=pk, opportunity=opportunity)
-    deliver_units = DeliverUnit.objects.filter(app=opportunity.deliver_app)
+    deliver_units = DeliverUnit.objects.filter(
+        Q(payment_unit__isnull=True) | Q(payment_unit=payment_unit), app=opportunity.deliver_app
+    )
+    exclude_payment_units = [payment_unit.pk]
+    if payment_unit.parent_payment_unit_id:
+        exclude_payment_units.append(payment_unit.parent_payment_unit_id)
     payment_unit_deliver_units = {deliver_unit.pk for deliver_unit in payment_unit.deliver_units.all()}
-    opportunity_payment_units = {
-        payment_unit
-        for payment_unit in opportunity.paymentunit_set.exclude(
-            pk__in=[payment_unit.pk, F("parent_payment_unit")]
-        ).all()
-    }
+    opportunity_payment_units = (
+        opportunity.paymentunit_set.filter(
+            Q(parent_payment_unit=payment_unit.pk) | Q(parent_payment_unit__isnull=True)
+        )
+        .exclude(pk__in=exclude_payment_units)
+        .all()
+    )
     form = PaymentUnitForm(
         deliver_units=deliver_units,
         instance=payment_unit,
