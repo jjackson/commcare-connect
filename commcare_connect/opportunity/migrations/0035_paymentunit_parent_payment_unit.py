@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0033_deliverunit_optional"),
+        ("opportunity", "0034_deliverunit_optional"),
     ]
 
     operations = [

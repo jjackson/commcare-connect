@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0032_blobmeta"),
+        ("opportunity", "0033_completedwork_uservisit_completed_work"),
     ]
 
     operations = [
