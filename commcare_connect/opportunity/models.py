@@ -243,7 +243,7 @@ class DeliverUnit(models.Model):
     name = models.CharField(max_length=255)
     payment_unit = models.ForeignKey(
         PaymentUnit,
-        on_delete=models.CASCADE,
+        on_delete=models.DO_NOTHING,
         related_name="deliver_units",
         related_query_name="deliver_unit",
         null=True,
