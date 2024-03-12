@@ -12,7 +12,7 @@ def get_organization_for_request(request, view_kwargs):
     org_slug = view_kwargs.get("org_slug", None)
     if org_slug:
         try:
-            return Organization.objects.get(slug=org_slug, memberships__user=request.user)
+            return Organization.objects.get(slug=org_slug)
         except Organization.DoesNotExist:
             return None
 
