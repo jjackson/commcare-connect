@@ -79,7 +79,8 @@ from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_d
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
-        return self.request.org_membership is not None
+        # request.org_membership is a SimpleLazyObject object so `is not None` is always `True`
+        return self.request.org_membership != None  # noqa: E711
 
 
 class OpportunityList(OrganizationUserMixin, ListView):
