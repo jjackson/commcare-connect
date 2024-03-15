@@ -78,6 +78,128 @@ class OpportunityChangeForm(forms.ModelForm):
         return split_users
 
 
+class OpportunityInitForm(forms.ModelForm):
+    class Meta:
+        model = Opportunity
+        fields = [
+            "name",
+            "description",
+            "short_description",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        self.domains = kwargs.pop("domains", [])
+        self.user = kwargs.pop("user", {})
+        self.org_slug = kwargs.pop("org_slug", "")
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("name")),
+            Row(Field("description")),
+            Row(Field("short_description")),
+            Fieldset(
+                "Learn App",
+                Row(Field("learn_app_domain")),
+                Row(Field("learn_app")),
+                Row(Field("learn_app_description")),
+                Row(Field("learn_app_passing_score")),
+                data_loading_states=True,
+            ),
+            Fieldset(
+                "Deliver App",
+                Row(Field("deliver_app_domain")),
+                Row(Field("deliver_app")),
+                data_loading_states=True,
+            ),
+            Row(Field("api_key")),
+            Submit("submit", "Submit"),
+        )
+
+        domain_choices = [(domain, domain) for domain in self.domains]
+        self.fields["learn_app_domain"] = forms.ChoiceField(
+            choices=domain_choices,
+            widget=forms.Select(
+                attrs={
+                    "hx-get": reverse("opportunity:get_applications_by_domain", args=(self.org_slug,)),
+                    "hx-include": "#id_learn_app_domain",
+                    "hx-trigger": "load delay:0.3s, change",
+                    "hx-target": "#id_learn_app",
+                    "data-loading-disable": True,
+                }
+            ),
+        )
+        self.fields["learn_app"] = forms.Field(
+            widget=forms.Select(choices=[(None, "Loading...")], attrs={"data-loading-disable": True})
+        )
+        self.fields["learn_app_description"] = forms.CharField(widget=forms.Textarea)
+        self.fields["learn_app_passing_score"] = forms.IntegerField(max_value=100, min_value=0)
+        self.fields["deliver_app_domain"] = forms.ChoiceField(
+            choices=domain_choices,
+            widget=forms.Select(
+                attrs={
+                    "hx-get": reverse("opportunity:get_applications_by_domain", args=(self.org_slug,)),
+                    "hx-include": "#id_deliver_app_domain",
+                    "hx-trigger": "load delay:0.3s, change",
+                    "hx-target": "#id_deliver_app",
+                    "data-loading-disable": True,
+                }
+            ),
+        )
+        self.fields["deliver_app"] = forms.Field(
+            widget=forms.Select(choices=[(None, "Loading...")], attrs={"data-loading-disable": True})
+        )
+        self.fields["api_key"] = forms.CharField(max_length=50)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data:
+            cleaned_data["learn_app"] = json.loads(cleaned_data["learn_app"])
+            cleaned_data["deliver_app"] = json.loads(cleaned_data["deliver_app"])
+
+            if cleaned_data["learn_app"]["id"] == cleaned_data["deliver_app"]["id"]:
+                self.add_error("learn_app", "Learn app and Deliver app cannot be same")
+                self.add_error("deliver_app", "Learn app and Deliver app cannot be same")
+            return cleaned_data
+
+    def save(self, commit=True):
+        organization = Organization.objects.get(slug=self.org_slug)
+        learn_app = self.cleaned_data["learn_app"]
+        deliver_app = self.cleaned_data["deliver_app"]
+        learn_app_domain = self.cleaned_data["learn_app_domain"]
+        deliver_app_domain = self.cleaned_data["deliver_app_domain"]
+        self.instance.learn_app, _ = CommCareApp.objects.get_or_create(
+            cc_app_id=learn_app["id"],
+            cc_domain=learn_app_domain,
+            organization=organization,
+            defaults={
+                "name": learn_app["name"],
+                "created_by": self.user.email,
+                "modified_by": self.user.email,
+                "description": self.cleaned_data["learn_app_description"],
+                "passing_score": self.cleaned_data["learn_app_passing_score"],
+            },
+        )
+        self.instance.deliver_app, _ = CommCareApp.objects.get_or_create(
+            cc_app_id=deliver_app["id"],
+            cc_domain=deliver_app_domain,
+            organization=organization,
+            defaults={
+                "name": deliver_app["name"],
+                "created_by": self.user.email,
+                "modified_by": self.user.email,
+            },
+        )
+        self.instance.created_by = self.user.email
+        self.instance.modified_by = self.user.email
+        self.instance.organization = organization
+        api_key, _ = HQApiKey.objects.get_or_create(user=self.user, api_key=self.cleaned_data["api_key"])
+        self.instance.api_key = api_key
+        super().save(commit=commit)
+
+        return self.instance
+
+
 class OpportunityCreationForm(forms.ModelForm):
     class Meta:
         model = Opportunity
