@@ -26,6 +26,7 @@ from commcare_connect.opportunity.forms import (
     DateRanges,
     OpportunityChangeForm,
     OpportunityCreationForm,
+    OpportunityInitForm,
     PaymentExportForm,
     PaymentUnitForm,
     SendMessageMobileUsersForm,
@@ -106,6 +107,26 @@ class OpportunityCreate(OrganizationUserMixin, CreateView):
         return kwargs
 
     def form_valid(self, form: OpportunityCreationForm) -> HttpResponse:
+        response = super().form_valid(form)
+        create_learn_modules_and_deliver_units.delay(self.object.id)
+        return response
+
+
+class OpportunityInit(OrganizationUserMixin, CreateView):
+    template_name = "opportunity/opportunity_init.html"
+    form_class = OpportunityInitForm
+
+    def get_success_url(self):
+        return reverse("opportunity:list", args=(self.request.org.slug,))
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["domains"] = get_domains_for_user(self.request.user)
+        kwargs["user"] = self.request.user
+        kwargs["org_slug"] = self.request.org.slug
+        return kwargs
+
+    def form_valid(self, form: OpportunityInitForm) -> HttpResponse:
         response = super().form_valid(form)
         create_learn_modules_and_deliver_units.delay(self.object.id)
         return response

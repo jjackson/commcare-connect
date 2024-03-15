@@ -5,6 +5,7 @@ from commcare_connect.opportunity.views import (
     OpportunityDeliverStatusTable,
     OpportunityDetail,
     OpportunityEdit,
+    OpportunityInit,
     OpportunityLearnStatusTableView,
     OpportunityList,
     OpportunityPaymentTableView,
@@ -38,6 +39,7 @@ app_name = "opportunity"
 urlpatterns = [
     path("", view=OpportunityList.as_view(), name="list"),
     path("create/", view=OpportunityCreate.as_view(), name="create"),
+    path("init/", view=OpportunityInit.as_view(), name="init"),
     path("<int:pk>/edit", view=OpportunityEdit.as_view(), name="edit"),
     path("<int:pk>/", view=OpportunityDetail.as_view(), name="detail"),
     path("<int:pk>/user_table/", view=OpportunityLearnStatusTableView.as_view(), name="user_table"),
