@@ -224,6 +224,8 @@ class PaymentUnit(models.Model):
     amount = models.PositiveIntegerField()
     name = models.CharField(max_length=255)
     description = models.TextField()
+    max_total = models.IntegerField(null=True)
+    max_daily = models.IntegerField(null=True)
     parent_payment_unit = models.ForeignKey(
         "self",
         on_delete=models.DO_NOTHING,

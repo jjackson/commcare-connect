@@ -117,6 +117,7 @@ class OpportunityInitForm(forms.ModelForm):
         )
 
         domain_choices = [(domain, domain) for domain in self.domains]
+        self.fields["description"] = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
         self.fields["learn_app_domain"] = forms.ChoiceField(
             choices=domain_choices,
             widget=forms.Select(
@@ -132,7 +133,7 @@ class OpportunityInitForm(forms.ModelForm):
         self.fields["learn_app"] = forms.Field(
             widget=forms.Select(choices=[(None, "Loading...")], attrs={"data-loading-disable": True})
         )
-        self.fields["learn_app_description"] = forms.CharField(widget=forms.Textarea)
+        self.fields["learn_app_description"] = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
         self.fields["learn_app_passing_score"] = forms.IntegerField(max_value=100, min_value=0)
         self.fields["deliver_app_domain"] = forms.ChoiceField(
             choices=domain_choices,
@@ -198,6 +199,39 @@ class OpportunityInitForm(forms.ModelForm):
         super().save(commit=commit)
 
         return self.instance
+
+
+class OpportunityFinalizeForm(forms.ModelForm):
+    class Meta:
+        model = Opportunity
+        fields = [
+            "end_date",
+            "total_budget",
+        ]
+        widgets = {
+            "end_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        budget_per_user = kwargs.pop("budget_per_user")
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper()
+
+        self.helper.layout = Layout(
+            Field("end_date"),
+            Field("max_users", oninput=f"id_total_budget.value = {budget_per_user} * parseInt(this.value || 0)"),
+            Field("total_budget", readonly=True, wrapper_class="form-group col-md-4 mb-0"),
+            Submit("submit", "Submit"),
+        )
+        self.fields["max_users"] = forms.IntegerField()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data:
+            if cleaned_data["end_date"] < now().date():
+                self.add_error("end_date", "Please enter the correct end date for this opportunity")
+            return cleaned_data
 
 
 class OpportunityCreationForm(forms.ModelForm):
@@ -446,7 +480,7 @@ class AddBudgetExistingUsersForm(forms.Form):
 class PaymentUnitForm(forms.ModelForm):
     class Meta:
         model = PaymentUnit
-        fields = ["name", "description", "amount"]
+        fields = ["name", "description", "amount", "max_total", "max_daily"]
 
     def __init__(self, *args, **kwargs):
         deliver_units = kwargs.pop("deliver_units", [])
@@ -461,6 +495,8 @@ class PaymentUnitForm(forms.ModelForm):
             Row(Field("required_deliver_units")),
             Row(Field("optional_deliver_units")),
             Row(Field("payment_units")),
+            Field("max_total", wrapper_class="form-group col-md-4 mb-0"),
+            Field("max_daily", wrapper_class="form-group col-md-4 mb-0"),
             Submit(name="submit", value="Submit"),
         )
         deliver_unit_choices = [(deliver_unit.id, deliver_unit.name) for deliver_unit in deliver_units]
@@ -502,6 +538,11 @@ class PaymentUnitForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         if cleaned_data:
+            if cleaned_data["max_daily"] > cleaned_data["max_total"]:
+                self.add_error(
+                    "max_daily",
+                    "Daily max visits per user cannot be greater than total Max visits per user",
+                )
             required_deliver_units = set(cleaned_data.get("required_deliver_units", []))
             for deliver_unit in cleaned_data.get("optional_deliver_units", []):
                 if deliver_unit in required_deliver_units:
