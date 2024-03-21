@@ -118,7 +118,7 @@ class OpportunityInit(OrganizationUserMixin, CreateView):
     form_class = OpportunityInitForm
 
     def get_success_url(self):
-        return reverse("opportunity:list", args=(self.request.org.slug,))
+        return reverse("opportunity:add_payment_units", args=(self.request.org.slug, self.object.id))
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -411,6 +411,8 @@ def payment_import(request, org_slug=None, pk=None):
 
 @org_member_required
 def add_payment_units(request, org_slug=None, pk=None):
+    if request.POST:
+        return add_payment_unit(request, org_slug=request.org, pk=pk, partial=True)
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
     return render(request, "opportunity/add_payment_units.html", dict(opportunity=opportunity))
 
@@ -440,6 +442,9 @@ def add_payment_unit(request, org_slug=None, pk=None, partial=True):
             parent_payment_unit=form.instance.id
         )
         messages.success(request, f"Payment unit {form.instance.name} created.")
+        return redirect("opportunity:add_payment_units", org_slug=request.org.slug, pk=opportunity.id)
+    elif request.POST:
+        messages.error(request, "Invalid Data")
         return redirect("opportunity:add_payment_units", org_slug=request.org.slug, pk=opportunity.id)
     return render(
         request,
@@ -492,8 +497,8 @@ def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
         PaymentUnit.objects.filter(id__in=removed_payment_units, parent_payment_unit=form.instance.id).update(
             parent_payment_unit=None
         )
-        messages.success(request, f"Payment unit {form.instance.name} updated.")
-        return redirect("opportunity:detail", org_slug=request.org.slug, pk=opportunity.id)
+        messages.success(request, f"Payment unit {form.instance.name} updated. Please reset the budget")
+        return redirect("opportunity:finalize", org_slug=request.org.slug, pk=opportunity.id)
     return render(
         request,
         "form.html",

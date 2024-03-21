@@ -225,6 +225,7 @@ class OpportunityFinalizeForm(forms.ModelForm):
             Submit("submit", "Submit"),
         )
         self.fields["max_users"] = forms.IntegerField()
+        self.fields["total_budget"].widget.attrs.update({"class": "form-control-plaintext"})
 
     def clean(self):
         cleaned_data = super().clean()
