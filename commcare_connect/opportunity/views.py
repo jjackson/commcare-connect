@@ -346,6 +346,7 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
         if form.is_valid():
             selected_users = form.cleaned_data["selected_users"]
             additional_visits = form.cleaned_data["additional_visits"]
+            # Todo; to update using ClaimLimit model
             update_kwargs = {"max_payments": F("max_payments") + additional_visits}
             if form.cleaned_data["end_date"]:
                 update_kwargs.update({"end_date": form.cleaned_data["end_date"]})
