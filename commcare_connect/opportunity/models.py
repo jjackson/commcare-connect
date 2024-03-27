@@ -2,7 +2,7 @@ from collections import Counter, defaultdict
 from uuid import uuid4
 
 from django.db import models
-from django.db.models import Count, Exists, F, OuterRef, Sum
+from django.db.models import Count, F, Q, Sum
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
@@ -69,11 +69,16 @@ class Opportunity(BaseModel):
     def __str__(self):
         return self.name
 
+    @property
     def top_level_paymentunits(self):
         # payment units that are prereqs of other paymentunits are ignored
         #   in budget calculations
         return self.paymentunit_set.exclude(
-            exists=Exists(PaymentUnit.objects.filter(parent_payment_unit_id=OuterRef("id")))
+            Q(
+                id__in=self.paymentunit_set.filter(parent_payment_unit_id__isnull=False)
+                .values("parent_payment_unit_id")
+                .distinct()
+            )
         )
 
     @property
@@ -91,8 +96,8 @@ class Opportunity(BaseModel):
         )
         claimed = 0
         for count in payment_unit_counts:
-            visits_count = payment_unit_counts["visits_count"]
-            amount = payment_unit_counts["amount"]
+            visits_count = count["visits_count"]
+            amount = count["amount"]
             claimed += visits_count * amount
 
         return claimed
@@ -101,7 +106,7 @@ class Opportunity(BaseModel):
     def utilised_budget(self):
         opp_access = OpportunityAccess.objects.filter(opportunity=self)
         completed_works = CompletedWork.objects.filter(
-            opportunity_access=opp_access, payment_unit__in=self.top_level_paymentunits
+            opportunity_access=opp_access, payment_unit__in=self.top_level_paymentunits.all()
         )
         payment_unit_counts = completed_works.values("payment_unit").annotate(
             completed_count=Count("id"), amount=F("payment_unit__amount")
@@ -427,7 +432,7 @@ class OpportunityClaimLimit(models.Model):
             for claim_limit in claim_limits:
                 total_claimed_visits += claim_limit.max_visits
 
-            remaining = payment_unit.max_total - total_claimed_visits
+            remaining = (payment_unit.max_total) * opportunity.number_of_users - total_claimed_visits
             OpportunityClaimLimit.objects.get_or_create(
                 opportunity_claim=claim, payment_unit=payment_unit, max_visits=min(remaining, payment_unit.max_total)
             )
