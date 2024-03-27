@@ -32,6 +32,7 @@ class OpportunityChangeForm(forms.ModelForm):
             "short_description",
             "max_visits_per_user",
             "daily_max_visits_per_user",
+            "auto_approve_visits",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -41,6 +42,7 @@ class OpportunityChangeForm(forms.ModelForm):
         self.helper.layout = Layout(
             Row(Field("name")),
             Row(Field("active")),
+            Row(Field("auto_approve_visits", css_class="form-check-input", wrapper_class="form-check form-switch")),
             Row(Field("description")),
             Row(Field("short_description")),
             Row(
