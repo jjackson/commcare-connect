@@ -1,6 +1,6 @@
 import pytest
 
-from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
+from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, OpportunityClaimLimit
 from commcare_connect.opportunity.tests.factories import (
     CompletedModuleFactory,
     OpportunityAccessFactory,
@@ -9,6 +9,7 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentUnitFactory,
 )
 from commcare_connect.users.models import User
+from commcare_connect.users.tests.factories import MobileUserFactory
 
 
 @pytest.mark.django_db
@@ -40,15 +41,42 @@ def test_opportunity_stats(opportunity: Opportunity, mobile_user: User):
         payment_unit2.id,
     }
 
-    # total 10 users (p1_amount * p1_max_total + p2_amount * p2_max_total)  * users
-    opportunity.total_budget = 8000
-    assert opportunity.budget_per_user == 800
-    assert opportunity.number_of_users == 10
+    assert opportunity.budget_per_user == sum([p.amount * p.max_total for p in [payment_unit1, payment_unit2]])
+    assert opportunity.number_of_users == opportunity.total_budget / opportunity.budget_per_user
+    assert (
+        opportunity.allotted_visits
+        == sum([pu.max_total for pu in [payment_unit1, payment_unit2]]) * opportunity.number_of_users
+    )
 
     access = OpportunityAccess.objects.get(opportunity=opportunity, user=mobile_user)
-    claim = OpportunityClaimFactory(opportunity_access=access, max_payments=100)
+    # max_payments to be removed
+    claim = OpportunityClaimFactory(opportunity_access=access, max_payments=0)
 
-    OpportunityClaimLimitFactory(opportunity_claim=claim, payment_unit=payment_unit1, max_visits=10)
-    OpportunityClaimLimitFactory(opportunity_claim=claim, payment_unit=payment_unit2, max_visits=5)
+    ocl1 = OpportunityClaimLimitFactory(opportunity_claim=claim, payment_unit=payment_unit1)
+    ocl2 = OpportunityClaimLimitFactory(opportunity_claim=claim, payment_unit=payment_unit2)
 
-    opportunity.claimed_budget == 80
+    opportunity.claimed_budget == (ocl1.max_visits * payment_unit1.amount) + (ocl2.max_visits * payment_unit2.amount)
+
+
+@pytest.mark.django_db
+def test_claim_limits(opportunity: Opportunity):
+    payment_units = PaymentUnitFactory.create_batch(2, opportunity=opportunity, parent_payment_unit=None)
+    budget_per_user = sum([p.max_total * p.amount for p in payment_units])
+    # budget not enough for more than 2 users
+    opportunity.total_budget = budget_per_user + budget_per_user * 0.5
+    mobile_users = MobileUserFactory.create_batch(3)
+    for mobile_user in mobile_users:
+        access = OpportunityAccessFactory(user=mobile_user, opportunity=opportunity, accepted=True)
+        claim = OpportunityClaimFactory(opportunity_access=access, max_payments=0)
+        OpportunityClaimLimit.create_claim_limits(opportunity, claim)
+
+    assert opportunity.claimed_budget <= int(opportunity.total_budget)
+    assert opportunity.claimed_visits <= int(opportunity.allotted_visits)
+    assert opportunity.remaining_budget < payment_units[0].amount + payment_units[1].amount
+
+    def limit_count(user):
+        return OpportunityClaimLimit.objects.filter(opportunity_claim__opportunity_access__user=user).count()
+
+    assert limit_count(mobile_users[0]) == 2
+    assert limit_count(mobile_users[1]) in [1, 2]
+    assert limit_count(mobile_users[2]) == 0
