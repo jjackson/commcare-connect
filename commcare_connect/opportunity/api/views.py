@@ -80,7 +80,7 @@ class ClaimOpportunityView(APIView):
 
         if OpportunityClaim.objects.filter(opportunity_access=opportunity_access).exists():
             return Response(status=200, data="Opportunity is already claimed")
-        if opportunity.remaining_budget < opportunity.budget_per_visit:
+        if opportunity.remaining_budget < opportunity.minimum_budget_per_visit:
             return Response(status=400, data="Opportunity cannot be claimed. (Budget Exhausted)")
         if opportunity.end_date < datetime.date.today():
             return Response(status=400, data="Opportunity cannot be claimed. (End date reached)")

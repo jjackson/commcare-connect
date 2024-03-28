@@ -82,6 +82,10 @@ class Opportunity(BaseModel):
         )
 
     @property
+    def minimum_budget_per_visit(self):
+        return min(self.top_level_paymentunits.values_list("amount", flat=True))
+
+    @property
     def remaining_budget(self) -> int:
         return self.total_budget - self.claimed_budget
 
@@ -92,7 +96,7 @@ class Opportunity(BaseModel):
         claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__in=opportunity_claim)
 
         payment_unit_counts = claim_limits.values("payment_unit").annotate(
-            visits_count=Count("id"), amount=F("payment_unit__amount")
+            visits_count=Sum("max_visits"), amount=F("payment_unit__amount")
         )
         claimed = 0
         for count in payment_unit_counts:
@@ -131,8 +135,7 @@ class Opportunity(BaseModel):
 
     @property
     def approved_visits(self):
-        opp_access = OpportunityAccess.objects.filter(opportunity=self)
-        return CompletedWork.objects.filter(opportunity_access=opp_access).count()
+        return CompletedWork.objects.filter(opportunity_access__opportunity=self).count()
 
     @property
     def number_of_users(self):
@@ -141,10 +144,7 @@ class Opportunity(BaseModel):
     @property
     def allotted_visits(self):
         payment_units = self.top_level_paymentunits.all()
-        visits = 0
-        for pu in payment_units:
-            visits += pu.max_total
-        return visits * self.number_of_users
+        return sum([pu.max_total for pu in payment_units]) * self.number_of_users
 
     @property
     def budget_per_user(self):
@@ -421,9 +421,12 @@ class OpportunityClaimLimit(models.Model):
     max_visits = models.IntegerField()
 
     @classmethod
-    def create_claim_limits(opportunity, claim):
-        claim_limits_by_payment_unit = defaultdict([])
-        for claim_limit in OpportunityClaimLimit.objects.filter(opportunity_claim__in=claim):
+    def create_claim_limits(cls, opportunity: Opportunity, claim: OpportunityClaim):
+        claim_limits_by_payment_unit = defaultdict(list)
+        claim_limits = OpportunityClaimLimit.objects.filter(
+            opportunity_claim__opportunity_access__opportunity=opportunity
+        )
+        for claim_limit in claim_limits:
             claim_limits_by_payment_unit[claim_limit.payment_unit].append(claim_limit)
 
         for payment_unit in opportunity.top_level_paymentunits.all():
@@ -433,6 +436,9 @@ class OpportunityClaimLimit(models.Model):
                 total_claimed_visits += claim_limit.max_visits
 
             remaining = (payment_unit.max_total) * opportunity.number_of_users - total_claimed_visits
+            if remaining < 1:
+                # claimed limit exceeded for this paymentunit
+                continue
             OpportunityClaimLimit.objects.get_or_create(
                 opportunity_claim=claim, payment_unit=payment_unit, max_visits=min(remaining, payment_unit.max_total)
             )
