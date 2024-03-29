@@ -79,6 +79,7 @@ class OpportunityInitForm(forms.ModelForm):
             "name",
             "description",
             "short_description",
+            "currency",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -106,6 +107,7 @@ class OpportunityInitForm(forms.ModelForm):
                 Row(Field("deliver_app")),
                 data_loading_states=True,
             ),
+            Row(Field("currency")),
             Row(Field("api_key")),
             Submit("submit", "Submit"),
         )
