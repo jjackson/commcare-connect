@@ -149,9 +149,8 @@ class OpportunityEdit(OrganizationUserMixin, UpdateView):
             add_connect_users.delay(users, form.instance.id)
         additional_users = form.cleaned_data["additional_users"]
         if additional_users:
-            opportunity.total_budget += (
-                opportunity.budget_per_visit * opportunity.max_visits_per_user * additional_users
-            )
+            for payment_unit in opportunity.top_level_paymentunits.all():
+                opportunity.total_budget += payment_unit.amount * payment_unit.max_total * additional_users
         end_date = form.cleaned_data["end_date"]
         if end_date:
             opportunity.end_date = end_date

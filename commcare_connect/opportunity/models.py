@@ -108,10 +108,7 @@ class Opportunity(BaseModel):
 
     @property
     def utilised_budget(self):
-        opp_access = OpportunityAccess.objects.filter(opportunity=self)
-        completed_works = CompletedWork.objects.filter(
-            opportunity_access=opp_access, payment_unit__in=self.top_level_paymentunits.all()
-        )
+        completed_works = CompletedWork.objects.filter(opportunity_access__opportunity=self)
         payment_unit_counts = completed_works.values("payment_unit").annotate(
             completed_count=Count("id"), amount=F("payment_unit__amount")
         )
