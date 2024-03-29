@@ -114,8 +114,13 @@ def update_payment_accrued(opportunity: Opportunity, users):
         access = OpportunityAccess.objects.get(user=user, opportunity=opportunity)
         payment_accrued = 0
         for payment_unit in payment_units:
-            required_deliver_units = payment_unit.deliver_units.filter(optional=False).values_list("id", flat=True)
-            optional_deliver_units = payment_unit.deliver_units.filter(optional=True).values_list("id", flat=True)
+            deliver_units = payment_unit.deliver_units.values("id", "optional")
+            required_deliver_units = list(
+                du["id"] for du in filter(lambda du: not du.get("optional", False), deliver_units)
+            )
+            optional_deliver_units = list(
+                du["id"] for du in filter(lambda du: du.get("optional", False), deliver_units)
+            )
             for _, visits in itertools.groupby(user_visits, key=lambda visit: visit["entity_id"]):
                 unit_counts = Counter(v["deliver_unit_id"] for v in visits)
                 # The min unit count is the completed required deliver units for an entity_id
