@@ -136,7 +136,7 @@ def test_payment_accrued_optional_deliver_units(opportunity: Opportunity):
 
 
 @pytest.mark.django_db
-def test_payment_accrued_assymetric_optional_deliver_units(opportunity: Opportunity, mobile_user: User):
+def test_payment_accrued_asymmetric_optional_deliver_units(opportunity: Opportunity, mobile_user: User):
     payment_unit = PaymentUnitFactory.create(opportunity=opportunity)
     deliver_unit = DeliverUnitFactory(payment_unit=payment_unit, app=opportunity.deliver_app, optional=False)
     UserVisitFactory.create_batch(
