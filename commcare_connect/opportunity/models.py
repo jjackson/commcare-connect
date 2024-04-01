@@ -278,6 +278,8 @@ class Payment(models.Model):
         related_query_name="payment",
         null=True,
     )
+    confirmed = models.BooleanField(default=False)
+    confirmation_date = models.DateTimeField(null=True)
 
 
 class CompletedWorkStatus(models.TextChoices):
