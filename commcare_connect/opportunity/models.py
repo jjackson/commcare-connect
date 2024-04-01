@@ -2,6 +2,7 @@ import math
 from collections import Counter
 from uuid import uuid4
 
+from django.conf import settings
 from django.db import models
 from django.db.models import Sum
 from django.utils.timezone import now
@@ -27,6 +28,10 @@ class CommCareApp(BaseModel):
 
     def __str__(self):
         return self.name
+
+    @property
+    def url(self):
+        return f"{settings.COMMCARE_HQ_URL}/a/{self.cc_domain}/apps/view/{self.cc_app_id}"
 
 
 class HQApiKey(models.Model):
