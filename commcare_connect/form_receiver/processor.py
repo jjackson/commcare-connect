@@ -218,7 +218,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         user_visit.status = VisitValidationStatus.approved
     user_visit.save()
     if opportunity.auto_approve_payments:
-        approve_completed_work_and_update_payment_accrued.delay(completed_work.id)
+        approve_completed_work_and_update_payment_accrued.delay([completed_work.id])
     download_user_visit_attachments.delay(user_visit.id)
 
 

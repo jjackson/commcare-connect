@@ -16,7 +16,10 @@ from commcare_connect.opportunity.models import (
     UserVisit,
     VisitValidationStatus,
 )
-from commcare_connect.opportunity.tasks import send_payment_notification
+from commcare_connect.opportunity.tasks import (
+    approve_completed_work_and_update_payment_accrued,
+    send_payment_notification,
+)
 from commcare_connect.utils.itertools import batched
 
 VISIT_ID_COL = "visit id"
@@ -97,12 +100,14 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
     missing_visits = set()
     seen_visits = set()
     user_ids = set()
+    seen_completed_works = set()
     with transaction.atomic():
         for visit_batch in batched(visit_ids, 100):
             to_update = []
             visits = UserVisit.objects.filter(xform_id__in=visit_batch, opportunity=opportunity)
             for visit in visits:
                 seen_visits.add(visit.xform_id)
+                seen_completed_works.add(visit.completed_work_id)
                 status = status_by_visit_id[visit.xform_id]
                 if visit.status != status:
                     visit.status = status
@@ -114,6 +119,10 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
 
             UserVisit.objects.bulk_update(to_update, fields=["status", "reason"])
             missing_visits |= set(visit_batch) - seen_visits
+    if opportunity.auto_approve_payments:
+        approve_completed_work_and_update_payment_accrued.delay(list(seen_completed_works))
+    else:
+        # TODO: This should be a task
         update_payment_accrued(opportunity, users=user_ids)
 
     return VisitImportStatus(seen_visits, missing_visits)

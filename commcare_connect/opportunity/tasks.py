@@ -272,13 +272,14 @@ def generate_work_status_export(opportunity_id: int, export_format: str):
 
 
 @celery_app.task()
-def approve_completed_work_and_update_payment_accrued(completed_work_id: int):
-    completed_work = CompletedWork.objects.get(pk=completed_work_id)
-    access = completed_work.opportunity_access
-    payment_accrued = completed_work.payment_accrued
-    if payment_accrued > 0:
-        with transaction.atomic():
-            completed_work.status = CompletedWorkStatus.approved
-            access.payment_accrued += payment_accrued
-            completed_work.save()
-            access.save()
+def approve_completed_work_and_update_payment_accrued(completed_work_ids: list[int]):
+    for completed_work_id in completed_work_ids:
+        completed_work = CompletedWork.objects.get(pk=completed_work_id)
+        access = completed_work.opportunity_access
+        payment_accrued = completed_work.payment_accrued
+        if payment_accrued > 0:
+            with transaction.atomic():
+                completed_work.status = CompletedWorkStatus.approved
+                access.payment_accrued += payment_accrued
+                completed_work.save()
+                access.save()
