@@ -25,6 +25,8 @@ from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import (
     BlobMeta,
     CompletedModule,
+    CompletedWork,
+    CompletedWorkStatus,
     DeliverUnit,
     LearnModule,
     Opportunity,
@@ -267,3 +269,16 @@ def generate_work_status_export(opportunity_id: int, export_format: str):
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_verification.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
+
+
+@celery_app.task()
+def approve_completed_work_and_update_payment_accrued(completed_work_id: int):
+    completed_work = CompletedWork.objects.get(pk=completed_work_id)
+    access = completed_work.opportunity_access
+    payment_accrued = completed_work.payment_accrued
+    if payment_accrued > 0:
+        with transaction.atomic():
+            completed_work.status = CompletedWorkStatus.approved
+            access.payment_accrued += payment_accrued
+            completed_work.save()
+            access.save()
