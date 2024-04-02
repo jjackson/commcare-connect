@@ -12,8 +12,9 @@
          hx-trigger="load" hx-swap="outerHTML">
       {% include "tables/table_placeholder.html" with num_cols=4 %}
     </div>
-    <div class="mt-3">
-      <button class="btn btn-secondary btn-sm" type="button" hx-get="{% url 'opportunity:add_payment_unit' org_slug=request.org.slug pk=opportunity.id %}?partial=True" hx-target="#paymentunitform" hx-swap="beforeend  scroll:bottom">
+    <div class="mt-3" x-data="{ buttonDisabled: false }">
+      <button class="btn btn-secondary btn-sm" type="button" hx-get="{% url 'opportunity:add_payment_unit' org_slug=request.org.slug pk=opportunity.id %}?partial=True" hx-target="#paymentunitform" hx-swap="beforeend  scroll:bottom"
+        x-on:click="buttonDisabled = true" x-bind:disabled="buttonDisabled">
         <span class="bi bi-plus"></span>
         Add Payment Unit
       </button>

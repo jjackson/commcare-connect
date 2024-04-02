@@ -70,6 +70,10 @@ class Opportunity(BaseModel):
         return self.name
 
     @property
+    def is_setup_complete(self):
+        return self.paymentunit_set.count() > 0 and self.total_budget
+
+    @property
     def top_level_paymentunits(self):
         # payment units that are prereqs of other paymentunits are ignored
         #   in budget calculations
