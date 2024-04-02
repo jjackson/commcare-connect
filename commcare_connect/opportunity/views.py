@@ -190,6 +190,14 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
     model = Opportunity
     template_name = "opportunity/opportunity_detail.html"
 
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if not self.object.is_setup_complete:
+            messages.warning(request, "Please complete the opportunity setup to view it")
+            return redirect("opportunity:add_payment_units", org_slug=request.org.slug, pk=self.object.id)
+        context = self.get_context_data(object=self.object)
+        return self.render_to_response(context)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["visit_export_form"] = VisitExportForm()
@@ -412,13 +420,13 @@ def payment_import(request, org_slug=None, pk=None):
 @org_member_required
 def add_payment_units(request, org_slug=None, pk=None):
     if request.POST:
-        return add_payment_unit(request, org_slug=request.org, pk=pk, partial=True)
+        return add_payment_unit(request, org_slug=request.org, pk=pk)
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
     return render(request, "opportunity/add_payment_units.html", dict(opportunity=opportunity))
 
 
 @org_member_required
-def add_payment_unit(request, org_slug=None, pk=None, partial=True):
+def add_payment_unit(request, org_slug=None, pk=None):
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
     deliver_units = DeliverUnit.objects.filter(app=opportunity.deliver_app, payment_unit__isnull=True)
     form = PaymentUnitForm(
@@ -448,7 +456,7 @@ def add_payment_unit(request, org_slug=None, pk=None, partial=True):
         return redirect("opportunity:add_payment_units", org_slug=request.org.slug, pk=opportunity.id)
     return render(
         request,
-        "partial_form.html" if partial else "form.html",
+        "partial_form.html" if request.GET.get("partial") == "True" else "form.html",
         dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Payment Unit Create", form=form),
     )
 

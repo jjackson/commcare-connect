@@ -29,10 +29,14 @@
           <tr>
             <td>{{ opportunity.name }}</td>
             <td>
-              {% if opportunity.is_active %}
-                <span class="badge bg-success rounded-pill">Active</span>
+              {% if opportunity.is_setup_complete %}
+                {% if opportunity.is_active %}
+                  <span class="badge bg-success rounded-pill">Active</span>
+                {% else %}
+                  <span class="badge bg-secondary text-white rounded-pill">Inactive</span>
+                {% endif %}
               {% else %}
-                <span class="badge bg-secondary text-white rounded-pill">Inactive</span>
+                <span class="badge bg-warning text-white rounded-pill">Pending Setup</span>
               {% endif %}
             </td>
             <td width="300">
