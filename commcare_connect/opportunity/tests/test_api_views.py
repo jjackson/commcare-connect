@@ -180,3 +180,30 @@ def test_delivery_progress_endpoint(
     assert response.status_code == 200
     assert len(response.data["payments"]) == 1
     assert response.data["payments"][0].keys() == PaymentSerializer().get_fields().keys()
+
+
+def test_confirm_payment(mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity):
+    access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
+    api_client.force_authenticate(mobile_user_with_connect_link)
+    payment = Payment.objects.create(amount=10, date_paid=datetime.date.today(), opportunity_access=access)
+    response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
+    assert response.status_code == 200
+    assert len(response.data["payments"]) == 1
+    assert response.data["payments"][0]["confirmed"] is False
+
+    # test confirmation
+    response = api_client.post(f"/api/payment/{payment.pk}/confirm", {"confirmed": "true"})
+    assert response.status_code == 200
+    response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
+    assert response.status_code == 200
+    payment_data = response.data["payments"][0]
+    assert payment_data["confirmed"] is True
+    assert payment_data["confirmation_date"] is not None
+
+    # test undo
+    response = api_client.post(f"/api/payment/{payment.pk}/confirm", {"confirmed": "false"})
+    assert response.status_code == 200
+    response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
+    assert response.status_code == 200
+    payment_data = response.data["payments"][0]
+    assert payment_data["confirmed"] is False
