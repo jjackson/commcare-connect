@@ -163,6 +163,13 @@ class OpportunityFinalize(OrganizationUserMixin, UpdateView):
     template_name = "opportunity/opportunity_finalize.html"
     form_class = OpportunityFinalizeForm
 
+    def dispatch(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if self.object.paymentunit_set.count() == 0:
+            messages.warning(request, "Please configure payment units before setting budget")
+            return redirect("opportunity:add_payment_units", org_slug=request.org.slug, pk=self.object.id)
+        return super().dispatch(request, *args, **kwargs)
+
     def get_success_url(self):
         return reverse("opportunity:detail", args=(self.request.org.slug, self.object.id))
 
