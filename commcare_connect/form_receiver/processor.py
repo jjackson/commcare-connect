@@ -181,7 +181,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         completed_work=completed_work,
     )
     if (
-        counts["daily"] >= opportunity.daily_max_visits_per_user
+        counts["daily"] >= deliver_unit.payment_unit.max_daily
         or counts["total"] >= claim_limit.max_visits
         or datetime.date.today() > claim.end_date
     ):
