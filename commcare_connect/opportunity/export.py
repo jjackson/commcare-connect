@@ -101,9 +101,14 @@ def export_deliver_status_table(opportunity: Opportunity) -> Dataset:
 
 def export_work_status_table(opportunity: Opportunity) -> Dataset:
     access_objects = OpportunityAccess.objects.filter(opportunity=opportunity)
-    completed_works = list(
-        filter(lambda cw: cw.completed, CompletedWork.objects.filter(opportunity_access__in=access_objects))
-    )
+    completed_works = []
+    for completed_work in CompletedWork.objects.filter(opportunity_access__in=access_objects):
+        completed = completed_work.completed
+        if opportunity.auto_approve_payments and completed and completed_work.flags:
+            completed_works.append(completed_work)
+            continue
+        if completed:
+            completed_work.append(completed_work)
     table = CompletedWorkTable(completed_works, exclude=("date_popup"))
     return get_dataset(table, export_title="Payment Verification export")
 
