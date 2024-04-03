@@ -154,7 +154,7 @@ class UserVisitSerializer(serializers.ModelSerializer):
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
-        fields = ["amount", "date_paid", "confirmed", "confirmation_date"]
+        fields = ["id", "amount", "date_paid", "confirmed", "confirmation_date"]
 
 
 class DeliveryProgressSerializer(serializers.Serializer):
