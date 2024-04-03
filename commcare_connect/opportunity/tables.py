@@ -195,7 +195,7 @@ class DeliverStatusTable(tables.Table):
     display_name = columns.Column("Name of the User")
     username = columns.Column(accessor="user__username", visible=False)
     payment_unit = columns.Column("Name of Payment Unit")
-    completed = columns.Column("Completed")
+    completed = columns.Column("Delivered")
     pending = columns.Column("Pending")
     approved = columns.Column("Approved")
     rejected = columns.Column("Rejected")
