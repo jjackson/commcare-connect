@@ -1,6 +1,6 @@
-from django.db.models import Case, Count, F, Max, Min, Q, Sum, When
+from django.db.models import Case, Count, F, Max, Min, Q, Sum, Value, When
 
-from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, VisitValidationStatus
+from commcare_connect.opportunity.models import CompletedWorkStatus, Opportunity, OpportunityAccess
 
 
 def get_annotated_opportunity_access(opportunity: Opportunity):
@@ -43,56 +43,39 @@ def get_annotated_opportunity_access(opportunity: Opportunity):
 
 
 def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
-    access_objects = (
-        OpportunityAccess.objects.filter(opportunity=opportunity)
-        .select_related("user")
-        .annotate(
-            visits_pending=Count(
-                "user__uservisit",
-                filter=Q(
-                    user__uservisit__opportunity=opportunity,
-                    user__uservisit__status=VisitValidationStatus.pending,
+    access_objects = []
+    for payment_unit in opportunity.paymentunit_set.all():
+        access_objects += (
+            OpportunityAccess.objects.filter(opportunity=opportunity)
+            .select_related("user")
+            .annotate(
+                payment_unit=Value(payment_unit.name),
+                pending=Count(
+                    "completedwork",
+                    filter=Q(
+                        completedwork__payment_unit=payment_unit,
+                        completedwork__status=CompletedWorkStatus.pending,
+                    ),
+                    distinct=True,
                 ),
-                distinct=True,
-            ),
-            visits_approved=Count(
-                "user__uservisit",
-                filter=Q(
-                    user__uservisit__opportunity=opportunity,
-                    user__uservisit__status=VisitValidationStatus.approved,
+                approved=Count(
+                    "completedwork",
+                    filter=Q(
+                        completedwork__payment_unit=payment_unit,
+                        completedwork__status=CompletedWorkStatus.approved,
+                    ),
+                    distinct=True,
                 ),
-                distinct=True,
-            ),
-            visits_rejected=Count(
-                "user__uservisit",
-                filter=Q(
-                    user__uservisit__opportunity=opportunity,
-                    user__uservisit__status=VisitValidationStatus.rejected,
+                rejected=Count(
+                    "completedwork",
+                    filter=Q(
+                        completedwork__payment_unit=payment_unit,
+                        completedwork__status=CompletedWorkStatus.rejected,
+                    ),
+                    distinct=True,
                 ),
-                distinct=True,
-            ),
-            visits_over_limit=Count(
-                "user__uservisit",
-                filter=Q(
-                    user__uservisit__opportunity=opportunity,
-                    user__uservisit__status=VisitValidationStatus.over_limit,
-                ),
-                distinct=True,
-            ),
-            visits_duplicate=Count(
-                "user__uservisit",
-                filter=Q(
-                    user__uservisit__opportunity=opportunity,
-                    user__uservisit__status=VisitValidationStatus.duplicate,
-                ),
-                distinct=True,
-            ),
-            visits_completed=F("visits_approved")
-            + F("visits_rejected")
-            + F("visits_over_limit")
-            + F("visits_pending")
-            + F("visits_duplicate"),
+                completed=F("approved") + F("rejected") + F("pending"),
+            )
+            .order_by("user__name")
         )
-        .order_by("user__name")
-    )
     return access_objects

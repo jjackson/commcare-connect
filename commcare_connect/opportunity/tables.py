@@ -194,12 +194,11 @@ class PaymentUnitTable(tables.Table):
 class DeliverStatusTable(tables.Table):
     display_name = columns.Column("Name of the User")
     username = columns.Column(accessor="user__username", visible=False)
-    visits_completed = columns.Column("Completed Visits")
-    visits_approved = columns.Column("Approved Visits")
-    visits_pending = columns.Column("Pending Visits")
-    visits_rejected = columns.Column("Rejected Visits")
-    visits_over_limit = columns.Column("Over Limit Visits")
-    visits_duplicate = columns.Column("Duplicate Visits")
+    payment_unit = columns.Column("Name of Payment Unit")
+    completed = columns.Column("Completed")
+    pending = columns.Column("Pending")
+    approved = columns.Column("Approved")
+    rejected = columns.Column("Rejected")
     details = columns.LinkColumn(
         "opportunity:user_visits_list",
         verbose_name="",
@@ -208,19 +207,17 @@ class DeliverStatusTable(tables.Table):
     )
 
     class Meta:
-        model = OpportunityAccess
-        fields = ("last_visit_date",)
+        model = CompletedWork
         orderable = False
+        fields = ("display_name",)
         sequence = (
             "display_name",
             "username",
-            "visits_completed",
-            "visits_approved",
-            "visits_pending",
-            "visits_rejected",
-            "visits_over_limit",
-            "visits_duplicate",
-            "last_visit_date",
+            "payment_unit",
+            "completed",
+            "pending",
+            "approved",
+            "rejected",
         )
 
     def render_last_visit_date(self, record, value):
