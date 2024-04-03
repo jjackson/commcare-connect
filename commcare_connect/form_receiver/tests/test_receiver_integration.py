@@ -99,7 +99,7 @@ def test_form_receiver_assessment(
 
 @pytest.mark.django_db
 def test_receiver_deliver_form(mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity):
-    deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app)
+    deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app, payment_unit=opportunity.paymentunit_set.first())
     stub = DeliverUnitStubFactory(id=deliver_unit.slug)
     form_json = get_form_json(
         form_block=stub.json,

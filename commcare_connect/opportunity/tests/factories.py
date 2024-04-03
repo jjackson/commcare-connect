@@ -68,7 +68,7 @@ class PaymentUnitFactory(DjangoModelFactory):
     amount = Faker("pyint", min_value=1, max_value=10)
     max_total = Faker("pyint", min_value=1, max_value=10)
     max_daily = Faker("pyint", min_value=1, max_value=10)
-    parent_payment_unit = SubFactory("commcare_connect.opportunity.tests.factories.PaymentUnitFactory")
+    # parent_payment_unit = SubFactory("commcare_connect.opportunity.tests.factories.PaymentUnitFactory")
 
     class Meta:
         model = "opportunity.PaymentUnit"
