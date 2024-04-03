@@ -204,7 +204,9 @@ def test_flagged_form(mobile_user_with_connect_link: User, api_client: APIClient
     assert len(visit.flag_reason.get("flags", []))
 
 
-def test_auto_approve_visits(mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity):
+def test_auto_approve_unflagged_visits(
+    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+):
     form_json = _create_opp_and_form_json(opportunity, user=mobile_user_with_connect_link)
     form_json["metadata"]["timeEnd"] = "2023-06-07T12:36:10.178000Z"
     opportunity.auto_approve_visits = True
@@ -215,7 +217,41 @@ def test_auto_approve_visits(mobile_user_with_connect_link: User, api_client: AP
     assert visit.status == VisitValidationStatus.approved
 
 
-def test_auto_approve_payments(mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity):
+def test_auto_approve_flagged_visits(
+    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=mobile_user_with_connect_link)
+    opportunity.auto_approve_visits = True
+    opportunity.save()
+    make_request(api_client, form_json, mobile_user_with_connect_link)
+    visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
+    assert visit.flagged
+    assert visit.status == VisitValidationStatus.rejected
+
+
+def test_auto_approve_payments_flagged_visit(
+    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    # Flagged Visit
+    form_json = _create_opp_and_form_json(opportunity, user=mobile_user_with_connect_link)
+    opportunity.auto_approve_payments = True
+    opportunity.save()
+    make_request(api_client, form_json, mobile_user_with_connect_link)
+    visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
+    assert visit.flagged
+    assert visit.status == VisitValidationStatus.pending
+
+    # No Payment Approval
+    approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
+    access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
+    completed_work = CompletedWork.objects.get(opportunity_access=access)
+    assert completed_work.status == CompletedWorkStatus.pending
+    assert access.payment_accrued == 0
+
+
+def test_auto_approve_payments_unflagged_visit(
+    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+):
     form_json = _create_opp_and_form_json(opportunity, user=mobile_user_with_connect_link)
     form_json["metadata"]["timeEnd"] = "2023-06-07T12:36:10.178000Z"
     opportunity.auto_approve_payments = True
@@ -225,14 +261,7 @@ def test_auto_approve_payments(mobile_user_with_connect_link: User, api_client: 
     assert not visit.flagged
     assert visit.status == VisitValidationStatus.pending
 
-    approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
-    access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
-    completed_work = CompletedWork.objects.get(opportunity_access=access)
-    assert completed_work.status == CompletedWorkStatus.pending
-    assert access.payment_accrued == 0
-
-    visit.status = VisitValidationStatus.approved
-    visit.save()
+    # Payment Approval
     approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
     access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
     completed_work = CompletedWork.objects.get(opportunity_access=access)
