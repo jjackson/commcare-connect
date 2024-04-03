@@ -331,7 +331,9 @@ class CompletedWork(models.Model):
 
     @property
     def flags(self):
-        visits = self.uservisit_set.values_list("flag_reason", flat=True)
+        visits = self.uservisit_set.exclude(status=VisitValidationStatus.approved).values_list(
+            "flag_reason", flat=True
+        )
         flags = set()
         for visit in visits:
             if not visit:
