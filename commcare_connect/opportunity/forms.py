@@ -540,14 +540,15 @@ class PaymentUnitForm(forms.ModelForm):
                     "max_daily",
                     "Daily max visits per user cannot be greater than total Max visits per user",
                 )
-            required_deliver_units = set(cleaned_data.get("required_deliver_units", []))
-            for deliver_unit in cleaned_data.get("optional_deliver_units", []):
-                if deliver_unit in required_deliver_units:
-                    deliver_unit_obj = DeliverUnit.objects.get(pk=deliver_unit)
-                    self.add_error(
-                        "optional_deliver_units",
-                        error=f"{deliver_unit_obj.name} cannot be marked both Required and Optional",
-                    )
+            common_deliver_units = set(cleaned_data.get("required_deliver_units", [])) & set(
+                cleaned_data.get("optional_deliver_units", [])
+            )
+            for deliver_unit in common_deliver_units:
+                deliver_unit_obj = DeliverUnit.objects.get(pk=deliver_unit)
+                self.add_error(
+                    "optional_deliver_units",
+                    error=f"{deliver_unit_obj.name} cannot be marked both Required and Optional",
+                )
         return cleaned_data
 
 
