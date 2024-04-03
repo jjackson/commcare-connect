@@ -129,6 +129,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
 
 
 def update_payment_accrued(opportunity: Opportunity, users):
+    """Updates payment accrued for completed and approved CompletedWork instances."""
     payment_units = opportunity.paymentunit_set.all()
     access_objects = OpportunityAccess.objects.filter(user__in=users, opportunity=opportunity)
     for access in access_objects:
