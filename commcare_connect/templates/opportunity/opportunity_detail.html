@@ -185,7 +185,8 @@
     <div class="accordion-item">
       <h2 class="accordion-header" id="headingOne">
         <button class="accordion-button fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#learn-app-modules" aria-expanded="true" aria-controls="collapseOne">
-          Learn App  - {{ object.learn_app.name }}
+          Learn App -&nbsp;
+          <a href="{{ object.learn_app.url }}" target="_blank">{{ object.learn_app.name }}</a>
         </button>
       </h2>
       <div id="learn-app-modules" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
@@ -214,7 +215,8 @@
     <div class="accordion-item">
       <h2 class="accordion-header" id="headingTwo">
         <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#deliver-units" aria-expanded="false" aria-controls="collapseTwo">
-          Deliver App - {{ object.deliver_app.name }}
+          Deliver App -&nbsp;
+          <a href="{{ object.deliver_app.url }}" target="_blank">{{ object.deliver_app.name }}</a>
         </button>
       </h2>
       <div id="deliver-units" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#accordionExample">
