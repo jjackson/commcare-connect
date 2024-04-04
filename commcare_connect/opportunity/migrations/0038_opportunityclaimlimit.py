@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0036_add_max_visits"),
+        ("opportunity", "0037_add_max_visits"),
     ]
 
     operations = [

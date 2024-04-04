@@ -44,6 +44,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    OpportunityClaimLimit,
     Payment,
     PaymentUnit,
     UserVisit,
@@ -364,12 +365,15 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
         if form.is_valid():
             selected_users = form.cleaned_data["selected_users"]
             additional_visits = form.cleaned_data["additional_visits"]
-            # Todo; to update using ClaimLimit model
-            update_kwargs = {"max_payments": F("max_payments") + additional_visits}
             if form.cleaned_data["end_date"]:
-                update_kwargs.update({"end_date": form.cleaned_data["end_date"]})
-            OpportunityClaim.objects.filter(pk__in=selected_users).update(**update_kwargs)
-            opportunity.total_budget += additional_visits * opportunity.budget_per_visit * len(selected_users)
+                OpportunityClaim.objects.filter(pk__in=selected_users).update(end_date=form.cleaned_data["end_date"])
+            if additional_visits:
+                OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users).update(
+                    max_visits=F("max_visits") + additional_visits
+                )
+
+            for ocl in OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users).all():
+                opportunity.total_budget += ocl.payment_unit.amount * additional_visits
             opportunity.save()
             return redirect("opportunity:detail", org_slug, pk)
 

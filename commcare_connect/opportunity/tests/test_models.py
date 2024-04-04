@@ -1,6 +1,6 @@
 import pytest
 
-from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, OpportunityClaimLimit
+from commcare_connect.opportunity.models import Opportunity, OpportunityClaimLimit
 from commcare_connect.opportunity.tests.factories import (
     CompletedModuleFactory,
     OpportunityAccessFactory,
@@ -22,7 +22,7 @@ def test_learn_progress():
 
 
 @pytest.mark.django_db
-def test_opportunity_stats(opportunity: Opportunity, mobile_user: User):
+def test_opportunity_stats(opportunity: Opportunity, user: User):
     payment_unit_sub = PaymentUnitFactory(
         opportunity=opportunity, max_total=100, max_daily=10, amount=5, parent_payment_unit=None
     )
@@ -48,9 +48,8 @@ def test_opportunity_stats(opportunity: Opportunity, mobile_user: User):
         == sum([pu.max_total for pu in [payment_unit1, payment_unit2]]) * opportunity.number_of_users
     )
 
-    access = OpportunityAccess.objects.get(opportunity=opportunity, user=mobile_user)
-    # max_payments to be removed
-    claim = OpportunityClaimFactory(opportunity_access=access, max_payments=0)
+    access = OpportunityAccessFactory(user=user, opportunity=opportunity)
+    claim = OpportunityClaimFactory(opportunity_access=access)
 
     ocl1 = OpportunityClaimLimitFactory(opportunity_claim=claim, payment_unit=payment_unit1)
     ocl2 = OpportunityClaimLimitFactory(opportunity_claim=claim, payment_unit=payment_unit2)
@@ -67,7 +66,7 @@ def test_claim_limits(opportunity: Opportunity):
     mobile_users = MobileUserFactory.create_batch(3)
     for mobile_user in mobile_users:
         access = OpportunityAccessFactory(user=mobile_user, opportunity=opportunity, accepted=True)
-        claim = OpportunityClaimFactory(opportunity_access=access, max_payments=0)
+        claim = OpportunityClaimFactory(opportunity_access=access)
         OpportunityClaimLimit.create_claim_limits(opportunity, claim)
 
     assert opportunity.claimed_budget <= int(opportunity.total_budget)

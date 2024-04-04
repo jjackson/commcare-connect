@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0035_paymentunit_parent_payment_unit_and_more"),
+        ("opportunity", "0036_payment_confirmation_date_payment_confirmed"),
     ]
 
     operations = [

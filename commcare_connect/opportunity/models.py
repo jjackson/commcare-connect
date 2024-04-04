@@ -64,10 +64,12 @@ class Opportunity(BaseModel):
         on_delete=models.CASCADE,
         null=True,
     )
+    # to be removed
     max_visits_per_user = models.IntegerField(null=True)
     daily_max_visits_per_user = models.IntegerField(null=True)
     start_date = models.DateField(null=True, default=datetime.date.today)
     end_date = models.DateField(null=True)
+    # to be removed
     budget_per_visit = models.IntegerField(null=True)
     total_budget = models.IntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
@@ -424,7 +426,7 @@ class UserVisit(XFormBaseModel):
 class OpportunityClaim(models.Model):
     opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE)
     # to be removed
-    max_payments = models.IntegerField()
+    max_payments = models.IntegerField(null=True)
     end_date = models.DateField()
     date_claimed = models.DateField(auto_now_add=True)
 
