@@ -6,7 +6,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0037_opportunityclaimlimit"),
+        ("opportunity", "0038_opportunityclaimlimit"),
     ]
 
     operations = [

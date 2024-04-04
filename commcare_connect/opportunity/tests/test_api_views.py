@@ -23,6 +23,7 @@ from commcare_connect.opportunity.tests.factories import (
     LearnModuleFactory,
     OpportunityAccessFactory,
     OpportunityFactory,
+    PaymentUnitFactory,
     UserVisitFactory,
 )
 from commcare_connect.users.models import User
@@ -32,10 +33,9 @@ from commcare_connect.users.tests.factories import ConnectIdUserLinkFactory
 def _setup_opportunity_and_access(mobile_user: User, total_budget, end_date, budget_per_visit=10):
     opportunity = OpportunityFactory(
         total_budget=total_budget,
-        max_visits_per_user=100,
         end_date=end_date,
-        budget_per_visit=budget_per_visit,
     )
+    PaymentUnitFactory(opportunity=opportunity, amount=budget_per_visit, max_total=100)
     opportunity_access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user)
     ConnectIdUserLinkFactory(
         user=mobile_user, commcare_username="test@ccc-test.commcarehq.org", domain=opportunity.deliver_app.cc_domain
@@ -113,7 +113,7 @@ def test_claim_endpoint_uneven_visits(mobile_user: User, api_client: APIClient):
     response = api_client.post(f"/api/opportunity/{opportunity.id}/claim")
     assert response.status_code == 201
     claim = OpportunityClaim.objects.get(opportunity_access=opportunity_access)
-    assert claim.max_payments == 1
+    assert claim.opportunityclaimlimit_set.first().max_visits == 1
 
 
 @pytest.mark.django_db
