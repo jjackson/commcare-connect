@@ -334,6 +334,8 @@ class CompletedWork(models.Model):
         visits = self.uservisit_set.values_list("flag_reason", flat=True)
         flags = set()
         for visit in visits:
+            if not visit:
+                continue
             for flag, _ in visit.get("flags", []):
                 flags.add(flag)
         return list(flags)
