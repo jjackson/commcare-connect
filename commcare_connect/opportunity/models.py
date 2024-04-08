@@ -1,4 +1,3 @@
-import datetime
 import math
 from collections import Counter
 from uuid import uuid4
@@ -120,12 +119,12 @@ class Opportunity(BaseModel):
 
 class OpportunityVerificationFlags(models.Model):
     opportunity = models.OneToOneField(Opportunity, on_delete=models.CASCADE)
-    duration = models.DurationField(default=datetime.timedelta(minutes=1))
+    duration = models.PositiveIntegerField(default=1)
     gps = models.BooleanField(default=True)
     duplicate = models.BooleanField(default=True)
     location = models.PositiveIntegerField(default=10)
-    form_submission_start = models.DateTimeField(null=True, blank=True)
-    form_submission_end = models.DateTimeField(null=True, blank=True)
+    form_submission_start = models.TimeField(null=True, blank=True)
+    form_submission_end = models.TimeField(null=True, blank=True)
 
 
 class LearnModule(models.Model):
