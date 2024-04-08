@@ -160,9 +160,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         opportunity_access=access,
         entity_id=entity_id,
         payment_unit=deliver_unit.payment_unit,
-        defaults={
-            "entity_name": entity_name,
-        },
+        defaults={"entity_name": entity_name},
     )
     user_visit = UserVisit(
         opportunity=opportunity,
@@ -185,24 +183,40 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     ):
         user_visit.status = VisitValidationStatus.over_limit
     flags = []
+    opportunity_flags = opportunity.opportunityverificationflags
     if counts["entity"] > 0:
         user_visit.status = VisitValidationStatus.duplicate
-        flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
-    if xform.metadata.duration < datetime.timedelta(seconds=60):
+        if opportunity_flags.duplicate:
+            flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
+    if opportunity_flags.duration.seconds > 0 and xform.metadata.duration < opportunity_flags.duration:
         flags.append(["duration", "The form was completed too quickly."])
     if xform.metadata.location is None:
-        flags.append(["gps", "GPS data is missing"])
+        if opportunity_flags.gps:
+            flags.append(["gps", "GPS data is missing"])
     else:
-        user_visits = UserVisit.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit).values("location")
-        cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
-        for visit in user_visits:
-            if visit.get("location") is None:
-                continue
-            lat, lon, *_ = visit["location"].split(" ")
-            dist = distance((lat, lon), (cur_lat, cur_lon))
-            if dist.m <= 10:
-                flags.append(["location", "Visit location is too close to another visit"])
-                break
+        if opportunity_flags.location > 0:
+            user_visits = UserVisit.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit).values(
+                "location"
+            )
+            cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
+            for visit in user_visits:
+                if visit.get("location") is None:
+                    continue
+                lat, lon, *_ = visit["location"].split(" ")
+                dist = distance((lat, lon), (cur_lat, cur_lon))
+                if dist.m <= 10:
+                    flags.append(["location", "Visit location is too close to another visit"])
+                    break
+    if (
+        opportunity_flags.form_submission_start
+        and opportunity_flags.form_submission_start.time() < xform.metadata.timeStart.time()
+    ):
+        flags.append(["form_submission_period", "Form was submitted before the start time"])
+    if (
+        opportunity_flags.form_submission_end
+        and opportunity_flags.form_submission_end.time() > xform.metadata.timeStart.time()
+    ):
+        flags.append(["form_submission_period", "Form was submitted after the end time"])
     if flags:
         user_visit.flagged = True
         user_visit.flag_reason = {"flags": flags}
