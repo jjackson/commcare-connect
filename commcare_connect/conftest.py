@@ -5,6 +5,7 @@ from commcare_connect.opportunity.tests.factories import (
     OpportunityAccessFactory,
     OpportunityClaimFactory,
     OpportunityFactory,
+    OpportunityVerificationFlagsFactory,
 )
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
@@ -45,7 +46,9 @@ def user(db) -> User:
 
 @pytest.fixture()
 def opportunity():
-    return OpportunityFactory()
+    factory = OpportunityFactory()
+    OpportunityVerificationFlagsFactory(opportunity=factory)
+    return factory
 
 
 @pytest.fixture

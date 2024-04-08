@@ -52,6 +52,13 @@ class OpportunityFactory(DjangoModelFactory):
         model = "opportunity.Opportunity"
 
 
+class OpportunityVerificationFlagsFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+
+    class Meta:
+        model = "opportunity.OpportunityVerificationFlags"
+
+
 class LearnModuleFactory(DjangoModelFactory):
     app = SubFactory(CommCareAppFactory)
     slug = Faker("pystr")
