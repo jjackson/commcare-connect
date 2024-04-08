@@ -43,6 +43,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    OpportunityVerificationFlags,
     Payment,
     PaymentUnit,
     UserVisit,
@@ -684,7 +685,8 @@ def fetch_attachment(self, org_slug, blob_id):
 @org_member_required
 def verification_flags_config(request, org_slug=None, pk=None):
     opportunity = get_object_or_404(Opportunity, pk=pk, organization=request.org)
-    form = OpportunityVerificationFlagsConfigForm(data=request.POST or None)
+    verification_flags = OpportunityVerificationFlags.objects.filter(opportunity=opportunity).first()
+    form = OpportunityVerificationFlagsConfigForm(instance=verification_flags, data=request.POST or None)
 
     if form.is_valid():
         verification_flags = form.save(commit=False)

@@ -466,4 +466,6 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
         self.fields["duration"].required = False
         self.fields["location"].required = False
         self.fields["gps"].required = False
-        self.fields["duration"].initial = 1
+        if self.instance:
+            self.fields["form_submission_start"].initial = self.instance.form_submission_start
+            self.fields["form_submission_end"].initial = self.instance.form_submission_end
