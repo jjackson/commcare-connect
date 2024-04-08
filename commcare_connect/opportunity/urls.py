@@ -31,6 +31,7 @@ from commcare_connect.opportunity.views import (
     update_visit_status_import,
     user_profile,
     user_visits_list,
+    verification_flags_config,
     visit_verification,
 )
 
@@ -75,4 +76,5 @@ urlpatterns = [
     path("approve/<int:pk>/", view=approve_visit, name="approve_visit"),
     path("reject/<int:pk>/", view=reject_visit, name="reject_visit"),
     path("fetch_attachment/<blob_id>", view=fetch_attachment, name="fetch_attachment"),
+    path("<int:pk>/verification_flags_config/", view=verification_flags_config, name="verification_flags_config"),
 ]

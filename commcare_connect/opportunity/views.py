@@ -26,6 +26,7 @@ from commcare_connect.opportunity.forms import (
     DateRanges,
     OpportunityChangeForm,
     OpportunityCreationForm,
+    OpportunityVerificationFlagsConfigForm,
     PaymentExportForm,
     PaymentUnitForm,
     SendMessageMobileUsersForm,
@@ -678,3 +679,23 @@ def fetch_attachment(self, org_slug, blob_id):
     blob_meta = BlobMeta.objects.get(blob_id=blob_id)
     attachment = storages["default"].open(blob_id)
     return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
+
+
+@org_member_required
+def verification_flags_config(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, pk=pk, organization=request.org)
+    form = OpportunityVerificationFlagsConfigForm(data=request.POST or None)
+
+    if form.is_valid():
+        verification_flags = form.save(commit=False)
+        verification_flags.opportunity = opportunity
+        verification_flags.save()
+        return redirect("opportunity:detail", request.org.slug, opportunity.id)
+
+    return render(
+        request,
+        "form.html",
+        context=dict(
+            title=f"{request.org.slug} - {opportunity.name}", form_title="Verification Flags Configuration", form=form
+        ),
+    )
