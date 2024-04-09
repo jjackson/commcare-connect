@@ -2,6 +2,7 @@ import math
 from collections import Counter
 from uuid import uuid4
 
+from django.conf import settings
 from django.db import models
 from django.db.models import Sum
 from django.utils.timezone import now
@@ -27,6 +28,10 @@ class CommCareApp(BaseModel):
 
     def __str__(self):
         return self.name
+
+    @property
+    def url(self):
+        return f"{settings.COMMCARE_HQ_URL}/a/{self.cc_domain}/apps/view/{self.cc_app_id}"
 
 
 class HQApiKey(models.Model):
@@ -275,6 +280,8 @@ class Payment(models.Model):
         related_query_name="payment",
         null=True,
     )
+    confirmed = models.BooleanField(default=False)
+    confirmation_date = models.DateTimeField(null=True)
 
 
 class CompletedWorkStatus(models.TextChoices):
@@ -298,8 +305,11 @@ class CompletedWork(models.Model):
         """Returns the no of completion of this work. Includes duplicate submissions."""
         visits = self.uservisit_set.values_list("deliver_unit_id", flat=True)
         unit_counts = Counter(visits)
-        required_deliver_units = self.payment_unit.deliver_units.filter(optional=False).values_list("id", flat=True)
-        optional_deliver_units = self.payment_unit.deliver_units.filter(optional=True).values_list("id", flat=True)
+        deliver_units = self.payment_unit.deliver_units.values("id", "optional")
+        required_deliver_units = list(
+            du["id"] for du in filter(lambda du: not du.get("optional", False), deliver_units)
+        )
+        optional_deliver_units = list(du["id"] for du in filter(lambda du: du.get("optional", False), deliver_units))
         # NOTE: The min unit count is the completed required deliver units for an entity_id
         number_completed = min(unit_counts[deliver_id] for deliver_id in required_deliver_units)
         if optional_deliver_units:
