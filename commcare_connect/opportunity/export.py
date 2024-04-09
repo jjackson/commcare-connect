@@ -108,7 +108,7 @@ def export_work_status_table(opportunity: Opportunity) -> Dataset:
             completed_works.append(completed_work)
             continue
         if completed:
-            completed_work.append(completed_work)
+            completed_works.append(completed_work)
     table = CompletedWorkTable(completed_works, exclude=("date_popup"))
     return get_dataset(table, export_title="Payment Verification export")
 
