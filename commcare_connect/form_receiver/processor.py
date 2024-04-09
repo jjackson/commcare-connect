@@ -188,7 +188,9 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         user_visit.status = VisitValidationStatus.duplicate
         if opportunity_flags.duplicate:
             flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
-    if opportunity_flags.duration.seconds > 0 and xform.metadata.duration < opportunity_flags.duration:
+    if opportunity_flags.duration > 0 and xform.metadata.duration < datetime.timedelta(
+        minutes=opportunity_flags.duration
+    ):
         flags.append(["duration", "The form was completed too quickly."])
     if xform.metadata.location is None:
         if opportunity_flags.gps:
