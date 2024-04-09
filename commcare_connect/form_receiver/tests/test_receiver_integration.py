@@ -226,7 +226,7 @@ def test_auto_approve_flagged_visits(
     make_request(api_client, form_json, mobile_user_with_connect_link)
     visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
     assert visit.flagged
-    assert visit.status == VisitValidationStatus.rejected
+    assert visit.status == VisitValidationStatus.pending
 
 
 def test_auto_approve_payments_flagged_visit(
