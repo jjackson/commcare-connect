@@ -280,10 +280,10 @@ def approve_completed_work_and_update_payment_accrued(completed_work_ids: list[i
         access = completed_work.opportunity_access
         if completed_work.flags:
             continue
-        payment_accrued = completed_work.payment_accrued
-        if payment_accrued > 0:
+        completed_count = completed_work.completed_count
+        if completed_count > 0:
             with transaction.atomic():
                 completed_work.status = CompletedWorkStatus.approved
-                access.payment_accrued += payment_accrued
+                access.payment_accrued += completed_count * completed_work.payment_unit.amount
                 completed_work.save()
                 access.save()
