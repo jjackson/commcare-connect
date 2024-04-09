@@ -210,8 +210,12 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         user_visit.flagged = True
         user_visit.flag_reason = {"flags": flags}
 
-    if opportunity.auto_approve_visits and user_visit.status == VisitValidationStatus.pending:
-        user_visit.status = VisitValidationStatus.rejected if user_visit.flagged else VisitValidationStatus.approved
+    if (
+        opportunity.auto_approve_visits
+        and user_visit.status == VisitValidationStatus.pending
+        and not user_visit.flagged
+    ):
+        user_visit.status = VisitValidationStatus.approved
     user_visit.save()
     if opportunity.auto_approve_payments:
         approve_completed_work_and_update_payment_accrued.delay([completed_work.id])
