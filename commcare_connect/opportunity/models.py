@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Sum
+from django.db.models import Count, Q, Sum
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
@@ -222,6 +222,23 @@ class OpportunityAccess(models.Model):
             return self.user.name
         else:
             return "---"
+
+    @property
+    def assessment_count(self):
+        return Assessment.objects.filter(user=self.user, opportunity=self.opportunity).count()
+
+    @property
+    def assessment_status(self):
+        assessments = Assessment.objects.filter(user=self.user, opportunity=self.opportunity).aggregate(
+            failed=Count("pk", filter=Q(passed=False)), passed=Count("pk", filter=Q(passed=True))
+        )
+        if assessments.get("passed", 0) > 0:
+            status = "Passed"
+        elif assessments.get("failed", 0) > 0:
+            status = "Failed"
+        else:
+            status = "Not completed"
+        return status
 
 
 class PaymentUnit(models.Model):
