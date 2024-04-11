@@ -53,6 +53,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
                 pending=Count(
                     "completedwork",
                     filter=Q(
+                        completedwork__opportunity_access_id=F("pk"),
                         completedwork__payment_unit=payment_unit,
                         completedwork__status=CompletedWorkStatus.pending,
                     ),
@@ -61,6 +62,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
                 approved=Count(
                     "completedwork",
                     filter=Q(
+                        completedwork__opportunity_access_id=F("pk"),
                         completedwork__payment_unit=payment_unit,
                         completedwork__status=CompletedWorkStatus.approved,
                     ),
@@ -69,6 +71,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
                 rejected=Count(
                     "completedwork",
                     filter=Q(
+                        completedwork__opportunity_access_id=F("pk"),
                         completedwork__payment_unit=payment_unit,
                         completedwork__status=CompletedWorkStatus.rejected,
                     ),
