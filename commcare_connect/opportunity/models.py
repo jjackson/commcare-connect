@@ -154,7 +154,7 @@ class Opportunity(BaseModel):
     @property
     def allotted_visits(self):
         payment_units = self.top_level_paymentunits.all()
-        return sum([pu.max_total for pu in payment_units]) * self.number_of_users
+        return sum([pu.max_total or 0 for pu in payment_units]) * self.number_of_users
 
     @property
     def budget_per_user(self):
