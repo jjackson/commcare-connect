@@ -78,9 +78,13 @@ class Opportunity(BaseModel):
     def __str__(self):
         return self.name
 
-    @property
     def is_setup_complete(self):
-        return self.paymentunit_set.count() > 0 and self.total_budget
+        if not (self.paymentunit_set.count() > 0 and self.total_budget):
+            return False
+        for pu in self.paymentunit_set.all():
+            if not (pu.max_total and pu.max_daily):
+                return False
+        return True
 
     @property
     def top_level_paymentunits(self):
