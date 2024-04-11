@@ -78,6 +78,7 @@ class Opportunity(BaseModel):
     def __str__(self):
         return self.name
 
+    @property
     def is_setup_complete(self):
         if not (self.paymentunit_set.count() > 0 and self.total_budget):
             return False
