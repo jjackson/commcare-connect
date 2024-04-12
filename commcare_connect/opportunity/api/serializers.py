@@ -155,7 +155,7 @@ class UserVisitSerializer(serializers.ModelSerializer):
 # to the deliver progress API
 class CompletedWorkSerializer(serializers.ModelSerializer):
     deliver_unit_name = serializers.CharField(source="payment_unit.name")
-    deliver_unit_slug = serializers.CharField(default="dummy_payment_unit")
+    deliver_unit_slug = serializers.CharField(source="payment_unit.pk")
     visit_date = serializers.DateTimeField(source="completion_date")
 
     class Meta:
