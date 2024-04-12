@@ -115,7 +115,7 @@ class ConfirmPaymentView(APIView):
 
     def post(self, *args, **kwargs):
         payment = get_object_or_404(Payment, pk=kwargs.get("pk"))
-        confirmed_value = self.request.data("confirmed")
+        confirmed_value = self.request.data["confirmed"]
         if confirmed_value == "false":
             confirmed = False
         elif confirmed_value == "true":
