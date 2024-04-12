@@ -36,17 +36,16 @@ def test_opportunity_stats(opportunity: Opportunity, user: User):
     payment_unit2 = PaymentUnitFactory(
         opportunity=opportunity, max_total=100, max_daily=10, amount=5, parent_payment_unit=None
     )
-    assert set(list(opportunity.top_level_paymentunits.values_list("id", flat=True))) == {
+    assert set(list(opportunity.paymentunit_set.values_list("id", flat=True))) == {
         payment_unit1.id,
         payment_unit2.id,
+        payment_unit_sub.id,
     }
 
-    assert opportunity.budget_per_user == sum([p.amount * p.max_total for p in [payment_unit1, payment_unit2]])
+    payment_units = [payment_unit1, payment_unit2, payment_unit_sub]
+    assert opportunity.budget_per_user == sum([p.amount * p.max_total for p in payment_units])
     assert opportunity.number_of_users == opportunity.total_budget / opportunity.budget_per_user
-    assert (
-        opportunity.allotted_visits
-        == sum([pu.max_total for pu in [payment_unit1, payment_unit2]]) * opportunity.number_of_users
-    )
+    assert opportunity.allotted_visits == sum([pu.max_total for pu in payment_units]) * opportunity.number_of_users
 
     access = OpportunityAccessFactory(user=user, opportunity=opportunity)
     claim = OpportunityClaimFactory(opportunity_access=access)
@@ -59,10 +58,14 @@ def test_opportunity_stats(opportunity: Opportunity, user: User):
 
 @pytest.mark.django_db
 def test_claim_limits(opportunity: Opportunity):
-    payment_units = PaymentUnitFactory.create_batch(2, opportunity=opportunity, parent_payment_unit=None)
+    payment_unit_sub = PaymentUnitFactory(opportunity=opportunity, parent_payment_unit=None)
+    payment_units = PaymentUnitFactory.create_batch(2, opportunity=opportunity, parent_payment_unit=None) + [
+        payment_unit_sub
+    ]
+    payment_unit_sub.parent_payment_unit = payment_units[0]
     budget_per_user = sum([p.max_total * p.amount for p in payment_units])
     # budget not enough for more than 2 users
-    opportunity.total_budget = budget_per_user + budget_per_user * 0.5
+    opportunity.total_budget = budget_per_user * 1.5
     mobile_users = MobileUserFactory.create_batch(3)
     for mobile_user in mobile_users:
         access = OpportunityAccessFactory(user=mobile_user, opportunity=opportunity, accepted=True)
@@ -76,6 +79,9 @@ def test_claim_limits(opportunity: Opportunity):
     def limit_count(user):
         return OpportunityClaimLimit.objects.filter(opportunity_claim__opportunity_access__user=user).count()
 
-    assert limit_count(mobile_users[0]) == 2
-    assert limit_count(mobile_users[1]) in [1, 2]
+    # enough for 1st user
+    assert limit_count(mobile_users[0]) == 3
+    # partially enough for 2nd user, depending on paymentunit.amount
+    assert limit_count(mobile_users[1]) in [2, 3]
+    # Not enough for 3rd user at all
     assert limit_count(mobile_users[2]) == 0

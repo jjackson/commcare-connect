@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, F, Sum
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
@@ -88,20 +88,8 @@ class Opportunity(BaseModel):
         return True
 
     @property
-    def top_level_paymentunits(self):
-        # payment units that are prereqs of other paymentunits are ignored
-        #   in budget calculations
-        return self.paymentunit_set.exclude(
-            Q(
-                id__in=self.paymentunit_set.filter(parent_payment_unit_id__isnull=False)
-                .values("parent_payment_unit_id")
-                .distinct()
-            )
-        )
-
-    @property
     def minimum_budget_per_visit(self):
-        return min(self.top_level_paymentunits.values_list("amount", flat=True))
+        return min(self.paymentunit_set.all().values_list("amount", flat=True))
 
     @property
     def remaining_budget(self) -> int:
@@ -158,12 +146,12 @@ class Opportunity(BaseModel):
 
     @property
     def allotted_visits(self):
-        payment_units = self.top_level_paymentunits.all()
+        payment_units = self.paymentunit_set.all()
         return sum([pu.max_total or 0 for pu in payment_units]) * self.number_of_users
 
     @property
     def budget_per_user(self):
-        payment_units = self.top_level_paymentunits.all()
+        payment_units = self.paymentunit_set.all()
         budget = 0
         for pu in payment_units:
             budget += pu.max_total * pu.amount
@@ -450,7 +438,7 @@ class OpportunityClaimLimit(models.Model):
         for claim_limit in claim_limits:
             claim_limits_by_payment_unit[claim_limit.payment_unit].append(claim_limit)
 
-        for payment_unit in opportunity.top_level_paymentunits.all():
+        for payment_unit in opportunity.paymentunit_set.all():
             claim_limits = claim_limits_by_payment_unit.get(payment_unit, [])
             total_claimed_visits = 0
             for claim_limit in claim_limits:
