@@ -213,15 +213,15 @@ class OpportunityFinalizeForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         budget_per_user = kwargs.pop("budget_per_user")
-        current_start_date = kwargs.pop("current_start_date")
-        is_start_date_readonly = current_start_date < datetime.date.today()
+        self.current_start_date = kwargs.pop("current_start_date")
+        self.is_start_date_readonly = self.current_start_date < datetime.date.today()
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper()
         self.helper.layout = Layout(
             Field(
                 "start_date",
-                help="Start date can't be edited if it was set in past" if is_start_date_readonly else None,
+                help="Start date can't be edited if it was set in past" if self.is_start_date_readonly else None,
             ),
             Field("end_date"),
             Field("max_users", oninput=f"id_total_budget.value = {budget_per_user} * parseInt(this.value || 0)"),
@@ -229,17 +229,21 @@ class OpportunityFinalizeForm(forms.ModelForm):
             Submit("submit", "Submit"),
         )
         self.fields["max_users"] = forms.IntegerField()
-        self.fields["start_date"].disabled = is_start_date_readonly
+        self.fields["start_date"].disabled = self.is_start_date_readonly
         self.fields["total_budget"].widget.attrs.update({"class": "form-control-plaintext"})
 
     def clean(self):
         cleaned_data = super().clean()
         if cleaned_data:
-            if cleaned_data["end_date"] < now().date():
+            if self.is_start_date_readonly:
+                cleaned_data["start_date"] = self.current_start_date
+            start_date = cleaned_data["start_date"]
+            end_date = cleaned_data["end_date"]
+            if end_date < now().date():
                 self.add_error("end_date", "Please enter the correct end date for this opportunity")
-            if cleaned_data["start_date"] < now().date():
+            if not self.is_start_date_readonly and start_date < now().date():
                 self.add_error("start_date", "Start date should be today or latter")
-            if cleaned_data["start_date"] >= cleaned_data["end_date"]:
+            if start_date >= end_date:
                 self.add_error("end_date", "End date must be after start date")
             return cleaned_data
 

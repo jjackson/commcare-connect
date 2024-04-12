@@ -193,7 +193,7 @@ class OpportunityFinalize(OrganizationUserMixin, UpdateView):
         if end_date:
             opportunity.end_date = end_date
         if start_date:
-            opportunity.end_date = start_date
+            opportunity.start_date = start_date
         response = super().form_valid(form)
         return response
 
