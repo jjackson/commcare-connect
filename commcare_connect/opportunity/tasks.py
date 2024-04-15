@@ -30,7 +30,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     OpportunityClaim,
     Payment,
-    UserInviteStatus,
+    UserInvite,
     UserVisit,
     VisitValidationStatus,
 )
@@ -65,15 +65,15 @@ def create_learn_modules_and_deliver_units(opportunity_id):
 
 @celery_app.task()
 def add_connect_users(user_list: list[str], opportunity_id: str):
-    UserInviteStatus.objects.bulk_create(
-        [UserInviteStatus(phone_number=user, opportunity=opportunity_id) for user in user_list]
+    UserInvite.objects.bulk_create(
+        [UserInvite(phone_number=user, opportunity_id=opportunity_id) for user in user_list]
     )
     for user in fetch_users(user_list):
         u, _ = User.objects.update_or_create(
             username=user.username, defaults={"phone_number": user.phone_number, "name": user.name}
         )
         opportunity_access, _ = OpportunityAccess.objects.get_or_create(user=u, opportunity_id=opportunity_id)
-        UserInviteStatus.objects.update_or_create(
+        UserInvite.objects.update_or_create(
             opportunity=opportunity_id,
             phone_number=user.phone_number,
             defaults={"opportunity_access": opportunity_access},
@@ -95,9 +95,9 @@ def invite_user(user_id, opportunity_access_id):
     if not user.phone_number:
         return
     sms_status = send_sms(user.phone_number, body)
-    UserInviteStatus.objects.update_or_create(
+    UserInvite.objects.update_or_create(
         opportunity_access=opportunity_access,
-        defaults={"status": sms_status.status, "message_sid": sms_status.sid},
+        defaults={"message_sid": sms_status.sid},
     )
     message = Message(
         usernames=[user.username],
