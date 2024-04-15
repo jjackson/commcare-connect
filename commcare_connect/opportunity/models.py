@@ -390,3 +390,11 @@ class BlobMeta(models.Model):
             ("parent_id", "name"),
         ]
         indexes = [models.Index(fields=["blob_id"])]
+
+
+class UserInviteStatus(models.Model):
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
+    phone_number = models.CharField(max_length=15)
+    opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE, null=True, blank=True)
+    message_sid = models.CharField(max_length=25)
+    status = models.CharField(max_length=20)
