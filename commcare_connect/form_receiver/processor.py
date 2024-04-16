@@ -147,7 +147,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
     counts = (
         UserVisit.objects.filter(opportunity=opportunity, user=user)
-        .exclude(status=VisitValidationStatus.over_limit, is_trial=True)
+        .exclude(Q(status=VisitValidationStatus.over_limit) | Q(is_trial=True))
         .aggregate(
             daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)),
             total=Count("*"),
