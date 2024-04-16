@@ -6,13 +6,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    replaces = [
-        ("opportunity", "0037_add_max_visits"),
-        ("opportunity", "0038_opportunityclaimlimit"),
-        ("opportunity", "0039_opportunity_start_date"),
-        ("opportunity", "0040_uservisit_is_trial"),
-        ("opportunity", "0041_alter_opportunityclaim_max_payments"),
-    ]
 
     dependencies = [
         ("opportunity", "0036_payment_confirmation_date_payment_confirmed"),
