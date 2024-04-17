@@ -7,13 +7,13 @@ from commcare_connect.opportunity.models import (
     Assessment,
     CommCareApp,
     CompletedModule,
+    CompletedWork,
     LearnModule,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
     Payment,
     UserVisit,
-    VisitValidationStatus,
 )
 
 
@@ -172,6 +172,27 @@ class UserVisitSerializer(serializers.ModelSerializer):
         ]
 
 
+# NOTE: this serializer is only required to avoid introducing breaking changes
+# to the deliver progress API
+class CompletedWorkSerializer(serializers.ModelSerializer):
+    deliver_unit_name = serializers.CharField(source="payment_unit.name")
+    deliver_unit_slug = serializers.CharField(source="payment_unit.pk")
+    visit_date = serializers.DateTimeField(source="completion_date")
+
+    class Meta:
+        model = CompletedWork
+        fields = [
+            "id",
+            "status",
+            "visit_date",
+            "deliver_unit_name",
+            "deliver_unit_slug",
+            "entity_id",
+            "entity_name",
+            "reason",
+        ]
+
+
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
@@ -189,7 +210,5 @@ class DeliveryProgressSerializer(serializers.Serializer):
         return PaymentSerializer(obj.payment_set.all(), many=True).data
 
     def get_deliveries(self, obj):
-        deliveries = UserVisit.objects.filter(opportunity=obj.opportunity, user=obj.user).exclude(
-            status=VisitValidationStatus.over_limit
-        )
-        return UserVisitSerializer(deliveries, many=True).data
+        completed_works = CompletedWork.objects.filter(opportunity_access=obj)
+        return CompletedWorkSerializer(completed_works, many=True).data
