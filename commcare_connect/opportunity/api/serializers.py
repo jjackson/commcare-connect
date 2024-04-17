@@ -73,6 +73,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     max_visits_per_user = serializers.SerializerMethodField()
     daily_max_visits_per_user = serializers.SerializerMethodField()
     budget_per_visit = serializers.SerializerMethodField()
+    budget_per_user = serializers.SerializerMethodField()
 
     class Meta:
         model = Opportunity
@@ -96,6 +97,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "learn_progress",
             "deliver_progress",
             "currency",
+            "is_active",
         ]
 
     def get_claim(self, obj):
@@ -124,6 +126,9 @@ class OpportunitySerializer(serializers.ModelSerializer):
 
     def get_budget_per_visit(self, obj):
         return obj.paymentunit_set.aggregate(amount=Max("amount")).get("amount", 0) or -1
+
+    def get_budget_per_user(self, obj):
+        return obj.budget_per_user
 
 
 @quickcache(vary_on=["user.pk", "opportunity.pk"], timeout=60 * 60)
