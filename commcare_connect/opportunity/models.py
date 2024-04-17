@@ -67,7 +67,7 @@ class Opportunity(BaseModel):
     # to be removed
     max_visits_per_user = models.IntegerField(null=True)
     daily_max_visits_per_user = models.IntegerField(null=True)
-    start_date = models.DateField(null=True, default=datetime.date.today)
+    start_date = models.DateField(default=datetime.date.today)
     end_date = models.DateField(null=True)
     # to be removed
     budget_per_visit = models.IntegerField(null=True)
@@ -428,6 +428,11 @@ class OpportunityClaimLimit(models.Model):
     opportunity_claim = models.ForeignKey(OpportunityClaim, on_delete=models.CASCADE)
     payment_unit = models.ForeignKey(PaymentUnit, on_delete=models.CASCADE)
     max_visits = models.IntegerField()
+
+    class Meta:
+        unique_together = [
+            ("opportunity_claim", "payment_unit"),
+        ]
 
     @classmethod
     def create_claim_limits(cls, opportunity: Opportunity, claim: OpportunityClaim):

@@ -25,7 +25,7 @@ def push_down_payment_limits(apps, schema_editor):
         if not opp.paymentunit_set.exists():
             continue
         if not opp.start_date:
-            opp.start_date = opp.date_created
+            opp.start_date = opp.date_created.date()
         payment_units = list(opp.paymentunit_set.all())
         if len(payment_units) == 1:
             pu = payment_units[0]
