@@ -98,6 +98,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "deliver_progress",
             "currency",
             "is_active",
+            "budget_per_user",
         ]
 
     def get_claim(self, obj):
