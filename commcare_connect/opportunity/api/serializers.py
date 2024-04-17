@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db.models import Max, Sum
 from rest_framework import serializers
 
 from commcare_connect.cache import quickcache
@@ -51,9 +52,15 @@ class CommCareAppSerializer(serializers.ModelSerializer):
 
 
 class OpportunityClaimSerializer(serializers.ModelSerializer):
+    max_payments = serializers.SerializerMethodField()
+
     class Meta:
         model = OpportunityClaim
         fields = ["max_payments", "end_date", "date_claimed"]
+
+    def get_max_payments(self, obj):
+        # return 1 for old opportunities
+        return obj.opportunityclaimlimit_set.aggregate(max_visits=Sum("max_visits")).get("max_visits", 0) or -1
 
 
 class OpportunitySerializer(serializers.ModelSerializer):
@@ -63,6 +70,9 @@ class OpportunitySerializer(serializers.ModelSerializer):
     claim = serializers.SerializerMethodField()
     learn_progress = serializers.SerializerMethodField()
     deliver_progress = serializers.SerializerMethodField()
+    max_visits_per_user = serializers.SerializerMethodField()
+    daily_max_visits_per_user = serializers.SerializerMethodField()
+    budget_per_visit = serializers.SerializerMethodField()
 
     class Meta:
         model = Opportunity
@@ -76,6 +86,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "organization",
             "learn_app",
             "deliver_app",
+            "start_date",
             "end_date",
             "max_visits_per_user",
             "daily_max_visits_per_user",
@@ -103,6 +114,16 @@ class OpportunitySerializer(serializers.ModelSerializer):
     def get_deliver_progress(self, obj):
         opp_access = _get_opp_access(self.context.get("request").user, obj)
         return opp_access.visit_count
+
+    def get_max_visits_per_user(self, obj):
+        # return 1 for older opportunities
+        return obj.paymentunit_set.aggregate(max_total=Sum("max_total")).get("max_total", 0) or -1
+
+    def get_daily_max_visits_per_user(self, obj):
+        return obj.paymentunit_set.aggregate(max_daily=Max("max_daily")).get("max_daily", 0) or -1
+
+    def get_budget_per_visit(self, obj):
+        return obj.paymentunit_set.aggregate(amount=Max("amount")).get("amount", 0) or -1
 
 
 @quickcache(vary_on=["user.pk", "opportunity.pk"], timeout=60 * 60)
