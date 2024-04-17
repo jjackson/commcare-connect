@@ -297,7 +297,7 @@ def get_status_by_completed_work_id(dataset):
     invalid_rows = []
     for row in dataset:
         row = list(row)
-        work_id = row[work_id_col_index]
+        work_id = str(row[work_id_col_index])
         status_raw = row[status_col_index].lower().replace(" ", "_")
         try:
             status_by_work_id[work_id] = CompletedWorkStatus[status_raw]

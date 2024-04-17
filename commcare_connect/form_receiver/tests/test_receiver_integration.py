@@ -20,12 +20,18 @@ from commcare_connect.opportunity.models import (
     LearnModule,
     Opportunity,
     OpportunityAccess,
-    OpportunityClaim,
+    OpportunityClaimLimit,
     UserVisit,
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tasks import approve_completed_work_and_update_payment_accrued
-from commcare_connect.opportunity.tests.factories import DeliverUnitFactory, LearnModuleFactory
+from commcare_connect.opportunity.tests.factories import (
+    DeliverUnitFactory,
+    LearnModuleFactory,
+    OpportunityAccessFactory,
+    OpportunityClaimFactory,
+    PaymentUnitFactory,
+)
 from commcare_connect.users.models import User
 
 
@@ -103,7 +109,7 @@ def test_form_receiver_assessment(
 
 @pytest.mark.django_db
 def test_receiver_deliver_form(mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity):
-    deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app)
+    deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app, payment_unit=opportunity.paymentunit_set.first())
     stub = DeliverUnitStubFactory(id=deliver_unit.slug)
     form_json = get_form_json(
         form_block=stub.json,
@@ -127,13 +133,14 @@ def _create_opp_and_form_json(
     daily_max_per_user=10,
     end_date=datetime.date.today(),
 ):
-    opportunity.daily_max_visits_per_user = daily_max_per_user
-    opportunity.save()
-    OpportunityClaim.objects.filter(
-        opportunity_access__opportunity=opportunity,
-        opportunity_access__user=user,
-    ).update(max_payments=max_visits_per_user, end_date=end_date)
-    deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app)
+    payment_unit = PaymentUnitFactory(
+        opportunity=opportunity, max_daily=daily_max_per_user, max_total=max_visits_per_user
+    )
+    access = OpportunityAccessFactory(user=user, opportunity=opportunity, accepted=True)
+    claim = OpportunityClaimFactory(end_date=end_date, opportunity_access=access)
+    OpportunityClaimLimit.create_claim_limits(opportunity, claim)
+
+    deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app, payment_unit=payment_unit)
     stub = DeliverUnitStubFactory(id=deliver_unit.slug)
     form_json = get_form_json(
         form_block=stub.json,
@@ -145,46 +152,50 @@ def _create_opp_and_form_json(
 
 @pytest.mark.django_db
 def test_receiver_deliver_form_daily_visits_reached(
-    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
-    form_json = _create_opp_and_form_json(opportunity, user=mobile_user_with_connect_link, daily_max_per_user=0)
-    assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 0
-    make_request(api_client, form_json, mobile_user_with_connect_link)
-    assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 1
-    visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link, daily_max_per_user=0)
+    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 0
+    make_request(api_client, form_json, user_with_connectid_link)
+    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 1
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.status == VisitValidationStatus.over_limit
 
 
 @pytest.mark.django_db
 def test_receiver_deliver_form_max_visits_reached(
-    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
-    form_json = _create_opp_and_form_json(opportunity, user=mobile_user_with_connect_link, max_visits_per_user=0)
-    assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 0
-    make_request(api_client, form_json, mobile_user_with_connect_link)
-    assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 1
-    visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link, max_visits_per_user=1)
+    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 0
+    make_request(api_client, form_json, user_with_connectid_link)
+    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 1
+    duplicate_json = deepcopy(form_json)
+    duplicate_json["form"]["deliver"]["entity_id"] = str(uuid4())
+    api_client.post("/api/receiver/", data=duplicate_json, format="json")
+    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 2
+    visit = UserVisit.objects.filter(user=user_with_connectid_link).last()
     assert visit.status == VisitValidationStatus.over_limit
 
 
 @pytest.mark.django_db
 def test_receiver_deliver_form_end_date_reached(
-    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     form_json = _create_opp_and_form_json(
-        opportunity, user=mobile_user_with_connect_link, end_date=datetime.date.today() - datetime.timedelta(days=100)
+        opportunity, user=user_with_connectid_link, end_date=datetime.date.today() - datetime.timedelta(days=100)
     )
-    assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 0
-    make_request(api_client, form_json, mobile_user_with_connect_link)
-    assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 1
-    visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
+    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 0
+    make_request(api_client, form_json, user_with_connectid_link)
+    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 1
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.status == VisitValidationStatus.over_limit
 
 
-def test_receiver_duplicate(mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity):
-    form_json = _create_opp_and_form_json(opportunity, user=mobile_user_with_connect_link)
-    make_request(api_client, form_json, mobile_user_with_connect_link)
-    visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
+def test_receiver_duplicate(user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.status == VisitValidationStatus.pending
     duplicate_json = deepcopy(form_json)
     duplicate_json["id"] = str(uuid4())
