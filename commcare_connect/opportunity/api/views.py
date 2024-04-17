@@ -1,5 +1,6 @@
 import datetime
 
+from django.db import transaction
 from django.utils.timezone import now
 from rest_framework import viewsets
 from rest_framework.generics import RetrieveAPIView, get_object_or_404
@@ -19,6 +20,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    OpportunityClaimLimit,
     Payment,
     UserVisit,
     VisitValidationStatus,
@@ -60,7 +62,7 @@ class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
         return UserVisit.objects.filter(
             opportunity=self.kwargs.get("opportunity_id"),
             user=self.request.user,
-        ).exclude(status=VisitValidationStatus.over_limit)
+        ).exclude(status=VisitValidationStatus.over_limit, is_trial=True)
 
 
 class DeliveryProgressView(RetrieveAPIView):
@@ -80,23 +82,23 @@ class ClaimOpportunityView(APIView):
 
         if OpportunityClaim.objects.filter(opportunity_access=opportunity_access).exists():
             return Response(status=200, data="Opportunity is already claimed")
-        if opportunity.remaining_budget < opportunity.budget_per_visit:
+        if opportunity.remaining_budget < opportunity.minimum_budget_per_visit:
             return Response(status=400, data="Opportunity cannot be claimed. (Budget Exhausted)")
         if opportunity.end_date < datetime.date.today():
             return Response(status=400, data="Opportunity cannot be claimed. (End date reached)")
 
-        max_payments = min(
-            opportunity.remaining_budget // opportunity.budget_per_visit, opportunity.max_visits_per_user
-        )
-        claim, created = OpportunityClaim.objects.get_or_create(
-            opportunity_access=opportunity_access,
-            defaults={
-                "max_payments": max_payments,
-                "end_date": opportunity.end_date,
-            },
-        )
-        if not created:
-            return Response(status=200, data="Opportunity is already claimed")
+        with transaction.atomic():
+            claim, created = OpportunityClaim.objects.get_or_create(
+                opportunity_access=opportunity_access,
+                defaults={
+                    "end_date": opportunity.end_date,
+                },
+            )
+
+            if not created:
+                return Response(status=200, data="Opportunity is already claimed")
+
+            OpportunityClaimLimit.create_claim_limits(opportunity, claim)
 
         domain = opportunity.deliver_app.cc_domain
         if not ConnectIDUserLink.objects.filter(user=self.request.user, domain=domain).exists():

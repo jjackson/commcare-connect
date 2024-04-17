@@ -1,10 +1,10 @@
-import math
-from collections import Counter
+import datetime
+from collections import Counter, defaultdict
 from uuid import uuid4
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Sum
+from django.db.models import Count, F, Sum
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
@@ -64,9 +64,12 @@ class Opportunity(BaseModel):
         on_delete=models.CASCADE,
         null=True,
     )
+    # to be removed
     max_visits_per_user = models.IntegerField(null=True)
     daily_max_visits_per_user = models.IntegerField(null=True)
+    start_date = models.DateField(default=datetime.date.today)
     end_date = models.DateField(null=True)
+    # to be removed
     budget_per_visit = models.IntegerField(null=True)
     total_budget = models.IntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
@@ -76,45 +79,87 @@ class Opportunity(BaseModel):
         return self.name
 
     @property
+    def is_setup_complete(self):
+        if not (self.paymentunit_set.count() > 0 and self.total_budget and self.start_date and self.end_date):
+            return False
+        for pu in self.paymentunit_set.all():
+            if not (pu.max_total and pu.max_daily):
+                return False
+        return True
+
+    @property
+    def minimum_budget_per_visit(self):
+        return min(self.paymentunit_set.all().values_list("amount", flat=True))
+
+    @property
     def remaining_budget(self) -> int:
         return self.total_budget - self.claimed_budget
 
     @property
     def claimed_budget(self):
-        return self.claimed_visits * self.budget_per_visit
+        opp_access = OpportunityAccess.objects.filter(opportunity=self)
+        opportunity_claim = OpportunityClaim.objects.filter(opportunity_access__in=opp_access)
+        claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__in=opportunity_claim)
+
+        payment_unit_counts = claim_limits.values("payment_unit").annotate(
+            visits_count=Sum("max_visits"), amount=F("payment_unit__amount")
+        )
+        claimed = 0
+        for count in payment_unit_counts:
+            visits_count = count["visits_count"]
+            amount = count["amount"]
+            claimed += visits_count * amount
+
+        return claimed
 
     @property
     def utilised_budget(self):
-        return self.approved_visits * self.budget_per_visit
+        completed_works = CompletedWork.objects.filter(opportunity_access__opportunity=self)
+        payment_unit_counts = completed_works.values("payment_unit").annotate(
+            completed_count=Count("id"), amount=F("payment_unit__amount")
+        )
+        utilised = 0
+        for payment_unit_count in payment_unit_counts:
+            completed_count = payment_unit_count["completed_count"]
+            amount = payment_unit_count["amount"]
+            utilised += completed_count * amount
+        return utilised
 
     @property
     def claimed_visits(self):
         opp_access = OpportunityAccess.objects.filter(opportunity=self)
-        used_budget = OpportunityClaim.objects.filter(opportunity_access__in=opp_access).aggregate(
-            Sum("max_payments")
-        )["max_payments__sum"]
+        opportunity_claim = OpportunityClaim.objects.filter(opportunity_access__in=opp_access)
+        used_budget = OpportunityClaimLimit.objects.filter(opportunity_claim__in=opportunity_claim).aggregate(
+            Sum("max_visits")
+        )["max_visits__sum"]
         if used_budget is None:
             used_budget = 0
         return used_budget
 
     @property
     def approved_visits(self):
-        approved_user_visits = UserVisit.objects.filter(
-            opportunity=self, status=VisitValidationStatus.approved
-        ).count()
-        return approved_user_visits
+        return CompletedWork.objects.filter(opportunity_access__opportunity=self).count()
+
+    @property
+    def number_of_users(self):
+        return self.total_budget / self.budget_per_user
 
     @property
     def allotted_visits(self):
-        return math.floor(self.total_budget / self.budget_per_visit)
+        payment_units = self.paymentunit_set.all()
+        return sum([pu.max_total or 0 for pu in payment_units]) * self.number_of_users
 
     @property
     def budget_per_user(self):
-        return self.max_visits_per_user * self.budget_per_visit
+        payment_units = self.paymentunit_set.all()
+        budget = 0
+        for pu in payment_units:
+            budget += pu.max_total * pu.amount
+        return budget
 
     @property
     def is_active(self):
-        return self.active and self.end_date >= now().date()
+        return self.active and self.end_date and self.end_date >= now().date()
 
 
 class LearnModule(models.Model):
@@ -196,7 +241,7 @@ class OpportunityAccess(models.Model):
     def visit_count(self):
         user_visits = (
             UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
-            .exclude(status=VisitValidationStatus.over_limit)
+            .exclude(status=VisitValidationStatus.over_limit, is_trial=True)
             .order_by("visit_date")
         )
         return user_visits.count()
@@ -205,7 +250,7 @@ class OpportunityAccess(models.Model):
     def last_visit_date(self):
         user_visits = (
             UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
-            .exclude(status=VisitValidationStatus.over_limit)
+            .exclude(status=VisitValidationStatus.over_limit, is_trial=True)
             .order_by("visit_date")
         )
         if user_visits.exists():
@@ -229,6 +274,8 @@ class PaymentUnit(models.Model):
     amount = models.PositiveIntegerField()
     name = models.CharField(max_length=255)
     description = models.TextField()
+    max_total = models.IntegerField(null=True)
+    max_daily = models.IntegerField(null=True)
     parent_payment_unit = models.ForeignKey(
         "self",
         on_delete=models.DO_NOTHING,
@@ -361,6 +408,7 @@ class UserVisit(XFormBaseModel):
     location = models.CharField(null=True)
     flagged = models.BooleanField(default=False)
     flag_reason = models.JSONField(null=True, blank=True)
+    is_trial = models.BooleanField(default=False)
     completed_work = models.ForeignKey(CompletedWork, on_delete=models.DO_NOTHING, null=True, blank=True)
 
     @property
@@ -370,9 +418,44 @@ class UserVisit(XFormBaseModel):
 
 class OpportunityClaim(models.Model):
     opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE)
-    max_payments = models.IntegerField()
+    # to be removed
+    max_payments = models.IntegerField(null=True)
     end_date = models.DateField()
     date_claimed = models.DateField(auto_now_add=True)
+
+
+class OpportunityClaimLimit(models.Model):
+    opportunity_claim = models.ForeignKey(OpportunityClaim, on_delete=models.CASCADE)
+    payment_unit = models.ForeignKey(PaymentUnit, on_delete=models.CASCADE)
+    max_visits = models.IntegerField()
+
+    class Meta:
+        unique_together = [
+            ("opportunity_claim", "payment_unit"),
+        ]
+
+    @classmethod
+    def create_claim_limits(cls, opportunity: Opportunity, claim: OpportunityClaim):
+        claim_limits_by_payment_unit = defaultdict(list)
+        claim_limits = OpportunityClaimLimit.objects.filter(
+            opportunity_claim__opportunity_access__opportunity=opportunity
+        )
+        for claim_limit in claim_limits:
+            claim_limits_by_payment_unit[claim_limit.payment_unit].append(claim_limit)
+
+        for payment_unit in opportunity.paymentunit_set.all():
+            claim_limits = claim_limits_by_payment_unit.get(payment_unit, [])
+            total_claimed_visits = 0
+            for claim_limit in claim_limits:
+                total_claimed_visits += claim_limit.max_visits
+
+            remaining = (payment_unit.max_total) * opportunity.number_of_users - total_claimed_visits
+            if remaining < 1:
+                # claimed limit exceeded for this paymentunit
+                continue
+            OpportunityClaimLimit.objects.get_or_create(
+                opportunity_claim=claim, payment_unit=payment_unit, max_visits=min(remaining, payment_unit.max_total)
+            )
 
 
 class BlobMeta(models.Model):
