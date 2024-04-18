@@ -134,7 +134,7 @@ class SMSStatusCallbackView(APIView):
 
     def post(self, *args, **kwargs):
         message_sid = self.request.data.get("MessageSid", None)
-        message_status = self.request.data.get("MessageSid", None)
+        message_status = self.request.data.get("MessageStatus", None)
         if message_status in UserInviteStatus.values:
             user_invite = UserInvite.objects.get(message_sid=message_sid)
             user_invite.status = message_status
