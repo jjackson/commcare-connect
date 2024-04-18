@@ -241,7 +241,7 @@ class OpportunityAccess(models.Model):
     def visit_count(self):
         user_visits = (
             UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
-            .exclude(status=VisitValidationStatus.over_limit, is_trial=True)
+            .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
             .order_by("visit_date")
         )
         return user_visits.count()
@@ -250,7 +250,7 @@ class OpportunityAccess(models.Model):
     def last_visit_date(self):
         user_visits = (
             UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
-            .exclude(status=VisitValidationStatus.over_limit, is_trial=True)
+            .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
             .order_by("visit_date")
         )
         if user_visits.exists():
@@ -312,6 +312,7 @@ class VisitValidationStatus(models.TextChoices):
     rejected = "rejected", gettext("Rejected")
     over_limit = "over_limit", gettext("Over Limit")
     duplicate = "duplicate", gettext("Duplicate")
+    trial = "trial", gettext("Trial")
 
 
 class Payment(models.Model):
@@ -424,7 +425,6 @@ class UserVisit(XFormBaseModel):
     location = models.CharField(null=True)
     flagged = models.BooleanField(default=False)
     flag_reason = models.JSONField(null=True, blank=True)
-    is_trial = models.BooleanField(default=False)
     completed_work = models.ForeignKey(CompletedWork, on_delete=models.DO_NOTHING, null=True, blank=True)
 
     @property
