@@ -23,6 +23,8 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     OpportunityClaimLimit,
     Payment,
+    UserInvite,
+    UserInviteStatus,
 )
 from commcare_connect.users.helpers import create_hq_user
 from commcare_connect.users.models import ConnectIDUserLink
@@ -124,4 +126,15 @@ class ConfirmPaymentView(APIView):
         payment.confirmed = confirmed
         payment.confirmation_date = now()
         payment.save()
+        return Response(status=200)
+
+
+class SMSStatusCallbackView(APIView):
+    def post(self, *args, **kwargs):
+        message_sid = self.request.data.get("MessageSid", None)
+        message_status = self.request.data.get("MessageSid", None)
+        if message_status in UserInviteStatus.values:
+            user_invite = UserInvite.objects.get(message_sid=message_sid)
+            user_invite.status = message_status
+            user_invite.save()
         return Response(status=200)
