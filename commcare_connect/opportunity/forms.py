@@ -1,3 +1,4 @@
+import datetime
 import json
 
 from crispy_forms.helper import FormHelper, Layout
@@ -31,8 +32,6 @@ class OpportunityChangeForm(forms.ModelForm):
             "active",
             "currency",
             "short_description",
-            "max_visits_per_user",
-            "daily_max_visits_per_user",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -44,10 +43,6 @@ class OpportunityChangeForm(forms.ModelForm):
             Row(Field("active")),
             Row(Field("description")),
             Row(Field("short_description")),
-            Row(
-                Field("max_visits_per_user", wrapper_class="form-group col-md-6 mb-0"),
-                Field("daily_max_visits_per_user", wrapper_class="form-group col-md-6 mb-0"),
-            ),
             Row(Field("currency")),
             Row(
                 Field("additional_users", wrapper_class="form-group col-md-6 mb-0"),
@@ -77,6 +72,181 @@ class OpportunityChangeForm(forms.ModelForm):
         user_data = self.cleaned_data["users"]
         split_users = [line.strip() for line in user_data.splitlines() if line.strip()]
         return split_users
+
+
+class OpportunityInitForm(forms.ModelForm):
+    class Meta:
+        model = Opportunity
+        fields = [
+            "name",
+            "description",
+            "short_description",
+            "currency",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        self.domains = kwargs.pop("domains", [])
+        self.user = kwargs.pop("user", {})
+        self.org_slug = kwargs.pop("org_slug", "")
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("name")),
+            Row(Field("description")),
+            Row(Field("short_description")),
+            Fieldset(
+                "Learn App",
+                Row(Field("learn_app_domain")),
+                Row(Field("learn_app")),
+                Row(Field("learn_app_description")),
+                Row(Field("learn_app_passing_score")),
+                data_loading_states=True,
+            ),
+            Fieldset(
+                "Deliver App",
+                Row(Field("deliver_app_domain")),
+                Row(Field("deliver_app")),
+                data_loading_states=True,
+            ),
+            Row(Field("currency")),
+            Row(Field("api_key")),
+            Submit("submit", "Submit"),
+        )
+
+        domain_choices = [(domain, domain) for domain in self.domains]
+        self.fields["description"] = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
+        self.fields["learn_app_domain"] = forms.ChoiceField(
+            choices=domain_choices,
+            widget=forms.Select(
+                attrs={
+                    "hx-get": reverse("opportunity:get_applications_by_domain", args=(self.org_slug,)),
+                    "hx-include": "#id_learn_app_domain",
+                    "hx-trigger": "load delay:0.3s, change",
+                    "hx-target": "#id_learn_app",
+                    "data-loading-disable": True,
+                }
+            ),
+        )
+        self.fields["learn_app"] = forms.Field(
+            widget=forms.Select(choices=[(None, "Loading...")], attrs={"data-loading-disable": True})
+        )
+        self.fields["learn_app_description"] = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
+        self.fields["learn_app_passing_score"] = forms.IntegerField(max_value=100, min_value=0)
+        self.fields["deliver_app_domain"] = forms.ChoiceField(
+            choices=domain_choices,
+            widget=forms.Select(
+                attrs={
+                    "hx-get": reverse("opportunity:get_applications_by_domain", args=(self.org_slug,)),
+                    "hx-include": "#id_deliver_app_domain",
+                    "hx-trigger": "load delay:0.3s, change",
+                    "hx-target": "#id_deliver_app",
+                    "data-loading-disable": True,
+                }
+            ),
+        )
+        self.fields["deliver_app"] = forms.Field(
+            widget=forms.Select(choices=[(None, "Loading...")], attrs={"data-loading-disable": True})
+        )
+        self.fields["api_key"] = forms.CharField(max_length=50)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data:
+            cleaned_data["learn_app"] = json.loads(cleaned_data["learn_app"])
+            cleaned_data["deliver_app"] = json.loads(cleaned_data["deliver_app"])
+
+            if cleaned_data["learn_app"]["id"] == cleaned_data["deliver_app"]["id"]:
+                self.add_error("learn_app", "Learn app and Deliver app cannot be same")
+                self.add_error("deliver_app", "Learn app and Deliver app cannot be same")
+            return cleaned_data
+
+    def save(self, commit=True):
+        organization = Organization.objects.get(slug=self.org_slug)
+        learn_app = self.cleaned_data["learn_app"]
+        deliver_app = self.cleaned_data["deliver_app"]
+        learn_app_domain = self.cleaned_data["learn_app_domain"]
+        deliver_app_domain = self.cleaned_data["deliver_app_domain"]
+        self.instance.learn_app, _ = CommCareApp.objects.get_or_create(
+            cc_app_id=learn_app["id"],
+            cc_domain=learn_app_domain,
+            organization=organization,
+            defaults={
+                "name": learn_app["name"],
+                "created_by": self.user.email,
+                "modified_by": self.user.email,
+                "description": self.cleaned_data["learn_app_description"],
+                "passing_score": self.cleaned_data["learn_app_passing_score"],
+            },
+        )
+        self.instance.deliver_app, _ = CommCareApp.objects.get_or_create(
+            cc_app_id=deliver_app["id"],
+            cc_domain=deliver_app_domain,
+            organization=organization,
+            defaults={
+                "name": deliver_app["name"],
+                "created_by": self.user.email,
+                "modified_by": self.user.email,
+            },
+        )
+        self.instance.created_by = self.user.email
+        self.instance.modified_by = self.user.email
+        self.instance.organization = organization
+        api_key, _ = HQApiKey.objects.get_or_create(user=self.user, api_key=self.cleaned_data["api_key"])
+        self.instance.api_key = api_key
+        super().save(commit=commit)
+
+        return self.instance
+
+
+class OpportunityFinalizeForm(forms.ModelForm):
+    class Meta:
+        model = Opportunity
+        fields = [
+            "start_date",
+            "end_date",
+            "total_budget",
+        ]
+        widgets = {
+            "start_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+            "end_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        budget_per_user = kwargs.pop("budget_per_user")
+        self.current_start_date = kwargs.pop("current_start_date")
+        self.is_start_date_readonly = self.current_start_date < datetime.date.today()
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper()
+        self.helper.layout = Layout(
+            Field(
+                "start_date",
+                help="Start date can't be edited if it was set in past" if self.is_start_date_readonly else None,
+            ),
+            Field("end_date"),
+            Field("max_users", oninput=f"id_total_budget.value = {budget_per_user} * parseInt(this.value || 0)"),
+            Field("total_budget", readonly=True, wrapper_class="form-group col-md-4 mb-0"),
+            Submit("submit", "Submit"),
+        )
+        self.fields["max_users"] = forms.IntegerField()
+        self.fields["start_date"].disabled = self.is_start_date_readonly
+        self.fields["total_budget"].widget.attrs.update({"class": "form-control-plaintext"})
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data:
+            if self.is_start_date_readonly:
+                cleaned_data["start_date"] = self.current_start_date
+            start_date = cleaned_data["start_date"]
+            end_date = cleaned_data["end_date"]
+            if end_date < now().date():
+                self.add_error("end_date", "Please enter the correct end date for this opportunity")
+            if not self.is_start_date_readonly and start_date < now().date():
+                self.add_error("start_date", "Start date should be today or latter")
+            if start_date >= end_date:
+                self.add_error("end_date", "End date must be after start date")
+            return cleaned_data
 
 
 class OpportunityCreationForm(forms.ModelForm):
@@ -325,7 +495,7 @@ class AddBudgetExistingUsersForm(forms.Form):
 class PaymentUnitForm(forms.ModelForm):
     class Meta:
         model = PaymentUnit
-        fields = ["name", "description", "amount"]
+        fields = ["name", "description", "amount", "max_total", "max_daily"]
 
     def __init__(self, *args, **kwargs):
         deliver_units = kwargs.pop("deliver_units", [])
@@ -340,6 +510,8 @@ class PaymentUnitForm(forms.ModelForm):
             Row(Field("required_deliver_units")),
             Row(Field("optional_deliver_units")),
             Row(Field("payment_units")),
+            Field("max_total", wrapper_class="form-group col-md-4 mb-0"),
+            Field("max_daily", wrapper_class="form-group col-md-4 mb-0"),
             Submit(name="submit", value="Submit"),
         )
         deliver_unit_choices = [(deliver_unit.id, deliver_unit.name) for deliver_unit in deliver_units]
@@ -381,6 +553,11 @@ class PaymentUnitForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         if cleaned_data:
+            if cleaned_data["max_daily"] > cleaned_data["max_total"]:
+                self.add_error(
+                    "max_daily",
+                    "Daily max visits per user cannot be greater than total Max visits per user",
+                )
             common_deliver_units = set(cleaned_data.get("required_deliver_units", [])) & set(
                 cleaned_data.get("optional_deliver_units", [])
             )
