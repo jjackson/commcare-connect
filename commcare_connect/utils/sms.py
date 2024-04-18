@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.urls import reverse
 from twilio.rest import Client
 
 
@@ -12,7 +13,11 @@ def send_sms(to, body):
     client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
     sender = get_sms_sender(to)
     return client.messages.create(
-        body=body, to=to, from_=sender, messaging_service_sid=settings.TWILIO_MESSAGING_SERVICE
+        body=body,
+        to=to,
+        from_=sender,
+        messaging_service_sid=settings.TWILIO_MESSAGING_SERVICE,
+        status_callback=reverse("api:sms_status_callback"),
     )
 
 

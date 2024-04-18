@@ -8,6 +8,7 @@ from commcare_connect.opportunity.api.views import (
     ConfirmPaymentView,
     DeliveryProgressView,
     OpportunityViewSet,
+    SMSStatusCallbackView,
     UserLearnProgressView,
     UserVisitViewSet,
 )
@@ -30,4 +31,5 @@ urlpatterns = [
     path("opportunity/<int:pk>/claim", ClaimOpportunityView.as_view()),
     path("opportunity/<int:pk>/delivery_progress", DeliveryProgressView.as_view(), name="deliver_progress"),
     path("payment/<int:pk>/confirm", ConfirmPaymentView.as_view(), name="confirm_payment"),
+    path("sms_status_callback", SMSStatusCallbackView.as_view(), name="sms_status_callback"),
 ]
