@@ -3,6 +3,21 @@
 from django.db import migrations, models
 import django.db.models.deletion
 
+from commcare_connect.opportunity.models import UserInviteStatus
+
+
+def populate_user_invite(apps, schema_editor):
+    OpportunityAccess = apps.get_model("opportunity.OpportunityAccess")
+    UserInvite = apps.get_model("opportunity.UserInvite")
+
+    for access in OpportunityAccess.objects.filter():
+        UserInvite.objects.create(
+            opportunity=access.opportunity,
+            phone_number=access.user.phone_number,
+            opportunity_access=access,
+            status=UserInviteStatus.accepted if access.accepted else UserInviteStatus.invited,
+        )
+
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -45,4 +60,5 @@ class Migration(migrations.Migration):
                 ),
             ],
         ),
+        migrations.RunPython(populate_user_invite, migrations.RunPython.noop),
     ]
