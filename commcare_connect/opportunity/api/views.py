@@ -135,8 +135,10 @@ class SMSStatusCallbackView(APIView):
     def post(self, *args, **kwargs):
         message_sid = self.request.data.get("MessageSid", None)
         message_status = self.request.data.get("MessageStatus", None)
-        if message_status in UserInviteStatus.values:
-            user_invite = UserInvite.objects.get(message_sid=message_sid)
-            user_invite.status = message_status
-            user_invite.save()
+        user_invite = get_object_or_404(UserInvite, message_sid=message_sid)
+        if message_status == "delivered":
+            user_invite.status = UserInviteStatus.sms_delivered
+        if message_status == "undelivered":
+            user_invite.status = UserInviteStatus.sms_not_delivered
+        user_invite.save()
         return Response(status=200)
