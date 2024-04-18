@@ -32,6 +32,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     Payment,
     UserInvite,
+    UserInviteStatus,
     UserVisit,
     VisitValidationStatus,
 )
@@ -68,10 +69,11 @@ def create_learn_modules_and_deliver_units(opportunity_id):
 def add_connect_users(user_list: list[str], opportunity_id: str):
     found_users = fetch_users(user_list)
     not_found_users = set(user_list) - {user.phone_number for user in found_users}
-    for u in User.objects.filter(username__in=not_found_users).values("phone_number"):
+    for u in not_found_users:
         UserInvite.objects.get_or_create(
             opportunity_id=opportunity_id,
-            phone_number=u.get("phone_number"),
+            phone_number=u,
+            status=UserInviteStatus.not_found,
         )
     for user in found_users:
         u, _ = User.objects.update_or_create(
@@ -102,7 +104,10 @@ def invite_user(user_id, opportunity_access_id):
     sms_status = send_sms(user.phone_number, body)
     UserInvite.objects.update_or_create(
         opportunity_access=opportunity_access,
-        defaults={"message_sid": sms_status.sid},
+        defaults={
+            "message_sid": sms_status.sid,
+            "status": UserInviteStatus.accepted if opportunity_access.accepted else UserInviteStatus.invited,
+        },
     )
     message = Message(
         usernames=[user.username],
