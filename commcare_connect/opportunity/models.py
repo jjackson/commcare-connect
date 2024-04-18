@@ -503,5 +503,5 @@ class UserInvite(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     phone_number = models.CharField(max_length=15)
     opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE, null=True, blank=True)
-    message_sid = models.CharField(max_length=25, null=True, blank=True)
+    message_sid = models.CharField(max_length=50, null=True, blank=True)
     status = models.CharField(max_length=50, choices=UserInviteStatus.choices, default=UserInviteStatus.invited)
