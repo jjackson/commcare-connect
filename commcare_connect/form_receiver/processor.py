@@ -147,7 +147,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
     counts = (
         UserVisit.objects.filter(opportunity=opportunity, user=user)
-        .exclude(Q(status=VisitValidationStatus.over_limit) | Q(is_trial=True))
+        .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
         .aggregate(
             daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)),
             total=Count("*"),
@@ -169,10 +169,10 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         app_build_version=xform.metadata.app_build_version,
         form_json=xform.raw_form,
         location=xform.metadata.location,
-        is_trial=opportunity.start_date > datetime.date.today(),
     )
-    if user_visit.is_trial:
+    if opportunity.start_date > datetime.date.today():
         completed_work = None
+        user_visit.status = VisitValidationStatus.trial
     else:
         completed_work, _ = CompletedWork.objects.get_or_create(
             opportunity_access=access,
@@ -202,9 +202,11 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     if xform.metadata.location is None:
         flags.append(["gps", "GPS data is missing"])
     else:
-        user_visits = UserVisit.objects.filter(
-            opportunity=opportunity, deliver_unit=deliver_unit, is_trial=False
-        ).values("location")
+        user_visits = (
+            UserVisit.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit)
+            .exclude(status=VisitValidationStatus.trial)
+            .values("location")
+        )
         cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
         for visit in user_visits:
             if visit.get("location") is None:
