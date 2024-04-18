@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db.models import Max, Sum
+from django.db.models import Sum
 from rest_framework import serializers
 
 from commcare_connect.cache import quickcache
@@ -120,13 +120,13 @@ class OpportunitySerializer(serializers.ModelSerializer):
 
     def get_max_visits_per_user(self, obj):
         # return 1 for older opportunities
-        return obj.paymentunit_set.aggregate(max_total=Sum("max_total")).get("max_total", 0) or -1
+        return obj.max_visits_per_user_new or -1
 
     def get_daily_max_visits_per_user(self, obj):
-        return obj.paymentunit_set.aggregate(max_daily=Max("max_daily")).get("max_daily", 0) or -1
+        return obj.daily_max_visits_per_user_new or -1
 
     def get_budget_per_visit(self, obj):
-        return obj.paymentunit_set.aggregate(amount=Max("amount")).get("amount", 0) or -1
+        return obj.budget_per_visit_new or -1
 
     def get_budget_per_user(self, obj):
         return obj.budget_per_user
