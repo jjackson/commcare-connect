@@ -4,7 +4,7 @@ from django.db import transaction
 from django.utils.timezone import now
 from rest_framework import viewsets
 from rest_framework.generics import RetrieveAPIView, get_object_or_404
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -130,6 +130,8 @@ class ConfirmPaymentView(APIView):
 
 
 class SMSStatusCallbackView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, *args, **kwargs):
         message_sid = self.request.data.get("MessageSid", None)
         message_status = self.request.data.get("MessageSid", None)
