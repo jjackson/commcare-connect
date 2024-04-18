@@ -1,3 +1,4 @@
+from allauth.account.models import transaction
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -16,7 +17,7 @@ from oauth2_provider.views.mixins import ClientProtectedResourceMixin
 from rest_framework.decorators import api_view, authentication_classes
 
 from commcare_connect.connect_id_client.main import fetch_demo_user_tokens
-from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
+from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, UserInvite, UserInviteStatus
 
 from .helpers import create_hq_user
 from .models import ConnectIDUserLink
@@ -116,10 +117,14 @@ def start_learn_app(request):
 def accept_invite(request, invite_id):
     try:
         o = OpportunityAccess.objects.get(invite_id=invite_id)
+        user_invite = UserInvite.objects.get(opportunity_access=o)
     except OpportunityAccess.DoesNotExist:
         return HttpResponse("This link is invalid. Please try again", status=404)
-    o.accepted = True
-    o.save()
+    with transaction.atomic():
+        o.accepted = True
+        user_invite.status = UserInviteStatus.accepted
+        o.save()
+        user_invite.save()
     return HttpResponse(
         "Thank you for accepting the invitation. Open your CommCare Connect App to "
         "see more information about the opportunity and begin learning"
