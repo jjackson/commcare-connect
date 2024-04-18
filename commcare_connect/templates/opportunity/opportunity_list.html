@@ -9,7 +9,7 @@
       <h1> Opportunities
         <span class="float-end">
           <a class="btn btn-primary"
-             href="{% url 'opportunity:create' org_slug=request.org.slug %}" title="Add new opportunity"><span
+             href="{% url 'opportunity:init' org_slug=request.org.slug %}" title="Add new opportunity"><span
             class="bi bi-plus"></span> Add new
           </a>
         </span>
@@ -29,10 +29,14 @@
           <tr>
             <td>{{ opportunity.name }}</td>
             <td>
-              {% if opportunity.is_active %}
-                <span class="badge bg-success rounded-pill">Active</span>
+              {% if opportunity.is_setup_complete %}
+                {% if opportunity.is_active %}
+                  <span class="badge bg-success rounded-pill">Active</span>
+                {% else %}
+                  <span class="badge bg-secondary text-white rounded-pill">Inactive</span>
+                {% endif %}
               {% else %}
-                <span class="badge bg-secondary text-white rounded-pill">Inactive</span>
+                <span class="badge bg-warning text-white rounded-pill">Pending Setup</span>
               {% endif %}
             </td>
             <td width="300">
