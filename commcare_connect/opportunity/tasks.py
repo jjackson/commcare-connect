@@ -66,16 +66,20 @@ def create_learn_modules_and_deliver_units(opportunity_id):
 
 @celery_app.task()
 def add_connect_users(user_list: list[str], opportunity_id: str):
-    UserInvite.objects.bulk_create(
-        [UserInvite(phone_number=user, opportunity_id=opportunity_id) for user in user_list]
-    )
-    for user in fetch_users(user_list):
+    found_users = fetch_users(user_list)
+    not_found_users = set(user_list) - {user.phone_number for user in found_users}
+    for u in User.objects.filter(username__in=not_found_users).values("phone_number"):
+        UserInvite.objects.get_or_create(
+            opportunity_id=opportunity_id,
+            phone_number=u.get("phone_number"),
+        )
+    for user in found_users:
         u, _ = User.objects.update_or_create(
             username=user.username, defaults={"phone_number": user.phone_number, "name": user.name}
         )
         opportunity_access, _ = OpportunityAccess.objects.get_or_create(user=u, opportunity_id=opportunity_id)
         UserInvite.objects.update_or_create(
-            opportunity=opportunity_id,
+            opportunity_id=opportunity_id,
             phone_number=user.phone_number,
             defaults={"opportunity_access": opportunity_access},
         )
