@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Count, F, Sum
+from django.db.models import Count, F, Max, Sum
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
@@ -146,8 +146,19 @@ class Opportunity(BaseModel):
 
     @property
     def allotted_visits(self):
-        payment_units = self.paymentunit_set.all()
-        return sum([pu.max_total or 0 for pu in payment_units]) * self.number_of_users
+        return self.max_visits_per_user_new * self.number_of_users
+
+    @property
+    def max_visits_per_user_new(self):
+        return self.paymentunit_set.aggregate(max_total=Sum("max_total")).get("max_total", 0)
+
+    @property
+    def daily_max_visits_per_user_new(self):
+        return self.paymentunit_set.aggregate(max_daily=Max("max_daily")).get("max_daily", 0)
+
+    @property
+    def budget_per_visit_new(self):
+        return self.paymentunit_set.aggregate(amount=Max("amount")).get("amount", 0)
 
     @property
     def budget_per_user(self):
