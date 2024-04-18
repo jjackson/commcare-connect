@@ -156,3 +156,13 @@ class AssessmentFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.Assessment"
+
+
+class UserInviteFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    phone_number = Faker("word")
+    message_sid = Faker("word")
+    opportunity_access = SubFactory(OpportunityAccessFactory)
+
+    class Meta:
+        model = "opportunity.UserInvite"
