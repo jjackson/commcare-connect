@@ -9,10 +9,12 @@ def populate_user_invite(apps, schema_editor):
     OpportunityAccess = apps.get_model("opportunity.OpportunityAccess")
     UserInvite = apps.get_model("opportunity.UserInvite")
     print("Running UserInvite data migration")
-    access_objects = OpportunityAccess.objects.all()
+    access_objects = OpportunityAccess.objects.all().select_related("user")
     for access in access_objects:
-        UserInvite.objects.create(
-            opportunity=access.opportunity,
+        if not access.user.phone_number:
+            continue
+        UserInvite.objects.get_or_create(
+            opportunity_id=access.opportunity_id,
             phone_number=access.user.phone_number,
             opportunity_access=access,
             status=UserInviteStatus.accepted if access.accepted else UserInviteStatus.invited,
