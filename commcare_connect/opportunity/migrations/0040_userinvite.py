@@ -8,14 +8,16 @@ from commcare_connect.opportunity.models import UserInviteStatus
 def populate_user_invite(apps, schema_editor):
     OpportunityAccess = apps.get_model("opportunity.OpportunityAccess")
     UserInvite = apps.get_model("opportunity.UserInvite")
-
-    for access in OpportunityAccess.objects.all():
+    print("Running UserInvite data migration")
+    access_objects = OpportunityAccess.objects.all()
+    for access in access_objects:
         UserInvite.objects.create(
             opportunity=access.opportunity,
             phone_number=access.user.phone_number,
             opportunity_access=access,
             status=UserInviteStatus.accepted if access.accepted else UserInviteStatus.invited,
         )
+    print(f"Created {len(access_objects)} user invites")
 
 
 class Migration(migrations.Migration):
