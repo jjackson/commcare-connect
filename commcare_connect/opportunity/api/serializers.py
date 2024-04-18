@@ -208,9 +208,15 @@ class PaymentSerializer(serializers.ModelSerializer):
 class DeliveryProgressSerializer(serializers.Serializer):
     deliveries = serializers.SerializerMethodField()
     payments = serializers.SerializerMethodField()
-    max_payments = serializers.IntegerField(source="opportunityclaim.max_payments")
+    max_payments = serializers.SerializerMethodField()
     payment_accrued = serializers.IntegerField()
     end_date = serializers.DateField(source="opportunityclaim.end_date")
+
+    def get_max_payments(self, obj):
+        return (
+            obj.opportunityclaim.opportunityclaimlimit_set.aggregate(max_visits=Sum("max_visits")).get("max_visits", 0)
+            or -1
+        )
 
     def get_payments(self, obj):
         return PaymentSerializer(obj.payment_set.all(), many=True).data
