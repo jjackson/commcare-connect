@@ -8,6 +8,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     Payment,
     PaymentUnit,
+    UserInvite,
     UserVisit,
     VisitValidationStatus,
 )
@@ -117,11 +118,12 @@ class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
 
 
 class UserStatusTable(tables.Table):
-    display_name = columns.Column(verbose_name="Name", footer="Total")
-    username = columns.Column(accessor="user__username", visible=False)
-    accepted = BooleanAggregateColumn(verbose_name="Accepted")
+    display_name = columns.Column(verbose_name="Name", footer="Total", accessor="opportunity_access__display_name")
+    username = columns.Column(accessor="opportunity_access__user__username", visible=False)
     claimed = AggregateColumn(verbose_name="Job Claimed", accessor="job_claimed")
-    started_learning = AggregateColumn(verbose_name="Started Learning", accessor="date_learn_started")
+    started_learning = AggregateColumn(
+        verbose_name="Started Learning", accessor="opportunity_access__date_learn_started"
+    )
     completed_learning = AggregateColumn(verbose_name="Completed Learning", accessor="date_learn_completed")
     passed_assessment = BooleanAggregateColumn(verbose_name="Passed Assessment")
     started_delivery = AggregateColumn(verbose_name="Started Delivery", accessor="date_deliver_started")
@@ -129,12 +131,12 @@ class UserStatusTable(tables.Table):
     view_profile = AggregateColumn("View Profile", empty_values=(), footer=lambda table: len(table.rows))
 
     class Meta:
-        model = OpportunityAccess
-        fields = ("display_name", "accepted", "last_visit_date")
+        model = UserInvite
+        fields = ("status",)
         sequence = (
             "display_name",
             "username",
-            "accepted",
+            "status",
             "started_learning",
             "completed_learning",
             "passed_assessment",
@@ -146,7 +148,7 @@ class UserStatusTable(tables.Table):
         orderable = False
 
     def render_view_profile(self, record):
-        if not record.accepted:
+        if record.opportunity_access is not None and record.opportunity_access.accepted:
             return "---"
         url = reverse(
             "opportunity:user_profile",
@@ -169,6 +171,9 @@ class UserStatusTable(tables.Table):
 
     def render_last_visit_date(self, record, value):
         return date_with_time_popup(self, value)
+
+    def render_status(self, record, value):
+        return record.status
 
 
 class PaymentUnitTable(tables.Table):
