@@ -56,6 +56,7 @@ class OpportunityAccessAdmin(admin.ModelAdmin):
             OpportunityClaim.objects.filter(opportunity_access=access).delete()
             CompletedModule.objects.filter(user=access.user, opportunity=access.opportunity).delete()
             Assessment.objects.filter(user=access.user, opportunity=access.opportunity).delete()
+            CompletedWork.objects.filter(opportunity_access=access).delete()
 
 
 @admin.register(LearnModule)
