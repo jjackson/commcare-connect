@@ -207,7 +207,7 @@ class DeliverStatusTable(tables.Table):
     )
 
     class Meta:
-        model = CompletedWork
+        model = OpportunityAccess
         orderable = False
         fields = ("display_name",)
         sequence = (
