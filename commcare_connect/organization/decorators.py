@@ -13,7 +13,7 @@ def _request_user_is_member(request):
 def _request_user_is_admin(request):
     return (
         request.org and request.org_membership and request.org_membership.role == UserOrganizationMembership.Role.ADMIN
-    )
+    ) or request.user.is_superuser
 
 
 def org_member_required(view_func):
