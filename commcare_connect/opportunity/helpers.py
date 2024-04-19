@@ -81,4 +81,5 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
             )
             .order_by("user__name")
         )
+    access_objects.sort(key=lambda a: a.user.name)
     return access_objects
