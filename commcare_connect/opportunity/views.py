@@ -37,6 +37,7 @@ from commcare_connect.opportunity.helpers import (
 )
 from commcare_connect.opportunity.models import (
     BlobMeta,
+    CommCareApp,
     CompletedModule,
     DeliverUnit,
     Opportunity,
@@ -600,11 +601,13 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
 def get_application(request, org_slug=None):
     domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
     applications = get_applications_for_user_by_domain(request.user, domain)
+    existing_apps = set(CommCareApp.objects.filter(cc_domain=domain).values_list("cc_app_id", flat=True))
     options = []
     for app in applications:
-        value = json.dumps(app)
-        name = app["name"]
-        options.append(format_html("<option value='{}'>{}</option>", value, name))
+        if app["id"] not in existing_apps:
+            value = json.dumps(app)
+            name = app["name"]
+            options.append(format_html("<option value='{}'>{}</option>", value, name))
     return HttpResponse("\n".join(options))
 
 
