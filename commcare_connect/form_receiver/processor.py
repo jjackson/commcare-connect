@@ -23,10 +23,7 @@ from commcare_connect.opportunity.models import (
     UserVisit,
     VisitValidationStatus,
 )
-from commcare_connect.opportunity.tasks import (
-    approve_completed_work_and_update_payment_accrued,
-    download_user_visit_attachments,
-)
+from commcare_connect.opportunity.tasks import download_user_visit_attachments
 from commcare_connect.users.models import User
 
 LEARN_MODULE_JSONPATH = parse("$..module")
@@ -228,8 +225,6 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     ):
         user_visit.status = VisitValidationStatus.approved
     user_visit.save()
-    if opportunity.auto_approve_payments:
-        approve_completed_work_and_update_payment_accrued.delay([completed_work.id])
     download_user_visit_attachments.delay(user_visit.id)
 
 
