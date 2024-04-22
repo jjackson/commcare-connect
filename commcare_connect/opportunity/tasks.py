@@ -271,7 +271,6 @@ def generate_work_status_export(opportunity_id: int, export_format: str):
     return export_tmp_name
 
 
-@celery_app.task()
 def approve_completed_work_and_update_payment_accrued(completed_work_ids: list[int]):
     """Approves and Updates Payment accrued for all completed (all deliver units submitted and any status) and
     un-flagged completed work."""

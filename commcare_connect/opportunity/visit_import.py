@@ -120,7 +120,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
             UserVisit.objects.bulk_update(to_update, fields=["status", "reason"])
             missing_visits |= set(visit_batch) - seen_visits
     if opportunity.auto_approve_payments:
-        approve_completed_work_and_update_payment_accrued.delay(list(seen_completed_works))
+        approve_completed_work_and_update_payment_accrued(list(seen_completed_works))
     else:
         # TODO: This should be a task
         update_payment_accrued(opportunity, users=user_ids)
