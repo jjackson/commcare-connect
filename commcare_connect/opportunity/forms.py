@@ -616,6 +616,8 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
         help_texts = {
             "duration": "Form completion duration threshold. (minutes)",
             "location": "Check form distance to other form submission. (metres)",
+            "duplicate": "Flag duplicate form submissions for an entity.",
+            "gps": "Flag forms with no location information.",
         }
 
     def __init__(self, *args, **kwargs):
