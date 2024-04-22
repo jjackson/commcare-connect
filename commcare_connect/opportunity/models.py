@@ -154,7 +154,7 @@ class Opportunity(BaseModel):
 
     @property
     def daily_max_visits_per_user_new(self):
-        return self.paymentunit_set.aggregate(max_daily=Max("max_daily")).get("max_daily", 0)
+        return self.paymentunit_set.aggregate(max_daily=Sum("max_daily")).get("max_daily", 0)
 
     @property
     def budget_per_visit_new(self):
