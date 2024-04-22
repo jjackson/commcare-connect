@@ -286,3 +286,22 @@ def approve_completed_work_and_update_payment_accrued(completed_work_ids: list[i
                 access.payment_accrued += completed_count * completed_work.payment_unit.amount
                 completed_work.save()
                 access.save()
+
+
+@celery_app.task()
+def bulk_approve_completed_work():
+    access_objects = OpportunityAccess.objects.filter(
+        opportunity__active=True,
+        opportunity__end_date__gte=datetime.date.today(),
+    )
+    for access in access_objects:
+        completed_works = access.completedwork_set.filter(status=CompletedWorkStatus.pending)
+        for completed_work in completed_works:
+            if completed_work.flags:
+                continue
+            completed_count = completed_work.completed_count
+            if completed_count > 0:
+                completed_work.status = CompletedWorkStatus.approved
+                access.payment_accrued += completed_count * completed_work.payment_unit.amount
+                completed_work.save()
+        access.save()
