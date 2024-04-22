@@ -159,19 +159,40 @@ def test_receiver_deliver_form_daily_visits_reached(
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("paymentunit_options", [pytest.param({"max_daily": 2})])
 def test_receiver_deliver_form_max_visits_reached(
-    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
 ):
-    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link, max_visits_per_user=1)
-    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 0
-    make_request(api_client, form_json, user_with_connectid_link)
-    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 1
-    duplicate_json = deepcopy(form_json)
-    duplicate_json["form"]["deliver"]["entity_id"] = str(uuid4())
-    api_client.post("/api/receiver/", data=duplicate_json, format="json")
-    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 2
-    visit = UserVisit.objects.filter(user=user_with_connectid_link).last()
-    assert visit.status == VisitValidationStatus.over_limit
+    def form_json(payment_unit):
+        deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app, payment_unit=payment_unit)
+        stub = DeliverUnitStubFactory(id=deliver_unit.slug)
+        form_json = get_form_json(
+            form_block=stub.json,
+            domain=deliver_unit.app.cc_domain,
+            app_id=deliver_unit.app.cc_app_id,
+        )
+        return form_json
+
+    def submit_form_for_random_entity(form_json):
+        duplicate_json = deepcopy(form_json)
+        duplicate_json["form"]["deliver"]["entity_id"] = str(uuid4())
+        make_request(api_client, duplicate_json, mobile_user_with_connect_link)
+
+    payment_units = opportunity.paymentunit_set.all()
+    form_json1 = form_json(payment_units[0])
+    form_json2 = form_json(payment_units[1])
+    for _ in range(2):
+        submit_form_for_random_entity(form_json1)
+        submit_form_for_random_entity(form_json2)
+    assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 4
+    # Limit reached
+    submit_form_for_random_entity(form_json2)
+    user_visits = UserVisit.objects.filter(user=mobile_user_with_connect_link)
+    assert user_visits.count() == 5
+    # First four are not over-limit
+    assert {u.status for u in user_visits[0:3]} == {VisitValidationStatus.pending}
+    # Last one is over limit
+    assert user_visits[4].status == VisitValidationStatus.over_limit
 
 
 @pytest.mark.django_db
@@ -195,7 +216,7 @@ def test_receiver_duplicate(user_with_connectid_link: User, api_client: APIClien
     assert visit.status == VisitValidationStatus.pending
     duplicate_json = deepcopy(form_json)
     duplicate_json["id"] = str(uuid4())
-    api_client.post("/api/receiver/", data=duplicate_json, format="json")
+    make_request(api_client, duplicate_json, user_with_connectid_link)
     visit = UserVisit.objects.get(xform_id=duplicate_json["id"])
     assert visit.status == VisitValidationStatus.duplicate
 
