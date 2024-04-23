@@ -226,9 +226,15 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
                 if dist.m <= 10:
                     flags.append(["location", "Visit location is too close to another visit"])
                     break
-    if opportunity_flags.form_submission_start and opportunity_flags.form_submission_start.time() < now().time():
+    if (
+        opportunity_flags.form_submission_start
+        and opportunity_flags.form_submission_start.time() < xform.metadata.timeStart.time()
+    ):
         flags.append(["form_submission_period", "Form was submitted before the start time"])
-    if opportunity_flags.form_submission_end and opportunity_flags.form_submission_end.time() > now().time():
+    if (
+        opportunity_flags.form_submission_end
+        and opportunity_flags.form_submission_end.time() > xform.metadata.timeStart.time()
+    ):
         flags.append(["form_submission_period", "Form was submitted after the end time"])
     if flags:
         user_visit.flagged = True
