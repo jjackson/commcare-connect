@@ -41,7 +41,12 @@ def test_process_xform_error(user: User, api_client: APIClient):
 
 
 def add_credentials(api_client: APIClient, user: User):
-    token = user.oauth2_provider_accesstoken.create(
-        expires=now() + datetime.timedelta(hours=1), token="token", scope="read write"
-    )
+    if not user.oauth2_provider_accesstoken.count():
+        token = user.oauth2_provider_accesstoken.create(
+            expires=now() + datetime.timedelta(hours=1), token="token", scope="read write"
+        )
+    else:
+        token = user.oauth2_provider_accesstoken.first()
+        token.expires = now() + datetime.timedelta(hours=1)
+        token.save()
     api_client.credentials(Authorization=f"Bearer {token}")
