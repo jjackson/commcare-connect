@@ -293,6 +293,7 @@ def bulk_approve_completed_work():
     access_objects = OpportunityAccess.objects.filter(
         opportunity__active=True,
         opportunity__end_date__gte=datetime.date.today(),
+        opportunity__auto_approve_payments=True,
     )
     for access in access_objects:
         completed_works = access.completedwork_set.filter(status=CompletedWorkStatus.pending)
