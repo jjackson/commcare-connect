@@ -7,7 +7,7 @@ from django_celery_beat.models import CrontabSchedule, PeriodicTask
 def create_bulk_apporve_completed_work_task(apps, schema_editor):
     schedule, _ = CrontabSchedule.objects.get_or_create(
         minute="00",
-        hour="12",
+        hour="23",
         day_of_week="*",
         day_of_month="*",
         month_of_year="*",
