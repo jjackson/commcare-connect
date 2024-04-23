@@ -8,6 +8,7 @@ from commcare_connect.opportunity.models import (
     CommCareApp,
     CompletedModule,
     CompletedWork,
+    CompletedWorkStatus,
     LearnModule,
     Opportunity,
     OpportunityAccess,
@@ -222,5 +223,7 @@ class DeliveryProgressSerializer(serializers.Serializer):
         return PaymentSerializer(obj.payment_set.all(), many=True).data
 
     def get_deliveries(self, obj):
-        completed_works = CompletedWork.objects.filter(opportunity_access=obj)
+        completed_works = CompletedWork.objects.filter(opportunity_access=obj).exclude(
+            status=CompletedWorkStatus.over_limit
+        )
         return CompletedWorkSerializer(completed_works, many=True).data
