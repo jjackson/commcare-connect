@@ -9,7 +9,7 @@ def populate_overlimit_work(apps, schema_editor):
     for visit in UserVisit.objects.filter(status=VisitValidationStatus.over_limit):
         if visit.completed_work and visit.completed_work.status != CompletedWorkStatus.approved:
             visit.completed_work.status = CompletedWorkStatus.over_limit
-            visit.completed_work.status.save()
+            visit.completed_work.save()
 
 
 class Migration(migrations.Migration):
