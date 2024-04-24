@@ -236,12 +236,12 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
                     break
     if (
         opportunity_flags.form_submission_start
-        and opportunity_flags.form_submission_start.time() < xform.metadata.timeStart.time()
+        and opportunity_flags.form_submission_start > xform.metadata.timeStart.time()
     ):
         flags.append(["form_submission_period", "Form was submitted before the start time"])
     if (
         opportunity_flags.form_submission_end
-        and opportunity_flags.form_submission_end.time() > xform.metadata.timeStart.time()
+        and opportunity_flags.form_submission_end < xform.metadata.timeStart.time()
     ):
         flags.append(["form_submission_period", "Form was submitted after the end time"])
     if flags:
