@@ -295,6 +295,27 @@ def test_auto_approve_payments_unflagged_visit(
     approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
     access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
     completed_work = CompletedWork.objects.get(opportunity_access=access)
+    assert completed_work.status == CompletedWorkStatus.pending
+    assert access.payment_accrued == 0
+
+
+def test_auto_approve_payments_approved_visit(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    form_json["metadata"]["timeEnd"] = "2023-06-07T12:36:10.178000Z"
+    opportunity.auto_approve_payments = True
+    opportunity.save()
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    visit.status = VisitValidationStatus.approved
+    visit.save()
+    assert not visit.flagged
+
+    # Payment Approval
+    approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
+    access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
+    completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.approved
     assert access.payment_accrued == completed_work.payment_accrued
 
