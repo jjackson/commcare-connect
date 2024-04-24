@@ -9,21 +9,20 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from commcare_connect.opportunity.api.serializers import (
+    CompletedWorkSerializer,
     DeliveryProgressSerializer,
     OpportunitySerializer,
     UserLearnProgressSerializer,
-    UserVisitSerializer,
 )
 from commcare_connect.opportunity.models import (
     Assessment,
     CompletedModule,
+    CompletedWork,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
     OpportunityClaimLimit,
     Payment,
-    UserVisit,
-    VisitValidationStatus,
 )
 from commcare_connect.users.helpers import create_hq_user
 from commcare_connect.users.models import ConnectIDUserLink
@@ -55,14 +54,14 @@ class UserLearnProgressView(RetrieveAPIView):
 
 
 class UserVisitViewSet(viewsets.GenericViewSet, viewsets.mixins.ListModelMixin):
-    serializer_class = UserVisitSerializer
+    serializer_class = CompletedWorkSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return UserVisit.objects.filter(
-            opportunity=self.kwargs.get("opportunity_id"),
-            user=self.request.user,
-        ).exclude(status=VisitValidationStatus.over_limit, is_trial=True)
+        return CompletedWork.objects.filter(
+            opportunity_access__opportunity=self.kwargs.get("opportunity_id"),
+            opportunity_access__user=self.request.user,
+        )
 
 
 class DeliveryProgressView(RetrieveAPIView):

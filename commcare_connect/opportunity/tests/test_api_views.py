@@ -21,6 +21,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tests.factories import (
+    CompletedWorkFactory,
     LearnModuleFactory,
     OpportunityAccessFactory,
     OpportunityFactory,
@@ -160,7 +161,7 @@ def test_opportunity_list_endpoint(
     assert response.data[0].keys() == OpportunitySerializer().get_fields().keys()
     payment_units = opportunity.paymentunit_set.all()
     assert response.data[0]["max_visits_per_user"] == sum([pu.max_total for pu in payment_units])
-    assert response.data[0]["daily_max_visits_per_user"] == max([pu.max_daily for pu in payment_units])
+    assert response.data[0]["daily_max_visits_per_user"] == sum([pu.max_daily for pu in payment_units])
     assert response.data[0]["budget_per_visit"] == max([pu.amount for pu in payment_units])
     claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__opportunity_access__opportunity=opportunity)
     assert response.data[0]["claim"]["max_payments"] == sum([cl.max_visits for cl in claim_limits])
@@ -170,8 +171,12 @@ def test_delivery_progress_endpoint(
     mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
+    completed_work = CompletedWorkFactory(opportunity_access=access)
     UserVisitFactory.create(
-        opportunity=opportunity, user=mobile_user_with_connect_link, status=VisitValidationStatus.pending
+        opportunity=opportunity,
+        user=mobile_user_with_connect_link,
+        status=VisitValidationStatus.pending,
+        completed_work=completed_work,
     )
     api_client.force_authenticate(mobile_user_with_connect_link)
     response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")

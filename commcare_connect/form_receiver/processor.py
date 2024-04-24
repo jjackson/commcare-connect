@@ -14,6 +14,7 @@ from commcare_connect.opportunity.models import (
     CommCareApp,
     CompletedModule,
     CompletedWork,
+    CompletedWorkStatus,
     DeliverUnit,
     LearnModule,
     Opportunity,
@@ -146,7 +147,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     deliver_unit = get_or_create_deliver_unit(app, deliver_unit_block)
     access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
     counts = (
-        UserVisit.objects.filter(opportunity=opportunity, user=user)
+        UserVisit.objects.filter(opportunity=opportunity, user=user, deliver_unit=deliver_unit)
         .exclude(Q(status=VisitValidationStatus.over_limit) | Q(is_trial=True))
         .aggregate(
             daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)),
@@ -171,6 +172,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         location=xform.metadata.location,
         is_trial=opportunity.start_date > datetime.date.today(),
     )
+    completed_work_needs_save = False
     if user_visit.is_trial:
         completed_work = None
     else:
@@ -192,10 +194,14 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             or datetime.date.today() > claim.end_date
         ):
             user_visit.status = VisitValidationStatus.over_limit
+            if not completed_work.status == CompletedWorkStatus.over_limit:
+                completed_work.status = CompletedWorkStatus.over_limit
+                completed_work_needs_save = True
+        elif counts["entity"] > 0:
+            user_visit.status = VisitValidationStatus.duplicate
 
     flags = []
-    if counts["entity"] > 0:
-        user_visit.status = VisitValidationStatus.duplicate
+    if user_visit.status == VisitValidationStatus.duplicate:
         flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
     if xform.metadata.duration < datetime.timedelta(seconds=60):
         flags.append(["duration", "The form was completed too quickly."])
@@ -225,6 +231,8 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     ):
         user_visit.status = VisitValidationStatus.approved
     user_visit.save()
+    if completed_work_needs_save:
+        completed_work.save()
     download_user_visit_attachments.delay(user_visit.id)
 
 
