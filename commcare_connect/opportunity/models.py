@@ -250,12 +250,7 @@ class OpportunityAccess(models.Model):
 
     @property
     def visit_count(self):
-        user_visits = (
-            UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
-            .exclude(status=VisitValidationStatus.over_limit, is_trial=True)
-            .order_by("visit_date")
-        )
-        return user_visits.count()
+        return self.completedwork_set.exclude(status=CompletedWorkStatus.over_limit).count()
 
     @property
     def last_visit_date(self):
@@ -344,6 +339,7 @@ class CompletedWorkStatus(models.TextChoices):
     pending = "pending", gettext("Pending")
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
+    over_limit = "over_limit", gettext("Over Limit")
 
 
 class CompletedWork(models.Model):

@@ -14,6 +14,7 @@ from commcare_connect.opportunity.models import (
     CommCareApp,
     CompletedModule,
     CompletedWork,
+    CompletedWorkStatus,
     DeliverUnit,
     LearnModule,
     Opportunity,
@@ -171,6 +172,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         location=xform.metadata.location,
         is_trial=opportunity.start_date > datetime.date.today(),
     )
+    completed_work_needs_save = False
     if user_visit.is_trial:
         completed_work = None
     else:
@@ -192,6 +194,9 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             or datetime.date.today() > claim.end_date
         ):
             user_visit.status = VisitValidationStatus.over_limit
+            if not completed_work.status == CompletedWorkStatus.over_limit:
+                completed_work.status = CompletedWorkStatus.over_limit
+                completed_work_needs_save = True
         elif counts["entity"] > 0:
             user_visit.status = VisitValidationStatus.duplicate
 
@@ -219,6 +224,8 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         user_visit.flagged = True
         user_visit.flag_reason = {"flags": flags}
     user_visit.save()
+    if completed_work_needs_save:
+        completed_work.save()
     download_user_visit_attachments.delay(user_visit.id)
 
 
