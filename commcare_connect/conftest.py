@@ -73,11 +73,19 @@ def user_with_connectid_link(db, opportunity):
 
 
 @pytest.fixture
-def mobile_user_with_connect_link(db, opportunity) -> User:
+def paymentunit_options():
+    # let tests parametrize as needed
+    return {}
+
+
+@pytest.fixture
+def mobile_user_with_connect_link(db, opportunity, paymentunit_options) -> User:
     user = MobileUserFactory()
     access = OpportunityAccessFactory(user=user, opportunity=opportunity, accepted=True)
     claim = OpportunityClaimFactory(end_date=opportunity.end_date, opportunity_access=access)
-    payment_units = PaymentUnitFactory.create_batch(2, opportunity=opportunity, parent_payment_unit=None)
+    payment_units = PaymentUnitFactory.create_batch(
+        2, opportunity=opportunity, parent_payment_unit=None, **(paymentunit_options)
+    )
     budget_per_user = sum([p.max_total * p.amount for p in payment_units])
     opportunity.total_budget = budget_per_user
     OpportunityClaimLimit.create_claim_limits(opportunity, claim)
