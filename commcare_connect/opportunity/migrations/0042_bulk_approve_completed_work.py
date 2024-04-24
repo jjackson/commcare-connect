@@ -15,7 +15,7 @@ def create_bulk_apporve_completed_work_task(apps, schema_editor):
     PeriodicTask.objects.update_or_create(
         crontab=schedule,
         name="bulk_approve_completed_work",
-        task="commcare_connect.opportunity.tasks.bulk_apporve_completed_work",
+        task="commcare_connect.opportunity.tasks.bulk_approve_completed_work",
     )
 
 
@@ -28,7 +28,7 @@ def delete_bulk_approve_completed_work_task(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0040_opportunity_auto_approve_payments_and_more"),
+        ("opportunity", "0041_opportunity_auto_approve_payments_and_more"),
     ]
 
     operations = [
