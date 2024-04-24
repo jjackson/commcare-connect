@@ -1,4 +1,5 @@
 import datetime
+from collections import Counter
 
 import httpx
 from allauth.utils import build_absolute_uri
@@ -274,18 +275,26 @@ def generate_work_status_export(opportunity_id: int, export_format: str):
 def approve_completed_work_and_update_payment_accrued(completed_work_ids: list[int]):
     """Approves and Updates Payment accrued for all completed (all deliver units submitted and any status) and
     un-flagged completed work."""
-    for completed_work_id in completed_work_ids:
-        completed_work = CompletedWork.objects.get(pk=completed_work_id)
+    completed_works = CompletedWork.objects.filter(id__in=completed_work_ids).select_related("payment_unit")
+    for completed_work in completed_works:
         access = completed_work.opportunity_access
         if completed_work.flags:
             continue
         completed_count = completed_work.completed_count
-        if completed_count > 0:
-            with transaction.atomic():
-                completed_work.status = CompletedWorkStatus.approved
-                access.payment_accrued += completed_count * completed_work.payment_unit.amount
-                completed_work.save()
-                access.save()
+
+        visits = completed_work.uservisit_set.values_list("status", flat=True)
+        status_count = Counter(visits)
+        if status_count[VisitValidationStatus.pending.value] > 0:
+            completed_work.status = CompletedWorkStatus.pending
+        if (
+            completed_count > 0
+            and status_count[VisitValidationStatus.approved.value] >= completed_work.payment_unit.deliver_units.count()
+        ):
+            completed_work.status = CompletedWorkStatus.approved
+            access.payment_accrued += completed_count * completed_work.payment_unit.amount
+            access.save()
+
+        completed_work.save()
 
 
 @celery_app.task()
@@ -301,8 +310,16 @@ def bulk_approve_completed_work():
             if completed_work.flags:
                 continue
             completed_count = completed_work.completed_count
-            if completed_count > 0:
+            visits = completed_work.uservisit_set.values_list("status", flat=True)
+            status_count = Counter(visits)
+            if status_count[VisitValidationStatus.pending.value] > 0:
+                completed_work.status = CompletedWorkStatus.pending
+            if (
+                completed_count > 0
+                and status_count[VisitValidationStatus.approved.value]
+                >= completed_work.payment_unit.deliver_units.count()
+            ):
                 completed_work.status = CompletedWorkStatus.approved
                 access.payment_accrued += completed_count * completed_work.payment_unit.amount
-                completed_work.save()
+            completed_work.save()
         access.save()
