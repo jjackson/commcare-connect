@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db.models import Max, Sum
+from django.db.models import Sum
 from rest_framework import serializers
 
 from commcare_connect.cache import quickcache
@@ -8,6 +8,7 @@ from commcare_connect.opportunity.models import (
     CommCareApp,
     CompletedModule,
     CompletedWork,
+    CompletedWorkStatus,
     LearnModule,
     Opportunity,
     OpportunityAccess,
@@ -120,13 +121,13 @@ class OpportunitySerializer(serializers.ModelSerializer):
 
     def get_max_visits_per_user(self, obj):
         # return 1 for older opportunities
-        return obj.paymentunit_set.aggregate(max_total=Sum("max_total")).get("max_total", 0) or -1
+        return obj.max_visits_per_user_new or -1
 
     def get_daily_max_visits_per_user(self, obj):
-        return obj.paymentunit_set.aggregate(max_daily=Max("max_daily")).get("max_daily", 0) or -1
+        return obj.daily_max_visits_per_user_new or -1
 
     def get_budget_per_visit(self, obj):
-        return obj.paymentunit_set.aggregate(amount=Max("amount")).get("amount", 0) or -1
+        return obj.budget_per_visit_new or -1
 
     def get_budget_per_user(self, obj):
         return obj.budget_per_user
@@ -208,13 +209,21 @@ class PaymentSerializer(serializers.ModelSerializer):
 class DeliveryProgressSerializer(serializers.Serializer):
     deliveries = serializers.SerializerMethodField()
     payments = serializers.SerializerMethodField()
-    max_payments = serializers.IntegerField(source="opportunityclaim.max_payments")
+    max_payments = serializers.SerializerMethodField()
     payment_accrued = serializers.IntegerField()
     end_date = serializers.DateField(source="opportunityclaim.end_date")
+
+    def get_max_payments(self, obj):
+        return (
+            obj.opportunityclaim.opportunityclaimlimit_set.aggregate(max_visits=Sum("max_visits")).get("max_visits", 0)
+            or -1
+        )
 
     def get_payments(self, obj):
         return PaymentSerializer(obj.payment_set.all(), many=True).data
 
     def get_deliveries(self, obj):
-        completed_works = CompletedWork.objects.filter(opportunity_access=obj)
+        completed_works = CompletedWork.objects.filter(opportunity_access=obj).exclude(
+            status=CompletedWorkStatus.over_limit
+        )
         return CompletedWorkSerializer(completed_works, many=True).data

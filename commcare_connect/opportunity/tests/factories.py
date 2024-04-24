@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from factory import DictFactory, Faker, SelfAttribute, SubFactory
+from factory import DictFactory, Faker, LazyAttribute, SelfAttribute, SubFactory
 from factory.django import DjangoModelFactory
 
 from commcare_connect.opportunity.models import VisitValidationStatus
@@ -74,8 +74,9 @@ class PaymentUnitFactory(DjangoModelFactory):
     name = Faker("name")
     description = Faker("text")
     amount = Faker("pyint", min_value=1, max_value=10)
-    max_total = Faker("pyint", min_value=1, max_value=10)
     max_daily = Faker("pyint", min_value=1, max_value=10)
+    max_total = LazyAttribute(lambda o: o.max_daily * 2)
+
     # parent_payment_unit = SubFactory("commcare_connect.opportunity.tests.factories.PaymentUnitFactory")
 
     class Meta:
