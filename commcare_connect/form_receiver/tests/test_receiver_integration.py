@@ -15,12 +15,16 @@ from commcare_connect.form_receiver.tests.xforms import (
 from commcare_connect.opportunity.models import (
     Assessment,
     CompletedModule,
+    CompletedWork,
+    CompletedWorkStatus,
     LearnModule,
     Opportunity,
+    OpportunityAccess,
     OpportunityClaimLimit,
     UserVisit,
     VisitValidationStatus,
 )
+from commcare_connect.opportunity.tasks import approve_completed_work_and_update_payment_accrued
 from commcare_connect.opportunity.tests.factories import (
     DeliverUnitFactory,
     LearnModuleFactory,
@@ -219,6 +223,121 @@ def test_receiver_duplicate(user_with_connectid_link: User, api_client: APIClien
     make_request(api_client, duplicate_json, user_with_connectid_link)
     visit = UserVisit.objects.get(xform_id=duplicate_json["id"])
     assert visit.status == VisitValidationStatus.duplicate
+    assert ["duplicate", "A beneficiary with the same identifier already exists"] in visit.flag_reason.get("flags", [])
+
+
+def test_flagged_form(user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity):
+    # The mock data for form fails with duration flag
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.status == VisitValidationStatus.pending
+    assert visit.flagged
+    assert len(visit.flag_reason.get("flags", []))
+
+
+def test_auto_approve_unflagged_visits(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    form_json["metadata"]["timeEnd"] = "2023-06-07T12:36:10.178000Z"
+    opportunity.auto_approve_visits = True
+    opportunity.save()
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert not visit.flagged
+    assert visit.status == VisitValidationStatus.approved
+
+
+def test_auto_approve_flagged_visits(user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    opportunity.auto_approve_visits = True
+    opportunity.save()
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert visit.status == VisitValidationStatus.pending
+
+
+def test_auto_approve_payments_flagged_visit(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    # Flagged Visit
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    opportunity.auto_approve_payments = True
+    opportunity.save()
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert visit.status == VisitValidationStatus.pending
+
+    # No Payment Approval
+    approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
+    access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
+    completed_work = CompletedWork.objects.get(opportunity_access=access)
+    assert completed_work.status == CompletedWorkStatus.pending
+    assert access.payment_accrued == 0
+
+
+def test_auto_approve_payments_unflagged_visit(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    form_json["metadata"]["timeEnd"] = "2023-06-07T12:36:10.178000Z"
+    opportunity.auto_approve_payments = True
+    opportunity.save()
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert not visit.flagged
+    assert visit.status == VisitValidationStatus.pending
+
+    # Payment Approval
+    approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
+    access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
+    completed_work = CompletedWork.objects.get(opportunity_access=access)
+    assert completed_work.status == CompletedWorkStatus.pending
+    assert access.payment_accrued == 0
+
+
+def test_auto_approve_payments_approved_visit(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    form_json["metadata"]["timeEnd"] = "2023-06-07T12:36:10.178000Z"
+    opportunity.auto_approve_payments = True
+    opportunity.save()
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    visit.status = VisitValidationStatus.approved
+    visit.save()
+    assert not visit.flagged
+
+    # Payment Approval
+    approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
+    access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
+    completed_work = CompletedWork.objects.get(opportunity_access=access)
+    assert completed_work.status == CompletedWorkStatus.approved
+    assert access.payment_accrued == completed_work.payment_accrued
+
+
+def test_auto_approve_visits_and_payments(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    form_json["metadata"]["timeEnd"] = "2023-06-07T12:36:10.178000Z"
+    opportunity.auto_approve_visits = True
+    opportunity.auto_approve_payments = True
+    opportunity.save()
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert not visit.flagged
+    assert visit.status == VisitValidationStatus.approved
+
+    approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
+    access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
+    completed_work = CompletedWork.objects.get(opportunity_access=access)
+    assert completed_work.status == CompletedWorkStatus.approved
+    assert access.payment_accrued == completed_work.payment_accrued
 
 
 def _get_form_json(learn_app, module_id, form_block=None):
