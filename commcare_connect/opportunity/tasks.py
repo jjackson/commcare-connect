@@ -301,9 +301,12 @@ def bulk_approve_completed_work():
         opportunity__auto_approve_payments=True,
     )
     for access in access_objects:
-        completed_works = access.completedwork_set.filter(status=CompletedWorkStatus.pending)
+        completed_works = access.completedwork_set.exlcude(
+            status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
+        )
+        access.payment_accrued = 0
         for completed_work in completed_works:
-            if completed_work.flags:
+            if completed_work.flags and completed_work.status != CompletedWorkStatus.approved:
                 continue
             completed_count = completed_work.completed_count
             visits = completed_work.uservisit_set.values_list("status", flat=True)
