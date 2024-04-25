@@ -74,6 +74,8 @@ class Opportunity(BaseModel):
     total_budget = models.IntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
     currency = models.CharField(max_length=3, null=True)
+    auto_approve_visits = models.BooleanField(default=False)
+    auto_approve_payments = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
@@ -355,9 +357,7 @@ class CompletedWork(models.Model):
     @property
     def completed_count(self):
         """Returns the no of completion of this work. Includes duplicate submissions."""
-        visits = self.uservisit_set.filter(status=VisitValidationStatus.approved).values_list(
-            "deliver_unit_id", flat=True
-        )
+        visits = self.uservisit_set.values_list("deliver_unit_id", flat=True)
         unit_counts = Counter(visits)
         deliver_units = self.payment_unit.deliver_units.values("id", "optional")
         required_deliver_units = list(
@@ -395,7 +395,9 @@ class CompletedWork(models.Model):
 
     @property
     def flags(self):
-        visits = self.uservisit_set.values_list("flag_reason", flat=True)
+        visits = self.uservisit_set.exclude(status=VisitValidationStatus.approved).values_list(
+            "flag_reason", flat=True
+        )
         flags = set()
         for visit in visits:
             if not visit:
