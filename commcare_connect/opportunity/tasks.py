@@ -25,7 +25,6 @@ from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import (
     BlobMeta,
     CompletedModule,
-    CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
     LearnModule,
@@ -269,28 +268,6 @@ def generate_work_status_export(opportunity_id: int, export_format: str):
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_verification.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
-
-
-def approve_completed_work_and_update_payment_accrued(completed_work_ids: list[int]):
-    """Approves and Updates Payment accrued for all completed (all deliver units submitted and any status) and
-    un-flagged completed work."""
-    completed_works = CompletedWork.objects.filter(id__in=completed_work_ids).select_related("payment_unit")
-    for completed_work in completed_works:
-        access = completed_work.opportunity_access
-        if completed_work.flags:
-            continue
-        completed_count = completed_work.completed_count
-
-        visits = completed_work.uservisit_set.values_list("status", flat=True)
-        if any(visit == "rejected" for visit in visits):
-            completed_work.status = CompletedWorkStatus.pending
-        elif all(visit == "approved" for visit in visits):
-            completed_work.status = CompletedWorkStatus.approved
-        if completed_count > 0 and completed_work.status == CompletedWorkStatus.approved:
-            access.payment_accrued += completed_count * completed_work.payment_unit.amount
-            access.save()
-
-        completed_work.save()
 
 
 @celery_app.task()
