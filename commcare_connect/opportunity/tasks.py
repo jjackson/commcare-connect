@@ -1,5 +1,4 @@
 import datetime
-from collections import Counter
 
 import httpx
 from allauth.utils import build_absolute_uri
@@ -283,14 +282,11 @@ def approve_completed_work_and_update_payment_accrued(completed_work_ids: list[i
         completed_count = completed_work.completed_count
 
         visits = completed_work.uservisit_set.values_list("status", flat=True)
-        status_count = Counter(visits)
-        if status_count[VisitValidationStatus.pending.value] > 0:
+        if any(visit == "rejected" for visit in visits):
             completed_work.status = CompletedWorkStatus.pending
-        if (
-            completed_count > 0
-            and status_count[VisitValidationStatus.approved.value] >= completed_work.payment_unit.deliver_units.count()
-        ):
+        elif all(visit == "approved" for visit in visits):
             completed_work.status = CompletedWorkStatus.approved
+        if completed_count > 0 and completed_work.status == CompletedWorkStatus.approved:
             access.payment_accrued += completed_count * completed_work.payment_unit.amount
             access.save()
 
@@ -311,15 +307,11 @@ def bulk_approve_completed_work():
                 continue
             completed_count = completed_work.completed_count
             visits = completed_work.uservisit_set.values_list("status", flat=True)
-            status_count = Counter(visits)
-            if status_count[VisitValidationStatus.pending.value] > 0:
+            if any(visit == "rejected" for visit in visits):
                 completed_work.status = CompletedWorkStatus.pending
-            if (
-                completed_count > 0
-                and status_count[VisitValidationStatus.approved.value]
-                >= completed_work.payment_unit.deliver_units.count()
-            ):
+            elif all(visit == "approved" for visit in visits):
                 completed_work.status = CompletedWorkStatus.approved
+            if completed_count > 0 and completed_work.status == CompletedWorkStatus.approved:
                 access.payment_accrued += completed_count * completed_work.payment_unit.amount
             completed_work.save()
         access.save()
