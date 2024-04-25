@@ -288,7 +288,7 @@ def bulk_approve_completed_work():
             completed_count = completed_work.completed_count
             visits = completed_work.uservisit_set.values_list("status", flat=True)
             if any(visit == "rejected" for visit in visits):
-                completed_work.status = CompletedWorkStatus.pending
+                completed_work.status = CompletedWorkStatus.rejected
             elif all(visit == "approved" for visit in visits):
                 completed_work.status = CompletedWorkStatus.approved
             if completed_count > 0 and completed_work.status == CompletedWorkStatus.approved:

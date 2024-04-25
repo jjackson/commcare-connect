@@ -137,7 +137,7 @@ def update_payment_accrued(opportunity: Opportunity, users):
                     continue
                 visits = completed_work.uservisit_set.values_list("status", flat=True)
                 if any(visit == "rejected" for visit in visits):
-                    completed_work.status = CompletedWorkStatus.pending
+                    completed_work.status = CompletedWorkStatus.rejected
                 elif all(visit == "approved" for visit in visits):
                     completed_work.status = CompletedWorkStatus.approved
             completed_count = completed_work.completed_count
