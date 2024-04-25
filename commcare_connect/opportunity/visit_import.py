@@ -16,10 +16,7 @@ from commcare_connect.opportunity.models import (
     UserVisit,
     VisitValidationStatus,
 )
-from commcare_connect.opportunity.tasks import (
-    approve_completed_work_and_update_payment_accrued,
-    send_payment_notification,
-)
+from commcare_connect.opportunity.tasks import send_payment_notification
 from commcare_connect.utils.itertools import batched
 
 VISIT_ID_COL = "visit id"
@@ -119,28 +116,34 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
 
             UserVisit.objects.bulk_update(to_update, fields=["status", "reason"])
             missing_visits |= set(visit_batch) - seen_visits
-    if opportunity.auto_approve_payments:
-        approve_completed_work_and_update_payment_accrued(list(seen_completed_works))
-    else:
-        # TODO: This should be a task
-        update_payment_accrued(opportunity, users=user_ids)
+    update_payment_accrued(opportunity, users=user_ids)
 
     return VisitImportStatus(seen_visits, missing_visits)
 
 
 def update_payment_accrued(opportunity: Opportunity, users):
     """Updates payment accrued for completed and approved CompletedWork instances."""
-    payment_units = opportunity.paymentunit_set.all()
     access_objects = OpportunityAccess.objects.filter(user__in=users, opportunity=opportunity)
     for access in access_objects:
-        payment_accrued = 0
-        for payment_unit in payment_units:
-            completed_works = access.completedwork_set.filter(
-                payment_unit=payment_unit, status=CompletedWorkStatus.approved
-            )
-            for completed_work in completed_works:
-                payment_accrued += completed_work.completed_count * payment_unit.amount
-        access.payment_accrued = payment_accrued
+        completed_works = access.completedwork_set.exclude(
+            status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
+        ).select_related("payment_unit")
+        access.payment_accrued = 0
+        for completed_work in completed_works:
+            # Auto Approve Payment conditions
+            if opportunity.auto_approve_payments:
+                # if flagged continue
+                if completed_work.flags and completed_work.status != CompletedWorkStatus.approved:
+                    continue
+                visits = completed_work.uservisit_set.values_list("status", flat=True)
+                if any(visit == "rejected" for visit in visits):
+                    completed_work.status = CompletedWorkStatus.pending
+                elif all(visit == "approved" for visit in visits):
+                    completed_work.status = CompletedWorkStatus.approved
+            completed_count = completed_work.completed_count
+            if completed_count > 0 and completed_work.status == CompletedWorkStatus.approved:
+                access.payment_accrued += completed_count * completed_work.payment_unit.amount
+            completed_work.save()
         access.save()
 
 

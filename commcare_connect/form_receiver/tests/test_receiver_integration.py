@@ -24,7 +24,6 @@ from commcare_connect.opportunity.models import (
     UserVisit,
     VisitValidationStatus,
 )
-from commcare_connect.opportunity.tasks import approve_completed_work_and_update_payment_accrued
 from commcare_connect.opportunity.tests.factories import (
     DeliverUnitFactory,
     LearnModuleFactory,
@@ -32,6 +31,7 @@ from commcare_connect.opportunity.tests.factories import (
     OpportunityClaimFactory,
     PaymentUnitFactory,
 )
+from commcare_connect.opportunity.visit_import import update_payment_accrued
 from commcare_connect.users.models import User
 
 
@@ -272,7 +272,7 @@ def test_auto_approve_payments_flagged_visit(
     assert visit.status == VisitValidationStatus.pending
 
     # No Payment Approval
-    approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
+    update_payment_accrued(opportunity, users=[user_with_connectid_link])
     access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.pending
@@ -292,7 +292,7 @@ def test_auto_approve_payments_unflagged_visit(
     assert visit.status == VisitValidationStatus.pending
 
     # Payment Approval
-    approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
+    update_payment_accrued(opportunity, users=[user_with_connectid_link])
     access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.pending
@@ -313,7 +313,7 @@ def test_auto_approve_payments_approved_visit(
     assert not visit.flagged
 
     # Payment Approval
-    approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
+    update_payment_accrued(opportunity, users=[user_with_connectid_link])
     access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.approved
@@ -333,7 +333,7 @@ def test_auto_approve_visits_and_payments(
     assert not visit.flagged
     assert visit.status == VisitValidationStatus.approved
 
-    approve_completed_work_and_update_payment_accrued([visit.completed_work_id])
+    update_payment_accrued(opportunity, users=[user_with_connectid_link])
     access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.approved
