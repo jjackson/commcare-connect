@@ -121,7 +121,7 @@ def test_export_user_status_table_no_data_only(opportunity: Opportunity):
         )
         UserInviteFactory(opportunity=opportunity, status=UserInviteStatus.accepted, opportunity_access=access)
         rows.append(
-            (mobile_user.name, mobile_user.username, "accepted", date.replace(tzinfo=None), "", False, "", "", "")
+            (mobile_user.name, mobile_user.username, "Accepted", date.replace(tzinfo=None), "", False, "", "", "")
         )
     dataset = export_user_status_table(opportunity)
     prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
@@ -142,7 +142,7 @@ def test_export_user_status_table_learn_data_only(opportunity: Opportunity):
         for learn_module in opportunity.learn_app.learn_modules.all()[2:]:
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
         rows.append(
-            (mobile_user.name, mobile_user.username, "accepted", date.replace(tzinfo=None), "", False, "", "", "")
+            (mobile_user.name, mobile_user.username, "Accepted", date.replace(tzinfo=None), "", False, "", "", "")
         )
     dataset = export_user_status_table(opportunity)
     prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
@@ -167,7 +167,7 @@ def test_export_user_status_table_learn_assessment_data_only(opportunity: Opport
             (
                 mobile_user.name,
                 mobile_user.username,
-                "accepted",
+                "Accepted",
                 date.replace(tzinfo=None),
                 date.replace(tzinfo=None),
                 True,
@@ -201,7 +201,7 @@ def test_export_user_status_table_data(opportunity: Opportunity):
             (
                 mobile_user.name,
                 mobile_user.username,
-                "accepted",
+                "Accepted",
                 date.replace(tzinfo=None),
                 date.replace(tzinfo=None),
                 True,
