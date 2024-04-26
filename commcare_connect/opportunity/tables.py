@@ -9,6 +9,7 @@ from commcare_connect.opportunity.models import (
     Payment,
     PaymentUnit,
     UserInvite,
+    UserInviteStatus,
     UserVisit,
     VisitValidationStatus,
 )
@@ -121,6 +122,9 @@ class UserStatusTable(tables.Table):
     display_name = columns.Column(verbose_name="Name", footer="Total", empty_values=())
     username = columns.Column(accessor="opportunity_access__user__username", visible=False)
     claimed = AggregateColumn(verbose_name="Job Claimed", accessor="job_claimed")
+    status = columns.Column(
+        footer=lambda table: f"Accepted: {sum(invite.status == UserInviteStatus.accepted for invite in table.data)}",
+    )
     started_learning = AggregateColumn(
         verbose_name="Started Learning", accessor="opportunity_access__date_learn_started"
     )
@@ -128,7 +132,7 @@ class UserStatusTable(tables.Table):
     passed_assessment = BooleanAggregateColumn(verbose_name="Passed Assessment")
     started_delivery = AggregateColumn(verbose_name="Started Delivery", accessor="date_deliver_started")
     last_visit_date = columns.Column(accessor="last_visit_date_d")
-    view_profile = AggregateColumn("View Profile", empty_values=(), footer=lambda table: len(table.rows))
+    view_profile = columns.Column("View Profile", empty_values=(), footer=lambda table: f"Invited: {len(table.rows)}")
 
     class Meta:
         model = UserInvite
