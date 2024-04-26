@@ -14,11 +14,13 @@ from commcare_connect.opportunity.models import (
     CommCareApp,
     CompletedModule,
     CompletedWork,
+    CompletedWorkStatus,
     DeliverUnit,
     LearnModule,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    OpportunityClaimLimit,
     UserVisit,
     VisitValidationStatus,
 )
@@ -145,8 +147,8 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     deliver_unit = get_or_create_deliver_unit(app, deliver_unit_block)
     access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
     counts = (
-        UserVisit.objects.filter(opportunity=opportunity, user=user)
-        .exclude(status=VisitValidationStatus.over_limit)
+        UserVisit.objects.filter(opportunity=opportunity, user=user, deliver_unit=deliver_unit)
+        .exclude(Q(status=VisitValidationStatus.over_limit) | Q(is_trial=True))
         .aggregate(
             daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)),
             total=Count("*"),
@@ -156,14 +158,6 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     claim = OpportunityClaim.objects.get(opportunity_access__opportunity=opportunity, opportunity_access__user=user)
     entity_id = deliver_unit_block.get("entity_id")
     entity_name = deliver_unit_block.get("entity_name")
-    completed_work, _ = CompletedWork.objects.get_or_create(
-        opportunity_access=access,
-        entity_id=entity_id,
-        payment_unit=deliver_unit.payment_unit,
-        defaults={
-            "entity_name": entity_name,
-        },
-    )
     user_visit = UserVisit(
         opportunity=opportunity,
         user=user,
@@ -176,24 +170,47 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         app_build_version=xform.metadata.app_build_version,
         form_json=xform.raw_form,
         location=xform.metadata.location,
-        completed_work=completed_work,
+        is_trial=opportunity.start_date > datetime.date.today(),
     )
-    if (
-        counts["daily"] >= opportunity.daily_max_visits_per_user
-        or counts["total"] >= claim.max_payments
-        or datetime.date.today() > claim.end_date
-    ):
-        user_visit.status = VisitValidationStatus.over_limit
+    completed_work_needs_save = False
+    if user_visit.is_trial:
+        completed_work = None
+    else:
+        completed_work, _ = CompletedWork.objects.get_or_create(
+            opportunity_access=access,
+            entity_id=entity_id,
+            payment_unit=deliver_unit.payment_unit,
+            defaults={
+                "entity_name": entity_name,
+            },
+        )
+        user_visit.completed_work = completed_work
+        claim_limit = OpportunityClaimLimit.objects.get(
+            opportunity_claim=claim, payment_unit=completed_work.payment_unit
+        )
+        if (
+            counts["daily"] >= deliver_unit.payment_unit.max_daily
+            or counts["total"] >= claim_limit.max_visits
+            or datetime.date.today() > claim.end_date
+        ):
+            user_visit.status = VisitValidationStatus.over_limit
+            if not completed_work.status == CompletedWorkStatus.over_limit:
+                completed_work.status = CompletedWorkStatus.over_limit
+                completed_work_needs_save = True
+        elif counts["entity"] > 0:
+            user_visit.status = VisitValidationStatus.duplicate
+
     flags = []
-    if counts["entity"] > 0:
-        user_visit.status = VisitValidationStatus.duplicate
+    if user_visit.status == VisitValidationStatus.duplicate:
         flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
     if xform.metadata.duration < datetime.timedelta(seconds=60):
         flags.append(["duration", "The form was completed too quickly."])
     if xform.metadata.location is None:
         flags.append(["gps", "GPS data is missing"])
     else:
-        user_visits = UserVisit.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit).values("location")
+        user_visits = UserVisit.objects.filter(
+            opportunity=opportunity, deliver_unit=deliver_unit, is_trial=False
+        ).values("location")
         cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
         for visit in user_visits:
             if visit.get("location") is None:
@@ -206,7 +223,16 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     if flags:
         user_visit.flagged = True
         user_visit.flag_reason = {"flags": flags}
+
+    if (
+        opportunity.auto_approve_visits
+        and user_visit.status == VisitValidationStatus.pending
+        and not user_visit.flagged
+    ):
+        user_visit.status = VisitValidationStatus.approved
     user_visit.save()
+    if completed_work_needs_save:
+        completed_work.save()
     download_user_visit_attachments.delay(user_visit.id)
 
 
