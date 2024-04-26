@@ -8,6 +8,7 @@ from django.db.models import Count, Q, Sum
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
+from commcare_connect.cache import quickcache
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
 from commcare_connect.utils.db import BaseModel
@@ -224,14 +225,21 @@ class OpportunityAccess(models.Model):
             return "---"
 
     @property
+    @quickcache(["self.pk"], timeout=15 * 60)
+    def _assessment_counts(self):
+        return Assessment.objects.filter(user=self.user, opportunity=self.opportunity).aggregate(
+            total=Count("pk"),
+            failed=Count("pk", filter=Q(passed=False)),
+            passed=Count("pk", filter=Q(passed=True)),
+        )
+
+    @property
     def assessment_count(self):
-        return Assessment.objects.filter(user=self.user, opportunity=self.opportunity).count()
+        return self._assessment_counts.get("total", 0)
 
     @property
     def assessment_status(self):
-        assessments = Assessment.objects.filter(user=self.user, opportunity=self.opportunity).aggregate(
-            failed=Count("pk", filter=Q(passed=False)), passed=Count("pk", filter=Q(passed=True))
-        )
+        assessments = self._assessment_counts
         if assessments.get("passed", 0) > 0:
             status = "Passed"
         elif assessments.get("failed", 0) > 0:
