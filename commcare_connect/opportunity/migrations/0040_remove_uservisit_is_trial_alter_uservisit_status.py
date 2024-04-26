@@ -3,6 +3,16 @@
 from django.db import migrations, models
 
 
+def migrate_trial(apps, schema_editor):
+    UserVisit = apps.get_model("opportunity.UserVisit")
+    UserVisit.objects.filter(is_trial=True).update(status='trial')
+
+
+def migrate_trial_rev(apps, schema_editor):
+    UserVisit = apps.get_model("opportunity.UserVisit")
+    UserVisit.objects.filter(status='trial').update(is_trial=True)
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("opportunity", "0039_alter_opportunity_start_date_and_more"),
@@ -28,5 +38,9 @@ class Migration(migrations.Migration):
                 default="pending",
                 max_length=50,
             ),
+        ),
+        migrations.RunPython(
+            migrate_trial,
+            migrate_trial_rev
         ),
     ]
