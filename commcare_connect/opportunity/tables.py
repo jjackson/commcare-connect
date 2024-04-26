@@ -118,7 +118,7 @@ class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
 
 
 class UserStatusTable(tables.Table):
-    display_name = columns.Column(verbose_name="Name", footer="Total", accessor="opportunity_access__display_name")
+    display_name = columns.Column(verbose_name="Name", footer="Total", empty_values=())
     username = columns.Column(accessor="opportunity_access__user__username", visible=False)
     claimed = AggregateColumn(verbose_name="Job Claimed", accessor="job_claimed")
     started_learning = AggregateColumn(
@@ -147,8 +147,17 @@ class UserStatusTable(tables.Table):
         empty_text = "No users invited for this opportunity."
         orderable = False
 
+    def render_display_name(self, record):
+        if record.opportunity_access is None:
+            return record.phone_number
+        if not record.opportunity_access.accepted:
+            return record.phone_number
+        return record.opportunity_access.display_name
+
     def render_view_profile(self, record):
-        if record.opportunity_access is not None and record.opportunity_access.accepted:
+        if record.opportunity_access is None:
+            return "---"
+        if not record.opportunity_access.accepted:
             return "---"
         url = reverse(
             "opportunity:user_profile",
@@ -171,9 +180,6 @@ class UserStatusTable(tables.Table):
 
     def render_last_visit_date(self, record, value):
         return date_with_time_popup(self, value)
-
-    def render_status(self, record, value):
-        return record.status
 
 
 class PaymentUnitTable(tables.Table):
