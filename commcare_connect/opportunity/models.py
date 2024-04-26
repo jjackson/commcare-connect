@@ -232,6 +232,9 @@ class OpportunityAccess(models.Model):
     accepted = models.BooleanField(default=False)
     invite_id = models.CharField(max_length=50, default=uuid4)
     payment_accrued = models.PositiveIntegerField(default=0)
+    suspended = models.BooleanField(default=False)
+    suspension_date = models.DateTimeField(null=True, blank=True)
+    suspension_reason = models.CharField(max_length=300, null=True, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=["invite_id"])]
