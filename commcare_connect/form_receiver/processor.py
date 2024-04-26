@@ -208,9 +208,11 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     if xform.metadata.location is None:
         flags.append(["gps", "GPS data is missing"])
     else:
-        user_visits = UserVisit.objects.filter(
-            opportunity=opportunity, deliver_unit=deliver_unit, is_trial=False
-        ).values("location")
+        user_visits = (
+            UserVisit.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit, is_trial=False)
+            .exclude(entity_id=user_visit.entity_id)
+            .values("location")
+        )
         cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
         for visit in user_visits:
             if visit.get("location") is None:
