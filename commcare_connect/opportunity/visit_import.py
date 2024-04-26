@@ -132,17 +132,14 @@ def update_payment_accrued(opportunity: Opportunity, users):
         for completed_work in completed_works:
             # Auto Approve Payment conditions
             if opportunity.auto_approve_payments:
-                # if flagged continue
-                if completed_work.flags and completed_work.status != CompletedWorkStatus.approved:
-                    continue
                 visits = completed_work.uservisit_set.values_list("status", flat=True)
                 if any(visit == "rejected" for visit in visits):
                     completed_work.status = CompletedWorkStatus.rejected
                 elif all(visit == "approved" for visit in visits):
                     completed_work.status = CompletedWorkStatus.approved
-            completed_count = completed_work.completed_count
-            if completed_count > 0 and completed_work.status == CompletedWorkStatus.approved:
-                access.payment_accrued += completed_count * completed_work.payment_unit.amount
+            approved_count = completed_work.approved_count
+            if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
+                access.payment_accrued += approved_count * completed_work.payment_unit.amount
             completed_work.save()
         access.save()
 
