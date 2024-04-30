@@ -278,7 +278,7 @@ def bulk_approve_completed_work():
         opportunity__auto_approve_payments=True,
     )
     for access in access_objects:
-        completed_works = access.completedwork_set.exlcude(
+        completed_works = access.completedwork_set.exclude(
             status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
         )
         access.payment_accrued = 0
