@@ -5,10 +5,10 @@ from uuid import uuid4
 from django.conf import settings
 from django.db import models
 from django.db.models import Count, F, Max, Q, Sum
+from django.utils.functional import cached_property
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
-from commcare_connect.cache import quickcache
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
 from commcare_connect.utils.db import BaseModel
@@ -277,8 +277,7 @@ class OpportunityAccess(models.Model):
         else:
             return "---"
 
-    @property
-    @quickcache(["self.pk"], timeout=15 * 60)
+    @cached_property
     def _assessment_counts(self):
         return Assessment.objects.filter(user=self.user, opportunity=self.opportunity).aggregate(
             total=Count("pk"),
