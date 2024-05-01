@@ -329,18 +329,28 @@ def test_auto_approve_payments_rejected_visit(
     opportunity.auto_approve_payments = True
     opportunity.save()
     make_request(api_client, form_json, user_with_connectid_link)
+    rejected_reason = ""
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     visit.status = VisitValidationStatus.rejected
     visit.reason = "rejected"
+    rejected_reason += visit.reason
     visit.save()
-    assert not visit.flagged
+
+    duplicate_json = deepcopy(form_json)
+    duplicate_json["id"] = str(uuid4())
+    make_request(api_client, duplicate_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(xform_id=duplicate_json["id"])
+    visit.status = VisitValidationStatus.rejected
+    visit.reason = "duplicate"
+    rejected_reason += "\n" + visit.reason
+    visit.save()
 
     # Payment Approval
     update_payment_accrued(opportunity, users=[user_with_connectid_link])
     access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.rejected
-    assert completed_work.reason == visit.reason
+    assert completed_work.reason == rejected_reason
     assert access.payment_accrued == completed_work.payment_accrued
 
 
