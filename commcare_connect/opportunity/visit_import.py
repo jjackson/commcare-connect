@@ -132,10 +132,11 @@ def update_payment_accrued(opportunity: Opportunity, users):
         for completed_work in completed_works:
             # Auto Approve Payment conditions
             if opportunity.auto_approve_payments:
-                visits = completed_work.uservisit_set.values_list("status", flat=True)
-                if any(visit == "rejected" for visit in visits):
+                visits = completed_work.uservisit_set.values_list("status", "reason")
+                if any(status == "rejected" for status, _ in visits):
                     completed_work.status = CompletedWorkStatus.rejected
-                elif all(visit == "approved" for visit in visits):
+                    completed_work.reason = "\n".join(map(lambda v: v[1], filter(lambda v: bool(v[1]), visits)))
+                elif all(status == "approved" for status, _ in visits):
                     completed_work.status = CompletedWorkStatus.approved
             approved_count = completed_work.approved_count
             if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
