@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Count, F, Sum
+from django.db.models import Count, F, Max, Sum
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
@@ -74,6 +74,8 @@ class Opportunity(BaseModel):
     total_budget = models.IntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
     currency = models.CharField(max_length=3, null=True)
+    auto_approve_visits = models.BooleanField(default=False)
+    auto_approve_payments = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
@@ -146,8 +148,19 @@ class Opportunity(BaseModel):
 
     @property
     def allotted_visits(self):
-        payment_units = self.paymentunit_set.all()
-        return sum([pu.max_total or 0 for pu in payment_units]) * self.number_of_users
+        return self.max_visits_per_user_new * self.number_of_users
+
+    @property
+    def max_visits_per_user_new(self):
+        return self.paymentunit_set.aggregate(max_total=Sum("max_total")).get("max_total", 0)
+
+    @property
+    def daily_max_visits_per_user_new(self):
+        return self.paymentunit_set.aggregate(max_daily=Sum("max_daily")).get("max_daily", 0)
+
+    @property
+    def budget_per_visit_new(self):
+        return self.paymentunit_set.aggregate(amount=Max("amount")).get("amount", 0)
 
     @property
     def budget_per_user(self):
@@ -239,12 +252,7 @@ class OpportunityAccess(models.Model):
 
     @property
     def visit_count(self):
-        user_visits = (
-            UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
-            .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
-            .order_by("visit_date")
-        )
-        return user_visits.count()
+        return self.completedwork_set.exclude(status=CompletedWorkStatus.over_limit).count()
 
     @property
     def last_visit_date(self):
@@ -334,6 +342,7 @@ class CompletedWorkStatus(models.TextChoices):
     pending = "pending", gettext("Pending")
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
+    over_limit = "over_limit", gettext("Over Limit")
 
 
 class CompletedWork(models.Model):
@@ -349,9 +358,17 @@ class CompletedWork(models.Model):
     @property
     def completed_count(self):
         """Returns the no of completion of this work. Includes duplicate submissions."""
+        visits = self.uservisit_set.values_list("deliver_unit_id", flat=True)
+        return self.calculate_completed(visits)
+
+    @property
+    def approved_count(self):
         visits = self.uservisit_set.filter(status=VisitValidationStatus.approved).values_list(
             "deliver_unit_id", flat=True
         )
+        return self.calculate_completed(visits)
+
+    def calculate_completed(self, visits):
         unit_counts = Counter(visits)
         deliver_units = self.payment_unit.deliver_units.values("id", "optional")
         required_deliver_units = list(
@@ -385,11 +402,13 @@ class CompletedWork(models.Model):
     @property
     def payment_accrued(self):
         """Returns the total payment accrued for this completed work. Includes duplicates"""
-        return self.completed_count * self.payment_unit.amount
+        return self.approved_count * self.payment_unit.amount
 
     @property
     def flags(self):
-        visits = self.uservisit_set.values_list("flag_reason", flat=True)
+        visits = self.uservisit_set.exclude(status=VisitValidationStatus.approved).values_list(
+            "flag_reason", flat=True
+        )
         flags = set()
         for visit in visits:
             if not visit:
