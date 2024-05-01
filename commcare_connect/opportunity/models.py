@@ -4,7 +4,8 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Count, F, Max, Sum
+from django.db.models import Count, F, Max, Q, Sum
+from django.utils.functional import cached_property
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
@@ -275,6 +276,29 @@ class OpportunityAccess(models.Model):
             return self.user.name
         else:
             return "---"
+
+    @cached_property
+    def _assessment_counts(self):
+        return Assessment.objects.filter(user=self.user, opportunity=self.opportunity).aggregate(
+            total=Count("pk"),
+            failed=Count("pk", filter=Q(passed=False)),
+            passed=Count("pk", filter=Q(passed=True)),
+        )
+
+    @property
+    def assessment_count(self):
+        return self._assessment_counts.get("total", 0)
+
+    @property
+    def assessment_status(self):
+        assessments = self._assessment_counts
+        if assessments.get("passed", 0) > 0:
+            status = "Passed"
+        elif assessments.get("failed", 0) > 0:
+            status = "Failed"
+        else:
+            status = "Not completed"
+        return status
 
 
 class PaymentUnit(models.Model):
