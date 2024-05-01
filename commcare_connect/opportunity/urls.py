@@ -32,7 +32,9 @@ from commcare_connect.opportunity.views import (
     payment_delete,
     payment_import,
     reject_visit,
+    revoke_user_suspension,
     send_message_mobile_users,
+    suspend_user,
     update_completed_work_status_import,
     update_visit_status_import,
     user_profile,
@@ -87,4 +89,6 @@ urlpatterns = [
     path("<int:pk>/completed_work_table/", view=OpportunityCompletedWorkTable.as_view(), name="completed_work_table"),
     path("<int:pk>/completed_work_export/", view=export_completed_work, name="completed_work_export"),
     path("<int:pk>/completed_work_import/", view=update_completed_work_status_import, name="completed_work_import"),
+    path("<int:opp_id>/suspend_user/<int:pk>/", view=suspend_user, name="suspend_user"),
+    path("<int:opp_id>/revoke_user_suspension/<int:pk>/", view=revoke_user_suspension, name="revoke_user_suspension"),
 ]

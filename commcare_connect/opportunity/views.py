@@ -813,3 +813,23 @@ def update_completed_work_status_import(request, org_slug=None, pk=None):
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
     return redirect("opportunity:detail", org_slug, pk)
+
+
+@org_member_required
+@require_POST
+def suspend_user(request, org_slug=None, opp_id=None, pk=None):
+    access = get_object_or_404(OpportunityAccess, opportunity_id=opp_id, id=pk)
+    access.suspended = True
+    access.suspension_date = now()
+    access.suspension_reason = request.POST.get("reason", "")
+    access.save()
+    return redirect("opportunity:user_profile", org_slug, opp_id, pk)
+
+
+@org_member_required
+@require_POST
+def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
+    access = get_object_or_404(OpportunityAccess, opportunity_id=opp_id, id=pk)
+    access.suspended = False
+    access.save()
+    return redirect("opportunity:user_profile", org_slug, opp_id, pk)
