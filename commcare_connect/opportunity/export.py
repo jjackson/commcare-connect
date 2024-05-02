@@ -100,7 +100,7 @@ def export_deliver_status_table(opportunity: Opportunity) -> Dataset:
 
 
 def export_work_status_table(opportunity: Opportunity) -> Dataset:
-    access_objects = OpportunityAccess.objects.filter(opportunity=opportunity)
+    access_objects = OpportunityAccess.objects.filter(opportunity=opportunity, suspended=False)
     completed_works = []
     for completed_work in CompletedWork.objects.filter(opportunity_access__in=access_objects):
         completed = completed_work.completed
