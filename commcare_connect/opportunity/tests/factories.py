@@ -41,6 +41,7 @@ class OpportunityFactory(DjangoModelFactory):
     active = True
     learn_app = SubFactory(CommCareAppFactory, organization=SelfAttribute("..organization"))
     deliver_app = SubFactory(CommCareAppFactory, organization=SelfAttribute("..organization"))
+    start_date = Faker("past_date")
     end_date = Faker("future_date")
     # to be removed
     budget_per_visit = Faker("pyint", min_value=1, max_value=10)

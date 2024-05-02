@@ -4,7 +4,8 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Count, F, Max, Sum
+from django.db.models import Count, F, Max, Q, Sum
+from django.utils.functional import cached_property
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
@@ -74,6 +75,8 @@ class Opportunity(BaseModel):
     total_budget = models.IntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
     currency = models.CharField(max_length=3, null=True)
+    auto_approve_visits = models.BooleanField(default=False)
+    auto_approve_payments = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
@@ -266,7 +269,7 @@ class OpportunityAccess(models.Model):
     def last_visit_date(self):
         user_visits = (
             UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
-            .exclude(status=VisitValidationStatus.over_limit, is_trial=True)
+            .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
             .order_by("visit_date")
         )
         if user_visits.exists():
@@ -283,6 +286,29 @@ class OpportunityAccess(models.Model):
             return self.user.name
         else:
             return "---"
+
+    @cached_property
+    def _assessment_counts(self):
+        return Assessment.objects.filter(user=self.user, opportunity=self.opportunity).aggregate(
+            total=Count("pk"),
+            failed=Count("pk", filter=Q(passed=False)),
+            passed=Count("pk", filter=Q(passed=True)),
+        )
+
+    @property
+    def assessment_count(self):
+        return self._assessment_counts.get("total", 0)
+
+    @property
+    def assessment_status(self):
+        assessments = self._assessment_counts
+        if assessments.get("passed", 0) > 0:
+            status = "Passed"
+        elif assessments.get("failed", 0) > 0:
+            status = "Failed"
+        else:
+            status = "Not completed"
+        return status
 
 
 class PaymentUnit(models.Model):
@@ -328,6 +354,7 @@ class VisitValidationStatus(models.TextChoices):
     rejected = "rejected", gettext("Rejected")
     over_limit = "over_limit", gettext("Over Limit")
     duplicate = "duplicate", gettext("Duplicate")
+    trial = "trial", gettext("Trial")
 
 
 class Payment(models.Model):
@@ -365,9 +392,17 @@ class CompletedWork(models.Model):
     @property
     def completed_count(self):
         """Returns the no of completion of this work. Includes duplicate submissions."""
+        visits = self.uservisit_set.values_list("deliver_unit_id", flat=True)
+        return self.calculate_completed(visits)
+
+    @property
+    def approved_count(self):
         visits = self.uservisit_set.filter(status=VisitValidationStatus.approved).values_list(
             "deliver_unit_id", flat=True
         )
+        return self.calculate_completed(visits)
+
+    def calculate_completed(self, visits):
         unit_counts = Counter(visits)
         deliver_units = self.payment_unit.deliver_units.values("id", "optional")
         required_deliver_units = list(
@@ -401,11 +436,13 @@ class CompletedWork(models.Model):
     @property
     def payment_accrued(self):
         """Returns the total payment accrued for this completed work. Includes duplicates"""
-        return self.completed_count * self.payment_unit.amount
+        return self.approved_count * self.payment_unit.amount
 
     @property
     def flags(self):
-        visits = self.uservisit_set.values_list("flag_reason", flat=True)
+        visits = self.uservisit_set.exclude(status=VisitValidationStatus.approved).values_list(
+            "flag_reason", flat=True
+        )
         flags = set()
         for visit in visits:
             if not visit:
@@ -441,7 +478,6 @@ class UserVisit(XFormBaseModel):
     location = models.CharField(null=True)
     flagged = models.BooleanField(default=False)
     flag_reason = models.JSONField(null=True, blank=True)
-    is_trial = models.BooleanField(default=False)
     completed_work = models.ForeignKey(CompletedWork, on_delete=models.DO_NOTHING, null=True, blank=True)
 
     @property

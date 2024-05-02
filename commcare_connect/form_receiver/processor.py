@@ -149,7 +149,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
     counts = (
         UserVisit.objects.filter(opportunity=opportunity, user=user, deliver_unit=deliver_unit)
-        .exclude(Q(status=VisitValidationStatus.over_limit) | Q(is_trial=True))
+        .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
         .aggregate(
             daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)),
             total=Count("*"),
@@ -159,12 +159,6 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     claim = OpportunityClaim.objects.get(opportunity_access__opportunity=opportunity, opportunity_access__user=user)
     entity_id = deliver_unit_block.get("entity_id")
     entity_name = deliver_unit_block.get("entity_name")
-    completed_work, _ = CompletedWork.objects.get_or_create(
-        opportunity_access=access,
-        entity_id=entity_id,
-        payment_unit=deliver_unit.payment_unit,
-        defaults={"entity_name": entity_name},
-    )
     user_visit = UserVisit(
         opportunity=opportunity,
         user=user,
@@ -177,11 +171,11 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         app_build_version=xform.metadata.app_build_version,
         form_json=xform.raw_form,
         location=xform.metadata.location,
-        is_trial=opportunity.start_date > datetime.date.today(),
     )
     completed_work_needs_save = False
-    if user_visit.is_trial:
+    if opportunity.start_date > datetime.date.today():
         completed_work = None
+        user_visit.status = VisitValidationStatus.trial
     else:
         completed_work, _ = CompletedWork.objects.get_or_create(
             opportunity_access=access,
@@ -222,9 +216,11 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             flags.append(["gps", "GPS data is missing"])
     else:
         if opportunity_flags.location > 0:
-            user_visits = UserVisit.objects.filter(
-                opportunity=opportunity, deliver_unit=deliver_unit, is_trial=False
-            ).values("location")
+            user_visits = (
+                UserVisit.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit)
+                .exclude(Q(status=VisitValidationStatus.trial) | Q(entity_id=user_visit.entity_id))
+                .values("location")
+            )
             cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
             for visit in user_visits:
                 if visit.get("location") is None:
@@ -247,6 +243,13 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     if flags:
         user_visit.flagged = True
         user_visit.flag_reason = {"flags": flags}
+
+    if (
+        opportunity.auto_approve_visits
+        and user_visit.status == VisitValidationStatus.pending
+        and not user_visit.flagged
+    ):
+        user_visit.status = VisitValidationStatus.approved
     user_visit.save()
     if completed_work_needs_save:
         completed_work.save()
