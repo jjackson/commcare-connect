@@ -50,6 +50,13 @@
               </a>
             </li>
           {% endif %}
+          <li>
+            <a class="dropdown-item"
+               href="{% url 'opportunity:verification_flags_config' org_slug=request.org.slug pk=opportunity.id %}">
+              <i class="bi bi-plus-circle-fill pe-2"></i>
+              {% translate "Configure Verification Flags" %}
+            </a>
+          </li>
           <li class="dropdown-divider"></li>
           <li>
             <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportVisitModal">
