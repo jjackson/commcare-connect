@@ -287,7 +287,7 @@ def bulk_approve_completed_work():
             visits = completed_work.uservisit_set.values_list("status", "reason")
             if any(status == "rejected" for status, _ in visits):
                 completed_work.status = CompletedWorkStatus.rejected
-                completed_work.reason = "\n".join(map(lambda v: v[1], filter(lambda v: bool(v[1]), visits)))
+                completed_work.reason = "\n".join(reason for _, reason in visits if reason)
             elif all(status == "approved" for status, _ in visits):
                 completed_work.status = CompletedWorkStatus.approved
             if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
