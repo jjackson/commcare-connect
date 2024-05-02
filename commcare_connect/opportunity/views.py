@@ -41,6 +41,7 @@ from commcare_connect.opportunity.models import (
     BlobMeta,
     CompletedModule,
     CompletedWork,
+    CompletedWorkStatus,
     DeliverUnit,
     Opportunity,
     OpportunityAccess,
@@ -637,6 +638,15 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
     if user_visit_data:
         lat_avg = reduce(lambda x, y: x + float(y["lat"]), user_visit_data, 0.0) / len(user_visit_data)
         lng_avg = reduce(lambda x, y: x + float(y["lng"]), user_visit_data, 0.0) / len(user_visit_data)
+
+    pending_completed_work_count = len(
+        [
+            cw
+            for cw in CompletedWork.objects.filter(opportunity_access=access, status=CompletedWorkStatus.pending)
+            if cw.approved_count
+        ]
+    )
+    pending_payment = max(access.payment_accrued - access.total_paid, 0)
     return render(
         request,
         "opportunity/user_profile.html",
@@ -646,6 +656,8 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
             lat_avg=lat_avg,
             lng_avg=lng_avg,
             MAPBOX_TOKEN=settings.MAPBOX_TOKEN,
+            pending_completed_work_count=pending_completed_work_count,
+            pending_payment=pending_payment,
         ),
     )
 
