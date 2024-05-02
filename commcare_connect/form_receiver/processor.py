@@ -210,7 +210,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     else:
         user_visits = (
             UserVisit.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit)
-            .exclude(status=VisitValidationStatus.trial)
+            .exclude(Q(status=VisitValidationStatus.trial) | Q(entity_id=user_visit.entity_id))
             .values("location")
         )
         cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
