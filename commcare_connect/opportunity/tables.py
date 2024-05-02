@@ -269,6 +269,35 @@ class CompletedWorkTable(tables.Table):
         return date_with_time_popup(self, value)
 
 
+class SuspendedUsersTable(tables.Table):
+    display_name = columns.Column("Name of the User")
+    revoke_suspension = columns.LinkColumn(
+        "opportunity:revoke_user_suspension",
+        verbose_name="",
+        text="Revoke",
+        args=[utils.A("opportunity__organization__slug"), utils.A("opportunity__id"), utils.A("pk")],
+    )
+
+    class Meta:
+        model = OpportunityAccess
+        fields = ("display_name", "suspension_date", "suspension_reason")
+        orderable = False
+        empty_text = "No suspended users."
+
+    def render_suspension_date(self, record, value):
+        return date_with_time_popup(self, value)
+
+    def render_revoke_suspension(self, record, value):
+        revoke_url = reverse(
+            "opportunity:revoke_user_suspension",
+            args=(record.opportunity.organization.slug, record.opportunity.id, record.pk),
+        )
+        page_url = reverse(
+            "opportunity:suspended_users_list", args=(record.opportunity.organization.slug, record.opportunity_id)
+        )
+        return format_html('<a class="btn btn-success" href="{}?next={}">Revoke</a>', revoke_url, page_url)
+
+
 def popup_html(value, popup_title, popup_direction="top", popup_class="", popup_attributes=""):
     return format_html(
         "<span class='{}' data-bs-toggle='tooltip' data-bs-placement='{}' data-bs-title='{}' {}>{}</span>",
