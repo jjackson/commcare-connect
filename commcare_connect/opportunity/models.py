@@ -4,7 +4,8 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Count, F, Max, Sum
+from django.db.models import Count, F, Max, Q, Sum
+from django.utils.functional import cached_property
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
@@ -279,6 +280,29 @@ class OpportunityAccess(models.Model):
         else:
             return "---"
 
+    @cached_property
+    def _assessment_counts(self):
+        return Assessment.objects.filter(user=self.user, opportunity=self.opportunity).aggregate(
+            total=Count("pk"),
+            failed=Count("pk", filter=Q(passed=False)),
+            passed=Count("pk", filter=Q(passed=True)),
+        )
+
+    @property
+    def assessment_count(self):
+        return self._assessment_counts.get("total", 0)
+
+    @property
+    def assessment_status(self):
+        assessments = self._assessment_counts
+        if assessments.get("passed", 0) > 0:
+            status = "Passed"
+        elif assessments.get("failed", 0) > 0:
+            status = "Failed"
+        else:
+            status = "Not completed"
+        return status
+
 
 class PaymentUnit(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
@@ -361,6 +385,16 @@ class CompletedWork(models.Model):
     def completed_count(self):
         """Returns the no of completion of this work. Includes duplicate submissions."""
         visits = self.uservisit_set.values_list("deliver_unit_id", flat=True)
+        return self.calculate_completed(visits)
+
+    @property
+    def approved_count(self):
+        visits = self.uservisit_set.filter(status=VisitValidationStatus.approved).values_list(
+            "deliver_unit_id", flat=True
+        )
+        return self.calculate_completed(visits)
+
+    def calculate_completed(self, visits):
         unit_counts = Counter(visits)
         deliver_units = self.payment_unit.deliver_units.values("id", "optional")
         required_deliver_units = list(
@@ -394,7 +428,7 @@ class CompletedWork(models.Model):
     @property
     def payment_accrued(self):
         """Returns the total payment accrued for this completed work. Includes duplicates"""
-        return self.completed_count * self.payment_unit.amount
+        return self.approved_count * self.payment_unit.amount
 
     @property
     def flags(self):
