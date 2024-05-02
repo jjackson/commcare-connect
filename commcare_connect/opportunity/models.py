@@ -271,7 +271,7 @@ class OpportunityAccess(models.Model):
 
     @property
     def total_paid(self):
-        return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0)
+        return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0) or 0
 
     @property
     def display_name(self):
