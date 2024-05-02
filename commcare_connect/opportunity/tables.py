@@ -16,6 +16,8 @@ from commcare_connect.opportunity.models import (
 class LearnStatusTable(tables.Table):
     display_name = columns.Column(verbose_name="Name")
     learn_progress = columns.Column(verbose_name="Modules Completed")
+    assessment_count = columns.Column(verbose_name="Number of Attempts")
+    assessment_status = columns.Column(verbose_name="Assessment Status")
     details = columns.LinkColumn(
         "opportunity:user_learn_progress",
         verbose_name="",
@@ -25,7 +27,7 @@ class LearnStatusTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "learn_progress")
+        fields = ("display_name", "learn_progress", "assessment_status", "assessment_count")
         sequence = ("display_name", "learn_progress")
         orderable = False
         empty_text = "No learn progress for users."
@@ -200,6 +202,7 @@ class DeliverStatusTable(tables.Table):
     visits_rejected = columns.Column("Rejected Visits")
     visits_over_limit = columns.Column("Over Limit Visits")
     visits_duplicate = columns.Column("Duplicate Visits")
+    visits_trial = columns.Column("Trial Visits")
     details = columns.LinkColumn(
         "opportunity:user_visits_list",
         verbose_name="",
@@ -220,6 +223,7 @@ class DeliverStatusTable(tables.Table):
             "visits_rejected",
             "visits_over_limit",
             "visits_duplicate",
+            "visits_trial",
             "last_visit_date",
         )
 
