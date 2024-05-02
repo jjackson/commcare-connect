@@ -135,7 +135,7 @@ def update_payment_accrued(opportunity: Opportunity, users):
                 visits = completed_work.uservisit_set.values_list("status", "reason")
                 if any(status == "rejected" for status, _ in visits):
                     completed_work.status = CompletedWorkStatus.rejected
-                    completed_work.reason = "\n".join(map(lambda v: v[1], filter(lambda v: bool(v[1]), visits)))
+                    completed_work.reason = "\n".join(reason for _, reason in visits if reason)
                 elif all(status == "approved" for status, _ in visits):
                     completed_work.status = CompletedWorkStatus.approved
             approved_count = completed_work.approved_count
