@@ -21,6 +21,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaimLimit,
+    OpportunityVerificationFlags,
     UserVisit,
     VisitValidationStatus,
 )
@@ -445,6 +446,57 @@ def test_auto_approve_visits_and_payments(
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.approved
     assert access.payment_accrued == completed_work.payment_accrued
+
+
+def test_reciever_verification_flags_form_submission(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    verification_flags = OpportunityVerificationFlags.objects.get(opportunity=opportunity)
+    verification_flags.form_submission_start = datetime.time(hour=10, minute=0)
+    verification_flags.form_submission_end = datetime.time(hour=12, minute=0)
+    verification_flags.save()
+
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    time = datetime.datetime(2024, 4, 17, 10, 0, 0)
+    form_json["metadata"]["timeStart"] = time
+    form_json["metadata"]["timeEnd"] = time + datetime.timedelta(minutes=10)
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert not visit.flagged
+
+
+def test_reciever_verification_flags_form_submission_start(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    verification_flags = OpportunityVerificationFlags.objects.get(opportunity=opportunity)
+    verification_flags.form_submission_start = datetime.time(hour=10, minute=0)
+    verification_flags.form_submission_end = datetime.time(hour=12, minute=0)
+    verification_flags.save()
+
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    time = datetime.datetime(2024, 4, 17, 9, 0, 0)
+    form_json["metadata"]["timeStart"] = time
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert ["form_submission_period", "Form was submitted before the start time"] in visit.flag_reason.get("flags", [])
+
+
+def test_reciever_verification_flags_form_submission_end(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    verification_flags = OpportunityVerificationFlags.objects.get(opportunity=opportunity)
+    verification_flags.form_submission_start = datetime.time(hour=10, minute=0)
+    verification_flags.form_submission_end = datetime.time(hour=12, minute=0)
+    verification_flags.save()
+
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    time = datetime.datetime(2024, 4, 17, 13, 0, 0)
+    form_json["metadata"]["timeStart"] = time
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert ["form_submission_period", "Form was submitted after the end time"] in visit.flag_reason.get("flags", [])
 
 
 def _get_form_json(learn_app, module_id, form_block=None):
