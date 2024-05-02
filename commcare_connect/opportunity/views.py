@@ -58,6 +58,7 @@ from commcare_connect.opportunity.tables import (
     LearnStatusTable,
     OpportunityPaymentTable,
     PaymentUnitTable,
+    SuspendedUsersTable,
     UserPaymentsTable,
     UserStatusTable,
     UserVisitTable,
@@ -839,9 +840,17 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
 
 
 @org_member_required
-@require_POST
 def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
     access = get_object_or_404(OpportunityAccess, opportunity_id=opp_id, id=pk)
     access.suspended = False
     access.save()
-    return redirect("opportunity:user_profile", org_slug, opp_id, pk)
+    next = request.GET.get("next", "/")
+    return redirect(next)
+
+
+@org_member_required
+def suspended_users_list(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
+    access_objects = OpportunityAccess.objects.filter(opportunity=opportunity, suspended=True)
+    table = SuspendedUsersTable(access_objects)
+    return render(request, "opportunity/suspended_users.html", dict(table=table, opportunity=opportunity))
