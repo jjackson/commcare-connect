@@ -31,7 +31,7 @@ def test_deliver_status_query(opportunity: Opportunity):
     for mobile_user in mobile_users:
         OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True)
         user_visits = UserVisitFactory.create_batch(20, opportunity=opportunity, user=mobile_user)
-        count_by_status = dict(approved=0, pending=0, rejected=0, over_limit=0, completed=0, duplicate=0)
+        count_by_status = dict(approved=0, pending=0, rejected=0, over_limit=0, completed=0, duplicate=0, trial=0)
         for user_visit in user_visits:
             count_by_status[user_visit.status.value] += 1
         count_by_status["completed"] = len(user_visits)

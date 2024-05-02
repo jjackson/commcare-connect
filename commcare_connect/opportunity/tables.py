@@ -202,6 +202,7 @@ class DeliverStatusTable(tables.Table):
     visits_rejected = columns.Column("Rejected Visits")
     visits_over_limit = columns.Column("Over Limit Visits")
     visits_duplicate = columns.Column("Duplicate Visits")
+    visits_trial = columns.Column("Trial Visits")
     details = columns.LinkColumn(
         "opportunity:user_visits_list",
         verbose_name="",
@@ -222,6 +223,7 @@ class DeliverStatusTable(tables.Table):
             "visits_rejected",
             "visits_over_limit",
             "visits_duplicate",
+            "visits_trial",
             "last_visit_date",
         )
 
