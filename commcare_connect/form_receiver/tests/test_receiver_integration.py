@@ -194,7 +194,7 @@ def test_receiver_deliver_form_max_visits_reached(
     user_visits = UserVisit.objects.filter(user=mobile_user_with_connect_link)
     assert user_visits.count() == 5
     # First four are not over-limit
-    assert {u.status for u in user_visits[0:3]} == {VisitValidationStatus.pending}
+    assert {u.status for u in user_visits[0:4]} == {VisitValidationStatus.pending}
     # Last one is over limit
     assert user_visits[4].status == VisitValidationStatus.over_limit
 
@@ -207,10 +207,29 @@ def test_receiver_deliver_form_end_date_reached(
         opportunity, user=user_with_connectid_link, end_date=datetime.date.today() - datetime.timedelta(days=100)
     )
     assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 0
+    assert CompletedWork.objects.count() == 0
+    make_request(api_client, form_json, user_with_connectid_link)
+    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 1
+    assert CompletedWork.objects.count() == 1
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.status == VisitValidationStatus.over_limit
+
+
+@pytest.mark.django_db
+def test_receiver_deliver_form_before_start_date(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    opportunity.start_date = datetime.date.today() + datetime.timedelta(days=10)
+    opportunity.save()
+    form_json = _create_opp_and_form_json(
+        opportunity, user=user_with_connectid_link, end_date=datetime.date.today() + datetime.timedelta(days=100)
+    )
+    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 0
     make_request(api_client, form_json, user_with_connectid_link)
     assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 1
     visit = UserVisit.objects.get(user=user_with_connectid_link)
-    assert visit.status == VisitValidationStatus.over_limit
+    assert visit.status == VisitValidationStatus.trial
+    assert CompletedWork.objects.count() == 0
 
 
 def test_receiver_duplicate(user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity):

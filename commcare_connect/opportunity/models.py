@@ -4,7 +4,8 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Count, F, Max, Sum
+from django.db.models import Count, F, Max, Q, Sum
+from django.utils.functional import cached_property
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
@@ -258,7 +259,7 @@ class OpportunityAccess(models.Model):
     def last_visit_date(self):
         user_visits = (
             UserVisit.objects.filter(user=self.user_id, opportunity=self.opportunity)
-            .exclude(status=VisitValidationStatus.over_limit, is_trial=True)
+            .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
             .order_by("visit_date")
         )
         if user_visits.exists():
@@ -275,6 +276,29 @@ class OpportunityAccess(models.Model):
             return self.user.name
         else:
             return "---"
+
+    @cached_property
+    def _assessment_counts(self):
+        return Assessment.objects.filter(user=self.user, opportunity=self.opportunity).aggregate(
+            total=Count("pk"),
+            failed=Count("pk", filter=Q(passed=False)),
+            passed=Count("pk", filter=Q(passed=True)),
+        )
+
+    @property
+    def assessment_count(self):
+        return self._assessment_counts.get("total", 0)
+
+    @property
+    def assessment_status(self):
+        assessments = self._assessment_counts
+        if assessments.get("passed", 0) > 0:
+            status = "Passed"
+        elif assessments.get("failed", 0) > 0:
+            status = "Failed"
+        else:
+            status = "Not completed"
+        return status
 
 
 class PaymentUnit(models.Model):
@@ -320,6 +344,7 @@ class VisitValidationStatus(models.TextChoices):
     rejected = "rejected", gettext("Rejected")
     over_limit = "over_limit", gettext("Over Limit")
     duplicate = "duplicate", gettext("Duplicate")
+    trial = "trial", gettext("Trial")
 
 
 class Payment(models.Model):
@@ -443,7 +468,6 @@ class UserVisit(XFormBaseModel):
     location = models.CharField(null=True)
     flagged = models.BooleanField(default=False)
     flag_reason = models.JSONField(null=True, blank=True)
-    is_trial = models.BooleanField(default=False)
     completed_work = models.ForeignKey(CompletedWork, on_delete=models.DO_NOTHING, null=True, blank=True)
 
     @property
