@@ -220,6 +220,9 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             if dist.m <= 10:
                 flags.append(["location", "Visit location is too close to another visit"])
                 break
+    if access.suspended:
+        flags.append(["user_suspended", "This user is suspended from the opportunity."])
+        user_visit.status = VisitValidationStatus.rejected
     if flags:
         user_visit.flagged = True
         user_visit.flag_reason = {"flags": flags}
