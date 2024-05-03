@@ -1,3 +1,4 @@
+import datetime
 import json
 from functools import reduce
 
@@ -37,7 +38,6 @@ from commcare_connect.opportunity.helpers import (
 )
 from commcare_connect.opportunity.models import (
     BlobMeta,
-    CommCareApp,
     CompletedModule,
     DeliverUnit,
     Opportunity,
@@ -601,7 +601,17 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
 def get_application(request, org_slug=None):
     domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
     applications = get_applications_for_user_by_domain(request.user, domain)
-    existing_apps = set(CommCareApp.objects.filter(cc_domain=domain).values_list("cc_app_id", flat=True))
+    active_opps = Opportunity.objects.filter(
+        Q(learn_app__cc_domain=domain) | Q(deliver_app__cc_domain=domain),
+        active=True,
+        end_date__lt=datetime.date.today(),
+    ).select_related("learn_app", "deliver_app")
+    existing_apps = set()
+    for opp in active_opps:
+        if opp.learn_app.domain == domain:
+            existing_apps.add(opp.learn_app.cc_app_id)
+        if opp.deliver_app.domain == domain:
+            existing_apps.add(opp.deliver_app.cc_app_id)
     options = []
     for app in applications:
         if app["id"] not in existing_apps:
