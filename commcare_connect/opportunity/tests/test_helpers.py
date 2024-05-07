@@ -40,6 +40,7 @@ def test_deliver_status_query(opportunity: Opportunity):
                 count_by_status[cw.status.value] += 1
             count_by_status["completed"] = len(completed_works)
             completed_work_counts[(mobile_user.username, pu.name)] = count_by_status
+
     access_objects = get_annotated_opportunity_access_deliver_status(opportunity)
     for access in access_objects:
         username = access.user.username

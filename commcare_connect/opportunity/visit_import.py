@@ -97,12 +97,14 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
     missing_visits = set()
     seen_visits = set()
     user_ids = set()
+    seen_completed_works = set()
     with transaction.atomic():
         for visit_batch in batched(visit_ids, 100):
             to_update = []
             visits = UserVisit.objects.filter(xform_id__in=visit_batch, opportunity=opportunity)
             for visit in visits:
                 seen_visits.add(visit.xform_id)
+                seen_completed_works.add(visit.completed_work_id)
                 status = status_by_visit_id[visit.xform_id]
                 if visit.status != status:
                     visit.status = status
@@ -114,23 +116,32 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
 
             UserVisit.objects.bulk_update(to_update, fields=["status", "reason"])
             missing_visits |= set(visit_batch) - seen_visits
-        update_payment_accrued(opportunity, users=user_ids)
+    update_payment_accrued(opportunity, users=user_ids)
 
     return VisitImportStatus(seen_visits, missing_visits)
 
 
 def update_payment_accrued(opportunity: Opportunity, users):
-    payment_units = opportunity.paymentunit_set.all()
+    """Updates payment accrued for completed and approved CompletedWork instances."""
     access_objects = OpportunityAccess.objects.filter(user__in=users, opportunity=opportunity)
     for access in access_objects:
-        payment_accrued = 0
-        for payment_unit in payment_units:
-            completed_works = access.completedwork_set.filter(
-                payment_unit=payment_unit, status=CompletedWorkStatus.approved
-            )
-            for completed_work in completed_works:
-                payment_accrued += completed_work.completed_count * payment_unit.amount
-        access.payment_accrued = payment_accrued
+        completed_works = access.completedwork_set.exclude(
+            status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
+        ).select_related("payment_unit")
+        access.payment_accrued = 0
+        for completed_work in completed_works:
+            # Auto Approve Payment conditions
+            if opportunity.auto_approve_payments:
+                visits = completed_work.uservisit_set.values_list("status", "reason")
+                if any(status == "rejected" for status, _ in visits):
+                    completed_work.status = CompletedWorkStatus.rejected
+                    completed_work.reason = "\n".join(reason for _, reason in visits if reason)
+                elif all(status == "approved" for status, _ in visits):
+                    completed_work.status = CompletedWorkStatus.approved
+            approved_count = completed_work.approved_count
+            if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
+                access.payment_accrued += approved_count * completed_work.payment_unit.amount
+            completed_work.save()
         access.save()
 
 
@@ -287,7 +298,7 @@ def get_status_by_completed_work_id(dataset):
     invalid_rows = []
     for row in dataset:
         row = list(row)
-        work_id = row[work_id_col_index]
+        work_id = str(row[work_id_col_index])
         status_raw = row[status_col_index].lower().replace(" ", "_")
         try:
             status_by_work_id[work_id] = CompletedWorkStatus[status_raw]

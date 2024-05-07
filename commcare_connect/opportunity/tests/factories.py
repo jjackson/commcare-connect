@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from factory import DictFactory, Faker, SelfAttribute, SubFactory
+from factory import DictFactory, Faker, LazyAttribute, SelfAttribute, SubFactory
 from factory.django import DjangoModelFactory
 
 from commcare_connect.opportunity.models import VisitValidationStatus
@@ -41,15 +41,22 @@ class OpportunityFactory(DjangoModelFactory):
     active = True
     learn_app = SubFactory(CommCareAppFactory, organization=SelfAttribute("..organization"))
     deliver_app = SubFactory(CommCareAppFactory, organization=SelfAttribute("..organization"))
-    max_visits_per_user = Faker("pyint", min_value=1, max_value=100)
-    daily_max_visits_per_user = Faker("pyint", min_value=1, max_value=SelfAttribute("..max_visits_per_user"))
+    start_date = Faker("past_date")
     end_date = Faker("future_date")
+    # to be removed
     budget_per_visit = Faker("pyint", min_value=1, max_value=10)
     total_budget = Faker("pyint", min_value=1000, max_value=10000)
     api_key = SubFactory(HQApiKeyFactory)
 
     class Meta:
         model = "opportunity.Opportunity"
+
+
+class OpportunityVerificationFlagsFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+
+    class Meta:
+        model = "opportunity.OpportunityVerificationFlags"
 
 
 class LearnModuleFactory(DjangoModelFactory):
@@ -68,6 +75,10 @@ class PaymentUnitFactory(DjangoModelFactory):
     name = Faker("name")
     description = Faker("text")
     amount = Faker("pyint", min_value=1, max_value=10)
+    max_daily = Faker("pyint", min_value=1, max_value=10)
+    max_total = LazyAttribute(lambda o: o.max_daily * 2)
+
+    # parent_payment_unit = SubFactory("commcare_connect.opportunity.tests.factories.PaymentUnitFactory")
 
     class Meta:
         model = "opportunity.PaymentUnit"
@@ -116,12 +127,20 @@ class UserVisitFactory(DjangoModelFactory):
 
 class OpportunityClaimFactory(DjangoModelFactory):
     opportunity_access = SubFactory(OpportunityAccessFactory)
-    max_payments = Faker("pyint", min_value=1, max_value=100)
     end_date = Faker("date")
     date_claimed = Faker("date")
 
     class Meta:
         model = "opportunity.OpportunityClaim"
+
+
+class OpportunityClaimLimitFactory(DjangoModelFactory):
+    opportunity_claim = SubFactory(OpportunityClaimFactory)
+    payment_unit = SubFactory(PaymentUnitFactory)
+    max_visits = Faker("pyint", min_value=1, max_value=100)
+
+    class Meta:
+        model = "opportunity.OpportunityClaimLimit"
 
 
 class CompletedModuleFactory(DjangoModelFactory):
