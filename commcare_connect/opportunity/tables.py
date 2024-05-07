@@ -201,6 +201,8 @@ class DeliverStatusTable(tables.Table):
     pending = columns.Column("Pending")
     approved = columns.Column("Approved")
     rejected = columns.Column("Rejected")
+    over_limit = columns.Column("Over Limit")
+
     details = columns.LinkColumn(
         "opportunity:user_visits_list",
         verbose_name="",
@@ -220,6 +222,7 @@ class DeliverStatusTable(tables.Table):
             "pending",
             "approved",
             "rejected",
+            "over_limit",
         )
 
     def render_last_visit_date(self, record, value):
