@@ -14,6 +14,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     OpportunityClaim,
     Payment,
+    PaymentUnit,
     UserVisit,
 )
 
@@ -52,6 +53,12 @@ class CommCareAppSerializer(serializers.ModelSerializer):
         return obj.passing_score
 
 
+class PaymentUnitSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentUnit
+        fields = ["id", "name", "max_total", "max_daily"]
+
+
 class OpportunityClaimSerializer(serializers.ModelSerializer):
     max_payments = serializers.SerializerMethodField()
 
@@ -75,6 +82,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     daily_max_visits_per_user = serializers.SerializerMethodField()
     budget_per_visit = serializers.SerializerMethodField()
     budget_per_user = serializers.SerializerMethodField()
+    payment_units = serializers.SerializerMethodField()
 
     class Meta:
         model = Opportunity
@@ -100,6 +108,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "currency",
             "is_active",
             "budget_per_user",
+            "payment_units",
         ]
 
     def get_claim(self, obj):
@@ -131,6 +140,10 @@ class OpportunitySerializer(serializers.ModelSerializer):
 
     def get_budget_per_user(self, obj):
         return obj.budget_per_user
+
+    def get_payment_units(self, obj):
+        payment_units = PaymentUnit.objects.filter(opportunity=obj)
+        return PaymentUnitSerializer(payment_units, many=True).data
 
 
 @quickcache(vary_on=["user.pk", "opportunity.pk"], timeout=60 * 60)
