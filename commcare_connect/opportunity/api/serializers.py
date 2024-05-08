@@ -13,6 +13,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    OpportunityClaimLimit,
     Payment,
     PaymentUnit,
     UserVisit,
@@ -59,16 +60,26 @@ class PaymentUnitSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "max_total", "max_daily"]
 
 
+class OpportunityClaimLimitSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OpportunityClaimLimit
+        fields = ["max_visits", "payment_unit"]
+
+
 class OpportunityClaimSerializer(serializers.ModelSerializer):
     max_payments = serializers.SerializerMethodField()
+    payment_units = serializers.SerializerMethodField()
 
     class Meta:
         model = OpportunityClaim
-        fields = ["max_payments", "end_date", "date_claimed"]
+        fields = ["max_payments", "end_date", "date_claimed", "payment_units"]
 
     def get_max_payments(self, obj):
         # return 1 for old opportunities
         return obj.opportunityclaimlimit_set.aggregate(max_visits=Sum("max_visits")).get("max_visits", 0) or -1
+
+    def get_payment_units(self, obj):
+        return OpportunityClaimLimitSerializer(obj.opportunityclaimlimit_set.all(), many=True).data
 
 
 class OpportunitySerializer(serializers.ModelSerializer):
