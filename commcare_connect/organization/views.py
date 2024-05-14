@@ -2,10 +2,12 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.translation import gettext
+from django.views.decorators.http import require_POST
 from rest_framework.decorators import api_view
 
+from commcare_connect import connect_id_client
 from commcare_connect.organization.decorators import org_admin_required
-from commcare_connect.organization.forms import MembershipForm, OrganizationChangeForm
+from commcare_connect.organization.forms import AddCredentialForm, MembershipForm, OrganizationChangeForm
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
 from commcare_connect.organization.tasks import send_org_invite
 
@@ -25,10 +27,17 @@ def organization_home(request, org_slug):
     if not form:
         form = OrganizationChangeForm(instance=org)
 
+    credentials = connect_id_client.fetch_credentials()
+
     return render(
         request,
         "organization/organization_home.html",
-        {"organization": org, "form": form, "membership_form": membership_form},
+        {
+            "organization": org,
+            "form": form,
+            "membership_form": membership_form,
+            "add_credential_form": AddCredentialForm(credentials=credentials),
+        },
     )
 
 
@@ -57,4 +66,18 @@ def accept_invite(request, org_slug, invite_id):
     membership.accepted = True
     membership.save()
     messages.success(request, message=f"Accepted invite for joining {organization.slug} organization.")
+    return redirect("organization:home", org_slug)
+
+
+@org_admin_required
+@require_POST
+def add_credential_view(request, org_slug):
+    org = get_object_or_404(Organization, slug=org_slug)
+    credentials = connect_id_client.fetch_credentials()
+    form = AddCredentialForm(data=request.POST, credentials=credentials)
+
+    if form.is_valid():
+        users = form.cleaned_data["users"]
+        credential = form.cleaned_data["credential"]
+        connect_id_client.add_credential(org, credential, users)
     return redirect("organization:home", org_slug)

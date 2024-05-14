@@ -50,18 +50,21 @@ class MembershipForm(forms.ModelForm):
 
 
 class AddCredentialForm(forms.Form):
-    credential = forms.CharField()
+    credential = forms.CharField(widget=forms.Select)
     users = forms.CharField(
         widget=forms.Textarea(
             attrs=dict(
-                placeholder="Enter the phone numbers of the users you want to add to "
-                "this opportunity, one on each line.",
+                placeholder="Enter the phone numbers of the users you want to add the "
+                "credential to, one on each line.",
             )
         ),
     )
 
     def __init__(self, *args, **kwargs):
+        credentials = kwargs.pop("credentials", [])
         super().__init__(*args, **kwargs)
+
+        self.fields["credential"].widget.choices = [(c.slug, c.name) for c in credentials]
 
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
