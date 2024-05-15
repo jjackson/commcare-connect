@@ -11,7 +11,7 @@ from django.utils.timezone import now
 from django.utils.translation import gettext
 from tablib import Dataset
 
-from commcare_connect.connect_id_client import fetch_users, send_message, send_message_bulk
+from commcare_connect.connect_id_client import fetch_users, filter_users, send_message, send_message_bulk
 from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
 from commcare_connect.opportunity.export import (
@@ -65,8 +65,11 @@ def create_learn_modules_and_deliver_units(opportunity_id):
 
 
 @celery_app.task()
-def add_connect_users(user_list: list[str], opportunity_id: str):
-    for user in fetch_users(user_list):
+def add_connect_users(user_list: list[str], opportunity_id: str, filter_country: str, filter_credential: list[str]):
+    users = fetch_users(user_list)
+    if filter_country or filter_credential:
+        users += filter_users(country_code=filter_country, credential=filter_credential)
+    for user in users:
         u, _ = User.objects.update_or_create(
             username=user.username, defaults={"phone_number": user.phone_number, "name": user.name}
         )
