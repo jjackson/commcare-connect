@@ -168,7 +168,7 @@ class UserStatusTable(tables.Table):
             kwargs={
                 "org_slug": record.opportunity.organization.slug,
                 "opp_id": record.opportunity_id,
-                "pk": record.id,
+                "pk": record.opportunity_access_id,
             },
         )
         return format_html('<a href="{}">View Profile</a>', url)
