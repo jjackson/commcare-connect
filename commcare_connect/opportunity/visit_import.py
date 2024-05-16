@@ -228,9 +228,9 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     payment_ids = []
     with transaction.atomic():
         usernames = list(payments)
-        users = OpportunityAccess.objects.filter(user__username__in=usernames, opportunity=opportunity).select_related(
-            "user"
-        )
+        users = OpportunityAccess.objects.filter(
+            user__username__in=usernames, opportunity=opportunity, suspended=False
+        ).select_related("user")
         for access in users:
             username = access.user.username
             amount = payments[username]
