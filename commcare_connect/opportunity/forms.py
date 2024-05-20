@@ -82,11 +82,14 @@ class OpportunityChangeForm(forms.ModelForm):
             help_text="Extends opportunity end date for all users.",
         )
         self.fields["filter_country"] = forms.CharField(
-            label="Filter By Country", widget=forms.Select(choices=[("", "Select country")] + FILTER_COUNTRIES)
+            label="Filter By Country",
+            widget=forms.Select(choices=[("", "Select country")] + FILTER_COUNTRIES),
+            required=False,
         )
         self.fields["filter_credential"] = forms.CharField(
             label="Filter By Credential",
             widget=forms.Select(choices=[("", "Select credential")] + [(c.slug, c.name) for c in credentials]),
+            required=False,
         )
         self.initial["end_date"] = self.instance.end_date.isoformat()
         self.initial["filter_country"] = [""]
