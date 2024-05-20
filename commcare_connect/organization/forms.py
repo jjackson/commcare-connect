@@ -64,7 +64,7 @@ class AddCredentialForm(forms.Form):
         credentials = kwargs.pop("credentials", [])
         super().__init__(*args, **kwargs)
 
-        self.fields["credential"].widget.choices = [(c.slug, c.name) for c in credentials]
+        self.fields["credential"].widget.choices = [(c.name, c.name) for c in credentials]
 
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
