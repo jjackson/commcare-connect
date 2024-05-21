@@ -57,7 +57,7 @@ def add_credential(organization: Organization, credential: str, users: list[str]
 def fetch_credentials():
     response = _make_request(GET, "/users/fetch_credentials")
     data = response.json()
-    return [Credential(**c) for c in data]
+    return [Credential(**c) for c in data["credentials"]]
 
 
 def filter_users(country_code: str, credential: list[str]):
