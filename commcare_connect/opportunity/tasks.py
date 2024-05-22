@@ -65,7 +65,9 @@ def create_learn_modules_and_deliver_units(opportunity_id):
 
 
 @celery_app.task()
-def add_connect_users(user_list: list[str], opportunity_id: str, filter_country: str, filter_credential: list[str]):
+def add_connect_users(
+    user_list: list[str], opportunity_id: str, filter_country: str = "", filter_credential: list[str] = ""
+):
     users = fetch_users(user_list)
     if filter_country or filter_credential:
         users += filter_users(country_code=filter_country, credential=filter_credential)
