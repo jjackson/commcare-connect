@@ -10,7 +10,7 @@ from commcare_connect.connect_id_client.models import Credential
 from commcare_connect.organization.decorators import org_admin_required
 from commcare_connect.organization.forms import AddCredentialForm, MembershipForm, OrganizationChangeForm
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
-from commcare_connect.organization.tasks import send_org_invite
+from commcare_connect.organization.tasks import add_credential_task, send_org_invite
 
 
 @org_admin_required
@@ -84,5 +84,5 @@ def add_credential_view(request, org_slug):
     if form.is_valid():
         users = form.cleaned_data["users"]
         credential = form.cleaned_data["credential"]
-        connect_id_client.add_credential(org, credential, users)
+        add_credential_task.delay(org.pk, credential, users)
     return redirect("organization:home", org_slug)
