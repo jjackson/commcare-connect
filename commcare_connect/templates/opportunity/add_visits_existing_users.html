@@ -1,14 +1,24 @@
-{% extends "base.html" %}
+{% extends "opportunity/base.html" %}
 {% load static %}
 {% load crispy_forms_tags %}
 
 {% block title %}{{ request.org }} - {{ opportunity.name }}{% endblock %}
 
+{% block breadcrumbs_inner %}
+  {{ block.super }}
+  <li class="breadcrumb-item">
+    <a href="{% url 'opportunity:detail' org_slug=request.org.slug pk=opportunity.pk %}">
+      {{ opportunity.name }}
+    </a>
+  </li>
+  <li class="breadcrumb-item active" aria-current="page">Update Visits</li>
+{% endblock %}
+
 {% block content %}
-  <div class="container">
-    <h1 class="display-5">Edit Opportunity</h1>
-    <h4>Adding Visits for Existing Users</h4>
-    <form method="post"
+  <h2>Edit Opportunity</h2>
+  <h4 class="mb-2">Adding Visits for Existing Users</h4>
+  <hr>
+  <form method="post"
           x-data="{
             additionalVisits: 0,
             selected_users: [],
@@ -26,8 +36,8 @@
         </div>
       {% endif %}
       {% if opportunity_claims %}
-        <table class="table table-custom border">
-          <thead class="table-secondary">
+        <table class="table table-responsive table-bordered">
+          <thead class="table-primary">
           <tr>
             <th></th>
             <th>Name</th>
@@ -43,10 +53,11 @@
               <td>
                 <input type="checkbox" name="selected_users" id="id_selected_users" value="{{ opp_claim.id }}"
                        x-model="selected_users"
-                       class="form-check-input {% if form.selected_users.errors %}is-invalid{% endif %}"/>
+                       class="form-check-input border-dark shadow {% if form.selected_users.errors %}is-invalid{% endif %}"/>
               </td>
               <td>{{ opp_claim.opportunity_access.user.name }}</td>
               <td>{{ opp_claim.opportunity_access.user.username }}</td>
+              <!-- Todo; replace by climitlimit.max_visits -->
               <td>{{ opp_claim.max_payments }}</td>
               <td>{{ opp_claim.opportunity_access.visit_count }}</td>
               <td>{{ opp_claim.end_date }}</td>
@@ -55,14 +66,14 @@
           </tbody>
         </table>
         <div class="row mb-2 py-2">
-          <div class="col-sm">
+          <div class="col-md">
             {{ form.additional_visits|as_crispy_field }}
           </div>
-          <div class="col-sm">
+          <div class="col-md">
             {{ form.end_date|as_crispy_field }}
           </div>
         </div>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal"
+        <button type="button" class="btn btn-primary float-end" data-bs-toggle="modal"
                 data-bs-target="#confirm-modal-add-visits">
           Save
         </button>
@@ -98,6 +109,4 @@
         </div>
       </div>
     </form>
-  </div>
-
 {% endblock content %}

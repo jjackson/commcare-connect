@@ -7,7 +7,7 @@
 
 
 {% block inner %}
-<h1>{% translate "Confirm E-mail Address" %}</h1>
+<h1 class="mb-4">{% translate "Confirm E-mail Address" %}</h1>
 
 {% if confirmation %}
 
@@ -24,7 +24,7 @@
 
 {% url 'account_email' as email_url %}
 
-<p>{% blocktranslate %}This e-mail confirmation link expired or is invalid. Please <a href="{{ email_url }}">issue a new e-mail confirmation request</a>.{% endblocktranslate %}</p>
+<p class="mt-2">{% blocktranslate %}This e-mail confirmation link expired or is invalid. Please <a href="{{ email_url }}">issue a new e-mail confirmation request</a>.{% endblocktranslate %}</p>
 
 {% endif %}
 
