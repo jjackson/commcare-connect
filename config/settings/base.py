@@ -215,13 +215,22 @@ LOGGING = {
             "level": "DEBUG",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
-        }
+        },
+        "null": {
+            "class": "logging.NullHandler",
+        },
     },
     "root": {"level": "INFO", "handlers": ["console"]},
     "django.template": {
         "handlers": ["console"],
         "level": env("DJANGO_TEMPLATE_LOG_LEVEL", default="WARN"),
         "propagate": False,
+    },
+    "loggers": {
+        "django.security.DisallowedHost": {
+            "handlers": ["null"],
+            "propagate": False,
+        },
     },
 }
 
@@ -269,6 +278,8 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.AcceptHeaderVersioning",
+    "DEFAULT_VERSION": "1.0",
 }
 
 CORS_URLS_REGEX = r"^/api/.*$"
@@ -293,9 +304,9 @@ CACHES = {
 
 DJANGO_TABLES2_TEMPLATE = "tables/tabbed_table.html"
 DJANGO_TABLES2_TABLE_ATTRS = {
-    "class": "table border table-custom",
+    "class": "table table-bordered mb-0",
     "thead": {
-        "class": "table-secondary",
+        "class": "",
     },
     "tfoot": {
         "class": "table-light fw-bold",

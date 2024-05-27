@@ -2,12 +2,7 @@ import pytest
 from django.utils.timezone import now
 from tablib import Dataset
 
-from commcare_connect.opportunity.export import (
-    export_deliver_status_table,
-    export_user_status_table,
-    export_user_visit_data,
-    get_flattened_dataset,
-)
+from commcare_connect.opportunity.export import export_user_status_table, export_user_visit_data, get_flattened_dataset
 from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import Opportunity, UserVisit
 from commcare_connect.opportunity.tests.factories import (
@@ -197,33 +192,4 @@ def test_export_user_status_table_data(opportunity: Opportunity):
         )
     dataset = export_user_status_table(opportunity)
     prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
-    assert prepared_test_dataset.export("csv") == dataset.export("csv")
-
-
-@pytest.mark.django_db
-def test_export_deliver_status_data(opportunity: Opportunity):
-    mobile_users = MobileUserFactory.create_batch(5)
-    rows = []
-    for mobile_user in sorted(mobile_users, key=lambda x: x.name):
-        access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True)
-        user_visits = UserVisitFactory.create_batch(20, opportunity=opportunity, user=mobile_user)
-        user_visits_count = {"approved": 0, "pending": 0, "rejected": 0, "over_limit": 0, "duplicate": 0}
-        for user_visit in user_visits:
-            user_visits_count[user_visit.status.value] += 1
-        rows.append(
-            (
-                mobile_user.name,
-                mobile_user.username,
-                len(user_visits),
-                user_visits_count.get("approved", 0),
-                user_visits_count.get("pending", 0),
-                user_visits_count.get("rejected", 0),
-                user_visits_count.get("over_limit", 0),
-                user_visits_count.get("duplicate", 0),
-                access.last_visit_date.replace(tzinfo=None),
-            )
-        )
-
-    dataset = export_deliver_status_table(opportunity)
-    prepared_test_dataset = _get_dataset(data=rows, headers=dataset.headers)
     assert prepared_test_dataset.export("csv") == dataset.export("csv")

@@ -13,10 +13,15 @@ from commcare_connect.opportunity.models import (
     Assessment,
     CommCareApp,
     CompletedModule,
+    CompletedWork,
+    CompletedWorkStatus,
     DeliverUnit,
     LearnModule,
     Opportunity,
+    OpportunityAccess,
     OpportunityClaim,
+    OpportunityClaimLimit,
+    OpportunityVerificationFlags,
     UserVisit,
     VisitValidationStatus,
 )
@@ -141,9 +146,10 @@ def process_deliver_form(user, xform: XForm, app: CommCareApp, opportunity: Oppo
 
 def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, deliver_unit_block: dict):
     deliver_unit = get_or_create_deliver_unit(app, deliver_unit_block)
+    access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
     counts = (
-        UserVisit.objects.filter(opportunity=opportunity, user=user)
-        .exclude(status=VisitValidationStatus.over_limit)
+        UserVisit.objects.filter(opportunity=opportunity, user=user, deliver_unit=deliver_unit)
+        .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
         .aggregate(
             daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)),
             total=Count("*"),
@@ -151,12 +157,14 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         )
     )
     claim = OpportunityClaim.objects.get(opportunity_access__opportunity=opportunity, opportunity_access__user=user)
+    entity_id = deliver_unit_block.get("entity_id")
+    entity_name = deliver_unit_block.get("entity_name")
     user_visit = UserVisit(
         opportunity=opportunity,
         user=user,
         deliver_unit=deliver_unit,
-        entity_id=deliver_unit_block.get("entity_id"),
-        entity_name=deliver_unit_block.get("entity_name"),
+        entity_id=entity_id,
+        entity_name=entity_name,
         visit_date=xform.metadata.timeStart,
         xform_id=xform.id,
         app_build_id=xform.build_id,
@@ -164,35 +172,87 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         form_json=xform.raw_form,
         location=xform.metadata.location,
     )
-    if (
-        counts["daily"] >= opportunity.daily_max_visits_per_user
-        or counts["total"] >= claim.max_payments
-        or datetime.date.today() > claim.end_date
-    ):
-        user_visit.status = VisitValidationStatus.over_limit
-    user_visits = UserVisit.objects.filter(opportunity=opportunity).values("location")
+    completed_work_needs_save = False
+    if opportunity.start_date > datetime.date.today():
+        completed_work = None
+        user_visit.status = VisitValidationStatus.trial
+    else:
+        completed_work, _ = CompletedWork.objects.get_or_create(
+            opportunity_access=access,
+            entity_id=entity_id,
+            payment_unit=deliver_unit.payment_unit,
+            defaults={
+                "entity_name": entity_name,
+            },
+        )
+        user_visit.completed_work = completed_work
+        claim_limit = OpportunityClaimLimit.objects.get(
+            opportunity_claim=claim, payment_unit=completed_work.payment_unit
+        )
+        if (
+            counts["daily"] >= deliver_unit.payment_unit.max_daily
+            or counts["total"] >= claim_limit.max_visits
+            or datetime.date.today() > claim.end_date
+        ):
+            user_visit.status = VisitValidationStatus.over_limit
+            if not completed_work.status == CompletedWorkStatus.over_limit:
+                completed_work.status = CompletedWorkStatus.over_limit
+                completed_work_needs_save = True
+        elif counts["entity"] > 0:
+            user_visit.status = VisitValidationStatus.duplicate
+
     flags = []
+    opportunity_flags, _ = OpportunityVerificationFlags.objects.get_or_create(opportunity=opportunity)
     if counts["entity"] > 0:
         user_visit.status = VisitValidationStatus.duplicate
-        flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
-    if xform.metadata.duration < datetime.timedelta(seconds=60):
+        if opportunity_flags.duplicate:
+            flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
+    if opportunity_flags.duration > 0 and xform.metadata.duration < datetime.timedelta(
+        minutes=opportunity_flags.duration
+    ):
         flags.append(["duration", "The form was completed too quickly."])
     if xform.metadata.location is None:
-        flags.append(["gps", "GPS data is missing"])
+        if opportunity_flags.gps:
+            flags.append(["gps", "GPS data is missing"])
     else:
-        cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
-        for visit in user_visits:
-            if visit.get("location") is None:
-                continue
-            lat, lon, *_ = visit["location"].split(" ")
-            dist = distance((lat, lon), (cur_lat, cur_lon))
-            if dist.m <= 10:
-                flags.append(["location", "Visit location is too close to another visit"])
-                break
+        if opportunity_flags.location > 0:
+            user_visits = (
+                UserVisit.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit)
+                .exclude(Q(status=VisitValidationStatus.trial) | Q(entity_id=user_visit.entity_id))
+                .values("location")
+            )
+            cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
+            for visit in user_visits:
+                if visit.get("location") is None:
+                    continue
+                lat, lon, *_ = visit["location"].split(" ")
+                dist = distance((lat, lon), (cur_lat, cur_lon))
+                if dist.m <= 10:
+                    flags.append(["location", "Visit location is too close to another visit"])
+                    break
+    if (
+        opportunity_flags.form_submission_start
+        and opportunity_flags.form_submission_start > xform.metadata.timeStart.time()
+    ):
+        flags.append(["form_submission_period", "Form was submitted before the start time"])
+    if (
+        opportunity_flags.form_submission_end
+        and opportunity_flags.form_submission_end < xform.metadata.timeStart.time()
+    ):
+        flags.append(["form_submission_period", "Form was submitted after the end time"])
     if flags:
         user_visit.flagged = True
         user_visit.flag_reason = {"flags": flags}
+
+    if (
+        opportunity.auto_approve_visits
+        and user_visit.status == VisitValidationStatus.pending
+        and not user_visit.flagged
+    ):
+        user_visit.status = VisitValidationStatus.approved
     user_visit.save()
+    if completed_work_needs_save:
+        completed_work.save()
     download_user_visit_attachments.delay(user_visit.id)
 
 

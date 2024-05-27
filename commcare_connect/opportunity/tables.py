@@ -4,6 +4,7 @@ from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
 
 from commcare_connect.opportunity.models import (
+    CompletedWork,
     OpportunityAccess,
     Payment,
     PaymentUnit,
@@ -15,6 +16,8 @@ from commcare_connect.opportunity.models import (
 class LearnStatusTable(tables.Table):
     display_name = columns.Column(verbose_name="Name")
     learn_progress = columns.Column(verbose_name="Modules Completed")
+    assessment_count = columns.Column(verbose_name="Number of Attempts")
+    assessment_status = columns.Column(verbose_name="Assessment Status")
     details = columns.LinkColumn(
         "opportunity:user_learn_progress",
         verbose_name="",
@@ -24,7 +27,7 @@ class LearnStatusTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "learn_progress")
+        fields = ("display_name", "learn_progress", "assessment_status", "assessment_count")
         sequence = ("display_name", "learn_progress")
         orderable = False
         empty_text = "No learn progress for users."
@@ -82,7 +85,7 @@ class UserVisitTable(tables.Table):
 
 class OpportunityPaymentTable(tables.Table):
     display_name = columns.Column(verbose_name="Name")
-    username = columns.Column(accessor="user.username", visible=False)
+    username = columns.Column(accessor="user__username", visible=False)
     view_payments = columns.LinkColumn(
         "opportunity:user_payments_table",
         verbose_name="",
@@ -117,7 +120,7 @@ class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
 
 class UserStatusTable(tables.Table):
     display_name = columns.Column(verbose_name="Name", footer="Total")
-    username = columns.Column(accessor="user.username", visible=False)
+    username = columns.Column(accessor="user__username", visible=False)
     accepted = BooleanAggregateColumn(verbose_name="Accepted")
     claimed = AggregateColumn(verbose_name="Job Claimed", accessor="job_claimed")
     started_learning = AggregateColumn(verbose_name="Started Learning", accessor="date_learn_started")
@@ -125,7 +128,7 @@ class UserStatusTable(tables.Table):
     passed_assessment = BooleanAggregateColumn(verbose_name="Passed Assessment")
     started_delivery = AggregateColumn(verbose_name="Started Delivery", accessor="date_deliver_started")
     last_visit_date = columns.Column(accessor="last_visit_date_d")
-    view_profile = columns.Column("View Profile", empty_values=())
+    view_profile = AggregateColumn("View Profile", empty_values=(), footer=lambda table: len(table.rows))
 
     class Meta:
         model = OpportunityAccess
@@ -192,13 +195,14 @@ class PaymentUnitTable(tables.Table):
 
 class DeliverStatusTable(tables.Table):
     display_name = columns.Column("Name of the User")
-    username = columns.Column(accessor="user.username", visible=False)
-    visits_completed = columns.Column("Completed Visits")
-    visits_approved = columns.Column("Approved Visits")
-    visits_pending = columns.Column("Pending Visits")
-    visits_rejected = columns.Column("Rejected Visits")
-    visits_over_limit = columns.Column("Over Limit Visits")
-    visits_duplicate = columns.Column("Duplicate Visits")
+    username = columns.Column(accessor="user__username", visible=False)
+    payment_unit = columns.Column("Name of Payment Unit")
+    completed = columns.Column("Delivered")
+    pending = columns.Column("Pending")
+    approved = columns.Column("Approved")
+    rejected = columns.Column("Rejected")
+    over_limit = columns.Column("Over Limit")
+
     details = columns.LinkColumn(
         "opportunity:user_visits_list",
         verbose_name="",
@@ -208,21 +212,60 @@ class DeliverStatusTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("last_visit_date",)
         orderable = False
+        fields = ("display_name",)
         sequence = (
             "display_name",
             "username",
-            "visits_completed",
-            "visits_approved",
-            "visits_pending",
-            "visits_rejected",
-            "visits_over_limit",
-            "visits_duplicate",
-            "last_visit_date",
+            "payment_unit",
+            "completed",
+            "pending",
+            "approved",
+            "rejected",
+            "over_limit",
         )
 
     def render_last_visit_date(self, record, value):
+        return date_with_time_popup(self, value)
+
+
+class CompletedWorkTable(tables.Table):
+    id = columns.Column("Instance Id", visible=False)
+    username = columns.Column(accessor="opportunity_access__user__username", visible=False)
+    entity_id = columns.Column(visible=False)
+    reason = columns.Column("Rejected Reason", accessor="reason", visible=False)
+    display_name = columns.Column("Name of the User", accessor="opportunity_access__display_name")
+    payment_unit = columns.Column("Payment Unit", accessor="payment_unit__name")
+    status = columns.Column("Payment Approval")
+
+    class Meta:
+        model = CompletedWork
+        fields = (
+            "entity_id",
+            "entity_name",
+            "status",
+            "reason",
+            "completion_date",
+            "flags",
+        )
+        orderable = False
+        sequence = (
+            "id",
+            "username",
+            "display_name",
+            "entity_id",
+            "entity_name",
+            "payment_unit",
+            "completion_date",
+            "flags",
+            "status",
+            "reason",
+        )
+
+    def render_flags(self, record, value):
+        return ", ".join(value)
+
+    def render_completion_date(self, record, value):
         return date_with_time_popup(self, value)
 
 

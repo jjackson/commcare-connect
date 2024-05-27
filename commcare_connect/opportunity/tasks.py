@@ -19,11 +19,13 @@ from commcare_connect.opportunity.export import (
     export_empty_payment_table,
     export_user_status_table,
     export_user_visit_data,
+    export_work_status_table,
 )
 from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import (
     BlobMeta,
     CompletedModule,
+    CompletedWorkStatus,
     DeliverUnit,
     LearnModule,
     Opportunity,
@@ -257,3 +259,38 @@ def download_user_visit_attachments(user_visit_id: id):
                 headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"},
             )
             default_storage.save(str(blob_meta.blob_id), ContentFile(response.content, name))
+
+
+@celery_app.task()
+def generate_work_status_export(opportunity_id: int, export_format: str):
+    opportunity = Opportunity.objects.get(id=opportunity_id)
+    dataset = export_work_status_table(opportunity)
+    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_verification.{export_format}"
+    save_export(dataset, export_tmp_name, export_format)
+    return export_tmp_name
+
+
+@celery_app.task()
+def bulk_approve_completed_work():
+    access_objects = OpportunityAccess.objects.filter(
+        opportunity__active=True,
+        opportunity__end_date__gte=datetime.date.today(),
+        opportunity__auto_approve_payments=True,
+    )
+    for access in access_objects:
+        completed_works = access.completedwork_set.exclude(
+            status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
+        )
+        access.payment_accrued = 0
+        for completed_work in completed_works:
+            approved_count = completed_work.approved_count
+            visits = completed_work.uservisit_set.values_list("status", "reason")
+            if any(status == "rejected" for status, _ in visits):
+                completed_work.status = CompletedWorkStatus.rejected
+                completed_work.reason = "\n".join(reason for _, reason in visits if reason)
+            elif all(status == "approved" for status, _ in visits):
+                completed_work.status = CompletedWorkStatus.approved
+            if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
+                access.payment_accrued += approved_count * completed_work.payment_unit.amount
+            completed_work.save()
+        access.save()
