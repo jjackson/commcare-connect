@@ -7,7 +7,7 @@ servers:
       env-file: '/home/connect/www/commcare-connect/docker.env'
   celery:
     hosts:
-      - 3.87.17.68
+      - 3.89.159.20
     options:
       # create by ansible
       env-file: '/home/connect/www/commcare-connect/docker.env'
