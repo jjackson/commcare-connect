@@ -29,7 +29,7 @@ def organization_home(request, org_slug):
         form = OrganizationChangeForm(instance=org)
 
     credentials = connect_id_client.fetch_credentials()
-    if not len(list(c for c in credentials if c.name == f"Worked for {org.name}")):
+    if not any(c.name == f"Worked for {org.name}" for c in credentials):
         credentials.append(Credential(name=f"Worked for {org.name}", slug="default"))
 
     return render(
@@ -77,7 +77,7 @@ def accept_invite(request, org_slug, invite_id):
 def add_credential_view(request, org_slug):
     org = get_object_or_404(Organization, slug=org_slug)
     credentials = connect_id_client.fetch_credentials()
-    if not len(list(c for c in credentials if c.name == f"Worked for {org.name}")):
+    if not any(c.name == f"Worked for {org.name}" for c in credentials):
         credentials.append(Credential(name=f"Worked for {org.name}", slug=f"Worked for {org.name}"))
     form = AddCredentialForm(data=request.POST, credentials=credentials)
 
