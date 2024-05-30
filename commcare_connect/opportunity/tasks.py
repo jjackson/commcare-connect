@@ -1,4 +1,5 @@
 import datetime
+import logging
 
 import httpx
 from allauth.utils import build_absolute_uri
@@ -39,6 +40,8 @@ from commcare_connect.users.models import User
 from commcare_connect.utils.datetime import is_date_before
 from commcare_connect.utils.sms import send_sms
 from config import celery_app
+
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task()
@@ -103,6 +106,7 @@ def invite_user(user_id, opportunity_access_id):
 @celery_app.task()
 def generate_visit_export(opportunity_id: int, date_range: str, status: list[str], export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
+    logger.info(f"Export for {opportunity.name} with date range {date_range} and status {','.join(status)}")
     dataset = export_user_visit_data(opportunity, DateRanges(date_range), [VisitValidationStatus(s) for s in status])
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_visit_export.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
@@ -285,10 +289,11 @@ def bulk_approve_completed_work():
         access.payment_accrued = 0
         for completed_work in completed_works:
             approved_count = completed_work.approved_count
-            visits = completed_work.uservisit_set.values_list("status", flat=True)
-            if any(visit == "rejected" for visit in visits):
+            visits = completed_work.uservisit_set.values_list("status", "reason")
+            if any(status == "rejected" for status, _ in visits):
                 completed_work.status = CompletedWorkStatus.rejected
-            elif all(visit == "approved" for visit in visits):
+                completed_work.reason = "\n".join(reason for _, reason in visits if reason)
+            elif all(status == "approved" for status, _ in visits):
                 completed_work.status = CompletedWorkStatus.approved
             if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
                 access.payment_accrued += approved_count * completed_work.payment_unit.amount
