@@ -21,6 +21,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     OpportunityClaim,
     OpportunityClaimLimit,
+    OpportunityVerificationFlags,
     UserVisit,
     VisitValidationStatus,
 )
@@ -148,7 +149,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
     counts = (
         UserVisit.objects.filter(opportunity=opportunity, user=user, deliver_unit=deliver_unit)
-        .exclude(Q(status=VisitValidationStatus.over_limit) | Q(is_trial=True))
+        .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
         .aggregate(
             daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)),
             total=Count("*"),
@@ -170,11 +171,11 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         app_build_version=xform.metadata.app_build_version,
         form_json=xform.raw_form,
         location=xform.metadata.location,
-        is_trial=opportunity.start_date > datetime.date.today(),
     )
     completed_work_needs_save = False
-    if user_visit.is_trial:
+    if opportunity.start_date > datetime.date.today():
         completed_work = None
+        user_visit.status = VisitValidationStatus.trial
     else:
         completed_work, _ = CompletedWork.objects.get_or_create(
             opportunity_access=access,
@@ -201,25 +202,44 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             user_visit.status = VisitValidationStatus.duplicate
 
     flags = []
-    if user_visit.status == VisitValidationStatus.duplicate:
-        flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
-    if xform.metadata.duration < datetime.timedelta(seconds=60):
+    opportunity_flags, _ = OpportunityVerificationFlags.objects.get_or_create(opportunity=opportunity)
+    if counts["entity"] > 0:
+        user_visit.status = VisitValidationStatus.duplicate
+        if opportunity_flags.duplicate:
+            flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
+    if opportunity_flags.duration > 0 and xform.metadata.duration < datetime.timedelta(
+        minutes=opportunity_flags.duration
+    ):
         flags.append(["duration", "The form was completed too quickly."])
     if xform.metadata.location is None:
-        flags.append(["gps", "GPS data is missing"])
+        if opportunity_flags.gps:
+            flags.append(["gps", "GPS data is missing"])
     else:
-        user_visits = UserVisit.objects.filter(
-            opportunity=opportunity, deliver_unit=deliver_unit, is_trial=False
-        ).values("location")
-        cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
-        for visit in user_visits:
-            if visit.get("location") is None:
-                continue
-            lat, lon, *_ = visit["location"].split(" ")
-            dist = distance((lat, lon), (cur_lat, cur_lon))
-            if dist.m <= 10:
-                flags.append(["location", "Visit location is too close to another visit"])
-                break
+        if opportunity_flags.location > 0:
+            user_visits = (
+                UserVisit.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit)
+                .exclude(Q(status=VisitValidationStatus.trial) | Q(entity_id=user_visit.entity_id))
+                .values("location")
+            )
+            cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
+            for visit in user_visits:
+                if visit.get("location") is None:
+                    continue
+                lat, lon, *_ = visit["location"].split(" ")
+                dist = distance((lat, lon), (cur_lat, cur_lon))
+                if dist.m <= 10:
+                    flags.append(["location", "Visit location is too close to another visit"])
+                    break
+    if (
+        opportunity_flags.form_submission_start
+        and opportunity_flags.form_submission_start > xform.metadata.timeStart.time()
+    ):
+        flags.append(["form_submission_period", "Form was submitted before the start time"])
+    if (
+        opportunity_flags.form_submission_end
+        and opportunity_flags.form_submission_end < xform.metadata.timeStart.time()
+    ):
+        flags.append(["form_submission_period", "Form was submitted after the end time"])
     if flags:
         user_visit.flagged = True
         user_visit.flag_reason = {"flags": flags}

@@ -1,4 +1,5 @@
 import datetime
+import logging
 
 import httpx
 from allauth.utils import build_absolute_uri
@@ -25,7 +26,6 @@ from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import (
     BlobMeta,
     CompletedModule,
-    CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
     LearnModule,
@@ -42,6 +42,8 @@ from commcare_connect.users.models import User
 from commcare_connect.utils.datetime import is_date_before
 from commcare_connect.utils.sms import send_sms
 from config import celery_app
+
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task()
@@ -126,6 +128,7 @@ def invite_user(user_id, opportunity_access_id):
 @celery_app.task()
 def generate_visit_export(opportunity_id: int, date_range: str, status: list[str], export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
+    logger.info(f"Export for {opportunity.name} with date range {date_range} and status {','.join(status)}")
     dataset = export_user_visit_data(opportunity, DateRanges(date_range), [VisitValidationStatus(s) for s in status])
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_visit_export.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
@@ -293,28 +296,6 @@ def generate_work_status_export(opportunity_id: int, export_format: str):
     return export_tmp_name
 
 
-def approve_completed_work_and_update_payment_accrued(completed_work_ids: list[int]):
-    """Approves and Updates Payment accrued for all completed (all deliver units submitted and any status) and
-    un-flagged completed work."""
-    completed_works = CompletedWork.objects.filter(id__in=completed_work_ids).select_related("payment_unit")
-    for completed_work in completed_works:
-        access = completed_work.opportunity_access
-        if completed_work.flags:
-            continue
-        completed_count = completed_work.completed_count
-
-        visits = completed_work.uservisit_set.values_list("status", flat=True)
-        if any(visit == "rejected" for visit in visits):
-            completed_work.status = CompletedWorkStatus.pending
-        elif all(visit == "approved" for visit in visits):
-            completed_work.status = CompletedWorkStatus.approved
-        if completed_count > 0 and completed_work.status == CompletedWorkStatus.approved:
-            access.payment_accrued += completed_count * completed_work.payment_unit.amount
-            access.save()
-
-        completed_work.save()
-
-
 @celery_app.task()
 def bulk_approve_completed_work():
     access_objects = OpportunityAccess.objects.filter(
@@ -323,17 +304,19 @@ def bulk_approve_completed_work():
         opportunity__auto_approve_payments=True,
     )
     for access in access_objects:
-        completed_works = access.completedwork_set.filter(status=CompletedWorkStatus.pending)
+        completed_works = access.completedwork_set.exclude(
+            status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
+        )
+        access.payment_accrued = 0
         for completed_work in completed_works:
-            if completed_work.flags:
-                continue
-            completed_count = completed_work.completed_count
-            visits = completed_work.uservisit_set.values_list("status", flat=True)
-            if any(visit == "rejected" for visit in visits):
-                completed_work.status = CompletedWorkStatus.pending
-            elif all(visit == "approved" for visit in visits):
+            approved_count = completed_work.approved_count
+            visits = completed_work.uservisit_set.values_list("status", "reason")
+            if any(status == "rejected" for status, _ in visits):
+                completed_work.status = CompletedWorkStatus.rejected
+                completed_work.reason = "\n".join(reason for _, reason in visits if reason)
+            elif all(status == "approved" for status, _ in visits):
                 completed_work.status = CompletedWorkStatus.approved
-            if completed_count > 0 and completed_work.status == CompletedWorkStatus.approved:
-                access.payment_accrued += completed_count * completed_work.payment_unit.amount
+            if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
+                access.payment_accrued += approved_count * completed_work.payment_unit.amount
             completed_work.save()
         access.save()

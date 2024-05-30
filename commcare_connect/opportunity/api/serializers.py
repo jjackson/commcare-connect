@@ -13,7 +13,9 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    OpportunityClaimLimit,
     Payment,
+    PaymentUnit,
     UserVisit,
 )
 
@@ -52,16 +54,32 @@ class CommCareAppSerializer(serializers.ModelSerializer):
         return obj.passing_score
 
 
+class PaymentUnitSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentUnit
+        fields = ["id", "name", "max_total", "max_daily", "amount"]
+
+
+class OpportunityClaimLimitSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OpportunityClaimLimit
+        fields = ["max_visits", "payment_unit"]
+
+
 class OpportunityClaimSerializer(serializers.ModelSerializer):
     max_payments = serializers.SerializerMethodField()
+    payment_units = serializers.SerializerMethodField()
 
     class Meta:
         model = OpportunityClaim
-        fields = ["max_payments", "end_date", "date_claimed"]
+        fields = ["max_payments", "end_date", "date_claimed", "payment_units"]
 
     def get_max_payments(self, obj):
         # return 1 for old opportunities
         return obj.opportunityclaimlimit_set.aggregate(max_visits=Sum("max_visits")).get("max_visits", 0) or -1
+
+    def get_payment_units(self, obj):
+        return OpportunityClaimLimitSerializer(obj.opportunityclaimlimit_set.all(), many=True).data
 
 
 class OpportunitySerializer(serializers.ModelSerializer):
@@ -75,6 +93,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     daily_max_visits_per_user = serializers.SerializerMethodField()
     budget_per_visit = serializers.SerializerMethodField()
     budget_per_user = serializers.SerializerMethodField()
+    payment_units = serializers.SerializerMethodField()
 
     class Meta:
         model = Opportunity
@@ -100,6 +119,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "currency",
             "is_active",
             "budget_per_user",
+            "payment_units",
         ]
 
     def get_claim(self, obj):
@@ -131,6 +151,10 @@ class OpportunitySerializer(serializers.ModelSerializer):
 
     def get_budget_per_user(self, obj):
         return obj.budget_per_user
+
+    def get_payment_units(self, obj):
+        payment_units = PaymentUnit.objects.filter(opportunity=obj)
+        return PaymentUnitSerializer(payment_units, many=True).data
 
 
 @quickcache(vary_on=["user.pk", "opportunity.pk"], timeout=60 * 60)
