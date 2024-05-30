@@ -13,17 +13,20 @@ def sort_link(context, field, display_text):
     if current_sort == field:
         new_sort = f"-{field}"
         icon = "bi-arrow-up-square-fill"
+        page = request.GET.get("page")
     elif current_sort == f"-{field}":
         new_sort = field
         icon = "bi-arrow-down-square-fill"
+        page = request.GET.get("page")
     else:
         new_sort = field
         icon = "bi-arrow-down-short"
+        page = None
 
     # Construct the URL with the new sorting parameter
     url = f"{request.path}?sort={new_sort}"
-    if request.GET.get("page"):
-        url += f"&page={request.GET.get('page')}"
+    if page:
+        url += f"&page={page}"
 
     # Return the HTML for the link with the optional icon
     return format_html(
