@@ -1,8 +1,12 @@
 import pytest
 
 from commcare_connect.opportunity.helpers import get_annotated_opportunity_access_deliver_status
-from commcare_connect.opportunity.models import Opportunity, UserVisit
-from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, UserVisitFactory
+from commcare_connect.opportunity.models import Opportunity
+from commcare_connect.opportunity.tests.factories import (
+    CompletedWorkFactory,
+    OpportunityAccessFactory,
+    PaymentUnitFactory,
+)
 from commcare_connect.users.tests.factories import MobileUserFactory
 
 
@@ -16,37 +20,36 @@ def test_deliver_status_query_no_visits(opportunity: Opportunity):
     usernames = {user.username for user in mobile_users}
     for access in access_objects:
         assert access.user.username in usernames
-        assert access.visits_approved == 0
-        assert access.visits_rejected == 0
-        assert access.visits_pending == 0
-        assert access.visits_over_limit == 0
-        assert access.visits_completed == 0
-        assert access.visits_duplicate == 0
+        assert access.approved == 0
+        assert access.rejected == 0
+        assert access.pending == 0
+        assert access.completed == 0
 
 
 @pytest.mark.django_db
 def test_deliver_status_query(opportunity: Opportunity):
     mobile_users = MobileUserFactory.create_batch(5)
-    user_visit_counts = {}
+    completed_work_counts = {}
+    payment_units = PaymentUnitFactory.create_batch(2, opportunity=opportunity)
     for mobile_user in mobile_users:
-        OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True)
-        user_visits = UserVisitFactory.create_batch(20, opportunity=opportunity, user=mobile_user)
-        count_by_status = dict(approved=0, pending=0, rejected=0, over_limit=0, completed=0, duplicate=0)
-        for user_visit in user_visits:
-            count_by_status[user_visit.status.value] += 1
-        count_by_status["completed"] = len(user_visits)
-        user_visit_counts[mobile_user.username] = count_by_status
+        access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True)
+        for pu in payment_units:
+            count_by_status = dict(approved=0, pending=0, rejected=0, completed=0, over_limit=0)
+            completed_works = CompletedWorkFactory.create_batch(20, opportunity_access=access, payment_unit=pu)
+            for cw in completed_works:
+                count_by_status[cw.status.value] += 1
+            count_by_status["completed"] = len(completed_works)
+            completed_work_counts[(mobile_user.username, pu.name)] = count_by_status
 
     access_objects = get_annotated_opportunity_access_deliver_status(opportunity)
     for access in access_objects:
         username = access.user.username
-        assert username in user_visit_counts
-        assert user_visit_counts[username]["approved"] == access.visits_approved
-        assert user_visit_counts[username]["rejected"] == access.visits_rejected
-        assert user_visit_counts[username]["pending"] == access.visits_pending
-        assert user_visit_counts[username]["over_limit"] == access.visits_over_limit
-        assert user_visit_counts[username]["completed"] == access.visits_completed
-        assert user_visit_counts[username]["duplicate"] == access.visits_duplicate
+        assert (username, access.payment_unit) in completed_work_counts
+        assert completed_work_counts[(username, access.payment_unit)]["approved"] == access.approved
+        assert completed_work_counts[(username, access.payment_unit)]["rejected"] == access.rejected
+        assert completed_work_counts[(username, access.payment_unit)]["pending"] == access.pending
+        assert completed_work_counts[(username, access.payment_unit)]["completed"] == access.completed
+        assert completed_work_counts[(username, access.payment_unit)]["over_limit"] == access.over_limit
 
 
 @pytest.mark.django_db
@@ -56,15 +59,12 @@ def test_deliver_status_query_visits_another_opportunity(opportunity: Opportunit
     mobile_users = list(MobileUserFactory.create_batch(5))
     for mobile_user in mobile_users:
         OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True)
-        UserVisitFactory.create_batch(5, user=mobile_user)
+        CompletedWorkFactory.create_batch(5)
     access_objects = get_annotated_opportunity_access_deliver_status(opportunity)
     usernames = {user.username for user in mobile_users}
     for access in access_objects:
-        assert UserVisit.objects.filter(user=mobile_user).count() == 5
         assert access.user.username in usernames
-        assert access.visits_approved == 0
-        assert access.visits_rejected == 0
-        assert access.visits_pending == 0
-        assert access.visits_over_limit == 0
-        assert access.visits_completed == 0
-        assert access.visits_duplicate == 0
+        assert access.approved == 0
+        assert access.rejected == 0
+        assert access.pending == 0
+        assert access.completed == 0

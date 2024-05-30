@@ -40,6 +40,7 @@ from commcare_connect.opportunity.views import (
     update_visit_status_import,
     user_profile,
     user_visits_list,
+    verification_flags_config,
     visit_verification,
 )
 
@@ -90,6 +91,7 @@ urlpatterns = [
     path("<int:pk>/completed_work_table/", view=OpportunityCompletedWorkTable.as_view(), name="completed_work_table"),
     path("<int:pk>/completed_work_export/", view=export_completed_work, name="completed_work_export"),
     path("<int:pk>/completed_work_import/", view=update_completed_work_status_import, name="completed_work_import"),
+    path("<int:pk>/verification_flags_config/", view=verification_flags_config, name="verification_flags_config"),
     path("<int:pk>/suspended_users/", view=suspended_users_list, name="suspended_users_list"),
     path("<int:opp_id>/suspend_user/<int:pk>/", view=suspend_user, name="suspend_user"),
     path("<int:opp_id>/revoke_user_suspension/<int:pk>/", view=revoke_user_suspension, name="revoke_user_suspension"),
