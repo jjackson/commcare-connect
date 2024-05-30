@@ -2,7 +2,7 @@ import datetime
 import json
 
 from crispy_forms.helper import FormHelper, Layout
-from crispy_forms.layout import HTML, Field, Fieldset, Row, Submit
+from crispy_forms.layout import HTML, Column, Field, Fieldset, Row, Submit
 from dateutil.relativedelta import relativedelta
 from django import forms
 from django.db.models import TextChoices
@@ -15,6 +15,7 @@ from commcare_connect.opportunity.models import (
     HQApiKey,
     Opportunity,
     OpportunityAccess,
+    OpportunityVerificationFlags,
     PaymentUnit,
     VisitValidationStatus,
 )
@@ -599,3 +600,55 @@ class SendMessageMobileUsersForm(forms.Form):
 
         choices = [(user.pk, user.username) for user in users]
         self.fields["selected_users"] = forms.MultipleChoiceField(choices=choices)
+
+
+class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
+    class Meta:
+        model = OpportunityVerificationFlags
+        fields = ("duplicate", "duration", "gps", "location", "form_submission_start", "form_submission_end")
+        widgets = {
+            "form_submission_start": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
+            "form_submission_end": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
+        }
+        labels = {
+            "duplicate": "Check Duplicates",
+            "gps": "Check GPS",
+            "form_submission_start": "Start Time",
+            "form_submission_end": "End Time",
+            "location": "Location Distance",
+        }
+        help_texts = {
+            "duration": "Minimum time to complete form (minutes)",
+            "location": "Minimum distance between form locations (metres)",
+            "duplicate": "Flag duplicate form submissions for an entity.",
+            "gps": "Flag forms with no location information.",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(
+                Field("duplicate", css_class="form-check-input", wrapper_class="form-check form-switch"),
+                Field("gps", css_class="form-check-input", wrapper_class="form-check form-switch"),
+            ),
+            Row(Field("duration")),
+            Row(Field("location")),
+            Fieldset(
+                "Form Submission Hours",
+                Row(
+                    Column(Field("form_submission_start")),
+                    Column(Field("form_submission_end")),
+                ),
+            ),
+            Submit(name="submit", value="Submit"),
+        )
+
+        self.fields["duplicate"].required = False
+        self.fields["duration"].required = False
+        self.fields["location"].required = False
+        self.fields["gps"].required = False
+        if self.instance:
+            self.fields["form_submission_start"].initial = self.instance.form_submission_start
+            self.fields["form_submission_end"].initial = self.instance.form_submission_end

@@ -37,6 +37,7 @@ from commcare_connect.opportunity.views import (
     update_visit_status_import,
     user_profile,
     user_visits_list,
+    verification_flags_config,
     visit_verification,
 )
 
@@ -87,4 +88,5 @@ urlpatterns = [
     path("<int:pk>/completed_work_table/", view=OpportunityCompletedWorkTable.as_view(), name="completed_work_table"),
     path("<int:pk>/completed_work_export/", view=export_completed_work, name="completed_work_export"),
     path("<int:pk>/completed_work_import/", view=update_completed_work_status_import, name="completed_work_import"),
+    path("<int:pk>/verification_flags_config/", view=verification_flags_config, name="verification_flags_config"),
 ]
