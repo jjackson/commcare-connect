@@ -1,6 +1,12 @@
 from django.db.models import Case, Count, F, Max, Min, Q, Sum, Value, When
 
-from commcare_connect.opportunity.models import CompletedWorkStatus, Opportunity, OpportunityAccess, UserInvite
+from commcare_connect.opportunity.models import (
+    CompletedWorkStatus,
+    Opportunity,
+    OpportunityAccess,
+    UserInvite,
+    VisitValidationStatus,
+)
 
 
 def get_annotated_opportunity_access(opportunity: Opportunity):
@@ -11,7 +17,8 @@ def get_annotated_opportunity_access(opportunity: Opportunity):
         .annotate(
             last_visit_date_d=Max(
                 "opportunity_access__user__uservisit__visit_date",
-                filter=Q(opportunity_access__user__uservisit__opportunity=opportunity),
+                filter=Q(opportunity_access__user__uservisit__opportunity=opportunity)
+                & ~Q(opportunity_access__user__uservisit__status=VisitValidationStatus.trial),
             ),
             date_deliver_started=Min(
                 "opportunity_access__user__uservisit__visit_date",
