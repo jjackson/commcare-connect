@@ -97,7 +97,10 @@ class OpportunityList(OrganizationUserMixin, ListView):
     paginate_by = 10
 
     def get_queryset(self):
-        return Opportunity.objects.filter(organization=self.request.org).order_by("name")
+        ordering = self.request.GET.get("sort", "name")
+        if ordering not in ["name", "-name", "start_date", "-start_date", "end_date", "-end_date"]:
+            ordering = "name"
+        return Opportunity.objects.filter(organization=self.request.org).order_by(ordering)
 
 
 class OpportunityCreate(OrganizationUserMixin, CreateView):
