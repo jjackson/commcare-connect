@@ -1,3 +1,4 @@
+import datetime
 import json
 from functools import reduce
 
@@ -452,7 +453,9 @@ def add_payment_units(request, org_slug=None, pk=None):
 @org_member_required
 def add_payment_unit(request, org_slug=None, pk=None):
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
-    deliver_units = DeliverUnit.objects.filter(app=opportunity.deliver_app, payment_unit__isnull=True)
+    deliver_units = DeliverUnit.objects.filter(
+        Q(payment_unit__isnull=True) | Q(payment_unit__opportunity__active=False), app=opportunity.deliver_app
+    )
     form = PaymentUnitForm(
         deliver_units=deliver_units,
         data=request.POST or None,
@@ -490,7 +493,8 @@ def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=opp_id)
     payment_unit = get_object_or_404(PaymentUnit, id=pk, opportunity=opportunity)
     deliver_units = DeliverUnit.objects.filter(
-        Q(payment_unit__isnull=True) | Q(payment_unit=payment_unit), app=opportunity.deliver_app
+        Q(payment_unit__isnull=True) | Q(payment_unit=payment_unit) | Q(payment_unit__opportunity__active=False),
+        app=opportunity.deliver_app,
     )
     exclude_payment_units = [payment_unit.pk]
     if payment_unit.parent_payment_unit_id:
@@ -693,11 +697,23 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
 def get_application(request, org_slug=None):
     domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
     applications = get_applications_for_user_by_domain(request.user, domain)
+    active_opps = Opportunity.objects.filter(
+        Q(learn_app__cc_domain=domain) | Q(deliver_app__cc_domain=domain),
+        active=True,
+        end_date__lt=datetime.date.today(),
+    ).select_related("learn_app", "deliver_app")
+    existing_apps = set()
+    for opp in active_opps:
+        if opp.learn_app.domain == domain:
+            existing_apps.add(opp.learn_app.cc_app_id)
+        if opp.deliver_app.domain == domain:
+            existing_apps.add(opp.deliver_app.cc_app_id)
     options = []
     for app in applications:
-        value = json.dumps(app)
-        name = app["name"]
-        options.append(format_html("<option value='{}'>{}</option>", value, name))
+        if app["id"] not in existing_apps:
+            value = json.dumps(app)
+            name = app["name"]
+            options.append(format_html("<option value='{}'>{}</option>", value, name))
     return HttpResponse("\n".join(options))
 
 
