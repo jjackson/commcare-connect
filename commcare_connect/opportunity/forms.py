@@ -5,7 +5,8 @@ from crispy_forms.helper import FormHelper, Layout
 from crispy_forms.layout import HTML, Column, Field, Fieldset, Row, Submit
 from dateutil.relativedelta import relativedelta
 from django import forms
-from django.db.models import TextChoices
+from django.core.exceptions import ValidationError
+from django.db.models import Q, TextChoices
 from django.urls import reverse
 from django.utils.timezone import now
 
@@ -71,11 +72,24 @@ class OpportunityChangeForm(forms.ModelForm):
             help_text="Extends opportunity end date for all users.",
         )
         self.initial["end_date"] = self.instance.end_date.isoformat()
+        self.currently_active = self.instance.active
 
     def clean_users(self):
         user_data = self.cleaned_data["users"]
         split_users = [line.strip() for line in user_data.splitlines() if line.strip()]
         return split_users
+
+    def clean_active(self):
+        active = self.cleaned_data["active"]
+        if active and not self.currently_active:
+            app_ids = (self.instance.learn_app.cc_app_id, self.instance.deliver_app.cc_app_id)
+            if (
+                Opportunity.objects.filter(active=True)
+                .filter(Q(learn_app__cc_app_id__in=app_ids) | Q(deliver_app__cc_app_id__in=app_ids))
+                .exists()
+            ):
+                raise ValidationError("Cannot reactivate opportunity with reused applications", code="app_reused")
+        return active
 
 
 class OpportunityInitForm(forms.ModelForm):
