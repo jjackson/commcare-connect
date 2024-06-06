@@ -18,7 +18,7 @@ def send_sms(to, body):
         to=to,
         from_=sender,
         messaging_service_sid=settings.TWILIO_MESSAGING_SERVICE,
-        status_callback=build_absolute_uri(None, reverse("api:sms_status_callback")),
+        status_callback=build_absolute_uri(None, reverse("users:sms_status_callback")),
     )
 
 

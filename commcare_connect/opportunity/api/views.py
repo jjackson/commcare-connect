@@ -4,7 +4,7 @@ from django.db import transaction
 from django.utils.timezone import now
 from rest_framework import viewsets
 from rest_framework.generics import RetrieveAPIView, get_object_or_404
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -23,8 +23,6 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     OpportunityClaimLimit,
     Payment,
-    UserInvite,
-    UserInviteStatus,
 )
 from commcare_connect.users.helpers import create_hq_user
 from commcare_connect.users.models import ConnectIDUserLink
@@ -126,19 +124,4 @@ class ConfirmPaymentView(APIView):
         payment.confirmed = confirmed
         payment.confirmation_date = now()
         payment.save()
-        return Response(status=200)
-
-
-class SMSStatusCallbackView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, *args, **kwargs):
-        message_sid = self.request.data.get("MessageSid", None)
-        message_status = self.request.data.get("MessageStatus", None)
-        user_invite = get_object_or_404(UserInvite, message_sid=message_sid)
-        if message_status == "delivered":
-            user_invite.status = UserInviteStatus.sms_delivered
-        if message_status == "undelivered":
-            user_invite.status = UserInviteStatus.sms_not_delivered
-        user_invite.save()
         return Response(status=200)
