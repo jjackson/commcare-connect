@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db.models import Sum
 from rest_framework import serializers
 
 from commcare_connect.cache import quickcache
@@ -6,13 +7,16 @@ from commcare_connect.opportunity.models import (
     Assessment,
     CommCareApp,
     CompletedModule,
+    CompletedWork,
+    CompletedWorkStatus,
     LearnModule,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    OpportunityClaimLimit,
     Payment,
+    PaymentUnit,
     UserVisit,
-    VisitValidationStatus,
 )
 
 
@@ -50,10 +54,32 @@ class CommCareAppSerializer(serializers.ModelSerializer):
         return obj.passing_score
 
 
+class PaymentUnitSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentUnit
+        fields = ["id", "name", "max_total", "max_daily", "amount"]
+
+
+class OpportunityClaimLimitSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OpportunityClaimLimit
+        fields = ["max_visits", "payment_unit"]
+
+
 class OpportunityClaimSerializer(serializers.ModelSerializer):
+    max_payments = serializers.SerializerMethodField()
+    payment_units = serializers.SerializerMethodField()
+
     class Meta:
         model = OpportunityClaim
-        fields = ["max_payments", "end_date", "date_claimed"]
+        fields = ["max_payments", "end_date", "date_claimed", "payment_units"]
+
+    def get_max_payments(self, obj):
+        # return 1 for old opportunities
+        return obj.opportunityclaimlimit_set.aggregate(max_visits=Sum("max_visits")).get("max_visits", 0) or -1
+
+    def get_payment_units(self, obj):
+        return OpportunityClaimLimitSerializer(obj.opportunityclaimlimit_set.all(), many=True).data
 
 
 class OpportunitySerializer(serializers.ModelSerializer):
@@ -63,6 +89,11 @@ class OpportunitySerializer(serializers.ModelSerializer):
     claim = serializers.SerializerMethodField()
     learn_progress = serializers.SerializerMethodField()
     deliver_progress = serializers.SerializerMethodField()
+    max_visits_per_user = serializers.SerializerMethodField()
+    daily_max_visits_per_user = serializers.SerializerMethodField()
+    budget_per_visit = serializers.SerializerMethodField()
+    budget_per_user = serializers.SerializerMethodField()
+    payment_units = serializers.SerializerMethodField()
 
     class Meta:
         model = Opportunity
@@ -76,6 +107,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "organization",
             "learn_app",
             "deliver_app",
+            "start_date",
             "end_date",
             "max_visits_per_user",
             "daily_max_visits_per_user",
@@ -85,6 +117,9 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "learn_progress",
             "deliver_progress",
             "currency",
+            "is_active",
+            "budget_per_user",
+            "payment_units",
         ]
 
     def get_claim(self, obj):
@@ -103,6 +138,23 @@ class OpportunitySerializer(serializers.ModelSerializer):
     def get_deliver_progress(self, obj):
         opp_access = _get_opp_access(self.context.get("request").user, obj)
         return opp_access.visit_count
+
+    def get_max_visits_per_user(self, obj):
+        # return 1 for older opportunities
+        return obj.max_visits_per_user_new or -1
+
+    def get_daily_max_visits_per_user(self, obj):
+        return obj.daily_max_visits_per_user_new or -1
+
+    def get_budget_per_visit(self, obj):
+        return obj.budget_per_visit_new or -1
+
+    def get_budget_per_user(self, obj):
+        return obj.budget_per_user
+
+    def get_payment_units(self, obj):
+        payment_units = PaymentUnit.objects.filter(opportunity=obj)
+        return PaymentUnitSerializer(payment_units, many=True).data
 
 
 @quickcache(vary_on=["user.pk", "opportunity.pk"], timeout=60 * 60)
@@ -151,22 +203,51 @@ class UserVisitSerializer(serializers.ModelSerializer):
         ]
 
 
+# NOTE: this serializer is only required to avoid introducing breaking changes
+# to the deliver progress API
+class CompletedWorkSerializer(serializers.ModelSerializer):
+    deliver_unit_name = serializers.CharField(source="payment_unit.name")
+    deliver_unit_slug = serializers.CharField(source="payment_unit.pk")
+    visit_date = serializers.DateTimeField(source="completion_date")
+
+    class Meta:
+        model = CompletedWork
+        fields = [
+            "id",
+            "status",
+            "visit_date",
+            "deliver_unit_name",
+            "deliver_unit_slug",
+            "entity_id",
+            "entity_name",
+            "reason",
+        ]
+
+
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
-        fields = ["amount", "date_paid"]
+        fields = ["id", "amount", "date_paid", "confirmed", "confirmation_date"]
 
 
 class DeliveryProgressSerializer(serializers.Serializer):
     deliveries = serializers.SerializerMethodField()
     payments = serializers.SerializerMethodField()
-    max_payments = serializers.IntegerField(source="opportunityclaim.max_payments")
+    max_payments = serializers.SerializerMethodField()
     payment_accrued = serializers.IntegerField()
     end_date = serializers.DateField(source="opportunityclaim.end_date")
+
+    def get_max_payments(self, obj):
+        return (
+            obj.opportunityclaim.opportunityclaimlimit_set.aggregate(max_visits=Sum("max_visits")).get("max_visits", 0)
+            or -1
+        )
 
     def get_payments(self, obj):
         return PaymentSerializer(obj.payment_set.all(), many=True).data
 
     def get_deliveries(self, obj):
-        deliveries = obj.uservisit_set.exclude(status=VisitValidationStatus.over_limit)
-        return UserVisitSerializer(deliveries, many=True).data
+        completed_works = CompletedWork.objects.filter(opportunity_access=obj).exclude(
+            status=CompletedWorkStatus.over_limit
+        )
+        return CompletedWorkSerializer(completed_works, many=True).data

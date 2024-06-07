@@ -5,6 +5,7 @@ from commcare_connect.opportunity.models import (
     Assessment,
     CommCareApp,
     CompletedModule,
+    CompletedWork,
     DeliverUnit,
     LearnModule,
     Opportunity,
@@ -55,6 +56,7 @@ class OpportunityAccessAdmin(admin.ModelAdmin):
             OpportunityClaim.objects.filter(opportunity_access=access).delete()
             CompletedModule.objects.filter(opportunity_access=access).delete()
             Assessment.objects.filter(opportunity_access=access).delete()
+            CompletedWork.objects.filter(opportunity_access=access).delete()
 
 
 @admin.register(LearnModule)
@@ -90,3 +92,16 @@ class UserVisitAdmin(admin.ModelAdmin):
 @admin.register(Assessment)
 class AssessmentAdmin(admin.ModelAdmin):
     list_display = ["app", "user", "opportunity", "date", "passed"]
+
+
+@admin.register(CompletedWork)
+class CompletedWorkAdmin(admin.ModelAdmin):
+    list_display = ["get_username", "get_opp_name", "opportunity_access", "payment_unit", "status"]
+
+    @admin.display(description="Opportunity Name")
+    def get_opp_name(self, obj):
+        return obj.opportunity_access.opportunity.name
+
+    @admin.display(description="Username")
+    def get_username(self, obj):
+        return obj.opportunity_access.user.username
