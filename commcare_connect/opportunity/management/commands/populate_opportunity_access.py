@@ -1,7 +1,6 @@
 from django.core.management.base import BaseCommand
 
 from commcare_connect.opportunity.models import Assessment, CompletedModule, OpportunityAccess, UserVisit
-from commcare_connect.utils.log import with_progress_bar
 
 
 class Command(BaseCommand):
@@ -10,7 +9,7 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         access_objects = OpportunityAccess.objects.all()
 
-        for access in with_progress_bar(access_objects):
+        for access in access_objects:
             UserVisit.objects.filter(user=access.user, opportunity=access.opportunity).update(
                 opportunity_access=access
             )

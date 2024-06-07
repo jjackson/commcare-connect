@@ -1,10 +1,13 @@
 import pytest
 from rest_framework.test import APIClient, APIRequestFactory
 
+from commcare_connect.opportunity.models import OpportunityClaimLimit
 from commcare_connect.opportunity.tests.factories import (
     OpportunityAccessFactory,
     OpportunityClaimFactory,
     OpportunityFactory,
+    OpportunityVerificationFlagsFactory,
+    PaymentUnitFactory,
 )
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
@@ -45,25 +48,47 @@ def user(db) -> User:
 
 @pytest.fixture()
 def opportunity():
-    return OpportunityFactory()
+    factory = OpportunityFactory()
+    OpportunityVerificationFlagsFactory(opportunity=factory)
+    return factory
 
 
 @pytest.fixture
 def mobile_user(db, opportunity) -> User:
     user = MobileUserFactory()
     OpportunityAccessFactory(user=user, opportunity=opportunity)
+    PaymentUnitFactory(opportunity=opportunity)
     return user
 
 
 @pytest.fixture
-def mobile_user_with_connect_link(db, opportunity) -> User:
+def user_with_connectid_link(db, opportunity):
     user = MobileUserFactory()
-    access = OpportunityAccessFactory(user=user, opportunity=opportunity)
-    OpportunityClaimFactory(
-        max_payments=opportunity.max_visits_per_user,
-        end_date=opportunity.end_date,
-        opportunity_access=access,
+    ConnectIdUserLinkFactory(user=user, commcare_username=f"test@{opportunity.learn_app.cc_domain}.commcarehq.org")
+    if opportunity.learn_app.cc_domain != opportunity.deliver_app.cc_domain:
+        ConnectIdUserLinkFactory(
+            user=user, commcare_username=f"test@{opportunity.deliver_app.cc_domain}.commcarehq.org"
+        )
+    return user
+
+
+@pytest.fixture
+def paymentunit_options():
+    # let tests parametrize as needed
+    return {}
+
+
+@pytest.fixture
+def mobile_user_with_connect_link(db, opportunity, paymentunit_options) -> User:
+    user = MobileUserFactory()
+    access = OpportunityAccessFactory(user=user, opportunity=opportunity, accepted=True)
+    claim = OpportunityClaimFactory(end_date=opportunity.end_date, opportunity_access=access)
+    payment_units = PaymentUnitFactory.create_batch(
+        2, opportunity=opportunity, parent_payment_unit=None, **(paymentunit_options)
     )
+    budget_per_user = sum([p.max_total * p.amount for p in payment_units])
+    opportunity.total_budget = budget_per_user
+    OpportunityClaimLimit.create_claim_limits(opportunity, claim)
     ConnectIdUserLinkFactory(user=user, commcare_username=f"test@{opportunity.learn_app.cc_domain}.commcarehq.org")
     if opportunity.learn_app.cc_domain != opportunity.deliver_app.cc_domain:
         ConnectIdUserLinkFactory(
