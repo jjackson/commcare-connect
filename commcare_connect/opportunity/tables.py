@@ -157,7 +157,7 @@ class UserStatusTable(tables.Table):
         if record.opportunity_access is None:
             return record.phone_number
         if not record.opportunity_access.accepted:
-            return record.phone_number
+            return "---"
         return record.opportunity_access.display_name
 
     def render_view_profile(self, record):
