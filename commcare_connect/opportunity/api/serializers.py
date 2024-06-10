@@ -94,6 +94,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     budget_per_visit = serializers.SerializerMethodField()
     budget_per_user = serializers.SerializerMethodField()
     payment_units = serializers.SerializerMethodField()
+    is_user_suspended = serializers.SerializerMethodField()
 
     class Meta:
         model = Opportunity
@@ -120,6 +121,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "is_active",
             "budget_per_user",
             "payment_units",
+            "is_user_suspended",
         ]
 
     def get_claim(self, obj):
@@ -155,6 +157,10 @@ class OpportunitySerializer(serializers.ModelSerializer):
     def get_payment_units(self, obj):
         payment_units = PaymentUnit.objects.filter(opportunity=obj)
         return PaymentUnitSerializer(payment_units, many=True).data
+
+    def get_is_user_suspended(self, obj):
+        opp_access = _get_opp_access(self.context.get("request").user, obj)
+        return opp_access.suspended
 
 
 @quickcache(vary_on=["user.pk", "opportunity.pk"], timeout=60 * 60)
