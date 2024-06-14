@@ -4,7 +4,7 @@ from tablib import Dataset
 
 from commcare_connect.opportunity.export import export_user_status_table, export_user_visit_data, get_flattened_dataset
 from commcare_connect.opportunity.forms import DateRanges
-from commcare_connect.opportunity.models import Opportunity, UserVisit
+from commcare_connect.opportunity.models import Opportunity, UserInviteStatus, UserVisit
 from commcare_connect.opportunity.tests.factories import (
     AssessmentFactory,
     CompletedModuleFactory,
@@ -13,6 +13,7 @@ from commcare_connect.opportunity.tests.factories import (
     OpportunityAccessFactory,
     OpportunityClaimFactory,
     OpportunityFactory,
+    UserInviteFactory,
     UserVisitFactory,
 )
 from commcare_connect.users.tests.factories import MobileUserFactory
@@ -84,7 +85,7 @@ def _get_prepared_dataset_for_user_status_test(data):
     headers = (
         "Name",
         "Username",
-        "Accepted",
+        "Status",
         "Started Learning",
         "Completed Learning",
         "Passed Assessment",
@@ -110,8 +111,13 @@ def test_export_user_status_table_no_data_only(opportunity: Opportunity):
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
         date = now()
-        OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date)
-        rows.append((mobile_user.name, mobile_user.username, True, date.replace(tzinfo=None), "", False, "", "", ""))
+        access = OpportunityAccessFactory(
+            opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date
+        )
+        UserInviteFactory(opportunity=opportunity, status=UserInviteStatus.accepted, opportunity_access=access)
+        rows.append(
+            (mobile_user.name, mobile_user.username, "Accepted", date.replace(tzinfo=None), "", False, "", "", "")
+        )
     dataset = export_user_status_table(opportunity)
     prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
     assert prepared_test_dataset.export("csv") == dataset.export("csv")
@@ -124,10 +130,15 @@ def test_export_user_status_table_learn_data_only(opportunity: Opportunity):
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
         date = now()
-        OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date)
+        access = OpportunityAccessFactory(
+            opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date
+        )
+        UserInviteFactory(opportunity=opportunity, status=UserInviteStatus.accepted, opportunity_access=access)
         for learn_module in opportunity.learn_app.learn_modules.all()[2:]:
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
-        rows.append((mobile_user.name, mobile_user.username, True, date.replace(tzinfo=None), "", False, "", "", ""))
+        rows.append(
+            (mobile_user.name, mobile_user.username, "Accepted", date.replace(tzinfo=None), "", False, "", "", "")
+        )
     dataset = export_user_status_table(opportunity)
     prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
     assert prepared_test_dataset.export("csv") == dataset.export("csv")
@@ -140,7 +151,10 @@ def test_export_user_status_table_learn_assessment_data_only(opportunity: Opport
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
         date = now()
-        OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date)
+        access = OpportunityAccessFactory(
+            opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date
+        )
+        UserInviteFactory(opportunity=opportunity, status=UserInviteStatus.accepted, opportunity_access=access)
         for learn_module in opportunity.learn_app.learn_modules.all():
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
         AssessmentFactory(app=opportunity.learn_app, opportunity=opportunity, user=mobile_user, passed=True, date=date)
@@ -148,7 +162,7 @@ def test_export_user_status_table_learn_assessment_data_only(opportunity: Opport
             (
                 mobile_user.name,
                 mobile_user.username,
-                True,
+                "Accepted",
                 date.replace(tzinfo=None),
                 date.replace(tzinfo=None),
                 True,
@@ -173,6 +187,7 @@ def test_export_user_status_table_data(opportunity: Opportunity):
             opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date
         )
         OpportunityClaimFactory(opportunity_access=access, max_payments=10, date_claimed=date)
+        UserInviteFactory(opportunity=opportunity, status=UserInviteStatus.accepted, opportunity_access=access)
         for learn_module in opportunity.learn_app.learn_modules.all():
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
         AssessmentFactory(app=opportunity.learn_app, opportunity=opportunity, user=mobile_user, passed=True, date=date)
@@ -181,7 +196,7 @@ def test_export_user_status_table_data(opportunity: Opportunity):
             (
                 mobile_user.name,
                 mobile_user.username,
-                True,
+                "Accepted",
                 date.replace(tzinfo=None),
                 date.replace(tzinfo=None),
                 True,
