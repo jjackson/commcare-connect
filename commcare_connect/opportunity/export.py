@@ -80,7 +80,7 @@ def export_empty_payment_table(opportunity: Opportunity) -> Dataset:
     headers = ["Username", "Phone Number", "Name", "Payment Amount"]
     dataset = Dataset(title="Export", headers=headers)
 
-    access_objects = OpportunityAccess.objects.filter(opportunity=opportunity).select_related("user")
+    access_objects = OpportunityAccess.objects.filter(opportunity=opportunity, suspended=False).select_related("user")
     for access in access_objects:
         row = (access.user.username, access.user.phone_number, access.user.name, "")
         dataset.append(row)
@@ -100,7 +100,7 @@ def export_deliver_status_table(opportunity: Opportunity) -> Dataset:
 
 
 def export_work_status_table(opportunity: Opportunity) -> Dataset:
-    access_objects = OpportunityAccess.objects.filter(opportunity=opportunity)
+    access_objects = OpportunityAccess.objects.filter(opportunity=opportunity, suspended=False)
     completed_works = []
     for completed_work in CompletedWork.objects.filter(opportunity_access__in=access_objects):
         completed = completed_work.completed
