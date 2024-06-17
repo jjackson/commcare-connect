@@ -302,6 +302,7 @@ def bulk_approve_completed_work():
         opportunity__active=True,
         opportunity__end_date__gte=datetime.date.today(),
         opportunity__auto_approve_payments=True,
+        suspended=False,
     )
     for access in access_objects:
         completed_works = access.completedwork_set.exclude(
