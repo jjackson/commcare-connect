@@ -717,9 +717,9 @@ def get_application(request, org_slug=None):
     ).select_related("learn_app", "deliver_app")
     existing_apps = set()
     for opp in active_opps:
-        if opp.learn_app.domain == domain:
+        if opp.learn_app.cc_domain == domain:
             existing_apps.add(opp.learn_app.cc_app_id)
-        if opp.deliver_app.domain == domain:
+        if opp.deliver_app.cc_domain == domain:
             existing_apps.add(opp.deliver_app.cc_app_id)
     options = []
     for app in applications:
