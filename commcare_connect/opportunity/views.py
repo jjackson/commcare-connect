@@ -304,8 +304,9 @@ def export_user_visits(request, **kwargs):
     export_format = form.cleaned_data["format"]
     date_range = DateRanges(form.cleaned_data["date_range"])
     status = form.cleaned_data["status"]
+    flatten = form.cleaned_data["flatten_form_data"]
 
-    result = generate_visit_export.delay(opportunity_id, date_range, status, export_format)
+    result = generate_visit_export.delay(opportunity_id, date_range, status, export_format, flatten)
     redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 

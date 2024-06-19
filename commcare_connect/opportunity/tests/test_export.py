@@ -44,7 +44,7 @@ def test_export_user_visit_data(mobile_user_with_connect_link):
             ),
         ]
     )
-    exporter = export_user_visit_data(opportunity, DateRanges.LAST_30_DAYS, [])
+    exporter = export_user_visit_data(opportunity, DateRanges.LAST_30_DAYS, [], True)
     username = mobile_user_with_connect_link.username
     name = mobile_user_with_connect_link.name
 
