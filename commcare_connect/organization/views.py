@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.text import slugify
 from django.utils.translation import gettext
 from django.views.decorators.http import require_POST
 from rest_framework.decorators import api_view
@@ -29,8 +30,9 @@ def organization_home(request, org_slug):
         form = OrganizationChangeForm(instance=org)
 
     credentials = connect_id_client.fetch_credentials()
-    if not any(c.name == f"Worked for {org.name}" for c in credentials):
-        credentials.append(Credential(name=f"Worked for {org.name}", slug="default"))
+    credential_name = f"Worked for {org.name}"
+    if not any(c.name == credential_name for c in credentials):
+        credentials.append(Credential(name=credential_name, slug=slugify(credential_name)))
 
     return render(
         request,
@@ -77,8 +79,9 @@ def accept_invite(request, org_slug, invite_id):
 def add_credential_view(request, org_slug):
     org = get_object_or_404(Organization, slug=org_slug)
     credentials = connect_id_client.fetch_credentials()
-    if not any(c.name == f"Worked for {org.name}" for c in credentials):
-        credentials.append(Credential(name=f"Worked for {org.name}", slug=f"Worked for {org.name}"))
+    credential_name = f"Worked for {org.name}"
+    if not any(c.name == credential_name for c in credentials):
+        credentials.append(Credential(name=credential_name, slug=slugify(credential_name)))
     form = AddCredentialForm(data=request.POST, credentials=credentials)
 
     if form.is_valid():
