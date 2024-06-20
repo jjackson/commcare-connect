@@ -79,7 +79,7 @@ class OpportunityClaimSerializer(serializers.ModelSerializer):
         return obj.opportunityclaimlimit_set.aggregate(max_visits=Sum("max_visits")).get("max_visits", 0) or -1
 
     def get_payment_units(self, obj):
-        return OpportunityClaimLimitSerializer(obj.opportunityclaimlimit_set.all(), many=True).data
+        return OpportunityClaimLimitSerializer(obj.opportunityclaimlimit_set.order_by("pk"), many=True).data
 
 
 class OpportunitySerializer(serializers.ModelSerializer):
