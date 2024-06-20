@@ -123,7 +123,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
 
 def update_payment_accrued(opportunity: Opportunity, users):
     """Updates payment accrued for completed and approved CompletedWork instances."""
-    access_objects = OpportunityAccess.objects.filter(user__in=users, opportunity=opportunity)
+    access_objects = OpportunityAccess.objects.filter(user__in=users, opportunity=opportunity, suspended=False)
     for access in access_objects:
         completed_works = access.completedwork_set.exclude(
             status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
@@ -159,7 +159,7 @@ def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:
     for row in dataset:
         row = list(row)
         visit_id = str(row[visit_col_index])
-        status_raw = row[status_col_index].lower().replace(" ", "_")
+        status_raw = row[status_col_index].lower().strip().replace(" ", "_")
         try:
             status_by_visit_id[visit_id] = VisitValidationStatus[status_raw]
         except KeyError:
@@ -229,9 +229,9 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     payment_ids = []
     with transaction.atomic():
         usernames = list(payments)
-        users = OpportunityAccess.objects.filter(user__username__in=usernames, opportunity=opportunity).select_related(
-            "user"
-        )
+        users = OpportunityAccess.objects.filter(
+            user__username__in=usernames, opportunity=opportunity, suspended=False
+        ).select_related("user")
         for access in users:
             username = access.user.username
             amount = payments[username]
@@ -299,7 +299,7 @@ def get_status_by_completed_work_id(dataset):
     for row in dataset:
         row = list(row)
         work_id = str(row[work_id_col_index])
-        status_raw = row[status_col_index].lower().replace(" ", "_")
+        status_raw = row[status_col_index].lower().strip().replace(" ", "_")
         try:
             status_by_work_id[work_id] = CompletedWorkStatus[status_raw]
         except KeyError:

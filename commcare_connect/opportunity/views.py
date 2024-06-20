@@ -1,3 +1,4 @@
+import datetime
 import json
 from functools import reduce
 
@@ -42,6 +43,7 @@ from commcare_connect.opportunity.models import (
     BlobMeta,
     CompletedModule,
     CompletedWork,
+    CompletedWorkStatus,
     DeliverUnit,
     Opportunity,
     OpportunityAccess,
@@ -59,6 +61,7 @@ from commcare_connect.opportunity.tables import (
     LearnStatusTable,
     OpportunityPaymentTable,
     PaymentUnitTable,
+    SuspendedUsersTable,
     UserPaymentsTable,
     UserStatusTable,
     UserVisitTable,
@@ -97,7 +100,10 @@ class OpportunityList(OrganizationUserMixin, ListView):
     paginate_by = 10
 
     def get_queryset(self):
-        return Opportunity.objects.filter(organization=self.request.org).order_by("name")
+        ordering = self.request.GET.get("sort", "name")
+        if ordering not in ["name", "-name", "start_date", "-start_date", "end_date", "-end_date"]:
+            ordering = "name"
+        return Opportunity.objects.filter(organization=self.request.org).order_by(ordering)
 
 
 class OpportunityCreate(OrganizationUserMixin, CreateView):
@@ -301,8 +307,9 @@ def export_user_visits(request, **kwargs):
     export_format = form.cleaned_data["format"]
     date_range = DateRanges(form.cleaned_data["date_range"])
     status = form.cleaned_data["status"]
+    flatten = form.cleaned_data["flatten_form_data"]
 
-    result = generate_visit_export.delay(opportunity_id, date_range, status, export_format)
+    result = generate_visit_export.delay(opportunity_id, date_range, status, export_format, flatten)
     redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 
@@ -452,7 +459,9 @@ def add_payment_units(request, org_slug=None, pk=None):
 @org_member_required
 def add_payment_unit(request, org_slug=None, pk=None):
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
-    deliver_units = DeliverUnit.objects.filter(app=opportunity.deliver_app, payment_unit__isnull=True)
+    deliver_units = DeliverUnit.objects.filter(
+        Q(payment_unit__isnull=True) | Q(payment_unit__opportunity__active=False), app=opportunity.deliver_app
+    )
     form = PaymentUnitForm(
         deliver_units=deliver_units,
         data=request.POST or None,
@@ -490,7 +499,8 @@ def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=opp_id)
     payment_unit = get_object_or_404(PaymentUnit, id=pk, opportunity=opportunity)
     deliver_units = DeliverUnit.objects.filter(
-        Q(payment_unit__isnull=True) | Q(payment_unit=payment_unit), app=opportunity.deliver_app
+        Q(payment_unit__isnull=True) | Q(payment_unit=payment_unit) | Q(payment_unit__opportunity__active=False),
+        app=opportunity.deliver_app,
     )
     exclude_payment_units = [payment_unit.pk]
     if payment_unit.parent_payment_unit_id:
@@ -642,6 +652,15 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
     if user_visit_data:
         lat_avg = reduce(lambda x, y: x + float(y["lat"]), user_visit_data, 0.0) / len(user_visit_data)
         lng_avg = reduce(lambda x, y: x + float(y["lng"]), user_visit_data, 0.0) / len(user_visit_data)
+
+    pending_completed_work_count = len(
+        [
+            cw
+            for cw in CompletedWork.objects.filter(opportunity_access=access, status=CompletedWorkStatus.pending)
+            if cw.approved_count
+        ]
+    )
+    pending_payment = max(access.payment_accrued - access.total_paid, 0)
     return render(
         request,
         "opportunity/user_profile.html",
@@ -651,6 +670,8 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
             lat_avg=lat_avg,
             lng_avg=lng_avg,
             MAPBOX_TOKEN=settings.MAPBOX_TOKEN,
+            pending_completed_work_count=pending_completed_work_count,
+            pending_payment=pending_payment,
         ),
     )
 
@@ -693,11 +714,23 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
 def get_application(request, org_slug=None):
     domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
     applications = get_applications_for_user_by_domain(request.user, domain)
+    active_opps = Opportunity.objects.filter(
+        Q(learn_app__cc_domain=domain) | Q(deliver_app__cc_domain=domain),
+        active=True,
+        end_date__lt=datetime.date.today(),
+    ).select_related("learn_app", "deliver_app")
+    existing_apps = set()
+    for opp in active_opps:
+        if opp.learn_app.cc_domain == domain:
+            existing_apps.add(opp.learn_app.cc_app_id)
+        if opp.deliver_app.cc_domain == domain:
+            existing_apps.add(opp.deliver_app.cc_app_id)
     options = []
     for app in applications:
-        value = json.dumps(app)
-        name = app["name"]
-        options.append(format_html("<option value='{}'>{}</option>", value, name))
+        if app["id"] not in existing_apps:
+            value = json.dumps(app)
+            name = app["name"]
+            options.append(format_html("<option value='{}'>{}</option>", value, name))
     return HttpResponse("\n".join(options))
 
 
@@ -839,3 +872,31 @@ def update_completed_work_status_import(request, org_slug=None, pk=None):
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
     return redirect("opportunity:detail", org_slug, pk)
+
+
+@org_member_required
+@require_POST
+def suspend_user(request, org_slug=None, opp_id=None, pk=None):
+    access = get_object_or_404(OpportunityAccess, opportunity_id=opp_id, id=pk)
+    access.suspended = True
+    access.suspension_date = now()
+    access.suspension_reason = request.POST.get("reason", "")
+    access.save()
+    return redirect("opportunity:user_profile", org_slug, opp_id, pk)
+
+
+@org_member_required
+def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
+    access = get_object_or_404(OpportunityAccess, opportunity_id=opp_id, id=pk)
+    access.suspended = False
+    access.save()
+    next = request.GET.get("next", "/")
+    return redirect(next)
+
+
+@org_member_required
+def suspended_users_list(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
+    access_objects = OpportunityAccess.objects.filter(opportunity=opportunity, suspended=True)
+    table = SuspendedUsersTable(access_objects)
+    return render(request, "opportunity/suspended_users.html", dict(table=table, opportunity=opportunity))
