@@ -77,6 +77,7 @@ class Opportunity(BaseModel):
     currency = models.CharField(max_length=3, null=True)
     auto_approve_visits = models.BooleanField(default=False)
     auto_approve_payments = models.BooleanField(default=False)
+    is_test = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
