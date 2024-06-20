@@ -382,12 +382,15 @@ class CompletedWorkStatus(models.TextChoices):
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
     over_limit = "over_limit", gettext("Over Limit")
+    incomplete = "incomplete", gettext("Incomplete")
 
 
 class CompletedWork(models.Model):
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE)
     payment_unit = models.ForeignKey(PaymentUnit, on_delete=models.DO_NOTHING)
-    status = models.CharField(max_length=50, choices=CompletedWorkStatus.choices, default=CompletedWorkStatus.pending)
+    status = models.CharField(
+        max_length=50, choices=CompletedWorkStatus.choices, default=CompletedWorkStatus.incomplete
+    )
     last_modified = models.DateTimeField(auto_now=True)
     entity_id = models.CharField(max_length=255, null=True, blank=True)
     entity_name = models.CharField(max_length=255, null=True, blank=True)

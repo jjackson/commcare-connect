@@ -253,7 +253,9 @@ class DeliveryProgressSerializer(serializers.Serializer):
         return PaymentSerializer(obj.payment_set.all(), many=True).data
 
     def get_deliveries(self, obj):
-        completed_works = CompletedWork.objects.filter(opportunity_access=obj).exclude(
-            status=CompletedWorkStatus.over_limit
+        completed_works = (
+            CompletedWork.objects.filter(opportunity_access=obj)
+            .exclude(status=CompletedWorkStatus.over_limit)
+            .exclude(status=CompletedWorkStatus.incomplete)
         )
         return CompletedWorkSerializer(completed_works, many=True).data
