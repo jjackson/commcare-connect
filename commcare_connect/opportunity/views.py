@@ -43,6 +43,7 @@ from commcare_connect.opportunity.models import (
     BlobMeta,
     CompletedModule,
     CompletedWork,
+    CompletedWorkStatus,
     DeliverUnit,
     Opportunity,
     OpportunityAccess,
@@ -60,6 +61,7 @@ from commcare_connect.opportunity.tables import (
     LearnStatusTable,
     OpportunityPaymentTable,
     PaymentUnitTable,
+    SuspendedUsersTable,
     UserPaymentsTable,
     UserStatusTable,
     UserVisitTable,
@@ -302,8 +304,9 @@ def export_user_visits(request, **kwargs):
     export_format = form.cleaned_data["format"]
     date_range = DateRanges(form.cleaned_data["date_range"])
     status = form.cleaned_data["status"]
+    flatten = form.cleaned_data["flatten_form_data"]
 
-    result = generate_visit_export.delay(opportunity_id, date_range, status, export_format)
+    result = generate_visit_export.delay(opportunity_id, date_range, status, export_format, flatten)
     redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 
@@ -646,6 +649,15 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
     if user_visit_data:
         lat_avg = reduce(lambda x, y: x + float(y["lat"]), user_visit_data, 0.0) / len(user_visit_data)
         lng_avg = reduce(lambda x, y: x + float(y["lng"]), user_visit_data, 0.0) / len(user_visit_data)
+
+    pending_completed_work_count = len(
+        [
+            cw
+            for cw in CompletedWork.objects.filter(opportunity_access=access, status=CompletedWorkStatus.pending)
+            if cw.approved_count
+        ]
+    )
+    pending_payment = max(access.payment_accrued - access.total_paid, 0)
     return render(
         request,
         "opportunity/user_profile.html",
@@ -655,6 +667,8 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
             lat_avg=lat_avg,
             lng_avg=lng_avg,
             MAPBOX_TOKEN=settings.MAPBOX_TOKEN,
+            pending_completed_work_count=pending_completed_work_count,
+            pending_payment=pending_payment,
         ),
     )
 
@@ -704,9 +718,9 @@ def get_application(request, org_slug=None):
     ).select_related("learn_app", "deliver_app")
     existing_apps = set()
     for opp in active_opps:
-        if opp.learn_app.domain == domain:
+        if opp.learn_app.cc_domain == domain:
             existing_apps.add(opp.learn_app.cc_app_id)
-        if opp.deliver_app.domain == domain:
+        if opp.deliver_app.cc_domain == domain:
             existing_apps.add(opp.deliver_app.cc_app_id)
     options = []
     for app in applications:
@@ -855,3 +869,31 @@ def update_completed_work_status_import(request, org_slug=None, pk=None):
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
     return redirect("opportunity:detail", org_slug, pk)
+
+
+@org_member_required
+@require_POST
+def suspend_user(request, org_slug=None, opp_id=None, pk=None):
+    access = get_object_or_404(OpportunityAccess, opportunity_id=opp_id, id=pk)
+    access.suspended = True
+    access.suspension_date = now()
+    access.suspension_reason = request.POST.get("reason", "")
+    access.save()
+    return redirect("opportunity:user_profile", org_slug, opp_id, pk)
+
+
+@org_member_required
+def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
+    access = get_object_or_404(OpportunityAccess, opportunity_id=opp_id, id=pk)
+    access.suspended = False
+    access.save()
+    next = request.GET.get("next", "/")
+    return redirect(next)
+
+
+@org_member_required
+def suspended_users_list(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
+    access_objects = OpportunityAccess.objects.filter(opportunity=opportunity, suspended=True)
+    table = SuspendedUsersTable(access_objects)
+    return render(request, "opportunity/suspended_users.html", dict(table=table, opportunity=opportunity))
