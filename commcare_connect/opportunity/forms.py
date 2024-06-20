@@ -5,7 +5,8 @@ from crispy_forms.helper import FormHelper, Layout
 from crispy_forms.layout import HTML, Column, Field, Fieldset, Row, Submit
 from dateutil.relativedelta import relativedelta
 from django import forms
-from django.db.models import TextChoices
+from django.core.exceptions import ValidationError
+from django.db.models import Q, TextChoices
 from django.urls import reverse
 from django.utils.timezone import now
 
@@ -94,11 +95,24 @@ class OpportunityChangeForm(forms.ModelForm):
         self.initial["end_date"] = self.instance.end_date.isoformat()
         self.initial["filter_country"] = [""]
         self.initial["filter_credential"] = [""]
+        self.currently_active = self.instance.active
 
     def clean_users(self):
         user_data = self.cleaned_data["users"]
         split_users = [line.strip() for line in user_data.splitlines() if line.strip()]
         return split_users
+
+    def clean_active(self):
+        active = self.cleaned_data["active"]
+        if active and not self.currently_active:
+            app_ids = (self.instance.learn_app.cc_app_id, self.instance.deliver_app.cc_app_id)
+            if (
+                Opportunity.objects.filter(active=True)
+                .filter(Q(learn_app__cc_app_id__in=app_ids) | Q(deliver_app__cc_app_id__in=app_ids))
+                .exists()
+            ):
+                raise ValidationError("Cannot reactivate opportunity with reused applications", code="app_reused")
+        return active
 
 
 class OpportunityInitForm(forms.ModelForm):
@@ -462,6 +476,7 @@ class VisitExportForm(forms.Form):
     format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="xlsx")
     date_range = forms.ChoiceField(choices=DateRanges.choices, initial=DateRanges.LAST_30_DAYS)
     status = forms.MultipleChoiceField(choices=[("all", "All")] + VisitValidationStatus.choices, initial=["all"])
+    flatten_form_data = forms.BooleanField(initial=True, required=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -470,6 +485,7 @@ class VisitExportForm(forms.Form):
             Row(Field("format")),
             Row(Field("date_range")),
             Row(Field("status")),
+            Row(Field("flatten_form_data", css_class="form-check-input", wrapper_class="form-check form-switch")),
         )
         self.helper.form_tag = False
 

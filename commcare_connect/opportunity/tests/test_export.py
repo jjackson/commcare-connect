@@ -1,15 +1,12 @@
+import random
+
 import pytest
 from django.utils.timezone import now
 from tablib import Dataset
 
-from commcare_connect.opportunity.export import (
-    export_deliver_status_table,
-    export_user_status_table,
-    export_user_visit_data,
-    get_flattened_dataset,
-)
+from commcare_connect.opportunity.export import export_user_status_table, export_user_visit_data, get_flattened_dataset
 from commcare_connect.opportunity.forms import DateRanges
-from commcare_connect.opportunity.models import Opportunity, UserVisit
+from commcare_connect.opportunity.models import Opportunity, UserInviteStatus, UserVisit
 from commcare_connect.opportunity.tests.factories import (
     AssessmentFactory,
     CompletedModuleFactory,
@@ -18,6 +15,7 @@ from commcare_connect.opportunity.tests.factories import (
     OpportunityAccessFactory,
     OpportunityClaimFactory,
     OpportunityFactory,
+    UserInviteFactory,
     UserVisitFactory,
 )
 from commcare_connect.users.tests.factories import MobileUserFactory
@@ -48,7 +46,7 @@ def test_export_user_visit_data(mobile_user_with_connect_link):
             ),
         ]
     )
-    exporter = export_user_visit_data(opportunity, DateRanges.LAST_30_DAYS, [])
+    exporter = export_user_visit_data(opportunity, DateRanges.LAST_30_DAYS, [], True)
     username = mobile_user_with_connect_link.username
     name = mobile_user_with_connect_link.name
 
@@ -89,7 +87,7 @@ def _get_prepared_dataset_for_user_status_test(data):
     headers = (
         "Name",
         "Username",
-        "Accepted",
+        "Status",
         "Started Learning",
         "Completed Learning",
         "Passed Assessment",
@@ -115,8 +113,13 @@ def test_export_user_status_table_no_data_only(opportunity: Opportunity):
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
         date = now()
-        OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date)
-        rows.append((mobile_user.name, mobile_user.username, True, date.replace(tzinfo=None), "", False, "", "", ""))
+        access = OpportunityAccessFactory(
+            opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date
+        )
+        UserInviteFactory(opportunity=opportunity, status=UserInviteStatus.accepted, opportunity_access=access)
+        rows.append(
+            (mobile_user.name, mobile_user.username, "Accepted", date.replace(tzinfo=None), "", False, "", "", "")
+        )
     dataset = export_user_status_table(opportunity)
     prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
     assert prepared_test_dataset.export("csv") == dataset.export("csv")
@@ -129,10 +132,15 @@ def test_export_user_status_table_learn_data_only(opportunity: Opportunity):
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
         date = now()
-        OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date)
+        access = OpportunityAccessFactory(
+            opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date
+        )
+        UserInviteFactory(opportunity=opportunity, status=UserInviteStatus.accepted, opportunity_access=access)
         for learn_module in opportunity.learn_app.learn_modules.all()[2:]:
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
-        rows.append((mobile_user.name, mobile_user.username, True, date.replace(tzinfo=None), "", False, "", "", ""))
+        rows.append(
+            (mobile_user.name, mobile_user.username, "Accepted", date.replace(tzinfo=None), "", False, "", "", "")
+        )
     dataset = export_user_status_table(opportunity)
     prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
     assert prepared_test_dataset.export("csv") == dataset.export("csv")
@@ -145,7 +153,10 @@ def test_export_user_status_table_learn_assessment_data_only(opportunity: Opport
     rows = []
     for mobile_user in sorted(mobile_users, key=lambda x: x.name):
         date = now()
-        OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date)
+        access = OpportunityAccessFactory(
+            opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date
+        )
+        UserInviteFactory(opportunity=opportunity, status=UserInviteStatus.accepted, opportunity_access=access)
         for learn_module in opportunity.learn_app.learn_modules.all():
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
         AssessmentFactory(app=opportunity.learn_app, opportunity=opportunity, user=mobile_user, passed=True, date=date)
@@ -153,7 +164,7 @@ def test_export_user_status_table_learn_assessment_data_only(opportunity: Opport
             (
                 mobile_user.name,
                 mobile_user.username,
-                True,
+                "Accepted",
                 date.replace(tzinfo=None),
                 date.replace(tzinfo=None),
                 True,
@@ -178,15 +189,22 @@ def test_export_user_status_table_data(opportunity: Opportunity):
             opportunity=opportunity, user=mobile_user, accepted=True, date_learn_started=date
         )
         OpportunityClaimFactory(opportunity_access=access, max_payments=10, date_claimed=date)
+        UserInviteFactory(opportunity=opportunity, status=UserInviteStatus.accepted, opportunity_access=access)
         for learn_module in opportunity.learn_app.learn_modules.all():
             CompletedModuleFactory(module=learn_module, user=mobile_user, opportunity=opportunity, date=date)
         AssessmentFactory(app=opportunity.learn_app, opportunity=opportunity, user=mobile_user, passed=True, date=date)
-        UserVisitFactory.create_batch(1, opportunity=opportunity, user=mobile_user, visit_date=date)
+        UserVisitFactory.create_batch(
+            1,
+            opportunity=opportunity,
+            user=mobile_user,
+            visit_date=date,
+            status=random.choice(["approved", "rejected", "pending"]),
+        )
         rows.append(
             (
                 mobile_user.name,
                 mobile_user.username,
-                True,
+                "Accepted",
                 date.replace(tzinfo=None),
                 date.replace(tzinfo=None),
                 True,
@@ -197,34 +215,4 @@ def test_export_user_status_table_data(opportunity: Opportunity):
         )
     dataset = export_user_status_table(opportunity)
     prepared_test_dataset = _get_prepared_dataset_for_user_status_test(rows)
-    assert prepared_test_dataset.export("csv") == dataset.export("csv")
-
-
-@pytest.mark.django_db
-def test_export_deliver_status_data(opportunity: Opportunity):
-    mobile_users = MobileUserFactory.create_batch(5)
-    rows = []
-    for mobile_user in sorted(mobile_users, key=lambda x: x.name):
-        access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True)
-        user_visits = UserVisitFactory.create_batch(20, opportunity=opportunity, user=mobile_user)
-        user_visits_count = {"approved": 0, "pending": 0, "rejected": 0, "over_limit": 0, "duplicate": 0, "trial": 0}
-        for user_visit in user_visits:
-            user_visits_count[user_visit.status.value] += 1
-        rows.append(
-            (
-                mobile_user.name,
-                mobile_user.username,
-                len(user_visits),
-                user_visits_count.get("approved", 0),
-                user_visits_count.get("pending", 0),
-                user_visits_count.get("rejected", 0),
-                user_visits_count.get("over_limit", 0),
-                user_visits_count.get("duplicate", 0),
-                user_visits_count.get("trial", 0),
-                access.last_visit_date.replace(tzinfo=None),
-            )
-        )
-
-    dataset = export_deliver_status_table(opportunity)
-    prepared_test_dataset = _get_dataset(data=rows, headers=dataset.headers)
     assert prepared_test_dataset.export("csv") == dataset.export("csv")
