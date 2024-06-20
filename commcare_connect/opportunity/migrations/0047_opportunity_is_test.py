@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0044_opportunityverificationflags"),
+        ("opportunity", "0046_opportunityaccess_suspended_and_more"),
     ]
 
     operations = [
