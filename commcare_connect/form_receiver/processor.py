@@ -240,6 +240,10 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         and opportunity_flags.form_submission_end < xform.metadata.timeStart.time()
     ):
         flags.append(["form_submission_period", "Form was submitted after the end time"])
+
+    if access.suspended:
+        flags.append(["user_suspended", "This user is suspended from the opportunity."])
+        user_visit.status = VisitValidationStatus.rejected
     if flags:
         user_visit.flagged = True
         user_visit.flag_reason = {"flags": flags}
