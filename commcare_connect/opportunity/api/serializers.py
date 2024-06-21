@@ -79,7 +79,9 @@ class OpportunityClaimSerializer(serializers.ModelSerializer):
         return obj.opportunityclaimlimit_set.aggregate(max_visits=Sum("max_visits")).get("max_visits", 0) or -1
 
     def get_payment_units(self, obj):
-        return OpportunityClaimLimitSerializer(obj.opportunityclaimlimit_set.order_by("pk"), many=True).data
+        return OpportunityClaimLimitSerializer(
+            obj.opportunityclaimlimit_set.order_by("payment_unit_id"), many=True
+        ).data
 
 
 class OpportunitySerializer(serializers.ModelSerializer):
@@ -253,7 +255,9 @@ class DeliveryProgressSerializer(serializers.Serializer):
         return PaymentSerializer(obj.payment_set.all(), many=True).data
 
     def get_deliveries(self, obj):
-        completed_works = CompletedWork.objects.filter(opportunity_access=obj).exclude(
-            status=CompletedWorkStatus.over_limit
+        completed_works = (
+            CompletedWork.objects.filter(opportunity_access=obj)
+            .exclude(status=CompletedWorkStatus.over_limit)
+            .exclude(status=CompletedWorkStatus.incomplete)
         )
         return CompletedWorkSerializer(completed_works, many=True).data
