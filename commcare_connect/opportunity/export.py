@@ -1,4 +1,5 @@
 import datetime
+import json
 
 from django.utils.encoding import force_str
 from flatten_dict import flatten
@@ -48,7 +49,10 @@ def export_user_visit_data(
         base_headers.append("form_json")
         dataset = Dataset(title="Export", headers=base_headers)
         for row in base_data:
-            dataset.append([force_str(col, strings_only=True) for col in row])
+            form_json = json.dumps(row.pop())
+            row.append(form_json)
+            row_data = [force_str(col, strings_only=True) for col in row]
+            dataset.append(row_data)
         return dataset
 
 
