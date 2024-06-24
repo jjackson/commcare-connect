@@ -110,9 +110,13 @@ def start_learn_app(request):
         access_object = OpportunityAccess.objects.get(user=request.user, opportunity=opportunity)
     except OpportunityAccess.DoesNotExist:
         return HttpResponse("user has no access to opportunity", status=400)
-    access_object.date_learn_started = now()
-    access_object.accepted = True
-    access_object.save()
+    with transaction.atomic():
+        access_object.date_learn_started = now()
+        access_object.accepted = True
+        access_object.save()
+        user_invite = UserInvite.objects.get(opportunity_access=access_object)
+        user_invite.status = UserInviteStatus.accepted
+        user_invite.save()
     return HttpResponse(status=200)
 
 
@@ -120,13 +124,13 @@ def start_learn_app(request):
 def accept_invite(request, invite_id):
     try:
         o = OpportunityAccess.objects.get(invite_id=invite_id)
-        user_invite = UserInvite.objects.get(opportunity_access=o)
     except OpportunityAccess.DoesNotExist:
         return HttpResponse("This link is invalid. Please try again", status=404)
     with transaction.atomic():
         o.accepted = True
-        user_invite.status = UserInviteStatus.accepted
         o.save()
+        user_invite = UserInvite.objects.get(opportunity_access=o)
+        user_invite.status = UserInviteStatus.accepted
         user_invite.save()
     return HttpResponse(
         "Thank you for accepting the invitation. Open your CommCare Connect App to "
