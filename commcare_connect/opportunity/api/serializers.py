@@ -157,7 +157,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
         return obj.budget_per_user
 
     def get_payment_units(self, obj):
-        payment_units = PaymentUnit.objects.filter(opportunity=obj)
+        payment_units = PaymentUnit.objects.filter(opportunity=obj).order_by("pk")
         return PaymentUnitSerializer(payment_units, many=True).data
 
     def get_is_user_suspended(self, obj):
