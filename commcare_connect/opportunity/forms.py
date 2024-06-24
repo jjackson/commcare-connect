@@ -13,6 +13,8 @@ from django.utils.timezone import now
 from commcare_connect.opportunity.models import (
     CommCareApp,
     DeliverUnit,
+    DeliverUnitFlagRules,
+    FormJsonValidationRules,
     HQApiKey,
     Opportunity,
     OpportunityAccess,
@@ -621,7 +623,7 @@ class SendMessageMobileUsersForm(forms.Form):
 class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
     class Meta:
         model = OpportunityVerificationFlags
-        fields = ("duplicate", "duration", "gps", "location", "form_submission_start", "form_submission_end")
+        fields = ("duplicate", "gps", "location", "form_submission_start", "form_submission_end")
         widgets = {
             "form_submission_start": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
             "form_submission_end": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
@@ -634,7 +636,6 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
             "location": "Location Distance",
         }
         help_texts = {
-            "duration": "Minimum time to complete form (minutes)",
             "location": "Minimum distance between form locations (metres)",
             "duplicate": "Flag duplicate form submissions for an entity.",
             "gps": "Flag forms with no location information.",
@@ -644,12 +645,12 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
+        self.helper.form_tag = False
         self.helper.layout = Layout(
             Row(
                 Field("duplicate", css_class="form-check-input", wrapper_class="form-check form-switch"),
                 Field("gps", css_class="form-check-input", wrapper_class="form-check form-switch"),
             ),
-            Row(Field("duration")),
             Row(Field("location")),
             Fieldset(
                 "Form Submission Hours",
@@ -658,13 +659,63 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
                     Column(Field("form_submission_end")),
                 ),
             ),
-            Submit(name="submit", value="Submit"),
         )
 
         self.fields["duplicate"].required = False
-        self.fields["duration"].required = False
         self.fields["location"].required = False
         self.fields["gps"].required = False
         if self.instance:
             self.fields["form_submission_start"].initial = self.instance.form_submission_start
             self.fields["form_submission_end"].initial = self.instance.form_submission_end
+
+
+class DeliverUnitFlagsForm(forms.ModelForm):
+    class Meta:
+        model = DeliverUnitFlagRules
+        fields = ("deliver_unit", "check_attachments", "duration")
+        help_texts = {"duration": "Minimum time to complete form (minutes)"}
+
+    def __init__(self, *args, **kwargs):
+        deliver_units = kwargs.pop("deliver_units", [])
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            Row(
+                Column(Field("deliver_unit")),
+                Column(
+                    Field(
+                        "check_attachments",
+                        css_class="form-check-input",
+                        wrapper_class="form-check form-switch",
+                    )
+                ),
+                Column(Field("duration")),
+            ),
+        )
+
+        self.fields["deliver_unit"] = forms.ChoiceField(choices=[(du.id, du.name) for du in deliver_units])
+
+
+class FormJsonValidationRulesForm(forms.ModelForm):
+    class Meta:
+        model = FormJsonValidationRules
+        fields = ("name", "deliver_unit", "question_path", "question_value")
+
+    def __init__(self, *args, **kwargs):
+        deliver_units = kwargs.pop("deliver_units", [])
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            Row(
+                Column(Field("name")),
+                Column(Field("question_path")),
+                Column(Field("question_value")),
+                Column(Field("deliver_unit")),
+            ),
+        )
+
+        self.fields["deliver_unit"] = forms.MultipleChoiceField(choices=[(du.id, du.name) for du in deliver_units])
