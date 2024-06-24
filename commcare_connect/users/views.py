@@ -108,11 +108,15 @@ def start_learn_app(request):
         ConnectIDUserLink.objects.create(commcare_username=cc_username, user=request.user, domain=domain)
     try:
         access_object = OpportunityAccess.objects.get(user=request.user, opportunity=opportunity)
+        user_invite = UserInvite.objects.get(opportunity_access=access_object)
     except OpportunityAccess.DoesNotExist:
         return HttpResponse("user has no access to opportunity", status=400)
-    access_object.date_learn_started = now()
-    access_object.accepted = True
-    access_object.save()
+    with transaction.atomic():
+        access_object.date_learn_started = now()
+        access_object.accepted = True
+        user_invite.status = UserInviteStatus.accepted
+        access_object.save()
+        user_invite.save()
     return HttpResponse(status=200)
 
 
