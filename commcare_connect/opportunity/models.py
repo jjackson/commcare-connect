@@ -43,6 +43,15 @@ class HQApiKey(models.Model):
     )
 
 
+class DeliveryType(models.Model):
+    name = models.CharField(max_length=255)
+    slug = models.CharField(max_length=255)
+    description = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.name
+
+
 class Opportunity(BaseModel):
     organization = models.ForeignKey(
         Organization,
@@ -78,6 +87,7 @@ class Opportunity(BaseModel):
     auto_approve_visits = models.BooleanField(default=False)
     auto_approve_payments = models.BooleanField(default=False)
     is_test = models.BooleanField(default=True)
+    delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
 
     def __str__(self):
         return self.name
