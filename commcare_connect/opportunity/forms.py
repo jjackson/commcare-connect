@@ -36,6 +36,7 @@ class OpportunityChangeForm(forms.ModelForm):
             "auto_approve_visits",
             "auto_approve_payments",
             "is_test",
+            "delivery_type",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -48,6 +49,7 @@ class OpportunityChangeForm(forms.ModelForm):
             Row(Field("auto_approve_visits", css_class="form-check-input", wrapper_class="form-check form-switch")),
             Row(Field("auto_approve_payments", css_class="form-check-input", wrapper_class="form-check form-switch")),
             Row(Field("is_test", css_class="form-check-input", wrapper_class="form-check form-switch")),
+            Row(Field("delivery_type")),
             Row(Field("description")),
             Row(Field("short_description")),
             Row(Field("currency")),
