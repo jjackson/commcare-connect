@@ -32,7 +32,6 @@ class OpportunityChangeForm(forms.ModelForm):
             "active",
             "currency",
             "short_description",
-            "auto_approve_payments",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -42,7 +41,6 @@ class OpportunityChangeForm(forms.ModelForm):
         self.helper.layout = Layout(
             Row(Field("name")),
             Row(Field("active", css_class="form-check-input", wrapper_class="form-check form-switch")),
-            Row(Field("auto_approve_payments", css_class="form-check-input", wrapper_class="form-check form-switch")),
             Row(Field("description")),
             Row(Field("short_description")),
             Row(Field("currency")),
