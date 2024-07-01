@@ -694,8 +694,7 @@ class DeliverUnitFlagsForm(forms.ModelForm):
                 Column(Field("duration")),
             ),
         )
-
-        self.fields["deliver_unit"] = forms.ChoiceField(choices=[(du.id, du.name) for du in deliver_units])
+        self.fields["deliver_unit"] = forms.ModelChoiceField(queryset=deliver_units)
 
 
 class FormJsonValidationRulesForm(forms.ModelForm):
@@ -714,8 +713,10 @@ class FormJsonValidationRulesForm(forms.ModelForm):
                 Column(Field("name")),
                 Column(Field("question_path")),
                 Column(Field("question_value")),
-                Column(Field("deliver_unit")),
             ),
+            Row(Column(Field("deliver_unit"))),
         )
 
-        self.fields["deliver_unit"] = forms.MultipleChoiceField(choices=[(du.id, du.name) for du in deliver_units])
+        self.fields["deliver_unit"] = forms.ModelMultipleChoiceField(
+            queryset=deliver_units, widget=forms.CheckboxSelectMultiple
+        )
