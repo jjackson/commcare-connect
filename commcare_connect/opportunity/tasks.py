@@ -33,6 +33,8 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     OpportunityClaim,
     Payment,
+    UserInvite,
+    UserInviteStatus,
     UserVisit,
     VisitValidationStatus,
 )
@@ -69,12 +71,25 @@ def create_learn_modules_and_deliver_units(opportunity_id):
 
 @celery_app.task()
 def add_connect_users(user_list: list[str], opportunity_id: str):
-    for user in fetch_users(user_list):
+    found_users = fetch_users(user_list)
+    not_found_users = set(user_list) - {user.phone_number for user in found_users}
+    for u in not_found_users:
+        UserInvite.objects.get_or_create(
+            opportunity_id=opportunity_id,
+            phone_number=u,
+            status=UserInviteStatus.not_found,
+        )
+    for user in found_users:
         u, _ = User.objects.update_or_create(
             username=user.username, defaults={"phone_number": user.phone_number, "name": user.name}
         )
         opportunity_access, _ = OpportunityAccess.objects.get_or_create(user=u, opportunity_id=opportunity_id)
-        invite_user.delay(u.id, opportunity_access.id)
+        UserInvite.objects.update_or_create(
+            opportunity_id=opportunity_id,
+            phone_number=user.phone_number,
+            defaults={"opportunity_access": opportunity_access},
+        )
+        invite_user.delay(u.pk, opportunity_access.pk)
 
 
 @celery_app.task()
@@ -90,7 +105,14 @@ def invite_user(user_id, opportunity_access_id):
     )
     if not user.phone_number:
         return
-    send_sms(user.phone_number, body)
+    sms_status = send_sms(user.phone_number, body)
+    UserInvite.objects.update_or_create(
+        opportunity_access=opportunity_access,
+        defaults={
+            "message_sid": sms_status.sid,
+            "status": UserInviteStatus.accepted if opportunity_access.accepted else UserInviteStatus.invited,
+        },
+    )
     message = Message(
         usernames=[user.username],
         title=gettext(
@@ -104,10 +126,12 @@ def invite_user(user_id, opportunity_access_id):
 
 
 @celery_app.task()
-def generate_visit_export(opportunity_id: int, date_range: str, status: list[str], export_format: str):
+def generate_visit_export(opportunity_id: int, date_range: str, status: list[str], export_format: str, flatten: bool):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     logger.info(f"Export for {opportunity.name} with date range {date_range} and status {','.join(status)}")
-    dataset = export_user_visit_data(opportunity, DateRanges(date_range), [VisitValidationStatus(s) for s in status])
+    dataset = export_user_visit_data(
+        opportunity, DateRanges(date_range), [VisitValidationStatus(s) for s in status], flatten
+    )
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_visit_export.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
@@ -280,6 +304,7 @@ def bulk_approve_completed_work():
         opportunity__active=True,
         opportunity__end_date__gte=datetime.date.today(),
         opportunity__auto_approve_payments=True,
+        suspended=False,
     )
     for access in access_objects:
         completed_works = access.completedwork_set.exclude(
@@ -287,14 +312,15 @@ def bulk_approve_completed_work():
         )
         access.payment_accrued = 0
         for completed_work in completed_works:
-            approved_count = completed_work.approved_count
-            visits = completed_work.uservisit_set.values_list("status", "reason")
-            if any(status == "rejected" for status, _ in visits):
-                completed_work.status = CompletedWorkStatus.rejected
-                completed_work.reason = "\n".join(reason for _, reason in visits if reason)
-            elif all(status == "approved" for status, _ in visits):
-                completed_work.status = CompletedWorkStatus.approved
-            if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
-                access.payment_accrued += approved_count * completed_work.payment_unit.amount
-            completed_work.save()
+            if completed_work.completed_count > 0:
+                approved_count = completed_work.approved_count
+                visits = completed_work.uservisit_set.values_list("status", "reason")
+                if any(status == "rejected" for status, _ in visits):
+                    completed_work.status = CompletedWorkStatus.rejected
+                    completed_work.reason = "\n".join(reason for _, reason in visits if reason)
+                elif all(status == "approved" for status, _ in visits):
+                    completed_work.status = CompletedWorkStatus.approved
+                if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
+                    access.payment_accrued += approved_count * completed_work.payment_unit.amount
+                completed_work.save()
         access.save()
