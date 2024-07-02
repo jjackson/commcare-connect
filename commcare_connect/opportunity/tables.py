@@ -317,8 +317,8 @@ class SuspendedUsersTable(tables.Table):
 
 
 class CatchmentAreaTable(tables.Table):
-    username = columns.Column(verbose_name="Username")
-    area_name = columns.Column(verbose_name="Area name")
+    username = columns.Column(accessor="opportunity_access__user__username", verbose_name="Username")
+    name = columns.Column(verbose_name="Area name")
     active = columns.Column(verbose_name="Active")
     latitude = columns.Column(verbose_name="Latitude")
     longitude = columns.Column(verbose_name="Longitude")
