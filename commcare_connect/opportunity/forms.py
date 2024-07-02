@@ -676,7 +676,7 @@ class DeliverUnitFlagsForm(forms.ModelForm):
         help_texts = {"duration": "Minimum time to complete form (minutes)"}
 
     def __init__(self, *args, **kwargs):
-        deliver_units = kwargs.pop("deliver_units", [])
+        self.opportunity = kwargs.pop("opportunity")
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
@@ -694,7 +694,18 @@ class DeliverUnitFlagsForm(forms.ModelForm):
                 Column(Field("duration")),
             ),
         )
-        self.fields["deliver_unit"] = forms.ModelChoiceField(queryset=deliver_units)
+        self.fields["deliver_unit"] = forms.ModelChoiceField(
+            queryset=DeliverUnit.objects.filter(app=self.opportunity.deliver_app)
+        )
+
+    def clean_deliver_unit(self):
+        deliver_unit = self.cleaned_data["deliver_unit"]
+        if (
+            self.instance.pk is None
+            and DeliverUnitFlagRules.objects.filter(deliver_unit=deliver_unit, opportunity=self.opportunity).exists()
+        ):
+            raise ValidationError("Flags are already configured for this Deliver Unit.")
+        return deliver_unit
 
 
 class FormJsonValidationRulesForm(forms.ModelForm):

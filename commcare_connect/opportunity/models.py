@@ -582,3 +582,6 @@ class DeliverUnitFlagRules(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     check_attachments = models.BooleanField(default=False)
     duration = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ("deliver_unit", "opportunity")
