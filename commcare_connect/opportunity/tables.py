@@ -4,6 +4,7 @@ from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
 
 from commcare_connect.opportunity.models import (
+    CatchmentArea,
     CompletedWork,
     OpportunityAccess,
     Payment,
@@ -313,6 +314,24 @@ class SuspendedUsersTable(tables.Table):
             "opportunity:suspended_users_list", args=(record.opportunity.organization.slug, record.opportunity_id)
         )
         return format_html('<a class="btn btn-success" href="{}?next={}">Revoke</a>', revoke_url, page_url)
+
+
+class CatchmentAreaTable(tables.Table):
+    username = columns.Column(verbose_name="Username")
+    area_name = columns.Column(verbose_name="Area name")
+    active = columns.Column(verbose_name="Active")
+    latitude = columns.Column(verbose_name="Latitude")
+    longitude = columns.Column(verbose_name="Longitude")
+    radius = columns.Column(verbose_name="Radius(meters)")
+
+    def render_active(self, value):
+        return "Yes" if value else "No"
+
+    class Meta:
+        model = CatchmentArea
+        fields = ("username", "area_name", "active", "latitude", "longitude", "radius")
+        orderable = False
+        sequence = ("username", "area_name", "active", "latitude", "longitude", "radius")
 
 
 def popup_html(value, popup_title, popup_direction="top", popup_class="", popup_attributes=""):

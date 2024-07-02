@@ -69,6 +69,7 @@ from commcare_connect.opportunity.tables import (
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     create_learn_modules_and_deliver_units,
+    generate_catchment_area_export,
     generate_deliver_status_export,
     generate_payment_export,
     generate_user_status_export,
@@ -224,8 +225,8 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["visit_export_form"] = VisitExportForm()
         context["export_task_id"] = self.request.GET.get("export_task_id")
+        context["visit_export_form"] = VisitExportForm()
         context["export_form"] = PaymentExportForm()
         return context
 
@@ -897,3 +898,18 @@ def suspended_users_list(request, org_slug=None, pk=None):
     access_objects = OpportunityAccess.objects.filter(opportunity=opportunity, suspended=True)
     table = SuspendedUsersTable(access_objects)
     return render(request, "opportunity/suspended_users.html", dict(table=table, opportunity=opportunity))
+
+
+@org_member_required
+def export_catchment_area(request, **kwargs):
+    opportunity_id = kwargs["pk"]
+    get_object_or_404(Opportunity, organization=request.org, id=opportunity_id)
+    form = PaymentExportForm(data=request.POST)
+    if not form.is_valid():
+        messages.error(request, form.errors)
+        return redirect("opportunity:detail", request.org.slug, opportunity_id)
+
+    export_format = form.cleaned_data["format"]
+    result = generate_catchment_area_export.delay(opportunity_id, export_format)
+    redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
+    return redirect(f"{redirect_url}?export_task_id={result.id}")

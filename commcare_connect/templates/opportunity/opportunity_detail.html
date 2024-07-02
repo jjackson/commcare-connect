@@ -116,6 +116,19 @@
               {% translate "Export Deliver Status" %}
             </a>
           </li>
+           <li class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportCatchmentModal">
+              <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
+              {% translate "Export Catchment Area" %}
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#importCatchmentModal">
+              <i class="bi bi-file-earmark-arrow-down-fill pe-2"></i>
+              {% translate "Import Catchment Area" %}
+            </a>
+          </li>
         </ul>
       </div>
     </div>
@@ -448,6 +461,11 @@
   <!-- Completed Work Export Modal -->
   {% url 'opportunity:completed_work_export' org_slug=request.org.slug pk=opportunity.pk as completed_work_export_url %}
   {% include "export_modal.html" with modal_id="exportCompletedWorkModal" modal_title=_("Export Payment Verification") export_url=completed_work_export_url export_form=export_form %}
+
+ <!-- Catchment Area Export Modal -->
+  {% url 'opportunity:catchment_area_export' org_slug=request.org.slug pk=opportunity.pk as catchment_area_export_url %}
+  {% include "export_modal.html" with modal_id="exportCatchmentModal" modal_title=_("Export Catchment Area") export_url=catchment_area_export_url export_form=export_form %}
+
 
   <!-- Completed Work Import modal -->
   <div class="modal fade" id="importCompletedWorkModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">

@@ -16,6 +16,7 @@ from commcare_connect.connect_id_client import fetch_users, send_message, send_m
 from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
 from commcare_connect.opportunity.export import (
+    export_catchment_area_table,
     export_deliver_status_table,
     export_empty_payment_table,
     export_user_status_table,
@@ -324,3 +325,12 @@ def bulk_approve_completed_work():
                     access.payment_accrued += approved_count * completed_work.payment_unit.amount
                 completed_work.save()
         access.save()
+
+
+@celery_app.task()
+def generate_catchment_area_export(opportunity_id: int, export_format: str):
+    opportunity = Opportunity.objects.get(id=opportunity_id)
+    dataset = export_catchment_area_table(opportunity)
+    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_catchment_area.{export_format}"
+    save_export(dataset, export_tmp_name, export_format)
+    return export_tmp_name
