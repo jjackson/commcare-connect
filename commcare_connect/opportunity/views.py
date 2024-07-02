@@ -819,19 +819,19 @@ def verification_flags_config(request, org_slug=None, pk=None):
         DeliverUnitFlagRules, DeliverUnitFlagsForm, max_num=len(deliver_units), can_delete=True
     )
     deliver_unit_formset = DeliverUnitFlagsFormset(
-        form_kwargs={"deliver_units": deliver_units},
-        data=request.POST or None,
+        form_kwargs={"opportunity": opportunity},
         prefix="deliver_unit",
         queryset=DeliverUnitFlagRules.objects.filter(opportunity=opportunity),
+        data=request.POST or None,
     )
     FormJsonValidationRulesFormset = modelformset_factory(
         FormJsonValidationRules, FormJsonValidationRulesForm, can_delete=True
     )
     form_json_formset = FormJsonValidationRulesFormset(
         form_kwargs={"deliver_units": deliver_units},
-        data=request.POST or None,
         prefix="form_json",
         queryset=FormJsonValidationRules.objects.filter(opportunity=opportunity),
+        data=request.POST or None,
     )
 
     if form.is_valid() and deliver_unit_formset.is_valid() and form_json_formset.is_valid():
