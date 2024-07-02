@@ -11,7 +11,7 @@ from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
-from commcare_connect.utils.db import BaseModel
+from commcare_connect.utils.db import BaseModel, slugify_uniquely
 
 
 class CommCareApp(BaseModel):
@@ -575,6 +575,11 @@ class FormJsonValidationRules(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     question_path = models.CharField(max_length=255)
     question_value = models.CharField(max_length=255)
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            self.slug = slugify_uniquely(self.name, self.__class__)
+        super().save(*args, **kwargs)
 
 
 class DeliverUnitFlagRules(models.Model):
