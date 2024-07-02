@@ -16,6 +16,8 @@ from commcare_connect.opportunity.models import (
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
+    DeliverUnitFlagRules,
+    FormJsonValidationRules,
     LearnModule,
     Opportunity,
     OpportunityAccess,
@@ -240,6 +242,25 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         and opportunity_flags.form_submission_end < xform.metadata.timeStart.time()
     ):
         flags.append(["form_submission_period", "Form was submitted after the end time"])
+
+    deliver_unit_flags = DeliverUnitFlagRules.objects.filter(
+        opportunity=opportunity, deliver_unit=deliver_unit
+    ).first()
+    if deliver_unit_flags is not None:
+        attachments = xform.raw_form.get("attachments", {})
+        try:
+            attachments.pop("form.xml")
+        except KeyError:
+            pass
+        if len(attachments) == 0:
+            flags.append(["attachment_missing", "Form was submitted without attachements."])
+
+    form_json_rules = FormJsonValidationRules.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit)
+    for form_json_rule in form_json_rules:
+        json_path = parse(form_json_rule.question_path)
+        matches = [match.value for match in json_path.find(xform.form) if match.value == form_json_rule.question_value]
+        if not matches:
+            flags.append(["form_value_not_found", f"Form does not satisfy {form_json_rule.name} validation rule."])
 
     if access.suspended:
         flags.append(["user_suspended", "This user is suspended from the opportunity."])
