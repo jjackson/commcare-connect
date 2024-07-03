@@ -82,65 +82,36 @@
               'input[name$="-INITIAL_FORMS"]'
             );
           },
+
           addForm() {
             const newForm = this.template.content.cloneNode(true);
-            // replace __prefix__ with the correct index
-            for (let el of newForm.querySelectorAll("div", "input, select, textarea")) {
-              if (el.name && el.name.includes("__prefix__")) {
-                el.name = el.name.replace(
-                  "__prefix__",
-                  this.formsContainer.children.length
-                );
-              }
-              if (el.id && el.id.includes("__prefix__")) {
-                el.id = el.id.replace(
-                  "__prefix__",
-                  this.formsContainer.children.length
-                );
-              }
+            const elements = newForm.querySelectorAll("div, input, select, textarea, label");
+            for (let el of elements) {
+              if (el.name && el.name.includes("__prefix__"))
+                el.name = el.name.replace("__prefix__", this.formsContainer.children.length);
+              if (el.id && el.id.includes("__prefix__"))
+                el.id = el.id.replace("__prefix__", this.formsContainer.children.length);
+              if (el.htmlForm && el.htmlFor.includes("__prefix__"))
+                el.htmlFor = el.htmlFor.replace("__prefix__", this.formsContainer.children.length);
             }
-            const labels = newForm.querySelectorAll("label");
-            for (let el of labels) {
-              if (el.htmlFor.includes("__prefix__")) {
-                el.htmlFor = el.htmlFor.replace(
-                  "__prefix__",
-                  this.formsContainer.children.length
-                );
-              }
-            }
-
-            // add the new form to the dom
             this.formsContainer.appendChild(newForm);
-
-            // adjust the management form inputs
             this.totalFormsInput.value = parseInt(this.totalFormsInput.value) + 1;
             this.initialFormsInput.value = parseInt(this.initialFormsInput.value) + 1;
           },
-          deleteForm() {
-            // remove the element from the dom
-            this.$el.closest("#form_json_form").remove();
 
-            // adjust the ids of the remaining inputs
+          deleteForm() {
+            this.$el.closest("#form_json_form").remove();
             for (let i = 0; i < this.formsContainer.children.length; i++) {
               const form = this.formsContainer.children[i];
-              const elements = form.querySelectorAll("div", "input, select, textarea", "label");
+              const elements = form.querySelectorAll("div, input, select, textarea, label");
               for (let el of elements) {
-                if (el.name)
-                  el.name = el.name.replace(/\d+/, i);
-                if (el.id)
-                  el.id = el.id.replace(/\d+/, i);
-                if (el.htmlFor)
-                  el.htmlFor = el.htmlFor.replace(/\d+/, i);
+                if (el.name) el.name = el.name.replace(/\d+/, i);
+                if (el.id) el.id = el.id.replace(/\d+/, i);
+                if (el.htmlFor) el.htmlFor = el.htmlFor.replace(/\d+/, i);
               }
             }
-
-            // adjust the management form inputs
-            this.totalFormsInput.value = Math.max(
-              0, parseInt(this.totalFormsInput.value) - 1
-            );
-            this.initialFormsInput.value = Math.max(
-              0, parseInt(this.initialFormsInput.value) - 1
-            );
+            this.totalFormsInput.value = Math.max(0, parseInt(this.totalFormsInput.value) - 1);
+            this.initialFormsInput.value = Math.max(0, parseInt(this.initialFormsInput.value) - 1);
           }
         }));
       });
