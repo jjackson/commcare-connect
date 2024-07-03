@@ -16,7 +16,7 @@
 {% block content %}
   <h2 class="mb-2">Payments for User {{ access.display_name }}</h2>
   <hr>
-  {% if latest_payment %}
+  {% if latest_payment and not request.org_membership.is_viewer %}
     <button class="btn btn-danger mb-2" data-bs-toggle="modal" data-bs-target="#rollbackConfirmModal">Rollback Last Payment</button>
   {% endif %}
   {% load django_tables2 %}
