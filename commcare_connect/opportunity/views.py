@@ -80,6 +80,7 @@ from commcare_connect.opportunity.tasks import (
 )
 from commcare_connect.opportunity.visit_import import (
     ImportException,
+    bulk_update_catchments,
     bulk_update_completed_work_status,
     bulk_update_payment_status,
     bulk_update_visit_status,
@@ -913,3 +914,18 @@ def export_catchment_area(request, **kwargs):
     result = generate_catchment_area_export.delay(opportunity_id, export_format)
     redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
     return redirect(f"{redirect_url}?export_task_id={result.id}")
+
+
+@org_member_required
+@require_POST
+def import_catchment_area(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
+    file = request.FILES.get("catchments")
+    try:
+        status = bulk_update_catchments(opportunity, file)
+    except ImportException as e:
+        messages.error(request, e.message)
+    else:
+        message = f"Catchment area updated successfully for {len(status)}."
+        messages.success(request, mark_safe(message))
+    return redirect("opportunity:detail", org_slug, pk)

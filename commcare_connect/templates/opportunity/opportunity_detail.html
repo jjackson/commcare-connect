@@ -7,7 +7,7 @@
 
 {% block breadcrumbs_inner %}
   {{ block.super }}
-  <li class="breadcrumb-item active" aria-current="page">{{ object.name }}</li>
+ <li class="breadcrumb-item active" aria-current="page">{{ object.name }}</li>
 {% endblock %}
 
 {% block content %}
@@ -499,4 +499,37 @@
       </div>
     </div>
   </div>
+
+<!-- Catchment Area Import modal -->
+<div class="modal fade" id="importCatchmentModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-primary">
+        <h1 class="modal-title fs-5 text-white">{% translate "Import Catchment Areas" %}</h1>
+        <button type="button" class="btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{% url "opportunity:catchment_area_import" org_slug=request.org.slug pk=opportunity.pk %}" method="post"
+            enctype="multipart/form-data">
+        <div class="modal-body">
+          <div class="mb-3">
+            {% csrf_token %}
+            <input class="form-control" type="file" id="importFile" name="catchments" required>
+            <div class="col-auto">
+              <span id="importFileHelp" class="form-text">
+                {% blocktrans %}
+                  The file must contain at least the "Area Name", "Active", "Latitude", "Longitude" and "Radius(meter)" column.
+                  The import is case-insensitive.
+                {% endblocktrans %}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-cloud-arrow-up"></i> Import</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endblock modal %}
