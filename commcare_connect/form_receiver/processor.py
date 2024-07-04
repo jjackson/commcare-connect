@@ -237,7 +237,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
                 within_catchment = False
                 for area in areas:
                     dist = distance((area.latitude, area.longitude), (cur_lat, cur_lon))
-                    if dist < area.radius:
+                    if dist.meters < area.radius:
                         within_catchment = True
                         break
                 if not within_catchment:
