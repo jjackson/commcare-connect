@@ -88,15 +88,13 @@ class CompletedWorkImportStatus:
 @dataclass
 class CatchmentAreaImportStatus:
     seen_catchments: set[str]
-    missing_catchments: set[str]
+    missing_catchments: int
 
     def __len__(self):
         return len(self.seen_catchments)
 
     def get_missing_message(self):
-        joined = ", ".join(self.missing_catchments)
-        missing = textwrap.wrap(joined, width=115, break_long_words=False, break_on_hyphens=False)
-        return f"<br>{len(self.missing_catchments)} catchment areas had error:<br>{'<br>'.join(missing)}"
+        return f"<br>{self.missing_catchments} catchment areas were not found."
 
 
 def bulk_update_visit_status(opportunity: Opportunity, file: UploadedFile) -> VisitImportStatus:
@@ -341,19 +339,19 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
         to_update = []
         invalid_rows = []
         seen_catchments = set()
-        missing_catchments = set()
+        missing_catchments = 0
 
-        opportunity_accesses = {}
+        opportunity_access = {}
         username_index = None
         if USERNAME_COL in headers:
             username_index = _get_header_index(headers, USERNAME_COL)
-            opportunity_accesses = {
+            opportunity_access = {
                 oa.user.username: oa
                 for oa in OpportunityAccess.objects.filter(opportunity=opportunity).select_related("user")
             }
 
         for row in dataset:
-            row = list(row)  # Convert row iterator to list for indexing
+            row = list(row)
             try:
                 latitude = Decimal(row[latitude_index])
                 longitude = Decimal(row[longitude_index])
@@ -385,9 +383,9 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
                         name=area_name,
                         active=active,
                     )
-                    seen_catchments.add(catchment.name)
+                    missing_catchments += 1
                     to_create.append(catchment)
-                elif row[username_index] in opportunity_accesses:
+                elif row[username_index] in opportunity_access:
                     username = row[username_index]
                     catchment = None
                     created = None
@@ -399,7 +397,7 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
                                 "latitude": latitude,
                                 "longitude": longitude,
                                 "radius": radius,
-                                "opportunity_accesses": opportunity_accesses[username],
+                                "opportunity_access": opportunity_access[username],
                                 "opportunity": opportunity,
                                 "name": area_name,
                                 "active": active,
@@ -411,14 +409,14 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
                         catchment.longitude = longitude
                         catchment.radius = radius
                         catchment.active = active
-                        catchment.opportunity_accesses = opportunity_accesses[username]
+                        catchment.opportunity_access = opportunity_access[username]
                         catchment.opportunity = opportunity
                         catchment.name = area_name
                         to_update.append(catchment)
-
-                    seen_catchments.add(catchment.name)
+                        seen_catchments.add(str(catchment.id))
+                    else:
+                        missing_catchments += 1
                 else:
-                    missing_catchments.add(row[area_name_index])
                     invalid_rows.append((row, f"Invalid username {row[username_index]}"))
 
             except (ValueError, TypeError) as e:
