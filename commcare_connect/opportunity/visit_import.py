@@ -1,5 +1,4 @@
 import codecs
-import mimetypes
 import textwrap
 from dataclasses import dataclass
 from decimal import Decimal
@@ -101,13 +100,7 @@ class CatchmentAreaImportStatus:
 
 
 def bulk_update_visit_status(opportunity: Opportunity, file: UploadedFile) -> VisitImportStatus:
-    file_format = None
-    if file.content_type:
-        file_format = mimetypes.guess_extension(file.content_type)
-        if file_format:
-            file_format = file_format[1:]
-    if not file_format:
-        file_format = file.name.split(".")[-1].lower()
+    file_format = get_file_extension(file)
     if file_format not in ("csv", "xlsx"):
         raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
     imported_data = get_imported_dataset(file, file_format)
@@ -211,13 +204,7 @@ def _get_header_index(headers: list[str], col_name: str) -> int:
 
 
 def bulk_update_payment_status(opportunity: Opportunity, file: UploadedFile) -> PaymentImportStatus:
-    file_format = None
-    if file.content_type:
-        file_format = mimetypes.guess_extension(file.content_type)
-        if file_format:
-            file_format = file_format[1:]
-    if not file_format:
-        file_format = file.name.split(".")[-1].lower()
+    file_format = get_file_extension(file)
     if file_format not in ("csv", "xlsx"):
         raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
     imported_data = get_imported_dataset(file, file_format)
@@ -268,13 +255,7 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
 
 
 def bulk_update_completed_work_status(opportunity: Opportunity, file: UploadedFile) -> CompletedWorkImportStatus:
-    file_format = None
-    if file.content_type:
-        file_format = mimetypes.guess_extension(file.content_type)
-        if file_format:
-            file_format = file_format[1:]
-    if not file_format:
-        file_format = file.name.split(".")[-1].lower()
+    file_format = get_file_extension(file)
     if file_format not in ("csv", "xlsx"):
         raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
     imported_data = get_imported_dataset(file, file_format)
