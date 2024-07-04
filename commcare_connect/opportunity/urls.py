@@ -30,6 +30,7 @@ from commcare_connect.opportunity.views import (
     export_users_for_payment,
     fetch_attachment,
     get_application,
+    import_catchment_area,
     payment_delete,
     payment_import,
     reject_visit,
@@ -97,5 +98,5 @@ urlpatterns = [
     path("<int:opp_id>/suspend_user/<int:pk>/", view=suspend_user, name="suspend_user"),
     path("<int:opp_id>/revoke_user_suspension/<int:pk>/", view=revoke_user_suspension, name="revoke_user_suspension"),
     path("<int:pk>/catchment_area_export/", view=export_catchment_area, name="catchment_area_export"),
-    path("<int:pk>/catchment_area_import/", view=update_visit_status_import, name="catchment_area_import"),
+    path("<int:pk>/catchment_area_import/", view=import_catchment_area, name="catchment_area_import"),
 ]

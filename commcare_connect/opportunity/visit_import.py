@@ -33,7 +33,7 @@ REQUIRED_COLS = [VISIT_ID_COL, STATUS_COL]
 LATITUDE_COL = "latitude"
 LONGITUDE_COL = "longitude"
 RADIUS_COL = "radius"
-AREA_NAME_COL = "name"
+AREA_NAME_COL = "area name"
 ACTIVE_COL = "active"
 CATCHMENT_ID = "catchment id"
 
@@ -88,16 +88,16 @@ class CompletedWorkImportStatus:
 
 @dataclass
 class CatchmentAreaImportStatus:
-    seen_catchment_area: set[str]
-    missing_catchment_area: set[str]
+    seen_catchments: set[str]
+    missing_catchments: set[str]
 
     def __len__(self):
-        return len(self.seen_catchment_area)
+        return len(self.seen_catchments)
 
     def get_missing_message(self):
-        joined = ", ".join(self.missing_catchment_area)
+        joined = ", ".join(self.missing_catchments)
         missing = textwrap.wrap(joined, width=115, break_long_words=False, break_on_hyphens=False)
-        return f"<br>{len(self.missing_catchment_area)} catchment areas had error:<br>{'<br>'.join(missing)}"
+        return f"<br>{len(self.missing_catchments)} catchment areas had error:<br>{'<br>'.join(missing)}"
 
 
 def bulk_update_visit_status(opportunity: Opportunity, file: UploadedFile) -> VisitImportStatus:
@@ -341,7 +341,7 @@ def bulk_update_catchments(opportunity: Opportunity, file: UploadedFile):
     if file_format not in ("csv", "xlsx"):
         raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
     imported_data = get_imported_dataset(file, file_format)
-    _bulk_update_catchments(opportunity, imported_data)
+    return _bulk_update_catchments(opportunity, imported_data)
 
 
 def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
@@ -358,6 +358,9 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
     with transaction.atomic():
         to_create = []
         to_update = []
+        invalid_rows = []
+        seen_catchments = set()
+        missing_catchments = set()
 
         opportunity_accesses = {}
         username_index = None
@@ -368,9 +371,6 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
                 for oa in OpportunityAccess.objects.filter(opportunity=opportunity).select_related("user")
             }
 
-        invalid_rows = []
-        seen_catchments = set()
-        missing_catchments = set()
         for row in dataset:
             row = list(row)  # Convert row iterator to list for indexing
             try:
@@ -443,6 +443,8 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
             except (ValueError, TypeError) as e:
                 missing_catchments.add(row[area_name_index])
                 invalid_rows.append((row, f"Invalid value type in row {row}: {e}"))
+                print(to_update)
+                print(to_create)
 
         if to_create:
             CatchmentArea.objects.bulk_create(to_create)
