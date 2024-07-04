@@ -443,8 +443,6 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
             except (ValueError, TypeError) as e:
                 missing_catchments.add(row[area_name_index])
                 invalid_rows.append((row, f"Invalid value type in row {row}: {e}"))
-                print(to_update)
-                print(to_create)
 
         if to_create:
             CatchmentArea.objects.bulk_create(to_create)
