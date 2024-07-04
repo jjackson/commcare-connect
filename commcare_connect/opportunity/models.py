@@ -585,8 +585,8 @@ class UserInvite(models.Model):
 
 class CatchmentArea(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
-    latitude = models.DecimalField(max_digits=8, decimal_places=8)
-    longitude = models.DecimalField(max_digits=8, decimal_places=8)
+    latitude = models.DecimalField(max_digits=10, decimal_places=8)
+    longitude = models.DecimalField(max_digits=11, decimal_places=8)
     radius = models.IntegerField(default=1000)
     opportunity_access = models.ForeignKey(OpportunityAccess, null=True, on_delete=models.DO_NOTHING)
     active = models.BooleanField(default=True)

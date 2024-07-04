@@ -317,21 +317,22 @@ class SuspendedUsersTable(tables.Table):
 
 
 class CatchmentAreaTable(tables.Table):
+    catchment_id = columns.Column(accessor="id", verbose_name="Catchment id")
     username = columns.Column(accessor="opportunity_access__user__username", verbose_name="Username")
     name = columns.Column(verbose_name="Area name")
     active = columns.Column(verbose_name="Active")
     latitude = columns.Column(verbose_name="Latitude")
     longitude = columns.Column(verbose_name="Longitude")
-    radius = columns.Column(verbose_name="Radius(meters)")
+    radius = columns.Column(verbose_name="Radius")
 
     def render_active(self, value):
         return "Yes" if value else "No"
 
     class Meta:
         model = CatchmentArea
-        fields = ("username", "area_name", "active", "latitude", "longitude", "radius")
+        fields = ("username", "catchment_id", "name", "active", "latitude", "longitude", "radius")
         orderable = False
-        sequence = ("username", "area_name", "active", "latitude", "longitude", "radius")
+        sequence = ("username", "catchment_id", "name", "active", "latitude", "longitude", "radius")
 
 
 def popup_html(value, popup_title, popup_direction="top", popup_class="", popup_attributes=""):
