@@ -175,3 +175,11 @@ class UserInviteFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.UserInvite"
+
+
+class DeliverUnitFlagRulesFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    deliver_unit = SubFactory(DeliverUnitFactory)
+
+    class Meta:
+        model = "opportunity.DeliverUnitFlagRules"

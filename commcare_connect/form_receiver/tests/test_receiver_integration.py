@@ -28,6 +28,7 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.tasks import bulk_approve_completed_work
 from commcare_connect.opportunity.tests.factories import (
     DeliverUnitFactory,
+    DeliverUnitFlagRulesFactory,
     LearnModuleFactory,
     OpportunityAccessFactory,
     OpportunityClaimFactory,
@@ -497,6 +498,32 @@ def test_reciever_verification_flags_form_submission_end(
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.flagged
     assert ["form_submission_period", "Form was submitted after the end time"] in visit.flag_reason.get("flags", [])
+
+
+def test_reciever_verification_flags_duration(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
+
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert ["duration", "The form was completed too quickly."] in visit.flag_reason.get("flags", [])
+
+
+def test_reciever_verification_flags_check_attachments(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=0, check_attachments=True)
+
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert ["attachment_missing", "Form was submitted without attachements."] in visit.flag_reason.get("flags", [])
 
 
 def _get_form_json(learn_app, module_id, form_block=None):
