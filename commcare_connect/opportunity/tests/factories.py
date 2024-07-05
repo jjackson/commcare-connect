@@ -175,3 +175,16 @@ class UserInviteFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.UserInvite"
+
+
+class CatchmentAreaFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    opportunity_access = SubFactory(OpportunityAccessFactory)
+    latitude = Faker("latitude")
+    longitude = Faker("longitude")
+    radius = Faker("random_int", min=500, max=2000)
+    active = Faker("boolean")
+    name = Faker("city")
+
+    class Meta:
+        model = "opportunity.CatchmentArea"
