@@ -65,7 +65,7 @@ class UserVisitTable(tables.Table):
     )
 
     def render_flag_reason(self, value):
-        short = [flag[0] for flag in value.get("flags")]
+        short = [flag[1] for flag in value.get("flags")]
         return ", ".join(short)
 
     class Meta:
@@ -217,6 +217,7 @@ class DeliverStatusTable(tables.Table):
     approved = columns.Column("Approved")
     rejected = columns.Column("Rejected")
     over_limit = columns.Column("Over Limit")
+    incomplete = columns.Column("Incomplete")
 
     details = columns.LinkColumn(
         "opportunity:user_visits_list",
@@ -238,6 +239,7 @@ class DeliverStatusTable(tables.Table):
             "approved",
             "rejected",
             "over_limit",
+            "incomplete",
         )
 
     def render_last_visit_date(self, record, value):

@@ -109,6 +109,15 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
                     ),
                     distinct=True,
                 ),
+                incomplete=Count(
+                    "completedwork",
+                    filter=Q(
+                        completedwork__opportunity_access_id=F("pk"),
+                        completedwork__payment_unit=payment_unit,
+                        completedwork__status=CompletedWorkStatus.incomplete,
+                    ),
+                    distinct=True,
+                ),
                 completed=F("approved") + F("rejected") + F("pending") + F("over_limit"),
             )
             .order_by("user__name")
