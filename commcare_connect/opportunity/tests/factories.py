@@ -183,3 +183,11 @@ class DeliverUnitFlagRulesFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.DeliverUnitFlagRules"
+
+
+class FormJsonValidationRulesFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    name = Faker("word")
+
+    class Meta:
+        model = "opportunity.FormJsonValidationRules"

@@ -29,6 +29,7 @@ from commcare_connect.opportunity.tasks import bulk_approve_completed_work
 from commcare_connect.opportunity.tests.factories import (
     DeliverUnitFactory,
     DeliverUnitFlagRulesFactory,
+    FormJsonValidationRulesFactory,
     LearnModuleFactory,
     OpportunityAccessFactory,
     OpportunityClaimFactory,
@@ -524,6 +525,46 @@ def test_reciever_verification_flags_check_attachments(
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.flagged
     assert ["attachment_missing", "Form was submitted without attachements."] in visit.flag_reason.get("flags", [])
+
+
+def test_reciever_verification_flags_form_json_rule(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    form_json["form"]["value"] = "123"
+    form_json_rule = FormJsonValidationRulesFactory(
+        opportunity=opportunity,
+        question_path="$.form.value",
+        question_value="123",
+    )
+    form_json_rule.deliver_unit.add(deliver_unit)
+
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert not visit.flagged
+
+
+def test_reciever_verification_flags_form_json_rule_flagged(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    form_json["form"]["value"] = "456"
+    form_json_rule = FormJsonValidationRulesFactory(
+        opportunity=opportunity,
+        question_path="$.form.value",
+        question_value="123",
+    )
+    form_json_rule.deliver_unit.add(deliver_unit)
+
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert [
+        "form_value_not_found",
+        f"Form does not satisfy {form_json_rule.name} validation rule.",
+    ] in visit.flag_reason.get("flags", [])
 
 
 def _get_form_json(learn_app, module_id, form_block=None):
