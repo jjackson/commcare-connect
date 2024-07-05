@@ -209,10 +209,6 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         user_visit.status = VisitValidationStatus.duplicate
         if opportunity_flags.duplicate:
             flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
-    if opportunity_flags.duration > 0 and xform.metadata.duration < datetime.timedelta(
-        minutes=opportunity_flags.duration
-    ):
-        flags.append(["duration", "The form was completed too quickly."])
     if xform.metadata.location is None:
         if opportunity_flags.gps:
             flags.append(["gps", "GPS data is missing"])
@@ -254,6 +250,11 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             pass
         if len(attachments) == 0:
             flags.append(["attachment_missing", "Form was submitted without attachements."])
+
+        if deliver_unit_flags.duration > 0 and xform.metadata.duration < datetime.timedelta(
+            minutes=deliver_unit_flags.duration
+        ):
+            flags.append(["duration", "The form was completed too quickly."])
 
     form_json_rules = FormJsonValidationRules.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit)
     for form_json_rule in form_json_rules:
