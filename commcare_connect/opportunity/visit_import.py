@@ -420,7 +420,6 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
                     invalid_rows.append((row, f"Invalid username {row[username_index]}"))
 
             except (ValueError, TypeError) as e:
-                missing_catchments.add(row[area_name_index])
                 invalid_rows.append((row, f"Invalid value type in row {row}: {e}"))
 
         if to_create:
