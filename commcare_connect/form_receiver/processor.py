@@ -258,8 +258,11 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
 
     form_json_rules = FormJsonValidationRules.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit)
     for form_json_rule in form_json_rules:
-        json_path = parse(form_json_rule.question_path)
-        matches = [match.value for match in json_path.find(xform.form) if match.value == form_json_rule.question_value]
+        json_path = parse(f"$.{form_json_rule.question_path}")
+        matches = [
+            match.value for match in json_path.find(xform.raw_form) if match.value == form_json_rule.question_value
+        ]
+
         if not matches:
             flags.append(["form_value_not_found", f"Form does not satisfy {form_json_rule.name} validation rule."])
 
