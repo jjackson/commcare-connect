@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0049_deliverytype_opportunity_delivery_type"),
+        ("opportunity", "0050_completedwork_status_modified_date_and_more"),
     ]
 
     operations = [
@@ -19,8 +19,8 @@ class Migration(migrations.Migration):
             name="CatchmentArea",
             fields=[
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                ("latitude", models.DecimalField(decimal_places=8, max_digits=8)),
-                ("longitude", models.DecimalField(decimal_places=8, max_digits=8)),
+                ("latitude", models.DecimalField(decimal_places=8, max_digits=11)),
+                ("longitude", models.DecimalField(decimal_places=8, max_digits=11)),
                 ("radius", models.IntegerField(default=1000)),
                 ("active", models.BooleanField(default=True)),
                 ("name", models.CharField(max_length=255)),
