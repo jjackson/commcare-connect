@@ -43,6 +43,15 @@ class HQApiKey(models.Model):
     )
 
 
+class DeliveryType(models.Model):
+    name = models.CharField(max_length=255)
+    slug = models.CharField(max_length=255)
+    description = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.name
+
+
 class Opportunity(BaseModel):
     organization = models.ForeignKey(
         Organization,
@@ -77,6 +86,8 @@ class Opportunity(BaseModel):
     currency = models.CharField(max_length=3, null=True)
     auto_approve_visits = models.BooleanField(default=False)
     auto_approve_payments = models.BooleanField(default=False)
+    is_test = models.BooleanField(default=True)
+    delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
 
     def __str__(self):
         return self.name
@@ -382,16 +393,24 @@ class CompletedWorkStatus(models.TextChoices):
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
     over_limit = "over_limit", gettext("Over Limit")
+    incomplete = "incomplete", gettext("Incomplete")
 
 
 class CompletedWork(models.Model):
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE)
     payment_unit = models.ForeignKey(PaymentUnit, on_delete=models.DO_NOTHING)
-    status = models.CharField(max_length=50, choices=CompletedWorkStatus.choices, default=CompletedWorkStatus.pending)
+    status = models.CharField(
+        max_length=50, choices=CompletedWorkStatus.choices, default=CompletedWorkStatus.incomplete
+    )
     last_modified = models.DateTimeField(auto_now=True)
     entity_id = models.CharField(max_length=255, null=True, blank=True)
     entity_name = models.CharField(max_length=255, null=True, blank=True)
     reason = models.CharField(max_length=300, null=True, blank=True)
+    status_modified_date = models.DateTimeField(null=True)
+
+    def update_status(self, status):
+        self.status = status
+        self.status_modified_date = now()
 
     # TODO: add caching on this property
     @property
@@ -487,6 +506,11 @@ class UserVisit(XFormBaseModel):
     flagged = models.BooleanField(default=False)
     flag_reason = models.JSONField(null=True, blank=True)
     completed_work = models.ForeignKey(CompletedWork, on_delete=models.DO_NOTHING, null=True, blank=True)
+    status_modified_date = models.DateTimeField(null=True)
+
+    def update_status(self, status):
+        self.status = status
+        self.status_modified_date = now()
 
     @property
     def images(self):
