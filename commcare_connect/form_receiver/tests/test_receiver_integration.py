@@ -252,6 +252,8 @@ def test_receiver_duplicate(user_with_connectid_link: User, api_client: APIClien
 def test_flagged_form(user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity):
     # The mock data for form fails with duration flag
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
     make_request(api_client, form_json, user_with_connectid_link)
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.status == VisitValidationStatus.pending
@@ -276,6 +278,8 @@ def test_auto_approve_flagged_visits(user_with_connectid_link: User, api_client:
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
     opportunity.auto_approve_visits = True
     opportunity.save()
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
     make_request(api_client, form_json, user_with_connectid_link)
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.flagged
@@ -289,6 +293,8 @@ def test_auto_approve_payments_flagged_visit(
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
     opportunity.auto_approve_payments = True
     opportunity.save()
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
     make_request(api_client, form_json, user_with_connectid_link)
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.flagged
