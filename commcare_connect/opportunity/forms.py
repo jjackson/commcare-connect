@@ -5,10 +5,12 @@ from crispy_forms.helper import FormHelper, Layout
 from crispy_forms.layout import HTML, Column, Field, Fieldset, Row, Submit
 from dateutil.relativedelta import relativedelta
 from django import forms
-from django.db.models import TextChoices
+from django.core.exceptions import ValidationError
+from django.db.models import Q, TextChoices
 from django.urls import reverse
 from django.utils.timezone import now
 
+from commcare_connect import connect_id_client
 from commcare_connect.opportunity.models import (
     CommCareApp,
     DeliverUnit,
@@ -22,6 +24,8 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
 
+FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Africa"), ("+91", "India")]
+
 
 class OpportunityChangeForm(forms.ModelForm):
     class Meta:
@@ -34,9 +38,12 @@ class OpportunityChangeForm(forms.ModelForm):
             "short_description",
             "auto_approve_visits",
             "auto_approve_payments",
+            "is_test",
+            "delivery_type",
         ]
 
     def __init__(self, *args, **kwargs):
+        credentials = connect_id_client.fetch_credentials()
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
@@ -45,6 +52,8 @@ class OpportunityChangeForm(forms.ModelForm):
             Row(Field("active", css_class="form-check-input", wrapper_class="form-check form-switch")),
             Row(Field("auto_approve_visits", css_class="form-check-input", wrapper_class="form-check form-switch")),
             Row(Field("auto_approve_payments", css_class="form-check-input", wrapper_class="form-check form-switch")),
+            Row(Field("is_test", css_class="form-check-input", wrapper_class="form-check form-switch")),
+            Row(Field("delivery_type")),
             Row(Field("description")),
             Row(Field("short_description")),
             Row(Field("currency")),
@@ -53,7 +62,14 @@ class OpportunityChangeForm(forms.ModelForm):
                 Field("end_date", wrapper_class="form-group col-md-6 mb-0"),
             ),
             HTML("<hr />"),
-            Row(Field("users")),
+            Fieldset(
+                "Invite Users",
+                Row(Field("users")),
+                Row(
+                    Field("filter_country", wrapper_class="form-group col-md-6 mb-0"),
+                    Field("filter_credential", wrapper_class="form-group col-md-6 mb-0"),
+                ),
+            ),
             Submit("submit", "Submit"),
         )
 
@@ -70,12 +86,37 @@ class OpportunityChangeForm(forms.ModelForm):
             required=False,
             help_text="Extends opportunity end date for all users.",
         )
+        self.fields["filter_country"] = forms.CharField(
+            label="Filter By Country",
+            widget=forms.Select(choices=[("", "Select country")] + FILTER_COUNTRIES),
+            required=False,
+        )
+        self.fields["filter_credential"] = forms.CharField(
+            label="Filter By Credential",
+            widget=forms.Select(choices=[("", "Select credential")] + [(c.slug, c.name) for c in credentials]),
+            required=False,
+        )
         self.initial["end_date"] = self.instance.end_date.isoformat()
+        self.initial["filter_country"] = [""]
+        self.initial["filter_credential"] = [""]
+        self.currently_active = self.instance.active
 
     def clean_users(self):
         user_data = self.cleaned_data["users"]
         split_users = [line.strip() for line in user_data.splitlines() if line.strip()]
         return split_users
+
+    def clean_active(self):
+        active = self.cleaned_data["active"]
+        if active and not self.currently_active:
+            app_ids = (self.instance.learn_app.cc_app_id, self.instance.deliver_app.cc_app_id)
+            if (
+                Opportunity.objects.filter(active=True)
+                .filter(Q(learn_app__cc_app_id__in=app_ids) | Q(deliver_app__cc_app_id__in=app_ids))
+                .exists()
+            ):
+                raise ValidationError("Cannot reactivate opportunity with reused applications", code="app_reused")
+        return active
 
 
 class OpportunityInitForm(forms.ModelForm):
@@ -439,6 +480,7 @@ class VisitExportForm(forms.Form):
     format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="xlsx")
     date_range = forms.ChoiceField(choices=DateRanges.choices, initial=DateRanges.LAST_30_DAYS)
     status = forms.MultipleChoiceField(choices=[("all", "All")] + VisitValidationStatus.choices, initial=["all"])
+    flatten_form_data = forms.BooleanField(initial=True, required=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -447,6 +489,7 @@ class VisitExportForm(forms.Form):
             Row(Field("format")),
             Row(Field("date_range")),
             Row(Field("status")),
+            Row(Field("flatten_form_data", css_class="form-check-input", wrapper_class="form-check form-switch")),
         )
         self.helper.form_tag = False
 
