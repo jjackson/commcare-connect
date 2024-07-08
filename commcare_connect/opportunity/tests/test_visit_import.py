@@ -248,7 +248,7 @@ def test_bulk_update_payments(opportunity: Opportunity):
 
 @pytest.fixture
 def dataset():
-    return Dataset(headers=["latitude", "longitude", "area name", "radius", "active", "username", "catchment id"])
+    return Dataset(headers=["latitude", "longitude", "area name", "radius", "active", "username", "id"])
 
 
 @pytest.fixture
