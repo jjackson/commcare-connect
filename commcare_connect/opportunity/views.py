@@ -41,6 +41,7 @@ from commcare_connect.opportunity.helpers import (
 )
 from commcare_connect.opportunity.models import (
     BlobMeta,
+    CatchmentArea,
     CompletedModule,
     CompletedWork,
     CompletedWorkStatus,
@@ -639,6 +640,7 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
 def user_profile(request, org_slug=None, opp_id=None, pk=None):
     access = get_object_or_404(OpportunityAccess, pk=pk, accepted=True)
     user_visits = UserVisit.objects.filter(user=access.user, opportunity=access.opportunity)
+    user_catchments = CatchmentArea.objects.filter(opportunity_access__user=access.user)
     user_visit_data = []
     for user_visit in user_visits:
         if not user_visit.location:
@@ -667,6 +669,16 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
             if cw.approved_count
         ]
     )
+    user_catchment_data = [
+        {
+            "name": catchment.name,
+            "lat": float(catchment.latitude),
+            "lng": float(catchment.longitude),
+            "radius": catchment.radius,
+            "active": catchment.active,
+        }
+        for catchment in user_catchments
+    ]
     pending_payment = max(access.payment_accrued - access.total_paid, 0)
     return render(
         request,
@@ -679,6 +691,7 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
             MAPBOX_TOKEN=settings.MAPBOX_TOKEN,
             pending_completed_work_count=pending_completed_work_count,
             pending_payment=pending_payment,
+            user_catchments=user_catchment_data,
         ),
     )
 

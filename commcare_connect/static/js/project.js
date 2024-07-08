@@ -63,3 +63,36 @@ function addAccuracyCircles(map, visit_data) {
 }
 
 window.addAccuracyCircles = addAccuracyCircles;
+
+function addCatchmentAreas(map, catchments) {
+  map.on('load', () => {
+    dummyCatchments.forEach((catchment) => {
+      const color = catchment.active ? '#3366ff' : '#ff4d4d';
+      const circleRadius = catchment.radius / 100;
+
+      map.addSource(`catchment-${catchment.name}`, {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [catchment.lng, catchment.lat],
+          },
+        },
+      });
+
+      map.addLayer({
+        id: `catchment-circle-${catchment.name}`,
+        type: 'circle',
+        source: `catchment-${catchment.name}`,
+        paint: {
+          'circle-radius': circleRadius,
+          'circle-color': color,
+          'circle-opacity': 0.3,
+        },
+      });
+    });
+  });
+}
+
+window.addCatchmentAreas = addCatchmentAreas;
