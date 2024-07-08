@@ -66,7 +66,7 @@ class UserVisitTable(tables.Table):
     )
 
     def render_flag_reason(self, value):
-        short = [flag[0] for flag in value.get("flags")]
+        short = [flag[1] for flag in value.get("flags")]
         return ", ".join(short)
 
     class Meta:
