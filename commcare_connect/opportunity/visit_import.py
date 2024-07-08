@@ -34,7 +34,7 @@ LONGITUDE_COL = "longitude"
 RADIUS_COL = "radius"
 AREA_NAME_COL = "area name"
 ACTIVE_COL = "active"
-CATCHMENT_ID = "catchment id"
+ID = "id"
 
 
 class ImportException(Exception):
@@ -388,9 +388,9 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
                 elif row[username_index] in opportunity_access:
                     username = row[username_index]
                     catchment = None
-                    created = None
-                    if CATCHMENT_ID in headers and row[_get_header_index(headers, CATCHMENT_ID)]:
-                        catchment_id = row[_get_header_index(headers, CATCHMENT_ID)]
+                    created = False
+                    if ID in headers and row[_get_header_index(headers, ID)]:
+                        catchment_id = row[_get_header_index(headers, ID)]
                         catchment, created = CatchmentArea.objects.get_or_create(
                             id=catchment_id,
                             defaults={
@@ -404,18 +404,30 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
                             },
                         )
 
-                    if not created:
-                        catchment.latitude = latitude
-                        catchment.longitude = longitude
-                        catchment.radius = radius
-                        catchment.active = active
-                        catchment.opportunity_access = opportunity_access[username]
-                        catchment.opportunity = opportunity
-                        catchment.name = area_name
-                        to_update.append(catchment)
-                        seen_catchments.add(str(catchment.id))
+                        if not created:
+                            catchment.latitude = latitude
+                            catchment.longitude = longitude
+                            catchment.radius = radius
+                            catchment.active = active
+                            catchment.opportunity_access = opportunity_access[username]
+                            catchment.opportunity = opportunity
+                            catchment.name = area_name
+                            to_update.append(catchment)
+                            seen_catchments.add(str(catchment.id))
+                        else:
+                            missing_catchments += 1
                     else:
+                        catchment = CatchmentArea(
+                            latitude=latitude,
+                            longitude=longitude,
+                            radius=radius,
+                            opportunity=opportunity,
+                            opportunity_access=opportunity_access[username],
+                            name=area_name,
+                            active=active,
+                        )
                         missing_catchments += 1
+                        to_create.append(catchment)
                 else:
                     invalid_rows.append((row, f"Invalid username {row[username_index]}"))
 

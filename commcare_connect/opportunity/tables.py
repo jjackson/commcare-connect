@@ -317,7 +317,7 @@ class SuspendedUsersTable(tables.Table):
 
 
 class CatchmentAreaTable(tables.Table):
-    catchment_id = columns.Column(accessor="id", verbose_name="Catchment id")
+    id = columns.Column(verbose_name="Id")
     username = columns.Column(accessor="opportunity_access__user__username", verbose_name="Username")
     name = columns.Column(verbose_name="Area name")
     active = columns.Column(verbose_name="Active")
@@ -330,9 +330,9 @@ class CatchmentAreaTable(tables.Table):
 
     class Meta:
         model = CatchmentArea
-        fields = ("username", "catchment_id", "name", "active", "latitude", "longitude", "radius")
+        fields = ("username", "id", "name", "active", "latitude", "longitude", "radius")
         orderable = False
-        sequence = ("username", "catchment_id", "name", "active", "latitude", "longitude", "radius")
+        sequence = ("username", "id", "name", "active", "latitude", "longitude", "radius")
 
 
 def popup_html(value, popup_title, popup_direction="top", popup_class="", popup_attributes=""):

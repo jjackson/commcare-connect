@@ -227,7 +227,7 @@ def test_export_user_status_table_data(opportunity: Opportunity):
 @pytest.mark.django_db
 def test_export_catchment_area_table_data(opportunity: Opportunity):
     catchments = CatchmentAreaFactory.create_batch(5, opportunity=opportunity)
-    expected_headers = ["Latitude", "Longitude", "Area name", "Radius", "Active", "Username", "Catchment id"]
+    expected_headers = ["Latitude", "Longitude", "Area name", "Radius", "Active", "Username", "Id"]
 
     data_set = export_catchment_area_table(opportunity)
 
@@ -247,4 +247,4 @@ def test_export_catchment_area_table_data(opportunity: Opportunity):
         assert expected_active == exported_data[data_set.headers.index("Active")]
         expected_username = catchment.opportunity_access.user.username if catchment.opportunity_access.user else ""
         assert expected_username == exported_data[data_set.headers.index("Username")]
-        assert catchment.id == exported_data[data_set.headers.index("Catchment id")]
+        assert catchment.id == exported_data[data_set.headers.index("Id")]
