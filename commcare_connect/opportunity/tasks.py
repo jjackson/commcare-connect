@@ -12,7 +12,7 @@ from django.utils.timezone import now
 from django.utils.translation import gettext
 from tablib import Dataset
 
-from commcare_connect.connect_id_client import fetch_users, send_message, send_message_bulk
+from commcare_connect.connect_id_client import fetch_users, filter_users, send_message, send_message_bulk
 from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
 from commcare_connect.opportunity.export import (
@@ -71,8 +71,12 @@ def create_learn_modules_and_deliver_units(opportunity_id):
 
 
 @celery_app.task()
-def add_connect_users(user_list: list[str], opportunity_id: str):
+def add_connect_users(
+    user_list: list[str], opportunity_id: str, filter_country: str = "", filter_credential: list[str] = ""
+):
     found_users = fetch_users(user_list)
+    if filter_country or filter_credential:
+        found_users += filter_users(country_code=filter_country, credential=filter_credential)
     not_found_users = set(user_list) - {user.phone_number for user in found_users}
     for u in not_found_users:
         UserInvite.objects.get_or_create(
@@ -122,6 +126,7 @@ def invite_user(user_id, opportunity_access_id):
         body=gettext(
             f"You have been invited to a new job in Commcare Connect - {opportunity_access.opportunity.name}"
         ),
+        data={"action": "opportunity_summary_page", "opportunity_id": opportunity_access.opportunity.id},
     )
     send_message(message)
 
@@ -211,6 +216,7 @@ def _get_learn_message(access: OpportunityAccess):
                 f"You have not completed your learning for {access.opportunity.name}."
                 "Please complete the learning modules to start delivering visits."
             ),
+            data={"action": "learn_progress", "opportunity_id": access.opportunity.id},
         )
 
 
@@ -230,6 +236,7 @@ def _get_deliver_message(access: OpportunityAccess):
             f"You have not completed your delivery visits for {access.opportunity.name}."
             "To maximise your payout complete all the required service delivery."
         ),
+        data={"action": "delivery_progress", "opportunity_id": access.opportunity.id},
     )
 
 
@@ -245,6 +252,7 @@ def send_payment_notification(opportunity_id: int, payment_ids: list[int]):
                 body=gettext(
                     f"You have received a payment of {opportunity.currency} {payment.amount} for {opportunity.name}."
                 ),
+                data={"action": "payment", "opportunity_id": opportunity.id},
             )
         )
     send_message_bulk(messages)
@@ -317,10 +325,10 @@ def bulk_approve_completed_work():
                 approved_count = completed_work.approved_count
                 visits = completed_work.uservisit_set.values_list("status", "reason")
                 if any(status == "rejected" for status, _ in visits):
-                    completed_work.status = CompletedWorkStatus.rejected
+                    completed_work.update_status(CompletedWorkStatus.rejected)
                     completed_work.reason = "\n".join(reason for _, reason in visits if reason)
                 elif all(status == "approved" for status, _ in visits):
-                    completed_work.status = CompletedWorkStatus.approved
+                    completed_work.update_status(CompletedWorkStatus.approved)
                 if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
                     access.payment_accrued += approved_count * completed_work.payment_unit.amount
                 completed_work.save()
