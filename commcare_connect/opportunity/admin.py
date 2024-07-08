@@ -7,12 +7,14 @@ from commcare_connect.opportunity.models import (
     CompletedModule,
     CompletedWork,
     DeliverUnit,
+    DeliveryType,
     LearnModule,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
     Payment,
     PaymentUnit,
+    UserInvite,
     UserVisit,
 )
 from commcare_connect.opportunity.tasks import create_learn_modules_and_deliver_units
@@ -22,6 +24,8 @@ from commcare_connect.opportunity.tasks import create_learn_modules_and_deliver_
 
 admin.site.register(CommCareApp)
 admin.site.register(PaymentUnit)
+admin.site.register(UserInvite)
+admin.site.register(DeliveryType)
 
 
 @admin.register(Opportunity)

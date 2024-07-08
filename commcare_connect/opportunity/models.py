@@ -43,6 +43,15 @@ class HQApiKey(models.Model):
     )
 
 
+class DeliveryType(models.Model):
+    name = models.CharField(max_length=255)
+    slug = models.CharField(max_length=255)
+    description = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.name
+
+
 class Opportunity(BaseModel):
     organization = models.ForeignKey(
         Organization,
@@ -77,6 +86,8 @@ class Opportunity(BaseModel):
     currency = models.CharField(max_length=3, null=True)
     auto_approve_visits = models.BooleanField(default=False)
     auto_approve_payments = models.BooleanField(default=False)
+    is_test = models.BooleanField(default=True)
+    delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
 
     def __str__(self):
         return self.name
@@ -217,6 +228,9 @@ class OpportunityAccess(models.Model):
     accepted = models.BooleanField(default=False)
     invite_id = models.CharField(max_length=50, default=uuid4)
     payment_accrued = models.PositiveIntegerField(default=0)
+    suspended = models.BooleanField(default=False)
+    suspension_date = models.DateTimeField(null=True, blank=True)
+    suspension_reason = models.CharField(max_length=300, null=True, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=["invite_id"])]
@@ -237,7 +251,9 @@ class OpportunityAccess(models.Model):
 
     @property
     def visit_count(self):
-        return self.completedwork_set.exclude(status=CompletedWorkStatus.over_limit).count()
+        return sum(
+            [cw.completed for cw in self.completedwork_set.exclude(status=CompletedWorkStatus.over_limit).all()]
+        )
 
     @property
     def last_visit_date(self):
@@ -252,7 +268,7 @@ class OpportunityAccess(models.Model):
 
     @property
     def total_paid(self):
-        return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0)
+        return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0) or 0
 
     @property
     def display_name(self):
@@ -379,16 +395,24 @@ class CompletedWorkStatus(models.TextChoices):
     approved = "approved", gettext("Approved")
     rejected = "rejected", gettext("Rejected")
     over_limit = "over_limit", gettext("Over Limit")
+    incomplete = "incomplete", gettext("Incomplete")
 
 
 class CompletedWork(models.Model):
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE)
     payment_unit = models.ForeignKey(PaymentUnit, on_delete=models.DO_NOTHING)
-    status = models.CharField(max_length=50, choices=CompletedWorkStatus.choices, default=CompletedWorkStatus.pending)
+    status = models.CharField(
+        max_length=50, choices=CompletedWorkStatus.choices, default=CompletedWorkStatus.incomplete
+    )
     last_modified = models.DateTimeField(auto_now=True)
     entity_id = models.CharField(max_length=255, null=True, blank=True)
     entity_name = models.CharField(max_length=255, null=True, blank=True)
     reason = models.CharField(max_length=300, null=True, blank=True)
+    status_modified_date = models.DateTimeField(null=True)
+
+    def update_status(self, status):
+        self.status = status
+        self.status_modified_date = now()
 
     # TODO: add caching on this property
     @property
@@ -402,9 +426,9 @@ class CompletedWork(models.Model):
         visits = self.uservisit_set.filter(status=VisitValidationStatus.approved).values_list(
             "deliver_unit_id", flat=True
         )
-        return self.calculate_completed(visits)
+        return self.calculate_completed(visits, approved=True)
 
-    def calculate_completed(self, visits):
+    def calculate_completed(self, visits, approved=False):
         unit_counts = Counter(visits)
         deliver_units = self.payment_unit.deliver_units.values("id", "optional")
         required_deliver_units = list(
@@ -427,7 +451,10 @@ class CompletedWork(models.Model):
             )
             child_completed_work_count = 0
             for completed_work in child_completed_works:
-                child_completed_work_count += completed_work.completed_count
+                if approved:
+                    child_completed_work_count += completed_work.approved_count
+                else:
+                    child_completed_work_count += completed_work.completed_count
             number_completed = min(number_completed, child_completed_work_count)
         return number_completed
 
@@ -482,6 +509,11 @@ class UserVisit(XFormBaseModel):
     flagged = models.BooleanField(default=False)
     flag_reason = models.JSONField(null=True, blank=True)
     completed_work = models.ForeignKey(CompletedWork, on_delete=models.DO_NOTHING, null=True, blank=True)
+    status_modified_date = models.DateTimeField(null=True)
+
+    def update_status(self, status):
+        self.status = status
+        self.status_modified_date = now()
 
     @property
     def images(self):
@@ -545,3 +577,19 @@ class BlobMeta(models.Model):
             ("parent_id", "name"),
         ]
         indexes = [models.Index(fields=["blob_id"])]
+
+
+class UserInviteStatus(models.TextChoices):
+    sms_delivered = "sms_delivered", gettext("SMS Delivered")
+    sms_not_delivered = "sms_not_delivered", gettext("SMS Not Delivered")
+    accepted = "accepted", gettext("Accepted")
+    invited = "invited", gettext("Invited")
+    not_found = "not_found", gettext("ConnectID Not Found")
+
+
+class UserInvite(models.Model):
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
+    phone_number = models.CharField(max_length=15)
+    opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE, null=True, blank=True)
+    message_sid = models.CharField(max_length=50, null=True, blank=True)
+    status = models.CharField(max_length=50, choices=UserInviteStatus.choices, default=UserInviteStatus.invited)
