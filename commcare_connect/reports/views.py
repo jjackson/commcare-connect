@@ -56,18 +56,24 @@ def _get_table_data_for_quarter(quarter):
         beneficiary_set.add(v.entity_id)
         service_count += v.approved_count
 
-    payment_data = Payment.objects.filter(
-        opportunity_access__opportunity__is_test=False,
-        confirmed=True,
-        date_paid__gte=quarter_start,
-        date_paid__lt=quarter_end,
-    ).aggregate(Sum("amount"))
+    payment_data = (
+        Payment.objects.filter(
+            opportunity_access__opportunity__is_test=False,
+            confirmed=True,
+            date_paid__gte=quarter_start,
+            date_paid__lt=quarter_end,
+        )
+        .values("opportunity_access__opportunity__currency")
+        .annotate(Sum("amount"))
+    )
+
+    payment_strings = [f"{p['amount__sum']} {p['opportunity_access__opportunity__currency']}" for p in payment_data]
 
     return {
         "quarter": f"{quarter[0]} Q{quarter[1]}",
         "users": len(user_set),
         "services": service_count,
-        "payments": payment_data["amount__sum"],
+        "payments": payment_strings,
         "beneficiaries": len(beneficiary_set),
     }
 
