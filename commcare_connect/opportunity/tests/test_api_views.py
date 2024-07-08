@@ -10,6 +10,7 @@ from commcare_connect.opportunity.api.serializers import (
     UserVisitSerializer,
 )
 from commcare_connect.opportunity.models import (
+    CompletedWorkStatus,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
@@ -165,7 +166,7 @@ def test_delivery_progress_endpoint(
     mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
-    completed_work = CompletedWorkFactory(opportunity_access=access)
+    completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
     UserVisitFactory.create(
         opportunity=opportunity,
         user=mobile_user_with_connect_link,

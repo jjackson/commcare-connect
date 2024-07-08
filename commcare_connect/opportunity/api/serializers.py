@@ -79,7 +79,9 @@ class OpportunityClaimSerializer(serializers.ModelSerializer):
         return obj.opportunityclaimlimit_set.aggregate(max_visits=Sum("max_visits")).get("max_visits", 0) or -1
 
     def get_payment_units(self, obj):
-        return OpportunityClaimLimitSerializer(obj.opportunityclaimlimit_set.all(), many=True).data
+        return OpportunityClaimLimitSerializer(
+            obj.opportunityclaimlimit_set.order_by("payment_unit_id"), many=True
+        ).data
 
 
 class OpportunitySerializer(serializers.ModelSerializer):
@@ -94,6 +96,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     budget_per_visit = serializers.SerializerMethodField()
     budget_per_user = serializers.SerializerMethodField()
     payment_units = serializers.SerializerMethodField()
+    is_user_suspended = serializers.SerializerMethodField()
 
     class Meta:
         model = Opportunity
@@ -120,6 +123,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "is_active",
             "budget_per_user",
             "payment_units",
+            "is_user_suspended",
         ]
 
     def get_claim(self, obj):
@@ -153,8 +157,12 @@ class OpportunitySerializer(serializers.ModelSerializer):
         return obj.budget_per_user
 
     def get_payment_units(self, obj):
-        payment_units = PaymentUnit.objects.filter(opportunity=obj)
+        payment_units = PaymentUnit.objects.filter(opportunity=obj).order_by("pk")
         return PaymentUnitSerializer(payment_units, many=True).data
+
+    def get_is_user_suspended(self, obj):
+        opp_access = _get_opp_access(self.context.get("request").user, obj)
+        return opp_access.suspended
 
 
 @quickcache(vary_on=["user.pk", "opportunity.pk"], timeout=60 * 60)
@@ -247,7 +255,9 @@ class DeliveryProgressSerializer(serializers.Serializer):
         return PaymentSerializer(obj.payment_set.all(), many=True).data
 
     def get_deliveries(self, obj):
-        completed_works = CompletedWork.objects.filter(opportunity_access=obj).exclude(
-            status=CompletedWorkStatus.over_limit
+        completed_works = (
+            CompletedWork.objects.filter(opportunity_access=obj)
+            .exclude(status=CompletedWorkStatus.over_limit)
+            .exclude(status=CompletedWorkStatus.incomplete)
         )
         return CompletedWorkSerializer(completed_works, many=True).data

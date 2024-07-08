@@ -107,7 +107,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                 seen_completed_works.add(visit.completed_work_id)
                 status = status_by_visit_id[visit.xform_id]
                 if visit.status != status:
-                    visit.status = status
+                    visit.update_status(status)
                     reason = reasons_by_visit_id.get(visit.xform_id)
                     if visit.status == VisitValidationStatus.rejected and reason:
                         visit.reason = reason
@@ -123,7 +123,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
 
 def update_payment_accrued(opportunity: Opportunity, users):
     """Updates payment accrued for completed and approved CompletedWork instances."""
-    access_objects = OpportunityAccess.objects.filter(user__in=users, opportunity=opportunity)
+    access_objects = OpportunityAccess.objects.filter(user__in=users, opportunity=opportunity, suspended=False)
     for access in access_objects:
         completed_works = access.completedwork_set.exclude(
             status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
@@ -131,17 +131,18 @@ def update_payment_accrued(opportunity: Opportunity, users):
         access.payment_accrued = 0
         for completed_work in completed_works:
             # Auto Approve Payment conditions
-            if opportunity.auto_approve_payments:
-                visits = completed_work.uservisit_set.values_list("status", "reason")
-                if any(status == "rejected" for status, _ in visits):
-                    completed_work.status = CompletedWorkStatus.rejected
-                    completed_work.reason = "\n".join(reason for _, reason in visits if reason)
-                elif all(status == "approved" for status, _ in visits):
-                    completed_work.status = CompletedWorkStatus.approved
-            approved_count = completed_work.approved_count
-            if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
-                access.payment_accrued += approved_count * completed_work.payment_unit.amount
-            completed_work.save()
+            if completed_work.completed_count > 0:
+                if opportunity.auto_approve_payments:
+                    visits = completed_work.uservisit_set.values_list("status", "reason")
+                    if any(status == "rejected" for status, _ in visits):
+                        completed_work.update_status(CompletedWorkStatus.rejected)
+                        completed_work.reason = "\n".join(reason for _, reason in visits if reason)
+                    elif all(status == "approved" for status, _ in visits):
+                        completed_work.update_status(CompletedWorkStatus.approved)
+                approved_count = completed_work.approved_count
+                if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
+                    access.payment_accrued += approved_count * completed_work.payment_unit.amount
+                completed_work.save()
         access.save()
 
 
@@ -159,7 +160,7 @@ def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:
     for row in dataset:
         row = list(row)
         visit_id = str(row[visit_col_index])
-        status_raw = row[status_col_index].lower().replace(" ", "_")
+        status_raw = row[status_col_index].lower().strip().replace(" ", "_")
         try:
             status_by_visit_id[visit_id] = VisitValidationStatus[status_raw]
         except KeyError:
@@ -229,9 +230,9 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     payment_ids = []
     with transaction.atomic():
         usernames = list(payments)
-        users = OpportunityAccess.objects.filter(user__username__in=usernames, opportunity=opportunity).select_related(
-            "user"
-        )
+        users = OpportunityAccess.objects.filter(
+            user__username__in=usernames, opportunity=opportunity, suspended=False
+        ).select_related("user")
         for access in users:
             username = access.user.username
             amount = payments[username]
@@ -273,7 +274,7 @@ def _bulk_update_completed_work_status(opportunity: Opportunity, dataset: Datase
                 seen_completed_works.add(str(completed_work.id))
                 status = status_by_work_id[str(completed_work.id)]
                 if completed_work.status != status:
-                    completed_work.status = status
+                    completed_work.update_status(status)
                     reason = reasons_by_work_id.get(str(completed_work.id))
                     if completed_work.status == CompletedWorkStatus.rejected and reason:
                         completed_work.reason = reason
@@ -299,7 +300,7 @@ def get_status_by_completed_work_id(dataset):
     for row in dataset:
         row = list(row)
         work_id = str(row[work_id_col_index])
-        status_raw = row[status_col_index].lower().replace(" ", "_")
+        status_raw = row[status_col_index].lower().strip().replace(" ", "_")
         try:
             status_by_work_id[work_id] = CompletedWorkStatus[status_raw]
         except KeyError:
