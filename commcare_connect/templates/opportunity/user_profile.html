@@ -61,6 +61,7 @@
 {% block inline_javascript %}
 {{ block.super }}
   {{ user_visits|json_script:"userVisits" }}
+  {{ user_catchments|json_script:"userCatchments" }}
   <script type="module">
     window.addEventListener('DOMContentLoaded', () => {
       mapboxgl.accessToken = "{{ MAPBOX_TOKEN }}";
@@ -78,7 +79,8 @@
           .addTo(map)
       })
       addAccuracyCircles(map, userVisits);
-      addCatchmentAreas(map, user_catchments)
+      const userCatchments = JSON.parse(document.getElementById('userCatchments').textContent);
+      addCatchmentAreas(map, userCatchments)
     });
   </script>
 {% endblock %}
