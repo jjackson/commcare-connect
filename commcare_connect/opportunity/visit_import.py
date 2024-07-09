@@ -324,7 +324,7 @@ def bulk_update_catchments(opportunity: Opportunity, file: UploadedFile):
 
 
 def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
-    headers = [header.lower() for header in dataset.headers or []]
+    headers = [header.lower() for header in dataset.headers or [] if header]
     if not headers:
         raise ImportException("The uploaded file did not contain any headers")
 
@@ -374,7 +374,7 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
                 if area_name_index is None or not isinstance(row[area_name_index], str):
                     raise ValueError("Area name is not valid.")
 
-                if not username_index or not row[username_index]:
+                if username_index is None or not row[username_index]:
                     catchment = CatchmentArea(
                         latitude=latitude,
                         longitude=longitude,
