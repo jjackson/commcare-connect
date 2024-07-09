@@ -125,7 +125,7 @@ def invite_user(user_id, opportunity_access_id):
         body=gettext(
             f"You have been invited to a new job in Commcare Connect - {opportunity_access.opportunity.name}"
         ),
-        data={"action": "opportunity_summary_page", "opportunity_id": opportunity_access.opportunity.id},
+        data={"action": "opportunity_summary_page", "opportunity_id": str(opportunity_access.opportunity.id)},
     )
     send_message(message)
 
@@ -215,7 +215,7 @@ def _get_learn_message(access: OpportunityAccess):
                 f"You have not completed your learning for {access.opportunity.name}."
                 "Please complete the learning modules to start delivering visits."
             ),
-            data={"action": "learn_progress", "opportunity_id": access.opportunity.id},
+            data={"action": "learn_progress", "opportunity_id": str(access.opportunity.id)},
         )
 
 
@@ -235,7 +235,7 @@ def _get_deliver_message(access: OpportunityAccess):
             f"You have not completed your delivery visits for {access.opportunity.name}."
             "To maximise your payout complete all the required service delivery."
         ),
-        data={"action": "delivery_progress", "opportunity_id": access.opportunity.id},
+        data={"action": "delivery_progress", "opportunity_id": str(access.opportunity.id)},
     )
 
 
@@ -251,7 +251,7 @@ def send_payment_notification(opportunity_id: int, payment_ids: list[int]):
                 body=gettext(
                     f"You have received a payment of {opportunity.currency} {payment.amount} for {opportunity.name}."
                 ),
-                data={"action": "payment", "opportunity_id": opportunity.id},
+                data={"action": "payment", "opportunity_id": str(opportunity.id)},
             )
         )
     send_message_bulk(messages)
