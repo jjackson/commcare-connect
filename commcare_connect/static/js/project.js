@@ -66,32 +66,68 @@ window.addAccuracyCircles = addAccuracyCircles;
 
 function addCatchmentAreas(map, catchments) {
   map.on('load', () => {
-    dummyCatchments.forEach((catchment) => {
-      const color = catchment.active ? '#3366ff' : '#ff4d4d';
-      const circleRadius = catchment.radius / 100;
+    const ACTIVE_COLOR = '#3366ff';
+    const INACTIVE_COLOR = '#ff4d4d';
+    const CIRCLE_OPACITY = 0.3;
+    const SQUARE_BOX_STYLE = 'width: 20px; height: 20px; opacity: 0.3;';
 
-      map.addSource(`catchment-${catchment.name}`, {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: [catchment.lng, catchment.lat],
-          },
+    const geojsonData = {
+      type: 'FeatureCollection',
+      features: catchments.map((catchment) => ({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [catchment.lng, catchment.lat],
         },
-      });
+        properties: {
+          name: catchment.name,
+          active: catchment.active,
+          radius: catchment.radius,
+        },
+      })),
+    };
 
-      map.addLayer({
-        id: `catchment-circle-${catchment.name}`,
-        type: 'circle',
-        source: `catchment-${catchment.name}`,
-        paint: {
-          'circle-radius': circleRadius,
-          'circle-color': color,
-          'circle-opacity': 0.3,
-        },
-      });
+    map.addSource('catchments', {
+      type: 'geojson',
+      data: geojsonData,
     });
+
+    map.addLayer({
+      id: 'catchment-circles',
+      type: 'circle',
+      source: 'catchments',
+      paint: {
+        'circle-radius': ['/', ['get', 'radius'], 100],
+        'circle-color': [
+          'case',
+          ['get', 'active'],
+          ACTIVE_COLOR,
+          INACTIVE_COLOR,
+        ],
+        'circle-opacity': CIRCLE_OPACITY,
+      },
+    });
+
+    const legend = document.createElement('div');
+    legend.className = 'card position-absolute bottom-0 end-0 m-3';
+
+    const activeStyle = `${SQUARE_BOX_STYLE} background-color: ${ACTIVE_COLOR};`;
+    const inactiveStyle = `${SQUARE_BOX_STYLE} background-color: ${INACTIVE_COLOR};`;
+
+    legend.innerHTML = `
+      <div class="card-body">
+        <h6 class="card-title">Catchment Areas</h6>
+        <div class="mb-2 d-flex align-items-center">
+          <span class="d-inline-block me-2" style="${activeStyle}"></span>
+          <span>Active</span>
+        </div>
+        <div class="d-flex align-items-center">
+          <span class="d-inline-block me-2" style="${inactiveStyle}"></span>
+          <span>Inactive</span>
+        </div>
+      </div>
+    `;
+    map.getContainer().appendChild(legend);
   });
 }
 
