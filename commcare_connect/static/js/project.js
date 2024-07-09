@@ -65,68 +65,68 @@ function addAccuracyCircles(map, visit_data) {
 window.addAccuracyCircles = addAccuracyCircles;
 
 function addCatchmentAreas(map, catchments) {
+  const ACTIVE_COLOR = '#3366ff';
+  const INACTIVE_COLOR = '#ff4d4d';
+  const CIRCLE_OPACITY = 0.3;
+
   map.on('load', () => {
-    const ACTIVE_COLOR = '#3366ff';
-    const INACTIVE_COLOR = '#ff4d4d';
-    const CIRCLE_OPACITY = 0.3;
-    const SQUARE_BOX_STYLE = 'width: 20px; height: 20px; opacity: 0.3;';
+    const catchmentCircles = catchments.map((catchment) =>
+      circle([catchment.lng, catchment.lat], catchment.radius, {
+        units: 'meters',
+        properties: { active: catchment.active },
+      }),
+    );
 
-    const geojsonData = {
-      type: 'FeatureCollection',
-      features: catchments.map((catchment) => ({
-        type: 'Feature',
-        geometry: {
-          type: 'Point',
-          coordinates: [catchment.lng, catchment.lat],
-        },
-        properties: {
-          name: catchment.name,
-          active: catchment.active,
-          radius: catchment.radius,
-        },
-      })),
-    };
-
-    map.addSource('catchments', {
+    map.addSource('catchment_circles', {
       type: 'geojson',
-      data: geojsonData,
-    });
-
-    map.addLayer({
-      id: 'catchment-circles',
-      type: 'circle',
-      source: 'catchments',
-      paint: {
-        'circle-radius': ['/', ['get', 'radius'], 100],
-        'circle-color': [
-          'case',
-          ['get', 'active'],
-          ACTIVE_COLOR,
-          INACTIVE_COLOR,
-        ],
-        'circle-opacity': CIRCLE_OPACITY,
+      data: {
+        type: 'FeatureCollection',
+        features: catchmentCircles,
       },
     });
 
-    const legend = document.createElement('div');
-    legend.className = 'card position-absolute bottom-0 end-0 m-3';
+    map.addLayer({
+      id: 'catchment-circles-layer',
+      source: 'catchment_circles',
+      type: 'fill',
+      paint: {
+        'fill-color': ['case', ['get', 'active'], ACTIVE_COLOR, INACTIVE_COLOR],
+        'fill-opacity': CIRCLE_OPACITY,
+      },
+    });
 
-    const activeStyle = `${SQUARE_BOX_STYLE} background-color: ${ACTIVE_COLOR};`;
-    const inactiveStyle = `${SQUARE_BOX_STYLE} background-color: ${INACTIVE_COLOR};`;
+    map.addLayer({
+      id: 'catchment-circle-outlines-layer',
+      source: 'catchment_circles',
+      type: 'line',
+      paint: {
+        'line-color': '#fcbf49',
+        'line-width': 3,
+        'line-opacity': 0.5,
+      },
+    });
+
+    // Add legend
+    const legend = document.createElement('div');
+    legend.className = 'card position-absolute bottom-0 end-0 m-2';
+
+    const squareBoxStyle = 'width: 20px; height: 20px; opacity: 0.3;';
+    const activeStyle = `${squareBoxStyle} background-color: ${ACTIVE_COLOR};`;
+    const inactiveStyle = `${squareBoxStyle} background-color: ${INACTIVE_COLOR};`;
 
     legend.innerHTML = `
-      <div class="card-body">
-        <h6 class="card-title">Catchment Areas</h6>
-        <div class="mb-2 d-flex align-items-center">
-          <span class="d-inline-block me-2" style="${activeStyle}"></span>
-          <span>Active</span>
-        </div>
-        <div class="d-flex align-items-center">
-          <span class="d-inline-block me-2" style="${inactiveStyle}"></span>
-          <span>Inactive</span>
-        </div>
-      </div>
-    `;
+                    <div class="card-body">
+                        <h6 class="card-title">Catchment Areas</h6>
+                        <div class="mb-2 d-flex align-items-center">
+                            <span class="d-inline-block me-2" style="${activeStyle}"></span>
+                            <span>Active</span>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <span class="d-inline-block me-2" style="${inactiveStyle}"></span>
+                            <span>Inactive</span>
+                        </div>
+                    </div>
+                `;
     map.getContainer().appendChild(legend);
   });
 }
