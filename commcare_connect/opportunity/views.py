@@ -788,7 +788,7 @@ def visit_verification(request, org_slug=None, pk=None):
 @org_member_required
 def approve_visit(request, org_slug=None, pk=None):
     user_visit = UserVisit.objects.get(pk=pk)
-    user_visit.update_status(VisitValidationStatus.approved)
+    user_visit.status = VisitValidationStatus.approved
     user_visit.save()
     opp_id = user_visit.opportunity_id
     access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id)
@@ -799,7 +799,7 @@ def approve_visit(request, org_slug=None, pk=None):
 @org_member_required
 def reject_visit(request, org_slug=None, pk=None):
     user_visit = UserVisit.objects.get(pk=pk)
-    user_visit.update_status(VisitValidationStatus.rejected)
+    user_visit.status = VisitValidationStatus.rejected
     user_visit.save()
     access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=user_visit.opportunity_id)
     update_payment_accrued(opportunity=access.opportunity, users=[access.user])

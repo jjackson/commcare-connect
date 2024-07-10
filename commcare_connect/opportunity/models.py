@@ -408,9 +408,15 @@ class CompletedWork(models.Model):
     reason = models.CharField(max_length=300, null=True, blank=True)
     status_modified_date = models.DateTimeField(null=True)
 
-    def update_status(self, status):
-        self.status = status
-        self.status_modified_date = now()
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            old_instance = CompletedWork.objects.get(pk=self.pk)
+            if old_instance.status != self.status:
+                self.status_modified_date = now()
+        else:
+            self.status_modified_date = now()
+
+        super().save(*args, **kwargs)
 
     # TODO: add caching on this property
     @property
@@ -508,9 +514,15 @@ class UserVisit(XFormBaseModel):
     completed_work = models.ForeignKey(CompletedWork, on_delete=models.DO_NOTHING, null=True, blank=True)
     status_modified_date = models.DateTimeField(null=True)
 
-    def update_status(self, status):
-        self.status = status
-        self.status_modified_date = now()
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            old_instance = UserVisit.objects.get(pk=self.pk)
+            if old_instance.status != self.status:
+                self.status_modified_date = now()
+        else:
+            self.status_modified_date = now()
+
+        super().save(*args, **kwargs)
 
     @property
     def images(self):
