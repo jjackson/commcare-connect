@@ -152,7 +152,9 @@ class Opportunity(BaseModel):
 
     @property
     def approved_visits(self):
-        return CompletedWork.objects.filter(opportunity_access__opportunity=self).count()
+        return CompletedWork.objects.filter(
+            opportunity_access__opportunity=self, status=CompletedWorkStatus.approved
+        ).count()
 
     @property
     def number_of_users(self):
