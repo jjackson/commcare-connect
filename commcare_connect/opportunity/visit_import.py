@@ -106,11 +106,18 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                 seen_visits.add(visit.xform_id)
                 seen_completed_works.add(visit.completed_work_id)
                 status = status_by_visit_id[visit.xform_id]
+                reason = reasons_by_visit_id.get(visit.xform_id)
+                changed = False
+
                 if visit.status != status:
                     visit.update_status(status)
-                    reason = reasons_by_visit_id.get(visit.xform_id)
-                    if visit.status == VisitValidationStatus.rejected and reason:
-                        visit.reason = reason
+                    changed = True
+
+                if status == VisitValidationStatus.rejected and reason:
+                    visit.reason = reason
+                    changed = True
+
+                if changed:
                     to_update.append(visit)
                 user_ids.add(visit.user_id)
 
