@@ -19,6 +19,7 @@ from commcare_connect.opportunity.views import (
     add_payment_unit,
     add_payment_units,
     approve_visit,
+    delete_form_json_rule,
     download_export,
     edit_payment_unit,
     export_completed_work,
@@ -95,4 +96,5 @@ urlpatterns = [
     path("<int:pk>/suspended_users/", view=suspended_users_list, name="suspended_users_list"),
     path("<int:opp_id>/suspend_user/<int:pk>/", view=suspend_user, name="suspend_user"),
     path("<int:opp_id>/revoke_user_suspension/<int:pk>/", view=revoke_user_suspension, name="revoke_user_suspension"),
+    path("<int:opp_id>/delete_form_json_rule/<int:pk>/", view=delete_form_json_rule, name="delete_form_json_rule"),
 ]

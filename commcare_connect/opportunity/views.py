@@ -16,7 +16,8 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 from django.utils.timezone import now
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
@@ -869,6 +870,15 @@ def verification_flags_config(request, org_slug=None, pk=None):
             form_json_formset=form_json_formset,
         ),
     )
+
+
+@org_member_required
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def delete_form_json_rule(request, org_slug=None, opp_id=None, pk=None):
+    form_json_rule = FormJsonValidationRules.objects.get(opportunity=opp_id, pk=pk)
+    form_json_rule.delete()
+    return HttpResponse(status=200)
 
 
 class OpportunityCompletedWorkTable(OrganizationUserMixin, SingleTableView):
