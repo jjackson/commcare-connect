@@ -857,7 +857,18 @@ def verification_flags_config(request, org_slug=None, pk=None):
             if fj_form.is_valid() and fj_form.cleaned_data != {}:
                 fj_form.instance.opportunity = opportunity
                 fj_form.save()
-        return redirect("opportunity:detail", request.org.slug, opportunity.id)
+        messages.success(request, "Verification flags saved successfully.")
+        return render(
+            request,
+            "opportunity/verification_flags_config.html",
+            context=dict(
+                opportunity=opportunity,
+                title=f"{request.org.slug} - {opportunity.name}",
+                form=form,
+                deliver_unit_formset=deliver_unit_formset,
+                form_json_formset=form_json_formset,
+            ),
+        )
 
     return render(
         request,
