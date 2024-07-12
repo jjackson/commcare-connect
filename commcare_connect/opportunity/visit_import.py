@@ -280,11 +280,17 @@ def _bulk_update_completed_work_status(opportunity: Opportunity, dataset: Datase
             for completed_work in completed_works:
                 seen_completed_works.add(str(completed_work.id))
                 status = status_by_work_id[str(completed_work.id)]
+                reason = reasons_by_work_id.get(str(completed_work.id))
+                changed = False
+
                 if completed_work.status != status:
                     completed_work.update_status(status)
-                    reason = reasons_by_work_id.get(str(completed_work.id))
-                    if completed_work.status == CompletedWorkStatus.rejected and reason:
-                        completed_work.reason = reason
+                    changed = True
+                if status == CompletedWorkStatus.rejected and reason and reason != completed_work.reason:
+                    completed_work.reason = reason
+                    changed = True
+
+                if changed:
                     to_update.append(completed_work)
                 user_ids.add(completed_work.opportunity_access.user_id)
             CompletedWork.objects.bulk_update(to_update, fields=["status", "reason"])
