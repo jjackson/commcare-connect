@@ -741,7 +741,7 @@ class FormJsonValidationRulesForm(forms.ModelForm):
         fields = ("name", "deliver_unit", "question_path", "question_value")
 
     def __init__(self, *args, **kwargs):
-        deliver_units = kwargs.pop("deliver_units", [])
+        self.opportunity = kwargs.pop("opportunity")
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
@@ -754,7 +754,8 @@ class FormJsonValidationRulesForm(forms.ModelForm):
             ),
             Row(Column(Field("deliver_unit"))),
         )
+        self.helper.render_hidden_fields = True
 
         self.fields["deliver_unit"] = forms.ModelMultipleChoiceField(
-            queryset=deliver_units, widget=forms.CheckboxSelectMultiple
+            queryset=DeliverUnit.objects.filter(app=self.opportunity.deliver_app), widget=forms.CheckboxSelectMultiple
         )

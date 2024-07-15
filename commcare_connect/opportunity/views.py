@@ -824,10 +824,9 @@ def verification_flags_config(request, org_slug=None, pk=None):
     opportunity = get_object_or_404(Opportunity, pk=pk, organization=request.org)
     verification_flags = OpportunityVerificationFlags.objects.filter(opportunity=opportunity).first()
     form = OpportunityVerificationFlagsConfigForm(instance=verification_flags, data=request.POST or None)
-    deliver_units = DeliverUnit.objects.filter(app=opportunity.deliver_app)
-
+    deliver_unit_count = DeliverUnit.objects.filter(app=opportunity.deliver_app).count()
     DeliverUnitFlagsFormset = modelformset_factory(
-        DeliverUnitFlagRules, DeliverUnitFlagsForm, max_num=len(deliver_units), can_delete=True
+        DeliverUnitFlagRules, DeliverUnitFlagsForm, extra=deliver_unit_count, max_num=deliver_unit_count
     )
     deliver_unit_formset = DeliverUnitFlagsFormset(
         form_kwargs={"opportunity": opportunity},
@@ -836,16 +835,21 @@ def verification_flags_config(request, org_slug=None, pk=None):
         data=request.POST or None,
     )
     FormJsonValidationRulesFormset = modelformset_factory(
-        FormJsonValidationRules, FormJsonValidationRulesForm, can_delete=True
+        FormJsonValidationRules, FormJsonValidationRulesForm, extra=1
     )
     form_json_formset = FormJsonValidationRulesFormset(
-        form_kwargs={"deliver_units": deliver_units},
+        form_kwargs={"opportunity": opportunity},
         prefix="form_json",
         queryset=FormJsonValidationRules.objects.filter(opportunity=opportunity),
         data=request.POST or None,
     )
-
-    if form.is_valid() and deliver_unit_formset.is_valid() and form_json_formset.is_valid():
+    print()
+    if (
+        request.method == "POST"
+        and form.is_valid()
+        and deliver_unit_formset.is_valid()
+        and form_json_formset.is_valid()
+    ):
         verification_flags = form.save(commit=False)
         verification_flags.opportunity = opportunity
         verification_flags.save()
@@ -858,17 +862,6 @@ def verification_flags_config(request, org_slug=None, pk=None):
                 fj_form.instance.opportunity = opportunity
                 fj_form.save()
         messages.success(request, "Verification flags saved successfully.")
-        return render(
-            request,
-            "opportunity/verification_flags_config.html",
-            context=dict(
-                opportunity=opportunity,
-                title=f"{request.org.slug} - {opportunity.name}",
-                form=form,
-                deliver_unit_formset=deliver_unit_formset,
-                form_json_formset=form_json_formset,
-            ),
-        )
 
     return render(
         request,
