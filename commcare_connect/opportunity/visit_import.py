@@ -1,7 +1,7 @@
 import codecs
 import textwrap
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
@@ -323,16 +323,121 @@ def bulk_update_catchments(opportunity: Opportunity, file: UploadedFile):
     return _bulk_update_catchments(opportunity, imported_data)
 
 
+class RowDataError(Exception):
+    pass
+
+
+class InvalidValueError(RowDataError):
+    pass
+
+
+class RowData:
+    def __init__(self, row: list[str], headers: list[str]):
+        self.row = row
+        self.headers = headers
+        self.latitude = self._get_latitude()
+        self.longitude = self._get_longitude()
+        self.radius = self._get_radius()
+        self.active = self._get_active()
+        self.area_name = self._get_area_name()
+        self.username = self._get_username()
+        self.id = self._get_id()
+
+    def _get_latitude(self) -> Decimal:
+        error_message = "Latitude must be between -90 and 90 degrees."
+        index = _get_header_index(self.headers, LATITUDE_COL)
+        try:
+            latitude = Decimal(self.row[index])
+        except (ValueError, TypeError, InvalidOperation):
+            raise InvalidValueError(error_message)
+        if not Decimal("-90") <= latitude <= Decimal("90"):
+            raise InvalidValueError(error_message)
+        return latitude
+
+    def _get_longitude(self) -> Decimal:
+        index = _get_header_index(self.headers, LONGITUDE_COL)
+        try:
+            longitude = Decimal(self.row[index])
+        except (ValueError, TypeError, InvalidOperation):
+            raise InvalidValueError(f"Invalid longitude value: {self.row[index]}")
+        if not Decimal("-180") <= longitude <= Decimal("180"):
+            raise InvalidValueError("Longitude must be between -180 and 180 degrees")
+        return longitude
+
+    def _get_radius(self) -> int:
+        index = _get_header_index(self.headers, RADIUS_COL)
+        try:
+            radius = int(self.row[index])
+        except (ValueError, TypeError):
+            raise InvalidValueError(f"Invalid radius value: {self.row[index]}")
+        if radius <= 0:
+            raise InvalidValueError("Radius must be a positive integer")
+        return radius
+
+    def _get_active(self) -> bool:
+        error_message = "Active status must be 'yes' or 'no'"
+        index = _get_header_index(self.headers, ACTIVE_COL)
+        active = self.row[index]
+        if not active:
+            raise InvalidValueError(error_message)
+        active = active.lower().strip()
+        if active not in ["yes", "no"]:
+            raise InvalidValueError(error_message)
+        return active == "yes"
+
+    def _get_area_name(self) -> str:
+        index = _get_header_index(self.headers, AREA_NAME_COL)
+        area_name = self.row[index]
+        if not area_name:
+            raise InvalidValueError("Area name is not valid.")
+        return area_name
+
+    def _get_username(self) -> str | None:
+        try:
+            index = _get_header_index(self.headers, USERNAME_COL)
+        except ImportException:
+            return None
+        username = self.row[index]
+        return username if username else None
+
+    def _get_id(self) -> int | None:
+        try:
+            index = _get_header_index(self.headers, ID)
+        except ImportException:
+            return None
+        catchment_id = self.row[index]
+        return catchment_id if catchment_id else None
+
+
+def create_or_update_catchment(row_data: RowData, opportunity: Opportunity, opportunity_access: dict):
+    if row_data.id:
+        catchment = CatchmentArea.objects.get(id=row_data.id)
+        if catchment:
+            catchment.latitude = row_data.latitude
+            catchment.longitude = row_data.longitude
+            catchment.radius = row_data.radius
+            catchment.name = row_data.area_name
+            catchment.active = row_data.active
+            return catchment, False
+
+    return (
+        CatchmentArea(
+            latitude=row_data.latitude,
+            longitude=row_data.longitude,
+            radius=row_data.radius,
+            opportunity=opportunity,
+            name=row_data.area_name,
+            active=row_data.active,
+            opportunity_access=opportunity_access.get(row_data.username, None),
+        ),
+        True,
+    )
+
+
 def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
     headers = [header.lower() for header in dataset.headers or [] if header]
     if not headers:
         raise ImportException("The uploaded file did not contain any headers")
-
-    latitude_index = _get_header_index(headers, LATITUDE_COL)
-    longitude_index = _get_header_index(headers, LONGITUDE_COL)
-    active_index = _get_header_index(headers, ACTIVE_COL)
-    radius_index = _get_header_index(headers, RADIUS_COL)
-    area_name_index = _get_header_index(headers, AREA_NAME_COL)
 
     with transaction.atomic():
         to_create = []
@@ -342,9 +447,7 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
         missing_catchments = 0
 
         opportunity_access = {}
-        username_index = None
         if USERNAME_COL in headers:
-            username_index = _get_header_index(headers, USERNAME_COL)
             opportunity_access = {
                 oa.user.username: oa
                 for oa in OpportunityAccess.objects.filter(opportunity=opportunity).select_related("user")
@@ -353,86 +456,18 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
         for row in dataset:
             row = list(row)
             try:
-                latitude = Decimal(row[latitude_index])
-                longitude = Decimal(row[longitude_index])
-                radius = int(row[radius_index])
-                active = row[active_index].lower().strip() == "yes"
-                area_name = str(row[area_name_index])
+                row_data = RowData(row, headers)
+                catchment, created = create_or_update_catchment(row_data, opportunity, opportunity_access)
 
-                if latitude < Decimal("-90") or latitude > Decimal("90"):
-                    raise ValueError("Latitude must be between -90 and 90 degrees")
-
-                if longitude < Decimal("-180") or longitude > Decimal("180"):
-                    raise ValueError("Longitude must be between -180 and 180 degrees")
-
-                if not radius:
-                    raise ValueError("Radius must be an integer")
-
-                if active_index is None or row[active_index].lower().strip() not in ["yes", "no"]:
-                    raise ValueError("Active status must be 'yes' or 'no'")
-
-                if area_name_index is None or not isinstance(row[area_name_index], str):
-                    raise ValueError("Area name is not valid.")
-
-                if username_index is None or not row[username_index]:
-                    catchment = CatchmentArea(
-                        latitude=latitude,
-                        longitude=longitude,
-                        radius=radius,
-                        opportunity=opportunity,
-                        name=area_name,
-                        active=active,
-                    )
-                    missing_catchments += 1
+                if created:
                     to_create.append(catchment)
-                elif row[username_index] in opportunity_access:
-                    username = row[username_index]
-                    catchment = None
-                    created = False
-                    if ID in headers and row[_get_header_index(headers, ID)]:
-                        catchment_id = row[_get_header_index(headers, ID)]
-                        catchment, created = CatchmentArea.objects.get_or_create(
-                            id=catchment_id,
-                            defaults={
-                                "latitude": latitude,
-                                "longitude": longitude,
-                                "radius": radius,
-                                "opportunity_access": opportunity_access[username],
-                                "opportunity": opportunity,
-                                "name": area_name,
-                                "active": active,
-                            },
-                        )
-
-                        if not created:
-                            catchment.latitude = latitude
-                            catchment.longitude = longitude
-                            catchment.radius = radius
-                            catchment.active = active
-                            catchment.opportunity_access = opportunity_access[username]
-                            catchment.opportunity = opportunity
-                            catchment.name = area_name
-                            to_update.append(catchment)
-                            seen_catchments.add(str(catchment.id))
-                        else:
-                            missing_catchments += 1
-                    else:
-                        catchment = CatchmentArea(
-                            latitude=latitude,
-                            longitude=longitude,
-                            radius=radius,
-                            opportunity=opportunity,
-                            opportunity_access=opportunity_access[username],
-                            name=area_name,
-                            active=active,
-                        )
-                        missing_catchments += 1
-                        to_create.append(catchment)
+                    missing_catchments += 1
                 else:
-                    invalid_rows.append((row, f"Invalid username {row[username_index]}"))
+                    to_update.append(catchment)
+                    seen_catchments.add(str(catchment.id))
 
-            except (ValueError, TypeError) as e:
-                invalid_rows.append((row, f"Invalid value type in row {row}: {e}"))
+            except InvalidValueError as e:
+                invalid_rows.append((row, f"Error in row {row}: {e}"))
 
         if to_create:
             CatchmentArea.objects.bulk_create(to_create)
@@ -441,5 +476,6 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
             CatchmentArea.objects.bulk_update(to_update, ["latitude", "longitude", "radius", "active", "name"])
 
         if invalid_rows:
-            raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
+            raise ImportException(f"{len(invalid_rows)} rows have errors", invalid_rows)
+
     return CatchmentAreaImportStatus(seen_catchments, missing_catchments)

@@ -936,6 +936,8 @@ def import_catchment_area(request, org_slug=None, pk=None):
     except ImportException as e:
         messages.error(request, e.message)
     else:
-        message = f"Catchment area updated successfully for {len(status)}."
+        message = (
+            f"{len(status)} catchment areas were updated successfully and {status.missing_catchments} were created."
+        )
         messages.success(request, mark_safe(message))
     return redirect("opportunity:detail", org_slug, pk)
