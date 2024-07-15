@@ -276,10 +276,15 @@ def old_catchments(opportunity):
 @pytest.mark.django_db
 def test_bulk_update_catchments_missing_headers(opportunity):
     required_headers = ["latitude", "longitude", "area name", "radius", "active"]
+    sample_data = ["40.7128", "-74.0060", "New York", "100", "yes"]  # Sample data for a complete row
 
     for missing_header in required_headers:
         incomplete_headers = [header for header in required_headers if header != missing_header]
         dataset = Dataset(headers=incomplete_headers)
+
+        # Add a row with data, excluding the value for the missing header
+        row_data = [value for header, value in zip(required_headers, sample_data) if header != missing_header]
+        dataset.append(row_data)
 
         with pytest.raises(ImportException) as excinfo:
             _bulk_update_catchments(opportunity, dataset)
