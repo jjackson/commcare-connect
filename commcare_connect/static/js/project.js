@@ -106,11 +106,15 @@ function addCatchmentAreas(map, catchments) {
       },
     });
 
-    window.Alpine.nextTick(() => {
-      const legendComponent = document.getElementById('legend').__x;
-      legendComponent.show = !!catchments?.length;
-      q;
-    });
+    if (catchments?.length) {
+      window.Alpine.nextTick(() => {
+        const legendElement = document.getElementById('legend');
+        if (legendElement) {
+          const legendData = window.Alpine.$data(legendElement);
+          legendData.show = true;
+        }
+      });
+    }
   });
 }
 
