@@ -843,7 +843,6 @@ def verification_flags_config(request, org_slug=None, pk=None):
         queryset=FormJsonValidationRules.objects.filter(opportunity=opportunity),
         data=request.POST or None,
     )
-    print()
     if (
         request.method == "POST"
         and form.is_valid()
