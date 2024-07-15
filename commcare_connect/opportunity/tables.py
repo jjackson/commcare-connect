@@ -118,9 +118,7 @@ class AggregateColumn(columns.Column):
 
 class SumColumn(columns.Column):
     def render_footer(self, bound_column, table):
-        return sum(
-            getattr(x, bound_column.accessor) for x in table.data if getattr(x, bound_column.accessor) is not None
-        )
+        return sum(getattr(x, bound_column.accessor) or 0 for x in table.data)
 
 
 class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
