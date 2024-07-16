@@ -63,7 +63,7 @@ def _get_table_data_for_quarter(quarter):
             date_paid__gte=quarter_start,
             date_paid__lt=quarter_end,
         )
-        .values("opportunity_access__opportunity__currency", "confirmed")
+        .values("opportunity_access__opportunity__currency")
         .annotate(Sum("amount"))
     )
 
@@ -77,7 +77,7 @@ def _get_table_data_for_quarter(quarter):
             date_paid__gte=quarter_start,
             date_paid__lt=quarter_end,
         )
-        .values("opportunity_access__opportunity__currency", "confirmed")
+        .values("opportunity_access__opportunity__currency")
         .annotate(Sum("amount"))
     )
     total_payment_strings = [
