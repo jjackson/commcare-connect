@@ -297,6 +297,15 @@ class OpportunityAccess(models.Model):
         return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0) or 0
 
     @property
+    def total_confirmed_paid(self):
+        return (
+            Payment.objects.filter(opportunity_access=self, confirmed=True)
+            .aggregate(total=Sum("amount"))
+            .get("total", 0)
+            or 0
+        )
+
+    @property
     def display_name(self):
         if self.accepted:
             return self.user.name
