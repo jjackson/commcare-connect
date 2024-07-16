@@ -411,7 +411,11 @@ class RowData:
 
 def create_or_update_catchment(row_data: RowData, opportunity: Opportunity, opportunity_access: dict):
     if row_data.id:
-        catchment = CatchmentArea.objects.get(id=row_data.id)
+        catchment = None
+        try:
+            catchment = CatchmentArea.objects.get(id=row_data.id)
+        except CatchmentArea.DoesNotExist:
+            None
         if catchment:
             catchment.latitude = row_data.latitude
             catchment.longitude = row_data.longitude
