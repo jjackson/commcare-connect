@@ -185,10 +185,7 @@ def clean_form_submission(user_visit: UserVisit, xform: XForm) -> list[list[str]
     if deliver_unit_flags is not None:
         if deliver_unit_flags.check_attachments:
             attachments = user_visit.form_json.get("attachments", {})
-            try:
-                attachments.pop("form.xml")
-            except KeyError:
-                pass
+            attachments.pop("form.xml", None)
             if len(attachments) == 0:
                 flags.append(["attachment_missing", "Form was submitted without attachements."])
 
