@@ -183,13 +183,14 @@ def clean_form_submission(user_visit: UserVisit, xform: XForm) -> list[list[str]
         opportunity=user_visit.opportunity, deliver_unit=user_visit.deliver_unit
     ).first()
     if deliver_unit_flags is not None:
-        attachments = user_visit.form_json.get("attachments", {})
-        try:
-            attachments.pop("form.xml")
-        except KeyError:
-            pass
-        if len(attachments) == 0:
-            flags.append(["attachment_missing", "Form was submitted without attachements."])
+        if deliver_unit_flags.check_attachments:
+            attachments = user_visit.form_json.get("attachments", {})
+            try:
+                attachments.pop("form.xml")
+            except KeyError:
+                pass
+            if len(attachments) == 0:
+                flags.append(["attachment_missing", "Form was submitted without attachements."])
 
         if deliver_unit_flags.duration > 0 and xform.metadata.duration < datetime.timedelta(
             minutes=deliver_unit_flags.duration
