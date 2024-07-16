@@ -110,7 +110,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                 changed = False
 
                 if visit.status != status:
-                    visit.update_status(status)
+                    visit.status = status
                     changed = True
 
                 if status == VisitValidationStatus.rejected and reason and reason != visit.reason:
@@ -142,7 +142,7 @@ def update_payment_accrued(opportunity: Opportunity, users):
                 if opportunity.auto_approve_payments:
                     visits = completed_work.uservisit_set.values_list("status", "reason")
                     if any(status == "rejected" for status, _ in visits):
-                        completed_work.update_status(CompletedWorkStatus.rejected)
+                        completed_work.status = CompletedWorkStatus.rejected
                         completed_work.reason = "\n".join(reason for _, reason in visits if reason)
                     elif all(status == "approved" for status, _ in visits):
                         completed_work.status = CompletedWorkStatus.approved
@@ -284,7 +284,7 @@ def _bulk_update_completed_work_status(opportunity: Opportunity, dataset: Datase
                 changed = False
 
                 if completed_work.status != status:
-                    completed_work.update_status(status)
+                    completed_work.status = status
                     changed = True
                 if status == CompletedWorkStatus.rejected and reason and reason != completed_work.reason:
                     completed_work.reason = reason
