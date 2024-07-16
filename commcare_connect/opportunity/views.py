@@ -22,6 +22,7 @@ from django_tables2.export import TableExport
 from geopy import distance
 
 from commcare_connect.form_receiver.serializers import XFormSerializer
+from commcare_connect.opportunity.api.serializers import remove_opportunity_access_cache
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     DateRanges,
@@ -889,6 +890,10 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
     access.suspension_date = now()
     access.suspension_reason = request.POST.get("reason", "")
     access.save()
+
+    # Clear the cached opportunity access for the suspended user
+    remove_opportunity_access_cache(access.user, access.opportunity)
+
     return redirect("opportunity:user_profile", org_slug, opp_id, pk)
 
 
