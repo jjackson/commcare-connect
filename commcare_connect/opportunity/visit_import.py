@@ -121,7 +121,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                     to_update.append(visit)
                 user_ids.add(visit.user_id)
 
-            UserVisit.objects.bulk_update(to_update, fields=["status", "reason"])
+            UserVisit.objects.bulk_update(to_update, fields=["status", "reason", "status_modified_date"])
             missing_visits |= set(visit_batch) - seen_visits
     update_payment_accrued(opportunity, users=user_ids)
 
@@ -145,7 +145,7 @@ def update_payment_accrued(opportunity: Opportunity, users):
                         completed_work.update_status(CompletedWorkStatus.rejected)
                         completed_work.reason = "\n".join(reason for _, reason in visits if reason)
                     elif all(status == "approved" for status, _ in visits):
-                        completed_work.update_status(CompletedWorkStatus.approved)
+                        completed_work.status = CompletedWorkStatus.approved
                 approved_count = completed_work.approved_count
                 if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
                     access.payment_accrued += approved_count * completed_work.payment_unit.amount
@@ -293,7 +293,7 @@ def _bulk_update_completed_work_status(opportunity: Opportunity, dataset: Datase
                 if changed:
                     to_update.append(completed_work)
                 user_ids.add(completed_work.opportunity_access.user_id)
-            CompletedWork.objects.bulk_update(to_update, fields=["status", "reason"])
+            CompletedWork.objects.bulk_update(to_update, fields=["status", "reason", "status_modified_date"])
             missing_completed_works |= set(work_batch) - seen_completed_works
         update_payment_accrued(opportunity, users=user_ids)
     return CompletedWorkImportStatus(seen_completed_works, missing_completed_works)
