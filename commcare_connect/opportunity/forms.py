@@ -701,6 +701,7 @@ class DeliverUnitFlagsForm(forms.ModelForm):
         model = DeliverUnitFlagRules
         fields = ("deliver_unit", "check_attachments", "duration")
         help_texts = {"duration": "Minimum time to complete form (minutes)"}
+        labels = {"check_attachments": "Require Attachments"}
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
@@ -712,11 +713,8 @@ class DeliverUnitFlagsForm(forms.ModelForm):
             Row(
                 Column(Field("deliver_unit")),
                 Column(
-                    Field(
-                        "check_attachments",
-                        css_class="form-check-input",
-                        wrapper_class="form-check form-switch",
-                    )
+                    HTML("<div class='fw-bold mb-3'>Attachments</div>"),
+                    Field("check_attachments", css_class="form-check-input", wrapper_class="form-check form-switch"),
                 ),
                 Column(Field("duration")),
             ),
