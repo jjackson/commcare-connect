@@ -828,14 +828,20 @@ def verification_flags_config(request, org_slug=None, pk=None):
     DeliverUnitFlagsFormset = modelformset_factory(
         DeliverUnitFlagRules, DeliverUnitFlagsForm, extra=deliver_unit_count, max_num=deliver_unit_count
     )
+    deliver_unit_flags = DeliverUnitFlagRules.objects.filter(opportunity=opportunity)
     deliver_unit_formset = DeliverUnitFlagsFormset(
         form_kwargs={"opportunity": opportunity},
         prefix="deliver_unit",
-        queryset=DeliverUnitFlagRules.objects.filter(opportunity=opportunity),
+        queryset=deliver_unit_flags,
         data=request.POST or None,
+        initial=[
+            {"deliver_unit": du} for du in opportunity.deliver_app.deliver_units.exclude(id__in=deliver_unit_flags)
+        ],
     )
     FormJsonValidationRulesFormset = modelformset_factory(
-        FormJsonValidationRules, FormJsonValidationRulesForm, extra=1
+        FormJsonValidationRules,
+        FormJsonValidationRulesForm,
+        extra=1,
     )
     form_json_formset = FormJsonValidationRulesFormset(
         form_kwargs={"opportunity": opportunity},
