@@ -149,8 +149,11 @@ def process_deliver_form(user, xform: XForm, app: CommCareApp, opportunity: Oppo
 def clean_form_submission(user_visit: UserVisit, xform: XForm) -> list[list[str]]:
     flags = []
     opportunity_flags, _ = OpportunityVerificationFlags.objects.get_or_create(opportunity=user_visit.opportunity)
-    if opportunity_flags.duplicate and user_visit.status == VisitValidationStatus.duplicate:
-        flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
+    if opportunity_flags.duplicate:
+        if user_visit.status == VisitValidationStatus.duplicate:
+            flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
+    else:
+        user_visit.status = VisitValidationStatus.pending
     if opportunity_flags.gps and user_visit.location is None:
         flags.append(["gps", "GPS data is missing"])
     if opportunity_flags.location > 0 and user_visit.location:
