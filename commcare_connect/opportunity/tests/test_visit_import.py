@@ -320,7 +320,7 @@ def test_bulk_update_catchments(opportunity, dataset, new_catchments, old_catchm
     assert import_status.seen_catchments == {
         str(catchment.id) for catchment in old_catchments
     }, "Mismatch in updated catchments"
-    assert import_status.missing_catchments == len(new_catchments), "Incorrect number of new catchments"
+    assert import_status.new_catchments == len(new_catchments), "Incorrect number of new catchments"
 
     for catchment in old_catchments:
         updated_catchment = CatchmentArea.objects.get(id=catchment.id)

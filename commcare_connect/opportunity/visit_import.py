@@ -43,6 +43,14 @@ class ImportException(Exception):
         self.rows = rows
 
 
+class RowDataError(Exception):
+    pass
+
+
+class InvalidValueError(RowDataError):
+    pass
+
+
 @dataclass
 class VisitImportStatus:
     seen_visits: set[str]
@@ -88,13 +96,10 @@ class CompletedWorkImportStatus:
 @dataclass
 class CatchmentAreaImportStatus:
     seen_catchments: set[str]
-    missing_catchments: int
+    new_catchments: int
 
     def __len__(self):
         return len(self.seen_catchments)
-
-    def get_missing_message(self):
-        return f"<br>{self.missing_catchments} catchment areas were not found."
 
 
 def bulk_update_visit_status(opportunity: Opportunity, file: UploadedFile) -> VisitImportStatus:
@@ -323,14 +328,6 @@ def bulk_update_catchments(opportunity: Opportunity, file: UploadedFile):
     return _bulk_update_catchments(opportunity, imported_data)
 
 
-class RowDataError(Exception):
-    pass
-
-
-class InvalidValueError(RowDataError):
-    pass
-
-
 class RowData:
     def __init__(self, row: list[str], headers: list[str]):
         self.row = row
@@ -409,11 +406,11 @@ class RowData:
         return catchment_id if catchment_id else None
 
 
-def create_or_update_catchment(row_data: RowData, opportunity: Opportunity, opportunity_access: dict):
+def create_or_update_catchment(row_data: RowData, opportunity: Opportunity, username_to_oa_map: dict):
     if row_data.id:
         catchment = None
         try:
-            catchment = CatchmentArea.objects.get(id=row_data.id)
+            catchment = CatchmentArea.objects.get(id=row_data.id, opportunity=opportunity)
         except CatchmentArea.DoesNotExist:
             None
         if catchment:
@@ -432,7 +429,7 @@ def create_or_update_catchment(row_data: RowData, opportunity: Opportunity, oppo
             opportunity=opportunity,
             name=row_data.area_name,
             active=row_data.active,
-            opportunity_access=opportunity_access.get(row_data.username, None),
+            opportunity_access=username_to_oa_map.get(row_data.username, None),
         ),
         True,
     )
@@ -448,24 +445,31 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
         to_update = []
         invalid_rows = []
         seen_catchments = set()
-        missing_catchments = 0
+        new_catchments = 0
 
-        opportunity_access = {}
+        username_to_oa_map = {}
         if USERNAME_COL in headers:
-            opportunity_access = {
-                oa.user.username: oa
-                for oa in OpportunityAccess.objects.filter(opportunity=opportunity).select_related("user")
-            }
+            username_index = _get_header_index(headers, USERNAME_COL)
+            usernames = []
+            for row in dataset:
+                row_list = list(row)
+                if row_list[username_index]:
+                    usernames.append(row_list[username_index])
+
+            opportunity_accesses = OpportunityAccess.objects.filter(
+                opportunity=opportunity, user__username__in=usernames
+            ).select_related("user")
+            username_to_oa_map = {oa.user.username: oa for oa in opportunity_accesses}
 
         for row in dataset:
             row = list(row)
             try:
                 row_data = RowData(row, headers)
-                catchment, created = create_or_update_catchment(row_data, opportunity, opportunity_access)
+                catchment, created = create_or_update_catchment(row_data, opportunity, username_to_oa_map)
 
                 if created:
                     to_create.append(catchment)
-                    missing_catchments += 1
+                    new_catchments += 1
                 else:
                     to_update.append(catchment)
                     seen_catchments.add(str(catchment.id))
@@ -482,4 +486,4 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
         if invalid_rows:
             raise ImportException(f"{len(invalid_rows)} rows have errors", invalid_rows)
 
-    return CatchmentAreaImportStatus(seen_catchments, missing_catchments)
+    return CatchmentAreaImportStatus(seen_catchments, new_catchments)
