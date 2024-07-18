@@ -720,7 +720,7 @@ class DeliverUnitFlagsForm(forms.ModelForm):
             ),
         )
         self.fields["deliver_unit"] = forms.ModelChoiceField(
-            queryset=DeliverUnit.objects.filter(app=self.opportunity.deliver_app)
+            queryset=DeliverUnit.objects.filter(app=self.opportunity.deliver_app), disabled=True, empty_label=None
         )
 
     def clean_deliver_unit(self):
