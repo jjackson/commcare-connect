@@ -38,8 +38,6 @@ class OpportunityChangeForm(forms.ModelForm):
             "active",
             "currency",
             "short_description",
-            "auto_approve_visits",
-            "auto_approve_payments",
             "is_test",
             "delivery_type",
         ]
@@ -52,8 +50,6 @@ class OpportunityChangeForm(forms.ModelForm):
         self.helper.layout = Layout(
             Row(Field("name")),
             Row(Field("active", css_class="form-check-input", wrapper_class="form-check form-switch")),
-            Row(Field("auto_approve_visits", css_class="form-check-input", wrapper_class="form-check form-switch")),
-            Row(Field("auto_approve_payments", css_class="form-check-input", wrapper_class="form-check form-switch")),
             Row(Field("is_test", css_class="form-check-input", wrapper_class="form-check form-switch")),
             Row(Field("delivery_type")),
             Row(Field("description")),
