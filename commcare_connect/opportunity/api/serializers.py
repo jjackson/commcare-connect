@@ -175,17 +175,13 @@ class OpportunitySerializer(serializers.ModelSerializer):
 
     def get_catchment_areas(self, obj):
         opp_access = _get_opp_access(self.context.get("request").user, obj)
-        catchments = _get_catchments(opp_access)
+        catchments = CatchmentArea.objects.filter(opportunity_access=opp_access)
         return CatchmentAreaSerializer(catchments, many=True).data
 
 
 @quickcache(vary_on=["user.pk", "opportunity.pk"], timeout=60 * 60)
 def _get_opp_access(user, opportunity):
     return OpportunityAccess.objects.filter(user=user, opportunity=opportunity).first()
-
-
-def _get_catchments(opportunity_access: OpportunityAccess):
-    return CatchmentArea.objects.filter(opportunity_access=opportunity_access)
 
 
 class CompletedModuleSerializer(serializers.ModelSerializer):
