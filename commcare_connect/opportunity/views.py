@@ -835,7 +835,10 @@ def verification_flags_config(request, org_slug=None, pk=None):
         queryset=deliver_unit_flags,
         data=request.POST or None,
         initial=[
-            {"deliver_unit": du} for du in opportunity.deliver_app.deliver_units.exclude(id__in=deliver_unit_flags)
+            {"deliver_unit": du}
+            for du in opportunity.deliver_app.deliver_units.exclude(
+                id__in=deliver_unit_flags.values_list("deliver_unit")
+            )
         ],
     )
     FormJsonValidationRulesFormset = modelformset_factory(
