@@ -57,8 +57,9 @@ def test_send_inactive_notification_learn_inactive_message(mobile_user: User, op
     )
     access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
     message = _get_inactive_message(access)
+    assert message is not None
     assert message.usernames[0] == mobile_user.username
-    assert message.title == f"Resume your learning journey for {opportunity.name}"
+    assert message.data.get("title") == f"Resume your learning journey for {opportunity.name}"
 
 
 def test_send_inactive_notification_deliver_inactive_message(mobile_user: User, opportunity: Opportunity):
@@ -75,8 +76,9 @@ def test_send_inactive_notification_deliver_inactive_message(mobile_user: User, 
     UserVisitFactory.create(user=mobile_user, opportunity=opportunity, visit_date=now() - datetime.timedelta(days=2))
 
     message = _get_inactive_message(access)
+    assert message is not None
     assert message.usernames[0] == mobile_user.username
-    assert message.title == f"Resume your job for {opportunity.name}"
+    assert message.data.get("title") == f"Resume your job for {opportunity.name}"
 
 
 def test_send_inactive_notification_not_claimed_deliver_message(mobile_user: User, opportunity: Opportunity):
@@ -90,8 +92,9 @@ def test_send_inactive_notification_not_claimed_deliver_message(mobile_user: Use
         )
     access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
     message = _get_inactive_message(access)
+    assert message is not None
     assert message.usernames[0] == mobile_user.username
-    assert message.title == f"Resume your job for {opportunity.name}"
+    assert message.data.get("title") == f"Resume your job for {opportunity.name}"
 
 
 def test_send_inactive_notification_active_user(mobile_user: User, opportunity: Opportunity):
