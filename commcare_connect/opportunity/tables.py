@@ -337,7 +337,7 @@ class CatchmentAreaTable(tables.Table):
             "site_code",
             "name",
             "name_of_user",
-            "phone_number",  # Only include this once
+            "phone_number",
             "active",
             "latitude",
             "longitude",
