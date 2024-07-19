@@ -185,6 +185,7 @@ class CatchmentAreaFactory(DjangoModelFactory):
     radius = Faker("random_int", min=500, max=2000)
     active = Faker("boolean")
     name = Faker("city")
+    site_code = Faker("pystr")
 
     class Meta:
         model = "opportunity.CatchmentArea"

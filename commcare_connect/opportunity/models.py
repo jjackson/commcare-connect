@@ -11,7 +11,7 @@ from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
-from commcare_connect.utils.db import BaseModel
+from commcare_connect.utils.db import BaseModel, slugify_uniquely
 
 
 class CommCareApp(BaseModel):
@@ -601,3 +601,9 @@ class CatchmentArea(models.Model):
     opportunity_access = models.ForeignKey(OpportunityAccess, null=True, on_delete=models.DO_NOTHING)
     active = models.BooleanField(default=True)
     name = models.CharField(max_length=255)
+    site_code = models.SlugField(max_length=255, unique=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            self.site_code = slugify_uniquely(self.name, self.__class__, "site_code")
+        super().save(*args, **kwargs)

@@ -18,6 +18,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tasks import send_payment_notification
+from commcare_connect.utils.db import slugify_uniquely
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.itertools import batched
 
@@ -34,7 +35,7 @@ LONGITUDE_COL = "longitude"
 RADIUS_COL = "radius"
 AREA_NAME_COL = "area name"
 ACTIVE_COL = "active"
-ID = "id"
+SITE_CODE_COL = "site code"
 
 
 class ImportException(Exception):
@@ -338,7 +339,7 @@ class RowData:
         self.active = self._get_active()
         self.area_name = self._get_area_name()
         self.username = self._get_username()
-        self.id = self._get_id()
+        self.site_code = self._get_site_code()
 
     def _get_latitude(self) -> Decimal:
         error_message = "Latitude must be between -90 and 90 degrees."
@@ -397,20 +398,20 @@ class RowData:
         username = self.row[index]
         return username if username else None
 
-    def _get_id(self) -> int | None:
+    def _get_site_code(self) -> str | None:
         try:
-            index = _get_header_index(self.headers, ID)
+            index = _get_header_index(self.headers, SITE_CODE_COL)
         except ImportException:
             return None
-        catchment_id = self.row[index]
-        return catchment_id if catchment_id else None
+        site_code = self.row[index]
+        return site_code if site_code else None
 
 
 def create_or_update_catchment(row_data: RowData, opportunity: Opportunity, username_to_oa_map: dict):
-    if row_data.id:
+    if row_data.site_code:
         catchment = None
         try:
-            catchment = CatchmentArea.objects.get(id=row_data.id, opportunity=opportunity)
+            catchment = CatchmentArea.objects.get(site_code=row_data.site_code)
         except CatchmentArea.DoesNotExist:
             None
         if catchment:
@@ -478,6 +479,8 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
                 invalid_rows.append((row, f"Error in row {row}: {e}"))
 
         if to_create:
+            for ca in to_create:
+                ca.site_code = slugify_uniquely(ca.name, CatchmentArea, "site_code")
             CatchmentArea.objects.bulk_create(to_create)
 
         if to_update:
