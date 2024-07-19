@@ -317,7 +317,6 @@ class SuspendedUsersTable(tables.Table):
 
 
 class CatchmentAreaTable(tables.Table):
-    id = columns.Column(verbose_name="Id")
     username = columns.Column(accessor="opportunity_access__user__username", verbose_name="Username")
     name_of_user = columns.Column(accessor="opportunity_access__user__name", verbose_name="Name")
     phone_number = columns.Column(accessor="opportunity_access__user__phone_number", verbose_name="Phone Number")
@@ -326,20 +325,32 @@ class CatchmentAreaTable(tables.Table):
     latitude = columns.Column(verbose_name="Latitude")
     longitude = columns.Column(verbose_name="Longitude")
     radius = columns.Column(verbose_name="Radius")
+    site_code = columns.Column(verbose_name="Site code")
 
     def render_active(self, value):
         return "Yes" if value else "No"
 
     class Meta:
         model = CatchmentArea
-        fields = ("username", "id", "name", "name_of_user", "phone_number" "active", "latitude", "longitude", "radius")
+        fields = (
+            "username",
+            "site_code",
+            "name",
+            "name_of_user",
+            "phone_number",  # Only include this once
+            "active",
+            "latitude",
+            "longitude",
+            "radius",
+        )
         orderable = False
         sequence = (
             "username",
-            "id",
-            "name",
             "name_of_user",
-            "phone_number" "active",
+            "phone_number",
+            "name",
+            "site_code",
+            "active",
             "latitude",
             "longitude",
             "radius",

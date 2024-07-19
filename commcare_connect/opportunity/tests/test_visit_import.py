@@ -248,7 +248,7 @@ def test_bulk_update_payments(opportunity: Opportunity):
 
 @pytest.fixture
 def dataset():
-    return Dataset(headers=["latitude", "longitude", "area name", "radius", "active", "username", "id"])
+    return Dataset(headers=["latitude", "longitude", "area name", "radius", "active", "username", "site code"])
 
 
 @pytest.fixture
@@ -309,7 +309,7 @@ def test_bulk_update_catchments(opportunity, dataset, new_catchments, old_catchm
                 str(catchment.radius + radius_change),
                 "yes",
                 catchment.opportunity_access.user.username,
-                str(catchment.id),
+                catchment.site_code,
             ]
         )
 
@@ -323,7 +323,7 @@ def test_bulk_update_catchments(opportunity, dataset, new_catchments, old_catchm
     assert import_status.new_catchments == len(new_catchments), "Incorrect number of new catchments"
 
     for catchment in old_catchments:
-        updated_catchment = CatchmentArea.objects.get(id=catchment.id)
+        updated_catchment = CatchmentArea.objects.get(site_code=catchment.site_code)
         assert (
             updated_catchment.name == f"{name_change} {catchment.name}"
         ), f"Name not updated correctly for catchment {catchment.id}"
