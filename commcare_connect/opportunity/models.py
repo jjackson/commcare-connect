@@ -84,8 +84,8 @@ class Opportunity(BaseModel):
     total_budget = models.IntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
     currency = models.CharField(max_length=3, null=True)
-    auto_approve_visits = models.BooleanField(default=False)
-    auto_approve_payments = models.BooleanField(default=False)
+    auto_approve_visits = models.BooleanField(default=True)
+    auto_approve_payments = models.BooleanField(default=True)
     is_test = models.BooleanField(default=True)
     delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
 
@@ -296,6 +296,15 @@ class OpportunityAccess(models.Model):
     @property
     def total_paid(self):
         return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0) or 0
+
+    @property
+    def total_confirmed_paid(self):
+        return (
+            Payment.objects.filter(opportunity_access=self, confirmed=True)
+            .aggregate(total=Sum("amount"))
+            .get("total", 0)
+            or 0
+        )
 
     @property
     def display_name(self):

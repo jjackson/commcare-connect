@@ -98,7 +98,7 @@ class OpportunityPaymentTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "username", "payment_accrued", "total_paid")
+        fields = ("display_name", "username", "payment_accrued", "total_paid", "total_confirmed_paid")
         orderable = False
         empty_text = "No user have payments accrued yet."
 
@@ -115,6 +115,11 @@ class UserPaymentsTable(tables.Table):
 class AggregateColumn(columns.Column):
     def render_footer(self, bound_column, table):
         return sum(1 if bound_column.accessor.resolve(row) else 0 for row in table.data)
+
+
+class SumColumn(columns.Column):
+    def render_footer(self, bound_column, table):
+        return sum(getattr(x, bound_column.accessor) or 0 for x in table.data)
 
 
 class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
@@ -210,15 +215,15 @@ class PaymentUnitTable(tables.Table):
 
 
 class DeliverStatusTable(tables.Table):
-    display_name = columns.Column("Name of the User")
+    display_name = columns.Column(verbose_name="Name of the User", footer="Total")
     username = columns.Column(accessor="user__username", visible=False)
     payment_unit = columns.Column("Name of Payment Unit")
-    completed = columns.Column("Delivered")
-    pending = columns.Column("Pending")
-    approved = columns.Column("Approved")
-    rejected = columns.Column("Rejected")
-    over_limit = columns.Column("Over Limit")
-    incomplete = columns.Column("Incomplete")
+    completed = SumColumn("Delivered")
+    pending = SumColumn("Pending")
+    approved = SumColumn("Approved")
+    rejected = SumColumn("Rejected")
+    over_limit = SumColumn("Over Limit")
+    incomplete = SumColumn("Incomplete")
 
     details = columns.LinkColumn(
         "opportunity:user_visits_list",
