@@ -18,7 +18,6 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tasks import send_payment_notification
-from commcare_connect.utils.db import slugify_uniquely
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.itertools import batched
 
@@ -398,42 +397,38 @@ class RowData:
         username = self.row[index]
         return username if username else None
 
-    def _get_site_code(self) -> str | None:
-        try:
-            index = _get_header_index(self.headers, SITE_CODE_COL)
-        except ImportException:
-            return None
+    def _get_site_code(self) -> str:
+        index = _get_header_index(self.headers, SITE_CODE_COL)
         site_code = self.row[index]
-        return site_code if site_code else None
+        if not site_code:
+            raise InvalidValueError("Site code is not provided.")
+        return site_code
 
 
 def create_or_update_catchment(row_data: RowData, opportunity: Opportunity, username_to_oa_map: dict):
-    if row_data.site_code:
-        catchment = None
-        try:
-            catchment = CatchmentArea.objects.get(site_code=row_data.site_code)
-        except CatchmentArea.DoesNotExist:
-            None
-        if catchment:
-            catchment.latitude = row_data.latitude
-            catchment.longitude = row_data.longitude
-            catchment.radius = row_data.radius
-            catchment.name = row_data.area_name
-            catchment.active = row_data.active
-            return catchment, False
-
-    return (
-        CatchmentArea(
-            latitude=row_data.latitude,
-            longitude=row_data.longitude,
-            radius=row_data.radius,
-            opportunity=opportunity,
-            name=row_data.area_name,
-            active=row_data.active,
-            opportunity_access=username_to_oa_map.get(row_data.username, None),
-        ),
-        True,
-    )
+    try:
+        catchment = CatchmentArea.objects.get(site_code=row_data.site_code, opportunity=opportunity)
+        catchment.latitude = row_data.latitude
+        catchment.longitude = row_data.longitude
+        catchment.radius = row_data.radius
+        catchment.name = row_data.area_name
+        catchment.active = row_data.active
+        catchment.opportunity_access = username_to_oa_map.get(row_data.username, None)
+        return catchment, False
+    except CatchmentArea.DoesNotExist:
+        return (
+            CatchmentArea(
+                latitude=row_data.latitude,
+                longitude=row_data.longitude,
+                radius=row_data.radius,
+                opportunity=opportunity,
+                name=row_data.area_name,
+                active=row_data.active,
+                site_code=row_data.site_code,
+                opportunity_access=username_to_oa_map.get(row_data.username, None),
+            ),
+            True,
+        )
 
 
 def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
@@ -479,12 +474,20 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
                 invalid_rows.append((row, f"Error in row {row}: {e}"))
 
         if to_create:
-            for ca in to_create:
-                ca.site_code = slugify_uniquely(ca.name, CatchmentArea, "site_code")
             CatchmentArea.objects.bulk_create(to_create)
 
         if to_update:
-            CatchmentArea.objects.bulk_update(to_update, ["latitude", "longitude", "radius", "active", "name"])
+            CatchmentArea.objects.bulk_update(
+                to_update,
+                [
+                    "latitude",
+                    "longitude",
+                    "radius",
+                    "active",
+                    "name",
+                    "opportunity_access",
+                ],
+            )
 
         if invalid_rows:
             raise ImportException(f"{len(invalid_rows)} rows have errors", invalid_rows)
