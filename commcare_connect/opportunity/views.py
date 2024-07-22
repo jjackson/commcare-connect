@@ -768,6 +768,9 @@ def visit_verification(request, org_slug=None, pk=None):
                     other_forms.append((loc, dist.m, other_lat, other_lon, other_precision))
         user_forms.sort(key=lambda x: x[1])
         other_forms.sort(key=lambda x: x[1])
+    reason = user_visit.reason
+    if not reason:
+        reason = "\n".join([flag[1] for flag in user_visit.flag_reason.get("flags", [])])
     return render(
         request,
         "opportunity/visit_verification.html",
@@ -781,6 +784,7 @@ def visit_verification(request, org_slug=None, pk=None):
             "visit_lon": lon,
             "visit_precision": precision,
             "MAPBOX_TOKEN": settings.MAPBOX_TOKEN,
+            "reason": reason,
         },
     )
 
@@ -797,9 +801,12 @@ def approve_visit(request, org_slug=None, pk=None):
 
 
 @org_member_required
+@require_POST
 def reject_visit(request, org_slug=None, pk=None):
     user_visit = UserVisit.objects.get(pk=pk)
+    reason = request.POST.get("reason")
     user_visit.status = VisitValidationStatus.rejected
+    user_visit.reason = reason
     user_visit.save()
     access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=user_visit.opportunity_id)
     update_payment_accrued(opportunity=access.opportunity, users=[access.user])
