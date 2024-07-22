@@ -254,8 +254,8 @@ def dataset():
 @pytest.fixture
 def new_catchments():
     return [
-        ["40.7128", "-74.0060", "New York", "5000", "yes", "", ""],
-        ["20.7128", "-84.0060", "London", "4500", "No", "", ""],
+        ["40.7128", "-74.0060", "New York", "5000", "yes", "", "new york"],
+        ["20.7128", "-84.0060", "London", "4500", "No", "", "london"],
     ]
 
 
@@ -275,8 +275,8 @@ def old_catchments(opportunity):
 
 @pytest.mark.django_db
 def test_bulk_update_catchments_missing_headers(opportunity):
-    required_headers = ["latitude", "longitude", "area name", "radius", "active"]
-    sample_data = ["40.7128", "-74.0060", "New York", "100", "yes"]  # Sample data for a complete row
+    required_headers = ["latitude", "longitude", "area name", "radius", "active", "site code"]
+    sample_data = ["40.7128", "-74.0060", "New York", "100", "yes", "new york"]  # Sample data for a complete row
 
     for missing_header in required_headers:
         incomplete_headers = [header for header in required_headers if header != missing_header]
