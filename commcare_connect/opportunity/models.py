@@ -601,4 +601,4 @@ class CatchmentArea(models.Model):
     opportunity_access = models.ForeignKey(OpportunityAccess, null=True, on_delete=models.DO_NOTHING)
     active = models.BooleanField(default=True)
     name = models.CharField(max_length=255)
-    site_code = models.SlugField(max_length=255, blank=True)
+    site_code = models.SlugField(max_length=255)
