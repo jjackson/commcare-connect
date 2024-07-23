@@ -611,3 +611,6 @@ class CatchmentArea(models.Model):
     active = models.BooleanField(default=True)
     name = models.CharField(max_length=255)
     site_code = models.SlugField(max_length=255)
+
+    class Meta:
+        unique_together = ("site_code", "opportunity")
