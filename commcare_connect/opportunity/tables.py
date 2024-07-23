@@ -4,6 +4,7 @@ from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
 
 from commcare_connect.opportunity.models import (
+    CatchmentArea,
     CompletedWork,
     OpportunityAccess,
     Payment,
@@ -318,6 +319,47 @@ class SuspendedUsersTable(tables.Table):
             "opportunity:suspended_users_list", args=(record.opportunity.organization.slug, record.opportunity_id)
         )
         return format_html('<a class="btn btn-success" href="{}?next={}">Revoke</a>', revoke_url, page_url)
+
+
+class CatchmentAreaTable(tables.Table):
+    username = columns.Column(accessor="opportunity_access__user__username", verbose_name="Username")
+    name_of_user = columns.Column(accessor="opportunity_access__user__name", verbose_name="Name")
+    phone_number = columns.Column(accessor="opportunity_access__user__phone_number", verbose_name="Phone Number")
+    name = columns.Column(verbose_name="Area name")
+    active = columns.Column(verbose_name="Active")
+    latitude = columns.Column(verbose_name="Latitude")
+    longitude = columns.Column(verbose_name="Longitude")
+    radius = columns.Column(verbose_name="Radius")
+    site_code = columns.Column(verbose_name="Site code")
+
+    def render_active(self, value):
+        return "Yes" if value else "No"
+
+    class Meta:
+        model = CatchmentArea
+        fields = (
+            "username",
+            "site_code",
+            "name",
+            "name_of_user",
+            "phone_number",
+            "active",
+            "latitude",
+            "longitude",
+            "radius",
+        )
+        orderable = False
+        sequence = (
+            "username",
+            "name_of_user",
+            "phone_number",
+            "name",
+            "site_code",
+            "active",
+            "latitude",
+            "longitude",
+            "radius",
+        )
 
 
 def popup_html(value, popup_title, popup_direction="top", popup_class="", popup_attributes=""):
