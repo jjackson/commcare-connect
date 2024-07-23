@@ -184,6 +184,10 @@ def _get_opp_access(user, opportunity):
     return OpportunityAccess.objects.filter(user=user, opportunity=opportunity).first()
 
 
+def remove_opportunity_access_cache(user, opportunity):
+    return _get_opp_access.clear(user, opportunity)
+
+
 class CompletedModuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompletedModule
