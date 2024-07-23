@@ -34,9 +34,9 @@ def _get_quarters_since_start():
 
 
 def _get_table_data_for_quarter(quarter):
-    quarter_start = date(quarter[0], quarter[1] * 3, 1)
+    quarter_start = date(quarter[0], (quarter[1] - 1) * 3 + 1, 1)
     next_quarter = _increment(quarter)
-    quarter_end = date(next_quarter[0], next_quarter[1] * 3, 1)
+    quarter_end = date(next_quarter[0], (next_quarter[1] - 1) * 3 + 1, 1)
     visit_data = (
         CompletedWork.objects.annotate(work_date=Max("uservisit__visit_date"))
         .filter(

@@ -14,5 +14,8 @@ class AdminReportTable(tables.Table):
         empty_text = "No data for this quarter."
         orderable = False
 
-    def render_payments(self, value):
+    def render_total_payments(self, value):
+        return mark_safe("<br>".join(value))
+
+    def render_approved_payments(self, value):
         return mark_safe("<br>".join(value))
