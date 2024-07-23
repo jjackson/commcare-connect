@@ -681,6 +681,7 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
             Row(
                 Field("duplicate", css_class="form-check-input", wrapper_class="form-check form-switch"),
                 Field("gps", css_class="form-check-input", wrapper_class="form-check form-switch"),
+                Field("catchment_areas", css_class="form-check-input", wrapper_class="form-check form-switch"),
             ),
             Row(Field("duration")),
             Row(Field("location")),
@@ -698,6 +699,7 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
         self.fields["duration"].required = False
         self.fields["location"].required = False
         self.fields["gps"].required = False
+        self.fields["catchment_areas"].required = False
         if self.instance:
             self.fields["form_submission_start"].initial = self.instance.form_submission_start
             self.fields["form_submission_end"].initial = self.instance.form_submission_end
