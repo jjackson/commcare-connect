@@ -785,7 +785,7 @@ def visit_verification(request, org_slug=None, pk=None):
         user_forms.sort(key=lambda x: x[1])
         other_forms.sort(key=lambda x: x[1])
     reason = user_visit.reason
-    if not reason:
+    if user_visit.flag_reason and not reason:
         reason = "\n".join([flag[1] for flag in user_visit.flag_reason.get("flags", [])])
     return render(
         request,
