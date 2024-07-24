@@ -191,3 +191,17 @@ class FormJsonValidationRulesFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.FormJsonValidationRules"
+
+
+class CatchmentAreaFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    opportunity_access = SubFactory(OpportunityAccessFactory)
+    latitude = Faker("latitude")
+    longitude = Faker("longitude")
+    radius = Faker("random_int", min=500, max=2000)
+    active = Faker("boolean")
+    name = Faker("city")
+    site_code = Faker("pystr")
+
+    class Meta:
+        model = "opportunity.CatchmentArea"

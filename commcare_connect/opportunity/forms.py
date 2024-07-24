@@ -646,7 +646,7 @@ class SendMessageMobileUsersForm(forms.Form):
 class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
     class Meta:
         model = OpportunityVerificationFlags
-        fields = ("duplicate", "gps", "location", "form_submission_start", "form_submission_end")
+        fields = ("duplicate", "gps", "location", "form_submission_start", "form_submission_end", "catchment_areas")
         widgets = {
             "form_submission_start": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
             "form_submission_end": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
@@ -657,11 +657,13 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
             "form_submission_start": "Start Time",
             "form_submission_end": "End Time",
             "location": "Location Distance",
+            "catchment_areas": "Catchment Area",
         }
         help_texts = {
             "location": "Minimum distance between form locations (metres)",
             "duplicate": "Flag duplicate form submissions for an entity.",
             "gps": "Flag forms with no location information.",
+            "catchment_areas": "Flag forms outside a users's assigned catchment area",
         }
 
     def __init__(self, *args, **kwargs):
@@ -673,6 +675,7 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
             Row(
                 Field("duplicate", css_class="form-check-input", wrapper_class="form-check form-switch"),
                 Field("gps", css_class="form-check-input", wrapper_class="form-check form-switch"),
+                Field("catchment_areas", css_class="form-check-input", wrapper_class="form-check form-switch"),
             ),
             Row(Field("location")),
             Fieldset(
@@ -687,6 +690,7 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
         self.fields["duplicate"].required = False
         self.fields["location"].required = False
         self.fields["gps"].required = False
+        self.fields["catchment_areas"].required = False
         if self.instance:
             self.fields["form_submission_start"].initial = self.instance.form_submission_start
             self.fields["form_submission_end"].initial = self.instance.form_submission_end

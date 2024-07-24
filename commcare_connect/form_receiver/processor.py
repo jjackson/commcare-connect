@@ -146,7 +146,7 @@ def process_deliver_form(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             process_deliver_unit(user, xform, app, opportunity, deliver_unit_block)
 
 
-def clean_form_submission(user_visit: UserVisit, xform: XForm) -> list[list[str]]:
+def clean_form_submission(access: OpportunityAccess, user_visit: UserVisit, xform: XForm) -> list[list[str]]:
     flags = []
     opportunity_flags, _ = OpportunityVerificationFlags.objects.get_or_create(opportunity=user_visit.opportunity)
     if opportunity_flags.duplicate:
@@ -171,6 +171,18 @@ def clean_form_submission(user_visit: UserVisit, xform: XForm) -> list[list[str]
             if dist.m <= opportunity_flags.location:
                 flags.append(["location", "Visit location is too close to another visit"])
                 break
+    if opportunity_flags.catchment_areas:
+        areas = access.catchmentarea_set.filter(active=True)
+        if areas:
+            cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
+            within_catchment = False
+            for area in areas:
+                dist = distance((area.latitude, area.longitude), (cur_lat, cur_lon))
+                if dist.meters < area.radius:
+                    within_catchment = True
+                    break
+            if not within_catchment:
+                flags.append(["catchment", "Visit outside worker catchment areas"])
     if (
         opportunity_flags.form_submission_start
         and opportunity_flags.form_submission_start > xform.metadata.timeStart.time()
@@ -268,8 +280,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
                 completed_work_needs_save = True
         elif counts["entity"] > 0:
             user_visit.update_status(VisitValidationStatus.duplicate)
-
-    flags = clean_form_submission(user_visit, xform)
+    flags = clean_form_submission(access, user_visit, xform)
     if access.suspended:
         flags.append(["user_suspended", "This user is suspended from the opportunity."])
         user_visit.update_status(VisitValidationStatus.rejected)

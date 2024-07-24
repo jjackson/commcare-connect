@@ -24,6 +24,7 @@ from django_tables2.export import TableExport
 from geopy import distance
 
 from commcare_connect.form_receiver.serializers import XFormSerializer
+from commcare_connect.opportunity.api.serializers import remove_opportunity_access_cache
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     DateRanges,
@@ -45,6 +46,7 @@ from commcare_connect.opportunity.helpers import (
 )
 from commcare_connect.opportunity.models import (
     BlobMeta,
+    CatchmentArea,
     CompletedModule,
     CompletedWork,
     CompletedWorkStatus,
@@ -75,6 +77,7 @@ from commcare_connect.opportunity.tables import (
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     create_learn_modules_and_deliver_units,
+    generate_catchment_area_export,
     generate_deliver_status_export,
     generate_payment_export,
     generate_user_status_export,
@@ -85,6 +88,7 @@ from commcare_connect.opportunity.tasks import (
 )
 from commcare_connect.opportunity.visit_import import (
     ImportException,
+    bulk_update_catchments,
     bulk_update_completed_work_status,
     bulk_update_payment_status,
     bulk_update_visit_status,
@@ -240,8 +244,8 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["visit_export_form"] = VisitExportForm()
         context["export_task_id"] = self.request.GET.get("export_task_id")
+        context["visit_export_form"] = VisitExportForm()
         context["export_form"] = PaymentExportForm()
         return context
 
@@ -645,6 +649,7 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
 def user_profile(request, org_slug=None, opp_id=None, pk=None):
     access = get_object_or_404(OpportunityAccess, pk=pk, accepted=True)
     user_visits = UserVisit.objects.filter(user=access.user, opportunity=access.opportunity)
+    user_catchments = CatchmentArea.objects.filter(opportunity_access=access)
     user_visit_data = []
     for user_visit in user_visits:
         if not user_visit.location:
@@ -673,6 +678,16 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
             if cw.approved_count
         ]
     )
+    user_catchment_data = [
+        {
+            "name": catchment.name,
+            "lat": float(catchment.latitude),
+            "lng": float(catchment.longitude),
+            "radius": catchment.radius,
+            "active": catchment.active,
+        }
+        for catchment in user_catchments
+    ]
     pending_payment = max(access.payment_accrued - access.total_paid, 0)
     return render(
         request,
@@ -685,6 +700,7 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
             MAPBOX_TOKEN=settings.MAPBOX_TOKEN,
             pending_completed_work_count=pending_completed_work_count,
             pending_payment=pending_payment,
+            user_catchments=user_catchment_data,
         ),
     )
 
@@ -774,6 +790,9 @@ def visit_verification(request, org_slug=None, pk=None):
                     other_forms.append((loc, dist.m, other_lat, other_lon, other_precision))
         user_forms.sort(key=lambda x: x[1])
         other_forms.sort(key=lambda x: x[1])
+    reason = user_visit.reason
+    if user_visit.flag_reason and not reason:
+        reason = "\n".join([flag[1] for flag in user_visit.flag_reason.get("flags", [])])
     return render(
         request,
         "opportunity/visit_verification.html",
@@ -787,6 +806,7 @@ def visit_verification(request, org_slug=None, pk=None):
             "visit_lon": lon,
             "visit_precision": precision,
             "MAPBOX_TOKEN": settings.MAPBOX_TOKEN,
+            "reason": reason,
         },
     )
 
@@ -803,9 +823,12 @@ def approve_visit(request, org_slug=None, pk=None):
 
 
 @org_member_required
+@require_POST
 def reject_visit(request, org_slug=None, pk=None):
     user_visit = UserVisit.objects.get(pk=pk)
+    reason = request.POST.get("reason")
     user_visit.status = VisitValidationStatus.rejected
+    user_visit.reason = reason
     user_visit.save()
     access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=user_visit.opportunity_id)
     update_payment_accrued(opportunity=access.opportunity, users=[access.user])
@@ -948,6 +971,10 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
     access.suspension_date = now()
     access.suspension_reason = request.POST.get("reason", "")
     access.save()
+
+    # Clear the cached opportunity access for the suspended user
+    remove_opportunity_access_cache(access.user, access.opportunity)
+
     return redirect("opportunity:user_profile", org_slug, opp_id, pk)
 
 
@@ -956,6 +983,7 @@ def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
     access = get_object_or_404(OpportunityAccess, opportunity_id=opp_id, id=pk)
     access.suspended = False
     access.save()
+    remove_opportunity_access_cache(access.user, access.opportunity)
     next = request.GET.get("next", "/")
     return redirect(next)
 
@@ -966,3 +994,33 @@ def suspended_users_list(request, org_slug=None, pk=None):
     access_objects = OpportunityAccess.objects.filter(opportunity=opportunity, suspended=True)
     table = SuspendedUsersTable(access_objects)
     return render(request, "opportunity/suspended_users.html", dict(table=table, opportunity=opportunity))
+
+
+@org_member_required
+def export_catchment_area(request, **kwargs):
+    opportunity_id = kwargs["pk"]
+    get_object_or_404(Opportunity, organization=request.org, id=opportunity_id)
+    form = PaymentExportForm(data=request.POST)
+    if not form.is_valid():
+        messages.error(request, form.errors)
+        return redirect("opportunity:detail", request.org.slug, opportunity_id)
+
+    export_format = form.cleaned_data["format"]
+    result = generate_catchment_area_export.delay(opportunity_id, export_format)
+    redirect_url = reverse("opportunity:detail", args=(request.org.slug, opportunity_id))
+    return redirect(f"{redirect_url}?export_task_id={result.id}")
+
+
+@org_member_required
+@require_POST
+def import_catchment_area(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
+    file = request.FILES.get("catchments")
+    try:
+        status = bulk_update_catchments(opportunity, file)
+    except ImportException as e:
+        messages.error(request, e.message)
+    else:
+        message = f"{len(status)} catchment areas were updated successfully and {status.new_catchments} were created."
+        messages.success(request, mark_safe(message))
+    return redirect("opportunity:detail", org_slug, pk)

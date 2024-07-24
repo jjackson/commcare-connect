@@ -358,11 +358,11 @@ def test_auto_approve_payments_rejected_visit(
     opportunity.auto_approve_payments = True
     opportunity.save()
     make_request(api_client, form_json, user_with_connectid_link)
-    rejected_reason = ""
+    rejected_reason = []
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     visit.status = VisitValidationStatus.rejected
     visit.reason = "rejected"
-    rejected_reason += visit.reason
+    rejected_reason.append(visit.reason)
     visit.save()
 
     duplicate_json = deepcopy(form_json)
@@ -371,7 +371,7 @@ def test_auto_approve_payments_rejected_visit(
     visit = UserVisit.objects.get(xform_id=duplicate_json["id"])
     visit.status = VisitValidationStatus.rejected
     visit.reason = "duplicate"
-    rejected_reason += "\n" + visit.reason
+    rejected_reason.append(visit.reason)
     visit.save()
 
     # Payment Approval
@@ -379,7 +379,8 @@ def test_auto_approve_payments_rejected_visit(
     access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.rejected
-    assert completed_work.reason == rejected_reason
+    for reason in rejected_reason:
+        assert reason in completed_work.reason
     assert access.payment_accrued == completed_work.payment_accrued
 
 
@@ -412,11 +413,11 @@ def test_auto_approve_payments_rejected_visit_task(
     opportunity.auto_approve_payments = True
     opportunity.save()
     make_request(api_client, form_json, user_with_connectid_link)
-    rejected_reason = ""
+    rejected_reason = []
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     visit.status = VisitValidationStatus.rejected
     visit.reason = "rejected"
-    rejected_reason += visit.reason
+    rejected_reason.append(visit.reason)
     visit.save()
 
     duplicate_json = deepcopy(form_json)
@@ -425,7 +426,7 @@ def test_auto_approve_payments_rejected_visit_task(
     visit = UserVisit.objects.get(xform_id=duplicate_json["id"])
     visit.status = VisitValidationStatus.rejected
     visit.reason = "duplicate"
-    rejected_reason += "\n" + visit.reason
+    rejected_reason.append(visit.reason)
     visit.save()
 
     # Payment Approval
@@ -433,7 +434,8 @@ def test_auto_approve_payments_rejected_visit_task(
     access = OpportunityAccess.objects.get(user=user_with_connectid_link, opportunity=opportunity)
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.rejected
-    assert completed_work.reason == rejected_reason
+    for reason in rejected_reason:
+        assert reason in completed_work.reason
     assert access.payment_accrued == completed_work.payment_accrued
 
 
