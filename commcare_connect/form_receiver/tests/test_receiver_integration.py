@@ -198,7 +198,7 @@ def test_receiver_deliver_form_max_visits_reached(
     user_visits = UserVisit.objects.filter(user=mobile_user_with_connect_link)
     assert user_visits.count() == 5
     # First four are not over-limit
-    assert {u.status for u in user_visits[0:4]} == {VisitValidationStatus.pending}
+    assert {u.status for u in user_visits[0:4]} == {VisitValidationStatus.pending, VisitValidationStatus.approved}
     # Last one is over limit
     assert user_visits[4].status == VisitValidationStatus.over_limit
 
@@ -240,7 +240,7 @@ def test_receiver_duplicate(user_with_connectid_link: User, api_client: APIClien
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
     make_request(api_client, form_json, user_with_connectid_link)
     visit = UserVisit.objects.get(user=user_with_connectid_link)
-    assert visit.status == VisitValidationStatus.pending
+    assert visit.status == VisitValidationStatus.approved
     duplicate_json = deepcopy(form_json)
     duplicate_json["id"] = str(uuid4())
     make_request(api_client, duplicate_json, user_with_connectid_link)
