@@ -1,4 +1,5 @@
 import random
+from datetime import timedelta
 
 import pytest
 from django.utils.timezone import now
@@ -31,7 +32,7 @@ def test_export_user_visit_data(mobile_user_with_connect_link):
     deliver_unit = DeliverUnitFactory()
     opportunity = OpportunityFactory()
     date1 = now()
-    date2 = now()
+    date2 = date1 + timedelta(minutes=10)
     UserVisit.objects.bulk_create(
         [
             UserVisit(
