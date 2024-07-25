@@ -4,6 +4,7 @@ from django.utils.safestring import mark_safe
 from django_tables2 import columns, tables, utils
 
 from commcare_connect.opportunity.models import (
+    CatchmentArea,
     CompletedWork,
     OpportunityAccess,
     Payment,
@@ -97,7 +98,7 @@ class OpportunityPaymentTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "username", "payment_accrued", "total_paid")
+        fields = ("display_name", "username", "payment_accrued", "total_paid", "total_confirmed_paid")
         orderable = False
         empty_text = "No user have payments accrued yet."
 
@@ -114,6 +115,11 @@ class UserPaymentsTable(tables.Table):
 class AggregateColumn(columns.Column):
     def render_footer(self, bound_column, table):
         return sum(1 if bound_column.accessor.resolve(row) else 0 for row in table.data)
+
+
+class SumColumn(columns.Column):
+    def render_footer(self, bound_column, table):
+        return sum(getattr(x, bound_column.accessor) or 0 for x in table.data)
 
 
 class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
@@ -209,15 +215,15 @@ class PaymentUnitTable(tables.Table):
 
 
 class DeliverStatusTable(tables.Table):
-    display_name = columns.Column("Name of the User")
+    display_name = columns.Column(verbose_name="Name of the User", footer="Total")
     username = columns.Column(accessor="user__username", visible=False)
     payment_unit = columns.Column("Name of Payment Unit")
-    completed = columns.Column("Delivered")
-    pending = columns.Column("Pending")
-    approved = columns.Column("Approved")
-    rejected = columns.Column("Rejected")
-    over_limit = columns.Column("Over Limit")
-    incomplete = columns.Column("Incomplete")
+    completed = SumColumn("Delivered")
+    pending = SumColumn("Pending")
+    approved = SumColumn("Approved")
+    rejected = SumColumn("Rejected")
+    over_limit = SumColumn("Over Limit")
+    incomplete = SumColumn("Incomplete")
 
     details = columns.LinkColumn(
         "opportunity:user_visits_list",
@@ -313,6 +319,47 @@ class SuspendedUsersTable(tables.Table):
             "opportunity:suspended_users_list", args=(record.opportunity.organization.slug, record.opportunity_id)
         )
         return format_html('<a class="btn btn-success" href="{}?next={}">Revoke</a>', revoke_url, page_url)
+
+
+class CatchmentAreaTable(tables.Table):
+    username = columns.Column(accessor="opportunity_access__user__username", verbose_name="Username")
+    name_of_user = columns.Column(accessor="opportunity_access__user__name", verbose_name="Name")
+    phone_number = columns.Column(accessor="opportunity_access__user__phone_number", verbose_name="Phone Number")
+    name = columns.Column(verbose_name="Area name")
+    active = columns.Column(verbose_name="Active")
+    latitude = columns.Column(verbose_name="Latitude")
+    longitude = columns.Column(verbose_name="Longitude")
+    radius = columns.Column(verbose_name="Radius")
+    site_code = columns.Column(verbose_name="Site code")
+
+    def render_active(self, value):
+        return "Yes" if value else "No"
+
+    class Meta:
+        model = CatchmentArea
+        fields = (
+            "username",
+            "site_code",
+            "name",
+            "name_of_user",
+            "phone_number",
+            "active",
+            "latitude",
+            "longitude",
+            "radius",
+        )
+        orderable = False
+        sequence = (
+            "username",
+            "name_of_user",
+            "phone_number",
+            "name",
+            "site_code",
+            "active",
+            "latitude",
+            "longitude",
+            "radius",
+        )
 
 
 def popup_html(value, popup_title, popup_direction="top", popup_class="", popup_attributes=""):
