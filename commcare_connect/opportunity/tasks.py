@@ -16,6 +16,7 @@ from commcare_connect.connect_id_client import fetch_users, filter_users, send_m
 from commcare_connect.connect_id_client.models import Message
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
 from commcare_connect.opportunity.export import (
+    export_catchment_area_table,
     export_deliver_status_table,
     export_empty_payment_table,
     export_user_status_table,
@@ -119,13 +120,16 @@ def invite_user(user_id, opportunity_access_id):
     )
     message = Message(
         usernames=[user.username],
-        title=gettext(
-            f"You have been invited to a CommCare Connect opportunity - {opportunity_access.opportunity.name}"
-        ),
-        body=gettext(
-            f"You have been invited to a new job in Commcare Connect - {opportunity_access.opportunity.name}"
-        ),
-        data={"action": "ccc_opportunity_summary_page", "opportunity_id": str(opportunity_access.opportunity.id)},
+        data={
+            "action": "ccc_opportunity_summary_page",
+            "opportunity_id": str(opportunity_access.opportunity.id),
+            "title": gettext(
+                f"You have been invited to a CommCare Connect opportunity - {opportunity_access.opportunity.name}"
+            ),
+            "body": gettext(
+                f"You have been invited to a new job in Commcare Connect - {opportunity_access.opportunity.name}"
+            ),
+        },
     )
     send_message(message)
 
@@ -210,12 +214,15 @@ def _get_learn_message(access: OpportunityAccess):
     if last_user_learn_module and is_date_before(last_user_learn_module.date, days=3):
         return Message(
             usernames=[access.user.username],
-            title=gettext(f"Resume your learning journey for {access.opportunity.name}"),
-            body=gettext(
-                f"You have not completed your learning for {access.opportunity.name}."
-                "Please complete the learning modules to start delivering visits."
-            ),
-            data={"action": "ccc_learn_progress", "opportunity_id": str(access.opportunity.id)},
+            data={
+                "action": "ccc_learn_progress",
+                "opportunity_id": str(access.opportunity.id),
+                "title": gettext(f"Resume your learning journey for {access.opportunity.name}"),
+                "body": gettext(
+                    f"You have not completed your learning for {access.opportunity.name}."
+                    "Please complete the learning modules to start delivering visits."
+                ),
+            },
         )
 
 
@@ -230,12 +237,15 @@ def _check_deliver_inactive(access: OpportunityAccess):
 def _get_deliver_message(access: OpportunityAccess):
     return Message(
         usernames=[access.user.username],
-        title=gettext(f"Resume your job for {access.opportunity.name}"),
-        body=gettext(
-            f"You have not completed your delivery visits for {access.opportunity.name}."
-            "To maximise your payout complete all the required service delivery."
-        ),
-        data={"action": "ccc_delivery_progress", "opportunity_id": str(access.opportunity.id)},
+        data={
+            "action": "ccc_delivery_progress",
+            "opportunity_id": str(access.opportunity.id),
+            "title": gettext(f"Resume your job for {access.opportunity.name}"),
+            "body": gettext(
+                f"You have not completed your delivery visits for {access.opportunity.name}."
+                "To maximise your payout complete all the required service delivery."
+            ),
+        },
     )
 
 
@@ -247,11 +257,16 @@ def send_payment_notification(opportunity_id: int, payment_ids: list[int]):
         messages.append(
             Message(
                 usernames=[payment.opportunity_access.user.username],
-                title=gettext("Payment received"),
-                body=gettext(
-                    f"You have received a payment of {opportunity.currency} {payment.amount} for {opportunity.name}."
-                ),
-                data={"action": "ccc_payment", "opportunity_id": str(opportunity.id)},
+                data={
+                    "action": "ccc_payment",
+                    "opportunity_id": str(opportunity.id),
+                    "title": gettext("Payment received"),
+                    "body": gettext(
+                        "You have received a payment of"
+                        f"{opportunity.currency} {payment.amount} for {opportunity.name}.",
+                    ),
+                    "payment_id": str(payment.id),
+                },
             )
         )
     send_message_bulk(messages)
@@ -332,3 +347,12 @@ def bulk_approve_completed_work():
                     access.payment_accrued += approved_count * completed_work.payment_unit.amount
                 completed_work.save()
         access.save()
+
+
+@celery_app.task()
+def generate_catchment_area_export(opportunity_id: int, export_format: str):
+    opportunity = Opportunity.objects.get(id=opportunity_id)
+    dataset = export_catchment_area_table(opportunity)
+    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_catchment_area.{export_format}"
+    save_export(dataset, export_tmp_name, export_format)
+    return export_tmp_name
