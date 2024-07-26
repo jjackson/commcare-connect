@@ -152,7 +152,9 @@ class Opportunity(BaseModel):
 
     @property
     def approved_visits(self):
-        return CompletedWork.objects.filter(opportunity_access__opportunity=self).count()
+        return CompletedWork.objects.filter(
+            opportunity_access__opportunity=self, status=CompletedWorkStatus.approved
+        ).count()
 
     @property
     def number_of_users(self):
@@ -244,9 +246,7 @@ class OpportunityAccess(models.Model):
         learn_modules_count = learn_modules.count()
         if learn_modules_count <= 0:
             return 0
-        completed_modules = CompletedModule.objects.filter(
-            opportunity=self.opportunity, module__in=learn_modules, user=self.user
-        ).count()
+        completed_modules = self.completedmodule_set.count()
         percentage = (completed_modules / learn_modules_count) * 100
         return round(percentage, 2)
 
