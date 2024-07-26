@@ -47,7 +47,6 @@ from commcare_connect.opportunity.helpers import (
 from commcare_connect.opportunity.models import (
     BlobMeta,
     CatchmentArea,
-    CompletedModule,
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
@@ -302,14 +301,6 @@ class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
 
     def get_queryset(self):
         return OpportunityAccess.objects.filter(opportunity_id=self.kwargs.get("opp_id"))
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["completed_modules"] = CompletedModule.objects.filter(
-            user=self.object.user,
-            opportunity_id=self.kwargs.get("opp_id"),
-        )
-        return context
 
 
 @org_member_required
@@ -624,9 +615,7 @@ def export_deliver_status(request, **kwargs):
 def user_visits_list(request, org_slug=None, opp_id=None, pk=None):
     opportunity = get_object_or_404(Opportunity, organization=request.org, id=opp_id)
     opportunity_access = get_object_or_404(OpportunityAccess, pk=pk, opportunity=opportunity)
-    user_visits = UserVisit.objects.filter(user=opportunity_access.user, opportunity=opportunity).order_by(
-        "visit_date"
-    )
+    user_visits = opportunity_access.uservisit_set.order_by("visit_date")
     user_visits_table = UserVisitTable(user_visits)
     return render(
         request,
@@ -648,7 +637,7 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
 @org_viewer_required
 def user_profile(request, org_slug=None, opp_id=None, pk=None):
     access = get_object_or_404(OpportunityAccess, pk=pk, accepted=True)
-    user_visits = UserVisit.objects.filter(user=access.user, opportunity=access.opportunity)
+    user_visits = UserVisit.objects.filter(opportunity_access=access)
     user_catchments = CatchmentArea.objects.filter(opportunity_access=access)
     user_visit_data = []
     for user_visit in user_visits:
