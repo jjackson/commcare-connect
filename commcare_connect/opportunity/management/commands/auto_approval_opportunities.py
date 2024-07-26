@@ -1,7 +1,7 @@
 from django.core.management import BaseCommand
 
-from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
-from commcare_connect.opportunity.visit_import import update_payment_accrued
+from commcare_connect.opportunity.models import CompletedWorkStatus, Opportunity, OpportunityAccess
+from commcare_connect.opportunity.utils.completed_work import update_status_and_compute_payment
 
 
 class Command(BaseCommand):
@@ -12,16 +12,19 @@ class Command(BaseCommand):
             "--opp", type=int, required=True, help="ID of the opportunity to run auto-approval logic on"
         )
 
-    def handle(self, *args, **options):
-        opp_id = options["opp"]
+    def handle(self, *args, opp: int, **options):
         try:
-            opportunity = Opportunity.objects.get(id=opp_id)
-            access_records = OpportunityAccess.objects.filter(opportunity=opportunity)
-            users = [access.user for access in access_records]
+            opportunity = Opportunity.objects.get(id=opp)
+            access_objects = OpportunityAccess.objects.filter(
+                opportunity=opportunity, suspended=False, opportunity__auto_approve_payments=True
+            )
+            for access in access_objects:
+                completed_works = access.completedwork_set.exclude(
+                    status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
+                )
+                update_status_and_compute_payment(completed_works, opportunity, False)
 
-            update_payment_accrued(opportunity=opportunity, users=users)
-
-            self.stdout.write(self.style.SUCCESS(f"Successfully processed opportunity with id {opp_id}"))
+            self.stdout.write(self.style.SUCCESS(f"Successfully processed opportunity with id {opp}"))
 
         except Opportunity.DoesNotExist:
-            self.stdout.write(self.style.ERROR(f"Opportunity with id {opp_id} does not exist."))
+            self.stdout.write(self.style.ERROR(f"Opportunity with id {opp} does not exist."))

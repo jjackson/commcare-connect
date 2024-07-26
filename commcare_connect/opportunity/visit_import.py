@@ -18,6 +18,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tasks import send_payment_notification
+from commcare_connect.opportunity.utils.completed_work import update_status_and_compute_payment
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.itertools import batched
 
@@ -154,21 +155,7 @@ def update_payment_accrued(opportunity: Opportunity, users):
         completed_works = access.completedwork_set.exclude(
             status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
         ).select_related("payment_unit")
-        access.payment_accrued = 0
-        for completed_work in completed_works:
-            # Auto Approve Payment conditions
-            if completed_work.completed_count > 0:
-                if opportunity.auto_approve_payments:
-                    visits = completed_work.uservisit_set.values_list("status", "reason")
-                    if any(status == "rejected" for status, _ in visits):
-                        completed_work.update_status(CompletedWorkStatus.rejected)
-                        completed_work.reason = "\n".join(reason for _, reason in visits if reason)
-                    elif all(status == "approved" for status, _ in visits):
-                        completed_work.update_status(CompletedWorkStatus.approved)
-                approved_count = completed_work.approved_count
-                if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
-                    access.payment_accrued += approved_count * completed_work.payment_unit.amount
-                completed_work.save()
+        access.payment_accrued = update_status_and_compute_payment(completed_works, opportunity)
         access.save()
 
 
