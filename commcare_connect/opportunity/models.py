@@ -152,7 +152,9 @@ class Opportunity(BaseModel):
 
     @property
     def approved_visits(self):
-        return CompletedWork.objects.filter(opportunity_access__opportunity=self).count()
+        return CompletedWork.objects.filter(
+            opportunity_access__opportunity=self, status=CompletedWorkStatus.approved
+        ).count()
 
     @property
     def number_of_users(self):
@@ -222,32 +224,6 @@ class XFormBaseModel(models.Model):
         abstract = True
 
 
-class CompletedModule(XFormBaseModel):
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="completed_modules",
-    )
-    module = models.ForeignKey(LearnModule, on_delete=models.PROTECT)
-    opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
-    date = models.DateTimeField()
-    duration = models.DurationField()
-
-
-class Assessment(XFormBaseModel):
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="assessments",
-    )
-    app = models.ForeignKey(CommCareApp, on_delete=models.PROTECT)
-    opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
-    date = models.DateTimeField()
-    score = models.IntegerField()
-    passing_score = models.IntegerField()
-    passed = models.BooleanField()
-
-
 class OpportunityAccess(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
@@ -270,9 +246,7 @@ class OpportunityAccess(models.Model):
         learn_modules_count = learn_modules.count()
         if learn_modules_count <= 0:
             return 0
-        completed_modules = CompletedModule.objects.filter(
-            opportunity=self.opportunity, module__in=learn_modules, user=self.user
-        ).count()
+        completed_modules = self.completedmodule_set.count()
         percentage = (completed_modules / learn_modules_count) * 100
         return round(percentage, 2)
 
@@ -335,6 +309,34 @@ class OpportunityAccess(models.Model):
         else:
             status = "Not completed"
         return status
+
+
+class CompletedModule(XFormBaseModel):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="completed_modules",
+    )
+    module = models.ForeignKey(LearnModule, on_delete=models.PROTECT)
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
+    opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE, null=True)
+    date = models.DateTimeField()
+    duration = models.DurationField()
+
+
+class Assessment(XFormBaseModel):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="assessments",
+    )
+    app = models.ForeignKey(CommCareApp, on_delete=models.PROTECT)
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
+    opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE, null=True)
+    date = models.DateTimeField()
+    score = models.IntegerField()
+    passing_score = models.IntegerField()
+    passed = models.BooleanField()
 
 
 class PaymentUnit(models.Model):
@@ -503,6 +505,7 @@ class UserVisit(XFormBaseModel):
         User,
         on_delete=models.CASCADE,
     )
+    opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE, null=True)
     deliver_unit = models.ForeignKey(DeliverUnit, on_delete=models.PROTECT)
     entity_id = models.CharField(max_length=255, null=True, blank=True)
     entity_name = models.CharField(max_length=255, null=True, blank=True)
