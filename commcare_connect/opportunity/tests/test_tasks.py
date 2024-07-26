@@ -59,8 +59,9 @@ def test_send_inactive_notification_learn_inactive_message(mobile_user: User, op
     )
     access.refresh_from_db()
     message = _get_inactive_message(access)
+    assert message is not None
     assert message.usernames[0] == mobile_user.username
-    assert message.title == f"Resume your learning journey for {opportunity.name}"
+    assert message.data.get("title") == f"Resume your learning journey for {opportunity.name}"
 
 
 def test_send_inactive_notification_deliver_inactive_message(mobile_user: User, opportunity: Opportunity):
@@ -84,8 +85,9 @@ def test_send_inactive_notification_deliver_inactive_message(mobile_user: User, 
     )
 
     message = _get_inactive_message(access)
+    assert message is not None
     assert message.usernames[0] == mobile_user.username
-    assert message.title == f"Resume your job for {opportunity.name}"
+    assert message.data.get("title") == f"Resume your job for {opportunity.name}"
 
 
 def test_send_inactive_notification_not_claimed_deliver_message(mobile_user: User, opportunity: Opportunity):
@@ -100,8 +102,9 @@ def test_send_inactive_notification_not_claimed_deliver_message(mobile_user: Use
             opportunity_access=access,
         )
     message = _get_inactive_message(access)
+    assert message is not None
     assert message.usernames[0] == mobile_user.username
-    assert message.title == f"Resume your job for {opportunity.name}"
+    assert message.data.get("title") == f"Resume your job for {opportunity.name}"
 
 
 def test_send_inactive_notification_active_user(mobile_user: User, opportunity: Opportunity):
