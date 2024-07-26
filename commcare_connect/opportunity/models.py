@@ -84,8 +84,8 @@ class Opportunity(BaseModel):
     total_budget = models.IntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
     currency = models.CharField(max_length=3, null=True)
-    auto_approve_visits = models.BooleanField(default=False)
-    auto_approve_payments = models.BooleanField(default=False)
+    auto_approve_visits = models.BooleanField(default=True)
+    auto_approve_payments = models.BooleanField(default=True)
     is_test = models.BooleanField(default=True)
     delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
 
@@ -197,6 +197,7 @@ class OpportunityVerificationFlags(models.Model):
     location = models.PositiveIntegerField(default=10)
     form_submission_start = models.TimeField(null=True, blank=True)
     form_submission_end = models.TimeField(null=True, blank=True)
+    catchment_areas = models.BooleanField(default=False)
 
 
 class LearnModule(models.Model):
@@ -269,6 +270,15 @@ class OpportunityAccess(models.Model):
     @property
     def total_paid(self):
         return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0) or 0
+
+    @property
+    def total_confirmed_paid(self):
+        return (
+            Payment.objects.filter(opportunity_access=self, confirmed=True)
+            .aggregate(total=Sum("amount"))
+            .get("total", 0)
+            or 0
+        )
 
     @property
     def display_name(self):
@@ -593,3 +603,17 @@ class UserInvite(models.Model):
     opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE, null=True, blank=True)
     message_sid = models.CharField(max_length=50, null=True, blank=True)
     status = models.CharField(max_length=50, choices=UserInviteStatus.choices, default=UserInviteStatus.invited)
+
+
+class CatchmentArea(models.Model):
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
+    latitude = models.DecimalField(max_digits=11, decimal_places=8)
+    longitude = models.DecimalField(max_digits=11, decimal_places=8)
+    radius = models.IntegerField(default=1000)
+    opportunity_access = models.ForeignKey(OpportunityAccess, null=True, on_delete=models.DO_NOTHING)
+    active = models.BooleanField(default=True)
+    name = models.CharField(max_length=255)
+    site_code = models.SlugField(max_length=255)
+
+    class Meta:
+        unique_together = ("site_code", "opportunity")
