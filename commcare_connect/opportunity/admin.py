@@ -7,7 +7,9 @@ from commcare_connect.opportunity.models import (
     CompletedModule,
     CompletedWork,
     DeliverUnit,
+    DeliverUnitFlagRules,
     DeliveryType,
+    FormJsonValidationRules,
     LearnModule,
     Opportunity,
     OpportunityAccess,
@@ -26,6 +28,8 @@ admin.site.register(CommCareApp)
 admin.site.register(PaymentUnit)
 admin.site.register(UserInvite)
 admin.site.register(DeliveryType)
+admin.site.register(DeliverUnitFlagRules)
+admin.site.register(FormJsonValidationRules)
 
 
 @admin.register(Opportunity)
