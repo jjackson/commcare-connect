@@ -36,12 +36,11 @@ class ProgramCreateOrUpdate(SuperUserMixin, UpdateView):
         return kwargs
 
     def form_valid(self, form):
-        is_new = self.object is None
+        is_edit = self.object is not None
         response = super().form_valid(form)
-        if is_new:
-            messages.success(self.request, "Program created successfully.")
-        else:
-            messages.success(self.request, "Program updated successfully.")
+        status = ("created", "updated")[is_edit]
+        message = f"Program '{self.object.name}' {status} successfully."
+        messages.success(self.request, message)
         return response
 
     def get_success_url(self):
@@ -53,7 +52,6 @@ class ProgramCreateOrUpdate(SuperUserMixin, UpdateView):
         return context
 
     def get_template_names(self):
-        if self.object:
-            return ["program/program_edit.html"]
-        else:
-            return ["program/program_add.html"]
+        view = ("add", "edit")[self.object is not None]
+        template = f"program/program_{view}.html"
+        return template
