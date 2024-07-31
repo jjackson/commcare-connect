@@ -8,7 +8,7 @@ class Program(BaseModel):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
     description = models.CharField()
-    delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
+    delivery_type = models.ForeignKey(DeliveryType, on_delete=models.PROTECT)
 
     def save(self, *args, **kwargs):
         if not self.id:
