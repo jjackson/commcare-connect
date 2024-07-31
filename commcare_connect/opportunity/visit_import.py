@@ -18,7 +18,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tasks import send_payment_notification
-from commcare_connect.opportunity.utils.completed_work import update_status_and_compute_payment
+from commcare_connect.opportunity.utils.completed_work import update_status
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.itertools import batched
 
@@ -155,8 +155,7 @@ def update_payment_accrued(opportunity: Opportunity, users):
         completed_works = access.completedwork_set.exclude(
             status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
         ).select_related("payment_unit")
-        access.payment_accrued = update_status_and_compute_payment(completed_works, opportunity)
-        access.save()
+        update_status(completed_works, access, True)
 
 
 def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:
