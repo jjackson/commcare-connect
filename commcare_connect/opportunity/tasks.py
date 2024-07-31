@@ -39,7 +39,7 @@ from commcare_connect.opportunity.models import (
     UserVisit,
     VisitValidationStatus,
 )
-from commcare_connect.opportunity.utils.completed_work import update_status_and_compute_payment
+from commcare_connect.opportunity.utils.completed_work import update_status
 from commcare_connect.users.models import User
 from commcare_connect.utils.datetime import is_date_before
 from commcare_connect.utils.sms import send_sms
@@ -334,8 +334,7 @@ def bulk_approve_completed_work():
         completed_works = access.completedwork_set.exclude(
             status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
         )
-        access.payment_accrued = update_status_and_compute_payment(completed_works, access.opportunity)
-        access.save()
+        update_status(completed_works, access, True)
 
 
 @celery_app.task()

@@ -1,7 +1,7 @@
 from django.core.management import BaseCommand
 
 from commcare_connect.opportunity.models import CompletedWorkStatus, Opportunity, OpportunityAccess
-from commcare_connect.opportunity.utils.completed_work import update_status_and_compute_payment
+from commcare_connect.opportunity.utils.completed_work import update_status
 
 
 class Command(BaseCommand):
@@ -22,7 +22,7 @@ class Command(BaseCommand):
                 completed_works = access.completedwork_set.exclude(
                     status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
                 )
-                update_status_and_compute_payment(completed_works, opportunity, False)
+                update_status(completed_works, access, False)
 
             self.stdout.write(self.style.SUCCESS(f"Successfully processed opportunity with id {opp}"))
 
