@@ -22,7 +22,8 @@
       <thead class="table-light">
       <tr>
         <th>{% sort_link 'name' 'Name' %}</th>
-        <th>Description</th>
+        <th>{% sort_link 'start_date' 'Start Date' %}</th>
+        <th>{% sort_link 'end_date' 'End Date' %}</th>
         <th>Delivery Type</th>
         <th>Manage</th>
       </tr>
@@ -31,7 +32,8 @@
       {% for program in page_obj %}
       <tr>
         <td>{{ program.name }}</td>
-        <td>{{ program.description }}</td>
+        <td>{{ program.start_date }}</td>
+        <td>{{ program.end_date }}</td>
         <td>{{ program.delivery_type.name }}</td>
         <td width="300">
           <div>

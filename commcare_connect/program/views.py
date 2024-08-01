@@ -15,9 +15,20 @@ class SuperUserMixin(LoginRequiredMixin, UserPassesTestMixin):
 class ProgramList(SuperUserMixin, ListView):
     model = Program
     paginate_by = 10
+    allowed_orderings = {
+        "name": "name",
+        "-name": "-name",
+        "start_date": "start_date",
+        "-start_date": "-start_date",
+        "end_date": "end_date",
+        "-end_date": "-end_date",
+    }
+    default_ordering = "name"
 
     def get_queryset(self):
-        return Program.objects.all()
+        ordering = self.request.GET.get("sort", self.default_ordering)
+        ordering = self.allowed_orderings.get(ordering, self.default_ordering)
+        return Program.objects.all().order_by(ordering)
 
 
 class ProgramCreateOrUpdate(SuperUserMixin, UpdateView):
