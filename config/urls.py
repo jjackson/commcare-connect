@@ -19,7 +19,7 @@ urlpatterns = [
     path("users/", include("commcare_connect.users.urls", namespace="users")),
     path("accounts/", include("allauth.urls")),
     # Your stuff: custom urls includes go here
-    path("register/organization", organization_create, name="organization_create"),
+    path("register/organization/", organization_create, name="organization_create"),
     path("a/<slug:org_slug>/", include("commcare_connect.organization.urls")),
     path("a/<slug:org_slug>/opportunity/", include("commcare_connect.opportunity.urls", namespace="opportunity")),
     path("admin_reports/", include("commcare_connect.reports.urls")),
