@@ -5,7 +5,7 @@ from django import forms
 from commcare_connect.program.models import Program
 
 HALF_WIDTH_FIELD = "form-group col-md-6 mb-0"
-DATE_INPUT = forms.DateInput(attrs={"type": "date", "class": "form-control"})
+DATE_INPUT = forms.DateInput(format="%Y-%m-%d", attrs={"type": "date", "class": "form-control"})
 
 
 class ProgramForm(forms.ModelForm):
@@ -32,6 +32,15 @@ class ProgramForm(forms.ModelForm):
             ),
             Submit("submit", "Submit"),
         )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get("start_date")
+        end_date = cleaned_data.get("end_date")
+
+        if start_date and end_date and end_date <= start_date:
+            self.add_error("end_date", "End date must be after the start date.")
+        return cleaned_data
 
     def save(self, commit=True):
         instance = super().save(commit=False)
