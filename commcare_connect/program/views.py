@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.views.generic import ListView, UpdateView
 
 from commcare_connect.program.forms import ProgramForm
-from commcare_connect.program.models import Program
+from commcare_connect.program.models import ManagedOpportunity, Program
 
 
 class SuperUserMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -12,22 +12,24 @@ class SuperUserMixin(LoginRequiredMixin, UserPassesTestMixin):
         return self.request.user.is_superuser
 
 
+ALLOWED_ORDERINGS = {
+    "name": "name",
+    "-name": "-name",
+    "start_date": "start_date",
+    "-start_date": "-start_date",
+    "end_date": "end_date",
+    "-end_date": "-end_date",
+}
+
+
 class ProgramList(SuperUserMixin, ListView):
     model = Program
     paginate_by = 10
-    allowed_orderings = {
-        "name": "name",
-        "-name": "-name",
-        "start_date": "start_date",
-        "-start_date": "-start_date",
-        "end_date": "end_date",
-        "-end_date": "-end_date",
-    }
     default_ordering = "name"
 
     def get_queryset(self):
         ordering = self.request.GET.get("sort", self.default_ordering)
-        ordering = self.allowed_orderings.get(ordering, self.default_ordering)
+        ordering = ALLOWED_ORDERINGS.get(ordering, self.default_ordering)
         return Program.objects.all().order_by(ordering)
 
 
@@ -66,3 +68,16 @@ class ProgramCreateOrUpdate(SuperUserMixin, UpdateView):
         view = ("add", "edit")[self.object is not None]
         template = f"program/program_{view}.html"
         return template
+
+
+class ManagedOpportunityList(SuperUserMixin, ListView):
+    model = ManagedOpportunity
+    paginate_by = 10
+    default_ordering = "name"
+    template_name = "opportunity_list.html"
+
+    def get_queryset(self):
+        ordering = self.request.GET.get("sort", self.default_ordering)
+        ordering = ALLOWED_ORDERINGS.get(ordering, self.default_ordering)
+        program_id = self.kwargs.get("program_id")
+        return ManagedOpportunity.objects.filter(program_id=program_id).order_by(ordering)
