@@ -1,6 +1,6 @@
 from django.db import models
 
-from commcare_connect.opportunity.models import DeliveryType
+from commcare_connect.opportunity.models import DeliveryType, Opportunity
 from commcare_connect.utils.db import BaseModel, slugify_uniquely
 
 
@@ -18,3 +18,9 @@ class Program(BaseModel):
         if not self.id:
             self.slug = slugify_uniquely(self.name, self.__class__)
         super().save(*args, **kwargs)
+
+
+class ManagedOpportunity(Opportunity):
+    program = models.ForeignKey(Program, on_delete=models.DO_NOTHING)
+    claimed = models.BooleanField(default=False)
+    org_pay_per_visit = models.IntegerField()
