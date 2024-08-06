@@ -26,7 +26,6 @@ from commcare_connect.opportunity.export import (
 from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import (
     BlobMeta,
-    CompletedModule,
     CompletedWorkStatus,
     DeliverUnit,
     LearnModule,
@@ -39,6 +38,7 @@ from commcare_connect.opportunity.models import (
     UserVisit,
     VisitValidationStatus,
 )
+from commcare_connect.opportunity.utils.completed_work import update_status
 from commcare_connect.users.models import User
 from commcare_connect.utils.datetime import is_date_before
 from commcare_connect.utils.sms import send_sms
@@ -208,9 +208,7 @@ def _get_inactive_message(access: OpportunityAccess):
 
 
 def _get_learn_message(access: OpportunityAccess):
-    last_user_learn_module = (
-        CompletedModule.objects.filter(user=access.user, opportunity=access.opportunity).order_by("date").last()
-    )
+    last_user_learn_module = access.completedmodule_set.order_by("date").last()
     if last_user_learn_module and is_date_before(last_user_learn_module.date, days=3):
         return Message(
             usernames=[access.user.username],
@@ -227,9 +225,7 @@ def _get_learn_message(access: OpportunityAccess):
 
 
 def _check_deliver_inactive(access: OpportunityAccess):
-    last_user_deliver_visit = (
-        UserVisit.objects.filter(user=access.user, opportunity=access.opportunity).order_by("visit_date").last()
-    )
+    last_user_deliver_visit = access.uservisit_set.order_by("visit_date").last()
     if last_user_deliver_visit and is_date_before(last_user_deliver_visit.visit_date, days=2):
         return _get_deliver_message(access)
 
@@ -333,20 +329,7 @@ def bulk_approve_completed_work():
         completed_works = access.completedwork_set.exclude(
             status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
         )
-        access.payment_accrued = 0
-        for completed_work in completed_works:
-            if completed_work.completed_count > 0:
-                approved_count = completed_work.approved_count
-                visits = completed_work.uservisit_set.values_list("status", "reason")
-                if any(status == "rejected" for status, _ in visits):
-                    completed_work.status = CompletedWorkStatus.rejected
-                    completed_work.reason = "\n".join(reason for _, reason in visits if reason)
-                elif all(status == "approved" for status, _ in visits):
-                    completed_work.status = CompletedWorkStatus.approved
-                if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
-                    access.payment_accrued += approved_count * completed_work.payment_unit.amount
-                completed_work.save()
-        access.save()
+        update_status(completed_works, access, True)
 
 
 @celery_app.task()
