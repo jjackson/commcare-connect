@@ -2,7 +2,8 @@ from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Field, Layout, Row, Submit
 from django import forms
 
-from commcare_connect.program.models import Program
+from commcare_connect.opportunity.forms import OpportunityInitForm
+from commcare_connect.program.models import ManagedOpportunity, Program
 
 HALF_WIDTH_FIELD = "form-group col-md-6 mb-0"
 DATE_INPUT = forms.DateInput(format="%Y-%m-%d", attrs={"type": "date", "class": "form-control"})
@@ -47,4 +48,23 @@ class ProgramForm(forms.ModelForm):
         if not instance.pk:
             instance.created_by = self.user.email
         instance.modified_by = self.user.email
+        return super().save(commit=commit)
+
+
+class ManagedOpportunityInitForm(OpportunityInitForm):
+    class Meta(OpportunityInitForm.Meta):
+        model = ManagedOpportunity
+        fields = OpportunityInitForm.Meta.fields + [
+            "org_pay_per_visit",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        self.program_id = kwargs.pop("program_id", "")
+        super().__init__(*args, **kwargs)
+
+        # Insert the org_pay_per_visit field before the Submit button.
+        self.helper.layout.fields.insert(-1, Row(Field("org_pay_per_visit")))
+
+    def save(self, commit=True):
+        self.instance.program = Program.objects.get(pk=self.program_id)
         return super().save(commit=commit)

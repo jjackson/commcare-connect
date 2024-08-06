@@ -6,7 +6,7 @@ from crispy_forms.layout import HTML, Column, Field, Fieldset, Row, Submit
 from dateutil.relativedelta import relativedelta
 from django import forms
 from django.core.exceptions import ValidationError
-from django.db.models import Q, TextChoices
+from django.db.models import Q, Sum, TextChoices
 from django.urls import reverse
 from django.utils.timezone import now
 
@@ -22,6 +22,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.organization.models import Organization
+from commcare_connect.program.models import ManagedOpportunity
 from commcare_connect.users.models import User
 
 FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Africa"), ("+91", "India")]
@@ -257,6 +258,7 @@ class OpportunityFinalizeForm(forms.ModelForm):
         budget_per_user = kwargs.pop("budget_per_user")
         self.current_start_date = kwargs.pop("current_start_date")
         self.is_start_date_readonly = self.current_start_date < datetime.date.today()
+        self.opp_id = kwargs.pop("opp_id")
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper()
@@ -287,6 +289,26 @@ class OpportunityFinalizeForm(forms.ModelForm):
                 self.add_error("start_date", "Start date should be today or latter")
             if start_date >= end_date:
                 self.add_error("end_date", "End date must be after start date")
+
+            # Condition for managed opportunity only.
+            try:
+                managed_opportunity = ManagedOpportunity.objects.get(id=self.opp_id)
+                program = managed_opportunity.program
+                if not (program.start_date <= start_date <= program.end_date):
+                    self.add_error("start_date", "Start date must be within the program's start and end dates.")
+
+                if not (program.start_date <= end_date <= program.end_date):
+                    self.add_error("end_date", "End date must be within the program's start and end dates.")
+
+                total_budget_sum = ManagedOpportunity.objects.filter(program=program).aggregate(
+                    total=Sum("total_budget")
+                )["total"]
+                if total_budget_sum > program.budget:
+                    self.add_error("total_budget", "Budget exceeds the program budget.")
+
+            except ManagedOpportunity.DoesNotExist:
+                pass
+
             return cleaned_data
 
 
