@@ -208,6 +208,7 @@ class OpportunityFinalize(OrganizationUserMemberRoleMixin, UpdateView):
             budget_per_user += pu.amount * pu.max_total
         kwargs["budget_per_user"] = budget_per_user
         kwargs["current_start_date"] = opportunity.start_date
+        kwargs["opp_id"] = opportunity.id
         return kwargs
 
     def form_valid(self, form):

@@ -3,7 +3,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.urls import reverse
 from django.views.generic import ListView, UpdateView
 
-from commcare_connect.program.forms import ProgramForm
+from commcare_connect.opportunity.views import OpportunityInit
+from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
 from commcare_connect.program.models import ManagedOpportunity, Program
 
 
@@ -74,10 +75,27 @@ class ManagedOpportunityList(SuperUserMixin, ListView):
     model = ManagedOpportunity
     paginate_by = 10
     default_ordering = "name"
-    template_name = "opportunity_list.html"
+    template_name = "opportunity/opportunity_list.html"
 
     def get_queryset(self):
         ordering = self.request.GET.get("sort", self.default_ordering)
         ordering = ALLOWED_ORDERINGS.get(ordering, self.default_ordering)
-        program_id = self.kwargs.get("program_id")
+        program_id = self.kwargs.get("pk")
         return ManagedOpportunity.objects.filter(program_id=program_id).order_by(ordering)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["program_id"] = self.kwargs.get("pk")
+        context["add_opp_url"] = reverse(
+            "program:opportunity_init", kwargs={"org_slug": self.request.org.slug, "pk": self.kwargs.get("pk")}
+        )
+        return context
+
+
+class ManagedOpportunityInit(SuperUserMixin, OpportunityInit):
+    form_class = ManagedOpportunityInitForm
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["program_id"] = self.kwargs.get("pk")
+        return kwargs
