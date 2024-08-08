@@ -54,16 +54,10 @@ class ProgramForm(forms.ModelForm):
 class ManagedOpportunityInitForm(OpportunityInitForm):
     class Meta(OpportunityInitForm.Meta):
         model = ManagedOpportunity
-        fields = OpportunityInitForm.Meta.fields + [
-            "org_pay_per_visit",
-        ]
 
     def __init__(self, *args, **kwargs):
         self.program_id = kwargs.pop("program_id", "")
         super().__init__(*args, **kwargs)
-
-        # Insert the org_pay_per_visit field before the Submit button.
-        self.helper.layout.fields.insert(-1, Row(Field("org_pay_per_visit")))
 
     def save(self, commit=True):
         self.instance.program = Program.objects.get(pk=self.program_id)
