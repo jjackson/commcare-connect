@@ -255,10 +255,11 @@ class OpportunityFinalizeForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
-        budget_per_user = kwargs.pop("budget_per_user")
+        self.budget_per_user = kwargs.pop("budget_per_user")
+        self.payment_units_max_total = kwargs.pop("payment_units_max_total", 0)
+        self.opportunity = kwargs.pop("opportunity")
         self.current_start_date = kwargs.pop("current_start_date")
         self.is_start_date_readonly = self.current_start_date < datetime.date.today()
-        self.opp_id = kwargs.pop("opp_id")
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper()
@@ -268,10 +269,30 @@ class OpportunityFinalizeForm(forms.ModelForm):
                 help="Start date can't be edited if it was set in past" if self.is_start_date_readonly else None,
             ),
             Field("end_date"),
-            Field("max_users", oninput=f"id_total_budget.value = {budget_per_user} * parseInt(this.value || 0)"),
+            Field(
+                "max_users",
+                oninput=f"id_total_budget.value = ({self.budget_per_user} + {self.payment_units_max_total}"
+                f"* id_org_pay_per_visit.value || 0) * parseInt(this.value || 0)",
+            ),
             Field("total_budget", readonly=True, wrapper_class="form-group col-md-4 mb-0"),
             Submit("submit", "Submit"),
         )
+
+        if self.opportunity.managed:
+            self.helper.layout.fields.insert(
+                -2,
+                Row(
+                    Field(
+                        "org_pay_per_visit",
+                        oninput=f"id_total_budget.value = ({self.budget_per_user} + {self.payment_units_max_total}"
+                        f"* parseInt(this.value || 0)) * id_max_users.value || 0",
+                    )
+                ),
+            )
+            self.fields["org_pay_per_visit"] = forms.IntegerField(
+                required=True, widget=forms.NumberInput(attrs={"class": "form-control"})
+            )
+
         self.fields["max_users"] = forms.IntegerField()
         self.fields["start_date"].disabled = self.is_start_date_readonly
         self.fields["total_budget"].widget.attrs.update({"class": "form-control-plaintext"})
@@ -290,26 +311,36 @@ class OpportunityFinalizeForm(forms.ModelForm):
             if start_date >= end_date:
                 self.add_error("end_date", "End date must be after start date")
 
-            # Condition for managed opportunity only.
-            try:
-                managed_opportunity = ManagedOpportunity.objects.get(id=self.opp_id)
-                program = managed_opportunity.program
-                if not (program.start_date <= start_date <= program.end_date):
-                    self.add_error("start_date", "Start date must be within the program's start and end dates.")
+            if self.opportunity.managed:
+                try:
+                    managed_opportunity = ManagedOpportunity.objects.get(id=self.opportunity.id)
+                    program = managed_opportunity.program
+                    if not (program.start_date <= start_date <= program.end_date):
+                        self.add_error("start_date", "Start date must be within the program's start and end dates.")
 
-                if not (program.start_date <= end_date <= program.end_date):
-                    self.add_error("end_date", "End date must be within the program's start and end dates.")
+                    if not (program.start_date <= end_date <= program.end_date):
+                        self.add_error("end_date", "End date must be within the program's start and end dates.")
 
-                total_budget_sum = ManagedOpportunity.objects.filter(program=program).aggregate(
-                    total=Sum("total_budget")
-                )["total"]
-                if total_budget_sum > program.budget:
-                    self.add_error("total_budget", "Budget exceeds the program budget.")
-
-            except ManagedOpportunity.DoesNotExist:
-                pass
+                    total_budget_sum = (
+                        ManagedOpportunity.objects.filter(program=program).aggregate(total=Sum("total_budget"))[
+                            "total"
+                        ]
+                        or 0
+                    )
+                    if total_budget_sum + cleaned_data["total_budget"] > program.budget:
+                        self.add_error("total_budget", "Budget exceeds the program budget.")
+                except ManagedOpportunity.DoesNotExist:
+                    # Should not happen.
+                    pass
 
             return cleaned_data
+
+    def save(self, commit=True):
+        if self.opportunity.managed:
+            ManagedOpportunity.objects.filter(id=self.opportunity.id).update(
+                org_pay_per_visit=self.cleaned_data["org_pay_per_visit"]
+            )
+        super().save(commit=commit)
 
 
 class OpportunityCreationForm(forms.ModelForm):
