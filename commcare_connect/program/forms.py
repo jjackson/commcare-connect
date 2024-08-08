@@ -12,7 +12,16 @@ DATE_INPUT = forms.DateInput(format="%Y-%m-%d", attrs={"type": "date", "class": 
 class ProgramForm(forms.ModelForm):
     class Meta:
         model = Program
-        fields = ["name", "description", "delivery_type", "budget", "currency", "start_date", "end_date"]
+        fields = [
+            "name",
+            "description",
+            "delivery_type",
+            "organization",
+            "budget",
+            "currency",
+            "start_date",
+            "end_date",
+        ]
         widgets = {"start_date": DATE_INPUT, "end_date": DATE_INPUT}
 
     def __init__(self, *args, **kwargs):
@@ -22,7 +31,7 @@ class ProgramForm(forms.ModelForm):
         self.helper.layout = Layout(
             Row(Field("name")),
             Row(Field("description")),
-            Row(Field("delivery_type")),
+            Row(Field("delivery_type"), Field("organization")),
             Row(
                 Field("budget", wrapper_class=HALF_WIDTH_FIELD),
                 Field("currency", wrapper_class=HALF_WIDTH_FIELD),

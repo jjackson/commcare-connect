@@ -43,6 +43,7 @@ class UserOrganizationMembership(models.Model):
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.MEMBER)
     invite_id = models.CharField(max_length=50, default=uuid4)
     accepted = models.BooleanField(default=False)
+    program_manager = models.BooleanField(default=False)
 
     @property
     def is_admin(self):
@@ -51,6 +52,10 @@ class UserOrganizationMembership(models.Model):
     @property
     def is_viewer(self):
         return self.role == self.Role.VIEWER
+
+    @property
+    def can_manage_program(self):
+        return self.is_admin and self.program_manager
 
     class Meta:
         db_table = "organization_membership"
