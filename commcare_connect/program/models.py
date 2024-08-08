@@ -1,6 +1,7 @@
 from django.db import models
 
 from commcare_connect.opportunity.models import DeliveryType, Opportunity
+from commcare_connect.organization.models import Organization
 from commcare_connect.utils.db import BaseModel, slugify_uniquely
 
 
@@ -13,6 +14,7 @@ class Program(BaseModel):
     currency = models.CharField(max_length=3)
     start_date = models.DateField()
     end_date = models.DateField()
+    organization = models.ForeignKey(Organization, on_delete=models.DO_NOTHING, null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if not self.id:

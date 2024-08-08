@@ -340,7 +340,7 @@ class OpportunityFinalizeForm(forms.ModelForm):
             ManagedOpportunity.objects.filter(id=self.opportunity.id).update(
                 org_pay_per_visit=self.cleaned_data["org_pay_per_visit"]
             )
-        super().save(commit=commit)
+        return super().save(commit=commit)
 
 
 class OpportunityCreationForm(forms.ModelForm):

@@ -8,9 +8,11 @@ from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramFo
 from commcare_connect.program.models import ManagedOpportunity, Program
 
 
-class SuperUserMixin(LoginRequiredMixin, UserPassesTestMixin):
+class ProgramManagerMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
-        return self.request.user.is_superuser
+        return (
+            self.request.org_membership is not None and self.request.org_membership.can_manage_program
+        ) or self.request.user.is_superuser
 
 
 ALLOWED_ORDERINGS = {
@@ -23,7 +25,7 @@ ALLOWED_ORDERINGS = {
 }
 
 
-class ProgramList(SuperUserMixin, ListView):
+class ProgramList(ProgramManagerMixin, ListView):
     model = Program
     paginate_by = 10
     default_ordering = "name"
@@ -34,7 +36,7 @@ class ProgramList(SuperUserMixin, ListView):
         return Program.objects.all().order_by(ordering)
 
 
-class ProgramCreateOrUpdate(SuperUserMixin, UpdateView):
+class ProgramCreateOrUpdate(ProgramManagerMixin, UpdateView):
     model = Program
     form_class = ProgramForm
 
@@ -71,7 +73,7 @@ class ProgramCreateOrUpdate(SuperUserMixin, UpdateView):
         return template
 
 
-class ManagedOpportunityList(SuperUserMixin, ListView):
+class ManagedOpportunityList(ProgramManagerMixin, ListView):
     model = ManagedOpportunity
     paginate_by = 10
     default_ordering = "name"
@@ -92,7 +94,7 @@ class ManagedOpportunityList(SuperUserMixin, ListView):
         return context
 
 
-class ManagedOpportunityInit(SuperUserMixin, OpportunityInit):
+class ManagedOpportunityInit(ProgramManagerMixin, OpportunityInit):
     form_class = ManagedOpportunityInitForm
 
     def get_form_kwargs(self):
