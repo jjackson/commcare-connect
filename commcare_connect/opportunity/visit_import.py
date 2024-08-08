@@ -130,7 +130,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                 changed = False
 
                 if visit.status != status:
-                    visit.update_status(status)
+                    visit.status = status
                     changed = True
 
                 if status == VisitValidationStatus.rejected and reason and reason != visit.reason:
@@ -141,7 +141,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                     to_update.append(visit)
                 user_ids.add(visit.user_id)
 
-            UserVisit.objects.bulk_update(to_update, fields=["status", "reason"])
+            UserVisit.objects.bulk_update(to_update, fields=["status", "reason", "status_modified_date"])
             missing_visits |= set(visit_batch) - seen_visits
     update_payment_accrued(opportunity, users=user_ids)
 
@@ -277,7 +277,7 @@ def _bulk_update_completed_work_status(opportunity: Opportunity, dataset: Datase
                 changed = False
 
                 if completed_work.status != status:
-                    completed_work.update_status(status)
+                    completed_work.status = status
                     changed = True
                 if status == CompletedWorkStatus.rejected and reason and reason != completed_work.reason:
                     completed_work.reason = reason
@@ -286,7 +286,7 @@ def _bulk_update_completed_work_status(opportunity: Opportunity, dataset: Datase
                 if changed:
                     to_update.append(completed_work)
                 user_ids.add(completed_work.opportunity_access.user_id)
-            CompletedWork.objects.bulk_update(to_update, fields=["status", "reason"])
+            CompletedWork.objects.bulk_update(to_update, fields=["status", "reason", "status_modified_date"])
             missing_completed_works |= set(work_batch) - seen_completed_works
         update_payment_accrued(opportunity, users=user_ids)
     return CompletedWorkImportStatus(seen_completed_works, missing_completed_works)
