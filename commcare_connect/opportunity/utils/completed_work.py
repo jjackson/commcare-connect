@@ -26,9 +26,9 @@ def update_status(completed_works, opportunity_access, compute_payment=True):
 def update_completed_work_status(completed_work):
     visits = completed_work.uservisit_set.values_list("status", "reason")
     if any(status == "rejected" for status, _ in visits):
-        completed_work.update_status(CompletedWorkStatus.rejected)
+        completed_work.status = CompletedWorkStatus.rejected
         completed_work.reason = "\n".join(reason for _, reason in visits if reason)
     elif all(status == "approved" for status, _ in visits):
-        completed_work.update_status(CompletedWorkStatus.approved)
+        completed_work.status = CompletedWorkStatus.approved
 
     completed_work.save()
