@@ -15,7 +15,7 @@
           </button>
           {% else %}
           <a class="btn btn-primary"
-             href="{% if add_opp_url %}{{ add_opp_url }}{% else %}{% url 'opportunity:init' org_slug=request.org.slug %}{% endif %}"
+             href="{{ opportunity_init_url }}"
              title="Add new opportunity"><span
             class="bi bi-plus"></span> Add new
           </a>

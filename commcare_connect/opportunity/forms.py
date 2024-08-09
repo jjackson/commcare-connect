@@ -272,7 +272,8 @@ class OpportunityFinalizeForm(forms.ModelForm):
             Field(
                 "max_users",
                 oninput=f"id_total_budget.value = ({self.budget_per_user} + {self.payment_units_max_total}"
-                f"* id_org_pay_per_visit.value || 0) * parseInt(this.value || 0)",
+                f"* parseInt(document.getElementById('id_org_pay_per_visit')?.value || 0)) "
+                f"* parseInt(this.value || 0)",
             ),
             Field("total_budget", readonly=True, wrapper_class="form-group col-md-4 mb-0"),
             Submit("submit", "Submit"),
@@ -285,7 +286,8 @@ class OpportunityFinalizeForm(forms.ModelForm):
                     Field(
                         "org_pay_per_visit",
                         oninput=f"id_total_budget.value = ({self.budget_per_user} + {self.payment_units_max_total}"
-                        f"* parseInt(this.value || 0)) * id_max_users.value || 0",
+                        f"* parseInt(this.value || 0)) "
+                        f"* parseInt(document.getElementById('id_max_users')?.value || 0)",
                     )
                 ),
             )
@@ -312,35 +314,22 @@ class OpportunityFinalizeForm(forms.ModelForm):
                 self.add_error("end_date", "End date must be after start date")
 
             if self.opportunity.managed:
-                try:
-                    managed_opportunity = ManagedOpportunity.objects.get(id=self.opportunity.id)
-                    program = managed_opportunity.program
-                    if not (program.start_date <= start_date <= program.end_date):
-                        self.add_error("start_date", "Start date must be within the program's start and end dates.")
+                managed_opportunity = ManagedOpportunity.objects.get(id=self.opportunity.id)
+                program = managed_opportunity.program
+                if not (program.start_date <= start_date <= program.end_date):
+                    self.add_error("start_date", "Start date must be within the program's start and end dates.")
 
-                    if not (program.start_date <= end_date <= program.end_date):
-                        self.add_error("end_date", "End date must be within the program's start and end dates.")
+                if not (program.start_date <= end_date <= program.end_date):
+                    self.add_error("end_date", "End date must be within the program's start and end dates.")
 
-                    total_budget_sum = (
-                        ManagedOpportunity.objects.filter(program=program).aggregate(total=Sum("total_budget"))[
-                            "total"
-                        ]
-                        or 0
-                    )
-                    if total_budget_sum + cleaned_data["total_budget"] > program.budget:
-                        self.add_error("total_budget", "Budget exceeds the program budget.")
-                except ManagedOpportunity.DoesNotExist:
-                    # Should not happen.
-                    pass
+                total_budget_sum = (
+                    ManagedOpportunity.objects.filter(program=program).aggregate(total=Sum("total_budget"))["total"]
+                    or 0
+                )
+                if total_budget_sum + cleaned_data["total_budget"] > program.budget:
+                    self.add_error("total_budget", "Budget exceeds the program budget.")
 
             return cleaned_data
-
-    def save(self, commit=True):
-        if self.opportunity.managed:
-            ManagedOpportunity.objects.filter(id=self.opportunity.id).update(
-                org_pay_per_visit=self.cleaned_data["org_pay_per_visit"]
-            )
-        return super().save(commit=commit)
 
 
 class OpportunityCreationForm(forms.ModelForm):

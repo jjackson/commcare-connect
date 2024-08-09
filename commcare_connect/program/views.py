@@ -12,7 +12,9 @@ from commcare_connect.program.models import ManagedOpportunity, Program
 class ProgramManagerMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
         return (
-            self.request.org_membership is not None and self.request.org_membership.can_manage_program
+            self.request.org_membership is not None
+            and self.request.org_membership.is_admin
+            and self.request.org.program_manager
         ) or self.request.user.is_superuser
 
 
@@ -89,7 +91,7 @@ class ManagedOpportunityList(ProgramManagerMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["program_id"] = self.kwargs.get("pk")
-        context["add_opp_url"] = reverse(
+        context["opportunity_init_url"] = reverse(
             "program:opportunity_init", kwargs={"org_slug": self.request.org.slug, "pk": self.kwargs.get("pk")}
         )
         return context
