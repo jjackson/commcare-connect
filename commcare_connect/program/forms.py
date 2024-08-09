@@ -65,9 +65,13 @@ class ManagedOpportunityInitForm(OpportunityInitForm):
         model = ManagedOpportunity
 
     def __init__(self, *args, **kwargs):
-        self.program_id = kwargs.pop("program_id", "")
+        self.program = kwargs.pop("program")
         super().__init__(*args, **kwargs)
 
+        # Managed opportunities should use the currency specified in the program.
+        self.fields["currency"].initial = self.program.currency
+        self.fields["currency"].widget = forms.TextInput(attrs={"readonly": "readonly", "disabled": True})
+
     def save(self, commit=True):
-        self.instance.program = Program.objects.get(pk=self.program_id)
+        self.instance.program = self.program
         return super().save(commit=commit)
