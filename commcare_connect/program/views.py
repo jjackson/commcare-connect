@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import ListView, UpdateView
 
@@ -96,8 +97,17 @@ class ManagedOpportunityList(ProgramManagerMixin, ListView):
 
 class ManagedOpportunityInit(ProgramManagerMixin, OpportunityInit):
     form_class = ManagedOpportunityInitForm
+    program = None
+
+    def dispatch(self, request, *args, **kwargs):
+        try:
+            self.program = Program.objects.get(pk=self.kwargs.get("pk"))
+        except Program.DoesNotExist:
+            messages.error(request, "Program not found.")
+            return redirect(reverse("program:list", kwargs={"org_slug": request.org.slug}))
+        return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["program_id"] = self.kwargs.get("pk")
+        kwargs["program"] = self.program
         return kwargs
