@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.opportunity.models import DeliveryType, Opportunity
 from commcare_connect.organization.models import Organization
@@ -30,3 +31,20 @@ class ManagedOpportunity(Opportunity):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.managed = True
+
+
+class ManagedOpportunityApplicationStatus(models.TextChoices):
+    INVITED = "invited", _("Invited")
+    APPLIED = "applied", _("Applied")
+    ACCEPTED = "accepted", _("Accepted")
+    REJECTED = "rejected", _("Rejected")
+
+
+class ManagedOpportunityApplication(BaseModel):
+    managed_opportunity = models.ForeignKey(ManagedOpportunity, on_delete=models.CASCADE)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    status = models.CharField(
+        max_length=20,
+        choices=ManagedOpportunityApplicationStatus.choices,
+        default=ManagedOpportunityApplicationStatus.INVITED,
+    )
