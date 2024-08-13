@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.views.generic import ListView, UpdateView
 
 from commcare_connect.opportunity.views import OpportunityInit
+from commcare_connect.organization.decorators import org_program_manager_required
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
 from commcare_connect.program.models import (
@@ -122,6 +123,7 @@ class ManagedOpportunityInit(ProgramManagerMixin, OpportunityInit):
         return kwargs
 
 
+@org_program_manager_required
 def invite_organization(request, org_slug, pk, opp_id):
     if request.method == "POST":
         org_slug = request.POST.get("organization")
@@ -169,6 +171,7 @@ class ManagedOpportunityApplicationList(ProgramManagerMixin, ListView):
         return context
 
 
+@org_program_manager_required
 def manage_application(request, org_slug, application_id, action):
     application = get_object_or_404(ManagedOpportunityApplication, id=application_id)
     redirect_url = reverse(
