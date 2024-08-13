@@ -1,12 +1,19 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.shortcuts import redirect
+from django.http import Http404
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.generic import ListView, UpdateView
 
 from commcare_connect.opportunity.views import OpportunityInit
+from commcare_connect.organization.models import Organization
 from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
-from commcare_connect.program.models import ManagedOpportunity, Program
+from commcare_connect.program.models import (
+    ManagedOpportunity,
+    ManagedOpportunityApplication,
+    ManagedOpportunityApplicationStatus,
+    Program,
+)
 
 
 class ProgramManagerMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -113,3 +120,82 @@ class ManagedOpportunityInit(ProgramManagerMixin, OpportunityInit):
         kwargs = super().get_form_kwargs()
         kwargs["program"] = self.program
         return kwargs
+
+
+def invite_organization(request, org_slug, pk, opp_id):
+    if request.method == "POST":
+        org_slug = request.POST.get("organization")
+        organization = get_object_or_404(Organization, slug=org_slug)
+        managed_opp = get_object_or_404(ManagedOpportunity, id=opp_id)
+
+        ManagedOpportunityApplication.objects.create(
+            managed_opportunity=managed_opp,
+            organization=organization,
+            status=ManagedOpportunityApplicationStatus.INVITED,
+            created_by=request.user.email,
+            modified_by=request.user.email,
+        )
+
+        messages.success(request, "Organization invited successfully!")
+        return redirect(
+            reverse("program:opportunity_application_list", kwargs={"org_slug": org_slug, "pk": pk, "opp_id": opp_id})
+        )
+
+
+class ManagedOpportunityApplicationList(ProgramManagerMixin, ListView):
+    model = ManagedOpportunityApplication
+    paginate_by = 15
+    template_name = "program/managed_opportunity_application_list.html"
+
+    def get_queryset(self):
+        return ManagedOpportunityApplication.objects.filter(managed_opportunity__id=self.kwargs.get("opp_id"))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["pk"] = self.kwargs.get("pk")
+        context["opp_id"] = self.kwargs.get("opp_id")
+
+        # Fetch organizations that are not invited, applied, or accepted.
+        invited_orgs_ids = ManagedOpportunityApplication.objects.filter(
+            managed_opportunity__id=self.kwargs.get("opp_id"),
+            status__in=[
+                ManagedOpportunityApplicationStatus.INVITED,
+                ManagedOpportunityApplicationStatus.APPLIED,
+                ManagedOpportunityApplicationStatus.ACCEPTED,
+            ],
+        ).values_list("organization_id", flat=True)
+
+        context["organizations"] = Organization.objects.exclude(id__in=invited_orgs_ids)
+        return context
+
+
+def manage_application(request, org_slug, application_id, action):
+    application = get_object_or_404(ManagedOpportunityApplication, id=application_id)
+    redirect_url = reverse(
+        "program:opportunity_application_list",
+        kwargs={
+            "org_slug": org_slug,
+            "pk": application.managed_opportunity.program.id,
+            "opp_id": application.managed_opportunity.id,
+        },
+    )
+
+    if application.status != ManagedOpportunityApplicationStatus.APPLIED:
+        messages.error(request, f"Application is not in the {ManagedOpportunityApplicationStatus.APPLIED} status")
+        return redirect(redirect_url)
+
+    status_mapping = {
+        "accept": ManagedOpportunityApplicationStatus.ACCEPTED,
+        "reject": ManagedOpportunityApplicationStatus.INVITED,
+    }
+
+    new_status = status_mapping.get(action, None)
+    if new_status is None:
+        raise Http404("Invalid action")
+
+    application.status = new_status
+    application.modified_by = request.user.email
+    application.save()
+
+    messages.success(request, f"Application has been {action}ed successfully.")
+    return redirect(redirect_url)
