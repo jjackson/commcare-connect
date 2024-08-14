@@ -1,6 +1,5 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -198,12 +197,13 @@ def manage_application(request, org_slug, application_id, action):
 
     status_mapping = {
         "accept": ManagedOpportunityApplicationStatus.ACCEPTED,
-        "reject": ManagedOpportunityApplicationStatus.INVITED,
+        "reject": ManagedOpportunityApplicationStatus.REJECTED,
     }
 
     new_status = status_mapping.get(action, None)
     if new_status is None:
-        raise Http404("Invalid action")
+        messages.error(request, "Action not allowed.")
+        return redirect(redirect_url)
 
     application.status = new_status
     application.modified_by = request.user.email
