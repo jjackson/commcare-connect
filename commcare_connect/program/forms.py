@@ -3,7 +3,7 @@ from crispy_forms.layout import Field, Layout, Row, Submit
 from django import forms
 
 from commcare_connect.opportunity.forms import OpportunityInitForm
-from commcare_connect.program.models import ManagedOpportunity, ManagedOpportunityApplication, Program
+from commcare_connect.program.models import ManagedOpportunity, Program
 
 HALF_WIDTH_FIELD = "form-group col-md-6 mb-0"
 DATE_INPUT = forms.DateInput(format="%Y-%m-%d", attrs={"type": "date", "class": "form-control"})
@@ -76,9 +76,3 @@ class ManagedOpportunityInitForm(OpportunityInitForm):
     def save(self, commit=True):
         self.instance.program = self.program
         return super().save(commit=commit)
-
-
-class MangedOpportunityApplicationForm(forms.ModelForm):
-    class Meta:
-        model = ManagedOpportunityApplication
-        fields = ["organization"]
