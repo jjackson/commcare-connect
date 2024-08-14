@@ -119,13 +119,15 @@ class OpportunityList(OrganizationUserMixin, ListView):
         if ordering not in ["name", "-name", "start_date", "-start_date", "end_date", "-end_date"]:
             ordering = "name"
 
-        # opportunities = Opportunity.objects.filter(organization=self.request.org, managed=False).order_by(ordering)
+        # Fetch Opportunities directly associated with the organization and not managed.
+        # Opportunities that are linked to the organization through a managed opportunity application
+        # where the status is 'accepted'.
         opportunities = Opportunity.objects.filter(
             Q(organization=self.request.org, managed=False)
             | Q(
-                id__in=ManagedOpportunityApplication.objects.filter(organization=self.request.org)
-                .exclude(status=ManagedOpportunityApplicationStatus.ACCEPTED)
-                .values("managed_opportunity_id")
+                id__in=ManagedOpportunityApplication.objects.filter(
+                    organization=self.request.org, status=ManagedOpportunityApplicationStatus.ACCEPTED
+                ).values("managed_opportunity_id")
             )
         ).order_by(ordering)
 
