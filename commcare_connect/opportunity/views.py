@@ -143,7 +143,7 @@ class OpportunityList(OrganizationUserMixin, ListView):
                 organization=self.request.org, status=ManagedOpportunityApplicationStatus.INVITED
             )
 
-        context["invited_opportunities"] = opportunity_invitations
+        context["opportunity_invitations"] = opportunity_invitations
         return context
 
 
