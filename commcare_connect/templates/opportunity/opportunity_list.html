@@ -92,7 +92,7 @@
     {% include 'pagination.html' %}
   </div>
 
-{% if invited_opportunities %}
+{% if opportunity_invitations %}
 <div class="container bg-white shado mb-5">
   <div class="mt-5 py-3">
     <h2>Opportunity Invitations</h2>
@@ -109,7 +109,7 @@
       </tr>
       </thead>
       <tbody>
-      {% for invitation in invited_opportunities %}
+      {% for invitation in opportunity_invitations %}
       <tr>
         <td>{{ invitation.managed_opportunity.name }}</td>
         <td>{{ invitation.managed_opportunity.start_date|default:"Not Set" }}</td>
