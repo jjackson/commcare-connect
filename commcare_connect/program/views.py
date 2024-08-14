@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, UpdateView
 
+from commcare_connect.opportunity.models import Opportunity
 from commcare_connect.opportunity.views import OpportunityInit
 from commcare_connect.organization.decorators import org_program_manager_required
 from commcare_connect.organization.models import Organization
@@ -162,11 +163,11 @@ class ManagedOpportunityApplicationList(ProgramManagerMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["pk"] = self.kwargs.get("pk")
-        context["opp_id"] = self.kwargs.get("opp_id")
+        opportunity = get_object_or_404(Opportunity, id=self.kwargs.get("opp_id"))
 
         # Fetch organizations that are not invited, applied, or accepted.
         invited_orgs_ids = ManagedOpportunityApplication.objects.filter(
-            managed_opportunity__id=self.kwargs.get("opp_id"),
+            managed_opportunity__id=opportunity.id,
             status__in=[
                 ManagedOpportunityApplicationStatus.INVITED,
                 ManagedOpportunityApplicationStatus.APPLIED,
@@ -175,6 +176,7 @@ class ManagedOpportunityApplicationList(ProgramManagerMixin, ListView):
         ).values_list("organization_id", flat=True)
 
         context["organizations"] = Organization.objects.exclude(id__in=invited_orgs_ids)
+        context["opportunity"] = opportunity
         return context
 
 
