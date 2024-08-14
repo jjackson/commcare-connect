@@ -58,18 +58,21 @@
              href="{% url 'program:manage_application' org_slug=request.org.slug application_id=application.id action='accept' %}">
             <span class="bi bi-check-circle-fill"></span><span class="d-none d-md-inline">&nbsp;Accept</span>
           </a>
-          <a class="btn btn-danger btn-sm"
-             href="{% url 'program:manage_application' org_slug=request.org.slug application_id=application.id action='reject' %}">
-            <span class="bi bi-x-square-fill"></span><span class="d-none d-md-inline">&nbsp;Reject</span>
-          </a>
           {% else %}
           <button class="btn btn-success btn-sm" disabled>
             <span class="bi bi-check-circle-fill"></span><span class="d-none d-md-inline">&nbsp;Accept</span>
           </button>
-          <button class="btn btn-danger btn-sm" disabled>
-            <span class="bi bi-x-square-fill"></span><span class="d-none d-md-inline">&nbsp;Reject</span>
-          </button>
           {% endif %}
+           {% if application.status == 'applied' or application.status == 'invited' %}
+           <a class="btn btn-danger btn-sm"
+              href="{% url 'program:manage_application' org_slug=request.org.slug application_id=application.id action='reject' %}">
+             <span class="bi bi-x-square-fill"></span><span class="d-none d-md-inline">&nbsp;Reject</span>
+           </a>
+           {% else %}
+           <button class="btn btn-danger btn-sm" disabled>
+             <span class="bi bi-x-square-fill"></span><span class="d-none d-md-inline">&nbsp;Reject</span>
+           </button>
+           {% endif %}
         </td>
       </tr>
       {% empty %}

@@ -127,8 +127,8 @@ class ManagedOpportunityInit(ProgramManagerMixin, OpportunityInit):
 @org_program_manager_required
 @require_POST
 def invite_organization(request, org_slug, pk, opp_id):
-    requested_organization_slug = request.POST.get("organization")
-    organization = get_object_or_404(Organization, slug=requested_organization_slug)
+    requested_org_slug = request.POST.get("organization")
+    organization = get_object_or_404(Organization, slug=requested_org_slug)
     managed_opp = get_object_or_404(ManagedOpportunity, id=opp_id)
 
     obj, created = ManagedOpportunityApplication.objects.update_or_create(
@@ -190,10 +190,6 @@ def manage_application(request, org_slug, application_id, action):
             "opp_id": application.managed_opportunity.id,
         },
     )
-
-    if application.status != ManagedOpportunityApplicationStatus.APPLIED:
-        messages.error(request, f"Application is not in the {ManagedOpportunityApplicationStatus.APPLIED} status")
-        return redirect(redirect_url)
 
     status_mapping = {
         "accept": ManagedOpportunityApplicationStatus.ACCEPTED,
