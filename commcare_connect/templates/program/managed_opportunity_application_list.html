@@ -10,8 +10,8 @@
   <div class="mt-5 py-3">
     <h1> Applications
       <span class="float-end">
-          <button class="btn btn-primary">
-            <a class="dropdown-item" data-bs-toggle="modal" data-bs-target="#inviteOrganizationsModal">
+          <button data-bs-toggle="modal" data-bs-target="#inviteOrganizationsModal" class="btn btn-primary">
+            <a class="dropdown-item">
               <i class="bi bi-building-fill-add pe-2"></i>{% translate "Invite" %}
             </a>
           </button>
@@ -39,7 +39,7 @@
           {% if application.status == 'invited' %}
           <span class="badge bg-primary rounded-pill">{{ application.status|capfirst }}</span>
           {% elif application.status == 'applied' %}
-          <span class="badge bg-warning text-dark rounded-pill">{{ application.status|capfirst }}</span>
+          <span class="badge bg-warning rounded-pill">{{ application.status|capfirst }}</span>
           {% elif application.status == 'accepted' %}
           <span class="badge bg-success rounded-pill">{{ application.status|capfirst }}</span>
           {% elif application.status == 'rejected' %}
@@ -47,7 +47,7 @@
           {% endif %}
         </td>
          <td>
-          {% if application.status == 'APPLIED' %}
+          {% if application.status == 'applied' %}
           <a class="btn btn-success btn-sm"
              href="{% url 'program:manage_application' org_slug=request.org.slug application_id=application.id action='accept' %}">
             <span class="bi bi-check-circle-fill"></span><span class="d-none d-md-inline">&nbsp;Accept</span>

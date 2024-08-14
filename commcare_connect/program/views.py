@@ -3,6 +3,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.views.decorators.http import require_POST
 from django.views.generic import ListView, UpdateView
 
 from commcare_connect.opportunity.views import OpportunityInit
@@ -124,24 +125,30 @@ class ManagedOpportunityInit(ProgramManagerMixin, OpportunityInit):
 
 
 @org_program_manager_required
+@require_POST
 def invite_organization(request, org_slug, pk, opp_id):
-    if request.method == "POST":
-        org_slug = request.POST.get("organization")
-        organization = get_object_or_404(Organization, slug=org_slug)
-        managed_opp = get_object_or_404(ManagedOpportunity, id=opp_id)
+    requested_organization_slug = request.POST.get("organization")
+    organization = get_object_or_404(Organization, slug=requested_organization_slug)
+    managed_opp = get_object_or_404(ManagedOpportunity, id=opp_id)
 
-        ManagedOpportunityApplication.objects.create(
-            managed_opportunity=managed_opp,
-            organization=organization,
-            status=ManagedOpportunityApplicationStatus.INVITED,
-            created_by=request.user.email,
-            modified_by=request.user.email,
-        )
+    obj, created = ManagedOpportunityApplication.objects.update_or_create(
+        managed_opportunity=managed_opp,
+        organization=organization,
+        defaults={
+            "status": ManagedOpportunityApplicationStatus.INVITED,
+            "created_by": request.user.email,
+            "modified_by": request.user.email,
+        },
+    )
 
+    if created:
         messages.success(request, "Organization invited successfully!")
-        return redirect(
-            reverse("program:opportunity_application_list", kwargs={"org_slug": org_slug, "pk": pk, "opp_id": opp_id})
-        )
+    else:
+        messages.info(request, "The invitation for this organization has been updated.")
+
+    return redirect(
+        reverse("program:opportunity_application_list", kwargs={"org_slug": org_slug, "pk": pk, "opp_id": opp_id})
+    )
 
 
 class ManagedOpportunityApplicationList(ProgramManagerMixin, ListView):
