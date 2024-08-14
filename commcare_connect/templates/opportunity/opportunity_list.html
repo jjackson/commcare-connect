@@ -91,4 +91,53 @@
     </div>
     {% include 'pagination.html' %}
   </div>
+
+{% if invited_opportunities %}
+<div class="container bg-white shado mb-5">
+  <div class="mt-5 py-3">
+    <h2>Opportunity Invitations</h2>
+  </div>
+  <div class="pb-4">
+    <table class="table border table-responsive">
+      <thead class="table-light">
+      <tr>
+        <th>Name</th>
+        <th>Start Date</th>
+        <th>End Date</th>
+        <th>Status</th>
+        <th>Manage</th>
+      </tr>
+      </thead>
+      <tbody>
+      {% for invitation in invited_opportunities %}
+      <tr>
+        <td>{{ invitation.managed_opportunity.name }}</td>
+        <td>{{ invitation.managed_opportunity.start_date|default:"Not Set" }}</td>
+        <td>{{ invitation.managed_opportunity.end_date|default:"Not Set" }}</td>
+        <td>
+          {% if invitation.managed_opportunity.is_setup_complete %}
+          {% if invitation.managed_opportunity.is_active %}
+          <span class="badge bg-success rounded-pill">Active</span>
+          {% else %}
+          <span class="badge bg-secondary text-white rounded-pill">Inactive</span>
+          {% endif %}
+          {% else %}
+          <span class="badge bg-warning text-white rounded-pill">Pending Setup</span>
+          {% endif %}
+        </td>
+        <td width="300">
+          <div>
+            <a class="btn btn-primary btn-sm"
+               href="{% url 'opportunity:apply_opportunity_invite' org_slug=request.org.slug pk=invitation.managed_opportunity.id application_id=invitation.id %}">
+              <span class="bi bi-check-circle-fill"></span><span class="d-none d-md-inline">&nbsp;Apply</span>
+            </a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% endblock content %}
