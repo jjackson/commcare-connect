@@ -18,6 +18,7 @@ from commcare_connect.opportunity.views import (
     add_budget_existing_users,
     add_payment_unit,
     add_payment_units,
+    apply_opportunity_invite,
     approve_visit,
     download_export,
     edit_payment_unit,
@@ -99,4 +100,7 @@ urlpatterns = [
     path("<int:opp_id>/revoke_user_suspension/<int:pk>/", view=revoke_user_suspension, name="revoke_user_suspension"),
     path("<int:pk>/catchment_area_export/", view=export_catchment_area, name="catchment_area_export"),
     path("<int:pk>/catchment_area_import/", view=import_catchment_area, name="catchment_area_import"),
+    path(
+        "<int:pk>/invite/<int:application_id>/apply/", view=apply_opportunity_invite, name="apply_opportunity_invite"
+    ),
 ]

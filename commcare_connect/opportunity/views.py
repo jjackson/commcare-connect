@@ -88,7 +88,11 @@ from commcare_connect.opportunity.visit_import import (
     update_payment_accrued,
 )
 from commcare_connect.organization.decorators import org_admin_required, org_member_required, org_viewer_required
-from commcare_connect.program.models import ManagedOpportunity
+from commcare_connect.program.models import (
+    ManagedOpportunity,
+    ManagedOpportunityApplication,
+    ManagedOpportunityApplicationStatus,
+)
 from commcare_connect.users.models import User
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 
@@ -114,11 +118,30 @@ class OpportunityList(OrganizationUserMixin, ListView):
         ordering = self.request.GET.get("sort", "name")
         if ordering not in ["name", "-name", "start_date", "-start_date", "end_date", "-end_date"]:
             ordering = "name"
-        return Opportunity.objects.filter(organization=self.request.org).order_by(ordering)
+
+        # opportunities = Opportunity.objects.filter(organization=self.request.org, managed=False).order_by(ordering)
+        opportunities = Opportunity.objects.filter(
+            Q(organization=self.request.org, managed=False)
+            | Q(
+                id__in=ManagedOpportunityApplication.objects.filter(organization=self.request.org)
+                .exclude(status=ManagedOpportunityApplicationStatus.ACCEPTED)
+                .values("managed_opportunity_id")
+            )
+        ).order_by(ordering)
+
+        return opportunities
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["opportunity_init_url"] = reverse("opportunity:init", kwargs={"org_slug": self.request.org.slug})
+
+        opportunity_invitations = None
+        if self.request.org_membership and self.request.org_membership.is_admin or self.request.user.is_superuser:
+            opportunity_invitations = ManagedOpportunityApplication.objects.filter(
+                organization=self.request.org, status=ManagedOpportunityApplicationStatus.INVITED
+            )
+
+        context["invited_opportunities"] = opportunity_invitations
         return context
 
 
@@ -969,3 +992,18 @@ def import_catchment_area(request, org_slug=None, pk=None):
         message = f"{len(status)} catchment areas were updated successfully and {status.new_catchments} were created."
         messages.success(request, mark_safe(message))
     return redirect("opportunity:detail", org_slug, pk)
+
+
+@org_admin_required
+def apply_opportunity_invite(request, application_id, org_slug=None, pk=None):
+    application = get_object_or_404(
+        ManagedOpportunityApplication, id=application_id, status=ManagedOpportunityApplicationStatus.INVITED
+    )
+    application.status = ManagedOpportunityApplicationStatus.APPLIED
+    application.modified_by = request.user.email
+    application.save()
+    messages.success(
+        request,
+        f"Application for the opportunity '{application.managed_opportunity.name}' has been successfully submitted.",
+    )
+    return redirect("opportunity:list", org_slug)
