@@ -16,7 +16,6 @@ class ProgramForm(forms.ModelForm):
             "name",
             "description",
             "delivery_type",
-            "organization",
             "budget",
             "currency",
             "start_date",
@@ -26,12 +25,13 @@ class ProgramForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop("user", None)
+        self.organization = kwargs.pop("organization")
         super().__init__(*args, **kwargs)
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Row(Field("name")),
             Row(Field("description")),
-            Row(Field("delivery_type"), Field("organization")),
+            Row(Field("delivery_type")),
             Row(
                 Field("budget", wrapper_class=HALF_WIDTH_FIELD),
                 Field("currency", wrapper_class=HALF_WIDTH_FIELD),
@@ -57,6 +57,10 @@ class ProgramForm(forms.ModelForm):
         if not instance.pk:
             instance.created_by = self.user.email
         instance.modified_by = self.user.email
+
+        if not instance.organization:
+            instance.organization = self.organization
+
         return super().save(commit=commit)
 
 
