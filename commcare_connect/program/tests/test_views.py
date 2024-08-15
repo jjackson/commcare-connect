@@ -84,7 +84,7 @@ class TestProgramListView(BaseProgramTest):
 
     @staticmethod
     def check_order(programs, expected_programs):
-        for program, expected_program in zip(programs, expected_programs):  # Adjust for pagination
+        for program, expected_program in zip(programs, expected_programs):
             assert program.name == expected_program.name
 
 
