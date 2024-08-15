@@ -12,37 +12,41 @@ from commcare_connect.program.tests.factories import ProgramFactory
 from commcare_connect.users.models import User
 
 
-@pytest.mark.django_db
-class TestProgramListView:
+class BaseProgramTest:
     @pytest.fixture(autouse=True)
-    def setup(self, program_manager_org: Organization, program_manager_org_user_admin: User):
+    def base_setup(self, program_manager_org: Organization, program_manager_org_user_admin: User, client: Client):
         self.organization = program_manager_org
         self.user = program_manager_org_user_admin
+        self.client = client
+        client.force_login(self.user)
+        self.list_url = reverse("program:list", kwargs={"org_slug": self.organization.slug})
+
+
+@pytest.mark.django_db
+class TestProgramListView(BaseProgramTest):
+    @pytest.fixture(autouse=True)
+    def test_setup(self):
         self.list_url = reverse("program:list", kwargs={"org_slug": self.organization.slug})
         self.programs = ProgramFactory.create_batch(15, organization=self.organization)
 
-    def test_view_url_exists_at_desired_location(self, client):
-        client.force_login(self.user)
-        response = client.get(self.list_url)
+    def test_view_url_exists_at_desired_location(self):
+        response = self.client.get(self.list_url)
         assert response.status_code == 200
 
-    def test_pagination_is_ten(self, client):
-        client.force_login(self.user)
-        response = client.get(self.list_url)
+    def test_pagination_is_ten(self):
+        response = self.client.get(self.list_url)
         assert response.status_code == HTTPStatus.OK
         programs = response.context["page_obj"].object_list
         assert len(programs) == 10
 
-    def test_pagination_next_page(self, client):
-        client.force_login(self.user)
-        response = client.get(f"{self.list_url}?page=2")
+    def test_pagination_next_page(self):
+        response = self.client.get(f"{self.list_url}?page=2")
         assert response.status_code == HTTPStatus.OK
         programs = response.context["page_obj"].object_list
         assert len(programs) == 5
 
     def test_default_ordering(self, client):
-        client.force_login(self.user)
-        response = client.get(self.list_url)
+        response = self.client.get(self.list_url)
         assert response.status_code == HTTPStatus.OK
         page_obj = response.context["page_obj"]
         programs = page_obj.object_list
@@ -50,8 +54,7 @@ class TestProgramListView:
         self.check_order(programs, expected_programs[:10])
 
     def test_ordering_by_start_date(self, client):
-        client.force_login(self.user)
-        response = client.get(f"{self.list_url}?sort=start_date")
+        response = self.client.get(f"{self.list_url}?sort=start_date")
         assert response.status_code == HTTPStatus.OK
         page_obj = response.context["page_obj"]
         programs = page_obj.object_list
@@ -59,8 +62,7 @@ class TestProgramListView:
         self.check_order(programs, expected_programs[:10])
 
     def test_ordering_by_end_date(self, client):
-        client.force_login(self.user)
-        response = client.get(f"{self.list_url}?sort=end_date")
+        response = self.client.get(f"{self.list_url}?sort=end_date")
         assert response.status_code == HTTPStatus.OK
         page_obj = response.context["page_obj"]
         programs = page_obj.object_list
@@ -68,8 +70,7 @@ class TestProgramListView:
         self.check_order(programs, expected_programs[:10])
 
     def test_ordering_by_invalid_field(self, client):
-        client.force_login(self.user)
-        response = client.get(f"{self.list_url}?sort=invalid")
+        response = self.client.get(f"{self.list_url}?sort=invalid")
         assert response.status_code == HTTPStatus.OK
         page_obj = response.context["page_obj"]
         programs = page_obj.object_list
@@ -83,18 +84,13 @@ class TestProgramListView:
 
 
 @pytest.mark.django_db
-class TestProgramCreateOrUpdateView:
+class TestProgramCreateOrUpdateView(BaseProgramTest):
     @pytest.fixture(autouse=True)
-    def setup(self, program_manager_org: Organization, program_manager_org_user_admin: User, client: Client):
-        self.organization = program_manager_org
-        self.user = program_manager_org_user_admin
-        self.delivery_type = DeliveryTypeFactory.create()
-        self.client = client
-        client.force_login(self.user)
+    def test_setup(self):
         self.program = ProgramFactory.create(organization=self.organization)
+        self.delivery_type = DeliveryTypeFactory.create()
         self.init_url = reverse("program:init", kwargs={"org_slug": self.organization.slug})
         self.edit_url = reverse("program:edit", kwargs={"org_slug": self.organization.slug, "pk": self.program.pk})
-        self.list_url = reverse("program:list", kwargs={"org_slug": self.organization.slug})
 
     def test_create_view(self):
         response = self.client.get(self.init_url)
