@@ -32,6 +32,7 @@ from commcare_connect.opportunity.views import (
     fetch_attachment,
     get_application,
     import_catchment_area,
+    opportunity_user_invite,
     payment_delete,
     payment_import,
     reject_visit,
@@ -103,4 +104,5 @@ urlpatterns = [
     path(
         "<int:pk>/invite/<int:application_id>/apply/", view=apply_opportunity_invite, name="apply_opportunity_invite"
     ),
+    path("<int:pk>/user_invite/", view=opportunity_user_invite, name="user_invite"),
 ]
