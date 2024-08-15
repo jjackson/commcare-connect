@@ -1,7 +1,7 @@
 {% extends "opportunity/base.html" %}
 {% load static %}
 {% load sort_link %}
-
+{% load i18n %}
 {% block title %}{{ request.org }} - Opportunities{% endblock %}
 
 {% block content %}
@@ -83,7 +83,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="3">No opportunities yet.</td>
+            <td colspan="3">{% translate "No opportunities yet." %}</td>
           </tr>
         {% endfor %}
         </tbody>
@@ -95,17 +95,17 @@
 {% if opportunity_invitations %}
 <div class="container bg-white shado mb-5">
   <div class="mt-5 py-3">
-    <h2>Opportunity Invitations</h2>
+    <h2>{% translate "Opportunity Invitations" %}</h2>
   </div>
   <div class="pb-4">
     <table class="table border table-responsive">
       <thead class="table-light">
       <tr>
-        <th>Name</th>
-        <th>Start Date</th>
-        <th>End Date</th>
-        <th>Status</th>
-        <th>Manage</th>
+        <th>{% translate "Name" %}</th>
+        <th>{% translate "Start Date" %}</th>
+        <th>{% translate "End Date" %}</th>
+        <th>{% translate "Status" %}</th>
+        <th>{% translate "Manage" %}</th>
       </tr>
       </thead>
       <tbody>
@@ -117,12 +117,12 @@
         <td>
           {% if invitation.managed_opportunity.is_setup_complete %}
           {% if invitation.managed_opportunity.is_active %}
-          <span class="badge bg-success rounded-pill">Active</span>
+          <span class="badge bg-success rounded-pill">{% translate "Active" %}</span>
           {% else %}
-          <span class="badge bg-secondary text-white rounded-pill">Inactive</span>
+          <span class="badge bg-secondary text-white rounded-pill">{% translate "Inactive" %}</span>
           {% endif %}
           {% else %}
-          <span class="badge bg-warning text-white rounded-pill">Pending Setup</span>
+          <span class="badge bg-warning text-white rounded-pill">{% translate "Pending Setup" %}</span>
           {% endif %}
         </td>
         <td width="300">
@@ -132,7 +132,7 @@
               method="post" style="display:inline;">
               {% csrf_token %}
               <button type="submit" class="btn btn-primary btn-sm">
-                <span class="bi bi-check-circle-fill"></span><span class="d-none d-md-inline">&nbsp;Apply</span>
+                <span class="bi bi-check-circle-fill"></span><span class="d-none d-md-inline">&nbsp;{% translate "Apply" %}</span>
               </button>
             </form>
           </div>
