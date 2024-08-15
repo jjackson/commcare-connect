@@ -127,10 +127,14 @@
         </td>
         <td width="300">
           <div>
-            <a class="btn btn-primary btn-sm"
-               href="{% url 'opportunity:apply_opportunity_invite' org_slug=request.org.slug pk=invitation.managed_opportunity.id application_id=invitation.id %}">
-              <span class="bi bi-check-circle-fill"></span><span class="d-none d-md-inline">&nbsp;Apply</span>
-            </a>
+            <form
+              action="{% url 'opportunity:apply_opportunity_invite' org_slug=request.org.slug pk=invitation.managed_opportunity.id application_id=invitation.id %}"
+              method="post" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-primary btn-sm">
+                <span class="bi bi-check-circle-fill"></span><span class="d-none d-md-inline">&nbsp;Apply</span>
+              </button>
+            </form>
           </div>
         </td>
       </tr>
