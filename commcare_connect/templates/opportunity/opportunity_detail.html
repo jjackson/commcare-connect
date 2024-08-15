@@ -42,7 +42,7 @@
             <a class="dropdown-item"
                href="{% url "program:opportunity_application_list" org_slug=request.org.slug pk=opportunity.managedopportunity.program.id opp_id=opportunity.pk %}">
               <i class="bi bi-building-fill-add pe-2"></i>
-              View Applications
+             {% translate "View Application" %}
             </a>
           </li>
            {% endif %}
@@ -50,7 +50,7 @@
             <a class="dropdown-item"
                href="{% url 'opportunity:add_payment_unit' org_slug=request.org.slug pk=opportunity.id %}">
               <i class="bi bi-plus-circle-fill pe-2"></i>
-              Add Payment Unit
+              {% translate "Add Payment Unit" %}
             </a>
           </li>
           {% if request.org_membership.is_admin %}
