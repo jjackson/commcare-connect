@@ -30,6 +30,7 @@ from commcare_connect.opportunity.forms import (
     OpportunityCreationForm,
     OpportunityFinalizeForm,
     OpportunityInitForm,
+    OpportunityUserInviteForm,
     OpportunityVerificationFlagsConfigForm,
     PaymentExportForm,
     PaymentUnitForm,
@@ -1009,3 +1010,21 @@ def apply_opportunity_invite(request, application_id, org_slug=None, pk=None):
         f"Application for the opportunity '{application.managed_opportunity.name}' has been successfully submitted.",
     )
     return redirect("opportunity:list", org_slug)
+
+
+@org_member_required
+def opportunity_user_invite(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
+    form = OpportunityUserInviteForm(data=request.POST or None)
+    if form.is_valid():
+        users = form.cleaned_data["users"]
+        filter_country = form.cleaned_data["filter_country"]
+        filter_credential = form.cleaned_data["filter_credential"]
+        if users or filter_country or filter_credential:
+            add_connect_users.delay(users, form.instance.id, filter_country, filter_credential)
+        return redirect("opportunity:detail", request.org.slug, pk)
+    return render(
+        request,
+        "form.html",
+        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Invite Users", form=form),
+    )
