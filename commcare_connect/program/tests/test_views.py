@@ -2,13 +2,18 @@ from http import HTTPStatus
 
 import pytest
 from django.contrib import messages
+from django.http import HttpResponseRedirect
 from django.test import Client
 from django.urls import reverse
 
 from commcare_connect.opportunity.tests.factories import DeliveryTypeFactory
 from commcare_connect.organization.models import Organization
-from commcare_connect.program.models import Program
-from commcare_connect.program.tests.factories import ProgramFactory
+from commcare_connect.program.models import ManagedOpportunityApplication, ManagedOpportunityApplicationStatus, Program
+from commcare_connect.program.tests.factories import (
+    ManagedOpportunityApplicationFactory,
+    ManagedOpportunityFactory,
+    ProgramFactory,
+)
 from commcare_connect.users.models import User
 
 
@@ -31,7 +36,7 @@ class TestProgramListView(BaseProgramTest):
 
     def test_view_url_exists_at_desired_location(self):
         response = self.client.get(self.list_url)
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
 
     def test_pagination_is_ten(self):
         response = self.client.get(self.list_url)
@@ -94,7 +99,7 @@ class TestProgramCreateOrUpdateView(BaseProgramTest):
 
     def test_create_view(self):
         response = self.client.get(self.init_url)
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         assert "program/program_add.html" in response.templates[0].name
 
     def test_create_program(self):
@@ -109,7 +114,9 @@ class TestProgramCreateOrUpdateView(BaseProgramTest):
         }
         response = self.client.post(self.init_url, data)
         assert response.status_code == HTTPStatus.FOUND
-        assert Program.objects.filter(name="New Program").exists()
+        new_program = Program.objects.get(name="New Program")
+        assert new_program.name == "New Program"
+        assert new_program.organization.slug == self.organization.slug
         assert "Program 'New Program' created successfully." in [
             msg.message for msg in messages.get_messages(response.wsgi_request)
         ]
@@ -133,9 +140,156 @@ class TestProgramCreateOrUpdateView(BaseProgramTest):
         }
         response = self.client.post(self.edit_url, data)
         assert response.status_code == HTTPStatus.FOUND
+        old_org = self.program.organization.slug
         self.program.refresh_from_db()
         assert self.program.name == "Updated Program Name"
+        assert self.program.organization.slug == old_org
         assert "Program 'Updated Program Name' updated successfully." in [
             msg.message for msg in messages.get_messages(response.wsgi_request)
         ]
         assert response.url == self.list_url
+
+
+@pytest.mark.django_db
+class TestInviteOrganizationView(BaseProgramTest):
+    @pytest.fixture(autouse=True)
+    def test_setup(self, organization: Organization):
+        self.invite_organization = organization
+        self.managed_opportunity = ManagedOpportunityFactory.create(organization=self.organization)
+        self.valid_url = reverse(
+            "program:invite_organization",
+            kwargs={
+                "org_slug": self.organization.slug,
+                "pk": self.managed_opportunity.program.pk,
+                "opp_id": self.managed_opportunity.pk,
+            },
+        )
+
+    def test_successful_invitation(self):
+        data = {
+            "organization": self.invite_organization.slug,
+        }
+        response = self.client.post(self.valid_url, data)
+        assert response.status_code == HttpResponseRedirect.status_code
+        assert ManagedOpportunityApplication.objects.filter(
+            managed_opportunity=self.managed_opportunity,
+            organization=self.invite_organization,
+            status=ManagedOpportunityApplicationStatus.INVITED,
+        ).exists()
+        assert "Organization invited successfully!" in [
+            msg.message for msg in messages.get_messages(response.wsgi_request)
+        ]
+
+    def test_invalid_organization_slug(self):
+        data = {
+            "organization": "invalid_slug",
+        }
+        response = self.client.post(self.valid_url, data)
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestManagedOpportunityApplicationListView(BaseProgramTest):
+    @pytest.fixture(autouse=True)
+    def test_setup(self, organization: Organization):
+        self.managed_opportunity = ManagedOpportunityFactory.create(organization=self.organization)
+        self.apllications = ManagedOpportunityApplicationFactory.create_batch(
+            20, managed_opportunity=self.managed_opportunity
+        )
+        self.list_url = reverse(
+            "program:opportunity_application_list",
+            kwargs={
+                "org_slug": self.organization.slug,
+                "pk": self.managed_opportunity.program.pk,
+                "opp_id": self.managed_opportunity.pk,
+            },
+        )
+
+    def test_view_url_exists_at_desired_location(self):
+        response = self.client.get(self.list_url)
+        assert response.status_code == HTTPStatus.OK
+        assert "program/managed_opportunity_application_list.html" in response.templates[0].name
+        context = response.context_data
+        assert "object_list" in context
+        assert "pk" in context
+        assert "opportunity" in context
+        assert "organizations" in context
+        assert context["pk"] == self.managed_opportunity.program.pk
+        assert context["opportunity"].pk == self.managed_opportunity.pk
+
+    def test_list_applications(self):
+        response = self.client.get(self.list_url)
+        assert response.status_code == HTTPStatus.OK
+        applications = response.context_data["object_list"]
+        assert len(applications) == 15
+
+    def test_pagination(self):
+        response = self.client.get(f"{self.list_url}?page=2")
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.context_data["object_list"]) == 5
+
+
+@pytest.mark.django_db
+class TestManageApplicationView(BaseProgramTest):
+    @pytest.fixture(autouse=True)
+    def test_setup(self):
+        self.managed_opportunity = ManagedOpportunityFactory.create(organization=self.organization)
+        self.application = ManagedOpportunityApplicationFactory.create(managed_opportunity=self.managed_opportunity)
+        self.application_list_url = reverse(
+            "program:opportunity_application_list",
+            kwargs={
+                "org_slug": self.organization.slug,
+                "pk": self.managed_opportunity.program.id,
+                "opp_id": self.managed_opportunity.id,
+            },
+        )
+
+    def test_accept_application(self):
+        url = reverse(
+            "program:manage_application",
+            kwargs={
+                "org_slug": self.organization.slug,
+                "application_id": self.application.id,
+                "action": "accept",
+            },
+        )
+        response = self.client.post(url)
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == self.application_list_url
+        self.application.refresh_from_db()
+        assert self.application.status == ManagedOpportunityApplicationStatus.ACCEPTED
+        assert "Application has been accepted successfully." in [
+            msg.message for msg in messages.get_messages(response.wsgi_request)
+        ]
+
+    def test_reject_application(self):
+        url = reverse(
+            "program:manage_application",
+            kwargs={
+                "org_slug": self.organization.slug,
+                "application_id": self.application.id,
+                "action": "reject",
+            },
+        )
+        response = self.client.post(url)
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == self.application_list_url
+        self.application.refresh_from_db()
+        assert self.application.status == ManagedOpportunityApplicationStatus.REJECTED
+        assert "Application has been rejected successfully." in [
+            msg.message for msg in messages.get_messages(response.wsgi_request)
+        ]
+
+    def test_invalid_action(self):
+        url = reverse(
+            "program:manage_application",
+            kwargs={
+                "org_slug": self.organization.slug,
+                "application_id": self.application.id,
+                "action": "invite",
+            },
+        )
+        response = self.client.post(url)
+        assert response.status_code == HTTPStatus.FOUND
+        assert self.application.status == ManagedOpportunityApplicationStatus.INVITED
+        assert "Action not allowed." in [msg.message for msg in messages.get_messages(response.wsgi_request)]

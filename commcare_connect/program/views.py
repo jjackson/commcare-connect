@@ -61,6 +61,7 @@ class ProgramCreateOrUpdate(ProgramManagerMixin, UpdateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["user"] = self.request.user
+        kwargs["organization"] = self.request.org
         return kwargs
 
     def form_valid(self, form):
@@ -180,6 +181,7 @@ class ManagedOpportunityApplicationList(ProgramManagerMixin, ListView):
 
 
 @org_program_manager_required
+@require_POST
 def manage_application(request, org_slug, application_id, action):
     application = get_object_or_404(ManagedOpportunityApplication, id=application_id)
     redirect_url = reverse(
