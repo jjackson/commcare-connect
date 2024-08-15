@@ -997,6 +997,7 @@ def import_catchment_area(request, org_slug=None, pk=None):
 
 
 @org_admin_required
+@require_POST
 def apply_opportunity_invite(request, application_id, org_slug=None, pk=None):
     application = get_object_or_404(
         ManagedOpportunityApplication, id=application_id, status=ManagedOpportunityApplicationStatus.INVITED
