@@ -314,7 +314,7 @@ class OpportunityFinalizeForm(forms.ModelForm):
                 self.add_error("end_date", "End date must be after start date")
 
             if self.opportunity.managed:
-                managed_opportunity = ManagedOpportunity.objects.get(id=self.opportunity.id)
+                managed_opportunity = self.opportunity.managedopportunity
                 program = managed_opportunity.program
                 if not (program.start_date <= start_date <= program.end_date):
                     self.add_error("start_date", "Start date must be within the program's start and end dates.")
