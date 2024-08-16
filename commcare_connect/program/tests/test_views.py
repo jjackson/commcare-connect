@@ -53,39 +53,42 @@ class TestProgramListView(BaseProgramTest):
     def test_default_ordering(self, client):
         response = self.client.get(self.list_url)
         assert response.status_code == HTTPStatus.OK
-        page_obj = response.context["page_obj"]
-        programs = page_obj.object_list
+        table = response.context["table"]
+        programs = table.data
         expected_programs = sorted(self.programs, key=lambda p: p.name)
-        self.check_order(programs, expected_programs[:10])
+        self.check_order(programs, expected_programs)
 
     def test_ordering_by_start_date(self, client):
         response = self.client.get(f"{self.list_url}?sort=start_date")
         assert response.status_code == HTTPStatus.OK
-        page_obj = response.context["page_obj"]
-        programs = page_obj.object_list
+        table = response.context["table"]
+        programs = table.data
         expected_programs = sorted(self.programs, key=lambda p: p.start_date)
-        self.check_order(programs, expected_programs[:10])
+        self.check_order(programs, expected_programs)
 
     def test_ordering_by_end_date(self, client):
         response = self.client.get(f"{self.list_url}?sort=end_date")
         assert response.status_code == HTTPStatus.OK
-        page_obj = response.context["page_obj"]
-        programs = page_obj.object_list
+        table = response.context["table"]
+        programs = table.data
         expected_programs = sorted(self.programs, key=lambda p: p.end_date)
-        self.check_order(programs, expected_programs[:10])
+        self.check_order(programs, expected_programs)
 
     def test_ordering_by_invalid_field(self, client):
         response = self.client.get(f"{self.list_url}?sort=invalid")
         assert response.status_code == HTTPStatus.OK
-        page_obj = response.context["page_obj"]
-        programs = page_obj.object_list
+        table = response.context["table"]
+        programs = table.data
         expected_programs = sorted(self.programs, key=lambda p: p.name)
-        self.check_order(programs, expected_programs[:10])
+        self.check_order(programs, expected_programs)
 
     @staticmethod
-    def check_order(programs, expected_programs):
-        for program, expected_program in zip(programs, expected_programs):
-            assert program.name == expected_program.name
+    def check_order(actual, expected):
+        assert len(actual) == len(expected)
+        for i, (program, expected_program) in enumerate(zip(actual, expected)):
+            assert (
+                program.name == expected_program.name
+            ), f"Order mismatch at index {i}: got '{program.name}', expected '{expected_program.name}'"
 
 
 @pytest.mark.django_db
@@ -221,12 +224,12 @@ class TestManagedOpportunityApplicationListView(BaseProgramTest):
         response = self.client.get(self.list_url)
         assert response.status_code == HTTPStatus.OK
         applications = response.context_data["object_list"]
-        assert len(applications) == 15
+        assert len(applications) == 10
 
     def test_pagination(self):
         response = self.client.get(f"{self.list_url}?page=2")
         assert response.status_code == HTTPStatus.OK
-        assert len(response.context_data["object_list"]) == 5
+        assert len(response.context_data["object_list"]) == 10
 
 
 @pytest.mark.django_db

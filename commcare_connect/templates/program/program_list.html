@@ -1,6 +1,7 @@
 {% extends "program/base.html" %}
 {% load static %}
 {% load sort_link %}
+{% load django_tables2 %}
 
 {% block title %}{{ request.org }} - Program{% endblock %}
 
@@ -18,42 +19,7 @@
   </div>
 
   <div class="pb-4">
-    <table class="table border table-responsive">
-      <thead class="table-light">
-      <tr>
-        <th>{% sort_link 'name' 'Name' %}</th>
-        <th>{% sort_link 'start_date' 'Start Date' %}</th>
-        <th>{% sort_link 'end_date' 'End Date' %}</th>
-        <th>Delivery Type</th>
-        <th>Manage</th>
-      </tr>
-      </thead>
-      <tbody x-ref="tbody">
-      {% for program in page_obj %}
-      <tr>
-        <td>{{ program.name }}</td>
-        <td>{{ program.start_date }}</td>
-        <td>{{ program.end_date }}</td>
-        <td>{{ program.delivery_type.name }}</td>
-        <td width="300">
-          <div>
-            <a class="btn btn-warning btn-sm"
-               href="{% url 'program:edit' org_slug=request.org.slug pk=program.id %}"><span
-              class="bi bi-pen"></span><span class="d-none d-md-inline">&nbsp;Edit</span></a>
-            <a class="btn btn-primary btn-sm"
-               href="{% url 'program:opportunity_list' org_slug=request.org.slug pk=program.id %}">
-              <span class="bi bi-eye"></span><span class="d-none d-md-inline">&nbsp;View Opportunities</span>
-            </a>
-          </div>
-        </td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="3">No programs yet.</td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+   {% render_table table %}
   </div>
   {% include 'pagination.html' %}
 </div>
