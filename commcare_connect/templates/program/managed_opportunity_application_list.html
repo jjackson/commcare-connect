@@ -2,7 +2,7 @@
 {% load static %}
 {% load i18n %}
 {% load sort_link %}
-
+{% load django_tables2 %}
 {% block title %}{{ request.org }} - Opportunities{% endblock %}
 
 {% block breadcrumbs_inner %}
@@ -25,73 +25,7 @@
     </h1>
   </div>
   <div class="pb-4">
-    <table class="table border table-responsive">
-      <thead class="table-light">
-      <tr>
-        <th>{% translate "Organization" %}</th>
-        <th>{% translate "Created by" %}</th>
-        <th>{% translate "Last updated" %}</th>
-        <th>{% translate "Status" %}</th>
-        <th>{% translate "Manage" %}</th>
-      </tr>
-      </thead>
-      <tbody x-ref="tbody">
-      {% for application in page_obj %}
-      <tr>
-        <td>{{ application.organization.slug }}</td>
-        <td>{{ application.created_by }}</td>
-        <td>{{application.date_modified}}</td>
-        <td>
-          {% if application.status == 'invited' %}
-          <span class="badge bg-primary rounded-pill">{{ application.status|capfirst }}</span>
-          {% elif application.status == 'applied' %}
-          <span class="badge bg-warning rounded-pill">{{ application.status|capfirst }}</span>
-          {% elif application.status == 'accepted' %}
-          <span class="badge bg-success rounded-pill">{{ application.status|capfirst }}</span>
-          {% elif application.status == 'rejected' %}
-          <span class="badge bg-danger rounded-pill">{{ application.status|capfirst }}</span>
-          {% endif %}
-        </td>
-         <td>
-          {% if application.status == 'applied' %}
-           <form
-             action="{% url 'program:manage_application' org_slug=request.org.slug application_id=application.id action='accept' %}"
-             method="post" class="d-inline">
-             {% csrf_token %}
-             <button type="submit" class="btn btn-success btn-sm">
-               <span class="bi bi-check-circle-fill"></span>
-               <span class="d-none d-md-inline">&nbsp;{% translate "Accept" %}</span>
-             </button>
-           </form>
-          {% else %}
-          <button class="btn btn-success btn-sm" disabled>
-            <span class="bi bi-check-circle-fill"></span><span class="d-none d-md-inline">&nbsp;Accept</span>
-          </button>
-          {% endif %}
-           {% if application.status == 'applied' or application.status == 'invited' %}
-           <form action="{% url 'program:manage_application' org_slug=request.org.slug application_id=application.id action='reject' %}"
-                 method="post" class="d-inline">
-             {% csrf_token %}
-             <button type="submit" class="btn btn-danger btn-sm">
-               <span class="bi bi-x-square-fill"></span>
-               <span class="d-none d-md-inline">&nbsp;{% translate "Reject" %}</span>
-             </button>
-           </form>
-           {% else %}
-           <button class="btn btn-danger btn-sm" disabled>
-             <span class="bi bi-x-square-fill"></span><span class="d-none d-md-inline">&nbsp;{% translate "Reject" %}</span>
-           </button>
-           {% endif %}
-        </td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="3">{% translate "No applications yet." %}</td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% include 'pagination.html' %}
+    {% render_table table %}
   </div>
 </div>
 

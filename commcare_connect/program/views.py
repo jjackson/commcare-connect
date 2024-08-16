@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, UpdateView
+from django_tables2 import SingleTableView
 
 from commcare_connect.opportunity.models import Opportunity
 from commcare_connect.opportunity.views import OpportunityInit
@@ -16,6 +17,7 @@ from commcare_connect.program.models import (
     ManagedOpportunityApplicationStatus,
     Program,
 )
+from commcare_connect.program.tables import ManagedOpportunityApplicationTable, ProgramTable
 
 
 class ProgramManagerMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -37,15 +39,13 @@ ALLOWED_ORDERINGS = {
 }
 
 
-class ProgramList(ProgramManagerMixin, ListView):
+class ProgramList(ProgramManagerMixin, SingleTableView):
     model = Program
     paginate_by = 10
-    default_ordering = "name"
+    table_class = ProgramTable
 
     def get_queryset(self):
-        ordering = self.request.GET.get("sort", self.default_ordering)
-        ordering = ALLOWED_ORDERINGS.get(ordering, self.default_ordering)
-        return Program.objects.all().order_by(ordering)
+        return Program.objects.filter(organization=self.request.org)
 
 
 class ProgramCreateOrUpdate(ProgramManagerMixin, UpdateView):
@@ -152,13 +152,15 @@ def invite_organization(request, org_slug, pk, opp_id):
     )
 
 
-class ManagedOpportunityApplicationList(ProgramManagerMixin, ListView):
+class ManagedOpportunityApplicationList(ProgramManagerMixin, SingleTableView):
     model = ManagedOpportunityApplication
-    paginate_by = 15
+    table_class = ManagedOpportunityApplicationTable
+    paginate_by = 10
     template_name = "program/managed_opportunity_application_list.html"
 
     def get_queryset(self):
-        return ManagedOpportunityApplication.objects.filter(managed_opportunity__id=self.kwargs.get("opp_id"))
+        opportunity_id = self.kwargs.get("opp_id")
+        return ManagedOpportunityApplication.objects.filter(managed_opportunity__id=opportunity_id)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
