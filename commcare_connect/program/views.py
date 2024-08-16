@@ -205,6 +205,10 @@ def manage_application(request, org_slug, application_id, action):
 
     application.status = new_status
     application.modified_by = request.user.email
+
+    if new_status == ManagedOpportunityApplicationStatus.ACCEPTED:
+        application.managed_opportunity.organization = application.organization
+
     application.save()
 
     messages.success(request, f"Application has been {action}ed successfully.")
