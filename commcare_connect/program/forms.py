@@ -53,13 +53,11 @@ class ProgramForm(forms.ModelForm):
         return cleaned_data
 
     def save(self, commit=True):
-        instance = super().save(commit=False)
-        if not instance.pk:
-            instance.created_by = self.user.email
-        instance.modified_by = self.user.email
+        if not self.instance.pk:
+            self.instance.organization = self.organization
+            self.instance.created_by = self.user.email
 
-        if not instance.organization:
-            instance.organization = self.organization
+        self.instance.modified_by = self.user.email
 
         return super().save(commit=commit)
 

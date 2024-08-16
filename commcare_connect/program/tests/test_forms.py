@@ -153,7 +153,7 @@ class TestOpportunityFinalizeForm:
             organization=program_manager_org,
         )
         manage_opp = ManagedOpportunityFactory.create(
-            program=self.program, start_date=timezone.now().date(), end_date=None
+            program=self.program, start_date=timezone.now().date(), end_date=None, total_budget=None
         )
         self.opportunity = Opportunity.objects.get(id=manage_opp.id)
         self.payment_unit = PaymentUnitFactory.create(opportunity=self.opportunity, amount=50, max_total=20)
