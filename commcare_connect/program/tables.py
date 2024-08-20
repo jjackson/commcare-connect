@@ -6,6 +6,12 @@ from django.utils.translation import gettext_lazy as _
 
 from .models import ManagedOpportunityApplication, ManagedOpportunityApplicationStatus, Program
 
+TABLE_TEMPLATE = "django_tables2/bootstrap5.html"
+RESPONSIVE_TABLE_AND_LIGHT_HEADER = {
+    "class": "table border table-responsive",
+    "thead": {"class": "table-light"},
+}
+
 
 class OpportunityInvitationTable(tables.Table):
     name = tables.Column(accessor="managed_opportunity.name", verbose_name=_("Name"))
@@ -45,11 +51,8 @@ class OpportunityInvitationTable(tables.Table):
         model = ManagedOpportunityApplication
         fields = ("name", "start_date", "end_date", "status", "manage")
         order_by_field = "invite_sort"
-        attrs = {
-            "class": "table border table-responsive",
-            "thead": {"class": "table-light"},
-        }
-        template_name = "django_tables2/bootstrap5.html"
+        attrs = RESPONSIVE_TABLE_AND_LIGHT_HEADER
+        template_name = TABLE_TEMPLATE
         order_by = ("date_modified",)
 
 
@@ -101,12 +104,10 @@ class ManagedOpportunityApplicationTable(tables.Table):
     class Meta:
         model = ManagedOpportunityApplication
         fields = ("organization", "created_by", "date_modified", "status", "manage")
-        attrs = {
-            "class": "table border table-responsive",
-            "thead": {"class": "table-light"},
-        }
-        template_name = "django_tables2/bootstrap5.html"
+        attrs = RESPONSIVE_TABLE_AND_LIGHT_HEADER
+        template_name = TABLE_TEMPLATE
         order_by = ("date_modified",)
+        empty_text = "No applications yet."
 
 
 class ProgramTable(tables.Table):
@@ -163,12 +164,10 @@ class ProgramTable(tables.Table):
             "budget",
             "manage",
         )
-        attrs = {
-            "class": "table border table-responsive",
-            "thead": {"class": "table-light"},
-        }
+        template_name = TABLE_TEMPLATE
+        attrs = RESPONSIVE_TABLE_AND_LIGHT_HEADER
         order_by = ("name",)
-        template_name = "django_tables2/bootstrap5.html"
+        empty_text = "No programs yet."
 
 
 def get_manage_buttons_html(buttons, request):
