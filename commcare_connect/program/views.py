@@ -210,6 +210,7 @@ def manage_application(request, org_slug, application_id, action):
 
     if new_status == ManagedOpportunityApplicationStatus.ACCEPTED:
         application.managed_opportunity.organization = application.organization
+        application.managed_opportunity.save()
 
     application.save()
 

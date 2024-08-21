@@ -117,6 +117,8 @@ class OpportunityChangeForm(forms.ModelForm):
 
 
 class OpportunityInitForm(forms.ModelForm):
+    managed_opp = False
+
     class Meta:
         model = Opportunity
         fields = [
@@ -233,7 +235,12 @@ class OpportunityInitForm(forms.ModelForm):
         )
         self.instance.created_by = self.user.email
         self.instance.modified_by = self.user.email
-        self.instance.organization = organization
+
+        # In the case of a managed opportunity, the organization will be null initially,
+        # as it will be set to the network manager's organization when the invitation is accepted.
+        if not self.managed_opp:
+            self.instance.organization = organization
+
         api_key, _ = HQApiKey.objects.get_or_create(user=self.user, api_key=self.cleaned_data["api_key"])
         self.instance.api_key = api_key
         super().save(commit=commit)
