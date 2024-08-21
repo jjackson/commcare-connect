@@ -69,6 +69,7 @@ class ManagedOpportunityInitForm(OpportunityInitForm):
     def __init__(self, *args, **kwargs):
         self.program = kwargs.pop("program")
         super().__init__(*args, **kwargs)
+        self.managed_opp = True
 
         # Managed opportunities should use the currency specified in the program.
         self.fields["currency"].initial = self.program.currency
