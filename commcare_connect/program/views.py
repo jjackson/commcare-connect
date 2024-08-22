@@ -1,12 +1,13 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, UpdateView
 from django_tables2 import SingleTableView
 
-from commcare_connect.opportunity.models import Opportunity
+from commcare_connect.opportunity.models import Opportunity, UserVisit
+from commcare_connect.opportunity.tables import UserVisitReviewTable
 from commcare_connect.opportunity.views import OpportunityInit
 from commcare_connect.organization.decorators import org_program_manager_required
 from commcare_connect.organization.models import Organization
@@ -217,3 +218,24 @@ def manage_application(request, org_slug, application_id, action):
 
     messages.success(request, f"Application has been {action}ed successfully.")
     return redirect(redirect_url)
+
+
+@org_program_manager_required
+def user_visit_review(request, org_slug, pk, opp_id):
+    opportunity = get_object_or_404(ManagedOpportunity, pk=opp_id)
+    user_visit_reviews = UserVisit.objects.filter(opportunity=opportunity, review_created_on__isnull=False).order_by(
+        "visit_date"
+    )
+    table = UserVisitReviewTable(user_visit_reviews)
+
+    if request.POST:
+        review_status = request.POST.get("review_status")
+        updated_reviews = request.POST.getlist("pk")
+        if review_status in ["approved", "rejected"]:
+            UserVisit.objects.filter(pk__in=updated_reviews).update(review_status=review_status)
+
+    return render(
+        request,
+        "program/opportunity_visit_review.html",
+        context=dict(table=table, user_visit_ids=[v.pk for v in user_visit_reviews]),
+    )

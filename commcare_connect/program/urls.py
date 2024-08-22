@@ -8,6 +8,7 @@ from commcare_connect.program.views import (
     ProgramList,
     invite_organization,
     manage_application,
+    user_visit_review,
 )
 
 app_name = "program"
@@ -24,4 +25,9 @@ urlpatterns = [
         name="opportunity_application_list",
     ),
     path("application/<int:application_id>/<str:action>", manage_application, name="manage_application"),
+    path(
+        "<int:pk>/opportunity/<int:opp_id>/user_visit_review",
+        view=user_visit_review,
+        name="user_visit_review",
+    ),
 ]
