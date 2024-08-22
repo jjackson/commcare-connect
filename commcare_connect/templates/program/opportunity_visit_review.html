@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+{% load django_tables2 %}
+
+{% block content %}
+<h2 class="mb-2">User Visit Review</h2>
+<hr />
+<form method="post"
+      x-data="{
+        selectAll: false,
+        selected: [],
+        toggleSelectAll() {
+          this.selectAll = !this.selectAll;
+          if(this.selectAll)
+            this.selected = JSON.parse(document.getElementById('user_visit_ids').textContent);
+          else
+            this.selected = [];
+        }
+      }"
+>
+  {% csrf_token %}
+  <div class="table-responsive">
+    {% render_table table %}
+  </div>
+  <div class="mt-2 input-group w-25">
+    <select class="form-select" name="review_status" required>
+      <option value="">Select</option>
+      <option value="approved">Approved</option>
+      <option value="rejected">Rejected</option>
+    </select>
+    <button type="submit" class="btn btn-primary">Save</button>
+  </div>
+</form>
+{{ user_visit_ids|json_script:"user_visit_ids" }}
+{% endblock content %}
