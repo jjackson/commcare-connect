@@ -291,7 +291,7 @@ class OpportunityLearnStatusTableView(OrganizationUserMixin, SingleTableView):
 
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
-        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        opportunity = get_opportunity_or_404(org_slug=self.request.org.slug, pk=opportunity_id)
         return OpportunityAccess.objects.filter(opportunity=opportunity).order_by("user__name")
 
 
@@ -303,7 +303,7 @@ class OpportunityPaymentTableView(OrganizationUserMixin, SingleTableView):
 
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
-        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        opportunity = get_opportunity_or_404(org_slug=self.request.org.slug, pk=opportunity_id)
         return OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0).order_by(
             "-payment_accrued"
         )
@@ -324,7 +324,7 @@ class UserPaymentsTableView(OrganizationUserMixin, SingleTableView):
 
     def get_queryset(self):
         opportunity_id = self.kwargs["opp_id"]
-        self.opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        self.opportunity = get_opportunity_or_404(org_slug=self.request.org.slug, pk=opportunity_id)
         access_id = self.kwargs["pk"]
         self.access = get_object_or_404(OpportunityAccess, opportunity=self.opportunity, pk=access_id)
         return Payment.objects.filter(opportunity_access=self.access).order_by("-date_paid")
@@ -455,7 +455,7 @@ class OpportunityUserStatusTableView(OrganizationUserMixin, SingleTableView):
 
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
-        opportunity = get_object_or_404(Opportunity, organization=self.request.org, id=opportunity_id)
+        opportunity = get_opportunity_or_404(org_slug=self.request.org.slug, pk=opportunity_id)
         access_objects = get_annotated_opportunity_access(opportunity)
         return access_objects
 
