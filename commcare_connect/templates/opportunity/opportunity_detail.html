@@ -45,6 +45,13 @@
              {% translate "View Application" %}
             </a>
           </li>
+          <li>
+            <a class="dropdown-item"
+               href="{% url "program:user_visit_review" org_slug=request.org.slug pk=opportunity.managedopportunity.program.id opp_id=opportunity.pk %}">
+              <i class="bi bi-clipboard2-data-fill pe-2"></i>
+             {% translate "Review User Visits" %}
+            </a>
+          </li>
            {% endif %}
           <li>
             <a class="dropdown-item"
