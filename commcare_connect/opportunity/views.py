@@ -112,12 +112,13 @@ class OrganizationUserMemberRoleMixin(LoginRequiredMixin, UserPassesTestMixin):
 
 def get_opportunity_or_404(pk, org_slug):
     opp = get_object_or_404(Opportunity, id=pk)
-    if opp.organization is not None and opp.organization.slug == org_slug:
+
+    if (opp.organization and opp.organization.slug == org_slug) or (
+        opp.managed and opp.managedopportunity.program.organization.slug == org_slug
+    ):
         return opp
-    elif opp.managed and opp.managedopportunity.program.organization.slug == org_slug:
-        return opp.managedopportunity
-    else:
-        raise Http404("Opportunity not found.")
+
+    raise Http404("Opportunity not found.")
 
 
 class OpportunityList(OrganizationUserMixin, ListView):
