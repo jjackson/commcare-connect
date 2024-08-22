@@ -1,8 +1,17 @@
-{% extends "opportunity/base.html" %}
+{% extends base_template %}
 {% load static %}
 {% load sort_link %}
 {% load i18n %}
 {% block title %}{{ request.org }} - Opportunities{% endblock %}
+
+{% block breadcrumbs_inner %}
+  {{ block.super }}
+  {% if program %}
+    <li class="breadcrumb-item active" aria-current="page">{{ program.name }}</li>
+  {% endif %}
+{% endblock %}
+
+
 
 {% block content %}
   <div class="container bg-white shadow">

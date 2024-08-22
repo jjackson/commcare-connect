@@ -100,10 +100,11 @@ class ManagedOpportunityList(ProgramManagerMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["program_id"] = self.kwargs.get("pk")
+        context["program"] = get_object_or_404(Program, id=self.kwargs.get("pk"))
         context["opportunity_init_url"] = reverse(
             "program:opportunity_init", kwargs={"org_slug": self.request.org.slug, "pk": self.kwargs.get("pk")}
         )
+        context["base_template"] = "program/base.html"
         return context
 
 

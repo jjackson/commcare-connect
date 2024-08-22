@@ -143,6 +143,7 @@ class OpportunityList(OrganizationUserMixin, ListView):
             )
 
         context["opportunity_invitations"] = opportunity_invitations
+        context["base_template"] = "opportunity/base.html"
         return context
 
 
