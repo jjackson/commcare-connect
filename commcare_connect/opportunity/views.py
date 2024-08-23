@@ -409,6 +409,8 @@ def update_visit_status_import(request, org_slug=None, pk=None):
         if status.missing_visits:
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
+    if opportunity.managed:
+        return redirect("opportunity:user_visit_review", org_slug, pk)
     return redirect("opportunity:detail", org_slug, pk)
 
 
