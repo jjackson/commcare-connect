@@ -65,6 +65,7 @@ from commcare_connect.opportunity.tables import (
     SuspendedUsersTable,
     UserPaymentsTable,
     UserStatusTable,
+    UserVisitReviewTable,
     UserVisitTable,
 )
 from commcare_connect.opportunity.tasks import (
@@ -1010,3 +1011,28 @@ def apply_opportunity_invite(request, application_id, org_slug=None, pk=None):
         f"Application for the opportunity '{application.managed_opportunity.name}' has been successfully submitted.",
     )
     return redirect("opportunity:list", org_slug)
+
+
+@org_member_required
+def user_visit_review(request, org_slug, opp_id):
+    opportunity = get_object_or_404(ManagedOpportunity, pk=opp_id)
+    if not opportunity.managed:
+        return Http404
+    is_program_manager = request.org_membership.is_admin and request.org.program_manager
+    user_visit_reviews = UserVisit.objects.filter(opportunity=opportunity, review_created_on__isnull=False).order_by(
+        "visit_date"
+    )
+    table = UserVisitReviewTable(user_visit_reviews)
+    if not is_program_manager:
+        table.exclude = ("pk",)
+    if request.POST and is_program_manager:
+        review_status = request.POST.get("review_status")
+        updated_reviews = request.POST.getlist("pk")
+        if review_status in ["approved", "rejected"]:
+            UserVisit.objects.filter(pk__in=updated_reviews).update(review_status=review_status)
+
+    return render(
+        request,
+        "opportunity/user_visit_review.html",
+        context=dict(table=table, user_visit_ids=[v.pk for v in user_visit_reviews]),
+    )
