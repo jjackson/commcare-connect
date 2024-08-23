@@ -6,6 +6,7 @@
 {% block content %}
 <h2 class="mb-2">User Visit Review</h2>
 <hr />
+{% if request.org_membership.is_admin and request.org.program_manager %}
 <form method="post"
       x-data="{
         selectAll: false,
@@ -33,4 +34,9 @@
   </div>
 </form>
 {{ user_visit_ids|json_script:"user_visit_ids" }}
+{% else %}
+<div class="table-responsive">
+  {% render_table table %}
+</div>
+{% endif %}
 {% endblock content %}

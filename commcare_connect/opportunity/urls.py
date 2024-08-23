@@ -42,6 +42,7 @@ from commcare_connect.opportunity.views import (
     update_completed_work_status_import,
     update_visit_status_import,
     user_profile,
+    user_visit_review,
     user_visits_list,
     verification_flags_config,
     visit_verification,
@@ -103,4 +104,5 @@ urlpatterns = [
     path(
         "<int:pk>/invite/<int:application_id>/apply/", view=apply_opportunity_invite, name="apply_opportunity_invite"
     ),
+    path("<int:opp_id>/user_visit_review", user_visit_review, name="user_visit_review"),
 ]
