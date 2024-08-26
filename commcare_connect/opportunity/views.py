@@ -841,10 +841,14 @@ def visit_verification(request, org_slug=None, pk=None):
 def approve_visit(request, org_slug=None, pk=None):
     user_visit = UserVisit.objects.get(pk=pk)
     user_visit.status = VisitValidationStatus.approved
+    if user_visit.opportunity.managed:
+        user_visit.review_created_on = now()
     user_visit.save()
     opp_id = user_visit.opportunity_id
     access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id)
     update_payment_accrued(opportunity=access.opportunity, users=[access.user])
+    if user_visit.opportunity.managed:
+        return redirect("opportunity:user_visit_review", org_slug, pk)
     return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity.id, pk=access.id)
 
 
@@ -855,9 +859,13 @@ def reject_visit(request, org_slug=None, pk=None):
     reason = request.POST.get("reason")
     user_visit.status = VisitValidationStatus.rejected
     user_visit.reason = reason
+    if user_visit.opportunity.managed:
+        user_visit.review_created_on = now()
     user_visit.save()
     access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=user_visit.opportunity_id)
     update_payment_accrued(opportunity=access.opportunity, users=[access.user])
+    if user_visit.opportunity.managed:
+        return redirect("opportunity:user_visit_review", org_slug, pk)
     return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity_id, pk=access.id)
 
 
