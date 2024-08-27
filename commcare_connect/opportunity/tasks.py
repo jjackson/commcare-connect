@@ -36,6 +36,7 @@ from commcare_connect.opportunity.models import (
     UserInvite,
     UserInviteStatus,
     UserVisit,
+    VisitReviewStatus,
     VisitValidationStatus,
 )
 from commcare_connect.users.models import User
@@ -332,7 +333,12 @@ def bulk_approve_completed_work():
         for completed_work in completed_works:
             if completed_work.completed_count > 0:
                 approved_count = completed_work.approved_count
-                visits = completed_work.uservisit_set.values_list("status", "reason")
+                if access.opportunity.managed:
+                    visits = completed_work.uservisit_set.filter(review_status=VisitReviewStatus.agree).values_list(
+                        "status", "reason"
+                    )
+                else:
+                    visits = completed_work.uservisit_set.values_list("status", "reason")
                 if any(status == "rejected" for status, _ in visits):
                     completed_work.update_status(CompletedWorkStatus.rejected)
                     completed_work.reason = "\n".join(reason for _, reason in visits if reason)
