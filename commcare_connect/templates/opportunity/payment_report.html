@@ -1,0 +1,21 @@
+{% extends "opportunity/base.html" %}
+{% load static %}
+{% load django_tables2 %}
+
+{% block breadcrumbs_inner %}
+  {{ block.super }}
+  <li class="breadcrumb-item">
+    <a href="{% url 'opportunity:detail' org_slug=request.org.slug pk=opportunity.pk %}">
+      {{ opportunity.name }}
+    </a>
+  </li>
+  <li class="breadcrumb-item active" aria-current="page">Payment Report</li>
+{% endblock %}
+
+{% block content %}
+<h2 class="mb-2">Payment Report</h2>
+<hr />
+<div class="table-responsive">
+  {% render_table table %}
+</div>
+{% endblock content %}

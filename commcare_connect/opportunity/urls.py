@@ -34,6 +34,7 @@ from commcare_connect.opportunity.views import (
     import_catchment_area,
     payment_delete,
     payment_import,
+    payment_report,
     reject_visit,
     revoke_user_suspension,
     send_message_mobile_users,
@@ -105,4 +106,5 @@ urlpatterns = [
         "<int:pk>/invite/<int:application_id>/apply/", view=apply_opportunity_invite, name="apply_opportunity_invite"
     ),
     path("<int:opp_id>/user_visit_review", user_visit_review, name="user_visit_review"),
+    path("<int:pk>/payment_report", payment_report, name="payment_report"),
 ]
