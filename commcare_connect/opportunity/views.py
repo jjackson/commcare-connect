@@ -541,7 +541,7 @@ def add_payment_unit(request, org_slug=None, pk=None):
 
 @org_member_required
 def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
-    opportunity = get_object_or_404(Opportunity, organization=request.org, id=opp_id)
+    opportunity = get_opportunity_or_404(pk=opp_id, org_slug=org_slug)
     payment_unit = get_object_or_404(PaymentUnit, id=pk, opportunity=opportunity)
     deliver_units = DeliverUnit.objects.filter(
         Q(payment_unit__isnull=True) | Q(payment_unit=payment_unit) | Q(payment_unit__opportunity__active=False),
@@ -603,6 +603,11 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, SingleTableView):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_opportunity_or_404(org_slug=self.request.org.slug, pk=opportunity_id)
         return PaymentUnit.objects.filter(opportunity=opportunity).order_by("name")
+
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        kwargs["org_slug"] = self.request.org.slug
+        return kwargs
 
 
 @org_member_required
@@ -1007,20 +1012,37 @@ def import_catchment_area(request, org_slug=None, pk=None):
     return redirect("opportunity:detail", org_slug, pk)
 
 
-@org_admin_required
 @require_POST
-def apply_opportunity_invite(request, application_id, org_slug=None, pk=None):
+@org_admin_required
+def apply_or_decline_application(request, application_id, action, org_slug=None, pk=None):
     application = get_object_or_404(
         ManagedOpportunityApplication, id=application_id, status=ManagedOpportunityApplicationStatus.INVITED
     )
-    application.status = ManagedOpportunityApplicationStatus.APPLIED
+
+    redirect_url = reverse("opportunity:list", kwargs={"org_slug": org_slug})
+
+    action_map = {
+        "apply": {
+            "status": ManagedOpportunityApplicationStatus.APPLIED,
+            "message": f"Application for the opportunity '{application.managed_opportunity.name}' has been "
+            f"successfully submitted.",
+        },
+        "decline": {
+            "status": ManagedOpportunityApplicationStatus.DECLINED,
+            "message": f"The application for the opportunity '{application.managed_opportunity.name}' has been marked "
+            f"as 'Declined'.",
+        },
+    }
+
+    if action not in action_map:
+        messages.error(request, "Action not allowed.")
+        return redirect(redirect_url)
+
+    application.status = action_map[action]["status"]
     application.modified_by = request.user.email
     application.save()
-    messages.success(
-        request,
-        f"Application for the opportunity '{application.managed_opportunity.name}' has been successfully submitted.",
-    )
-    return redirect("opportunity:list", org_slug)
+    messages.success(request, action_map[action]["message"])
+    return redirect(redirect_url)
 
 
 @org_member_required
