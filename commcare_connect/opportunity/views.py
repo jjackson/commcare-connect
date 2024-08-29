@@ -1060,22 +1060,27 @@ def payment_report(request, org_slug, pk):
         "PaymentReportData", ["payment_unit", "approved", "user_payment_accrued", "nm_payment_accrued"]
     )
     data = []
-    total_paid_users = sum(Payment.objects.filter(opportunity_access__opportunity=opportunity).values_list("amount"))
+    total_paid_users = sum(
+        Payment.objects.filter(opportunity_access__opportunity=opportunity, organization__isnull=True).values_list(
+            "amount"
+        )
+    )
+    total_paid_nm = sum(
+        Payment.objects.filter(opportunity_access__isnull=True, organization=request.org).values_list("amount")
+    )
     total_user_payment_accrued = 0
+    total_nm_payment_accrued = 0
     for payment_unit in payment_units:
         completed_works = CompletedWork.objects.filter(
             opportunity_access__opportunity=opportunity, status=CompletedWorkStatus.approved
         )
         completed_work_count = len(completed_works)
         user_payment_accrued = sum([cw.payment_accrued for cw in completed_works])
+        nm_payment_accrued = completed_work_count * opportunity.managedopportunity.org_pay_per_visit
         total_user_payment_accrued += user_payment_accrued
+        total_nm_payment_accrued += nm_payment_accrued
         data.append(
-            PaymentReportData(
-                payment_unit.name,
-                completed_work_count,
-                user_payment_accrued,
-                completed_work_count * opportunity.managedopportunity.org_pay_per_visit,
-            )
+            PaymentReportData(payment_unit.name, completed_work_count, user_payment_accrued, nm_payment_accrued)
         )
     table = PaymentReportTable(data)
     return render(
@@ -1086,5 +1091,7 @@ def payment_report(request, org_slug, pk):
             opportunity=opportunity,
             total_paid_users=total_paid_users,
             total_user_payment_accrued=total_user_payment_accrued,
+            total_paid_nm=total_paid_nm,
+            total_nm_payment_accrued=total_nm_payment_accrued,
         ),
     )
