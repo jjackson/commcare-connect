@@ -1060,18 +1060,31 @@ def payment_report(request, org_slug, pk):
         "PaymentReportData", ["payment_unit", "approved", "user_payment_accrued", "nm_payment_accrued"]
     )
     data = []
+    total_paid_users = sum(Payment.objects.filter(opportunity_access__opportunity=opportunity).values_list("amount"))
+    total_user_payment_accrued = 0
     for payment_unit in payment_units:
         completed_works = CompletedWork.objects.filter(
             opportunity_access__opportunity=opportunity, status=CompletedWorkStatus.approved
         )
         completed_work_count = len(completed_works)
+        user_payment_accrued = sum([cw.payment_accrued for cw in completed_works])
+        total_user_payment_accrued += user_payment_accrued
         data.append(
             PaymentReportData(
                 payment_unit.name,
                 completed_work_count,
-                sum([cw.payment_accrued for cw in completed_works]),
+                user_payment_accrued,
                 completed_work_count * opportunity.managedopportunity.org_pay_per_visit,
             )
         )
     table = PaymentReportTable(data)
-    return render(request, "opportunity/payment_report.html", context=dict(table=table, opportunity=opportunity))
+    return render(
+        request,
+        "opportunity/payment_report.html",
+        context=dict(
+            table=table,
+            opportunity=opportunity,
+            total_paid_users=total_paid_users,
+            total_user_payment_accrued=total_user_payment_accrued,
+        ),
+    )
