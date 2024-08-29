@@ -1066,7 +1066,9 @@ def payment_report(request, org_slug, pk):
         )
     )
     total_paid_nm = sum(
-        Payment.objects.filter(opportunity_access__isnull=True, organization=request.org).values_list("amount")
+        Payment.objects.filter(opportunity_access__isnull=True, organization=opportunity.organization).values_list(
+            "amount"
+        )
     )
     total_user_payment_accrued = 0
     total_nm_payment_accrued = 0
