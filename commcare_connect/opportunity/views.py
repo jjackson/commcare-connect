@@ -133,14 +133,13 @@ class OpportunityList(OrganizationUserMixin, ListView):
         context = super().get_context_data(**kwargs)
         context["opportunity_init_url"] = reverse("opportunity:init", kwargs={"org_slug": self.request.org.slug})
 
-        program_invitations = None
+        program_invitation_table = None
         if self.request.org_membership and self.request.org_membership.is_admin or self.request.user.is_superuser:
             program_invitations = ProgramApplication.objects.filter(
                 organization=self.request.org, status=ProgramApplicationStatus.INVITED
             )
-        table = ProgramInvitationTable(program_invitations)
-        context["program_invitation_table"] = table
-        context["program_invitations"] = program_invitations
+            program_invitation_table = ProgramInvitationTable(program_invitations)
+        context["program_invitation_table"] = program_invitation_table
         context["base_template"] = "opportunity/base.html"
         return context
 

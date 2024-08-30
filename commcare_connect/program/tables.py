@@ -14,11 +14,11 @@ RESPONSIVE_TABLE_AND_LIGHT_HEADER = {
 
 
 class ProgramInvitationTable(tables.Table):
-    program = tables.Column(accessor="program.name", verbose_name=_("Program"))
-    start_date = tables.DateColumn(accessor="program.start_date", verbose_name=_("Start Date"))
-    end_date = tables.DateColumn(accessor="program.end_date", verbose_name=_("End Date"))
+    program = tables.Column(accessor="program__name", verbose_name=_("Program"))
+    start_date = tables.DateColumn(accessor="program__start_date", verbose_name=_("Start Date"))
+    end_date = tables.DateColumn(accessor="program__end_date", verbose_name=_("End Date"))
 
-    budget = tables.Column(accessor="program.budget", verbose_name=_("Name"))
+    budget = tables.Column(accessor="program__budget", verbose_name=_("Name"))
 
     manage = tables.Column(
         verbose_name=_("Manage"),
@@ -75,7 +75,6 @@ class ProgramInvitationTable(tables.Table):
         order_by_field = "invite_sort"
         attrs = RESPONSIVE_TABLE_AND_LIGHT_HEADER
         template_name = TABLE_TEMPLATE
-        order_by = ("date_modified",)
         orderable = False
 
 
@@ -130,8 +129,8 @@ class ProgramApplicationTable(tables.Table):
         fields = ("organization", "created_by", "date_modified", "status", "manage")
         attrs = RESPONSIVE_TABLE_AND_LIGHT_HEADER
         template_name = TABLE_TEMPLATE
-        order_by = ("date_modified",)
         empty_text = "No applications yet."
+        orderable = False
 
 
 class ProgramTable(tables.Table):
@@ -181,6 +180,10 @@ class ProgramTable(tables.Table):
                 "url": view_opp_url,
                 "text": "View opportunities",
                 "icon": "bi bi-eye",
+                "disable": ProgramApplication.objects.filter(
+                    program=record, status=ProgramApplicationStatus.ACCEPTED
+                ).count()
+                == 0,
             },
             {
                 "post": False,
@@ -204,8 +207,8 @@ class ProgramTable(tables.Table):
         )
         template_name = TABLE_TEMPLATE
         attrs = RESPONSIVE_TABLE_AND_LIGHT_HEADER
-        order_by = ("name",)
         empty_text = "No programs yet."
+        orderable = False
 
 
 def get_manage_buttons_html(buttons, request):
