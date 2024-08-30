@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
-from .models import ManagedOpportunityApplication, ManagedOpportunityApplicationStatus, Program
+from .models import Program, ProgramApplication, ProgramApplicationStatus
 
 TABLE_TEMPLATE = "django_tables2/bootstrap5.html"
 RESPONSIVE_TABLE_AND_LIGHT_HEADER = {
@@ -13,15 +13,12 @@ RESPONSIVE_TABLE_AND_LIGHT_HEADER = {
 }
 
 
-class OpportunityInvitationTable(tables.Table):
-    name = tables.Column(accessor="managed_opportunity.name", verbose_name=_("Name"))
-    start_date = tables.DateColumn(
-        accessor="managed_opportunity.start_date", verbose_name=_("Start Date"), default=_("Not Set")
-    )
-    end_date = tables.DateColumn(
-        accessor="managed_opportunity.end_date", verbose_name=_("End Date"), default=_("Not Set")
-    )
-    status = tables.Column(verbose_name=_("Status"))
+class ProgramInvitationTable(tables.Table):
+    program = tables.Column(accessor="program.name", verbose_name=_("Program"))
+    start_date = tables.DateColumn(accessor="program.start_date", verbose_name=_("Start Date"))
+    end_date = tables.DateColumn(accessor="program.end_date", verbose_name=_("End Date"))
+
+    budget = tables.Column(accessor="program.budget", verbose_name=_("Name"))
 
     manage = tables.Column(
         verbose_name=_("Manage"),
@@ -29,21 +26,27 @@ class OpportunityInvitationTable(tables.Table):
         empty_values=(),
     )
 
+    def render_budget(self, record):
+        return f"{record.program.budget} {record.program.currency}"
+
     def render_manage(self, record):
+        org_slug = self.context["request"].org.slug
+        program_id = record.program.id
+
         apply_url = reverse(
-            "opportunity:apply_or_decline_application",
+            "program:apply_or_decline_application",
             kwargs={
-                "org_slug": self.context["request"].org.slug,
-                "pk": record.managed_opportunity.id,
+                "org_slug": org_slug,
+                "pk": program_id,
                 "application_id": record.id,
                 "action": "apply",
             },
         )
         decline_url = reverse(
-            "opportunity:apply_or_decline_application",
+            "program:apply_or_decline_application",
             kwargs={
-                "org_slug": self.context["request"].org.slug,
-                "pk": record.managed_opportunity.id,
+                "org_slug": org_slug,
+                "pk": program_id,
                 "application_id": record.id,
                 "action": "decline",
             },
@@ -67,17 +70,18 @@ class OpportunityInvitationTable(tables.Table):
         return get_manage_buttons_html(buttons, self.context["request"])
 
     class Meta:
-        model = ManagedOpportunityApplication
-        fields = ("name", "start_date", "end_date", "status", "manage")
+        model = ProgramApplication
+        fields = ("program", "start_date", "end_date", "budget", "manage")
         order_by_field = "invite_sort"
         attrs = RESPONSIVE_TABLE_AND_LIGHT_HEADER
         template_name = TABLE_TEMPLATE
         order_by = ("date_modified",)
+        orderable = False
 
 
-class ManagedOpportunityApplicationTable(tables.Table):
+class ProgramApplicationTable(tables.Table):
     organization = tables.Column()
-    created_by = tables.Column(orderable=False)
+    created_by = tables.Column()
     status = tables.Column()
     date_modified = tables.DateColumn(verbose_name=_("Updated On"), order_by=("date_modified",))
     manage = tables.Column(
@@ -103,7 +107,7 @@ class ManagedOpportunityApplicationTable(tables.Table):
                 "text": _("Accept"),
                 "color": "success",
                 "icon": "bi bi-check-circle-fill",
-                "disable": record.status != ManagedOpportunityApplicationStatus.APPLIED,
+                "disable": record.status != ProgramApplicationStatus.APPLIED,
             },
             {
                 "post": True,
@@ -113,16 +117,16 @@ class ManagedOpportunityApplicationTable(tables.Table):
                 "icon": "bi bi-x-square-fill",
                 "disable": record.status
                 in [
-                    ManagedOpportunityApplicationStatus.ACCEPTED,
-                    ManagedOpportunityApplicationStatus.REJECTED,
-                    ManagedOpportunityApplicationStatus.DECLINED,
+                    ProgramApplicationStatus.ACCEPTED,
+                    ProgramApplicationStatus.REJECTED,
+                    ProgramApplicationStatus.DECLINED,
                 ],
             },
         ]
         return get_manage_buttons_html(buttons, self.context["request"])
 
     class Meta:
-        model = ManagedOpportunityApplication
+        model = ProgramApplication
         fields = ("organization", "created_by", "date_modified", "status", "manage")
         attrs = RESPONSIVE_TABLE_AND_LIGHT_HEADER
         template_name = TABLE_TEMPLATE
@@ -157,6 +161,13 @@ class ProgramTable(tables.Table):
                 "pk": record.id,
             },
         )
+        application_url = reverse(
+            "program:applications",
+            kwargs={
+                "org_slug": self.context["request"].org.slug,
+                "pk": record.id,
+            },
+        )
         buttons = [
             {
                 "post": False,
@@ -170,6 +181,13 @@ class ProgramTable(tables.Table):
                 "url": view_opp_url,
                 "text": "View opportunities",
                 "icon": "bi bi-eye",
+            },
+            {
+                "post": False,
+                "url": application_url,
+                "text": "Applications",
+                "color": "success",
+                "icon": "bi bi-people-fill",
             },
         ]
         return get_manage_buttons_html(buttons, self.context["request"])

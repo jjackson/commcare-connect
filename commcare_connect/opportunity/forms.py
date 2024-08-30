@@ -158,6 +158,13 @@ class OpportunityInitForm(forms.ModelForm):
             Submit("submit", "Submit"),
         )
 
+        if self.managed_opp:
+            self.fields["organization"] = forms.ModelChoiceField(
+                queryset=Organization.objects.all(),
+                required=True,
+                widget=forms.Select(attrs={"class": "form-control"}),
+            )
+
         domain_choices = [(domain, domain) for domain in self.domains]
         self.fields["description"] = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
         self.fields["learn_app_domain"] = forms.ChoiceField(
@@ -236,9 +243,9 @@ class OpportunityInitForm(forms.ModelForm):
         self.instance.created_by = self.user.email
         self.instance.modified_by = self.user.email
 
-        # In the case of a managed opportunity, the organization will be null initially,
-        # as it will be set to the network manager's organization when the invitation is accepted.
-        if not self.managed_opp:
+        if self.managed_opp:
+            self.instance.organization = self.cleaned_data.get("organization")
+        else:
             self.instance.organization = organization
 
         api_key, _ = HQApiKey.objects.get_or_create(user=self.user, api_key=self.cleaned_data["api_key"])
