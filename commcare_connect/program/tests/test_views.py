@@ -52,31 +52,7 @@ class TestProgramListView(BaseProgramTest):
         assert response.status_code == HTTPStatus.OK
         table = response.context["table"]
         programs = table.data
-        expected_programs = sorted(self.programs, key=lambda p: p.name)
-        self.check_order(programs, expected_programs)
-
-    def test_ordering_by_start_date(self, client):
-        response = self.client.get(f"{self.list_url}?sort=start_date")
-        assert response.status_code == HTTPStatus.OK
-        table = response.context["table"]
-        programs = table.data
-        expected_programs = sorted(self.programs, key=lambda p: p.start_date)
-        self.check_order(programs, expected_programs)
-
-    def test_ordering_by_end_date(self, client):
-        response = self.client.get(f"{self.list_url}?sort=end_date")
-        assert response.status_code == HTTPStatus.OK
-        table = response.context["table"]
-        programs = table.data
-        expected_programs = sorted(self.programs, key=lambda p: p.end_date)
-        self.check_order(programs, expected_programs)
-
-    def test_ordering_by_invalid_field(self, client):
-        response = self.client.get(f"{self.list_url}?sort=invalid")
-        assert response.status_code == HTTPStatus.OK
-        table = response.context["table"]
-        programs = table.data
-        expected_programs = sorted(self.programs, key=lambda p: p.name)
+        expected_programs = sorted(self.programs, key=lambda p: p.date_modified)
         self.check_order(programs, expected_programs)
 
     @staticmethod

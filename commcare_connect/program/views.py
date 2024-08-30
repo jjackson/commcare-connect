@@ -39,7 +39,7 @@ class ProgramList(ProgramManagerMixin, SingleTableView):
     table_class = ProgramTable
 
     def get_queryset(self):
-        return Program.objects.filter(organization=self.request.org)
+        return Program.objects.filter(organization=self.request.org).order_by("date_modified")
 
 
 class ProgramCreateOrUpdate(ProgramManagerMixin, UpdateView):
@@ -153,7 +153,7 @@ class ProgramApplicationList(ProgramManagerMixin, SingleTableView):
 
     def get_queryset(self):
         program_id = self.kwargs.get("pk")
-        return ProgramApplication.objects.filter(program__id=program_id)
+        return ProgramApplication.objects.filter(program__id=program_id).order_by("date_modified")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
