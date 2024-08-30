@@ -158,13 +158,6 @@ class OpportunityInitForm(forms.ModelForm):
             Submit("submit", "Submit"),
         )
 
-        if self.managed_opp:
-            self.fields["organization"] = forms.ModelChoiceField(
-                queryset=Organization.objects.all(),
-                required=True,
-                widget=forms.Select(attrs={"class": "form-control"}),
-            )
-
         domain_choices = [(domain, domain) for domain in self.domains]
         self.fields["description"] = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
         self.fields["learn_app_domain"] = forms.ChoiceField(
