@@ -31,7 +31,7 @@ class LearnStatusTable(tables.Table):
         empty_text = "No learn progress for users."
 
     def __init__(self, *args, **kwargs):
-        self.org_slug = kwargs.pop("org_slug")
+        self.org_slug = kwargs.pop("org_slug", None)
         super().__init__(*args, **kwargs)
 
     def render_details(self, record):
@@ -166,7 +166,7 @@ class UserStatusTable(tables.Table):
         orderable = False
 
     def __init__(self, *args, **kwargs):
-        self.org_slug = kwargs.pop("org_slug")
+        self.org_slug = kwargs.pop("org_slug", None)
         super().__init__(*args, **kwargs)
 
     def render_display_name(self, record):
@@ -211,7 +211,7 @@ class PaymentUnitTable(tables.Table):
         orderable = False
 
     def __init__(self, *args, **kwargs):
-        self.org_slug = kwargs.pop("org_slug")
+        self.org_slug = kwargs.pop("org_slug", None)
         super().__init__(*args, **kwargs)
 
     def render_deliver_units(self, record):
@@ -255,7 +255,7 @@ class DeliverStatusTable(tables.Table):
         )
 
     def __init__(self, *args, **kwargs):
-        self.org_slug = kwargs.pop("org_slug")
+        self.org_slug = kwargs.pop("org_slug", None)
         super().__init__(*args, **kwargs)
 
     def render_details(self, record):
