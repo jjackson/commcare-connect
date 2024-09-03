@@ -621,7 +621,7 @@ def export_user_status(request, **kwargs):
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 
 
-class OpportunityDeliverStatusTable(OrganizationUserMixin, SingleTableView):
+class OpportunityDeliverStatusTable(OrganizationUserMixin, OrgContextSingleTableView):
     model = OpportunityAccess
     paginate_by = 25
     table_class = DeliverStatusTable
@@ -632,11 +632,6 @@ class OpportunityDeliverStatusTable(OrganizationUserMixin, SingleTableView):
         opportunity = get_opportunity_or_404(pk=opportunity_id, org_slug=self.kwargs["org_slug"])
         access_objects = get_annotated_opportunity_access_deliver_status(opportunity)
         return access_objects
-
-    def get_table_kwargs(self):
-        kwargs = super().get_table_kwargs()
-        kwargs["org_slug"] = self.request.org.slug
-        return kwargs
 
 
 @org_member_required
