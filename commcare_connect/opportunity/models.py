@@ -632,3 +632,13 @@ class CatchmentArea(models.Model):
 
     class Meta:
         unique_together = ("site_code", "opportunity")
+
+
+class PaymentInvoice(models.Model):
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
+    amount = models.PositiveIntegerField()
+    date = models.DateField()
+    invoice_number = models.CharField(max_length=50)
+
+    class Meta:
+        unique_together = ("opportunity", "invoice_number")
