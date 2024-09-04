@@ -8,6 +8,7 @@ from commcare_connect.opportunity.models import (
     CompletedWork,
     OpportunityAccess,
     Payment,
+    PaymentInvoice,
     PaymentUnit,
     UserInvite,
     UserInviteStatus,
@@ -408,6 +409,13 @@ class PaymentReportTable(tables.Table):
 
     class Meta:
         orderable = False
+
+
+class PaymentInvoiceTable(tables.Table):
+    class Meta:
+        model = PaymentInvoice
+        orderable = False
+        fields = ("pk", "amount", "date", "invoice_number")
 
 
 def popup_html(value, popup_title, popup_direction="top", popup_class="", popup_attributes=""):

@@ -18,6 +18,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityVerificationFlags,
+    PaymentInvoice,
     PaymentUnit,
     VisitValidationStatus,
 )
@@ -752,3 +753,34 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
         if self.instance:
             self.fields["form_submission_start"].initial = self.instance.form_submission_start
             self.fields["form_submission_end"].initial = self.instance.form_submission_end
+
+
+class PaymentInvoiceForm(forms.ModelForm):
+    class Meta:
+        model = PaymentInvoice
+        fields = ("amount", "date", "invoice_number")
+
+    def __init__(self, *args, **kwargs):
+        self.opportunity = kwargs.pop("opportunity")
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("amount")),
+            Row(Field("date")),
+            Row(Field("invoice_number")),
+            Submit(name="submit", value="Submit"),
+        )
+
+    def clean_invoice_number(self):
+        invoice_number = self.cleaned_data["invoice_number"]
+        if PaymentInvoice.objects.filter(opportunity=self.opportunity, invoice_number=invoice_number).exists():
+            raise ValidationError(f"Invoice with {invoice_number} number already exists", code="invoice_number_reused")
+        return invoice_number
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.opportunity = self.opportunity
+        if commit:
+            instance.save()
+        return instance
