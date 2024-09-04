@@ -769,8 +769,8 @@ class PaymentInvoiceForm(forms.ModelForm):
             Row(Field("amount")),
             Row(Field("date")),
             Row(Field("invoice_number")),
-            Submit(name="submit", value="Submit"),
         )
+        self.helper.form_tag = False
 
     def clean_invoice_number(self):
         invoice_number = self.cleaned_data["invoice_number"]
