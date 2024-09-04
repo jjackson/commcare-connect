@@ -4,6 +4,7 @@ from collections import namedtuple
 from functools import reduce
 
 from celery.result import AsyncResult
+from crispy_forms.utils import render_crispy_form
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -33,6 +34,7 @@ from commcare_connect.opportunity.forms import (
     OpportunityInitForm,
     OpportunityVerificationFlagsConfigForm,
     PaymentExportForm,
+    PaymentInvoiceForm,
     PaymentUnitForm,
     SendMessageMobileUsersForm,
     VisitExportForm,
@@ -53,6 +55,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaimLimit,
     OpportunityVerificationFlags,
     Payment,
+    PaymentInvoice,
     PaymentUnit,
     UserVisit,
     VisitValidationStatus,
@@ -62,6 +65,7 @@ from commcare_connect.opportunity.tables import (
     DeliverStatusTable,
     LearnStatusTable,
     OpportunityPaymentTable,
+    PaymentInvoiceTable,
     PaymentReportTable,
     PaymentUnitTable,
     SuspendedUsersTable,
@@ -1097,3 +1101,51 @@ def payment_report(request, org_slug, pk):
             total_nm_payment_accrued=total_nm_payment_accrued,
         ),
     )
+
+
+class PaymentInvoiceTableView(OrganizationUserMixin, SingleTableView):
+    model = PaymentInvoice
+    paginate_by = 25
+    table_class = PaymentInvoiceTable
+    template_name = "tables/single_table.html"
+    filter_class = ""
+
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        user_is_program_manager = self.request.org.program_manager and self.request.org_membership.is_admin
+        if not user_is_program_manager:
+            kwargs["exclude"] = ("pk",)
+        return kwargs
+
+    def get_queryset(self):
+        opportunity_id = self.kwargs["pk"]
+        opportunity = get_opportunity_or_404(org_slug=self.request.org.slug, pk=opportunity_id)
+        return PaymentInvoice.objects.filter(opportunity=opportunity)
+
+
+@org_member_required
+def invoice_list(request, org_slug, pk):
+    opportunity = get_opportunity_or_404(pk, org_slug)
+    if not opportunity.managed:
+        return redirect("opportunity:detail", org_slug, pk)
+    user_is_program_manager = request.org.program_manager and request.org_membership.is_admin
+    form = PaymentInvoiceForm(opportunity=opportunity)
+    return render(
+        request,
+        "opportunity/invoice_list.html",
+        context=dict(opportunity=opportunity, user_is_program_manager=user_is_program_manager, form=form),
+    )
+
+
+@org_member_required
+def invoice_create(request, org_slug, pk):
+    opportunity = get_opportunity_or_404(pk, org_slug)
+    user_is_program_manager = request.org.program_manager and request.org_membership.is_admin
+    if not opportunity.managed or user_is_program_manager:
+        return redirect("opportunity:detail", org_slug, pk)
+    form = PaymentInvoiceForm(data=request.POST or None, opportunity=opportunity)
+    if request.POST and form.is_valid():
+        form.save()
+        form = PaymentInvoiceForm(opportunity=opportunity)
+        return HttpResponse(render_crispy_form(form), headers={"HX-Trigger": "newInvoice"})
+    return HttpResponse(render_crispy_form(form))
