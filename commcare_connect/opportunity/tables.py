@@ -436,7 +436,7 @@ class PaymentInvoiceTable(tables.Table):
 
     def render_payment_date(self, value):
         if value is not None:
-            return value.date
+            return value.date_paid
         return
 
 
