@@ -27,18 +27,19 @@
     </div>
 {% endblock content %}
 
+{% if not request.org_membership.is_program_manager %}
 {% block modal %}
   <div class="modal fade" id="invoiceModal" tabindex="-1" role="dialog" aria-labelledby="invoiceModalLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title" id="invoiceModalLabel">Create Invoice</h5>
-          <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
-            <span aria-hidden="true">&times;</span>
-          </button>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <form hx-post="{% url "opportunity:invoice_create" org_slug=request.org.slug pk=opportunity.pk %}" hx-trigger="submit"
-          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}' hx-target="#formFields">
+        <form hx-post="{% url "opportunity:invoice_create" org_slug=request.org.slug pk=opportunity.pk %}"
+              hx-trigger="submit"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+              hx-target="#formFields">
           <div class="modal-body">
             <div id="formFields">{% crispy form %}</div>
           </div>
@@ -51,3 +52,4 @@
     </div>
   </div>
 {% endblock modal %}
+{% endif %}

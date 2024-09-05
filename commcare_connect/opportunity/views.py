@@ -1108,12 +1108,10 @@ class PaymentInvoiceTableView(OrganizationUserMixin, SingleTableView):
     paginate_by = 25
     table_class = PaymentInvoiceTable
     template_name = "tables/single_table.html"
-    filter_class = ""
 
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
-        user_is_program_manager = self.request.org.program_manager and self.request.org_membership.is_admin
-        if not user_is_program_manager:
+        if not self.request.org_membership.is_program_manager:
             kwargs["exclude"] = ("pk",)
         return kwargs
 
@@ -1128,20 +1126,18 @@ def invoice_list(request, org_slug, pk):
     opportunity = get_opportunity_or_404(pk, org_slug)
     if not opportunity.managed:
         return redirect("opportunity:detail", org_slug, pk)
-    user_is_program_manager = request.org.program_manager and request.org_membership.is_admin
     form = PaymentInvoiceForm(opportunity=opportunity)
     return render(
         request,
         "opportunity/invoice_list.html",
-        context=dict(opportunity=opportunity, user_is_program_manager=user_is_program_manager, form=form),
+        context=dict(opportunity=opportunity, form=form),
     )
 
 
 @org_member_required
 def invoice_create(request, org_slug, pk):
     opportunity = get_opportunity_or_404(pk, org_slug)
-    user_is_program_manager = request.org.program_manager and request.org_membership.is_admin
-    if not opportunity.managed or user_is_program_manager:
+    if not opportunity.managed or request.org_membership.is_program_manager:
         return redirect("opportunity:detail", org_slug, pk)
     form = PaymentInvoiceForm(data=request.POST or None, opportunity=opportunity)
     if request.POST and form.is_valid():

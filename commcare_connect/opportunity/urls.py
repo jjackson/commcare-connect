@@ -109,6 +109,6 @@ urlpatterns = [
     path("<int:opp_id>/user_visit_review", user_visit_review, name="user_visit_review"),
     path("<int:pk>/payment_report", payment_report, name="payment_report"),
     path("<int:pk>/invoice/", views.invoice_list, name="invoice_list"),
-    path("<int:pk>/invoice_table", views.PaymentInvoiceTableView.as_view(), name="invoice_table"),
+    path("<int:pk>/invoice_table/", views.PaymentInvoiceTableView.as_view(), name="invoice_table"),
     path("<int:pk>/invoice/create/", views.invoice_create, name="invoice_create"),
 ]

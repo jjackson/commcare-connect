@@ -759,6 +759,7 @@ class PaymentInvoiceForm(forms.ModelForm):
     class Meta:
         model = PaymentInvoice
         fields = ("amount", "date", "invoice_number")
+        widgets = {"date": forms.DateInput(attrs={"type": "date", "class": "form-control"})}
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
