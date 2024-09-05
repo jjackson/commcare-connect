@@ -48,8 +48,7 @@
           }"
       hx-post="{% url "opportunity:invoice_approve" org_slug=request.org.slug pk=opportunity.pk %}"
       hx-swap="none"
-    >
-    {% csrf_token %}
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   {% endif %}
 
   <div id="invoiceTable">
@@ -74,7 +73,8 @@
         <form hx-post="{% url "opportunity:invoice_create" org_slug=request.org.slug pk=opportunity.pk %}"
               hx-trigger="submit"
               hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-              hx-target="#formFields">
+              hx-target="#formFields"
+              hx-on::after-request="this.reset()">
           <div class="modal-body">
             <div id="formFields">{% crispy form %}</div>
           </div>
