@@ -46,7 +46,7 @@
             </a>
           </li>
           {% endif %}
-          {% if object.managed and request.org_membership.is_admin and request.org_membership.program_manager or request.user.is_superuser %}
+          {% if object.managed and request.org_membership.is_program_manager or request.user.is_superuser %}
           <li>
             <a class="dropdown-item"
                href="{% url "program:opportunity_application_list" org_slug=request.org.slug pk=opportunity.managedopportunity.program.id opp_id=opportunity.pk %}">
@@ -70,7 +70,7 @@
               </a>
             </li>
           {% endif %}
-          {% if not object.managed or user_is_program_manager %}
+          {% if not object.managed or request.org_membership.is_program_manager %}
           <li>
             <a class="dropdown-item"
                href="{% url 'opportunity:verification_flags_config' org_slug=request.org.slug pk=opportunity.id %}">
