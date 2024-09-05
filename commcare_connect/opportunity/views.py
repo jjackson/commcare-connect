@@ -1118,7 +1118,11 @@ class PaymentInvoiceTableView(OrganizationUserMixin, SingleTableView):
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
         opportunity = get_opportunity_or_404(org_slug=self.request.org.slug, pk=opportunity_id)
-        return PaymentInvoice.objects.filter(opportunity=opportunity)
+        filter_kwargs = dict(opportunity=opportunity)
+        table_filter = self.request.GET.get("filter")
+        if table_filter is not None and table_filter in ["paid", "pending"]:
+            filter_kwargs["payment__isnull"] = table_filter == "pending"
+        return PaymentInvoice.objects.filter(**filter_kwargs).order_by("date")
 
 
 @org_member_required
