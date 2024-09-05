@@ -1149,3 +1149,21 @@ def invoice_create(request, org_slug, pk):
         form = PaymentInvoiceForm(opportunity=opportunity)
         return HttpResponse(render_crispy_form(form), headers={"HX-Trigger": "newInvoice"})
     return HttpResponse(render_crispy_form(form))
+
+
+@org_member_required
+@require_POST
+def invoice_approve(request, org_slug, pk):
+    opportunity = get_opportunity_or_404(pk, org_slug)
+    if not opportunity.managed or not request.org_membership.is_program_manager:
+        return redirect("opportunity:detail", org_slug, pk)
+    invoice_ids = request.POST.getlist("pk")
+    invoices = PaymentInvoice.objects.filter(opportunity=opportunity, pk__in=invoice_ids, payment__isnull=True)
+    for invoice in invoices:
+        payment = Payment(
+            amount=invoice.amount,
+            organization=opportunity.organization,
+            invoice=invoice,
+        )
+        payment.save()
+    return HttpResponse(headers={"HX-Trigger": "newInvoice"})
