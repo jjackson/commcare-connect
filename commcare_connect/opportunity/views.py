@@ -1071,7 +1071,7 @@ def payment_report(request, org_slug, pk):
     total_nm_payment_accrued = 0
     for payment_unit in payment_units:
         completed_works = CompletedWork.objects.filter(
-            opportunity_access__opportunity=opportunity, status=CompletedWorkStatus.approved
+            opportunity_access__opportunity=opportunity, status=CompletedWorkStatus.approved, payment_unit=payment_unit
         )
         completed_work_count = len(completed_works)
         user_payment_accrued = sum([cw.payment_accrued for cw in completed_works])
