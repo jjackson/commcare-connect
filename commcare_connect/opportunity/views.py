@@ -864,13 +864,9 @@ def reject_visit(request, org_slug=None, pk=None):
     reason = request.POST.get("reason")
     user_visit.status = VisitValidationStatus.rejected
     user_visit.reason = reason
-    if user_visit.opportunity.managed:
-        user_visit.review_created_on = now()
     user_visit.save()
     access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=user_visit.opportunity_id)
     update_payment_accrued(opportunity=access.opportunity, users=[access.user])
-    if user_visit.opportunity.managed:
-        return redirect("opportunity:user_visit_review", org_slug, pk)
     return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity_id, pk=access.id)
 
 
