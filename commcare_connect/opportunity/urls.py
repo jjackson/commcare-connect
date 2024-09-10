@@ -106,5 +106,5 @@ urlpatterns = [
         view=apply_or_decline_application,
         name="apply_or_decline_application",
     ),
-    path("<int:opp_id>/user_visit_review", user_visit_review, name="user_visit_review"),
+    path("<int:opp_id>/user_visit_review/", user_visit_review, name="user_visit_review"),
 ]
