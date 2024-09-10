@@ -1058,7 +1058,7 @@ def user_visit_review(request, org_slug, opp_id):
     if not is_program_manager:
         table.exclude = ("pk",)
     if request.POST and is_program_manager:
-        review_status = request.POST.get("review_status")
+        review_status = request.POST.get("review_status").lower()
         updated_reviews = request.POST.getlist("pk")
         user_visits = UserVisit.objects.filter(pk__in=updated_reviews)
         if review_status in ["agree", "disagree"]:
