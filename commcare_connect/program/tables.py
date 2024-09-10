@@ -30,6 +30,8 @@ class ProgramInvitationTable(tables.Table):
         return f"{record.program.budget} {record.program.currency}"
 
     def render_manage(self, record):
+        if record.status == ProgramApplicationStatus.ACCEPTED:
+            return "-"
         org_slug = self.context["request"].org.slug
         program_id = record.program.id
 
