@@ -90,6 +90,8 @@ class ProgramApplicationTable(tables.Table):
     )
 
     def render_manage(self, record):
+        if record.status == ProgramApplicationStatus.INVITED:
+            return "-"
         accept_url = reverse(
             "program:manage_application",
             kwargs={"org_slug": self.context["request"].org.slug, "application_id": record.id, "action": "accept"},
