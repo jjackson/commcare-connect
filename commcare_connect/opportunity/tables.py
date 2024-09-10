@@ -404,6 +404,7 @@ class UserVisitReviewTable(tables.Table):
             "created_on",
             "user_visit",
         )
+        empty_text = "No visits submitted for review."
 
 
 def popup_html(value, popup_title, popup_direction="top", popup_class="", popup_attributes=""):
