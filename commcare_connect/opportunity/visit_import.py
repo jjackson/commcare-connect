@@ -1,12 +1,16 @@
 import codecs
+import json
 import textwrap
+import urllib
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
 from tablib import Dataset
 
+from commcare_connect.cache import quickcache
 from commcare_connect.opportunity.models import (
     CatchmentArea,
     CompletedWork,
@@ -216,6 +220,9 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     amount_col_index = _get_header_index(headers, AMOUNT_COL)
     invalid_rows = []
     payments = {}
+    exchange_rate = get_exchange_rate(opportunity.currency)
+    if not exchange_rate:
+        raise ImportException(f"Currency code {opportunity.currency} is invalid")
     for row in imported_data:
         row = list(row)
         username = str(row[username_col_index])
@@ -242,12 +249,34 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
         for access in users:
             username = access.user.username
             amount = payments[username]
-            payment = Payment.objects.create(opportunity_access=access, amount=amount)
+            amount_usd = amount / exchange_rate
+            payment = Payment.objects.create(opportunity_access=access, amount=amount, amount_usd=amount_usd)
             seen_users.add(username)
             payment_ids.append(payment.pk)
     missing_users = set(usernames) - seen_users
     send_payment_notification.delay(opportunity.id, payment_ids)
     return PaymentImportStatus(seen_users, missing_users)
+
+
+def _cache_key(currency_code, date=None):
+    return [currency_code, date.toordinal() if date else None]
+
+
+@quickcache(vary_on=_cache_key, timeout=60 * 60)
+def get_exchange_rate(currency_code, date=None):
+    # date should be a date object or None for latest rate
+
+    if currency_code in ["USD", None]:
+        return 1
+
+    base_url = "https://openexchangerates.org/api"
+    if date:
+        url = f"{base_url}/historical/{date.strftime('%Y-%m-%d')}.json"
+    else:
+        url = f"{base_url}/latest.json"
+    url = f"{url}?app_id={settings.OPEN_EXCHANGE_RATES_API_ID}"
+    rates = json.load(urllib.request.urlopen(url))
+    return rates["rates"].get(currency_code)
 
 
 def bulk_update_completed_work_status(opportunity: Opportunity, file: UploadedFile) -> CompletedWorkImportStatus:

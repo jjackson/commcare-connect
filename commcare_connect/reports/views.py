@@ -73,12 +73,8 @@ def _get_table_data_for_quarter(quarter):
             date_paid__lt=quarter_end,
         )
         .values("opportunity_access__opportunity__currency")
-        .annotate(Sum("amount"))
+        .annotate(Sum("amount_usd"))
     )
-
-    approved_payment_strings = [
-        f"{p['amount__sum']} {p['opportunity_access__opportunity__currency']}" for p in approved_payment_data
-    ]
 
     total_payment_data = (
         Payment.objects.filter(
@@ -87,11 +83,12 @@ def _get_table_data_for_quarter(quarter):
             date_paid__lt=quarter_end,
         )
         .values("opportunity_access__opportunity__currency")
-        .annotate(Sum("amount"))
+        .annotate(Sum("amount_usd"))
     )
-    total_payment_strings = [
-        f"{p['amount__sum']} {p['opportunity_access__opportunity__currency']}" for p in total_payment_data
-    ]
+
+    approved_payment_strings = [f"{p['amount_usd__sum']} USD" for p in approved_payment_data]
+
+    total_payment_strings = [f"{p['amount_usd__sum']} USD" for p in total_payment_data]
 
     return {
         "quarter": f"{quarter[0]} Q{quarter[1]}",

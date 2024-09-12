@@ -387,6 +387,7 @@ class VisitValidationStatus(models.TextChoices):
 
 class Payment(models.Model):
     amount = models.PositiveIntegerField()
+    amount_usd = models.DecimalField(max_digits=10, decimal_places=2, null=True)
     date_paid = models.DateTimeField(auto_now_add=True)
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.DO_NOTHING, null=True, blank=True)
     payment_unit = models.ForeignKey(
