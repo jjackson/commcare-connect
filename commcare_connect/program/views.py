@@ -39,7 +39,7 @@ class ProgramList(ProgramManagerMixin, SingleTableView):
     table_class = ProgramTable
 
     def get_queryset(self):
-        return Program.objects.filter(organization=self.request.org).order_by("date_modified")
+        return Program.objects.filter(organization=self.request.org).order_by("start_date")
 
 
 class ProgramCreateOrUpdate(ProgramManagerMixin, UpdateView):
