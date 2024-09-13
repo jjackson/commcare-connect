@@ -58,7 +58,6 @@ class Opportunity(BaseModel):
         on_delete=models.CASCADE,
         related_name="opportunities",
         related_query_name="opportunity",
-        null=True,
     )
     name = models.CharField(max_length=255)
     description = models.TextField()
