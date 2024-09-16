@@ -303,7 +303,8 @@ class OpportunityPaymentTableView(OrganizationUserMixin, SingleTableView):
 
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
-        opportunity = get_opportunity_or_404(org_slug=self.kwargs["org_slug"], pk=opportunity_id)
+        org_slug = self.kwargs["org_slug"]
+        opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
         return OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0).order_by(
             "-payment_accrued"
         )
@@ -324,7 +325,8 @@ class UserPaymentsTableView(OrganizationUserMixin, SingleTableView):
 
     def get_queryset(self):
         opportunity_id = self.kwargs["opp_id"]
-        self.opportunity = get_opportunity_or_404(org_slug=self.kwargs["org_slug"], pk=opportunity_id)
+        org_slug = self.kwargs["org_slug"]
+        self.opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
         access_id = self.kwargs["pk"]
         self.access = get_object_or_404(OpportunityAccess, opportunity=self.opportunity, pk=access_id)
         return Payment.objects.filter(opportunity_access=self.access).order_by("-date_paid")
@@ -340,7 +342,7 @@ class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
 @org_member_required
 def export_user_visits(request, **kwargs):
     opportunity_id = kwargs["pk"]
-    get_opportunity_or_404(org_slug=kwargs["org_slug"], pk=opportunity_id)
+    get_opportunity_or_404(org_slug=request.org.slug, pk=opportunity_id)
     form = VisitExportForm(data=request.POST)
     if not form.is_valid():
         messages.error(request, form.errors)
@@ -455,7 +457,8 @@ class OpportunityUserStatusTableView(OrganizationUserMixin, SingleTableView):
 
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
-        opportunity = get_opportunity_or_404(org_slug=self.kwargs["org_slug"], pk=opportunity_id)
+        org_slug = self.kwargs["org_slug"]
+        opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
         access_objects = get_annotated_opportunity_access(opportunity)
         return access_objects
 
@@ -463,7 +466,7 @@ class OpportunityUserStatusTableView(OrganizationUserMixin, SingleTableView):
 @org_member_required
 def export_users_for_payment(request, **kwargs):
     opportunity_id = kwargs["pk"]
-    get_opportunity_or_404(org_slug=kwargs["org_slug"], pk=opportunity_id)
+    get_opportunity_or_404(org_slug=request.org.slug, pk=opportunity_id)
     form = PaymentExportForm(data=request.POST)
     if not form.is_valid():
         messages.error(request, form.errors)
@@ -598,7 +601,8 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, SingleTableView):
 
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
-        opportunity = get_opportunity_or_404(org_slug=self.kwargs["org_slug"], pk=opportunity_id)
+        org_slug = self.kwargs["org_slug"]
+        opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
         return PaymentUnit.objects.filter(opportunity=opportunity).order_by("name")
 
     def get_table_kwargs(self):
@@ -610,7 +614,7 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, SingleTableView):
 @org_member_required
 def export_user_status(request, **kwargs):
     opportunity_id = kwargs["pk"]
-    get_opportunity_or_404(org_slug=kwargs["org_slug"], pk=opportunity_id)
+    get_opportunity_or_404(org_slug=request.org.slug, pk=opportunity_id)
     form = PaymentExportForm(data=request.POST)
     if not form.is_valid():
         messages.error(request, form.errors)
@@ -630,7 +634,8 @@ class OpportunityDeliverStatusTable(OrganizationUserMixin, SingleTableView):
 
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
-        opportunity = get_opportunity_or_404(pk=opportunity_id, org_slug=self.kwargs["org_slug"])
+        org_slug = self.kwargs["org_slug"]
+        opportunity = get_opportunity_or_404(pk=opportunity_id, org_slug=org_slug)
         access_objects = get_annotated_opportunity_access_deliver_status(opportunity)
         return access_objects
 
@@ -638,7 +643,7 @@ class OpportunityDeliverStatusTable(OrganizationUserMixin, SingleTableView):
 @org_member_required
 def export_deliver_status(request, **kwargs):
     opportunity_id = kwargs["pk"]
-    get_opportunity_or_404(pk=opportunity_id, org_slug=kwargs["org_slug"])
+    get_opportunity_or_404(pk=opportunity_id, org_slug=request.org.slug)
     form = PaymentExportForm(data=request.POST)
     if not form.is_valid():
         messages.error(request, form.errors)
@@ -899,7 +904,8 @@ class OpportunityCompletedWorkTable(OrganizationUserMixin, SingleTableView):
 
     def get_queryset(self):
         opportunity_id = self.kwargs["pk"]
-        opportunity = get_opportunity_or_404(org_slug=self.kwargs["org_slug"], pk=opportunity_id)
+        org_slug = self.kwargs["org_slug"]
+        opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
         access_objects = OpportunityAccess.objects.filter(opportunity=opportunity)
         return list(
             filter(lambda cw: cw.completed, CompletedWork.objects.filter(opportunity_access__in=access_objects))
@@ -909,7 +915,7 @@ class OpportunityCompletedWorkTable(OrganizationUserMixin, SingleTableView):
 @org_member_required
 def export_completed_work(request, **kwargs):
     opportunity_id = kwargs["pk"]
-    get_opportunity_or_404(org_slug=kwargs["org_slug"], pk=opportunity_id)
+    get_opportunity_or_404(org_slug=request.org.slug, pk=opportunity_id)
     form = PaymentExportForm(data=request.POST)
     if not form.is_valid():
         messages.error(request, form.errors)
@@ -974,7 +980,7 @@ def suspended_users_list(request, org_slug=None, pk=None):
 @org_member_required
 def export_catchment_area(request, **kwargs):
     opportunity_id = kwargs["pk"]
-    get_opportunity_or_404(org_slug=kwargs["org_slug"], pk=opportunity_id)
+    get_opportunity_or_404(org_slug=request.org.slug, pk=opportunity_id)
     form = PaymentExportForm(data=request.POST)
     if not form.is_valid():
         messages.error(request, form.errors)
