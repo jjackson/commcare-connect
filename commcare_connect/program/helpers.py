@@ -54,18 +54,3 @@ def get_annotated_managed_opportunity(program: Program):
     )
 
     return managed_opportunities
-
-
-def get_annotated_managed_opportunity_nm(program: Program, start_date=None, end_date=None):
-    managed_opportunities = (
-        ManagedOpportunity.objects.filter(program=program, start_date__gte=start_date)
-        .order_by("start_date")
-        .annotate()
-        .prefetch_related(
-            "opportunityaccess_set",
-            "opportunityaccess_set__uservisit_set",
-            "opportunityaccess_set__assessment_set",
-        )
-    )
-
-    return managed_opportunities
