@@ -238,7 +238,7 @@ class FunnelPerformanceTable(tables.Table):
     workers_invited = tables.Column(verbose_name=_("Workers Invited"))
     workers_passing_assessment = tables.Column(verbose_name=_("Workers Passing Assessment"))
     workers_starting_delivery = tables.Column(verbose_name=_("Workers Starting Delivery"))
-    percentage_conversion = tables.Column(verbose_name=_("% Conversion"))
+    percentage_conversion = tables.Column(verbose_name=_("Percentage Conversion"))
     average_time_to_convert = tables.Column(verbose_name=_("Average Time To convert"))
 
     class Meta:
@@ -259,48 +259,3 @@ class FunnelPerformanceTable(tables.Table):
         total_seconds = record.average_time_to_convert.total_seconds()
         hours = total_seconds / 3600
         return f"{round(hours, 2)}hr"
-
-
-class DeliveryPerformanceTable(tables.Table):
-    organization = tables.Column()
-    start_date = tables.DateColumn()
-    workers_invited = tables.Column(
-        empty_values=(),
-        verbose_name=_("Workers Invited"),
-    )
-    workers_starting_delivery = tables.Column(empty_values=(), verbose_name=_("Total Workers Starting Delivery"))
-    active_workers = tables.Column(empty_values=(), verbose_name=_("Active Workers"))
-    deliveries_per_day_per_worker = tables.Column(empty_values=(), verbose_name=_("Deliveries Per Day Per Worker"))
-    percentage_records_flagged = tables.Column(empty_values=(), verbose_name="% Records Flagged")
-
-    class Meta:
-        model = ManagedOpportunity
-        empty_text = "No data available yet."
-        fields = (
-            "organization",
-            "start_date",
-            "Total Workers Starting Delivery",
-            "Active Workers",
-            "Deliveries Per Day Per Worker",
-            "% Records Flagged",
-        )
-        orderable = False
-
-    @staticmethod
-    def get_queryset():
-        queryset = ManagedOpportunity.objects.prefetch_related("opportunityaccess_set")
-        return queryset
-
-    def precompute_data(self, record):
-        """Precompute the values for the record and store them in the record."""
-        if not hasattr(record, "_precomputed_data"):
-            data = {
-                "workers_starting_delivery": 0,
-            }
-            for access in record.opportunityaccess_set.all():
-                if access.last_visit_date:
-                    data["workers_starting_delivery"] += 1
-
-            record._precomputed_data = data
-
-        return record._precomputed_data

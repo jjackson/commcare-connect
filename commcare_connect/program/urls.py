@@ -9,7 +9,6 @@ from commcare_connect.program.views import (
     ProgramList,
     apply_or_decline_application,
     dashboard,
-    delivery_table,
     invite_organization,
     manage_application,
 )
@@ -30,6 +29,5 @@ urlpatterns = [
         name="apply_or_decline_application",
     ),
     path("<int:pk>/dashboard", dashboard, name="dashboard"),
-    path("<int:pk>/funnel-performance-table", FunnelPerformanceTableView.as_view(), name="funnel_performance_table"),
-    path("<int:pk>/delivery-performance-table", delivery_table, name="delivery_performance_table"),
+    path("<int:pk>/funnel_performance_table", FunnelPerformanceTableView.as_view(), name="funnel_performance_table"),
 ]
