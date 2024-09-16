@@ -20,7 +20,7 @@
   <hr />
   {% if not request.org_membership.is_program_manager %}
     <button type="button" class="btn btn-primary mb-2" data-bs-toggle="modal" data-bs-target="#invoiceModal">
-      Add New Invoice
+      {% translate Add New Invoice %}
     </button>
   {% endif %}
 
@@ -61,7 +61,7 @@
   </div>
 
   {% if request.org_membership.is_program_manager %}
-      <button type="submit" class="btn btn-primary mt-2">Pay</button>
+      <button type="submit" class="btn btn-primary mt-2">{% translate "Pay" %}</button>
     </form>
   {% endif %}
 {% endblock content %}
@@ -72,7 +72,7 @@
     <div class="modal-dialog" role="document">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="invoiceModalLabel">Create Invoice</h5>
+          <h5 class="modal-title" id="invoiceModalLabel">{% translate "Create Invoice" %}</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="invoiceModalClose"></button>
         </div>
         <form hx-post="{% url "opportunity:invoice_create" org_slug=request.org.slug pk=opportunity.pk %}"
@@ -84,8 +84,8 @@
             <div id="formFields">{% crispy form %}</div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="submit" class="btn btn-primary">Save changes</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% translate "Close" %}</button>
+            <button type="submit" class="btn btn-primary">{% translate "Save changes" %}</button>
           </div>
         </form>
       </div>
