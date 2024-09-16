@@ -254,10 +254,3 @@ class FunnelPerformanceTableView(ProgramManagerMixin, SingleTableView):
         program_id = self.kwargs["pk"]
         program = get_object_or_404(Program, id=program_id)
         return get_annotated_managed_opportunity(program)
-
-
-@org_program_manager_required
-def delivery_table(request, **kwargs):
-    manage_opps = ManagedOpportunity.objects.filter(program__id=kwargs.get("pk"))
-    delivery_performance_table = FunnelPerformanceTable(manage_opps)
-    return render(request, "tables/single_table.html", {"table": delivery_performance_table})
