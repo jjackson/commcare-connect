@@ -131,9 +131,12 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
 
                 if visit.status != status:
                     visit.update_status(status)
-                    visit.reason = reason
                     if opportunity.managed and status == VisitValidationStatus.approved:
                         visit.review_created_on = now()
+                    changed = True
+
+                if status == VisitValidationStatus.rejected and reason and reason != visit.reason:
+                    visit.reason = reason
                     changed = True
 
                 if changed:
