@@ -532,6 +532,7 @@ class UserVisit(XFormBaseModel):
         max_length=50, choices=VisitReviewStatus.choices, default=VisitReviewStatus.pending
     )
     review_created_on = models.DateTimeField(blank=True, null=True)
+    justification = models.CharField(max_length=300, null=True, blank=True)
 
     def update_status(self, status):
         self.status = status
