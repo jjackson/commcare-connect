@@ -357,8 +357,7 @@ class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
 
 
 @org_member_required
-def export_user_visits(request, **kwargs):
-    opportunity_id = kwargs["pk"]
+def export_user_visits(request, org_slug, opportunity_id):
     get_opportunity_or_404(org_slug=request.org.slug, pk=opportunity_id)
     form = VisitExportForm(data=request.POST)
     if not form.is_valid():
@@ -483,8 +482,7 @@ class OpportunityUserStatusTableView(OrganizationUserMixin, OrgContextSingleTabl
 
 
 @org_member_required
-def export_users_for_payment(request, **kwargs):
-    opportunity_id = kwargs["pk"]
+def export_users_for_payment(request, org_slug, opportunity_id):
     get_opportunity_or_404(org_slug=request.org.slug, pk=opportunity_id)
     form = PaymentExportForm(data=request.POST)
     if not form.is_valid():
@@ -629,8 +627,7 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, OrgContextSingleTab
 
 
 @org_member_required
-def export_user_status(request, **kwargs):
-    opportunity_id = kwargs["pk"]
+def export_user_status(request, org_slug, opportunity_id):
     get_opportunity_or_404(org_slug=request.org.slug, pk=opportunity_id)
     form = PaymentExportForm(data=request.POST)
     if not form.is_valid():
@@ -658,8 +655,7 @@ class OpportunityDeliverStatusTable(OrganizationUserMixin, OrgContextSingleTable
 
 
 @org_member_required
-def export_deliver_status(request, **kwargs):
-    opportunity_id = kwargs["pk"]
+def export_deliver_status(request, org_slug, opportunity_id):
     get_opportunity_or_404(pk=opportunity_id, org_slug=request.org.slug)
     form = PaymentExportForm(data=request.POST)
     if not form.is_valid():
@@ -987,8 +983,7 @@ class OpportunityCompletedWorkTable(OrganizationUserMixin, SingleTableView):
 
 
 @org_member_required
-def export_completed_work(request, **kwargs):
-    opportunity_id = kwargs["pk"]
+def export_completed_work(request, org_slug, opportunity_id):
     get_opportunity_or_404(org_slug=request.org.slug, pk=opportunity_id)
     form = PaymentExportForm(data=request.POST)
     if not form.is_valid():
@@ -1052,8 +1047,7 @@ def suspended_users_list(request, org_slug=None, pk=None):
 
 
 @org_member_required
-def export_catchment_area(request, **kwargs):
-    opportunity_id = kwargs["pk"]
+def export_catchment_area(request, org_slug, opportunity_id):
     get_opportunity_or_404(org_slug=request.org.slug, pk=opportunity_id)
     form = PaymentExportForm(data=request.POST)
     if not form.is_valid():
