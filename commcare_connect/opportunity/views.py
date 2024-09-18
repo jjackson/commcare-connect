@@ -7,7 +7,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
-from django.db.models import F, Q
+from django.db.models import F, Q, Sum
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -44,6 +44,7 @@ from commcare_connect.opportunity.forms import (
 from commcare_connect.opportunity.helpers import (
     get_annotated_opportunity_access,
     get_annotated_opportunity_access_deliver_status,
+    get_payment_report_data,
 )
 from commcare_connect.opportunity.models import (
     BlobMeta,
@@ -68,6 +69,7 @@ from commcare_connect.opportunity.tables import (
     DeliverStatusTable,
     LearnStatusTable,
     OpportunityPaymentTable,
+    PaymentReportTable,
     PaymentUnitTable,
     SuspendedUsersTable,
     UserPaymentsTable,
@@ -1123,4 +1125,32 @@ def user_visit_review(request, org_slug, opp_id):
         request,
         "opportunity/user_visit_review.html",
         context=dict(table=table, user_visit_ids=[v.pk for v in user_visit_reviews], opportunity=opportunity),
+    )
+
+
+@org_member_required
+def payment_report(request, org_slug, pk):
+    opportunity = get_opportunity_or_404(pk, org_slug)
+    if not opportunity.managed:
+        return redirect("opportunity:detail", org_slug, pk)
+    total_paid_users = (
+        Payment.objects.filter(opportunity_access__opportunity=opportunity).aggregate(total=Sum("amount"))["total"]
+        or 0
+    )
+    total_paid_nm = (
+        Payment.objects.filter(organization=opportunity.organization).aggregate(total=Sum("amount"))["total"] or 0
+    )
+    data, total_user_payment_accrued, total_nm_payment_accrued = get_payment_report_data(opportunity)
+    table = PaymentReportTable(data)
+    return render(
+        request,
+        "opportunity/payment_report.html",
+        context=dict(
+            table=table,
+            opportunity=opportunity,
+            total_paid_users=total_paid_users,
+            total_user_payment_accrued=total_user_payment_accrued,
+            total_paid_nm=total_paid_nm,
+            total_nm_payment_accrued=total_nm_payment_accrued,
+        ),
     )
