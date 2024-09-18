@@ -37,7 +37,6 @@
             </a>
           </li>
           {% endif %}
-          {% if not object.managed %}
           <li>
             <a class="dropdown-item"
                href="{% url 'opportunity:add_budget_existing_users' org_slug=request.org.slug pk=opportunity.id %}">
@@ -45,7 +44,6 @@
               Add Budget
             </a>
           </li>
-          {% endif %}
           {% if object.managed and request.org_membership.is_program_manager or request.user.is_superuser %}
           <li>
             <a class="dropdown-item"
@@ -54,12 +52,12 @@
               View Applications
             </a>
           </li>
-           {% endif %}
+         {% endif %}
           <li>
             <a class="dropdown-item"
                href="{% url 'opportunity:add_payment_unit' org_slug=request.org.slug pk=opportunity.id %}">
               <i class="bi bi-plus-circle-fill pe-2"></i>
-              Add Payment Unit
+              {% translate "Add Payment Unit" %}
             </a>
           </li>
           {% if request.org_membership.is_admin %}
