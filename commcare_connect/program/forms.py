@@ -16,7 +16,6 @@ class ProgramForm(forms.ModelForm):
             "name",
             "description",
             "delivery_type",
-            "organization",
             "budget",
             "currency",
             "start_date",
@@ -26,12 +25,13 @@ class ProgramForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop("user", None)
+        self.organization = kwargs.pop("organization")
         super().__init__(*args, **kwargs)
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Row(Field("name")),
             Row(Field("description")),
-            Row(Field("delivery_type"), Field("organization")),
+            Row(Field("delivery_type")),
             Row(
                 Field("budget", wrapper_class=HALF_WIDTH_FIELD),
                 Field("currency", wrapper_class=HALF_WIDTH_FIELD),
@@ -53,10 +53,12 @@ class ProgramForm(forms.ModelForm):
         return cleaned_data
 
     def save(self, commit=True):
-        instance = super().save(commit=False)
-        if not instance.pk:
-            instance.created_by = self.user.email
-        instance.modified_by = self.user.email
+        if not self.instance.pk:
+            self.instance.organization = self.organization
+            self.instance.created_by = self.user.email
+
+        self.instance.modified_by = self.user.email
+
         return super().save(commit=commit)
 
 
@@ -67,6 +69,7 @@ class ManagedOpportunityInitForm(OpportunityInitForm):
     def __init__(self, *args, **kwargs):
         self.program = kwargs.pop("program")
         super().__init__(*args, **kwargs)
+        self.managed_opp = True
 
         # Managed opportunities should use the currency specified in the program.
         self.fields["currency"].initial = self.program.currency
@@ -75,4 +78,5 @@ class ManagedOpportunityInitForm(OpportunityInitForm):
 
     def save(self, commit=True):
         self.instance.program = self.program
+        self.instance.currency = self.program.currency
         return super().save(commit=commit)
