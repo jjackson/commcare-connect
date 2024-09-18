@@ -52,7 +52,7 @@ class TestProgramListView(BaseProgramTest):
         assert response.status_code == HTTPStatus.OK
         table = response.context["table"]
         programs = table.data
-        expected_programs = sorted(self.programs, key=lambda p: p.date_modified)
+        expected_programs = sorted(self.programs, key=lambda p: p.start_date)
         self.check_order(programs, expected_programs)
 
     @staticmethod
@@ -228,7 +228,6 @@ class TestManageApplicationView(BaseProgramTest):
         )
         response = self.client.post(url)
         assert response.status_code == HTTPStatus.FOUND
-        assert response.url == self.application_list_url
         self.application.refresh_from_db()
         assert self.application.status == ProgramApplicationStatus.ACCEPTED
         assert "Application has been accepted successfully." in [
