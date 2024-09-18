@@ -1,5 +1,6 @@
 from django.urls import path
 
+from commcare_connect.opportunity import views
 from commcare_connect.opportunity.views import (
     OpportunityCompletedWorkTable,
     OpportunityCreate,
@@ -19,6 +20,7 @@ from commcare_connect.opportunity.views import (
     add_payment_unit,
     add_payment_units,
     approve_visit,
+    delete_form_json_rule,
     download_export,
     edit_payment_unit,
     export_catchment_area,
@@ -31,8 +33,10 @@ from commcare_connect.opportunity.views import (
     fetch_attachment,
     get_application,
     import_catchment_area,
+    opportunity_user_invite,
     payment_delete,
     payment_import,
+    payment_report,
     reject_visit,
     revoke_user_suspension,
     send_message_mobile_users,
@@ -41,6 +45,7 @@ from commcare_connect.opportunity.views import (
     update_completed_work_status_import,
     update_visit_status_import,
     user_profile,
+    user_visit_review,
     user_visits_list,
     verification_flags_config,
     visit_verification,
@@ -97,6 +102,15 @@ urlpatterns = [
     path("<int:pk>/suspended_users/", view=suspended_users_list, name="suspended_users_list"),
     path("<int:opp_id>/suspend_user/<int:pk>/", view=suspend_user, name="suspend_user"),
     path("<int:opp_id>/revoke_user_suspension/<int:pk>/", view=revoke_user_suspension, name="revoke_user_suspension"),
+    path("<int:opp_id>/delete_form_json_rule/<int:pk>/", view=delete_form_json_rule, name="delete_form_json_rule"),
     path("<int:pk>/catchment_area_export/", view=export_catchment_area, name="catchment_area_export"),
     path("<int:pk>/catchment_area_import/", view=import_catchment_area, name="catchment_area_import"),
+    path("<int:pk>/payment_report/", payment_report, name="payment_report"),
+    path("<int:opp_id>/user_visit_review/", user_visit_review, name="user_visit_review"),
+    path("<int:pk>/user_invite/", view=opportunity_user_invite, name="user_invite"),
+    path("<int:pk>/payment_report", payment_report, name="payment_report"),
+    path("<int:pk>/invoice/", views.invoice_list, name="invoice_list"),
+    path("<int:pk>/invoice_table/", views.PaymentInvoiceTableView.as_view(), name="invoice_table"),
+    path("<int:pk>/invoice/create/", views.invoice_create, name="invoice_create"),
+    path("<int:pk>/invoice/approve/", views.invoice_approve, name="invoice_approve"),
 ]

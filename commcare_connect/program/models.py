@@ -15,7 +15,7 @@ class Program(BaseModel):
     currency = models.CharField(max_length=3)
     start_date = models.DateField()
     end_date = models.DateField()
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
 
     def save(self, *args, **kwargs):
         if not self.id:
