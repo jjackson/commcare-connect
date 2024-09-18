@@ -1,7 +1,6 @@
 import codecs
 import textwrap
-from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
 from decimal import Decimal, InvalidOperation
 
 from django.core.files.uploadedfile import UploadedFile
@@ -106,6 +105,16 @@ class CatchmentAreaImportStatus:
         return len(self.seen_catchments)
 
 
+@dataclass
+class VisitData:
+    status: VisitValidationStatus = VisitValidationStatus.pending
+    reason: str = ""
+    justification: str | None = ""
+
+    def __iter__(self):
+        return iter(astuple(self))
+
+
 def bulk_update_visit_status(opportunity: Opportunity, file: UploadedFile) -> VisitImportStatus:
     file_format = get_file_extension(file)
     if file_format not in ("csv", "xlsx"):
@@ -127,9 +136,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
             for visit in visits:
                 seen_visits.add(visit.xform_id)
                 visit_data = data_by_visit_id[visit.xform_id]
-                status = visit_data["status"]
-                reason = visit_data.get("reason")
-                justification = visit_data.get("justification")
+                status, reason, justification = visit_data
                 changed = False
                 if visit.status != status:
                     visit.status = status
@@ -163,34 +170,7 @@ def update_payment_accrued(opportunity: Opportunity, users):
         update_status(completed_works, access, True)
 
 
-def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:
-    headers = [header.lower() for header in dataset.headers or []]
-    if not headers:
-        raise ImportException("The uploaded file did not contain any headers")
-
-    visit_col_index = _get_header_index(headers, VISIT_ID_COL)
-    status_col_index = _get_header_index(headers, STATUS_COL)
-    reason_col_index = _get_header_index(headers, REASON_COL)
-    status_by_visit_id = {}
-    reason_by_visit_id = {}
-    invalid_rows = []
-    for row in dataset:
-        row = list(row)
-        visit_id = str(row[visit_col_index])
-        status_raw = row[status_col_index].lower().strip().replace(" ", "_")
-        try:
-            status_by_visit_id[visit_id] = VisitValidationStatus[status_raw]
-        except KeyError:
-            invalid_rows.append((row, f"status must be one of {VisitValidationStatus.values}"))
-        if status_raw == VisitValidationStatus.rejected.value:
-            reason_by_visit_id[visit_id] = str(row[reason_col_index])
-
-    if invalid_rows:
-        raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
-    return status_by_visit_id, reason_by_visit_id
-
-
-def get_data_by_visit_id(dataset) -> dict[int, any]:
+def get_data_by_visit_id(dataset) -> dict[int, VisitData]:
     headers = [header.lower() for header in dataset.headers or []]
     if not headers:
         raise ImportException("The uploaded file did not contain any headers")
@@ -199,20 +179,22 @@ def get_data_by_visit_id(dataset) -> dict[int, any]:
     status_col_index = _get_header_index(headers, STATUS_COL)
     reason_col_index = _get_header_index(headers, REASON_COL)
     justification_col_index = _get_header_index(headers, JUSTIFICATION_COL, required=False)
-    data_by_visit_id = defaultdict(dict)
+    data_by_visit_id = {}
     invalid_rows = []
     for row in dataset:
         row = list(row)
         visit_id = str(row[visit_col_index])
         status_raw = row[status_col_index].lower().strip().replace(" ", "_")
+        visit_data = VisitData()
         try:
-            data_by_visit_id[visit_id]["status"] = VisitValidationStatus[status_raw]
+            visit_data.status = VisitValidationStatus[status_raw]
         except KeyError:
             invalid_rows.append((row, f"status must be one of {VisitValidationStatus.values}"))
         if status_raw == VisitValidationStatus.rejected.value:
-            data_by_visit_id[visit_id]["reason"] = str(row[reason_col_index])
+            visit_data.reason = str(row[reason_col_index])
         if justification_col_index > 0:
-            data_by_visit_id[visit_id]["justification"] = str(row[justification_col_index])
+            visit_data.justification = str(row[justification_col_index])
+        data_by_visit_id[visit_id] = visit_data
 
     if invalid_rows:
         raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
