@@ -504,6 +504,12 @@ class CompletedWork(models.Model):
         return visit.visit_date if visit else None
 
 
+class VisitReviewStatus(models.TextChoices):
+    pending = "pending", gettext("Pending Review")
+    agree = "agree", gettext("Agree")
+    disagree = "disagree", gettext("Disagree")
+
+
 class UserVisit(XFormBaseModel):
     opportunity = models.ForeignKey(
         Opportunity,
@@ -528,6 +534,11 @@ class UserVisit(XFormBaseModel):
     flag_reason = models.JSONField(null=True, blank=True)
     completed_work = models.ForeignKey(CompletedWork, on_delete=models.DO_NOTHING, null=True, blank=True)
     status_modified_date = models.DateTimeField(null=True)
+    review_status = models.CharField(
+        max_length=50, choices=VisitReviewStatus.choices, default=VisitReviewStatus.pending
+    )
+    review_created_on = models.DateTimeField(blank=True, null=True)
+    justification = models.CharField(max_length=300, null=True, blank=True)
 
     def __init__(self, *args, **kwargs):
         self.status = VisitValidationStatus.pending
