@@ -20,6 +20,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tasks import send_payment_notification
+from commcare_connect.opportunity.utils.completed_work import update_status
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.itertools import batched
 
@@ -131,7 +132,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                 justification = visit_data.get("justification")
                 changed = False
                 if visit.status != status:
-                    visit.update_status(status)
+                    visit.status = status
                     if opportunity.managed and status == VisitValidationStatus.approved:
                         visit.review_created_on = now()
                     changed = True
@@ -144,7 +145,9 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                 if changed:
                     to_update.append(visit)
                 user_ids.add(visit.user_id)
-            UserVisit.objects.bulk_update(to_update, fields=["status", "reason", "review_created_on", "justification"])
+            UserVisit.objects.bulk_update(
+                to_update, fields=["status", "reason", "review_created_on", "justification", "status_modified_date"]
+            )
             missing_visits |= set(visit_batch) - seen_visits
     update_payment_accrued(opportunity, users=user_ids)
     return VisitImportStatus(seen_visits, missing_visits)
@@ -157,28 +160,7 @@ def update_payment_accrued(opportunity: Opportunity, users):
         completed_works = access.completedwork_set.exclude(
             status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
         ).select_related("payment_unit")
-        access.payment_accrued = 0
-        for completed_work in completed_works:
-            # Auto Approve Payment conditions
-            if completed_work.completed_count > 0:
-                if opportunity.auto_approve_payments:
-                    visits = completed_work.uservisit_set.values_list("status", "reason", "review_status")
-                    if any(status == "rejected" for status, *_ in visits):
-                        completed_work.update_status(CompletedWorkStatus.rejected)
-                        completed_work.reason = "\n".join(reason for _, reason, _ in visits if reason)
-                    if all(status == "approved" for status, *_ in visits):
-                        completed_work.update_status(CompletedWorkStatus.approved)
-                    if (
-                        opportunity.managed
-                        and not all(status == "agree" for *_, status in visits)
-                        and completed_work.status == CompletedWorkStatus.approved
-                    ):
-                        completed_work.update_status(CompletedWorkStatus.pending)
-                approved_count = completed_work.approved_count
-                if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
-                    access.payment_accrued += approved_count * completed_work.payment_unit.amount
-                completed_work.save()
-        access.save()
+        update_status(completed_works, access, True)
 
 
 def get_status_by_visit_id(dataset) -> dict[int, VisitValidationStatus]:
@@ -331,7 +313,7 @@ def _bulk_update_completed_work_status(opportunity: Opportunity, dataset: Datase
                 changed = False
 
                 if completed_work.status != status:
-                    completed_work.update_status(status)
+                    completed_work.status = status
                     changed = True
                 if status == CompletedWorkStatus.rejected and reason and reason != completed_work.reason:
                     completed_work.reason = reason
@@ -340,7 +322,7 @@ def _bulk_update_completed_work_status(opportunity: Opportunity, dataset: Datase
                 if changed:
                     to_update.append(completed_work)
                 user_ids.add(completed_work.opportunity_access.user_id)
-            CompletedWork.objects.bulk_update(to_update, fields=["status", "reason"])
+            CompletedWork.objects.bulk_update(to_update, fields=["status", "reason", "status_modified_date"])
             missing_completed_works |= set(work_batch) - seen_completed_works
         update_payment_accrued(opportunity, users=user_ids)
     return CompletedWorkImportStatus(seen_completed_works, missing_completed_works)
