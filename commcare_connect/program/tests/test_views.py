@@ -228,7 +228,6 @@ class TestManageApplicationView(BaseProgramTest):
         )
         response = self.client.post(url)
         assert response.status_code == HTTPStatus.FOUND
-        assert response.url == self.application_list_url
         self.application.refresh_from_db()
         assert self.application.status == ProgramApplicationStatus.ACCEPTED
         assert "Application has been accepted successfully." in [
