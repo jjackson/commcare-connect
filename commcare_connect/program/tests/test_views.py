@@ -52,7 +52,7 @@ class TestProgramListView(BaseProgramTest):
         assert response.status_code == HTTPStatus.OK
         table = response.context["table"]
         programs = table.data
-        expected_programs = sorted(self.programs, key=lambda p: p.date_modified)
+        expected_programs = sorted(self.programs, key=lambda p: p.start_date)
         self.check_order(programs, expected_programs)
 
     @staticmethod
