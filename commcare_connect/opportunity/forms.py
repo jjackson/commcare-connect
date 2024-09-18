@@ -93,7 +93,7 @@ class OpportunityChangeForm(forms.ModelForm):
             widget=forms.Select(choices=[("", "Select credential")] + [(c.slug, c.name) for c in credentials]),
             required=False,
         )
-        self.initial["end_date"] = self.instance.end_date.isoformat()
+        self.initial["end_date"] = self.instance.end_date.isoformat() if self.instance.end_date else None
         self.initial["filter_country"] = [""]
         self.initial["filter_credential"] = [""]
         self.currently_active = self.instance.active
@@ -117,6 +117,8 @@ class OpportunityChangeForm(forms.ModelForm):
 
 
 class OpportunityInitForm(forms.ModelForm):
+    managed_opp = False
+
     class Meta:
         model = Opportunity
         fields = [
@@ -233,7 +235,12 @@ class OpportunityInitForm(forms.ModelForm):
         )
         self.instance.created_by = self.user.email
         self.instance.modified_by = self.user.email
-        self.instance.organization = organization
+
+        # In the case of a managed opportunity, the organization will be null initially,
+        # as it will be set to the network manager's organization when the invitation is accepted.
+        if not self.managed_opp:
+            self.instance.organization = organization
+
         api_key, _ = HQApiKey.objects.get_or_create(user=self.user, api_key=self.cleaned_data["api_key"])
         self.instance.api_key = api_key
         super().save(commit=commit)
@@ -314,7 +321,7 @@ class OpportunityFinalizeForm(forms.ModelForm):
                 self.add_error("end_date", "End date must be after start date")
 
             if self.opportunity.managed:
-                managed_opportunity = ManagedOpportunity.objects.get(id=self.opportunity.id)
+                managed_opportunity = self.opportunity.managedopportunity
                 program = managed_opportunity.program
                 if not (program.start_date <= start_date <= program.end_date):
                     self.add_error("start_date", "Start date must be within the program's start and end dates.")
@@ -323,7 +330,9 @@ class OpportunityFinalizeForm(forms.ModelForm):
                     self.add_error("end_date", "End date must be within the program's start and end dates.")
 
                 total_budget_sum = (
-                    ManagedOpportunity.objects.filter(program=program).aggregate(total=Sum("total_budget"))["total"]
+                    ManagedOpportunity.objects.filter(program=program)
+                    .exclude(id=managed_opportunity.id)
+                    .aggregate(total=Sum("total_budget"))["total"]
                     or 0
                 )
                 if total_budget_sum + cleaned_data["total_budget"] > program.budget:
