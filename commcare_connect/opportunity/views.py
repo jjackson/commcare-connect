@@ -72,6 +72,7 @@ from commcare_connect.opportunity.tables import (
     SuspendedUsersTable,
     UserPaymentsTable,
     UserStatusTable,
+    UserVisitReviewTable,
     UserVisitTable,
 )
 from commcare_connect.opportunity.tasks import (
@@ -422,6 +423,8 @@ def update_visit_status_import(request, org_slug=None, pk=None):
         if status.missing_visits:
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
+    if opportunity.managed:
+        return redirect("opportunity:user_visit_review", org_slug, pk)
     return redirect("opportunity:detail", org_slug, pk)
 
 
@@ -858,10 +861,14 @@ def visit_verification(request, org_slug=None, pk=None):
 def approve_visit(request, org_slug=None, pk=None):
     user_visit = UserVisit.objects.get(pk=pk)
     user_visit.status = VisitValidationStatus.approved
+    if user_visit.opportunity.managed:
+        user_visit.review_created_on = now()
     user_visit.save()
     opp_id = user_visit.opportunity_id
     access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=opp_id)
     update_payment_accrued(opportunity=access.opportunity, users=[access.user])
+    if user_visit.opportunity.managed:
+        return redirect("opportunity:user_visit_review", org_slug, opp_id)
     return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity.id, pk=access.id)
 
 
@@ -1085,4 +1092,35 @@ def opportunity_user_invite(request, org_slug=None, pk=None):
         request,
         "form.html",
         dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Invite Users", form=form),
+    )
+
+
+@org_member_required
+def user_visit_review(request, org_slug, opp_id):
+    opportunity = get_opportunity_or_404(opp_id, org_slug)
+    if not opportunity.managed:
+        return redirect("opportunity:detail", org_slug, opp_id)
+    is_program_manager = (
+        request.org_membership != None  # noqa: E711
+        and request.org_membership.is_admin
+        and request.org.program_manager
+    )
+    user_visit_reviews = UserVisit.objects.filter(opportunity=opportunity, review_created_on__isnull=False).order_by(
+        "visit_date"
+    )
+    table = UserVisitReviewTable(user_visit_reviews)
+    if not is_program_manager:
+        table.exclude = ("pk",)
+    if request.POST and is_program_manager:
+        review_status = request.POST.get("review_status").lower()
+        updated_reviews = request.POST.getlist("pk")
+        user_visits = UserVisit.objects.filter(pk__in=updated_reviews)
+        if review_status in ["agree", "disagree"]:
+            user_visits.update(review_status=review_status)
+            update_payment_accrued(opportunity=opportunity, users=[visit.user for visit in user_visits])
+
+    return render(
+        request,
+        "opportunity/user_visit_review.html",
+        context=dict(table=table, user_visit_ids=[v.pk for v in user_visit_reviews], opportunity=opportunity),
     )

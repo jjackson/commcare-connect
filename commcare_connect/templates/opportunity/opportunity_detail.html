@@ -52,7 +52,14 @@
               View Applications
             </a>
           </li>
-         {% endif %}
+          <li>
+            <a class="dropdown-item"
+               href="{% url "opportunity:user_visit_review" org_slug=request.org.slug opp_id=opportunity.pk %}">
+              <i class="bi bi-clipboard2-data-fill pe-2"></i>
+             {% translate "Review User Visits" %}
+            </a>
+          </li>
+          {% endif %}
           <li>
             <a class="dropdown-item"
                href="{% url 'opportunity:add_payment_unit' org_slug=request.org.slug pk=opportunity.id %}">
