@@ -16,6 +16,8 @@ from commcare_connect.opportunity.models import (
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
+    DeliverUnitFlagRules,
+    FormJsonValidationRules,
     LearnModule,
     Opportunity,
     OpportunityAccess,
@@ -23,6 +25,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaimLimit,
     OpportunityVerificationFlags,
     UserVisit,
+    VisitReviewStatus,
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tasks import download_user_visit_attachments
@@ -148,6 +151,84 @@ def process_deliver_form(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             process_deliver_unit(user, xform, app, opportunity, deliver_unit_block)
 
 
+def clean_form_submission(access: OpportunityAccess, user_visit: UserVisit, xform: XForm) -> list[list[str]]:
+    flags = []
+    opportunity_flags, _ = OpportunityVerificationFlags.objects.get_or_create(opportunity=user_visit.opportunity)
+    if opportunity_flags.duplicate:
+        if user_visit.status == VisitValidationStatus.duplicate:
+            flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
+    else:
+        user_visit.status = VisitValidationStatus.pending
+    if opportunity_flags.gps and user_visit.location is None:
+        flags.append(["gps", "GPS data is missing"])
+    if opportunity_flags.location > 0 and user_visit.location:
+        user_visits = (
+            UserVisit.objects.filter(opportunity=user_visit.opportunity, deliver_unit=user_visit.deliver_unit)
+            .exclude(Q(status=VisitValidationStatus.trial) | Q(entity_id=user_visit.entity_id))
+            .values("location")
+        )
+        cur_lat, cur_lon, *_ = user_visit.location.split(" ")
+        for visit in user_visits:
+            if visit.get("location") is None:
+                continue
+            lat, lon, *_ = visit["location"].split(" ")
+            dist = distance((lat, lon), (cur_lat, cur_lon))
+            if dist.m <= opportunity_flags.location:
+                flags.append(["location", "Visit location is too close to another visit"])
+                break
+    if opportunity_flags.catchment_areas:
+        areas = access.catchmentarea_set.filter(active=True)
+        if areas:
+            cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
+            within_catchment = False
+            for area in areas:
+                dist = distance((area.latitude, area.longitude), (cur_lat, cur_lon))
+                if dist.meters < area.radius:
+                    within_catchment = True
+                    break
+            if not within_catchment:
+                flags.append(["catchment", "Visit outside worker catchment areas"])
+    if (
+        opportunity_flags.form_submission_start
+        and opportunity_flags.form_submission_start > xform.metadata.timeStart.time()
+    ):
+        flags.append(["form_submission_period", "Form was submitted before the start time"])
+    if (
+        opportunity_flags.form_submission_end
+        and opportunity_flags.form_submission_end < xform.metadata.timeStart.time()
+    ):
+        flags.append(["form_submission_period", "Form was submitted after the end time"])
+
+    deliver_unit_flags = DeliverUnitFlagRules.objects.filter(
+        opportunity=user_visit.opportunity, deliver_unit=user_visit.deliver_unit
+    ).first()
+    if deliver_unit_flags is not None:
+        if deliver_unit_flags.check_attachments:
+            attachments = user_visit.form_json.get("attachments", {})
+            attachments.pop("form.xml", None)
+            if len(attachments) == 0:
+                flags.append(["attachment_missing", "Form was submitted without attachements."])
+
+        if deliver_unit_flags.duration > 0 and xform.metadata.duration < datetime.timedelta(
+            minutes=deliver_unit_flags.duration
+        ):
+            flags.append(["duration", "The form was completed too quickly."])
+
+    form_json_rules = FormJsonValidationRules.objects.filter(
+        opportunity=user_visit.opportunity, deliver_unit=user_visit.deliver_unit
+    )
+    for form_json_rule in form_json_rules:
+        json_path = parse(f"$.{form_json_rule.question_path}")
+        matches = [
+            match.value
+            for match in json_path.find(user_visit.form_json)
+            if match.value == form_json_rule.question_value
+        ]
+        if not matches:
+            flags.append(["form_value_not_found", f"Form does not satisfy {form_json_rule.name} validation rule."])
+    return flags
+
+
 def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, deliver_unit_block: dict):
     deliver_unit = get_or_create_deliver_unit(app, deliver_unit_block)
     access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
@@ -199,68 +280,16 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             or counts["total"] >= claim_limit.max_visits
             or datetime.date.today() > claim.end_date
         ):
-            user_visit.update_status(VisitValidationStatus.over_limit)
+            user_visit.status = VisitValidationStatus.over_limit
             if not completed_work.status == CompletedWorkStatus.over_limit:
-                completed_work.update_status(CompletedWorkStatus.over_limit)
+                completed_work.status = CompletedWorkStatus.over_limit
                 completed_work_needs_save = True
         elif counts["entity"] > 0:
-            user_visit.update_status(VisitValidationStatus.duplicate)
-
-    flags = []
-    opportunity_flags, _ = OpportunityVerificationFlags.objects.get_or_create(opportunity=opportunity)
-    if counts["entity"] > 0:
-        user_visit.update_status(VisitValidationStatus.duplicate)
-        if opportunity_flags.duplicate:
-            flags.append(["duplicate", "A beneficiary with the same identifier already exists"])
-    if opportunity_flags.duration > 0 and xform.metadata.duration < datetime.timedelta(
-        minutes=opportunity_flags.duration
-    ):
-        flags.append(["duration", "The form was completed too quickly."])
-    if xform.metadata.location is None:
-        if opportunity_flags.gps:
-            flags.append(["gps", "GPS data is missing"])
-    else:
-        if opportunity_flags.location > 0:
-            user_visits = (
-                UserVisit.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit)
-                .exclude(Q(status=VisitValidationStatus.trial) | Q(entity_id=user_visit.entity_id))
-                .values("location")
-            )
-            cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
-            for visit in user_visits:
-                if visit.get("location") is None:
-                    continue
-                lat, lon, *_ = visit["location"].split(" ")
-                dist = distance((lat, lon), (cur_lat, cur_lon))
-                if dist.m <= 10:
-                    flags.append(["location", "Visit location is too close to another visit"])
-                    break
-        if opportunity_flags.catchment_areas:
-            areas = access.catchmentarea_set.filter(active=True)
-            if areas:
-                cur_lat, cur_lon, *_ = xform.metadata.location.split(" ")
-                within_catchment = False
-                for area in areas:
-                    dist = distance((area.latitude, area.longitude), (cur_lat, cur_lon))
-                    if dist.meters < area.radius:
-                        within_catchment = True
-                        break
-                if not within_catchment:
-                    flags.append(["catchment", "Visit outside worker catchment areas"])
-    if (
-        opportunity_flags.form_submission_start
-        and opportunity_flags.form_submission_start > xform.metadata.timeStart.time()
-    ):
-        flags.append(["form_submission_period", "Form was submitted before the start time"])
-    if (
-        opportunity_flags.form_submission_end
-        and opportunity_flags.form_submission_end < xform.metadata.timeStart.time()
-    ):
-        flags.append(["form_submission_period", "Form was submitted after the end time"])
-
+            user_visit.status = VisitValidationStatus.duplicate
+    flags = clean_form_submission(access, user_visit, xform)
     if access.suspended:
         flags.append(["user_suspended", "This user is suspended from the opportunity."])
-        user_visit.update_status(VisitValidationStatus.rejected)
+        user_visit.status = VisitValidationStatus.rejected
     if flags:
         user_visit.flagged = True
         user_visit.flag_reason = {"flags": flags}
@@ -270,14 +299,15 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         and user_visit.status == VisitValidationStatus.pending
         and not user_visit.flagged
     ):
-        user_visit.update_status(VisitValidationStatus.approved)
+        user_visit.status = VisitValidationStatus.approved
+        user_visit.review_status = VisitReviewStatus.agree
     user_visit.save()
     if (
         completed_work is not None
         and completed_work.completed_count > 0
         and completed_work.status == CompletedWorkStatus.incomplete
     ):
-        completed_work.update_status(CompletedWorkStatus.pending)
+        completed_work.status = CompletedWorkStatus.pending
         completed_work_needs_save = True
     if completed_work_needs_save:
         completed_work.save()
