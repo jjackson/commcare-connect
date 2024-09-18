@@ -8,6 +8,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
 from django.db.models import F, Q
+from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -15,7 +16,8 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 from django.utils.timezone import now
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
@@ -26,6 +28,8 @@ from commcare_connect.opportunity.api.serializers import remove_opportunity_acce
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     DateRanges,
+    DeliverUnitFlagsForm,
+    FormJsonValidationRulesForm,
     OpportunityChangeForm,
     OpportunityCreationForm,
     OpportunityFinalizeForm,
@@ -46,6 +50,8 @@ from commcare_connect.opportunity.models import (
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
+    DeliverUnitFlagRules,
+    FormJsonValidationRules,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
@@ -532,6 +538,9 @@ def add_payment_unit(request, org_slug=None, pk=None):
             parent_payment_unit=form.instance.id
         )
         messages.success(request, f"Payment unit {form.instance.name} created.")
+        claims = OpportunityClaim.objects.filter(opportunity_access__opportunity=opportunity)
+        for claim in claims:
+            OpportunityClaimLimit.create_claim_limits(opportunity, claim)
         return redirect("opportunity:add_payment_units", org_slug=request.org.slug, pk=opportunity.id)
     elif request.POST:
         messages.error(request, "Invalid Data")
@@ -879,20 +888,73 @@ def verification_flags_config(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(pk=pk, org_slug=org_slug)
     verification_flags = OpportunityVerificationFlags.objects.filter(opportunity=opportunity).first()
     form = OpportunityVerificationFlagsConfigForm(instance=verification_flags, data=request.POST or None)
-
-    if form.is_valid():
+    deliver_unit_count = DeliverUnit.objects.filter(app=opportunity.deliver_app).count()
+    DeliverUnitFlagsFormset = modelformset_factory(
+        DeliverUnitFlagRules, DeliverUnitFlagsForm, extra=deliver_unit_count, max_num=deliver_unit_count
+    )
+    deliver_unit_flags = DeliverUnitFlagRules.objects.filter(opportunity=opportunity)
+    deliver_unit_formset = DeliverUnitFlagsFormset(
+        form_kwargs={"opportunity": opportunity},
+        prefix="deliver_unit",
+        queryset=deliver_unit_flags,
+        data=request.POST or None,
+        initial=[
+            {"deliver_unit": du}
+            for du in opportunity.deliver_app.deliver_units.exclude(
+                id__in=deliver_unit_flags.values_list("deliver_unit")
+            )
+        ],
+    )
+    FormJsonValidationRulesFormset = modelformset_factory(
+        FormJsonValidationRules,
+        FormJsonValidationRulesForm,
+        extra=1,
+    )
+    form_json_formset = FormJsonValidationRulesFormset(
+        form_kwargs={"opportunity": opportunity},
+        prefix="form_json",
+        queryset=FormJsonValidationRules.objects.filter(opportunity=opportunity),
+        data=request.POST or None,
+    )
+    if (
+        request.method == "POST"
+        and form.is_valid()
+        and deliver_unit_formset.is_valid()
+        and form_json_formset.is_valid()
+    ):
         verification_flags = form.save(commit=False)
         verification_flags.opportunity = opportunity
         verification_flags.save()
-        return redirect("opportunity:detail", request.org.slug, opportunity.id)
+        for du_form in deliver_unit_formset.forms:
+            if du_form.is_valid() and du_form.cleaned_data != {}:
+                du_form.instance.opportunity = opportunity
+                du_form.save()
+        for fj_form in form_json_formset.forms:
+            if fj_form.is_valid() and fj_form.cleaned_data != {}:
+                fj_form.instance.opportunity = opportunity
+                fj_form.save()
+        messages.success(request, "Verification flags saved successfully.")
 
     return render(
         request,
-        "form.html",
+        "opportunity/verification_flags_config.html",
         context=dict(
-            title=f"{request.org.slug} - {opportunity.name}", form_title="Verification Flags Configuration", form=form
+            opportunity=opportunity,
+            title=f"{request.org.slug} - {opportunity.name}",
+            form=form,
+            deliver_unit_formset=deliver_unit_formset,
+            form_json_formset=form_json_formset,
         ),
     )
+
+
+@org_member_required
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def delete_form_json_rule(request, org_slug=None, opp_id=None, pk=None):
+    form_json_rule = FormJsonValidationRules.objects.get(opportunity=opp_id, pk=pk)
+    form_json_rule.delete()
+    return HttpResponse(status=200)
 
 
 class OpportunityCompletedWorkTable(OrganizationUserMixin, SingleTableView):
