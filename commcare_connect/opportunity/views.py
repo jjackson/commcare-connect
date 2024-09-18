@@ -34,6 +34,7 @@ from commcare_connect.opportunity.forms import (
     OpportunityCreationForm,
     OpportunityFinalizeForm,
     OpportunityInitForm,
+    OpportunityUserInviteForm,
     OpportunityVerificationFlagsConfigForm,
     PaymentExportForm,
     PaymentUnitForm,
@@ -285,11 +286,12 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
         context = self.get_context_data(object=self.object)
         return self.render_to_response(context)
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, object, **kwargs):
         context = super().get_context_data(**kwargs)
         context["export_task_id"] = self.request.GET.get("export_task_id")
         context["visit_export_form"] = VisitExportForm()
         context["export_form"] = PaymentExportForm()
+        context["user_is_network_manager"] = object.managed and object.organization == self.request.org
         return context
 
 
@@ -1066,3 +1068,21 @@ def import_catchment_area(request, org_slug=None, pk=None):
         message = f"{len(status)} catchment areas were updated successfully and {status.new_catchments} were created."
         messages.success(request, mark_safe(message))
     return redirect("opportunity:detail", org_slug, pk)
+
+
+@org_member_required
+def opportunity_user_invite(request, org_slug=None, pk=None):
+    opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
+    form = OpportunityUserInviteForm(data=request.POST or None)
+    if form.is_valid():
+        users = form.cleaned_data["users"]
+        filter_country = form.cleaned_data["filter_country"]
+        filter_credential = form.cleaned_data["filter_credential"]
+        if users or filter_country or filter_credential:
+            add_connect_users.delay(users, opportunity.id, filter_country, filter_credential)
+        return redirect("opportunity:detail", request.org.slug, pk)
+    return render(
+        request,
+        "form.html",
+        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Invite Users", form=form),
+    )
