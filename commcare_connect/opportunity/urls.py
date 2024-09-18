@@ -35,6 +35,7 @@ from commcare_connect.opportunity.views import (
     opportunity_user_invite,
     payment_delete,
     payment_import,
+    payment_report,
     reject_visit,
     revoke_user_suspension,
     send_message_mobile_users,
@@ -103,6 +104,7 @@ urlpatterns = [
     path("<int:opp_id>/delete_form_json_rule/<int:pk>/", view=delete_form_json_rule, name="delete_form_json_rule"),
     path("<int:pk>/catchment_area_export/", view=export_catchment_area, name="catchment_area_export"),
     path("<int:pk>/catchment_area_import/", view=import_catchment_area, name="catchment_area_import"),
+    path("<int:pk>/payment_report/", payment_report, name="payment_report"),
     path("<int:opp_id>/user_visit_review/", user_visit_review, name="user_visit_review"),
     path("<int:pk>/user_invite/", view=opportunity_user_invite, name="user_invite"),
 ]
