@@ -11,7 +11,7 @@ from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
-from commcare_connect.utils.db import BaseModel
+from commcare_connect.utils.db import BaseModel, slugify_uniquely
 
 
 class CommCareApp(BaseModel):
@@ -58,7 +58,6 @@ class Opportunity(BaseModel):
         on_delete=models.CASCADE,
         related_name="opportunities",
         related_query_name="opportunity",
-        null=True,
     )
     name = models.CharField(max_length=255)
     description = models.TextField()
@@ -436,9 +435,16 @@ class CompletedWork(models.Model):
     reason = models.CharField(max_length=300, null=True, blank=True)
     status_modified_date = models.DateTimeField(null=True)
 
-    def update_status(self, status):
-        self.status = status
+    def __init__(self, *args, **kwargs):
+        self.status = CompletedWorkStatus.incomplete
         self.status_modified_date = now()
+        super().__init__(*args, **kwargs)
+
+    def __setattr__(self, name, value):
+        if name == "status":
+            if getattr(self, "status", None) != value:  # Check if status has changed
+                self.status_modified_date = now()
+        super().__setattr__(name, value)
 
     # TODO: add caching on this property
     @property
@@ -546,10 +552,18 @@ class UserVisit(XFormBaseModel):
         max_length=50, choices=VisitReviewStatus.choices, default=VisitReviewStatus.pending
     )
     review_created_on = models.DateTimeField(blank=True, null=True)
+    justification = models.CharField(max_length=300, null=True, blank=True)
 
-    def update_status(self, status):
-        self.status = status
+    def __init__(self, *args, **kwargs):
+        self.status = VisitValidationStatus.pending
         self.status_modified_date = now()
+        super().__init__(*args, **kwargs)
+
+    def __setattr__(self, name, value):
+        if name == "status":
+            if getattr(self, "status", None) != value:
+                self.status_modified_date = now()
+        super().__setattr__(name, value)
 
     @property
     def images(self):
@@ -594,7 +608,9 @@ class OpportunityClaimLimit(models.Model):
                 # claimed limit exceeded for this paymentunit
                 continue
             OpportunityClaimLimit.objects.get_or_create(
-                opportunity_claim=claim, payment_unit=payment_unit, max_visits=min(remaining, payment_unit.max_total)
+                opportunity_claim=claim,
+                payment_unit=payment_unit,
+                defaults={"max_visits": min(remaining, payment_unit.max_total)},
             )
 
 
@@ -629,6 +645,30 @@ class UserInvite(models.Model):
     opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE, null=True, blank=True)
     message_sid = models.CharField(max_length=50, null=True, blank=True)
     status = models.CharField(max_length=50, choices=UserInviteStatus.choices, default=UserInviteStatus.invited)
+
+
+class FormJsonValidationRules(models.Model):
+    slug = models.SlugField()
+    name = models.CharField(max_length=25)
+    deliver_unit = models.ManyToManyField(DeliverUnit)
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
+    question_path = models.CharField(max_length=255)
+    question_value = models.CharField(max_length=255)
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            self.slug = slugify_uniquely(self.name, self.__class__)
+        super().save(*args, **kwargs)
+
+
+class DeliverUnitFlagRules(models.Model):
+    deliver_unit = models.ForeignKey(DeliverUnit, on_delete=models.CASCADE)
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
+    check_attachments = models.BooleanField(default=False)
+    duration = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ("deliver_unit", "opportunity")
 
 
 class CatchmentArea(models.Model):
