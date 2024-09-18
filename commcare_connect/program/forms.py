@@ -3,7 +3,8 @@ from crispy_forms.layout import Field, Layout, Row, Submit
 from django import forms
 
 from commcare_connect.opportunity.forms import OpportunityInitForm
-from commcare_connect.program.models import ManagedOpportunity, Program
+from commcare_connect.organization.models import Organization
+from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplicationStatus
 
 HALF_WIDTH_FIELD = "form-group col-md-6 mb-0"
 DATE_INPUT = forms.DateInput(format="%Y-%m-%d", attrs={"type": "date", "class": "form-control"})
@@ -16,7 +17,6 @@ class ProgramForm(forms.ModelForm):
             "name",
             "description",
             "delivery_type",
-            "organization",
             "budget",
             "currency",
             "start_date",
@@ -26,12 +26,13 @@ class ProgramForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop("user", None)
+        self.organization = kwargs.pop("organization")
         super().__init__(*args, **kwargs)
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Row(Field("name")),
             Row(Field("description")),
-            Row(Field("delivery_type"), Field("organization")),
+            Row(Field("delivery_type")),
             Row(
                 Field("budget", wrapper_class=HALF_WIDTH_FIELD),
                 Field("currency", wrapper_class=HALF_WIDTH_FIELD),
@@ -53,10 +54,12 @@ class ProgramForm(forms.ModelForm):
         return cleaned_data
 
     def save(self, commit=True):
-        instance = super().save(commit=False)
-        if not instance.pk:
-            instance.created_by = self.user.email
-        instance.modified_by = self.user.email
+        if not self.instance.pk:
+            self.instance.organization = self.organization
+            self.instance.created_by = self.user.email
+
+        self.instance.modified_by = self.user.email
+
         return super().save(commit=commit)
 
 
@@ -67,12 +70,26 @@ class ManagedOpportunityInitForm(OpportunityInitForm):
     def __init__(self, *args, **kwargs):
         self.program = kwargs.pop("program")
         super().__init__(*args, **kwargs)
+        self.managed_opp = True
 
         # Managed opportunities should use the currency specified in the program.
         self.fields["currency"].initial = self.program.currency
         self.fields["currency"].widget = forms.TextInput(attrs={"readonly": "readonly", "disabled": True})
         self.fields["currency"].required = False
 
+        program_members = Organization.objects.filter(
+            programapplication__program=self.program, programapplication__status=ProgramApplicationStatus.ACCEPTED
+        ).distinct()
+
+        self.fields["organization"] = forms.ModelChoiceField(
+            queryset=program_members,
+            required=True,
+            widget=forms.Select(attrs={"class": "form-control"}),
+        )
+
+        self.helper.layout.fields.insert(3, Row(Field("organization")))
+
     def save(self, commit=True):
         self.instance.program = self.program
+        self.instance.currency = self.program.currency
         return super().save(commit=commit)

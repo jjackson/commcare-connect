@@ -180,6 +180,22 @@ class UserInviteFactory(DjangoModelFactory):
         model = "opportunity.UserInvite"
 
 
+class DeliverUnitFlagRulesFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    deliver_unit = SubFactory(DeliverUnitFactory)
+
+    class Meta:
+        model = "opportunity.DeliverUnitFlagRules"
+
+
+class FormJsonValidationRulesFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    name = Faker("word")
+
+    class Meta:
+        model = "opportunity.FormJsonValidationRules"
+
+
 class CatchmentAreaFactory(DjangoModelFactory):
     opportunity = SubFactory(OpportunityFactory)
     opportunity_access = SubFactory(OpportunityAccessFactory)
@@ -192,3 +208,11 @@ class CatchmentAreaFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.CatchmentArea"
+
+
+class DeliveryTypeFactory(DjangoModelFactory):
+    name = Faker("name")
+    description = Faker("text", max_nb_chars=200)
+
+    class Meta:
+        model = "opportunity.DeliveryType"

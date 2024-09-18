@@ -14,6 +14,8 @@ from commcare_connect import connect_id_client
 from commcare_connect.opportunity.models import (
     CommCareApp,
     DeliverUnit,
+    DeliverUnitFlagRules,
+    FormJsonValidationRules,
     HQApiKey,
     Opportunity,
     OpportunityAccess,
@@ -136,6 +138,8 @@ class OpportunityChangeForm(forms.ModelForm, OpportunityUserInviteForm):
 
 
 class OpportunityInitForm(forms.ModelForm):
+    managed_opp = False
+
     class Meta:
         model = Opportunity
         fields = [
@@ -252,7 +256,12 @@ class OpportunityInitForm(forms.ModelForm):
         )
         self.instance.created_by = self.user.email
         self.instance.modified_by = self.user.email
-        self.instance.organization = organization
+
+        if self.managed_opp:
+            self.instance.organization = self.cleaned_data.get("organization")
+        else:
+            self.instance.organization = organization
+
         api_key, _ = HQApiKey.objects.get_or_create(user=self.user, api_key=self.cleaned_data["api_key"])
         self.instance.api_key = api_key
         super().save(commit=commit)
@@ -333,7 +342,7 @@ class OpportunityFinalizeForm(forms.ModelForm):
                 self.add_error("end_date", "End date must be after start date")
 
             if self.opportunity.managed:
-                managed_opportunity = ManagedOpportunity.objects.get(id=self.opportunity.id)
+                managed_opportunity = self.opportunity.managedopportunity
                 program = managed_opportunity.program
                 if not (program.start_date <= start_date <= program.end_date):
                     self.add_error("start_date", "Start date must be within the program's start and end dates.")
@@ -342,7 +351,9 @@ class OpportunityFinalizeForm(forms.ModelForm):
                     self.add_error("end_date", "End date must be within the program's start and end dates.")
 
                 total_budget_sum = (
-                    ManagedOpportunity.objects.filter(program=program).aggregate(total=Sum("total_budget"))["total"]
+                    ManagedOpportunity.objects.filter(program=program)
+                    .exclude(id=managed_opportunity.id)
+                    .aggregate(total=Sum("total_budget"))["total"]
                     or 0
                 )
                 if total_budget_sum + cleaned_data["total_budget"] > program.budget:
@@ -705,15 +716,7 @@ class SendMessageMobileUsersForm(forms.Form):
 class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
     class Meta:
         model = OpportunityVerificationFlags
-        fields = (
-            "duplicate",
-            "duration",
-            "gps",
-            "location",
-            "form_submission_start",
-            "form_submission_end",
-            "catchment_areas",
-        )
+        fields = ("duplicate", "gps", "location", "form_submission_start", "form_submission_end", "catchment_areas")
         widgets = {
             "form_submission_start": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
             "form_submission_end": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
@@ -727,7 +730,6 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
             "catchment_areas": "Catchment Area",
         }
         help_texts = {
-            "duration": "Minimum time to complete form (minutes)",
             "location": "Minimum distance between form locations (metres)",
             "duplicate": "Flag duplicate form submissions for an entity.",
             "gps": "Flag forms with no location information.",
@@ -738,13 +740,13 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
+        self.helper.form_tag = False
         self.helper.layout = Layout(
             Row(
                 Field("duplicate", css_class="form-check-input", wrapper_class="form-check form-switch"),
                 Field("gps", css_class="form-check-input", wrapper_class="form-check form-switch"),
                 Field("catchment_areas", css_class="form-check-input", wrapper_class="form-check form-switch"),
             ),
-            Row(Field("duration")),
             Row(Field("location")),
             Fieldset(
                 "Form Submission Hours",
@@ -753,14 +755,75 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
                     Column(Field("form_submission_end")),
                 ),
             ),
-            Submit(name="submit", value="Submit"),
         )
 
         self.fields["duplicate"].required = False
-        self.fields["duration"].required = False
         self.fields["location"].required = False
         self.fields["gps"].required = False
         self.fields["catchment_areas"].required = False
         if self.instance:
             self.fields["form_submission_start"].initial = self.instance.form_submission_start
             self.fields["form_submission_end"].initial = self.instance.form_submission_end
+
+
+class DeliverUnitFlagsForm(forms.ModelForm):
+    class Meta:
+        model = DeliverUnitFlagRules
+        fields = ("deliver_unit", "check_attachments", "duration")
+        help_texts = {"duration": "Minimum time to complete form (minutes)"}
+        labels = {"check_attachments": "Require Attachments"}
+
+    def __init__(self, *args, **kwargs):
+        self.opportunity = kwargs.pop("opportunity")
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            Row(
+                Column(Field("deliver_unit")),
+                Column(
+                    HTML("<div class='fw-bold mb-3'>Attachments</div>"),
+                    Field("check_attachments", css_class="form-check-input", wrapper_class="form-check form-switch"),
+                ),
+                Column(Field("duration")),
+            ),
+        )
+        self.fields["deliver_unit"] = forms.ModelChoiceField(
+            queryset=DeliverUnit.objects.filter(app=self.opportunity.deliver_app), disabled=True, empty_label=None
+        )
+
+    def clean_deliver_unit(self):
+        deliver_unit = self.cleaned_data["deliver_unit"]
+        if (
+            self.instance.pk is None
+            and DeliverUnitFlagRules.objects.filter(deliver_unit=deliver_unit, opportunity=self.opportunity).exists()
+        ):
+            raise ValidationError("Flags are already configured for this Deliver Unit.")
+        return deliver_unit
+
+
+class FormJsonValidationRulesForm(forms.ModelForm):
+    class Meta:
+        model = FormJsonValidationRules
+        fields = ("name", "deliver_unit", "question_path", "question_value")
+
+    def __init__(self, *args, **kwargs):
+        self.opportunity = kwargs.pop("opportunity")
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            Row(
+                Column(Field("name")),
+                Column(Field("question_path")),
+                Column(Field("question_value")),
+            ),
+            Row(Column(Field("deliver_unit"))),
+        )
+        self.helper.render_hidden_fields = True
+
+        self.fields["deliver_unit"] = forms.ModelMultipleChoiceField(
+            queryset=DeliverUnit.objects.filter(app=self.opportunity.deliver_app), widget=forms.CheckboxSelectMultiple
+        )
