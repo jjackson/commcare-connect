@@ -7,11 +7,14 @@ from commcare_connect.opportunity.models import (
     CompletedModule,
     CompletedWork,
     DeliverUnit,
+    DeliverUnitFlagRules,
     DeliveryType,
+    FormJsonValidationRules,
     LearnModule,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
+    OpportunityClaimLimit,
     Payment,
     PaymentUnit,
     UserInvite,
@@ -26,6 +29,8 @@ admin.site.register(CommCareApp)
 admin.site.register(PaymentUnit)
 admin.site.register(UserInvite)
 admin.site.register(DeliveryType)
+admin.site.register(DeliverUnitFlagRules)
+admin.site.register(FormJsonValidationRules)
 
 
 @admin.register(Opportunity)
@@ -70,9 +75,15 @@ class LearnModuleAndDeliverUnitAdmin(admin.ModelAdmin):
     search_fields = ["name"]
 
 
+class OpportunityClaimLimitInline(admin.TabularInline):
+    list_display = ["payment_unit", "max_visit"]
+    model = OpportunityClaimLimit
+
+
 @admin.register(OpportunityClaim)
 class OpportunityClaimAdmin(admin.ModelAdmin):
     list_display = ["get_username", "get_opp_name", "opportunity_access"]
+    inlines = [OpportunityClaimLimitInline]
 
     @admin.display(description="Opportunity Name")
     def get_opp_name(self, obj):

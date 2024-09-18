@@ -37,24 +37,33 @@ def _get_table_data_for_quarter(quarter):
     quarter_start = date(quarter[0], (quarter[1] - 1) * 3 + 1, 1)
     next_quarter = _increment(quarter)
     quarter_end = date(next_quarter[0], (next_quarter[1] - 1) * 3 + 1, 1)
-    visit_data = (
-        CompletedWork.objects.annotate(work_date=Max("uservisit__visit_date"))
-        .filter(
-            opportunity_access__opportunity__is_test=False,
-            status=CompletedWorkStatus.approved,
-            work_date__gte=quarter_start,
-            work_date__lt=quarter_end,
-        )
-        .select_related("opportunity_access")
-    )
 
     user_set = set()
     beneficiary_set = set()
     service_count = 0
-    for v in visit_data:
-        user_set.add(v.opportunity_access.user_id)
-        beneficiary_set.add(v.entity_id)
-        service_count += v.approved_count
+    last_pk = 0
+    more = True
+
+    while more:
+        visit_data = (
+            CompletedWork.objects.annotate(work_date=Max("uservisit__visit_date"))
+            .filter(
+                opportunity_access__opportunity__is_test=False,
+                status=CompletedWorkStatus.approved,
+                work_date__gte=quarter_start,
+                work_date__lt=quarter_end,
+                id__gt=last_pk,
+            )
+            .select_related("opportunity_access")
+        ).order_by("id")[:100]
+
+        if len(visit_data) < 100:
+            more = False
+        for v in visit_data:
+            user_set.add(v.opportunity_access.user_id)
+            beneficiary_set.add(v.entity_id)
+            service_count += v.approved_count
+            last_pk = v.id
 
     approved_payment_data = (
         Payment.objects.filter(

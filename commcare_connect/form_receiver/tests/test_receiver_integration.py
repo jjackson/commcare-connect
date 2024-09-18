@@ -28,6 +28,8 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.tasks import bulk_approve_completed_work
 from commcare_connect.opportunity.tests.factories import (
     DeliverUnitFactory,
+    DeliverUnitFlagRulesFactory,
+    FormJsonValidationRulesFactory,
     LearnModuleFactory,
     OpportunityAccessFactory,
     OpportunityClaimFactory,
@@ -196,7 +198,7 @@ def test_receiver_deliver_form_max_visits_reached(
     user_visits = UserVisit.objects.filter(user=mobile_user_with_connect_link)
     assert user_visits.count() == 5
     # First four are not over-limit
-    assert {u.status for u in user_visits[0:4]} == {VisitValidationStatus.pending}
+    assert {u.status for u in user_visits[0:4]} == {VisitValidationStatus.pending, VisitValidationStatus.approved}
     # Last one is over limit
     assert user_visits[4].status == VisitValidationStatus.over_limit
 
@@ -238,7 +240,7 @@ def test_receiver_duplicate(user_with_connectid_link: User, api_client: APIClien
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
     make_request(api_client, form_json, user_with_connectid_link)
     visit = UserVisit.objects.get(user=user_with_connectid_link)
-    assert visit.status == VisitValidationStatus.pending
+    assert visit.status == VisitValidationStatus.approved
     duplicate_json = deepcopy(form_json)
     duplicate_json["id"] = str(uuid4())
     make_request(api_client, duplicate_json, user_with_connectid_link)
@@ -250,6 +252,8 @@ def test_receiver_duplicate(user_with_connectid_link: User, api_client: APIClien
 def test_flagged_form(user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity):
     # The mock data for form fails with duration flag
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
     make_request(api_client, form_json, user_with_connectid_link)
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.status == VisitValidationStatus.pending
@@ -274,6 +278,8 @@ def test_auto_approve_flagged_visits(user_with_connectid_link: User, api_client:
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
     opportunity.auto_approve_visits = True
     opportunity.save()
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
     make_request(api_client, form_json, user_with_connectid_link)
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.flagged
@@ -287,6 +293,8 @@ def test_auto_approve_payments_flagged_visit(
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
     opportunity.auto_approve_payments = True
     opportunity.save()
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
     make_request(api_client, form_json, user_with_connectid_link)
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.flagged
@@ -500,6 +508,72 @@ def test_reciever_verification_flags_form_submission_end(
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.flagged
     assert ["form_submission_period", "Form was submitted after the end time"] in visit.flag_reason.get("flags", [])
+
+
+def test_reciever_verification_flags_duration(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
+
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert ["duration", "The form was completed too quickly."] in visit.flag_reason.get("flags", [])
+
+
+def test_reciever_verification_flags_check_attachments(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=0, check_attachments=True)
+
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert ["attachment_missing", "Form was submitted without attachements."] in visit.flag_reason.get("flags", [])
+
+
+def test_reciever_verification_flags_form_json_rule(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    form_json["form"]["value"] = "123"
+    form_json_rule = FormJsonValidationRulesFactory(
+        opportunity=opportunity,
+        question_path="$.form.value",
+        question_value="123",
+    )
+    form_json_rule.deliver_unit.add(deliver_unit)
+
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert not visit.flagged
+
+
+def test_reciever_verification_flags_form_json_rule_flagged(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    form_json["form"]["value"] = "456"
+    form_json_rule = FormJsonValidationRulesFactory(
+        opportunity=opportunity,
+        question_path="$.form.value",
+        question_value="123",
+    )
+    form_json_rule.deliver_unit.add(deliver_unit)
+
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert [
+        "form_value_not_found",
+        f"Form does not satisfy {form_json_rule.name} validation rule.",
+    ] in visit.flag_reason.get("flags", [])
 
 
 def _get_form_json(learn_app, module_id, form_block=None):
