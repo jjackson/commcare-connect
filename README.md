@@ -48,7 +48,7 @@ Some useful command are available via the `tasks.py` file:
 
 - Install loca.lt
   - `npm install -g localtunnel`
-- Run `loca.lt --port 8000 --subdomain [my-unique-subdomain]` and copy the generated URL
+- Run `lt --port 8000 --subdomain [my-unique-subdomain]` and copy the generated URL
 - Update your `.env` file with the host:
 
       DJANGO_ALLOWED_HOSTS=[my-unique-subdomain].loca.lt
