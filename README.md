@@ -66,6 +66,7 @@ Some useful command are available via the `tasks.py` file:
 
 **Test the OAuth2 flow**
 
+- Set `COMMCARE_HQ_URL=https://staging.commcarehq.org` in your `.env` file and restart the server.
 - Navigate to http://[my-unique-subdomain].loca.lt/accounts/login/
 - Click the "Log in with CommCare HQ" button
 - You should be redirected to CommCare HQ to log in
