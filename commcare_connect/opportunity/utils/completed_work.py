@@ -1,4 +1,4 @@
-from commcare_connect.opportunity.models import CompletedWorkStatus
+from commcare_connect.opportunity.models import CompletedWorkStatus, VisitReviewStatus, VisitValidationStatus
 
 
 def update_status(completed_works, opportunity_access, compute_payment=True):
@@ -12,15 +12,15 @@ def update_status(completed_works, opportunity_access, compute_payment=True):
 
         if opportunity_access.opportunity.auto_approve_payments:
             visits = completed_work.uservisit_set.values_list("status", "reason", "review_status")
-            if any(status == "rejected" for status, *_ in visits):
+            if any(status == VisitValidationStatus.rejected for status, *_ in visits):
                 completed_work.status = CompletedWorkStatus.rejected
                 completed_work.reason = "\n".join(reason for _, reason, _ in visits if reason)
-            elif all(status == "approved" for status, *_ in visits):
+            elif all(status == VisitValidationStatus.approved for status, *_ in visits):
                 completed_work.status = CompletedWorkStatus.approved
 
             if (
                 opportunity_access.opportunity.managed
-                and not all(review_status == "agree" for *_, review_status in visits)
+                and not all(review_status == VisitReviewStatus.agree for *_, review_status in visits)
                 and completed_work.status == CompletedWorkStatus.approved
             ):
                 completed_work.status = CompletedWorkStatus.pending
