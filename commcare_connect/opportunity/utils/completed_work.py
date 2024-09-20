@@ -11,11 +11,11 @@ def update_status(completed_works, opportunity_access, compute_payment=True):
             continue
 
         if opportunity_access.opportunity.auto_approve_payments:
-            visits = completed_work.uservisit_set.values_list("status", "reason")
-            if any(status == "rejected" for status, _ in visits):
+            visits = completed_work.uservisit_set.values_list("status", "reason", "review_status")
+            if any(status == "rejected" for status, *_ in visits):
                 completed_work.status = CompletedWorkStatus.rejected
-                completed_work.reason = "\n".join(reason for _, reason in visits if reason)
-            elif all(status == "approved" for status, _ in visits):
+                completed_work.reason = "\n".join(reason for _, reason, _ in visits if reason)
+            elif all(status == "approved" for status, *_ in visits):
                 completed_work.status = CompletedWorkStatus.approved
 
             if (
