@@ -262,3 +262,25 @@ class FunnelPerformanceTable(tables.Table):
         total_seconds = record.average_time_to_convert.total_seconds()
         hours = total_seconds / 3600
         return f"{round(hours, 2)}hr"
+
+
+class DeliveryPerformanceTable(tables.Table):
+    organization = tables.Column()
+    start_date = tables.DateColumn()
+    workers_invited = tables.Column(verbose_name=_("Workers Starting Delivery"))
+    active_workers = tables.Column(verbose_name=_("Active Workers"))
+    delivery_per_day_per_worker = tables.Column(verbose_name=_("Delivery Per Day Per Worker"))
+    records_flagged = tables.Column(verbose_name=_("Records flagged"))
+
+    class Meta:
+        model = ManagedOpportunity
+        empty_text = "No data available yet."
+        fields = (
+            "organization",
+            "start_date",
+            "workers_starting_delivery",
+            "active_workers",
+            "delivery_per_day_per_worker",
+            "records_flagged",
+        )
+        orderable = False
