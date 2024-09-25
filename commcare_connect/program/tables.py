@@ -267,10 +267,10 @@ class FunnelPerformanceTable(tables.Table):
 class DeliveryPerformanceTable(tables.Table):
     organization = tables.Column()
     start_date = tables.DateColumn()
-    workers_invited = tables.Column(verbose_name=_("Workers Starting Delivery"))
+    total_workers_starting_delivery = tables.Column(verbose_name=_("Workers Starting Delivery"))
     active_workers = tables.Column(verbose_name=_("Active Workers"))
     delivery_per_day_per_worker = tables.Column(verbose_name=_("Delivery Per Day Per Worker"))
-    records_flagged = tables.Column(verbose_name=_("Records flagged"))
+    records_flagged_percentage = tables.Column(verbose_name=_("Records flagged"))
 
     class Meta:
         model = ManagedOpportunity
@@ -278,9 +278,9 @@ class DeliveryPerformanceTable(tables.Table):
         fields = (
             "organization",
             "start_date",
-            "workers_starting_delivery",
+            "total_workers_starting_delivery",
             "active_workers",
             "delivery_per_day_per_worker",
-            "records_flagged",
+            "records_flagged_percentage",
         )
         orderable = False
