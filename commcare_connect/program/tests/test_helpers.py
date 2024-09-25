@@ -3,9 +3,14 @@ from datetime import timedelta
 from django_celery_beat.utils import now
 
 from commcare_connect.opportunity.models import VisitValidationStatus
-from commcare_connect.opportunity.tests.factories import AssessmentFactory, OpportunityAccessFactory, UserVisitFactory
+from commcare_connect.opportunity.tests.factories import (
+    AssessmentFactory,
+    CompletedWorkFactory,
+    OpportunityAccessFactory,
+    UserVisitFactory,
+)
 from commcare_connect.organization.models import Organization
-from commcare_connect.program.helpers import get_annotated_managed_opportunity
+from commcare_connect.program.helpers import get_annotated_managed_opportunity, get_delivery_performance_report
 from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
 from commcare_connect.users.tests.factories import OrganizationFactory, UserFactory
 
@@ -48,11 +53,13 @@ def test_delivery_performance(program_manager_org: Organization):
             opportunity=opp,
             status=visit_status,
             opportunity_access=access,
-            visit_date=now() + timedelta(1),
+            visit_date=now() + timedelta(3),
         )
+        CompletedWorkFactory.create(opportunity_access=access)
 
-    opps = get_annotated_managed_opportunity(program)
-    for opp in opps:
-        assert nm_org.slug == opp.organization.slug
-        assert opp.workers_passing_assessment == 5
-        assert opp.workers_starting_delivery == 3
+    opps = get_delivery_performance_report(program, None, None)
+
+    assert opps[0].total_workers_starting_delivery == 3, "Total workers starting delivery doesn't match"
+    assert opps[0].active_workers == 3, "Active workers count doesn't match"
+    assert opps[0].delivery_per_day_per_worker == 1.0, "Deliveries per day doesn't match"
+    assert opps[0].records_flagged_percentage == 1.0, "Records flagged percentage doesn't match"

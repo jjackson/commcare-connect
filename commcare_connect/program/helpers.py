@@ -1,4 +1,18 @@
-from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, OuterRef, Q, Subquery
+from django.db.models import (
+    Avg,
+    Case,
+    Count,
+    DurationField,
+    ExpressionWrapper,
+    F,
+    FloatField,
+    OuterRef,
+    Q,
+    Subquery,
+    Value,
+    When,
+)
+from django.db.models.functions import Round
 
 from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 from commcare_connect.program.models import ManagedOpportunity, Program
@@ -86,10 +100,18 @@ def get_delivery_performance_report(program: Program, start_date, end_date):
                 filter=active_workers_filter,
                 distinct=True,
             ),
-            total_payment_units=Count("opportunityaccess__completedwork", distinct=True),
-            total_payement_since_start_date=Count("opportunityaccess__completedwork", distinct=True),
-            deliveries_per_day=F("total_payement_since_start_date") / F("active_workers"),
-            records_flagged_percentage=F("total_payment_units") / F("total_payement_since_start_date"),
+            total_payment_units=Count("opportunityaccess__completedwork"),
+            total_payement_since_start_date=Count("opportunityaccess__completedwork", filter=date_filter),
+            delivery_per_day_per_worker=Case(
+                When(active_workers=0, then=Value(0)),
+                default=Round(F("total_payement_since_start_date") / F("active_workers"), 2),
+                output_field=FloatField(),
+            ),
+            records_flagged_percentage=Case(
+                When(active_workers=0, then=Value(0)),
+                default=Round(F("total_payment_units") / F("total_payement_since_start_date")),
+                output_field=FloatField(),
+            ),
         )
     )
 
