@@ -62,4 +62,4 @@ def test_delivery_performance(program_manager_org: Organization):
     assert opps[0].total_workers_starting_delivery == 3, "Total workers starting delivery doesn't match"
     assert opps[0].active_workers == 3, "Active workers count doesn't match"
     assert opps[0].delivery_per_day_per_worker == 1.0, "Deliveries per day doesn't match"
-    assert opps[0].records_flagged_percentage == 1.0, "Records flagged percentage doesn't match"
+    assert opps[0].records_flagged_percentage == 100.0, "Records flagged percentage doesn't match"

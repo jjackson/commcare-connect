@@ -109,7 +109,7 @@ def get_delivery_performance_report(program: Program, start_date, end_date):
             ),
             records_flagged_percentage=Case(
                 When(active_workers=0, then=Value(0)),
-                default=Round(F("total_payment_units") / F("total_payement_since_start_date")),
+                default=Round(F("total_payment_units") / F("total_payement_since_start_date")) * 100,
                 output_field=FloatField(),
             ),
         )
