@@ -8,7 +8,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
 
-from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, Payment, UserVisit
+from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, Payment
 
 from .tables import AdminReportTable
 
@@ -123,23 +123,10 @@ def delivery_stats_report(request):
 @user_passes_test(lambda user: user.is_superuser)
 @require_GET
 def program_dashboard_report(request):
-    user_visits = UserVisit.objects.filter(location__isnull=False)
-    user_visit_data = []
-    for user_visit in user_visits:
-        lat, lng, elevation, precision = list(map(float, user_visit.location.split(" ")))
-        user_visit_data.append(
-            dict(
-                entity_name=user_visit.entity_name,
-                visit_date=user_visit.visit_date.date(),
-                lat=lat,
-                lng=lng,
-                precision=precision,
-            )
-        )
     return render(
         request,
         "reports/dashboard.html",
-        context={"user_visits": user_visit_data, "mapbox_token": settings.MAPBOX_TOKEN},
+        context={"mapbox_token": settings.MAPBOX_TOKEN},
     )
 
 
