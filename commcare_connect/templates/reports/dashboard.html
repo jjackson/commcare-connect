@@ -119,9 +119,10 @@
         // description HTML from its properties.
         map.on('click', 'unclustered-point', (e) => {
             const coordinates = e.features[0].geometry.coordinates.slice();
-            const mag = e.features[0].properties.mag;
-            const tsunami =
-                e.features[0].properties.tsunami === 1 ? 'yes' : 'no';
+            const status = e.features[0].properties.status;
+            const rawDate = e.features[0].properties.visit_date;
+            const visitDate = new Date(rawDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
 
             // Ensure that if the map is zoomed out such that
             // multiple copies of the feature are visible, the
@@ -135,7 +136,7 @@
             new mapboxgl.Popup()
                 .setLngLat(coordinates)
                 .setHTML(
-                    `magnitude: ${mag}<br>Was there a tsunami?: ${tsunami}`
+                    `Visit Date: ${visitDate}<br>Status: ${status}`
                 )
                 .addTo(map);
         });
