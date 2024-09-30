@@ -26,7 +26,7 @@ class Command(BaseCommand):
         num_visits = options["num_visits"]
         self.stdout.write(f"Generating {num_visits} test visits...")
 
-        # Create test userso
+        # Create test users
         users = [MobileUserFactory() for _ in range(10)]
 
         # Create opportunities and opportunity accesses
@@ -36,10 +36,11 @@ class Command(BaseCommand):
                 OpportunityAccessFactory(user=user, opportunity=opportunity)
 
         # Generate completed work and user visits
-        start_date = datetime(2023, 1, 1, tzinfo=timezone.utc)
+        start_date = datetime(2024, 1, 1, tzinfo=timezone.utc)
         end_date = datetime.now(timezone.utc)
 
-        for _ in range(num_visits):
+        for count in range(num_visits):
+            print(f"{count + 1}/{num_visits}...")
             user = random.choice(users)
             opportunity_access = random.choice(user.opportunityaccess_set.all())
             completed_work = CompletedWorkFactory(
