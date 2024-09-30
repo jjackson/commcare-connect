@@ -168,7 +168,10 @@ def visit_map_data(request):
 
 def _results_to_geojson(results):
     geojson = {"type": "FeatureCollection", "features": []}
-
+    status_to_color = {
+        "approved": "#00FF00",
+        "rejected": "#FF0000",
+    }
     for result in results:
         feature = {
             "type": "Feature",
@@ -180,6 +183,8 @@ def _results_to_geojson(results):
                 key: value for key, value in result.items() if key not in ["gps_location_lat", "gps_location_long"]
             },
         }
+        color = status_to_color.get(result["status"], "#FFFF00")
+        feature["properties"]["color"] = color
         geojson["features"].append(feature)
 
     return geojson
