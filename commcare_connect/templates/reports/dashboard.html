@@ -37,6 +37,9 @@
             clusterRadius: 50 // Radius of each cluster when clustering points (defaults to 50)
         });
 
+        const clusterStep1 = 50;
+        const clusterStep2 = 100;
+
         map.addLayer({
             id: 'clusters',
             type: 'circle',
@@ -45,25 +48,25 @@
             paint: {
                 // Use step expressions (https://docs.mapbox.com/style-spec/reference/expressions/#step)
                 // with three steps to implement three types of circles:
-                //   * Blue, 20px circles when point count is less than 100
-                //   * Yellow, 30px circles when point count is between 100 and 750
-                //   * Green, 40px circles when point count is greater than or equal to 750
+                //   * Blue, 20px circles when point count is less than clusterStep1
+                //   * Yellow, 30px circles when point count is between clusterStep1 and clusterStep2
+                //   * Green, 40px circles when point count is greater than or equal to clusterStep2
                 'circle-color': [
                     'step',
                     ['get', 'point_count'],
                     '#51bbd6',
-                    50,
+                    clusterStep1,
                     '#f1f075',
-                    100,
+                    clusterStep2,
                     '#00FF00'
                 ],
                 'circle-radius': [
                     'step',
                     ['get', 'point_count'],
                     20,
-                    100,
+                    clusterStep1,
                     30,
-                    750,
+                    clusterStep2,
                     40
                 ]
             }
@@ -149,23 +152,5 @@
         });
     });
   });
-
-    //   const map = new mapboxgl.Map({
-    //     container: 'user-visit-map',
-    //     style: 'mapbox://styles/mapbox/satellite-streets-v12',
-    //     center: [0, 0 ],
-    //     zoom: 14,
-    //   });
-    //   const userVisits = JSON.parse(document.getElementById('userVisits').textContent);
-    //   userVisits.forEach(loc => {
-    //     new mapboxgl.Marker()
-    //       .setLngLat([loc.lng, loc.lat])
-    //       .setPopup(new mapboxgl.Popup().setHTML(`${loc.entity_name}<br />${loc.visit_date}`))
-    //       .addTo(map)
-    //   })
-    //   addAccuracyCircles(map, userVisits);
-    //   const userCatchments = JSON.parse(document.getElementById('userCatchments').textContent);
-    //   addCatchmentAreas(map, userCatchments)
-    // });
   </script>
 {% endblock %}
