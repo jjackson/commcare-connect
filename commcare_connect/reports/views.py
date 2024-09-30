@@ -1,11 +1,14 @@
 from datetime import date
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.db import connection
 from django.db.models import Max, Sum
+from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
 
-from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, Payment
+from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, Payment, UserVisit
 
 from .tables import AdminReportTable
 
@@ -114,3 +117,69 @@ def delivery_stats_report(request):
         table_data.append(data)
     table = AdminReportTable(table_data)
     return render(request, "reports/admin.html", context={"table": table})
+
+
+@login_required
+@user_passes_test(lambda user: user.is_superuser)
+@require_GET
+def program_dashboard_report(request):
+    user_visits = UserVisit.objects.filter(location__isnull=False)
+    user_visit_data = []
+    for user_visit in user_visits:
+        lat, lng, elevation, precision = list(map(float, user_visit.location.split(" ")))
+        user_visit_data.append(
+            dict(
+                entity_name=user_visit.entity_name,
+                visit_date=user_visit.visit_date.date(),
+                lat=lat,
+                lng=lng,
+                precision=precision,
+            )
+        )
+    return render(
+        request,
+        "reports/dashboard.html",
+        context={"user_visits": user_visit_data, "mapbox_token": settings.MAPBOX_TOKEN},
+    )
+
+
+@login_required
+@user_passes_test(lambda user: user.is_superuser)
+@require_GET
+def visit_map_data(request):
+    with connection.cursor() as cursor:
+        # Read the SQL file
+        with open("commcare_connect/reports/sql/visit_map.sql") as sql_file:
+            sql_query = sql_file.read()
+
+        # Execute the query
+        cursor.execute(sql_query)
+
+        # Fetch all results
+        columns = [col[0] for col in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    # Convert to GeoJSON
+    geojson = _results_to_geojson(results)
+
+    # Return the GeoJSON as JSON response
+    return JsonResponse(geojson, safe=False)
+
+
+def _results_to_geojson(results):
+    geojson = {"type": "FeatureCollection", "features": []}
+
+    for result in results:
+        feature = {
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [float(result["gps_location_long"]), float(result["gps_location_lat"])],
+            },
+            "properties": {
+                key: value for key, value in result.items() if key not in ["gps_location_lat", "gps_location_long"]
+            },
+        }
+        geojson["features"].append(feature)
+
+    return geojson
