@@ -3,7 +3,6 @@ SELECT
 	ou.xform_id AS visit_id,
 	ou.visit_date,
 	ou.form_json -> 'metadata' -> 'username' AS username_connectid,
-	COALESCE(ou.form_json -> 'form' -> 'case' -> 'update' ->> 'visit_type', 'unknown') AS visit_type,
 	du.name AS deliver_unit_name,
     	-- New column: days_since_opp_start
 	DATE_PART('day', ou.visit_date::timestamp - opp.start_date::timestamp) AS days_since_opp_start,
@@ -15,12 +14,6 @@ SELECT
 	ou.form_json -> 'metadata' -> 'timeStart' AS timeStart,
 	ou.form_json -> 'metadata' -> 'timeEnd' AS timeEnd,
 	EXTRACT(EPOCH FROM ((ou.form_json -> 'metadata' ->> 'timeEnd')::timestamp - (ou.form_json -> 'metadata' ->> 'timeStart')::timestamp)) / 60 AS visit_duration,
-
-	CASE
-	WHEN NULLIF(ou.form_json -> 'form' -> 'case' -> 'update' ->> 'confirm_practice_case', '') IS NOT NULL
-	THEN 'yes'
-	ELSE NULL
-  END AS practice_case,
 	CASE
     	WHEN ou.form_json -> 'metadata' -> 'location' IS NOT NULL THEN
         	SPLIT_PART(ou.form_json -> 'metadata' ->> 'location', ' ', 1)
