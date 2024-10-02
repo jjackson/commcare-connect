@@ -25,6 +25,14 @@ FILTER_FOR_VALID_VISIT_DATE = ~Q(
 )
 
 
+def calculate_safe_percentage(numerator, denominator):
+    return Case(
+        When(**{denominator: 0}, then=Value(0)),  # Handle division by zero
+        default=Round(Cast(F(numerator), FloatField()) / Cast(F(denominator), FloatField()) * 100, 2),
+        output_field=FloatField(),
+    )
+
+
 def get_annotated_managed_opportunity(program: Program):
     earliest_visits = (
         UserVisit.objects.filter(
@@ -52,7 +60,7 @@ def get_annotated_managed_opportunity(program: Program):
                 filter=FILTER_FOR_VALID_VISIT_DATE,
                 distinct=True,
             ),
-            percentage_conversion=F("workers_starting_delivery") / F("workers_invited") * 100,
+            percentage_conversion=calculate_safe_percentage("workers_starting_delivery", "workers_invited"),
             average_time_to_convert=Avg(
                 ExpressionWrapper(
                     Subquery(earliest_visits) - F("opportunityaccess__invited_date"), output_field=DurationField()
@@ -112,15 +120,8 @@ def get_delivery_performance_report(program: Program, start_date, end_date):
                 default=Round(F("total_payment_since_start_date") / F("active_workers"), 2),
                 output_field=FloatField(),
             ),
-            records_flagged_percentage=Case(
-                When(total_payment_since_start_date=0, then=Value(0)),
-                default=Round(
-                    Cast(F("total_payment_units_with_flags"), FloatField())
-                    / Cast(F("total_payment_since_start_date"), FloatField())
-                    * 100,
-                    2,
-                ),
-                output_field=FloatField(),
+            records_flagged_percentage=calculate_safe_percentage(
+                "total_payment_units_with_flags", "total_payment_since_start_date"
             ),
         )
     )
