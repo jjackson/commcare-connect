@@ -12,7 +12,7 @@ from django.db.models import (
     Value,
     When,
 )
-from django.db.models.functions import Round
+from django.db.models.functions import Cast, Round
 
 from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 from commcare_connect.program.models import ManagedOpportunity, Program
@@ -79,7 +79,12 @@ def get_delivery_performance_report(program: Program, start_date, end_date):
     if end_date:
         date_filter &= Q(opportunityaccess__uservisit__visit_date__lte=end_date)
 
-    active_workers_filter = Q(FILTER_FOR_VALID_VISIT_DATE, date_filter)
+    flagged_visits_filter = Q(opportunityaccess__uservisit__flagged=True) & ~Q(
+        opportunityaccess__uservisit__status__in=[
+            VisitValidationStatus.rejected,
+            VisitValidationStatus.approved,
+        ]
+    )
 
     managed_opportunities = (
         ManagedOpportunity.objects.filter(program=program)
@@ -92,24 +97,29 @@ def get_delivery_performance_report(program: Program, start_date, end_date):
         .annotate(
             total_workers_starting_delivery=Count(
                 "opportunityaccess__uservisit__user",
-                filter=FILTER_FOR_VALID_VISIT_DATE,
                 distinct=True,
             ),
             active_workers=Count(
                 "opportunityaccess__uservisit__user",
-                filter=active_workers_filter,
+                filter=date_filter,
                 distinct=True,
             ),
             total_payment_units=Count("opportunityaccess__completedwork"),
-            total_payement_since_start_date=Count("opportunityaccess__completedwork", filter=date_filter),
+            total_payment_units_with_flags=Count("opportunityaccess__completedwork", filter=flagged_visits_filter),
+            total_payment_since_start_date=Count("opportunityaccess__completedwork", filter=date_filter),
             delivery_per_day_per_worker=Case(
                 When(active_workers=0, then=Value(0)),
-                default=Round(F("total_payement_since_start_date") / F("active_workers"), 2),
+                default=Round(F("total_payment_since_start_date") / F("active_workers"), 2),
                 output_field=FloatField(),
             ),
             records_flagged_percentage=Case(
-                When(active_workers=0, then=Value(0)),
-                default=Round(F("total_payment_units") / F("total_payement_since_start_date")) * 100,
+                When(total_payment_since_start_date=0, then=Value(0)),
+                default=Round(
+                    Cast(F("total_payment_units_with_flags"), FloatField())
+                    / Cast(F("total_payment_since_start_date"), FloatField())
+                    * 100,
+                    2,
+                ),
                 output_field=FloatField(),
             ),
         )
