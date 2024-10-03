@@ -434,6 +434,7 @@ class CompletedWork(models.Model):
     entity_name = models.CharField(max_length=255, null=True, blank=True)
     reason = models.CharField(max_length=300, null=True, blank=True)
     status_modified_date = models.DateTimeField(null=True)
+    payment_date = models.DateTimeField(null=True)
 
     def __init__(self, *args, **kwargs):
         self.status = CompletedWorkStatus.incomplete
