@@ -263,9 +263,23 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
             payment = Payment.objects.create(opportunity_access=access, amount=amount)
             seen_users.add(username)
             payment_ids.append(payment.pk)
+            update_work_payment_date(payment)
     missing_users = set(usernames) - seen_users
     send_payment_notification.delay(opportunity.id, payment_ids)
     return PaymentImportStatus(seen_users, missing_users)
+
+
+def update_work_payment_date(payment: Payment):
+    completed_works = CompletedWork.objects.filter(opportunity_access=payment.opportunity_access)
+    paid = payment.amount
+    works_to_update = []
+
+    for current_work in completed_works:
+        if paid > current_work.payment_accrued:
+            works_to_update.append(current_work.id)
+
+    if works_to_update:
+        CompletedWork.objects.filter(id__in=works_to_update).update(payment_date=payment.date_paid)
 
 
 def bulk_update_completed_work_status(opportunity: Opportunity, file: UploadedFile) -> CompletedWorkImportStatus:
