@@ -19,7 +19,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tasks import send_payment_notification
-from commcare_connect.opportunity.utils.completed_work import update_status
+from commcare_connect.opportunity.utils.completed_work import update_status, update_work_payment_date
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.itertools import batched
 
@@ -267,19 +267,6 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     missing_users = set(usernames) - seen_users
     send_payment_notification.delay(opportunity.id, payment_ids)
     return PaymentImportStatus(seen_users, missing_users)
-
-
-def update_work_payment_date(payment: Payment):
-    completed_works = CompletedWork.objects.filter(opportunity_access=payment.opportunity_access)
-    paid = payment.amount
-    works_to_update = []
-
-    for current_work in completed_works:
-        if paid > current_work.payment_accrued:
-            works_to_update.append(current_work.id)
-
-    if works_to_update:
-        CompletedWork.objects.filter(id__in=works_to_update).update(payment_date=payment.date_paid)
 
 
 def bulk_update_completed_work_status(opportunity: Opportunity, file: UploadedFile) -> CompletedWorkImportStatus:
