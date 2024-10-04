@@ -48,26 +48,35 @@ def update_work_payment_date(access: OpportunityAccess):
     payments = Payment.objects.filter(opportunity_access=access).order_by("date_paid")
     completed_works = CompletedWork.objects.filter(opportunity_access=access).order_by("status_modified_date")
 
-    paid = 0
-    works_to_update = []
-    completed_works_iter = iter(completed_works)
-
-    try:
-        current_work = next(completed_works_iter)
-    except StopIteration:
+    if not payments or not completed_works:
         return
 
-    for payment in payments:
-        paid += payment.amount
+    works_to_update = []
+    completed_works_iter = iter(completed_works)
+    current_work = next(completed_works_iter)
 
-        while paid > current_work.payment_accrued:
+    remaining_amount = 0
+
+    for payment in payments:
+        remaining_amount += payment.amount
+
+        while remaining_amount >= current_work.payment_accrued:
             current_work.payment_date = payment.date_paid
             works_to_update.append(current_work)
+            remaining_amount -= current_work.payment_accrued
 
             try:
                 current_work = next(completed_works_iter)
             except StopIteration:
                 break
+        else:
+            continue
+
+        # we've broken out of the inner while loop so all completed_works are processed.
+        break
+
+    for cw in works_to_update:
+        print("cw before saving", cw.payment_date)
 
     if works_to_update:
         CompletedWork.objects.bulk_update(works_to_update, ["payment_date"])
