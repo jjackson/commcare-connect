@@ -280,7 +280,7 @@ def _cache_key(currency_code, date=None):
     return [currency_code, date.toordinal() if date else None]
 
 
-@quickcache(vary_on=_cache_key, timeout=60 * 60)
+@quickcache(vary_on=_cache_key, timeout=12 * 60 * 60)
 def get_exchange_rate(currency_code, date=None):
     # date should be a date object or None for latest rate
 
