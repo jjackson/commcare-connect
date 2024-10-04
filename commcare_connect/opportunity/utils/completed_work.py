@@ -1,6 +1,7 @@
 from commcare_connect.opportunity.models import (
     CompletedWork,
     CompletedWorkStatus,
+    OpportunityAccess,
     Payment,
     VisitReviewStatus,
     VisitValidationStatus,
@@ -43,14 +44,30 @@ def update_status(completed_works, opportunity_access, compute_payment=True):
         opportunity_access.save()
 
 
-def update_work_payment_date(payment: Payment):
-    completed_works = CompletedWork.objects.filter(opportunity_access=payment.opportunity_access)
-    paid = payment.amount
-    works_to_update = []
+def update_work_payment_date(access: OpportunityAccess):
+    payments = Payment.objects.filter(opportunity_access=access).order_by("date_paid")
+    completed_works = CompletedWork.objects.filter(opportunity_access=access).order_by("status_modified_date")
 
-    for current_work in completed_works:
-        if paid > current_work.payment_accrued:
-            works_to_update.append(current_work.id)
+    paid = 0
+    works_to_update = []
+    completed_works_iter = iter(completed_works)
+
+    try:
+        current_work = next(completed_works_iter)
+    except StopIteration:
+        return
+
+    for payment in payments:
+        paid += payment.amount
+
+        while paid > current_work.payment_accrued:
+            current_work.payment_date = payment.date_paid
+            works_to_update.append(current_work)
+
+            try:
+                current_work = next(completed_works_iter)
+            except StopIteration:
+                break
 
     if works_to_update:
-        CompletedWork.objects.filter(id__in=works_to_update).update(payment_date=payment.date_paid)
+        CompletedWork.objects.bulk_update(works_to_update, ["payment_date"])
