@@ -75,8 +75,5 @@ def update_work_payment_date(access: OpportunityAccess):
         # we've broken out of the inner while loop so all completed_works are processed.
         break
 
-    for cw in works_to_update:
-        print("cw before saving", cw.payment_date)
-
     if works_to_update:
         CompletedWork.objects.bulk_update(works_to_update, ["payment_date"])
