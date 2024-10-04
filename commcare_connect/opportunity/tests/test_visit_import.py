@@ -29,11 +29,12 @@ from commcare_connect.opportunity.tests.factories import (
 )
 from commcare_connect.opportunity.visit_import import (
     ImportException,
+    VisitData,
     _bulk_update_catchments,
     _bulk_update_completed_work_status,
     _bulk_update_payments,
     _bulk_update_visit_status,
-    get_status_by_visit_id,
+    get_data_by_visit_id,
     update_payment_accrued,
 )
 from commcare_connect.users.models import User
@@ -249,12 +250,12 @@ def test_payment_accrued_asymmetric_optional_deliver_units(opportunity: Opportun
         (
             ["visit id", "status", "rejected reason"],
             [[123, "approved", ""], ["abc", "rejected", ""]],
-            {"123": VisitValidationStatus.approved.value, "abc": VisitValidationStatus.rejected.value},
+            {"123": VisitData(VisitValidationStatus.approved), "abc": VisitData(VisitValidationStatus.rejected)},
         ),
         (
             ["extra col", "visit id", "status", "rejected reason"],
             [["x", "1", "approved", ""], ["y", "2", "rejected", ""]],
-            {"1": VisitValidationStatus.approved.value, "2": VisitValidationStatus.rejected.value},
+            {"1": VisitData(VisitValidationStatus.approved), "2": VisitData(VisitValidationStatus.rejected)},
         ),
         (["a", "status"], [], ImportException("Missing required column(s): 'visit id'")),
         (["visit id", "a"], [], ImportException("Missing required column(s): 'status'")),
@@ -266,10 +267,10 @@ def test_get_status_by_visit_id(headers, rows, expected):
 
     if isinstance(expected, ImportException):
         with pytest.raises(ImportException, match=re.escape(expected.message)):
-            get_status_by_visit_id(dataset)
+            get_data_by_visit_id(dataset)
     else:
-        actual, _ = get_status_by_visit_id(dataset)
-        assert actual == expected
+        actual = get_data_by_visit_id(dataset)
+        assert dict(actual) == expected
 
 
 @pytest.mark.django_db

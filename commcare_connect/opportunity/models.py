@@ -88,6 +88,7 @@ class Opportunity(BaseModel):
     auto_approve_payments = models.BooleanField(default=True)
     is_test = models.BooleanField(default=True)
     delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
+    managed = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
@@ -385,10 +386,21 @@ class VisitValidationStatus(models.TextChoices):
     trial = "trial", gettext("Trial")
 
 
+class PaymentInvoice(models.Model):
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
+    amount = models.PositiveIntegerField()
+    date = models.DateField()
+    invoice_number = models.CharField(max_length=50)
+
+    class Meta:
+        unique_together = ("opportunity", "invoice_number")
+
+
 class Payment(models.Model):
     amount = models.PositiveIntegerField()
     amount_usd = models.DecimalField(max_digits=10, decimal_places=2, null=True)
     date_paid = models.DateTimeField(auto_now_add=True)
+    # This is used to indicate payments made to Opportunity Users
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.DO_NOTHING, null=True, blank=True)
     payment_unit = models.ForeignKey(
         PaymentUnit,
@@ -399,6 +411,9 @@ class Payment(models.Model):
     )
     confirmed = models.BooleanField(default=False)
     confirmation_date = models.DateTimeField(null=True)
+    # This is used to indicate Payments made to Network Manager organizations
+    organization = models.ForeignKey(Organization, on_delete=models.DO_NOTHING, null=True, blank=True)
+    invoice = models.OneToOneField(PaymentInvoice, on_delete=models.DO_NOTHING, null=True, blank=True)
 
 
 class CompletedWorkStatus(models.TextChoices):
@@ -504,6 +519,12 @@ class CompletedWork(models.Model):
         return visit.visit_date if visit else None
 
 
+class VisitReviewStatus(models.TextChoices):
+    pending = "pending", gettext("Pending Review")
+    agree = "agree", gettext("Agree")
+    disagree = "disagree", gettext("Disagree")
+
+
 class UserVisit(XFormBaseModel):
     opportunity = models.ForeignKey(
         Opportunity,
@@ -528,6 +549,11 @@ class UserVisit(XFormBaseModel):
     flag_reason = models.JSONField(null=True, blank=True)
     completed_work = models.ForeignKey(CompletedWork, on_delete=models.DO_NOTHING, null=True, blank=True)
     status_modified_date = models.DateTimeField(null=True)
+    review_status = models.CharField(
+        max_length=50, choices=VisitReviewStatus.choices, default=VisitReviewStatus.pending
+    )
+    review_created_on = models.DateTimeField(blank=True, null=True)
+    justification = models.CharField(max_length=300, null=True, blank=True)
 
     def __init__(self, *args, **kwargs):
         self.status = VisitValidationStatus.pending
