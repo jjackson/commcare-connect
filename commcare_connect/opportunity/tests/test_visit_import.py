@@ -464,6 +464,71 @@ def test_update_work_payment_date_fully(opportunity):
     ).count() == get_assignable_completed_work_count(access)
 
 
+@pytest.mark.django_db
+def test_update_work_payment_date_with_precise_dates(opportunity):
+    user = MobileUserFactory()
+    access = OpportunityAccessFactory(opportunity=opportunity, user=user, accepted=True)
+
+    payment_units = [
+        PaymentUnitFactory(opportunity=opportunity, amount=5),
+        PaymentUnitFactory(opportunity=opportunity, amount=5),
+    ]
+
+    for payment_unit in payment_units:
+        DeliverUnitFactory.create_batch(2, payment_unit=payment_unit, app=opportunity.deliver_app, optional=False)
+
+    completed_work_1 = CompletedWorkFactory(
+        opportunity_access=access,
+        payment_unit=payment_units[0],
+        status=CompletedWorkStatus.approved.value,
+        payment_date=None,
+    )
+
+    completed_work_2 = CompletedWorkFactory(
+        opportunity_access=access,
+        payment_unit=payment_units[1],
+        status=CompletedWorkStatus.approved.value,
+        payment_date=None,
+    )
+
+    create_user_visits_for_completed_work(opportunity, user, access, payment_units[0], completed_work_1)
+    create_user_visits_for_completed_work(opportunity, user, access, payment_units[1], completed_work_2)
+
+    now = timezone.now()
+
+    payment_1 = PaymentFactory(opportunity_access=access, amount=7)
+    payment_2 = PaymentFactory(opportunity_access=access, amount=3)
+
+    payment_1.date_paid = now - timedelta(3)
+    payment_2.date_paid = now - timedelta(1)
+    payment_1.save()
+    payment_2.save()
+
+    payment_1.refresh_from_db()
+    payment_2.refresh_from_db()
+
+    update_work_payment_date(access)
+
+    completed_work_1.refresh_from_db()
+    completed_work_2.refresh_from_db()
+
+    assert completed_work_1.payment_date == payment_1.date_paid
+
+    assert completed_work_2.payment_date == payment_2.date_paid
+
+
+def create_user_visits_for_completed_work(opportunity, user, access, payment_unit, completed_work):
+    for deliver_unit in payment_unit.deliver_units.all():
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=user,
+            deliver_unit=deliver_unit,
+            status=VisitValidationStatus.approved.value,
+            opportunity_access=access,
+            completed_work=completed_work,
+        )
+
+
 def get_assignable_completed_work_count(access: OpportunityAccess) -> int:
     total_available_amount = sum(payment.amount for payment in Payment.objects.filter(opportunity_access=access))
     total_assigned_count = 0
