@@ -4,7 +4,7 @@ from django.db import migrations, models
 from django.db.models.functions import TruncDate
 from commcare_connect.opportunity.visit_import import get_exchange_rate
 
-def populate_amount_usd():
+def populate_amount_usd(apps, schema_editor):
     Payment = apps.get_model("opportunity.Payment")
     payments = (
         Payment.objects
@@ -33,7 +33,7 @@ def populate_amount_usd():
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0054_formjsonvalidationrules_deliverunitflagrules"),
+        ("opportunity", "0058_paymentinvoice_payment_invoice"),
     ]
 
     operations = [
