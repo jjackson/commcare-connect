@@ -68,37 +68,29 @@ def _get_table_data_for_quarter(quarter):
             service_count += v.approved_count
             last_pk = v.id
 
-    approved_payment_data = (
+    approved_payment_amount = (
         Payment.objects.filter(
             opportunity_access__opportunity__is_test=False,
             confirmed=True,
             date_paid__gte=quarter_start,
             date_paid__lt=quarter_end,
-        )
-        .values("opportunity_access__opportunity__currency")
-        .annotate(Sum("amount_usd"))
-    )
+        ).aggregate(Sum("amount_usd"))
+    )["amount_usd__sum"]
 
-    total_payment_data = (
+    total_payment_amount = (
         Payment.objects.filter(
             opportunity_access__opportunity__is_test=False,
             date_paid__gte=quarter_start,
             date_paid__lt=quarter_end,
-        )
-        .values("opportunity_access__opportunity__currency")
-        .annotate(Sum("amount_usd"))
-    )
-
-    approved_payment_strings = [f"{p['amount_usd__sum']} USD" for p in approved_payment_data]
-
-    total_payment_strings = [f"{p['amount_usd__sum']} USD" for p in total_payment_data]
+        ).aggregate(Sum("amount_usd"))
+    )["amount_usd__sum"]
 
     return {
         "quarter": f"{quarter[0]} Q{quarter[1]}",
         "users": len(user_set),
         "services": service_count,
-        "approved_payments": approved_payment_strings,
-        "total_payments": total_payment_strings,
+        "approved_payments": approved_payment_amount,
+        "total_payments": total_payment_amount,
         "beneficiaries": len(beneficiary_set),
     }
 
