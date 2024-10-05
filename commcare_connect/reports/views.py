@@ -15,6 +15,7 @@ from django.utils.functional import cached_property
 from django.views.decorators.http import require_GET
 from django_filters.views import FilterView
 
+from commcare_connect.cache import quickcache
 from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, DeliveryType, Payment
 
 from .tables import AdminReportTable
@@ -43,6 +44,7 @@ def _get_quarters_since_start():
     return quarters
 
 
+@quickcache(["quarter", "delivery_type", "group_by_delivery_type"], timeout=12 * 60 * 60)
 def _get_table_data_for_quarter(quarter, delivery_type, group_by_delivery_type=False):
     if delivery_type:
         delivery_type_filter = Q(opportunity_access__opportunity__delivery_type__slug=delivery_type)
