@@ -185,6 +185,11 @@ class DeliveryReportFilters(django_filters.FilterSet):
     quarter = django_filters.ChoiceFilter(
         choices=[(1, "Q1"), (2, "Q2"), (3, "Q3"), (4, "Q4")], label="Quarter", method="filter_by_ignore"
     )
+    by_delivery_type = django_filters.BooleanFilter(
+        widget=forms.CheckboxInput(),
+        label='Break up by delivery type',
+        method='filter_by_ignore'
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -202,7 +207,7 @@ class DeliveryReportFilters(django_filters.FilterSet):
 
     class Meta:
         model = None
-        fields = ["delivery_type", "year", "quarter"]
+        fields = ["delivery_type", "year", "quarter", "by_delivery_type"]
         unknown_field_behavior = django_filters.UnknownFieldBehavior.IGNORE
 
 
@@ -255,7 +260,7 @@ class DeliveryStatsReportView(tables.SingleTableMixin, SuperUserRequiredMixin, N
             quarters = _get_quarters_since_start()
         elif year:
             if quarter:
-                quarters = [(year, quarter)]
+                quarters = [(year, int(quarter))]
             else:
                 quarters = [(year, q) for q in range(1, 5)]
 

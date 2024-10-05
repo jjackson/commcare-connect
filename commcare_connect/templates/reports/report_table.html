@@ -12,6 +12,7 @@
           hx-swap="outerHTML"
           hx-trigger="change"
           hx-push-url="true"
+          hx-params="not csrfmiddlewaretoken"
           class="form-inline">
         {% crispy filter.form %}
     </form>
