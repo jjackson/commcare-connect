@@ -112,7 +112,6 @@ def _get_table_data_for_quarter(quarter, delivery_type, group_by_delivery_type=F
         total_payment_data = payment_query.values("opportunity_access__opportunity__delivery_type__name").annotate(
             total_sum=Sum("amount_usd")
         )
-
         approved_payment_dict = {
             item["opportunity_access__opportunity__delivery_type__name"]: item["approved_sum"]
             for item in approved_payment_data
