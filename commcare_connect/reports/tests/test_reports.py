@@ -47,9 +47,9 @@ def test_delivery_stats(opportunity: Opportunity):
 
     # delivery_type filter not applied
     all_data = _get_table_data_for_quarter((datetime.datetime.utcnow().year, quarter), None)
-    assert all_data["users"] == 5
-    assert all_data["services"] == 10
-    assert all_data["beneficiaries"] == 10
+    assert all_data[0]["users"] == 5
+    assert all_data[0]["services"] == 10
+    assert all_data[0]["beneficiaries"] == 10
 
     # test delivery_type filter
     filtered_data = _get_table_data_for_quarter(
@@ -59,6 +59,6 @@ def test_delivery_stats(opportunity: Opportunity):
 
     # unknown delivery-type should have no data
     unknown_delivery_type_data = _get_table_data_for_quarter((datetime.datetime.utcnow().year, quarter), "unknown")
-    assert unknown_delivery_type_data["users"] == 0
-    assert unknown_delivery_type_data["services"] == 0
-    assert unknown_delivery_type_data["beneficiaries"] == 0
+    assert unknown_delivery_type_data[0]["users"] == 0
+    assert unknown_delivery_type_data[0]["services"] == 0
+    assert unknown_delivery_type_data[0]["beneficiaries"] == 0
