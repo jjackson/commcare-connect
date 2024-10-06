@@ -1,14 +1,22 @@
-from datetime import date
+from datetime import date, datetime
 
+import django_filters
+import django_tables2 as tables
+from django import forms
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db import connection
-from django.db.models import Max, Sum
+from django.db.models import Max, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.urls import reverse
+from django.utils.functional import cached_property
 from django.views.decorators.http import require_GET
+from django_filters.views import FilterView
 
-from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, Payment
+from commcare_connect.cache import quickcache
+from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, DeliveryType, Payment
 
 from .tables import AdminReportTable
 
@@ -36,76 +44,111 @@ def _get_quarters_since_start():
     return quarters
 
 
-def _get_table_data_for_quarter(quarter):
+@quickcache(["quarter", "delivery_type", "group_by_delivery_type"], timeout=12 * 60 * 60)
+def _get_table_data_for_quarter(quarter, delivery_type, group_by_delivery_type=False):
+    if delivery_type:
+        delivery_type_filter = Q(opportunity_access__opportunity__delivery_type__slug=delivery_type)
+    else:
+        delivery_type_filter = Q()
     quarter_start = date(quarter[0], (quarter[1] - 1) * 3 + 1, 1)
     next_quarter = _increment(quarter)
     quarter_end = date(next_quarter[0], (next_quarter[1] - 1) * 3 + 1, 1)
+    data = []
 
-    user_set = set()
-    beneficiary_set = set()
-    service_count = 0
+    if group_by_delivery_type:
+        from collections import defaultdict
+
+        user_set = defaultdict(set)
+        beneficiary_set = defaultdict(set)
+        service_count = defaultdict(int)
+    else:
+        user_set = set()
+        beneficiary_set = set()
+        service_count = 0
+
     last_pk = 0
     more = True
-
     while more:
         visit_data = (
             CompletedWork.objects.annotate(work_date=Max("uservisit__visit_date"))
             .filter(
+                delivery_type_filter,
                 opportunity_access__opportunity__is_test=False,
                 status=CompletedWorkStatus.approved,
                 work_date__gte=quarter_start,
                 work_date__lt=quarter_end,
                 id__gt=last_pk,
             )
-            .select_related("opportunity_access")
+            .select_related("opportunity_access__opportunity__delivery_type")
         ).order_by("id")[:100]
-
         if len(visit_data) < 100:
             more = False
         for v in visit_data:
-            user_set.add(v.opportunity_access.user_id)
-            beneficiary_set.add(v.entity_id)
-            service_count += v.approved_count
+            delivery_type_name = v.opportunity_access.opportunity.delivery_type.name
+            if group_by_delivery_type:
+                user_set[delivery_type_name].add(v.opportunity_access.user_id)
+                beneficiary_set[delivery_type_name].add(v.entity_id)
+                service_count[delivery_type_name] += v.approved_count
+            else:
+                user_set.add(v.opportunity_access.user_id)
+                beneficiary_set.add(v.entity_id)
+                service_count += v.approved_count
+
             last_pk = v.id
 
-    approved_payment_amount = (
-        Payment.objects.filter(
-            opportunity_access__opportunity__is_test=False,
-            confirmed=True,
-            date_paid__gte=quarter_start,
-            date_paid__lt=quarter_end,
-        ).aggregate(Sum("amount_usd"))
-    )["amount_usd__sum"]
+    payment_query = Payment.objects.filter(
+        delivery_type_filter,
+        opportunity_access__opportunity__is_test=False,
+        date_paid__gte=quarter_start,
+        date_paid__lt=quarter_end,
+    )
 
-    total_payment_amount = (
-        Payment.objects.filter(
-            opportunity_access__opportunity__is_test=False,
-            date_paid__gte=quarter_start,
-            date_paid__lt=quarter_end,
-        ).aggregate(Sum("amount_usd"))
-    )["amount_usd__sum"]
-
-    return {
-        "quarter": f"{quarter[0]} Q{quarter[1]}",
-        "users": len(user_set),
-        "services": service_count,
-        "approved_payments": approved_payment_amount,
-        "total_payments": total_payment_amount,
-        "beneficiaries": len(beneficiary_set),
-    }
-
-
-@login_required
-@user_passes_test(lambda user: user.is_superuser)
-@require_GET
-def delivery_stats_report(request):
-    table_data = []
-    quarters = _get_quarters_since_start()
-    for q in quarters:
-        data = _get_table_data_for_quarter(q)
-        table_data.append(data)
-    table = AdminReportTable(table_data)
-    return render(request, "reports/admin.html", context={"table": table})
+    if group_by_delivery_type:
+        approved_payment_data = (
+            payment_query.filter(confirmed=True)
+            .values("opportunity_access__opportunity__delivery_type__name")
+            .annotate(approved_sum=Sum("amount_usd"))
+        )
+        total_payment_data = payment_query.values("opportunity_access__opportunity__delivery_type__name").annotate(
+            total_sum=Sum("amount_usd")
+        )
+        approved_payment_dict = {
+            item["opportunity_access__opportunity__delivery_type__name"]: item["approved_sum"]
+            for item in approved_payment_data
+        }
+        total_payment_dict = {
+            item["opportunity_access__opportunity__delivery_type__name"]: item["total_sum"]
+            for item in total_payment_data
+        }
+        for delivery_type_name in user_set.keys():
+            data.append(
+                {
+                    "delivery_type": delivery_type_name,
+                    "quarter": quarter,
+                    "users": len(user_set[delivery_type_name]),
+                    "services": service_count[delivery_type_name],
+                    "approved_payments": approved_payment_dict.get(delivery_type_name, 0),
+                    "total_payments": total_payment_dict.get(delivery_type_name, 0),
+                    "beneficiaries": len(beneficiary_set[delivery_type_name]),
+                }
+            )
+    else:
+        approved_payment_amount = (
+            payment_query.filter(confirmed=True).aggregate(Sum("amount_usd"))["amount_usd__sum"] or 0
+        )
+        total_payment_amount = payment_query.aggregate(Sum("amount_usd"))["amount_usd__sum"] or 0
+        data.append(
+            {
+                "delivery_type": "All",
+                "quarter": quarter,
+                "users": len(user_set),
+                "services": service_count,
+                "approved_payments": approved_payment_amount,
+                "total_payments": total_payment_amount,
+                "beneficiaries": len(beneficiary_set),
+            }
+        )
+    return data
 
 
 @login_required
@@ -164,3 +207,104 @@ def _results_to_geojson(results):
         geojson["features"].append(feature)
 
     return geojson
+
+
+class SuperUserRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
+    def test_func(self):
+        return self.request.user.is_superuser
+
+
+class DeliveryReportFilters(django_filters.FilterSet):
+    delivery_type = django_filters.ChoiceFilter(method="filter_by_ignore")
+    year = django_filters.ChoiceFilter(method="filter_by_ignore")
+    quarter = django_filters.ChoiceFilter(
+        choices=[(1, "Q1"), (2, "Q2"), (3, "Q3"), (4, "Q4")], label="Quarter", method="filter_by_ignore"
+    )
+    by_delivery_type = django_filters.BooleanFilter(
+        widget=forms.CheckboxInput(), label="Break up by delivery type", method="filter_by_ignore"
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        current_year = datetime.now().year
+        year_choices = [(year, str(year)) for year in range(2023, current_year + 1)]
+        self.filters["year"] = django_filters.ChoiceFilter(
+            choices=year_choices, label="Year", method="filter_by_ignore"
+        )
+
+        delivery_types = DeliveryType.objects.values_list("slug", "name")
+        self.filters["delivery_type"] = django_filters.ChoiceFilter(choices=delivery_types, label="Delivery Type")
+
+    def filter_by_ignore(self, queryset, name, value):
+        return queryset
+
+    class Meta:
+        model = None
+        fields = ["delivery_type", "year", "quarter", "by_delivery_type"]
+        unknown_field_behavior = django_filters.UnknownFieldBehavior.IGNORE
+
+
+class NonModelFilterView(FilterView):
+    def get_queryset(self):
+        # Doesn't matter which model it is here
+        return CompletedWork.objects.none()
+
+    @property
+    def object_list(self):
+        # Override this
+        return []
+
+    def get(self, request, *args, **kwargs):
+        filterset_class = self.get_filterset_class()
+        self.filterset = self.get_filterset(filterset_class)
+        context = self.get_context_data(filter=self.filterset, object_list=self.object_list)
+        return self.render_to_response(context)
+
+
+class DeliveryStatsReportView(tables.SingleTableMixin, SuperUserRequiredMixin, NonModelFilterView):
+    table_class = AdminReportTable
+    filterset_class = DeliveryReportFilters
+
+    def get_template_names(self):
+        if self.request.htmx:
+            template_name = "reports/htmx_table.html"
+        else:
+            template_name = "reports/report_table.html"
+
+        return template_name
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["report_url"] = reverse("reports:delivery_stats_report")
+        return context
+
+    @cached_property
+    def filter_values(self):
+        if not self.filterset.form.is_valid():
+            return None
+        else:
+            return self.filterset.form.cleaned_data
+
+    @property
+    def object_list(self):
+        table_data = []
+        if not self.filter_values:
+            return []
+
+        delivery_type = self.filter_values["delivery_type"]
+        year = int(self.filter_values["year"])
+        quarter = self.filter_values["quarter"]
+        group_by_delivery_type = self.filter_values["by_delivery_type"]
+
+        if not year:
+            quarters = _get_quarters_since_start()
+        elif year:
+            if quarter:
+                quarters = [(year, int(quarter))]
+            else:
+                quarters = [(year, q) for q in range(1, 5)]
+
+        for q in quarters:
+            data = _get_table_data_for_quarter(q, delivery_type, group_by_delivery_type)
+            table_data += data
+        return table_data

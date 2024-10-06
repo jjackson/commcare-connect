@@ -49,7 +49,7 @@ def user(db) -> User:
 
 @pytest.fixture()
 def opportunity():
-    factory = OpportunityFactory()
+    factory = OpportunityFactory(is_test=False)
     OpportunityVerificationFlagsFactory(opportunity=factory)
     return factory
 
