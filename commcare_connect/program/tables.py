@@ -259,6 +259,8 @@ class FunnelPerformanceTable(tables.Table):
         orderable = False
 
     def render_average_time_to_convert(self, record):
+        if not record.average_time_to_convert:
+            return "---"
         total_seconds = record.average_time_to_convert.total_seconds()
         hours = total_seconds / 3600
         return f"{round(hours, 2)}hr"

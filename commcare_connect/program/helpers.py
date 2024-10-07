@@ -17,12 +17,12 @@ from django.db.models.functions import Cast, Round
 from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 from commcare_connect.program.models import ManagedOpportunity, Program
 
-FILTER_FOR_VALID_VISIT_DATE = ~Q(
-    opportunityaccess__uservisit__status__in=[
-        VisitValidationStatus.over_limit,
-        VisitValidationStatus.trial,
-    ]
-)
+EXCLUDED_STATUS = [
+    VisitValidationStatus.over_limit,
+    VisitValidationStatus.trial,
+]
+
+FILTER_FOR_VALID_VISIT_DATE = ~Q(opportunityaccess__uservisit__status__in=EXCLUDED_STATUS)
 
 
 def calculate_safe_percentage(numerator, denominator):
@@ -38,7 +38,7 @@ def get_annotated_managed_opportunity(program: Program):
         UserVisit.objects.filter(
             opportunity_access=OuterRef("opportunityaccess"),
         )
-        .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
+        .exclude(status__in=EXCLUDED_STATUS)
         .order_by("visit_date")
         .values("visit_date")[:1]
     )
@@ -47,13 +47,13 @@ def get_annotated_managed_opportunity(program: Program):
         ManagedOpportunity.objects.filter(program=program)
         .order_by("start_date")
         .annotate(
-            workers_invited=Count("opportunityaccess"),
+            workers_invited=Count("opportunityaccess", distinct=True),
             workers_passing_assessment=Count(
                 "opportunityaccess__assessment",
                 filter=Q(
                     opportunityaccess__assessment__passed=True,
-                    opportunityaccess__assessment__opportunity=F("opportunityaccess__opportunity"),
                 ),
+                distinct=True,
             ),
             workers_starting_delivery=Count(
                 "opportunityaccess__uservisit__user",
@@ -79,7 +79,7 @@ def get_annotated_managed_opportunity(program: Program):
 
 
 def get_delivery_performance_report(program: Program, start_date, end_date):
-    date_filter = Q()
+    date_filter = FILTER_FOR_VALID_VISIT_DATE
 
     if start_date:
         date_filter &= Q(opportunityaccess__uservisit__visit_date__gte=start_date)
@@ -105,6 +105,7 @@ def get_delivery_performance_report(program: Program, start_date, end_date):
         .annotate(
             total_workers_starting_delivery=Count(
                 "opportunityaccess__uservisit__user",
+                filter=FILTER_FOR_VALID_VISIT_DATE,
                 distinct=True,
             ),
             active_workers=Count(
