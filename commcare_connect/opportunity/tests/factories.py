@@ -225,3 +225,12 @@ class DeliveryTypeFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.DeliveryType"
+
+
+class PaymentFactory(DjangoModelFactory):
+    opportunity_access = SubFactory(OpportunityAccessFactory)
+    amount = Faker("pyint", min_value=1, max_value=10000)
+    date_paid = Faker("past_date")
+
+    class Meta:
+        model = "opportunity.Payment"
