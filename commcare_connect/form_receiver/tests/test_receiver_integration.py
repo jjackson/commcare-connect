@@ -460,7 +460,7 @@ def test_auto_approve_visits_and_payments(
     assert access.payment_accrued == completed_work.payment_accrued
 
 
-def test_reciever_verification_flags_form_submission(
+def test_receiver_verification_flags_form_submission(
     user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     verification_flags = OpportunityVerificationFlags.objects.get(opportunity=opportunity)
@@ -477,7 +477,7 @@ def test_reciever_verification_flags_form_submission(
     assert not visit.flagged
 
 
-def test_reciever_verification_flags_form_submission_start(
+def test_receiver_verification_flags_form_submission_start(
     user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     verification_flags = OpportunityVerificationFlags.objects.get(opportunity=opportunity)
@@ -494,7 +494,7 @@ def test_reciever_verification_flags_form_submission_start(
     assert ["form_submission_period", "Form was submitted before the start time"] in visit.flag_reason.get("flags", [])
 
 
-def test_reciever_verification_flags_form_submission_end(
+def test_receiver_verification_flags_form_submission_end(
     user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     verification_flags = OpportunityVerificationFlags.objects.get(opportunity=opportunity)
@@ -511,7 +511,7 @@ def test_reciever_verification_flags_form_submission_end(
     assert ["form_submission_period", "Form was submitted after the end time"] in visit.flag_reason.get("flags", [])
 
 
-def test_reciever_verification_flags_duration(
+def test_receiver_verification_flags_duration(
     user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
@@ -524,7 +524,7 @@ def test_reciever_verification_flags_duration(
     assert ["duration", "The form was completed too quickly."] in visit.flag_reason.get("flags", [])
 
 
-def test_reciever_verification_flags_check_attachments(
+def test_receiver_verification_flags_check_attachments(
     user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
@@ -537,7 +537,7 @@ def test_reciever_verification_flags_check_attachments(
     assert ["attachment_missing", "Form was submitted without attachements."] in visit.flag_reason.get("flags", [])
 
 
-def test_reciever_verification_flags_form_json_rule(
+def test_receiver_verification_flags_form_json_rule(
     user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
@@ -555,7 +555,7 @@ def test_reciever_verification_flags_form_json_rule(
     assert not visit.flagged
 
 
-def test_reciever_verification_flags_form_json_rule_flagged(
+def test_receiver_verification_flags_form_json_rule_flagged(
     user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
@@ -577,7 +577,7 @@ def test_reciever_verification_flags_form_json_rule_flagged(
     ] in visit.flag_reason.get("flags", [])
 
 
-def test_reciever_verification_flags_catchment_areas(
+def test_receiver_verification_flags_catchment_areas(
     user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     verification_flags = OpportunityVerificationFlags.objects.get(opportunity=opportunity)
