@@ -23,6 +23,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaimLimit,
     OpportunityVerificationFlags,
     UserVisit,
+    VisitReviewStatus,
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tasks import bulk_approve_completed_work
@@ -594,6 +595,33 @@ def test_receiver_verification_flags_catchment_areas(
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.flagged
     assert ["catchment", "Visit outside worker catchment areas"] in visit.flag_reason.get("flags", [])
+
+
+def test_receiver_auto_agree_approved_visit(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    opportunity.managed = True
+    opportunity.save()
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert not visit.flagged
+    assert visit.status == VisitValidationStatus.approved
+    assert visit.review_status == VisitReviewStatus.agree
+
+
+def test_receiver_flagged_visit_review_pending(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    opportunity.managed = True
+    opportunity.save()
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    form_json["metadata"]["location"] = None
+    make_request(api_client, form_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert visit.status == VisitValidationStatus.pending
+    assert visit.review_status == VisitReviewStatus.pending
 
 
 def _get_form_json(learn_app, module_id, form_block=None):
