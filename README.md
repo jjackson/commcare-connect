@@ -48,7 +48,7 @@ Some useful command are available via the `tasks.py` file:
 
 - Install loca.lt
   - `npm install -g localtunnel`
-- Run `loca.lt --port 8000 --subdomain [my-unique-subdomain]` and copy the generated URL
+- Run `lt --port 8000 --subdomain [my-unique-subdomain]` and copy the generated URL
 - Update your `.env` file with the host:
 
       DJANGO_ALLOWED_HOSTS=[my-unique-subdomain].loca.lt
@@ -66,6 +66,7 @@ Some useful command are available via the `tasks.py` file:
 
 **Test the OAuth2 flow**
 
+- Set `COMMCARE_HQ_URL=https://staging.commcarehq.org` in your `.env` file and restart the server.
 - Navigate to http://[my-unique-subdomain].loca.lt/accounts/login/
 - Click the "Log in with CommCare HQ" button
 - You should be redirected to CommCare HQ to log in
