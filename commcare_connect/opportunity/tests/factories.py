@@ -33,6 +33,14 @@ class HQApiKeyFactory(DjangoModelFactory):
         model = "opportunity.HQApiKey"
 
 
+class DeliveryTypeFactory(DjangoModelFactory):
+    name = Faker("name")
+    slug = Faker("pystr")
+
+    class Meta:
+        model = "opportunity.DeliveryType"
+
+
 class OpportunityFactory(DjangoModelFactory):
     organization = SubFactory(OrganizationFactory)
     name = Faker("name")
@@ -47,6 +55,7 @@ class OpportunityFactory(DjangoModelFactory):
     budget_per_visit = Faker("pyint", min_value=1, max_value=10)
     total_budget = Faker("pyint", min_value=1000, max_value=10000)
     api_key = SubFactory(HQApiKeyFactory)
+    delivery_type = SubFactory(DeliveryTypeFactory)
 
     class Meta:
         model = "opportunity.Opportunity"
