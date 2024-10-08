@@ -587,11 +587,11 @@ def test_receiver_verification_flags_catchment_areas(
     assert ["catchment", "Visit outside worker catchment areas"] in visit.flag_reason.get("flags", [])
 
 
+@pytest.mark.parametrize("opportunity", [{"managed": True}], indirect=True)
 def test_receiver_auto_agree_approved_visit(
     mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
 ):
-    opportunity.managed = True
-    opportunity.save()
+    assert opportunity.managed
     form_json = get_form_json_for_payment_unit(opportunity.paymentunit_set.all()[0])
     make_request(api_client, form_json, mobile_user_with_connect_link)
     visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
@@ -600,12 +600,11 @@ def test_receiver_auto_agree_approved_visit(
     assert visit.review_status == VisitReviewStatus.agree
 
 
-@pytest.mark.parametrize("paymentunit_options", [pytest.param({"max_daily": 2})])
+@pytest.mark.parametrize("opportunity", [{"managed": True}], indirect=True)
 def test_receiver_flagged_visit_review_pending(
     mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
 ):
-    opportunity.managed = True
-    opportunity.save()
+    assert opportunity.managed
     form_json = get_form_json_for_payment_unit(opportunity.paymentunit_set.all()[0])
     form_json["metadata"]["location"] = None
     make_request(api_client, form_json, mobile_user_with_connect_link)
