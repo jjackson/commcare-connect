@@ -285,7 +285,9 @@ def _cache_key(currency_code, date=None):
 def get_exchange_rate(currency_code, date=None):
     # date should be a date object or None for latest rate
 
-    if currency_code in ["USD", None]:
+    if currency_code is None:
+        raise ImportException("Opportunity must have specified currency to import payments")
+    if currency_code == "USD":
         return 1
 
     base_url = "https://openexchangerates.org/api"
