@@ -192,19 +192,28 @@ def _results_to_geojson(results):
         "rejected": "#FF0000",
     }
     for result in results:
-        feature = {
-            "type": "Feature",
-            "geometry": {
-                "type": "Point",
-                "coordinates": [float(result["gps_location_long"]), float(result["gps_location_lat"])],
-            },
-            "properties": {
-                key: value for key, value in result.items() if key not in ["gps_location_lat", "gps_location_long"]
-            },
-        }
-        color = status_to_color.get(result["status"], "#FFFF00")
-        feature["properties"]["color"] = color
-        geojson["features"].append(feature)
+        # Check if both latitude and longitude are not None and can be converted to float
+        if result.get("gps_location_long") and result.get("gps_location_lat"):
+            try:
+                longitude = float(result["gps_location_long"])
+                latitude = float(result["gps_location_lat"])
+            except ValueError:
+                # Skip this result if conversion to float fails
+                continue
+
+            feature = {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [longitude, latitude],
+                },
+                "properties": {
+                    key: value for key, value in result.items() if key not in ["gps_location_lat", "gps_location_long"]
+                },
+            }
+            color = status_to_color.get(result.get("status", ""), "#FFFF00")
+            feature["properties"]["color"] = color
+            geojson["features"].append(feature)
 
     return geojson
 
