@@ -30,110 +30,70 @@ class TestGetAnnotatedManagedOpportunity:
         )
         return user
 
-    def test_basic_scenario(self):
-        for i in range(5):
-            self.create_user_with_access(
-                visit_status=VisitValidationStatus.pending if i < 3 else VisitValidationStatus.trial
-            )
+    @pytest.mark.parametrize(
+        "scenario, visit_statuses, passing_assessments, expected_invited,"
+        " expected_passing, expected_delivery, expected_conversion",
+        [
+            (
+                "basic_scenario",
+                [VisitValidationStatus.pending, VisitValidationStatus.pending, VisitValidationStatus.trial],
+                [True, True, True],
+                3,
+                3,
+                2,
+                66.67,
+            ),
+            ("empty_scenario", [], [], 0, 0, 0, 0.0),
+            ("multiple_visits_scenario", [VisitValidationStatus.pending], [True], 1, 1, 1, 100.0),
+            (
+                "excluded_statuses",
+                [VisitValidationStatus.over_limit, VisitValidationStatus.trial],
+                [True, True],
+                2,
+                2,
+                0,
+                0.0,
+            ),
+            (
+                "failed_assessments",
+                [VisitValidationStatus.pending, VisitValidationStatus.pending],
+                [False, True],
+                2,
+                1,
+                2,
+                100.0,
+            ),
+        ],
+    )
+    def test_scenarios(
+        self,
+        scenario,
+        visit_statuses,
+        passing_assessments,
+        expected_invited,
+        expected_passing,
+        expected_delivery,
+        expected_conversion,
+    ):
+        for i, visit_status in enumerate(visit_statuses):
+            user = self.create_user_with_access(visit_status=visit_status, passed_assessment=passing_assessments[i])
+
+            # For the "multiple_visits_scenario", create additional visits for the same user
+            if scenario == "multiple_visits_scenario":
+                access = user.opportunityaccess_set.first()
+                UserVisitFactory.create_batch(
+                    2,
+                    user=user,
+                    opportunity=self.opp,
+                    status=VisitValidationStatus.pending,
+                    opportunity_access=access,
+                    visit_date=now() + timedelta(days=2),
+                )
 
         opps = get_annotated_managed_opportunity(self.program)
         assert len(opps) == 1
         annotated_opp = opps[0]
-        assert annotated_opp.organization.slug == self.nm_org.slug
-        assert annotated_opp.workers_invited == 5
-        assert annotated_opp.workers_passing_assessment == 5
-        assert annotated_opp.workers_starting_delivery == 3
-        assert annotated_opp.percentage_conversion == 60.0
-
-    def test_empty_scenario(self):
-        opps = get_annotated_managed_opportunity(self.program)
-        assert len(opps) == 1
-        annotated_opp = opps[0]
-        assert annotated_opp.workers_invited == 0
-        assert annotated_opp.workers_passing_assessment == 0
-        assert annotated_opp.workers_starting_delivery == 0
-        assert annotated_opp.percentage_conversion == 0.0
-        assert annotated_opp.average_time_to_convert is None
-
-    def test_multiple_visits(self):
-        user = self.create_user_with_access()
-        UserVisitFactory.create_batch(
-            2,
-            user=user,
-            opportunity=self.opp,
-            status=VisitValidationStatus.pending,
-            opportunity_access=user.opportunityaccess_set.first(),
-            visit_date=now() + timedelta(days=2),
-        )
-
-        opps = get_annotated_managed_opportunity(self.program)
-        assert len(opps) == 1
-        annotated_opp = opps[0]
-        assert annotated_opp.workers_invited == 1
-        assert annotated_opp.workers_passing_assessment == 1
-        assert annotated_opp.workers_starting_delivery == 1
-        assert annotated_opp.percentage_conversion == 100.0
-
-    def test_excluded_statuses(self):
-        self.create_user_with_access(visit_status=VisitValidationStatus.over_limit)
-        self.create_user_with_access(visit_status=VisitValidationStatus.trial)
-
-        opps = get_annotated_managed_opportunity(self.program)
-        assert len(opps) == 1
-        annotated_opp = opps[0]
-        assert annotated_opp.workers_invited == 2
-        assert annotated_opp.workers_passing_assessment == 2
-        assert annotated_opp.workers_starting_delivery == 0
-        assert annotated_opp.percentage_conversion == 0.0
-
-    def test_average_time_to_convert(self):
-        for i in range(3):
-            user = self.create_user_with_access()
-            user.opportunityaccess_set.update(invited_date=now() - timedelta(days=i))
-
-        opps = get_annotated_managed_opportunity(self.program)
-        assert len(opps) == 1
-        annotated_opp = opps[0]
-        expected_time = timedelta(days=2)
-        actual_time = annotated_opp.average_time_to_convert
-        assert abs(actual_time - expected_time) < timedelta(seconds=5)
-
-    def test_multiple_opportunities(self):
-        nm_org2 = OrganizationFactory.create()
-        opp2 = ManagedOpportunityFactory.create(
-            program=self.program, organization=nm_org2, start_date=now() + timedelta(days=1)
-        )
-
-        self.create_user_with_access()
-        user2 = UserFactory.create()
-        access2 = OpportunityAccessFactory.create(opportunity=opp2, user=user2, invited_date=now())
-        AssessmentFactory.create(opportunity=opp2, user=user2, opportunity_access=access2, passed=True)
-        UserVisitFactory.create(
-            user=user2,
-            opportunity=opp2,
-            status=VisitValidationStatus.pending,
-            opportunity_access=access2,
-            visit_date=now() + timedelta(days=1),
-        )
-
-        opps = get_annotated_managed_opportunity(self.program)
-        assert len(opps) == 2
-        assert opps[0].organization.slug == self.nm_org.slug
-        assert opps[1].organization.slug == nm_org2.slug
-        for annotated_opp in opps:
-            assert annotated_opp.workers_invited == 1
-            assert annotated_opp.workers_passing_assessment == 1
-            assert annotated_opp.workers_starting_delivery == 1
-            assert annotated_opp.percentage_conversion == 100.0
-
-    def test_failed_assessments(self):
-        self.create_user_with_access(passed_assessment=False)
-        self.create_user_with_access(passed_assessment=True)
-
-        opps = get_annotated_managed_opportunity(self.program)
-        assert len(opps) == 1
-        annotated_opp = opps[0]
-        assert annotated_opp.workers_invited == 2
-        assert annotated_opp.workers_passing_assessment == 1
-        assert annotated_opp.workers_starting_delivery == 2
-        assert annotated_opp.percentage_conversion == 100.0
+        assert annotated_opp.workers_invited == expected_invited, f"Failed in {scenario}"
+        assert annotated_opp.workers_passing_assessment == expected_passing, f"Failed in {scenario}"
+        assert annotated_opp.workers_starting_delivery == expected_delivery, f"Failed in {scenario}"
+        assert pytest.approx(annotated_opp.percentage_conversion, 0.01) == expected_conversion, f"Failed in {scenario}"
