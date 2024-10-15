@@ -23,7 +23,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tasks import send_payment_notification
-from commcare_connect.opportunity.utils.completed_work import update_status
+from commcare_connect.opportunity.utils.completed_work import update_status, update_work_payment_date
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.itertools import batched
 
@@ -271,6 +271,7 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
             payment = Payment.objects.create(opportunity_access=access, amount=amount, amount_usd=amount_usd)
             seen_users.add(username)
             payment_ids.append(payment.pk)
+            update_work_payment_date(access)
     missing_users = set(usernames) - seen_users
     send_payment_notification.delay(opportunity.id, payment_ids)
     return PaymentImportStatus(seen_users, missing_users)
@@ -284,7 +285,9 @@ def _cache_key(currency_code, date=None):
 def get_exchange_rate(currency_code, date=None):
     # date should be a date object or None for latest rate
 
-    if currency_code in ["USD", None]:
+    if currency_code is None:
+        raise ImportException("Opportunity must have specified currency to import payments")
+    if currency_code == "USD":
         return 1
 
     base_url = "https://openexchangerates.org/api"
