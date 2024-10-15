@@ -15,7 +15,8 @@ from commcare_connect.program.tests.factories import ManagedOpportunityFactory, 
 from commcare_connect.users.tests.factories import OrganizationFactory, UserFactory
 
 
-class TestGetAnnotatedManagedOpportunity:
+@pytest.mark.django_db
+class BaseManagedOpportunityTest:
     @pytest.fixture(autouse=True)
     def setup(self, db):
         self.program = ProgramFactory.create()
@@ -35,6 +36,23 @@ class TestGetAnnotatedManagedOpportunity:
         )
         return user
 
+    def create_user_with_visit(self, visit_status, visit_date, flagged=False, create_completed_work=True):
+        user = UserFactory.create()
+        access = OpportunityAccessFactory.create(opportunity=self.opp, user=user, invited_date=now())
+        UserVisitFactory.create(
+            user=user,
+            opportunity=self.opp,
+            status=visit_status,
+            opportunity_access=access,
+            visit_date=visit_date,
+            flagged=flagged,
+        )
+        if create_completed_work:
+            CompletedWorkFactory.create(opportunity_access=access)
+        return user
+
+
+class TestGetAnnotatedManagedOpportunity(BaseManagedOpportunityTest):
     def test_basic_scenario(self):
         for i in range(5):
             self.create_user_with_access(
@@ -103,7 +121,7 @@ class TestGetAnnotatedManagedOpportunity:
         assert abs(actual_time - expected_time) < timedelta(seconds=5)
 
     def test_multiple_opportunities(self):
-        nm_org2 = OrganizationFactory.create()
+        nm_org2 = OrganizationFactory.create(program_manager=True)
         opp2 = ManagedOpportunityFactory.create(
             program=self.program, organization=nm_org2, start_date=now() + timedelta(days=1)
         )
@@ -144,29 +162,7 @@ class TestGetAnnotatedManagedOpportunity:
 
 
 @pytest.mark.django_db
-class TestDeliveryPerformanceReport:
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        self.program_manager_org = OrganizationFactory.create()
-        self.program = ProgramFactory.create(organization=self.program_manager_org)
-        self.nm_org = OrganizationFactory.create()
-        self.opp = ManagedOpportunityFactory.create(program=self.program, organization=self.nm_org)
-
-    def create_user_with_visit(self, visit_status, visit_date, flagged=False, create_completed_work=True):
-        user = UserFactory.create()
-        access = OpportunityAccessFactory.create(opportunity=self.opp, user=user, invited_date=now())
-        UserVisitFactory.create(
-            user=user,
-            opportunity=self.opp,
-            status=visit_status,
-            opportunity_access=access,
-            visit_date=visit_date,
-            flagged=flagged,
-        )
-        if create_completed_work:
-            CompletedWorkFactory.create(opportunity_access=access)
-        return user
-
+class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
     def test_basic_delivery_performance(self):
         for _ in range(2):
             self.create_user_with_visit(VisitValidationStatus.pending, now(), True)

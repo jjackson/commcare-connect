@@ -97,11 +97,6 @@ def get_delivery_performance_report(program: Program, start_date, end_date):
     managed_opportunities = (
         ManagedOpportunity.objects.filter(program=program)
         .order_by("start_date")
-        .prefetch_related(
-            "opportunityaccess_set",
-            "opportunityaccess_set__uservisit_set",
-            "opportunityaccess_set__completedwork_set",
-        )
         .annotate(
             total_workers_starting_delivery=Count(
                 "opportunityaccess__uservisit__user",
