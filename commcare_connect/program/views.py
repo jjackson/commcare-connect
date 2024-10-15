@@ -276,7 +276,4 @@ class DeliveryPerformanceTableView(ProgramManagerMixin, SingleTableView):
         program = get_object_or_404(Program, id=program_id)
         start_date = self.request.GET.get("start_date") or None
         end_date = self.request.GET.get("end_date") or None
-
-        print("start_date", start_date)
-        print("end_date", end_date)
         return get_delivery_performance_report(program, start_date, end_date)
