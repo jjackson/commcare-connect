@@ -68,11 +68,6 @@ def get_annotated_managed_opportunity(program: Program):
                 filter=filter_for_valid__visit_date,
             ),
         )
-        .prefetch_related(
-            "opportunityaccess_set",
-            "opportunityaccess_set__uservisit_set",
-            "opportunityaccess_set__assessment_set",
-        )
     )
 
     return managed_opportunities
