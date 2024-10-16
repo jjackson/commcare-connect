@@ -44,17 +44,14 @@ def update_status(completed_works, opportunity_access, compute_payment=True):
         opportunity_access.save()
 
 
-def update_work_payment_date(access: OpportunityAccess, payment_model_ref=None, completed_work_model_ref=None):
+def update_work_payment_date(access: OpportunityAccess, payment_model=None, completed_work_model=None):
     """
     Dynamically assign models to avoid issues with historical models during migrations.
     Top-level imports use the current model, which may not match the schema at migration
     time. This ensures we use historical models during migrations and current models in normal execution.
     """
-    if not payment_model_ref:
-        payment_model_ref = Payment
-
-    if not completed_work_model_ref:
-        completed_work_model_ref = CompletedWork
+    payment_model_ref = payment_model or Payment
+    completed_work_model_ref = completed_work_model or CompletedWork
 
     payments = payment_model_ref.objects.filter(opportunity_access=access).order_by("date_paid")
     completed_works = completed_work_model_ref.objects.filter(opportunity_access=access).order_by(
