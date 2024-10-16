@@ -46,7 +46,9 @@ def update_status(completed_works, opportunity_access, compute_payment=True):
 
 def update_work_payment_date(access: OpportunityAccess, payment_model_ref=None, completed_work_model_ref=None):
     """
-    Import models dynamically within the function helps us avoid issues with historical models during migrations.
+    Dynamically assign models to avoid issues with historical models during migrations.
+    Top-level imports use the current model, which may not match the schema at migration
+    time. This ensures we use historical models during migrations and current models in normal execution.
     """
     if not payment_model_ref:
         payment_model_ref = Payment
