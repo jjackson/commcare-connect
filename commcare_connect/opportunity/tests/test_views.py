@@ -53,7 +53,6 @@ def test_add_budget_existing_users(
 
 class TestUserVisitReviewView:
     @pytest.fixture(autouse=True)
-    @pytest.mark.parametrize("opportunity", [{"managed": True}], indirect=True)
     def setup(
         self,
         client: Client,
@@ -61,7 +60,6 @@ class TestUserVisitReviewView:
         program_manager_org_user_admin: User,
         organization: Organization,
         org_user_admin: User,
-        mobile_user: User,
     ):
         self.client = client
         self.pm_org = program_manager_org
@@ -70,11 +68,9 @@ class TestUserVisitReviewView:
         self.nm_user = org_user_admin
         self.program = ProgramFactory(organization=self.pm_org)
         self.opportunity = ManagedOpportunityFactory(program=self.program, organization=self.nm_org)
-        self.mobile_user = mobile_user
-        access = OpportunityAccessFactory(user=mobile_user, opportunity=self.opportunity, accepted=True)
+        access = OpportunityAccessFactory(opportunity=self.opportunity, accepted=True)
         self.visits = UserVisitFactory.create_batch(
             10,
-            user=mobile_user,
             opportunity=self.opportunity,
             status=VisitValidationStatus.approved,
             review_created_on=now(),
