@@ -1,5 +1,3 @@
-from functools import lru_cache
-
 from django.conf import settings
 from django.db.models import Sum
 from rest_framework import serializers
@@ -94,6 +92,12 @@ class CatchmentAreaSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "latitude", "longitude", "radius", "active"]
 
 
+class OpportunityVerificationFlagsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OpportunityVerificationFlags
+        fields = ["form_submission_start", "form_submission_end"]
+
+
 class OpportunitySerializer(serializers.ModelSerializer):
     organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
     learn_app = CommCareAppSerializer()
@@ -108,8 +112,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     payment_units = serializers.SerializerMethodField()
     is_user_suspended = serializers.SerializerMethodField()
     catchment_areas = serializers.SerializerMethodField()
-    start_time_threshold = serializers.SerializerMethodField()
-    end_time_threshold = serializers.SerializerMethodField()
+    verification_flags = OpportunityVerificationFlagsSerializer(source="opportunityverificationflags", read_only=True)
 
     class Meta:
         model = Opportunity
@@ -138,8 +141,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "payment_units",
             "is_user_suspended",
             "catchment_areas",
-            "start_time_threshold",
-            "end_time_threshold",
+            "verification_flags",
         ]
 
     def get_claim(self, obj):
@@ -184,18 +186,6 @@ class OpportunitySerializer(serializers.ModelSerializer):
         opp_access = _get_opp_access(self.context.get("request").user, obj)
         catchments = CatchmentArea.objects.filter(opportunity_access=opp_access)
         return CatchmentAreaSerializer(catchments, many=True).data
-
-    @lru_cache
-    def _get_flags(self, obj):
-        return OpportunityVerificationFlags.objects.filter(opportunity=obj).first()
-
-    def get_start_time_threshold(self, obj):
-        flags = self._get_flags(obj)
-        return flags.form_submission_start
-
-    def get_end_time_threshold(self, obj):
-        flags = self._get_flags(obj)
-        return flags.form_submission_end
 
 
 @quickcache(vary_on=["user.pk", "opportunity.pk"], timeout=60 * 60)
