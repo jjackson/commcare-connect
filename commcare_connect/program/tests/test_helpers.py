@@ -53,12 +53,6 @@ class BaseManagedOpportunityTest:
 
 
 class TestGetAnnotatedManagedOpportunity(BaseManagedOpportunityTest):
-    def test_basic_scenario(self):
-        for i in range(5):
-            self.create_user_with_access(
-                visit_status=VisitValidationStatus.pending if i < 3 else VisitValidationStatus.trial
-            )
-
     @pytest.mark.parametrize(
         "scenario, visit_statuses, passing_assessments, expected_invited,"
         " expected_passing, expected_delivery, expected_conversion",
