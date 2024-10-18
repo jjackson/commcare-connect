@@ -1,4 +1,11 @@
-from commcare_connect.opportunity.models import CompletedWorkStatus, VisitReviewStatus, VisitValidationStatus
+from commcare_connect.opportunity.models import (
+    CompletedWork,
+    CompletedWorkStatus,
+    OpportunityAccess,
+    Payment,
+    VisitReviewStatus,
+    VisitValidationStatus,
+)
 
 
 def update_status(completed_works, opportunity_access, compute_payment=True):
@@ -35,3 +42,48 @@ def update_status(completed_works, opportunity_access, compute_payment=True):
     if compute_payment:
         opportunity_access.payment_accrued = payment_accrued
         opportunity_access.save()
+
+
+def update_work_payment_date(access: OpportunityAccess, payment_model=None, completed_work_model=None):
+    """
+    Dynamically assign models to avoid issues with historical models during migrations.
+    Top-level imports use the current model, which may not match the schema at migration
+    time. This ensures we use historical models during migrations and current models in normal execution.
+    """
+    payment_model_ref = payment_model or Payment
+    completed_work_model_ref = completed_work_model or CompletedWork
+
+    payments = payment_model_ref.objects.filter(opportunity_access=access).order_by("date_paid")
+    completed_works = completed_work_model_ref.objects.filter(opportunity_access=access).order_by(
+        "status_modified_date"
+    )
+
+    if not payments or not completed_works:
+        return
+
+    works_to_update = []
+    completed_works_iter = iter(completed_works)
+    current_work = next(completed_works_iter)
+
+    remaining_amount = 0
+
+    for payment in payments:
+        remaining_amount += payment.amount
+
+        while remaining_amount >= current_work.payment_accrued:
+            current_work.payment_date = payment.date_paid
+            works_to_update.append(current_work)
+            remaining_amount -= current_work.payment_accrued
+
+            try:
+                current_work = next(completed_works_iter)
+            except StopIteration:
+                break
+        else:
+            continue
+
+        # we've broken out of the inner while loop so all completed_works are processed.
+        break
+
+    if works_to_update:
+        completed_work_model_ref.objects.bulk_update(works_to_update, ["payment_date"])
