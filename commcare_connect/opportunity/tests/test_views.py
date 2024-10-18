@@ -78,7 +78,7 @@ class TestUserVisitReviewView:
             opportunity_access=access,
         )
 
-    def test_user_visit_review_program_manager_pending(self):
+    def test_user_visit_review_program_manager_table(self):
         self.url = reverse("opportunity:user_visit_review", args=(self.pm_org.slug, self.opportunity.id))
         self.client.force_login(self.pm_user)
         response = self.client.get(self.url)
@@ -87,43 +87,24 @@ class TestUserVisitReviewView:
         assert len(table.rows) == 10
         assert "pk" in table.columns.names()
 
-        visits = UserVisit.objects.filter(id__in=[visit.id for visit in self.visits])
-        for visit in visits:
-            assert visit.review_status == VisitReviewStatus.pending
-
-    def test_user_visit_review_program_manager_agree(self):
+    @pytest.mark.parametrize("review_status", [(VisitReviewStatus.agree), (VisitReviewStatus.disagree)])
+    def test_user_visit_review_program_manager_approval(self, review_status):
         self.url = reverse("opportunity:user_visit_review", args=(self.pm_org.slug, self.opportunity.id))
         self.client.force_login(self.pm_user)
-        response = self.client.post(self.url, {"pk": [], "review_status": VisitReviewStatus.agree.value})
+        response = self.client.post(self.url, {"pk": [], "review_status": review_status.value})
         assert response.status_code == 200
         visits = UserVisit.objects.filter(id__in=[visit.id for visit in self.visits])
         for visit in visits:
             assert visit.review_status == VisitReviewStatus.pending
 
         visit_ids = [visit.id for visit in self.visits][:5]
-        response = self.client.post(self.url, {"pk": visit_ids, "review_status": VisitReviewStatus.agree.value})
+        response = self.client.post(self.url, {"pk": visit_ids, "review_status": review_status.value})
         assert response.status_code == 200
         visits = UserVisit.objects.filter(id__in=visit_ids)
         for visit in visits:
-            assert visit.review_status == VisitReviewStatus.agree
+            assert visit.review_status == review_status
 
-    def test_user_visit_review_program_manager_reject(self):
-        self.url = reverse("opportunity:user_visit_review", args=(self.pm_org.slug, self.opportunity.id))
-        self.client.force_login(self.pm_user)
-        response = self.client.post(self.url, {"pk": [], "review_status": VisitReviewStatus.agree.value})
-        assert response.status_code == 200
-        visits = UserVisit.objects.filter(id__in=[visit.id for visit in self.visits])
-        for visit in visits:
-            assert visit.review_status == VisitReviewStatus.pending
-
-        visit_ids = [visit.id for visit in self.visits][:5]
-        response = self.client.post(self.url, {"pk": visit_ids, "review_status": VisitReviewStatus.disagree.value})
-        assert response.status_code == 200
-        visits = UserVisit.objects.filter(id__in=visit_ids)
-        for visit in visits:
-            assert visit.review_status == VisitReviewStatus.disagree
-
-    def test_user_visit_review_network_manager(self):
+    def test_user_visit_review_network_manager_table(self):
         self.url = reverse("opportunity:user_visit_review", args=(self.nm_org.slug, self.opportunity.id))
         self.client.force_login(self.nm_user)
         response = self.client.get(self.url)
