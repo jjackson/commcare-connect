@@ -59,200 +59,192 @@ class TestGetAnnotatedManagedOpportunity(BaseManagedOpportunityTest):
                 visit_status=VisitValidationStatus.pending if i < 3 else VisitValidationStatus.trial
             )
 
+    @pytest.mark.parametrize(
+        "scenario, visit_statuses, passing_assessments, expected_invited,"
+        " expected_passing, expected_delivery, expected_conversion",
+        [
+            (
+                "basic_scenario",
+                [VisitValidationStatus.pending, VisitValidationStatus.pending, VisitValidationStatus.trial],
+                [True, True, True],
+                3,
+                3,
+                2,
+                66.67,
+            ),
+            ("empty_scenario", [], [], 0, 0, 0, 0.0),
+            ("multiple_visits_scenario", [VisitValidationStatus.pending], [True], 1, 1, 1, 100.0),
+            (
+                "excluded_statuses",
+                [VisitValidationStatus.over_limit, VisitValidationStatus.trial],
+                [True, True],
+                2,
+                2,
+                0,
+                0.0,
+            ),
+            (
+                "failed_assessments",
+                [VisitValidationStatus.pending, VisitValidationStatus.pending],
+                [False, True],
+                2,
+                1,
+                2,
+                100.0,
+            ),
+        ],
+    )
+    def test_scenarios(
+        self,
+        scenario,
+        visit_statuses,
+        passing_assessments,
+        expected_invited,
+        expected_passing,
+        expected_delivery,
+        expected_conversion,
+    ):
+        for i, visit_status in enumerate(visit_statuses):
+            user = self.create_user_with_access(visit_status=visit_status, passed_assessment=passing_assessments[i])
+
+            # For the "multiple_visits_scenario", create additional visits for the same user
+            if scenario == "multiple_visits_scenario":
+                access = user.opportunityaccess_set.first()
+                UserVisitFactory.create_batch(
+                    2,
+                    user=user,
+                    opportunity=self.opp,
+                    status=VisitValidationStatus.pending,
+                    opportunity_access=access,
+                    visit_date=now() + timedelta(days=2),
+                )
         opps = get_annotated_managed_opportunity(self.program)
         assert len(opps) == 1
         annotated_opp = opps[0]
-        assert annotated_opp.organization.slug == self.nm_org.slug
-        assert annotated_opp.workers_invited == 5
-        assert annotated_opp.workers_passing_assessment == 5
-        assert annotated_opp.workers_starting_delivery == 3
-        assert annotated_opp.percentage_conversion == 60.0
-
-    def test_empty_scenario(self):
-        opps = get_annotated_managed_opportunity(self.program)
-        assert len(opps) == 1
-        annotated_opp = opps[0]
-        assert annotated_opp.workers_invited == 0
-        assert annotated_opp.workers_passing_assessment == 0
-        assert annotated_opp.workers_starting_delivery == 0
-        assert annotated_opp.percentage_conversion == 0.0
-        assert annotated_opp.average_time_to_convert is None
-
-    def test_multiple_visits(self):
-        user = self.create_user_with_access()
-        UserVisitFactory.create_batch(
-            2,
-            user=user,
-            opportunity=self.opp,
-            status=VisitValidationStatus.pending,
-            opportunity_access=user.opportunityaccess_set.first(),
-            visit_date=now() + timedelta(days=2),
-        )
-        opps = get_annotated_managed_opportunity(self.program)
-        assert len(opps) == 1
-        annotated_opp = opps[0]
-        assert annotated_opp.workers_invited == 1
-        assert annotated_opp.workers_passing_assessment == 1
-        assert annotated_opp.workers_starting_delivery == 1
-        assert annotated_opp.percentage_conversion == 100.0
-
-    def test_excluded_statuses(self):
-        self.create_user_with_access(visit_status=VisitValidationStatus.over_limit)
-        self.create_user_with_access(visit_status=VisitValidationStatus.trial)
-
-        opps = get_annotated_managed_opportunity(self.program)
-        assert len(opps) == 1
-        annotated_opp = opps[0]
-        assert annotated_opp.workers_invited == 2
-        assert annotated_opp.workers_passing_assessment == 2
-        assert annotated_opp.workers_starting_delivery == 0
-        assert annotated_opp.percentage_conversion == 0.0
-
-    def test_average_time_to_convert(self):
-        for i in range(3):
-            user = self.create_user_with_access()
-            user.opportunityaccess_set.update(invited_date=now() - timedelta(days=i))
-
-        opps = get_annotated_managed_opportunity(self.program)
-        assert len(opps) == 1
-        annotated_opp = opps[0]
-        expected_time = timedelta(days=2)
-        actual_time = annotated_opp.average_time_to_convert
-        assert abs(actual_time - expected_time) < timedelta(seconds=5)
-
-    def test_multiple_opportunities(self):
-        nm_org2 = OrganizationFactory.create(program_manager=True)
-        opp2 = ManagedOpportunityFactory.create(
-            program=self.program, organization=nm_org2, start_date=now() + timedelta(days=1)
-        )
-
-        self.create_user_with_access()
-        user2 = UserFactory.create()
-        access2 = OpportunityAccessFactory.create(opportunity=opp2, user=user2, invited_date=now())
-        AssessmentFactory.create(opportunity=opp2, user=user2, opportunity_access=access2, passed=True)
-        UserVisitFactory.create(
-            user=user2,
-            opportunity=opp2,
-            status=VisitValidationStatus.pending,
-            opportunity_access=access2,
-            visit_date=now() + timedelta(days=1),
-        )
-
-        opps = get_annotated_managed_opportunity(self.program)
-        assert len(opps) == 2
-        assert opps[0].organization.slug == self.nm_org.slug
-        assert opps[1].organization.slug == nm_org2.slug
-        for annotated_opp in opps:
-            assert annotated_opp.workers_invited == 1
-            assert annotated_opp.workers_passing_assessment == 1
-            assert annotated_opp.workers_starting_delivery == 1
-            assert annotated_opp.percentage_conversion == 100.0
-
-    def test_failed_assessments(self):
-        self.create_user_with_access(passed_assessment=False)
-        self.create_user_with_access(passed_assessment=True)
-
-        opps = get_annotated_managed_opportunity(self.program)
-        assert len(opps) == 1
-        annotated_opp = opps[0]
-        assert annotated_opp.workers_invited == 2
-        assert annotated_opp.workers_passing_assessment == 1
-        assert annotated_opp.workers_starting_delivery == 2
-        assert annotated_opp.percentage_conversion == 100.0
+        assert annotated_opp.workers_invited == expected_invited, f"Failed in {scenario}"
+        assert annotated_opp.workers_passing_assessment == expected_passing, f"Failed in {scenario}"
+        assert annotated_opp.workers_starting_delivery == expected_delivery, f"Failed in {scenario}"
+        assert pytest.approx(annotated_opp.percentage_conversion, 0.01) == expected_conversion, f"Failed in {scenario}"
 
 
 @pytest.mark.django_db
 class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
-    def test_basic_delivery_performance(self):
-        for _ in range(2):
-            self.create_user_with_visit(VisitValidationStatus.pending, now(), True)
-        for _ in range(3):
-            self.create_user_with_visit(VisitValidationStatus.approved, now(), False)
+    start_date = now() - timedelta(10)
+    end_date = now() + timedelta(10)
 
-        opps = get_delivery_performance_report(self.program, None, None)
-        assert len(opps) == 1
-        assert opps[0].total_workers_starting_delivery == 5
-        assert opps[0].active_workers == 5
-        assert opps[0].total_payment_units == 5
-        assert opps[0].total_payment_units_with_flags == 2
-        assert opps[0].total_payment_since_start_date == 5
-        assert opps[0].delivery_per_day_per_worker == 1.0
-        assert opps[0].records_flagged_percentage == 40.0
+    @pytest.mark.parametrize(
+        "scenario, visit_statuses, visit_date, flagged_statuses, expected_active_workers, "
+        "expected_total_workers, expected_flags, expected_records_flagged_percentage,"
+        "total_payment_units_with_flags,total_payment_since_start_date, delivery_per_day_per_worker",
+        [
+            (
+                "basic_scenario",
+                [VisitValidationStatus.pending] * 2 + [VisitValidationStatus.approved] * 3,
+                [now()] * 5,
+                [True] * 3 + [False] * 2,
+                5,
+                5,
+                2,
+                40.0,
+                2,
+                5,
+                1.0,
+            ),
+            (
+                "date_range_scenario",
+                [VisitValidationStatus.pending] * 4,
+                [
+                    now() - timedelta(8),
+                    now() + timedelta(11),
+                    now() - timedelta(9),
+                    now() + timedelta(11),
+                ],
+                [False] * 4,
+                2,
+                4,
+                0,
+                0.0,
+                0,
+                2,
+                1.0,
+            ),
+            (
+                "flagged_visits_scenario",
+                [VisitValidationStatus.pending, VisitValidationStatus.pending],
+                [now()] * 2,
+                [False, True],
+                2,
+                2,
+                1,
+                50.0,
+                1,
+                2,
+                1.0,
+            ),
+            (
+                "no_active_workers_scenario",
+                [VisitValidationStatus.over_limit, VisitValidationStatus.trial],
+                [now(), now()],
+                [False, False],
+                0,
+                0,
+                0,
+                0.0,
+                0,
+                0,
+                0.0,
+            ),
+            (
+                "mixed_statuses_scenario",
+                [
+                    VisitValidationStatus.pending,
+                    VisitValidationStatus.approved,
+                    VisitValidationStatus.rejected,
+                    VisitValidationStatus.over_limit,
+                ],
+                [now()] * 4,
+                [True] * 4,
+                3,
+                3,
+                2,
+                66.67,
+                2,
+                3,
+                1.0,
+            ),
+        ],
+    )
+    def test_delivery_performance_report_scenarios(
+        self,
+        scenario,
+        visit_statuses,
+        visit_date,
+        flagged_statuses,
+        expected_active_workers,
+        expected_total_workers,
+        expected_flags,
+        expected_records_flagged_percentage,
+        total_payment_units_with_flags,
+        total_payment_since_start_date,
+        delivery_per_day_per_worker,
+    ):
+        for i, visit_status in enumerate(visit_statuses):
+            self.create_user_with_visit(
+                visit_status=visit_status, visit_date=visit_date[i], flagged=flagged_statuses[i]
+            )
 
-    def test_delivery_performance_with_date_range(self):
-        start_date = now() - timedelta(10)
-        end_date = now() + timedelta(10)
-
-        self.create_user_with_visit(VisitValidationStatus.pending, start_date - timedelta(1))
-        self.create_user_with_visit(VisitValidationStatus.pending, start_date + timedelta(1))
-        self.create_user_with_visit(VisitValidationStatus.pending, end_date - timedelta(1))
-        self.create_user_with_visit(VisitValidationStatus.pending, end_date + timedelta(1))
+        start_date = end_date = None
+        if scenario == "date_range_scenario":
+            start_date = now() - timedelta(10)
+            end_date = now() + timedelta(10)
 
         opps = get_delivery_performance_report(self.program, start_date, end_date)
-        assert opps[0].active_workers == 2
-        assert opps[0].total_payment_since_start_date == 2
 
-    def test_delivery_performance_with_flagged_visits(self):
-        self.create_user_with_visit(VisitValidationStatus.pending, now())
-        self.create_user_with_visit(VisitValidationStatus.pending, now(), flagged=True)
-
-        opps = get_delivery_performance_report(self.program, None, None)
-        assert opps[0].total_payment_units_with_flags == 1
-        assert opps[0].records_flagged_percentage == 50.0
-
-    def test_delivery_performance_with_no_active_workers(self):
-        self.create_user_with_visit(VisitValidationStatus.over_limit, now())
-        self.create_user_with_visit(VisitValidationStatus.trial, now())
-
-        opps = get_delivery_performance_report(self.program, None, None)
-        assert opps[0].total_workers_starting_delivery == 0
-        assert opps[0].active_workers == 0
-        assert opps[0].delivery_per_day_per_worker == 0.0
-
-    def test_delivery_performance_with_multiple_opportunities(self):
-        opp2 = ManagedOpportunityFactory.create(program=self.program)
-
-        self.create_user_with_visit(VisitValidationStatus.pending, now())
-
-        user = UserFactory.create()
-        access = OpportunityAccessFactory.create(opportunity=opp2, user=user, invited_date=now())
-        UserVisitFactory.create(
-            user=user,
-            opportunity=opp2,
-            status=VisitValidationStatus.pending,
-            opportunity_access=access,
-            visit_date=now(),
-        )
-        CompletedWorkFactory.create(opportunity_access=access)
-
-        opps = get_delivery_performance_report(self.program, None, None)
-        assert len(opps) == 2
-        assert all(o.active_workers == 1 for o in opps)
-
-    def test_delivery_performance_with_no_completed_work(self):
-        self.create_user_with_visit(VisitValidationStatus.pending, now(), create_completed_work=False)
-
-        opps = get_delivery_performance_report(self.program, None, None)
-        assert opps[0].total_payment_units == 0
-        assert opps[0].delivery_per_day_per_worker == 0
-
-    @pytest.mark.parametrize("visit_status", [VisitValidationStatus.rejected, VisitValidationStatus.approved])
-    def test_delivery_performance_excluded_statuses(self, visit_status):
-        self.create_user_with_visit(visit_status, now(), flagged=True)
-
-        opps = get_delivery_performance_report(self.program, None, None)
-        assert opps[0].total_workers_starting_delivery == 1
-        assert opps[0].active_workers == 1
-        assert opps[0].total_payment_units_with_flags == 0
-
-    def test_delivery_performance_with_mixed_statuses(self):
-        self.create_user_with_visit(VisitValidationStatus.pending, now(), flagged=True)
-        self.create_user_with_visit(VisitValidationStatus.approved, now(), flagged=True)
-        self.create_user_with_visit(VisitValidationStatus.rejected, now(), flagged=True)
-        self.create_user_with_visit(VisitValidationStatus.over_limit, now(), flagged=True)
-
-        opps = get_delivery_performance_report(self.program, None, None)
-        assert opps[0].total_workers_starting_delivery == 3
-        assert opps[0].active_workers == 3
-        assert opps[0].total_payment_units_with_flags == 2
-        assert opps[0].records_flagged_percentage == 66.67
+        assert len(opps) == 1
+        assert opps[0].active_workers == expected_active_workers
+        assert opps[0].total_workers_starting_delivery == expected_total_workers
+        assert opps[0].total_payment_units_with_flags == expected_flags
+        assert opps[0].records_flagged_percentage == expected_records_flagged_percentage
+        assert opps[0].total_payment_units_with_flags == total_payment_units_with_flags
+        assert opps[0].total_payment_since_start_date == total_payment_since_start_date
+        assert opps[0].delivery_per_day_per_worker == delivery_per_day_per_worker

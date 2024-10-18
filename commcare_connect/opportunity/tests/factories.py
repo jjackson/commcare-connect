@@ -56,6 +56,7 @@ class OpportunityFactory(DjangoModelFactory):
     total_budget = Faker("pyint", min_value=1000, max_value=10000)
     api_key = SubFactory(HQApiKeyFactory)
     delivery_type = SubFactory(DeliveryTypeFactory)
+    currency = "USD"
 
     class Meta:
         model = "opportunity.Opportunity"
@@ -225,3 +226,12 @@ class DeliveryTypeFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.DeliveryType"
+
+
+class PaymentFactory(DjangoModelFactory):
+    opportunity_access = SubFactory(OpportunityAccessFactory)
+    amount = Faker("pyint", min_value=1, max_value=10000)
+    date_paid = Faker("past_date")
+
+    class Meta:
+        model = "opportunity.Payment"
