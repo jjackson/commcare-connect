@@ -460,55 +460,47 @@ def test_auto_approve_visits_and_payments(
     assert access.payment_accrued == completed_work.payment_accrued
 
 
+@pytest.mark.parametrize(
+    "opportunity",
+    [
+        {
+            "verification_flags": {
+                "form_submission_start": datetime.time(10, 0),
+                "form_submission_end": datetime.time(14, 0),
+            }
+        }
+    ],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "submission_time_hour, expected_message",
+    [
+        (11, None),
+        (9, "Form was submitted before the start time"),
+        (15, "Form was submitted after the end time"),
+    ],
+)
 def test_reciever_verification_flags_form_submission(
-    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+    user_with_connectid_link: User,
+    api_client: APIClient,
+    opportunity: Opportunity,
+    submission_time_hour,
+    expected_message,
 ):
-    verification_flags = OpportunityVerificationFlags.objects.get(opportunity=opportunity)
-    verification_flags.form_submission_start = datetime.time(hour=10, minute=0)
-    verification_flags.form_submission_end = datetime.time(hour=12, minute=0)
-    verification_flags.save()
-
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
-    time = datetime.datetime(2024, 4, 17, 10, 0, 0)
-    form_json["metadata"]["timeStart"] = time
-    form_json["metadata"]["timeEnd"] = time + datetime.timedelta(minutes=10)
+    submission_time = datetime.datetime(2024, 5, 17, hour=submission_time_hour, minute=0)
+    form_json["metadata"]["timeStart"] = submission_time
+
     make_request(api_client, form_json, user_with_connectid_link)
+
     visit = UserVisit.objects.get(user=user_with_connectid_link)
-    assert not visit.flagged
 
-
-def test_reciever_verification_flags_form_submission_start(
-    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
-):
-    verification_flags = OpportunityVerificationFlags.objects.get(opportunity=opportunity)
-    verification_flags.form_submission_start = datetime.time(hour=10, minute=0)
-    verification_flags.form_submission_end = datetime.time(hour=12, minute=0)
-    verification_flags.save()
-
-    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
-    time = datetime.datetime(2024, 4, 17, 9, 0, 0)
-    form_json["metadata"]["timeStart"] = time
-    make_request(api_client, form_json, user_with_connectid_link)
-    visit = UserVisit.objects.get(user=user_with_connectid_link)
-    assert visit.flagged
-    assert ["form_submission_period", "Form was submitted before the start time"] in visit.flag_reason.get("flags", [])
-
-
-def test_reciever_verification_flags_form_submission_end(
-    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
-):
-    verification_flags = OpportunityVerificationFlags.objects.get(opportunity=opportunity)
-    verification_flags.form_submission_start = datetime.time(hour=10, minute=0)
-    verification_flags.form_submission_end = datetime.time(hour=12, minute=0)
-    verification_flags.save()
-
-    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
-    time = datetime.datetime(2024, 4, 17, 13, 0, 0)
-    form_json["metadata"]["timeStart"] = time
-    make_request(api_client, form_json, user_with_connectid_link)
-    visit = UserVisit.objects.get(user=user_with_connectid_link)
-    assert visit.flagged
-    assert ["form_submission_period", "Form was submitted after the end time"] in visit.flag_reason.get("flags", [])
+    # Assert based on the expected message
+    if expected_message is None:
+        assert not visit.flagged
+    else:
+        assert visit.flagged
+        assert ["form_submission_period", expected_message] in visit.flag_reason.get("flags", [])
 
 
 def test_reciever_verification_flags_duration(

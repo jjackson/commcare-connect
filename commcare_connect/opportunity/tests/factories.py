@@ -72,6 +72,8 @@ class OpportunityAccessFactory(DjangoModelFactory):
 
 class OpportunityVerificationFlagsFactory(DjangoModelFactory):
     opportunity = SubFactory(OpportunityFactory)
+    form_submission_start = None  # Default to None
+    form_submission_end = None  # Default to None
 
     class Meta:
         model = "opportunity.OpportunityVerificationFlags"
