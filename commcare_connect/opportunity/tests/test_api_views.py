@@ -146,8 +146,22 @@ def test_learn_progress_endpoint(mobile_user: User, api_client: APIClient):
     assert list(response.data["assessments"][0].keys()) == ["date", "score", "passing_score", "passed"]
 
 
+@pytest.mark.parametrize(
+    "opportunity",
+    [
+        {
+            "verification_flags": {
+                "form_submission_start": datetime.time(10, 0),
+                "form_submission_end": datetime.time(14, 0),
+            }
+        }
+    ],
+    indirect=True,
+)
 def test_opportunity_list_endpoint(
-    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+    mobile_user_with_connect_link: User,
+    api_client: APIClient,
+    opportunity: Opportunity,
 ):
     api_client.force_authenticate(mobile_user_with_connect_link)
     response = api_client.get("/api/opportunity/")
