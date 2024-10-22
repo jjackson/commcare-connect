@@ -584,3 +584,39 @@ def test_network_manager_reject_flagged_visit(mobile_user: User, opportunity: Op
         assert visit.status_modified_date is not None
         assert before_update <= visit.status_modified_date <= after_update
         assert visit.review_created_on is None
+
+
+@pytest.mark.parametrize("opportunity", [{"managed": True}], indirect=True)
+@pytest.mark.parametrize(
+    "review_status, cw_status",
+    [
+        (VisitReviewStatus.pending, CompletedWorkStatus.pending),
+        (VisitReviewStatus.agree, CompletedWorkStatus.approved),
+        (VisitReviewStatus.disagree, CompletedWorkStatus.pending),
+    ],
+)
+def test_review_completed_work_status(
+    mobile_user_with_connect_link: User, opportunity: Opportunity, review_status, cw_status
+):
+    deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app, payment_unit=opportunity.paymentunit_set.first())
+    access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
+    UserVisitFactory.create_batch(
+        2,
+        opportunity_access=access,
+        status=VisitValidationStatus.approved,
+        review_status=review_status,
+        review_created_on=now(),
+        completed_work__status=CompletedWorkStatus.pending,
+        completed_work__opportunity_access=access,
+        completed_work__payment_unit=opportunity.paymentunit_set.first(),
+        deliver_unit=deliver_unit,
+    )
+    assert access.payment_accrued == 0
+    update_payment_accrued(opportunity, {mobile_user_with_connect_link.id})
+    completed_works = CompletedWork.objects.filter(opportunity_access=access)
+    payment_accrued = 0
+    for cw in completed_works:
+        assert cw.status == cw_status
+        payment_accrued += cw.payment_accrued
+    access.refresh_from_db()
+    assert access.payment_accrued == payment_accrued
