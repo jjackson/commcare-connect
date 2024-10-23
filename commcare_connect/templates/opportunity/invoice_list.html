@@ -2,6 +2,7 @@
 {% load django_tables2 %}
 {% load static %}
 {% load crispy_forms_tags %}
+{% load i18n %}
 
 {% block title %}{{ request.org }} - Invoices{% endblock title %}
 
@@ -20,7 +21,7 @@
   <hr />
   {% if not request.org_membership.is_program_manager %}
     <button type="button" class="btn btn-primary mb-2" data-bs-toggle="modal" data-bs-target="#invoiceModal">
-      {% translate Add New Invoice %}
+      {% translate "Add New Invoice" %}
     </button>
   {% endif %}
 

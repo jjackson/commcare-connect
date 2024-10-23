@@ -56,6 +56,7 @@ class OpportunityFactory(DjangoModelFactory):
     total_budget = Faker("pyint", min_value=1000, max_value=10000)
     api_key = SubFactory(HQApiKeyFactory)
     delivery_type = SubFactory(DeliveryTypeFactory)
+    currency = "USD"
 
     class Meta:
         model = "opportunity.Opportunity"
@@ -71,6 +72,8 @@ class OpportunityAccessFactory(DjangoModelFactory):
 
 class OpportunityVerificationFlagsFactory(DjangoModelFactory):
     opportunity = SubFactory(OpportunityFactory)
+    form_submission_start = None  # Default to None
+    form_submission_end = None  # Default to None
 
     class Meta:
         model = "opportunity.OpportunityVerificationFlags"
