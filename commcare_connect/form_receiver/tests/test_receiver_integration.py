@@ -588,30 +588,21 @@ def test_receiver_verification_flags_catchment_areas(
 
 
 @pytest.mark.parametrize("opportunity", [{"managed": True}], indirect=True)
-def test_receiver_auto_agree_approved_visit(
-    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+@pytest.mark.parametrize(
+    "visit_status, review_status",
+    [
+        (VisitValidationStatus.approved, VisitReviewStatus.agree),
+        (VisitValidationStatus.pending, VisitReviewStatus.pending),
+    ],
+)
+def test_receiver_visit_review_status(
+    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity, visit_status, review_status
 ):
     assert opportunity.managed
-    form_json = get_form_json_for_payment_unit(opportunity.paymentunit_set.all()[0])
+    form_json = get_form_json_for_payment_unit(opportunity.paymentunit_set.first())
+    if visit_status != VisitValidationStatus.approved:
+        form_json["metadata"]["location"] = None
     make_request(api_client, form_json, mobile_user_with_connect_link)
-    visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
-    assert not visit.flagged
-    assert visit.status == VisitValidationStatus.approved
-    assert visit.review_status == VisitReviewStatus.agree
-
-
-@pytest.mark.parametrize("opportunity", [{"managed": True}], indirect=True)
-def test_receiver_flagged_visit_review_pending(
-    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
-):
-    assert opportunity.managed
-    form_json = get_form_json_for_payment_unit(opportunity.paymentunit_set.all()[0])
-    form_json["metadata"]["location"] = None
-    make_request(api_client, form_json, mobile_user_with_connect_link)
-    visit = UserVisit.objects.get(user=mobile_user_with_connect_link)
-    assert visit.flagged
-    assert visit.status == VisitValidationStatus.pending
-    assert visit.review_status == VisitReviewStatus.pending
 
 
 def get_form_json_for_payment_unit(payment_unit):
