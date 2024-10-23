@@ -543,47 +543,28 @@ def get_assignable_completed_work_count(access: OpportunityAccess) -> int:
 
 
 @pytest.mark.parametrize("opportunity", [{"managed": True}], indirect=True)
-def test_network_manager_approve_flagged_visit(mobile_user: User, opportunity: Opportunity):
+@pytest.mark.parametrize("visit_status", [VisitValidationStatus.approved, VisitValidationStatus.rejected])
+def test_network_manager_flagged_visit_review_status(mobile_user: User, opportunity: Opportunity, visit_status):
     assert opportunity.managed
     access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
     visits = UserVisitFactory.create_batch(
         5, opportunity=opportunity, status=VisitValidationStatus.pending, user=mobile_user, opportunity_access=access
     )
     dataset = Dataset(headers=["visit id", "status", "rejected reason", "justification"])
-    dataset.extend([[visit.xform_id, VisitValidationStatus.approved.value, "", "justification"] for visit in visits])
+    dataset.extend([[visit.xform_id, visit_status.value, "", "justification"] for visit in visits])
     before_update = now()
     import_status = _bulk_update_visit_status(opportunity, dataset)
     after_update = now()
     assert not import_status.missing_visits
     updated_visits = UserVisit.objects.filter(opportunity=opportunity)
     for visit in updated_visits:
-        assert visit.status == VisitValidationStatus.approved
+        assert visit.status == visit_status
         assert visit.status_modified_date is not None
         assert before_update <= visit.status_modified_date <= after_update
-        assert before_update <= visit.review_created_on <= after_update
-        assert visit.review_status == VisitReviewStatus.pending
-        assert visit.justification == "justification"
-
-
-@pytest.mark.parametrize("opportunity", [{"managed": True}], indirect=True)
-def test_network_manager_reject_flagged_visit(mobile_user: User, opportunity: Opportunity):
-    assert opportunity.managed
-    access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
-    visits = UserVisitFactory.create_batch(
-        5, opportunity=opportunity, status=VisitValidationStatus.pending, user=mobile_user, opportunity_access=access
-    )
-    dataset = Dataset(headers=["visit id", "status", "rejected reason", "justification"])
-    dataset.extend([[visit.xform_id, VisitValidationStatus.rejected.value, "", "justification"] for visit in visits])
-    before_update = now()
-    import_status = _bulk_update_visit_status(opportunity, dataset)
-    after_update = now()
-    assert not import_status.missing_visits
-    updated_visits = UserVisit.objects.filter(opportunity=opportunity)
-    for visit in updated_visits:
-        assert visit.status == VisitValidationStatus.rejected
-        assert visit.status_modified_date is not None
-        assert before_update <= visit.status_modified_date <= after_update
-        assert visit.review_created_on is None
+        if visit.status == VisitValidationStatus.approved:
+            assert before_update <= visit.review_created_on <= after_update
+            assert visit.review_status == VisitReviewStatus.pending
+            assert visit.justification == "justification"
 
 
 @pytest.mark.parametrize("opportunity", [{"managed": True}], indirect=True)
