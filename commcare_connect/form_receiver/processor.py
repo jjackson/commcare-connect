@@ -303,15 +303,12 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         user_visit.status = VisitValidationStatus.approved
         user_visit.review_status = VisitReviewStatus.agree
     user_visit.save()
-    if (
-        completed_work is not None
-        and completed_work.completed_count > 0
-        and completed_work.status == CompletedWorkStatus.incomplete
-    ):
-        completed_work.status = CompletedWorkStatus.pending
-        completed_work_needs_save = True
-    if completed_work_needs_save:
-        completed_work.save()
+    if completed_work is not None:
+        if completed_work.completed_count > 0 and completed_work.status == CompletedWorkStatus.incomplete:
+            completed_work.status = CompletedWorkStatus.pending
+            completed_work_needs_save = True
+        if completed_work_needs_save:
+            completed_work.save()
     download_user_visit_attachments.delay(user_visit.id)
 
 
