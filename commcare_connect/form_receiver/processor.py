@@ -1,5 +1,6 @@
 import datetime
 
+from django.core.cache import cache
 from django.db.models import Count, Q
 from django.utils.timezone import now
 from geopy.distance import distance
@@ -29,6 +30,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tasks import download_user_visit_attachments
+from commcare_connect.opportunity.visit_import import update_payment_accrued
 from commcare_connect.users.models import User
 
 LEARN_MODULE_JSONPATH = parse("$..module")
@@ -309,6 +311,8 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             completed_work_needs_save = True
         if completed_work_needs_save:
             completed_work.save()
+    with cache.lock(access.id):
+        update_payment_accrued(opportunity, [access.user_id])
     download_user_visit_attachments.delay(user_visit.id)
 
 
