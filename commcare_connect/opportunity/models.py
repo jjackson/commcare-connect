@@ -181,8 +181,9 @@ class Opportunity(BaseModel):
     def budget_per_user(self):
         payment_units = self.paymentunit_set.all()
         budget = 0
+        org_pay = self.managedopportunity.org_pay_per_visit if self.managed else 0
         for pu in payment_units:
-            budget += pu.max_total * pu.amount
+            budget += pu.max_total * (pu.amount + org_pay)
         return budget
 
     @property
