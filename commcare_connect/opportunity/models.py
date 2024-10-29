@@ -354,6 +354,8 @@ class PaymentUnit(models.Model):
         blank=True,
         null=True,
     )
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
 
 
 class DeliverUnit(models.Model):
