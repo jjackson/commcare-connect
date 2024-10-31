@@ -7,7 +7,7 @@
 <h2 class="my-2">Program Dashboard</h2>
 <div class="container" x-data="dashboardStats()" >
   <div class="mb-4">
-    <div class="row mb-4" x-ref="filterForm">
+    <div class="row mb-4" x-ref="filterForm" id="filterForm">
       {% crispy filter.form %}
     </div>
   </div>
@@ -99,10 +99,12 @@
       isLoading: false,
       async init() {
         await this.loadStats();
-
         const formElement = this.$refs.filterForm.querySelector('form');
         formElement.querySelectorAll('select, input').forEach(input => {
-          input.addEventListener('change', () => this.loadStats());
+          input.addEventListener('change', () => {
+            this.loadStats();
+            window.refreshMapData();
+          });
         });
       },
       async loadStats(event) {
@@ -126,9 +128,23 @@
   }
 </script>
 <script type="module">
+  let map;
+
+  // Add this function to handle map data refresh
+  window.refreshMapData = () => {
+    if (!map) return;
+
+    const formElement = document.querySelector('#filterForm form');
+    const formData = new FormData(formElement);
+    const queryString = new URLSearchParams(formData).toString();
+
+    // Update the source data with new filters
+    map.getSource('visits').setData(`{% url "reports:visit_map_data" %}?${queryString}`);
+  };
+
   window.addEventListener('DOMContentLoaded', () => {
     mapboxgl.accessToken = "{{ mapbox_token }}";
-    const map = new mapboxgl.Map({
+    map = new mapboxgl.Map({
       container: 'map',
       // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
       style: 'mapbox://styles/mapbox/dark-v11',
@@ -137,16 +153,17 @@
     });
 
     map.on('load', () => {
-      // Add a new source from our GeoJSON data and
-      // set the 'cluster' option to true. GL-JS will
-      // add the point_count property to your source data.
+      // Modify the source configuration to include initial filters
+      const formElement = document.querySelector('#filterForm form');
+      const formData = new FormData(formElement);
+      const queryString = new URLSearchParams(formData).toString();
+
       map.addSource('visits', {
         type: 'geojson',
-        // Point to GeoJSON data from the backend.
-        data: '{% url "reports:visit_map_data" %}',
+        data: `{% url "reports:visit_map_data" %}?${queryString}`,
         cluster: true,
-        clusterMaxZoom: 14, // Max zoom to cluster points on
-        clusterRadius: 50 // Radius of each cluster when clustering points (defaults to 50)
+        clusterMaxZoom: 14,
+        clusterRadius: 50
       });
 
       const clusterStep1 = 50;

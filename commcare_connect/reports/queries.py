@@ -2,12 +2,10 @@ from django.db.models import DateTimeField, ExpressionWrapper, F, FloatField
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast, Extract
 
-from commcare_connect.opportunity.models import UserVisit
 
-
-def get_visit_map_queryset_base():
+def get_visit_map_queryset(base_queryset):
     return (
-        UserVisit.objects.annotate(
+        base_queryset.annotate(
             username_connectid=F("form_json__metadata__username"),
             deliver_unit_name=F("deliver_unit__name"),
             days_since_opp_start=ExpressionWrapper(
