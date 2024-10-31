@@ -9,9 +9,6 @@
   <div class="mb-4">
     <div class="row mb-4" x-ref="filterForm">
       {% crispy filter.form %}
-      <div class="col-12 text-end">
-        <button type="button" class="btn btn-primary" @click="loadStats()">Update Dashboard</button>
-      </div>
     </div>
   </div>
   <div class="row">
@@ -78,6 +75,11 @@
       async init() {
         console.log('init called');
         await this.loadStats();
+
+        const formElement = this.$refs.filterForm.querySelector('form');
+        formElement.querySelectorAll('select, input').forEach(input => {
+          input.addEventListener('change', () => this.loadStats());
+        });
       },
       async loadStats(event) {
         try {
