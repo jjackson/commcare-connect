@@ -5,7 +5,7 @@
 {% block title %}Admin Dashboard{% endblock %}
 {% block content %}
 <h2 class="my-2">Program Dashboard</h2>
-<div class="container" x-data="dashboardStats()" x-init="$nextTick(() => console.log('Alpine initialized'))">
+<div class="container" x-data="dashboardStats()" >
   <div class="mb-4">
     <div class="row mb-4" x-ref="filterForm">
       {% crispy filter.form %}
@@ -98,7 +98,6 @@
       },
       isLoading: false,
       async init() {
-        console.log('init called');
         await this.loadStats();
 
         const formElement = this.$refs.filterForm.querySelector('form');
@@ -112,18 +111,10 @@
           const formElement = this.$refs.filterForm.querySelector('form');
           const formData = new FormData(formElement);
           const queryString = new URLSearchParams(formData).toString();
-          console.log('queryString:', queryString);
-
           const url = `{% url 'reports:dashboard_stats_api' %}?${queryString}`;
-          console.log('fetching from:', url);
-
           const response = await fetch(url);
-          console.log('response:', response);
-
           if (!response.ok) throw new Error('Failed to load stats');
           const data = await response.json();
-          console.log('received data:', data);
-
           this.stats = data;
         } catch (error) {
           console.error('Error loading dashboard stats:', error);
