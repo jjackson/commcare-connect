@@ -392,16 +392,16 @@ def dashboard_stats_api(request):
         queryset = filterset.filter_queryset(queryset)
 
     # Example stats calculation (adjust based on your needs)
-    total_visits = queryset.count()
-    completed_visits = queryset.filter(status=CompletedWorkStatus.approved).count()
-    pending_visits = total_visits - completed_visits
     active_users = queryset.values("opportunity_access__user").distinct().count()
+    total_visits = queryset.count()
+    verified_visits = queryset.filter(status=CompletedWorkStatus.approved).count()
+    pending_visits = total_visits - verified_visits
 
     return JsonResponse(
         {
             "total_visits": total_visits,
             "active_users": active_users,
-            "completed_visits": completed_visits,
+            "verified_visits": verified_visits,
             "pending_visits": pending_visits,
         }
     )
