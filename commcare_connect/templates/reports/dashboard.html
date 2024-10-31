@@ -101,6 +101,9 @@
         await this.loadStats();
         const formElement = this.$refs.filterForm.querySelector('form');
         formElement.querySelectorAll('select, input').forEach(input => {
+          if (input.value) {
+            input.dispatchEvent(new Event('change'));
+          }
           input.addEventListener('change', () => {
             this.loadStats();
             window.refreshMapData();
