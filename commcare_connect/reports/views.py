@@ -157,16 +157,28 @@ def _get_table_data_for_quarter(quarter, delivery_type, group_by_delivery_type=F
 class DashboardFilters(django_filters.FilterSet):
     opportunity__delivery_type = django_filters.ModelChoiceFilter(
         queryset=DeliveryType.objects.all(),
+        label="Program",
         empty_label="All Programs",
         required=False,
     )
     opportunity__organization = django_filters.ModelChoiceFilter(
         queryset=Organization.objects.all(),
+        label="Organization",
         empty_label="All Organizations",
         required=False,
     )
-    visit_date = django_filters.DateFilter(
+    from_date = django_filters.DateTimeFilter(
         widget=forms.DateInput(attrs={"type": "date"}),
+        field_name="visit_date",
+        lookup_expr="gt",
+        label="From Date",
+        required=False,
+    )
+    to_date = django_filters.DateTimeFilter(
+        widget=forms.DateInput(attrs={"type": "date"}),
+        field_name="visit_date",
+        lookup_expr="lte",
+        label="To Date",
         required=False,
     )
 
@@ -176,15 +188,16 @@ class DashboardFilters(django_filters.FilterSet):
         self.form.helper.form_class = "form-inline"
         self.form.helper.layout = Layout(
             Row(
-                Column("opportunity__delivery_type", css_class="col-md-4"),
-                Column("opportunity__organization", css_class="col-md-4"),
-                Column("visit_date", css_class="col-md-4"),
+                Column("opportunity__delivery_type", css_class="col-md-3"),
+                Column("opportunity__organization", css_class="col-md-3"),
+                Column("from_date", css_class="col-md-3"),
+                Column("to_date", css_class="col-md-3"),
             )
         )
 
     class Meta:
         model = UserVisit
-        fields = ["opportunity__delivery_type", "opportunity__organization", "visit_date"]
+        fields = ["opportunity__delivery_type", "opportunity__organization", "from_date", "to_date"]
 
 
 @login_required
@@ -367,6 +380,7 @@ def dashboard_stats_api(request):
     # Use the filtered queryset to calculate stats
     queryset = UserVisit.objects.all()
     if filterset.is_valid():
+        print(filterset.form.cleaned_data)
         queryset = filterset.filter_queryset(queryset)
 
     # Example stats calculation (adjust based on your needs)
