@@ -7,12 +7,12 @@
 <h2 class="my-2">Program Dashboard</h2>
 <div class="container" x-data="dashboardStats()" x-init="$nextTick(() => console.log('Alpine initialized'))">
   <div class="mb-4">
-    <form class="row mb-4 id=" filter-form" x-ref="filterForm" x-on:submit.prevent="loadStats()">
+    <div class="row mb-4" x-ref="filterForm">
       {% crispy filter.form %}
       <div class="col-12 text-end">
         <button type="button" class="btn btn-primary" @click="loadStats()">Update Dashboard</button>
       </div>
-    </form>
+    </div>
   </div>
   <div class="row">
     <div class="col-12 col-sm-6 col-md-3 mb-3">
@@ -80,14 +80,9 @@
         await this.loadStats();
       },
       async loadStats(event) {
-        console.log('loadStats called', {
-          event,
-          form: this.$refs.filterForm,
-          formData: new FormData(this.$refs.filterForm)
-        });
-
         try {
-          const formData = new FormData(this.$refs.filterForm);
+          const formElement = this.$refs.filterForm.querySelector('form');
+          const formData = new FormData(formElement);
           const queryString = new URLSearchParams(formData).toString();
           console.log('queryString:', queryString);
 
