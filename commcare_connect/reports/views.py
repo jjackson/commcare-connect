@@ -2,6 +2,8 @@ from datetime import date, datetime
 
 import django_filters
 import django_tables2 as tables
+from crispy_forms.helper import FormHelper
+from crispy_forms.layout import Column, Layout, Row
 from django import forms
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -16,7 +18,8 @@ from django.views.decorators.http import require_GET
 from django_filters.views import FilterView
 
 from commcare_connect.cache import quickcache
-from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, DeliveryType, Payment
+from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, DeliveryType, Payment, UserVisit
+from commcare_connect.organization.models import Organization
 
 from .tables import AdminReportTable
 
@@ -151,14 +154,51 @@ def _get_table_data_for_quarter(quarter, delivery_type, group_by_delivery_type=F
     return data
 
 
+class DashboardFilters(django_filters.FilterSet):
+    opportunity__delivery_type = django_filters.ModelChoiceFilter(
+        queryset=DeliveryType.objects.all(),
+        empty_label="All Programs",
+        required=False,
+    )
+    opportunity__organization = django_filters.ModelChoiceFilter(
+        queryset=Organization.objects.all(),
+        empty_label="All Organizations",
+        required=False,
+    )
+    visit_date = django_filters.DateFilter(
+        widget=forms.DateInput(attrs={"type": "date"}),
+        required=False,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.form.helper = FormHelper()
+        self.form.helper.form_class = "form-inline"
+        self.form.helper.layout = Layout(
+            Row(
+                Column("opportunity__delivery_type", css_class="col-md-4"),
+                Column("opportunity__organization", css_class="col-md-4"),
+                Column("visit_date", css_class="col-md-4"),
+            )
+        )
+
+    class Meta:
+        model = UserVisit
+        fields = ["opportunity__delivery_type", "opportunity__organization", "visit_date"]
+
+
 @login_required
-@user_passes_test(lambda user: user.is_superuser)
-@require_GET
+@user_passes_test(lambda u: u.is_superuser)
 def program_dashboard_report(request):
+    filterset = DashboardFilters(request.GET)
+
     return render(
         request,
         "reports/dashboard.html",
-        context={"mapbox_token": settings.MAPBOX_TOKEN},
+        context={
+            "mapbox_token": settings.MAPBOX_TOKEN,
+            "filter": filterset,
+        },
     )
 
 
@@ -317,3 +357,29 @@ class DeliveryStatsReportView(tables.SingleTableMixin, SuperUserRequiredMixin, N
             data = _get_table_data_for_quarter(q, delivery_type, group_by_delivery_type)
             table_data += data
         return table_data
+
+
+@login_required
+@user_passes_test(lambda u: u.is_superuser)
+def dashboard_stats_api(request):
+    filterset = DashboardFilters(request.GET)
+
+    # Use the filtered queryset to calculate stats
+    queryset = UserVisit.objects.all()
+    if filterset.is_valid():
+        queryset = filterset.filter_queryset(queryset)
+
+    # Example stats calculation (adjust based on your needs)
+    total_visits = queryset.count()
+    completed_visits = queryset.filter(status=CompletedWorkStatus.approved).count()
+    pending_visits = total_visits - completed_visits
+    active_users = queryset.values("opportunity_access__user").distinct().count()
+
+    return JsonResponse(
+        {
+            "total_visits": total_visits,
+            "active_users": active_users,
+            "completed_visits": completed_visits,
+            "pending_visits": pending_visits,
+        }
+    )

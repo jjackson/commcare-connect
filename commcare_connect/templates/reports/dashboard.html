@@ -6,87 +6,40 @@
 {% block content %}
   <h2 class="my-2">Program Dashboard</h2>
   <div class="container" x-data="dashboardStats()">
-    <div class="row mb-3">
-      <div class="col-md-4 mt-4">
-        <div class="form-group">
-          <label for="program-select" class="form-label">Program</label>
-          <select class="form-select" id="program-select">
-            <option selected value="">Select a program...</option>
-            {% for program in programs %}
-              <option value="{{ program.id }}">{{ program.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-      <div class="col-md-4 mt-4">
-        <div class="form-group">
-          <label for="org-select" class="form-label">Organization</label>
-          <select class="form-select" id="org-select">
-            <option selected value="">Select an organization...</option>
-            {% for org in organizations %}
-              <option value="{{ org.id }}">{{ org.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-      <div class="col-md-4 mt-4">
-        <div class="form-group">
-          <label for="date-select" class="form-label">Date</label>
-          <input type="date" class="form-control" id="date-select" value="">
-        </div>
-      </div>
-    </div>
-    <div class="row mb-4">
-      <div class="col-12 text-end">
-        <button type="submit" class="btn btn-primary">Update Dashboard</button>
-      </div>
-    </div>
+    <form class="row mb-3" id="filter-form" hx-get="{% url 'reports:dashboard_stats_api' %}"
+          hx-trigger="change from:#filter-form" hx-swap="none" x-ref="filterForm">
+      {% crispy filter.form %}
+    </form>
     <div class="row">
       <div class="col-12 col-sm-6 col-md-3 mb-3">
         <div class="card">
           <div class="card-body">
-            <div class="display-4 fw-bold" x-text="stats.total_visits || 0">
-              0
-            </div>
-            <div class="small text-muted mt-1">
-              Total Visits
-            </div>
+            <div class="display-4 fw-bold" x-text="stats.total_visits || 0">0</div>
+            <div class="small text-muted mt-1">Total Visits</div>
           </div>
         </div>
       </div>
       <div class="col-12 col-sm-6 col-md-3 mb-3">
         <div class="card">
           <div class="card-body">
-            <div class="display-4 fw-bold" x-text="stats.active_users || 0">
-              0
-            </div>
-            <div class="small text-muted mt-1">
-              Active Users
-            </div>
+            <div class="display-4 fw-bold" x-text="stats.active_users || 0">0</div>
+            <div class="small text-muted mt-1">Active Users</div>
           </div>
         </div>
       </div>
       <div class="col-12 col-sm-6 col-md-3 mb-3">
         <div class="card">
           <div class="card-body">
-            <div class="display-4 fw-bold" x-text="stats.completed_visits || 0">
-              0
-            </div>
-            <div class="small text-muted mt-1">
-              Completed Visits
-            </div>
+            <div class="display-4 fw-bold" x-text="stats.completed_visits || 0">0</div>
+            <div class="small text-muted mt-1">Completed Visits</div>
           </div>
         </div>
       </div>
       <div class="col-12 col-sm-6 col-md-3 mb-3">
         <div class="card">
           <div class="card-body">
-            <div class="display-4 fw-bold" x-text="stats.pending_visits || 0">
-              0
-            </div>
-            <div class="small text-muted mt-1">
-              Pending Visits
-            </div>
+            <div class="display-4 fw-bold" x-text="stats.pending_visits || 0">0</div>
+            <div class="small text-muted mt-1">Pending Visits</div>
           </div>
         </div>
       </div>
@@ -109,7 +62,6 @@
 {% endblock content %}
 {% block inline_javascript %}
 {{ block.super }}
-  {{ user_visits|json_script:"userVisits" }}
   <script>
     function dashboardStats() {
       return {
@@ -121,19 +73,12 @@
         },
         async init() {
           await this.loadStats();
-
-          // Set up event listeners for filter changes
-          document.getElementById('program-select').addEventListener('change', () => this.loadStats());
-          document.getElementById('org-select').addEventListener('change', () => this.loadStats());
-          document.getElementById('date-select').addEventListener('change', () => this.loadStats());
         },
         async loadStats() {
-          const program = document.getElementById('program-select').value;
-          const organization = document.getElementById('org-select').value;
-          const date = document.getElementById('date-select').value;
-
           try {
-            const response = await fetch(`/api/dashboard-stats/?program=${program}&organization=${organization}&date=${date}`);
+            const formData = new FormData(this.$refs.filterForm);
+            const queryString = new URLSearchParams(formData).toString();
+            const response = await fetch(`{% url 'reports:dashboard_stats_api' %}?${queryString}`);
             if (!response.ok) throw new Error('Failed to load stats');
             this.stats = await response.json();
           } catch (error) {
