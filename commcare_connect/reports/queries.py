@@ -1,4 +1,4 @@
-from django.db.models import Case, DateTimeField, ExpressionWrapper, F, FloatField, Value, When
+from django.db.models import DateTimeField, ExpressionWrapper, F, FloatField
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast, Extract
 
@@ -19,22 +19,7 @@ def get_visit_map_queryset_base():
                 Extract(Cast("timeend_str", DateTimeField()) - Cast("timestart_str", DateTimeField()), "epoch") / 60,
                 output_field=FloatField(),
             ),
-            gps_location_lat=Case(
-                When(
-                    form_json__metadata__location__isnull=False,
-                    then=ExpressionWrapper(F("form_json__metadata__location__0"), output_field=FloatField()),
-                ),
-                default=Value(None),
-                output_field=FloatField(),
-            ),
-            gps_location_long=Case(
-                When(
-                    form_json__metadata__location__isnull=False,
-                    then=ExpressionWrapper(F("form_json__metadata__location__1"), output_field=FloatField()),
-                ),
-                default=Value(None),
-                output_field=FloatField(),
-            ),
+            location_str=KeyTextTransform("location", KeyTextTransform("metadata", F("form_json"))),
         )
         .select_related("deliver_unit", "opportunity")
         .values(
@@ -52,7 +37,6 @@ def get_visit_map_queryset_base():
             "timestart_str",
             "timeend_str",
             "visit_duration",
-            "gps_location_lat",
-            "gps_location_long",
+            "location_str",
         )
     )
