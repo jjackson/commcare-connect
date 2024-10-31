@@ -5,13 +5,13 @@
 {% block title %}Admin Dashboard{% endblock %}
 {% block content %}
   <h2 class="my-2">Program Dashboard</h2>
-  <div class="container">
+  <div class="container" x-data="dashboardStats()">
     <div class="row mb-3">
       <div class="col-md-4 mt-4">
         <div class="form-group">
           <label for="program-select" class="form-label">Program</label>
           <select class="form-select" id="program-select">
-            <option selected>Select a program...</option>
+            <option selected value="">Select a program...</option>
             {% for program in programs %}
               <option value="{{ program.id }}">{{ program.name }}</option>
             {% endfor %}
@@ -22,7 +22,7 @@
         <div class="form-group">
           <label for="org-select" class="form-label">Organization</label>
           <select class="form-select" id="org-select">
-            <option selected>Select an organization...</option>
+            <option selected value="">Select an organization...</option>
             {% for org in organizations %}
               <option value="{{ org.id }}">{{ org.name }}</option>
             {% endfor %}
@@ -32,7 +32,7 @@
       <div class="col-md-4 mt-4">
         <div class="form-group">
           <label for="date-select" class="form-label">Date</label>
-          <input type="date" class="form-control" id="date-select">
+          <input type="date" class="form-control" id="date-select" value="">
         </div>
       </div>
     </div>
@@ -44,8 +44,8 @@
     <div class="row">
       <div class="col-12 col-sm-6 col-md-3 mb-3">
         <div class="card">
-          <div class="card-body ">
-            <div class="display-4 fw-bold">
+          <div class="card-body">
+            <div class="display-4 fw-bold" x-text="stats.total_visits || 0">
               0
             </div>
             <div class="small text-muted mt-1">
@@ -57,7 +57,7 @@
       <div class="col-12 col-sm-6 col-md-3 mb-3">
         <div class="card">
           <div class="card-body">
-            <div class="display-4 fw-bold">
+            <div class="display-4 fw-bold" x-text="stats.active_users || 0">
               0
             </div>
             <div class="small text-muted mt-1">
@@ -69,7 +69,7 @@
       <div class="col-12 col-sm-6 col-md-3 mb-3">
         <div class="card">
           <div class="card-body">
-            <div class="display-4 fw-bold">
+            <div class="display-4 fw-bold" x-text="stats.completed_visits || 0">
               0
             </div>
             <div class="small text-muted mt-1">
@@ -81,7 +81,7 @@
       <div class="col-12 col-sm-6 col-md-3 mb-3">
         <div class="card">
           <div class="card-body">
-            <div class="display-4 fw-bold">
+            <div class="display-4 fw-bold" x-text="stats.pending_visits || 0">
               0
             </div>
             <div class="small text-muted mt-1">
@@ -110,6 +110,39 @@
 {% block inline_javascript %}
 {{ block.super }}
   {{ user_visits|json_script:"userVisits" }}
+  <script>
+    function dashboardStats() {
+      return {
+        stats: {
+          total_visits: 0,
+          active_users: 0,
+          completed_visits: 0,
+          pending_visits: 0
+        },
+        async init() {
+          await this.loadStats();
+
+          // Set up event listeners for filter changes
+          document.getElementById('program-select').addEventListener('change', () => this.loadStats());
+          document.getElementById('org-select').addEventListener('change', () => this.loadStats());
+          document.getElementById('date-select').addEventListener('change', () => this.loadStats());
+        },
+        async loadStats() {
+          const program = document.getElementById('program-select').value;
+          const organization = document.getElementById('org-select').value;
+          const date = document.getElementById('date-select').value;
+
+          try {
+            const response = await fetch(`/api/dashboard-stats/?program=${program}&organization=${organization}&date=${date}`);
+            if (!response.ok) throw new Error('Failed to load stats');
+            this.stats = await response.json();
+          } catch (error) {
+            console.error('Error loading dashboard stats:', error);
+          }
+        }
+      }
+    }
+  </script>
   <script type="module">
     window.addEventListener('DOMContentLoaded', () => {
       mapboxgl.accessToken = "{{ mapbox_token }}";
