@@ -5,11 +5,19 @@
 {% block title %}Admin Dashboard{% endblock %}
 {% block content %}
   <h2 class="my-2">Program Dashboard</h2>
-  <div class="container" x-data="dashboardStats()">
-    <form class="row mb-3" id="filter-form" hx-get="{% url 'reports:dashboard_stats_api' %}"
-          hx-trigger="change from:#filter-form" hx-swap="none" x-ref="filterForm">
-      {% crispy filter.form %}
-    </form>
+  <div class="container" x-data="dashboardStats()" x-init="$nextTick(() => console.log('Alpine initialized'))">
+    <div class="mb-4">
+        <form class="row mb-4 id="filter-form" x-ref="filterForm" x-on:submit.prevent="loadStats()">
+        {% crispy filter.form %}
+        <div class="col-12 text-end">
+            <button
+            type="button"
+            class="btn btn-primary"
+            @click="loadStats()"
+            >Update Dashboard</button>
+        </div>
+        </form>
+    </div>
     <div class="row">
       <div class="col-12 col-sm-6 col-md-3 mb-3">
         <div class="card">
@@ -72,15 +80,32 @@
           pending_visits: 0
         },
         async init() {
+          console.log('init called');
           await this.loadStats();
         },
-        async loadStats() {
+        async loadStats(event) {
+          console.log('loadStats called', {
+            event,
+            form: this.$refs.filterForm,
+            formData: new FormData(this.$refs.filterForm)
+          });
+
           try {
             const formData = new FormData(this.$refs.filterForm);
             const queryString = new URLSearchParams(formData).toString();
-            const response = await fetch(`{% url 'reports:dashboard_stats_api' %}?${queryString}`);
+            console.log('queryString:', queryString);
+
+            const url = `{% url 'reports:dashboard_stats_api' %}?${queryString}`;
+            console.log('fetching from:', url);
+
+            const response = await fetch(url);
+            console.log('response:', response);
+
             if (!response.ok) throw new Error('Failed to load stats');
-            this.stats = await response.json();
+            const data = await response.json();
+            console.log('received data:', data);
+
+            this.stats = data;
           } catch (error) {
             console.error('Error loading dashboard stats:', error);
           }
