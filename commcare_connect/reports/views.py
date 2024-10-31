@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import django_filters
 import django_tables2 as tables
@@ -197,6 +197,23 @@ class DashboardFilters(django_filters.FilterSet):
             )
         )
 
+        # Set default values if no data is provided
+        if not self.data:
+            # Create a mutable copy of the QueryDict
+            self.data = self.data.copy() if self.data else {}
+
+            # Set default dates
+            today = date.today()
+            default_from = today - timedelta(days=90)
+
+            # Set the default values
+            self.data["to_date"] = today.strftime("%Y-%m-%d")
+            self.data["from_date"] = default_from.strftime("%Y-%m-%d")
+
+            # Force the form to bind with the default data
+            self.form.is_bound = True
+            self.form.data = self.data
+
     class Meta:
         model = UserVisit
         fields = ["program", "organization", "from_date", "to_date"]
@@ -227,7 +244,6 @@ def visit_map_data(request):
 
     queryset = UserVisit.objects.all()
     if filterset.is_valid():
-        print(filterset.form.cleaned_data)
         queryset = filterset.filter_queryset(queryset)
 
     queryset = get_visit_map_queryset(queryset)
@@ -245,7 +261,6 @@ def _results_to_geojson(results):
         "approved": "#00FF00",
         "rejected": "#FF0000",
     }
-    print("calling _results_to_geojson")
     for i, result in enumerate(results.all()):
         location_str = result.get("location_str")
         # Check if both latitude and longitude are not None and can be converted to float
@@ -388,7 +403,6 @@ def dashboard_stats_api(request):
     # Use the filtered queryset to calculate stats
     queryset = UserVisit.objects.all()
     if filterset.is_valid():
-        print(filterset.form.cleaned_data)
         queryset = filterset.filter_queryset(queryset)
 
     # Example stats calculation (adjust based on your needs)
