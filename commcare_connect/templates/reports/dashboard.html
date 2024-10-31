@@ -4,253 +4,249 @@
 {% load django_tables2 %}
 {% block title %}Admin Dashboard{% endblock %}
 {% block content %}
-  <h2 class="my-2">Program Dashboard</h2>
-  <div class="container" x-data="dashboardStats()" x-init="$nextTick(() => console.log('Alpine initialized'))">
-    <div class="mb-4">
-        <form class="row mb-4 id="filter-form" x-ref="filterForm" x-on:submit.prevent="loadStats()">
-        {% crispy filter.form %}
-        <div class="col-12 text-end">
-            <button
-            type="button"
-            class="btn btn-primary"
-            @click="loadStats()"
-            >Update Dashboard</button>
-        </div>
-        </form>
-    </div>
-    <div class="row">
-      <div class="col-12 col-sm-6 col-md-3 mb-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="display-4 fw-bold" x-text="stats.total_visits || 0">0</div>
-            <div class="small text-muted mt-1">Total Visits</div>
-          </div>
-        </div>
+<h2 class="my-2">Program Dashboard</h2>
+<div class="container" x-data="dashboardStats()" x-init="$nextTick(() => console.log('Alpine initialized'))">
+  <div class="mb-4">
+    <form class="row mb-4 id=" filter-form" x-ref="filterForm" x-on:submit.prevent="loadStats()">
+      {% crispy filter.form %}
+      <div class="col-12 text-end">
+        <button type="button" class="btn btn-primary" @click="loadStats()">Update Dashboard</button>
       </div>
-      <div class="col-12 col-sm-6 col-md-3 mb-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="display-4 fw-bold" x-text="stats.active_users || 0">0</div>
-            <div class="small text-muted mt-1">Active Users</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-sm-6 col-md-3 mb-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="display-4 fw-bold" x-text="stats.completed_visits || 0">0</div>
-            <div class="small text-muted mt-1">Completed Visits</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-sm-6 col-md-3 mb-3">
-        <div class="card">
-          <div class="card-body">
-            <div class="display-4 fw-bold" x-text="stats.pending_visits || 0">0</div>
-            <div class="small text-muted mt-1">Pending Visits</div>
-          </div>
-        </div>
-      </div>
-    </div>
+    </form>
   </div>
   <div class="row">
-    <div class="col-12 col-lg-8">
-      <h3 class="my-2">Service Delivery Map</h3>
-      <div id="map" class="mt-3 mb-2 rounded border" style="height: 900px;"></div>
-    </div>
-    <div class="col-12 col-lg-4">
-      <h3 class="my-2">Additional Information</h3>
+    <div class="col-12 col-sm-6 col-md-3 mb-3">
       <div class="card">
         <div class="card-body">
-          <p class="text-muted">Placeholder content</p>
+          <div class="display-4 fw-bold" x-text="stats.total_visits || 0">0</div>
+          <div class="small text-muted mt-1">Total Visits</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6 col-md-3 mb-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="display-4 fw-bold" x-text="stats.active_users || 0">0</div>
+          <div class="small text-muted mt-1">Active Users</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6 col-md-3 mb-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="display-4 fw-bold" x-text="stats.completed_visits || 0">0</div>
+          <div class="small text-muted mt-1">Completed Visits</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6 col-md-3 mb-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="display-4 fw-bold" x-text="stats.pending_visits || 0">0</div>
+          <div class="small text-muted mt-1">Pending Visits</div>
         </div>
       </div>
     </div>
   </div>
+</div>
+<div class="row">
+  <div class="col-12 col-lg-8">
+    <h3 class="my-2">Service Delivery Map</h3>
+    <div id="map" class="mt-3 mb-2 rounded border" style="height: 900px;"></div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <h3 class="my-2">Additional Information</h3>
+    <div class="card">
+      <div class="card-body">
+        <p class="text-muted">Placeholder content</p>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock content %}
 {% block inline_javascript %}
 {{ block.super }}
-  <script>
-    function dashboardStats() {
-      return {
-        stats: {
-          total_visits: 0,
-          active_users: 0,
-          completed_visits: 0,
-          pending_visits: 0
-        },
-        async init() {
-          console.log('init called');
-          await this.loadStats();
-        },
-        async loadStats(event) {
-          console.log('loadStats called', {
-            event,
-            form: this.$refs.filterForm,
-            formData: new FormData(this.$refs.filterForm)
-          });
+<script>
+  function dashboardStats() {
+    return {
+      stats: {
+        total_visits: 0,
+        active_users: 0,
+        completed_visits: 0,
+        pending_visits: 0
+      },
+      async init() {
+        console.log('init called');
+        await this.loadStats();
+      },
+      async loadStats(event) {
+        console.log('loadStats called', {
+          event,
+          form: this.$refs.filterForm,
+          formData: new FormData(this.$refs.filterForm)
+        });
 
-          try {
-            const formData = new FormData(this.$refs.filterForm);
-            const queryString = new URLSearchParams(formData).toString();
-            console.log('queryString:', queryString);
+        try {
+          const formData = new FormData(this.$refs.filterForm);
+          const queryString = new URLSearchParams(formData).toString();
+          console.log('queryString:', queryString);
 
-            const url = `{% url 'reports:dashboard_stats_api' %}?${queryString}`;
-            console.log('fetching from:', url);
+          const url = `{% url 'reports:dashboard_stats_api' %}?${queryString}`;
+          console.log('fetching from:', url);
 
-            const response = await fetch(url);
-            console.log('response:', response);
+          const response = await fetch(url);
+          console.log('response:', response);
 
-            if (!response.ok) throw new Error('Failed to load stats');
-            const data = await response.json();
-            console.log('received data:', data);
+          if (!response.ok) throw new Error('Failed to load stats');
+          const data = await response.json();
+          console.log('received data:', data);
 
-            this.stats = data;
-          } catch (error) {
-            console.error('Error loading dashboard stats:', error);
-          }
+          this.stats = data;
+        } catch (error) {
+          console.error('Error loading dashboard stats:', error);
         }
       }
     }
-  </script>
-  <script type="module">
-    window.addEventListener('DOMContentLoaded', () => {
-      mapboxgl.accessToken = "{{ mapbox_token }}";
+  }
+</script>
+<script type="module">
+  window.addEventListener('DOMContentLoaded', () => {
+    mapboxgl.accessToken = "{{ mapbox_token }}";
     const map = new mapboxgl.Map({
-        container: 'map',
-        // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
-        style: 'mapbox://styles/mapbox/dark-v11',
-        center: [-103.5917, 40.6699],
-        zoom: 3
+      container: 'map',
+      // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
+      style: 'mapbox://styles/mapbox/dark-v11',
+      center: [-103.5917, 40.6699],
+      zoom: 3
     });
 
     map.on('load', () => {
-        // Add a new source from our GeoJSON data and
-        // set the 'cluster' option to true. GL-JS will
-        // add the point_count property to your source data.
-        map.addSource('visits', {
-            type: 'geojson',
-            // Point to GeoJSON data from the backend.
-            data: '{% url "reports:visit_map_data" %}',
-            cluster: true,
-            clusterMaxZoom: 14, // Max zoom to cluster points on
-            clusterRadius: 50 // Radius of each cluster when clustering points (defaults to 50)
+      // Add a new source from our GeoJSON data and
+      // set the 'cluster' option to true. GL-JS will
+      // add the point_count property to your source data.
+      map.addSource('visits', {
+        type: 'geojson',
+        // Point to GeoJSON data from the backend.
+        data: '{% url "reports:visit_map_data" %}',
+        cluster: true,
+        clusterMaxZoom: 14, // Max zoom to cluster points on
+        clusterRadius: 50 // Radius of each cluster when clustering points (defaults to 50)
+      });
+
+      const clusterStep1 = 50;
+      const clusterStep2 = 100;
+
+      map.addLayer({
+        id: 'clusters',
+        type: 'circle',
+        source: 'visits',
+        filter: ['has', 'point_count'],
+        paint: {
+          // Use step expressions (https://docs.mapbox.com/style-spec/reference/expressions/#step)
+          // with three steps to implement three types of circles:
+          //   * Blue, 20px circles when point count is less than clusterStep1
+          //   * Yellow, 30px circles when point count is between clusterStep1 and clusterStep2
+          //   * Green, 40px circles when point count is greater than or equal to clusterStep2
+          'circle-color': [
+            'step',
+            ['get', 'point_count'],
+            '#51bbd6',
+            clusterStep1,
+            '#f1f075',
+            clusterStep2,
+            '#00FF00'
+          ],
+          'circle-radius': [
+            'step',
+            ['get', 'point_count'],
+            20,
+            clusterStep1,
+            30,
+            clusterStep2,
+            40
+          ]
+        }
+      });
+
+      map.addLayer({
+        id: 'cluster-count',
+        type: 'symbol',
+        source: 'visits',
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': ['get', 'point_count_abbreviated'],
+          'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+          'text-size': 12
+        }
+      });
+
+      map.addLayer({
+        id: 'unclustered-point',
+        type: 'circle',
+        source: 'visits',
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-color': ['get', 'color'],
+          'circle-radius': 4,
+          'circle-stroke-width': 1,
+          'circle-stroke-color': '#fff'
+        }
+      });
+
+      // inspect a cluster on click
+      map.on('click', 'clusters', (e) => {
+        const features = map.queryRenderedFeatures(e.point, {
+          layers: ['clusters']
         });
+        const clusterId = features[0].properties.cluster_id;
+        map.getSource('visits').getClusterExpansionZoom(
+          clusterId,
+          (err, zoom) => {
+            if (err) return;
 
-        const clusterStep1 = 50;
-        const clusterStep2 = 100;
-
-        map.addLayer({
-            id: 'clusters',
-            type: 'circle',
-            source: 'visits',
-            filter: ['has', 'point_count'],
-            paint: {
-                // Use step expressions (https://docs.mapbox.com/style-spec/reference/expressions/#step)
-                // with three steps to implement three types of circles:
-                //   * Blue, 20px circles when point count is less than clusterStep1
-                //   * Yellow, 30px circles when point count is between clusterStep1 and clusterStep2
-                //   * Green, 40px circles when point count is greater than or equal to clusterStep2
-                'circle-color': [
-                    'step',
-                    ['get', 'point_count'],
-                    '#51bbd6',
-                    clusterStep1,
-                    '#f1f075',
-                    clusterStep2,
-                    '#00FF00'
-                ],
-                'circle-radius': [
-                    'step',
-                    ['get', 'point_count'],
-                    20,
-                    clusterStep1,
-                    30,
-                    clusterStep2,
-                    40
-                ]
-            }
-        });
-
-        map.addLayer({
-            id: 'cluster-count',
-            type: 'symbol',
-            source: 'visits',
-            filter: ['has', 'point_count'],
-            layout: {
-                'text-field': ['get', 'point_count_abbreviated'],
-                'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
-                'text-size': 12
-            }
-        });
-
-        map.addLayer({
-            id: 'unclustered-point',
-            type: 'circle',
-            source: 'visits',
-            filter: ['!', ['has', 'point_count']],
-            paint: {
-                'circle-color': ['get', 'color'],
-                'circle-radius': 4,
-                'circle-stroke-width': 1,
-                'circle-stroke-color': '#fff'
-            }
-        });
-
-        // inspect a cluster on click
-        map.on('click', 'clusters', (e) => {
-            const features = map.queryRenderedFeatures(e.point, {
-                layers: ['clusters']
+            map.easeTo({
+              center: features[0].geometry.coordinates,
+              zoom: zoom
             });
-            const clusterId = features[0].properties.cluster_id;
-            map.getSource('visits').getClusterExpansionZoom(
-                clusterId,
-                (err, zoom) => {
-                    if (err) return;
+          }
+        );
+      });
 
-                    map.easeTo({
-                        center: features[0].geometry.coordinates,
-                        zoom: zoom
-                    });
-                }
-            );
-        });
-
-        // When a click event occurs on a feature in
-        // the unclustered-point layer, open a popup at
-        // the location of the feature, with
-        // description HTML from its properties.
-        map.on('click', 'unclustered-point', (e) => {
-            const coordinates = e.features[0].geometry.coordinates.slice();
-            const status = e.features[0].properties.status;
-            const rawDate = e.features[0].properties.visit_date;
-            const visitDate = new Date(rawDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+      // When a click event occurs on a feature in
+      // the unclustered-point layer, open a popup at
+      // the location of the feature, with
+      // description HTML from its properties.
+      map.on('click', 'unclustered-point', (e) => {
+        const coordinates = e.features[0].geometry.coordinates.slice();
+        const status = e.features[0].properties.status;
+        const rawDate = e.features[0].properties.visit_date;
+        const visitDate = new Date(rawDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
 
-            // Ensure that if the map is zoomed out such that
-            // multiple copies of the feature are visible, the
-            // popup appears over the copy being pointed to.
-            if (['mercator', 'equirectangular'].includes(map.getProjection().name)) {
-                while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
-                    coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
-                }
-            }
+        // Ensure that if the map is zoomed out such that
+        // multiple copies of the feature are visible, the
+        // popup appears over the copy being pointed to.
+        if (['mercator', 'equirectangular'].includes(map.getProjection().name)) {
+          while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+            coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+          }
+        }
 
-            new mapboxgl.Popup()
-                .setLngLat(coordinates)
-                .setHTML(
-                    `Visit Date: ${visitDate}<br>Status: ${status}`
-                )
-                .addTo(map);
-        });
+        new mapboxgl.Popup()
+          .setLngLat(coordinates)
+          .setHTML(
+            `Visit Date: ${visitDate}<br>Status: ${status}`
+          )
+          .addTo(map);
+      });
 
-        map.on('mouseenter', 'clusters', () => {
-            map.getCanvas().style.cursor = 'pointer';
-        });
-        map.on('mouseleave', 'clusters', () => {
-            map.getCanvas().style.cursor = '';
-        });
+      map.on('mouseenter', 'clusters', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'clusters', () => {
+        map.getCanvas().style.cursor = '';
+      });
     });
   });
-  </script>
+</script>
 {% endblock %}
