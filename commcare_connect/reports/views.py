@@ -155,14 +155,16 @@ def _get_table_data_for_quarter(quarter, delivery_type, group_by_delivery_type=F
 
 
 class DashboardFilters(django_filters.FilterSet):
-    opportunity__delivery_type = django_filters.ModelChoiceFilter(
+    program = django_filters.ModelChoiceFilter(
         queryset=DeliveryType.objects.all(),
+        field_name="opportunity__delivery_type",
         label="Program",
         empty_label="All Programs",
         required=False,
     )
-    opportunity__organization = django_filters.ModelChoiceFilter(
+    organization = django_filters.ModelChoiceFilter(
         queryset=Organization.objects.all(),
+        field_name="opportunity__organization",
         label="Organization",
         empty_label="All Organizations",
         required=False,
@@ -188,8 +190,8 @@ class DashboardFilters(django_filters.FilterSet):
         self.form.helper.form_class = "form-inline"
         self.form.helper.layout = Layout(
             Row(
-                Column("opportunity__delivery_type", css_class="col-md-3"),
-                Column("opportunity__organization", css_class="col-md-3"),
+                Column("program", css_class="col-md-3"),
+                Column("organization", css_class="col-md-3"),
                 Column("from_date", css_class="col-md-3"),
                 Column("to_date", css_class="col-md-3"),
             )
@@ -197,7 +199,7 @@ class DashboardFilters(django_filters.FilterSet):
 
     class Meta:
         model = UserVisit
-        fields = ["opportunity__delivery_type", "opportunity__organization", "from_date", "to_date"]
+        fields = ["program", "organization", "from_date", "to_date"]
 
 
 @login_required
