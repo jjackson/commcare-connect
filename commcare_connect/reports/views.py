@@ -395,13 +395,13 @@ def dashboard_stats_api(request):
     active_users = queryset.values("opportunity_access__user").distinct().count()
     total_visits = queryset.count()
     verified_visits = queryset.filter(status=CompletedWorkStatus.approved).count()
-    pending_visits = total_visits - verified_visits
+    percent_verified = round(float(verified_visits / total_visits) * 100, 1) if total_visits > 0 else 0
 
     return JsonResponse(
         {
             "total_visits": total_visits,
             "active_users": active_users,
             "verified_visits": verified_visits,
-            "pending_visits": pending_visits,
+            "percent_verified": f"{percent_verified:.1f}%",
         }
     )
