@@ -4,10 +4,108 @@
 {% load django_tables2 %}
 {% block title %}Admin Dashboard{% endblock %}
 {% block content %}
-  <h2 class="mb-2">Visit Dashboard</h2>
-  <div id="map" class="mt-3 mb-2 rounded border" style="height: 900px;"></div>
-
-
+  <h2 class="my-2">Program Dashboard</h2>
+  <div class="container">
+    <div class="row mb-3">
+      <div class="col-md-4 mt-4">
+        <div class="form-group">
+          <label for="program-select" class="form-label">Program</label>
+          <select class="form-select" id="program-select">
+            <option selected>Select a program...</option>
+            {% for program in programs %}
+              <option value="{{ program.id }}">{{ program.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="col-md-4 mt-4">
+        <div class="form-group">
+          <label for="org-select" class="form-label">Organization</label>
+          <select class="form-select" id="org-select">
+            <option selected>Select an organization...</option>
+            {% for org in organizations %}
+              <option value="{{ org.id }}">{{ org.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="col-md-4 mt-4">
+        <div class="form-group">
+          <label for="date-select" class="form-label">Date</label>
+          <input type="date" class="form-control" id="date-select">
+        </div>
+      </div>
+    </div>
+    <div class="row mb-4">
+      <div class="col-12 text-end">
+        <button type="submit" class="btn btn-primary">Update Dashboard</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-12 col-sm-6 col-md-3 mb-3">
+        <div class="card">
+          <div class="card-body ">
+            <div class="display-4 fw-bold">
+              0
+            </div>
+            <div class="small text-muted mt-1">
+              Total Visits
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-sm-6 col-md-3 mb-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="display-4 fw-bold">
+              0
+            </div>
+            <div class="small text-muted mt-1">
+              Active Users
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-sm-6 col-md-3 mb-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="display-4 fw-bold">
+              0
+            </div>
+            <div class="small text-muted mt-1">
+              Completed Visits
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-sm-6 col-md-3 mb-3">
+        <div class="card">
+          <div class="card-body">
+            <div class="display-4 fw-bold">
+              0
+            </div>
+            <div class="small text-muted mt-1">
+              Pending Visits
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-12 col-lg-8">
+      <h3 class="my-2">Service Delivery Map</h3>
+      <div id="map" class="mt-3 mb-2 rounded border" style="height: 900px;"></div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <h3 class="my-2">Additional Information</h3>
+      <div class="card">
+        <div class="card-body">
+          <p class="text-muted">Placeholder content</p>
+        </div>
+      </div>
+    </div>
+  </div>
 {% endblock content %}
 {% block inline_javascript %}
 {{ block.super }}
