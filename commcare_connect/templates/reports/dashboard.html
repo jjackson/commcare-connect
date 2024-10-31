@@ -22,7 +22,7 @@
               <span class="display-4">&nbsp;</span>
             </span>
           </div>
-          <div class="small text-muted mt-1">Active Front-Line Workers</div>
+          <div class="small text-muted mt-1">Active FLWs</div>
         </div>
       </div>
     </div>
@@ -58,13 +58,13 @@
       <div class="card">
         <div class="card-body">
           <div class="fw-bold">
-            <span x-show="!isLoading" x-text="stats.pending_visits || 0" class="display-4">0</span>
+            <span x-show="!isLoading" x-text="stats.percent_verified || '0.0%'" class="display-4">0</span>
             <span x-show="isLoading">
               <span class="spinner-border text-secondary opacity-50" role="status"></span>
               <span class="display-4">&nbsp;</span>
             </span>
           </div>
-          <div class="small text-muted mt-1">Pending Visits</div>
+          <div class="small text-muted mt-1">Percent Verified</div>
         </div>
       </div>
     </div>
@@ -94,7 +94,7 @@
         total_visits: 0,
         active_users: 0,
         verified_visits: 0,
-        pending_visits: 0
+        percent_verified: "0.0%"
       },
       isLoading: false,
       async init() {
