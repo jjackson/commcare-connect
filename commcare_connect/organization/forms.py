@@ -57,7 +57,7 @@ class MembershipForm(forms.ModelForm):
         user = User.objects.filter(email=email).exclude(memberships__organization=self.organization).first()
 
         if not user:
-            raise ValidationError("User with this email/username does not exist or is already a member")
+            raise ValidationError("User with this email does not exist or is already a member")
 
         self.instance.user = user
         return email
