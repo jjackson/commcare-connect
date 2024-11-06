@@ -5,8 +5,8 @@ from django.db.models.fields.json import KT
 def get_visit_map_queryset(base_queryset):
     return (
         base_queryset.annotate(
-            username_connectid=F("form_json__metadata__username"),
             deliver_unit_name=F("deliver_unit__name"),
+            username_connectid=KT("form_json__metadata__username"),
             timestart_str=KT("form_json__metadata__timeStart"),
             timeend_str=KT("form_json__metadata__timeEnd"),
             location_str=KT("form_json__metadata__location"),
