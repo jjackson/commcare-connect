@@ -1,5 +1,5 @@
 from django.db.models import DateTimeField, ExpressionWrapper, F, FloatField
-from django.db.models.fields.json import KeyTextTransform
+from django.db.models.fields.json import KT
 from django.db.models.functions import Cast, Extract
 
 
@@ -11,13 +11,13 @@ def get_visit_map_queryset(base_queryset):
             days_since_opp_start=ExpressionWrapper(
                 Extract(F("visit_date") - F("opportunity__start_date"), "day"), output_field=FloatField()
             ),
-            timestart_str=KeyTextTransform("timeStart", KeyTextTransform("metadata", F("form_json"))),
-            timeend_str=KeyTextTransform("timeEnd", KeyTextTransform("metadata", F("form_json"))),
+            timestart_str=KT("form_json__metadata__timeStart"),
+            timeend_str=KT("form_json__metadata__timeEnd"),
             visit_duration=ExpressionWrapper(
                 Extract(Cast("timeend_str", DateTimeField()) - Cast("timestart_str", DateTimeField()), "epoch") / 60,
                 output_field=FloatField(),
             ),
-            location_str=KeyTextTransform("location", KeyTextTransform("metadata", F("form_json"))),
+            location_str=KT("form_json__metadata__location"),
         )
         .select_related("deliver_unit", "opportunity", "opportunity__delivery_type", "opportunity__organization")
         .values(
