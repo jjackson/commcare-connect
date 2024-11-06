@@ -16,6 +16,7 @@ from commcare_connect.opportunity.models import (
     CatchmentArea,
     CompletedWork,
     CompletedWorkStatus,
+    ExchangeRate,
     Opportunity,
     OpportunityAccess,
     Payment,
@@ -290,6 +291,10 @@ def get_exchange_rate(currency_code, date=None):
     if currency_code == "USD":
         return 1
 
+    rate = get_exchange_rate_from_db(currency_code, date)
+    if rate:
+        return rate
+
     base_url = "https://openexchangerates.org/api"
     if date:
         url = f"{base_url}/historical/{date.strftime('%Y-%m-%d')}.json"
@@ -297,7 +302,27 @@ def get_exchange_rate(currency_code, date=None):
         url = f"{base_url}/latest.json"
     url = f"{url}?app_id={settings.OPEN_EXCHANGE_RATES_API_ID}"
     rates = json.load(urllib.request.urlopen(url))
-    return rates["rates"].get(currency_code)
+
+    rate = rates["rates"].get(currency_code)
+
+    rate_date = date if date else now().date()
+    ExchangeRate.objects.create(currency_code=currency_code, rate=rate, rate_date=rate_date)
+
+    return rate
+
+
+def get_exchange_rate_from_db(currency_code, date=None):
+    if currency_code == "USD":
+        return 1
+
+    if not date:
+        date = now().date()
+
+    rate = (
+        ExchangeRate.objects.filter(currency_code=currency_code, rate_date=date).values_list("rate", flat=True).first()
+    )
+
+    return rate
 
 
 def bulk_update_completed_work_status(opportunity: Opportunity, file: UploadedFile) -> CompletedWorkImportStatus:
