@@ -1,6 +1,5 @@
-from django.db.models import DateTimeField, ExpressionWrapper, F, FloatField
+from django.db.models import F
 from django.db.models.fields.json import KT
-from django.db.models.functions import Cast, Extract
 
 
 def get_visit_map_queryset(base_queryset):
@@ -8,15 +7,8 @@ def get_visit_map_queryset(base_queryset):
         base_queryset.annotate(
             username_connectid=F("form_json__metadata__username"),
             deliver_unit_name=F("deliver_unit__name"),
-            days_since_opp_start=ExpressionWrapper(
-                Extract(F("visit_date") - F("opportunity__start_date"), "day"), output_field=FloatField()
-            ),
             timestart_str=KT("form_json__metadata__timeStart"),
             timeend_str=KT("form_json__metadata__timeEnd"),
-            visit_duration=ExpressionWrapper(
-                Extract(Cast("timeend_str", DateTimeField()) - Cast("timestart_str", DateTimeField()), "epoch") / 60,
-                output_field=FloatField(),
-            ),
             location_str=KT("form_json__metadata__location"),
         )
         .select_related("deliver_unit", "opportunity", "opportunity__delivery_type", "opportunity__organization")
@@ -30,7 +22,6 @@ def get_visit_map_queryset(base_queryset):
             "visit_date",
             "username_connectid",
             "deliver_unit_name",
-            "days_since_opp_start",
             "entity_id",
             "status",
             "flagged",
@@ -38,7 +29,6 @@ def get_visit_map_queryset(base_queryset):
             "reason",
             "timestart_str",
             "timeend_str",
-            "visit_duration",
             "location_str",
         )
     )
