@@ -31,7 +31,7 @@ class MembershipForm(forms.ModelForm):
         max_length=254,
         required=True,
         label="",
-        widget=forms.TextInput(attrs={"placeholder": "Enter email or username"}),
+        widget=forms.TextInput(attrs={"placeholder": "Enter email address or username"}),
     )
 
     class Meta:
@@ -56,10 +56,7 @@ class MembershipForm(forms.ModelForm):
     def clean_email_or_username(self):
         email_or_username = self.cleaned_data["email_or_username"]
         user = (
-            User.objects.filter(
-                Q(email=email_or_username) | Q(username=email_or_username),
-                email__isnull=False,
-            )
+            User.objects.filter(Q(email=email_or_username) | Q(username=email_or_username))
             .exclude(memberships__organization=self.organization)
             .first()
         )
