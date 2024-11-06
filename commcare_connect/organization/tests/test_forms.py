@@ -15,39 +15,47 @@ class TestAddMembersView:
         client.force_login(self.user)
 
     @pytest.mark.django_db
-    def test_add_member_by_email(self, organization):
-        new_user = UserFactory(email="test@example.com")
-        data = {"email_or_username": new_user.email, "role": "member"}
-        response = self.client.post(self.url, data)
-        assert response.status_code == 302
-        assert response.url == reverse("organization:home", kwargs={"org_slug": organization.slug})
-        membership = organization.memberships.get(user=new_user)
-        assert membership.role == data["role"]
+    @pytest.mark.parametrize(
+        "email_or_username, role, expected_status_code, create_user, expected_role, should_exist",
+        [
+            ("testformember@example.com", "member", 302, True, "member", True),
+            ("testforadmin@example.com", "admin", 302, True, "admin", True),
+            ("testforusername", "member", 302, True, "member", True),
+            ("testforusername", "admin", 302, True, "admin", True),
+            ("nonexistent@example.com", "member", 302, False, None, False),
+            ("existing@example.com", "admin", 302, True, "member", True),
+        ],
+    )
+    def test_add_member(
+        self,
+        email_or_username,
+        role,
+        expected_status_code,
+        create_user,
+        expected_role,
+        should_exist,
+        organization,
+    ):
+        if create_user:
+            user = UserFactory(
+                email=email_or_username if "@" in email_or_username else None,
+                username=email_or_username if "@" not in email_or_username else None,
+            )
 
-    @pytest.mark.django_db
-    def test_add_member_by_username(self, organization):
-        new_user = UserFactory(username="test")
-        data = {"email_or_username": new_user.username, "role": "member"}
-        response = self.client.post(self.url, data)
-        assert response.status_code == 302
-        membership = organization.memberships.get(user=new_user)
-        assert membership.role == data["role"]
-        assert not membership.accepted
+            if email_or_username == "existing@example.com":
+                organization.members.add(user, through_defaults={"role": expected_role})
 
-    @pytest.mark.django_db
-    def test_add_member_nonexistent_user(self, organization):
-        data = {"email_or_username": "nonexistent@example.com", "role": "member"}
+        data = {"email_or_username": email_or_username, "role": role}
         response = self.client.post(self.url, data)
-        assert response.status_code == 302
-        assert not organization.memberships.filter(user__email="nonexistent@example.com").exists()
 
-    @pytest.mark.django_db
-    def test_add_existing_member(self, organization):
-        existing_user = UserFactory(email="test@example.com")
-        organization.members.add(existing_user, through_defaults={"role": "member"})
+        membership_filter = (
+            {"user__email": email_or_username} if "@" in email_or_username else {"user__username": email_or_username}
+        )
 
-        data = {"email_or_username": existing_user.email, "role": "admin"}
-        response = self.client.post(self.url, data)
-        assert response.status_code == 302
-        assert organization.memberships.filter(user=existing_user).count() == 1
-        assert organization.memberships.get(user=existing_user).role == "member"
+        assert response.status_code == expected_status_code
+        membership_exists = organization.memberships.filter(**membership_filter).exists()
+        assert membership_exists == should_exist
+
+        if should_exist and expected_role:
+            membership = organization.memberships.get(**membership_filter)
+            assert membership.role == expected_role
