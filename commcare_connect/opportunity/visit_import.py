@@ -290,6 +290,7 @@ def get_exchange_rate(currency_code, date=None):
         return rate
 
     base_url = "https://openexchangerates.org/api"
+
     if date:
         url = f"{base_url}/historical/{date.strftime('%Y-%m-%d')}.json"
     else:
@@ -299,8 +300,9 @@ def get_exchange_rate(currency_code, date=None):
 
     rate = rates["rates"].get(currency_code)
 
-    rate_date = date if date else now().date()
-    ExchangeRate.objects.create(currency_code=currency_code, rate=rate, rate_date=rate_date)
+    if rate:
+        rate_date = date if date else now().date()
+        ExchangeRate.objects.create(currency_code=currency_code, rate=rate, rate_date=rate_date)
 
     return rate
 
