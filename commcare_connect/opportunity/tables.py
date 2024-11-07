@@ -173,9 +173,7 @@ class UserStatusTable(OrgContextTable):
         orderable = False
 
     def render_display_name(self, record):
-        if record.opportunity_access is None:
-            return record.phone_number
-        if not record.opportunity_access.accepted:
+        if not getattr(record.opportunity_access, "accepted", False):
             return "---"
         return record.opportunity_access.display_name
 
