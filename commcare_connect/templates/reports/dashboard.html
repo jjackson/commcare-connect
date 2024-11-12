@@ -73,7 +73,14 @@
 <div class="row">
   <div class="col-12">
     <h3 class="my-2">Service Delivery Map</h3>
-    <div id="map" class="mt-3 mb-2 rounded border" style="height: 900px;"></div>
+    <div class="position-relative">
+      <div id="map" class="mt-3 mb-2 rounded border" style="height: 900px;"></div>
+      <div id="map-loading" class="position-absolute top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex justify-content-center align-items-center">
+        <div class="spinner-border text-light" role="status">
+          <span class="visually-hidden">Loading map...</span>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock content %}
@@ -124,17 +131,23 @@
 </script>
 <script type="module">
   let map;
+  const mapLoading = document.getElementById('map-loading');
 
   // Add this function to handle map data refresh
   window.refreshMapData = () => {
     if (!map) return;
+    mapLoading.classList.remove('d-none');  // Show loading state
 
     const formElement = document.querySelector('#filterForm form');
     const formData = new FormData(formElement);
     const queryString = new URLSearchParams(formData).toString();
 
     // Update the source data with new filters
-    map.getSource('visits').setData(`{% url "reports:visit_map_data" %}?${queryString}`);
+    map.getSource('visits').setData(
+      `{% url "reports:visit_map_data" %}?${queryString}`,
+      // Hide loading state after data is loaded
+      () => mapLoading.classList.add('d-none')
+    );
   };
 
   window.addEventListener('DOMContentLoaded', () => {
@@ -261,6 +274,15 @@
       if (!map.isSourceLoaded('visits')) return;
       updateMarkers();
     });
+
+    // Hide loading overlay when initial map load is complete
+    mapLoading.classList.add('d-none');
+  });
+
+  // Show loading state if map errors
+  map.on('error', () => {
+    mapLoading.classList.add('d-none');
+    // Optionally add error messaging here
   });
 
   // code for creating an SVG donut chart from feature properties
