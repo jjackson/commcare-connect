@@ -4,6 +4,49 @@ console.log('dashboard.js loaded');
 // soft green, yellow, red
 const visitColors = ['#4ade80', '#fbbf24', '#f87171'];
 
+// after the GeoJSON data is loaded, update markers on the screen on every frame
+// objects for caching and keeping track of HTML marker objects (for performance)
+const markers = {};
+let markersOnScreen = {};
+
+function updateMarkers(map) {
+  const newMarkers = {};
+  const features = map.querySourceFeatures('visits');
+
+  // for every cluster on the screen, create an HTML marker for it (if we didn't yet),
+  // and add it to the map if it's not there already
+  for (const feature of features) {
+    const coords = feature.geometry.coordinates;
+    const props = feature.properties;
+    if (!props.cluster) continue;
+    const id = props.cluster_id;
+
+    let marker = markers[id];
+    if (!marker) {
+      console.log('creating donut chart for cluster', id);
+      const el = createDonutChart(
+        {
+          ...props,
+          cluster_id: id, // Make sure cluster_id is passed
+          coordinates: coords, // Pass the coordinates
+        },
+        map,
+      );
+      marker = markers[id] = new mapboxgl.Marker({
+        element: el,
+      }).setLngLat(coords);
+    }
+    newMarkers[id] = marker;
+
+    if (!markersOnScreen[id]) marker.addTo(map);
+  }
+  // for every marker we've added previously, remove those that are no longer visible
+  for (const id in markersOnScreen) {
+    if (!newMarkers[id]) markersOnScreen[id].remove();
+  }
+  markersOnScreen = newMarkers;
+}
+
 // Function to create a donut chart
 function createDonutChart(props, map) {
   console.log('createDonutChart', props);
@@ -87,4 +130,5 @@ function donutSegment(start, end, r, r0, color) {
   }" fill="${color}" opacity="0.85" stroke="#1f2937" stroke-width="1" />`;
 }
 
+window.updateMarkers = updateMarkers;
 window.createDonutChart = createDonutChart;
