@@ -223,12 +223,13 @@ class DashboardFilters(django_filters.FilterSet):
 @user_passes_test(lambda u: u.is_superuser)
 def program_dashboard_report(request):
     filterset = DashboardFilters(request.GET)
-
+    cluster = request.GET.get("cluster", "true") == "true"
     return render(
         request,
         "reports/dashboard.html",
         context={
             "mapbox_token": settings.MAPBOX_TOKEN,
+            "cluster_visits": cluster,
             "filter": filterset,
         },
     )
