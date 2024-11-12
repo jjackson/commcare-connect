@@ -238,12 +238,6 @@
           .addTo(map);
       });
 
-      map.on('mouseenter', 'clusters', () => {
-        map.getCanvas().style.cursor = 'pointer';
-      });
-      map.on('mouseleave', 'clusters', () => {
-        map.getCanvas().style.cursor = '';
-      });
       // after the GeoJSON data is loaded, update markers on the screen on every frame
       // objects for caching and keeping track of HTML marker objects (for performance)
       const markers = {};
@@ -262,10 +256,14 @@
 
           let marker = markers[id];
           if (!marker) {
-              const el = createDonutChart(props);
-              marker = markers[id] = new mapboxgl.Marker({
-                  element: el
-              }).setLngLat(coords);
+            const el = createDonutChart({
+              ...props,
+              cluster_id: id,  // Make sure cluster_id is passed
+              coordinates: coords  // Pass the coordinates
+            });
+            marker = markers[id] = new mapboxgl.Marker({
+              element: el
+            }).setLngLat(coords);
           }
           newMarkers[id] = marker;
 
@@ -325,12 +323,10 @@
 
         const el = document.createElement('div');
         el.innerHTML = html;
-
-        // Add mouse events to the donut chart
         el.style.cursor = 'pointer';
 
-        // Add click handler to zoom to cluster
-        el.addEventListener('click', () => {
+          // Click handler to zoom and navigate to the cluster
+        el.addEventListener('click', (e) => {
           map.getSource('visits').getClusterExpansionZoom(
             props.cluster_id,
             (err, zoom) => {
@@ -344,7 +340,7 @@
           );
         });
 
-        return el.firstChild;
+        return el;
     }
 
     function donutSegment(start, end, r, r0, color) {
