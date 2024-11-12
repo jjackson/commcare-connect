@@ -204,7 +204,7 @@ class DashboardFilters(django_filters.FilterSet):
 
             # Set default dates
             today = date.today()
-            default_from = today - timedelta(days=90)
+            default_from = today - timedelta(days=30)
 
             # Set the default values
             self.data["to_date"] = today.strftime("%Y-%m-%d")
