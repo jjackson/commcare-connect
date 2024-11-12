@@ -134,24 +134,29 @@
   const mapLoading = document.getElementById('map-loading');
 
   // Add this function to handle map data refresh
-  window.refreshMapData = () => {
+  window.refreshMapData = async () => {
     if (!map) return;
     console.log('refreshing map data');
-    // mapLoading.classList.remove('d-none');  // Show loading state
+    mapLoading.classList.remove('d-none');  // Show loading state
 
     const formElement = document.querySelector('#filterForm form');
     const formData = new FormData(formElement);
     const queryString = new URLSearchParams(formData).toString();
 
-    // Update the source data with new filters
-    map.getSource('visits').setData(
-      `{% url "reports:visit_map_data" %}?${queryString}`,
-      () => {
-        console.log('setting loading to none after update');
-        mapLoading.classList.add('d-none');  // Hide loading state after data is loaded
-        console.log('setting loading to none after update');
-      }
-    );
+    try {
+      // Fetch the data first
+      const response = await fetch(`{% url "reports:visit_map_data" %}?${queryString}`);
+      const data = await response.json();
+
+      // Then set it on the map source
+      map.getSource('visits').setData(data);
+
+      // Hide loading state after data is set
+      mapLoading.classList.add('d-none');
+    } catch (error) {
+      console.error('Error refreshing map data:', error);
+      mapLoading.classList.add('d-none');
+    }
   };
 
   window.addEventListener('DOMContentLoaded', () => {
