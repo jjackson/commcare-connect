@@ -139,9 +139,9 @@
 
   window.addEventListener('DOMContentLoaded', () => {
     mapboxgl.accessToken = "{{ mapbox_token }}";
+    const cluster = {% if cluster_visits %}true{% else %}false{% endif %};
     map = new mapboxgl.Map({
       container: 'map',
-      // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
       style: 'mapbox://styles/mapbox/dark-v11',
       center: [20, 0], // Centered on Africa (roughly central coordinates)
       zoom: 3,
@@ -156,8 +156,8 @@
       map.addSource('visits', {
         type: 'geojson',
         data: `{% url "reports:visit_map_data" %}?${queryString}`,
-        cluster: true,
-        clusterMaxZoom: 14,
+        cluster: cluster,
+        clusterMaxZoom: 12,
         clusterRadius: 50
       });
 
