@@ -23,7 +23,6 @@ function updateMarkers(map) {
 
     let marker = markers[id];
     if (!marker) {
-      console.log('creating donut chart for cluster', id);
       const el = createDonutChart(
         {
           ...props,
@@ -49,7 +48,6 @@ function updateMarkers(map) {
 
 // Function to create a donut chart
 function createDonutChart(props, map) {
-  console.log('createDonutChart', props);
   const offsets = [];
   const counts = [props.approved, props.pending, props.rejected];
   let total = 0;
