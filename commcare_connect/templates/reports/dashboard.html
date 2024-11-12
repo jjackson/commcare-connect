@@ -197,7 +197,7 @@
         type: 'geojson',
         data: `{% url "reports:visit_map_data" %}?${queryString}`,
         cluster: true,
-        clusterMaxZoom: 12,
+        clusterMaxZoom: 14,
         clusterRadius: 80,
         clusterMinPoints: minClusterSize,
         clusterProperties: {
