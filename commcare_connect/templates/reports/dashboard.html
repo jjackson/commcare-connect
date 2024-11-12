@@ -136,7 +136,8 @@
   // Add this function to handle map data refresh
   window.refreshMapData = () => {
     if (!map) return;
-    mapLoading.classList.remove('d-none');  // Show loading state
+    console.log('refreshing map data');
+    // mapLoading.classList.remove('d-none');  // Show loading state
 
     const formElement = document.querySelector('#filterForm form');
     const formData = new FormData(formElement);
@@ -145,8 +146,11 @@
     // Update the source data with new filters
     map.getSource('visits').setData(
       `{% url "reports:visit_map_data" %}?${queryString}`,
-      // Hide loading state after data is loaded
-      () => mapLoading.classList.add('d-none')
+      () => {
+        console.log('setting loading to none after update');
+        mapLoading.classList.add('d-none');  // Hide loading state after data is loaded
+        console.log('setting loading to none after update');
+      }
     );
   };
 
@@ -276,11 +280,13 @@
     });
 
     // Hide loading overlay when initial map load is complete
+    console.log('setting loading to none')
     mapLoading.classList.add('d-none');
   });
 
   // Show loading state if map errors
   map.on('error', () => {
+    console.log('setting loading to none for an error')
     mapLoading.classList.add('d-none');
     // Optionally add error messaging here
   });
