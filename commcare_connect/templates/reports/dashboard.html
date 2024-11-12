@@ -134,10 +134,9 @@
   let map;
   const mapLoading = document.getElementById('map-loading');
 
-  // Add this function to handle map data refresh
   window.refreshMapData = async () => {
     if (!map) return;
-    console.log('refreshing map data');
+
     mapLoading.classList.remove('d-none');  // Show loading state
 
     const formElement = document.querySelector('#filterForm form');
@@ -145,11 +144,11 @@
     const queryString = new URLSearchParams(formData).toString();
 
     try {
-      // Fetch the data first
+      // Fetch the data
       const response = await fetch(`{% url "reports:visit_map_data" %}?${queryString}`);
       const data = await response.json();
 
-      // Then set it on the map source
+      // Set it on the map source
       map.getSource('visits').setData(data);
 
       // Hide loading state after data is set
@@ -169,6 +168,12 @@
       zoom: 3,
     });
 
+    // This loads a map with two layers, one is a cluster with donut
+    // charts based on the visit data, inspired heavily by this mapbox example:
+    // https://docs.mapbox.com/mapbox-gl-js/example/cluster-html/
+    // The other is a layer of unclustered points with clickable popups, based on
+    // this example: https://docs.mapbox.com/mapbox-gl-js/example/popup-on-click/
+
     // filters for classifying visits by status
     const approved = ['==', ['get', 'status'], 'approved'];
     const pending = ['all',
@@ -178,7 +183,8 @@
     const rejected = ['==', ['get', 'status'], 'rejected'];
 
     // colors to use for the categories
-    const colors = ['#4ade80', '#fbbf24', '#f87171']; // softer green, yellow, red
+    // soft green, yellow, red
+    const colors = ['#4ade80', '#fbbf24', '#f87171'];
 
     map.on('load', () => {
       // Modify the source configuration to include initial filters
