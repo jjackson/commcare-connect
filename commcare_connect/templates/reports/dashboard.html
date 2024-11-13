@@ -316,7 +316,7 @@
         const formData = new FormData(formElement);
         const queryString = new URLSearchParams(formData).toString();
 
-        const response = await fetch(`{% url 'reports:visits_over_time_api' %}?${queryString}`);
+        const response = await fetch(`{% url 'reports:dashboard_charts_api' %}?${queryString}`);
         const data = await response.json();
 
         // Update time series chart
