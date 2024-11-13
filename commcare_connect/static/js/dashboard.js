@@ -194,6 +194,37 @@ function createTimeSeriesChart(ctx, data) {
 }
 
 function createProgramPieChart(ctx, data) {
+  // Check if there's no data or empty data
+  if (!data?.data?.length) {
+    return new Chart(ctx, {
+      type: 'pie',
+      data: {
+        labels: ['No data'],
+        datasets: [
+          {
+            data: [1],
+            backgroundColor: ['rgba(156, 163, 175, 0.3)'],
+            borderColor: ['rgb(156, 163, 175)'],
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              boxWidth: 12,
+              color: 'rgb(156, 163, 175)',
+            },
+          },
+        },
+      },
+    });
+  }
+
   return new Chart(ctx, {
     type: 'pie',
     data: {
@@ -223,6 +254,37 @@ function createProgramPieChart(ctx, data) {
 }
 
 function createStatusPieChart(ctx, data) {
+  // Check if there's no data or empty data
+  if (!data?.data?.length) {
+    return new Chart(ctx, {
+      type: 'pie',
+      data: {
+        labels: ['No data'],
+        datasets: [
+          {
+            data: [1],
+            backgroundColor: ['rgba(156, 163, 175, 0.3)'],
+            borderColor: ['rgb(156, 163, 175)'],
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              boxWidth: 12,
+              color: 'rgb(156, 163, 175)',
+            },
+          },
+        },
+      },
+    });
+  }
+
   return new Chart(ctx, {
     type: 'pie',
     data: {
