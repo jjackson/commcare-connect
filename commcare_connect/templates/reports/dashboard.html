@@ -303,13 +303,6 @@
 
     let timeSeriesChart, programPieChart, statusPieChart;
 
-    const chartColors = [
-      { border: 'rgb(75, 192, 192)', background: 'rgba(75, 192, 192, 0.8)' },
-      { border: 'rgb(255, 99, 132)', background: 'rgba(255, 99, 132, 0.8)' },
-      { border: 'rgb(255, 205, 86)', background: 'rgba(255, 205, 86, 0.8)' },
-      { border: 'rgb(54, 162, 235)', background: 'rgba(54, 162, 235, 0.8)' },
-    ];
-
     async function updateCharts() {
       try {
         const formElement = document.querySelector('#filterForm form');
@@ -323,117 +316,19 @@
         if (timeSeriesChart) {
           timeSeriesChart.destroy();
         }
-
-        timeSeriesChart = new Chart(timeSeriesCtx, {
-          type: 'bar',
-          data: {
-            labels: data.time_series.labels,
-            datasets: data.time_series.datasets.map((dataset, index) => ({
-              label: dataset.name,
-              data: dataset.data,
-              borderColor: chartColors[index % chartColors.length].border,
-              backgroundColor: chartColors[index % chartColors.length].background,
-              borderWidth: 1
-            }))
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              tooltip: {
-                mode: 'index',
-                intersect: false,
-              }
-            },
-            scales: {
-              x: {
-                stacked: true,
-                title: {
-                  display: true,
-                  text: 'Date'
-                }
-              },
-              y: {
-                stacked: true,
-                beginAtZero: true,
-                title: {
-                  display: true,
-                  text: 'Number of Visits'
-                }
-              }
-            }
-          }
-        });
+        timeSeriesChart = createTimeSeriesChart(timeSeriesCtx, data.time_series);
 
         // Update program pie chart
         if (programPieChart) {
           programPieChart.destroy();
         }
-
-        programPieChart = new Chart(programPieCtx, {
-          type: 'pie',
-          data: {
-            labels: data.program_pie.labels,
-            datasets: [{
-              data: data.program_pie.data,
-              backgroundColor: chartColors.map(c => c.background),
-              borderColor: chartColors.map(c => c.border),
-              borderWidth: 1
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                position: 'bottom',
-                labels: {
-                  boxWidth: 12
-                }
-              }
-            }
-          }
-        });
+        programPieChart = createProgramPieChart(programPieCtx, data.program_pie);
 
         // Update status pie chart
         if (statusPieChart) {
           statusPieChart.destroy();
         }
-
-        const statusColors = {
-          approved: { background: 'rgba(74, 222, 128, 0.8)', border: 'rgb(74, 222, 128)' },
-          rejected: { background: 'rgba(248, 113, 113, 0.8)', border: 'rgb(248, 113, 113)' },
-          pending: { background: 'rgba(251, 191, 36, 0.8)', border: 'rgb(251, 191, 36)' }
-        };
-
-        statusPieChart = new Chart(statusPieCtx, {
-          type: 'pie',
-          data: {
-            labels: data.status_pie.labels,
-            datasets: [{
-              data: data.status_pie.data,
-              backgroundColor: data.status_pie.labels.map(status =>
-                statusColors[status]?.background || 'rgba(156, 163, 175, 0.8)'
-              ),
-              borderColor: data.status_pie.labels.map(status =>
-                statusColors[status]?.border || 'rgb(156, 163, 175)'
-              ),
-              borderWidth: 1
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                position: 'bottom',
-                labels: {
-                  boxWidth: 12
-                }
-              }
-            }
-          }
-        });
+        statusPieChart = createStatusPieChart(statusPieCtx, data.status_pie);
 
       } catch (error) {
         console.error('Error updating charts:', error);
