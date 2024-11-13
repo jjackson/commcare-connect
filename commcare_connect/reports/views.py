@@ -468,6 +468,6 @@ def visits_over_time_api(request):
             data.append(program_data[program_name].get(current_date, 0))
             current_date += timedelta(days=1)
 
-        datasets.append({"name": program_name, "data": data})
+        datasets.append({"name": program_name or "Unknown", "data": data})
 
     return JsonResponse({"labels": labels, "datasets": datasets})
