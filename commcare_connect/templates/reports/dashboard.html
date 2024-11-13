@@ -295,48 +295,42 @@
   });
   // Update chart when page loads
   window.addEventListener('DOMContentLoaded', () => {
-        // Replace the chart initialization code with this:
-        const ctx = document.getElementById('visits-over-time');
-    let visitsChart;
+    const timeSeriesCtx = document.getElementById('visits-over-time');
+    const programPieCtx = document.getElementById('visits-by-program');
+    const statusPieCtx = document.getElementById('visits-by-status');
 
-    async function updateVisitsChart() {
+    let timeSeriesChart, programPieChart, statusPieChart;
+
+    const chartColors = [
+      { border: 'rgb(75, 192, 192)', background: 'rgba(75, 192, 192, 0.8)' },
+      { border: 'rgb(255, 99, 132)', background: 'rgba(255, 99, 132, 0.8)' },
+      { border: 'rgb(255, 205, 86)', background: 'rgba(255, 205, 86, 0.8)' },
+      { border: 'rgb(54, 162, 235)', background: 'rgba(54, 162, 235, 0.8)' },
+    ];
+
+    async function updateCharts() {
       try {
         const formElement = document.querySelector('#filterForm form');
         const formData = new FormData(formElement);
         const queryString = new URLSearchParams(formData).toString();
 
         const response = await fetch(`{% url 'reports:visits_over_time_api' %}?${queryString}`);
-        const chartData = await response.json();
+        const data = await response.json();
 
-        if (visitsChart) {
-          visitsChart.destroy();
+        // Update time series chart
+        if (timeSeriesChart) {
+          timeSeriesChart.destroy();
         }
 
-        // Assuming the API now returns data in this format:
-        // {
-        //   labels: ['2024-01', '2024-02', ...],
-        //   datasets: [
-        //     { name: 'Program A', data: [10, 20, ...] },
-        //     { name: 'Program B', data: [15, 25, ...] },
-        //   ]
-        // }
-
-        const colors = [
-          { border: 'rgb(75, 192, 192)', background: 'rgb(146, 219, 219)' },
-          { border: 'rgb(255, 99, 132)', background: 'rgb(255, 178, 193)' },
-          { border: 'rgb(255, 205, 86)', background: 'rgb(255, 227, 167)' },
-          { border: 'rgb(54, 162, 235)', background: 'rgb(157, 207, 245)' },
-        ];
-
-        visitsChart = new Chart(ctx, {
+        timeSeriesChart = new Chart(timeSeriesCtx, {
           type: 'bar',
           data: {
-            labels: chartData.labels,
-            datasets: chartData.datasets.map((dataset, index) => ({
+            labels: data.time_series.labels,
+            datasets: data.time_series.datasets.map((dataset, index) => ({
               label: dataset.name,
               data: dataset.data,
-              borderColor: colors[index % colors.length].border,
-              backgroundColor: colors[index % colors.length].background,
+              borderColor: chartColors[index % chartColors.length].border,
+              backgroundColor: chartColors[index % chartColors.length].background,
               borderWidth: 1
             }))
           },
@@ -346,7 +340,7 @@
             plugins: {
               title: {
                 display: true,
-                text: 'Visits by Program'
+                text: 'Visits Over Time'
               },
               tooltip: {
                 mode: 'index',
@@ -372,19 +366,88 @@
             }
           }
         });
+
+        // Update program pie chart
+        if (programPieChart) {
+          programPieChart.destroy();
+        }
+
+        programPieChart = new Chart(programPieCtx, {
+          type: 'pie',
+          data: {
+            labels: data.program_pie.labels,
+            datasets: [{
+              data: data.program_pie.data,
+              backgroundColor: chartColors.map(c => c.background),
+              borderColor: chartColors.map(c => c.border),
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'right',
+                labels: {
+                  boxWidth: 12
+                }
+              }
+            }
+          }
+        });
+
+        // Update status pie chart
+        if (statusPieChart) {
+          statusPieChart.destroy();
+        }
+
+        const statusColors = {
+          approved: { background: 'rgba(74, 222, 128, 0.8)', border: 'rgb(74, 222, 128)' },
+          rejected: { background: 'rgba(248, 113, 113, 0.8)', border: 'rgb(248, 113, 113)' },
+          pending: { background: 'rgba(251, 191, 36, 0.8)', border: 'rgb(251, 191, 36)' }
+        };
+
+        statusPieChart = new Chart(statusPieCtx, {
+          type: 'pie',
+          data: {
+            labels: data.status_pie.labels,
+            datasets: [{
+              data: data.status_pie.data,
+              backgroundColor: data.status_pie.labels.map(status =>
+                statusColors[status]?.background || 'rgba(156, 163, 175, 0.8)'
+              ),
+              borderColor: data.status_pie.labels.map(status =>
+                statusColors[status]?.border || 'rgb(156, 163, 175)'
+              ),
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'right',
+                labels: {
+                  boxWidth: 12
+                }
+              }
+            }
+          }
+        });
+
       } catch (error) {
-        console.error('Error updating visits chart:', error);
+        console.error('Error updating charts:', error);
       }
     }
 
+    updateCharts();
 
-    console.log('updating visits chart on load');
-    updateVisitsChart();
-
-    // Update chart when filters change
+    // Update charts when filters change
     const formElement = document.querySelector('#filterForm form');
     formElement.querySelectorAll('select, input').forEach(input => {
-      input.addEventListener('change', updateVisitsChart);
+      input.addEventListener('change', updateCharts);
     });
   });
 
