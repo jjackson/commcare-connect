@@ -6,6 +6,7 @@
 {% block javascript %}
   {{ block.super }}
   <script src="{% static 'bundles/js/dashboard-bundle.js' %}" ></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 {% block content %}
 <h2 class="my-2">Program Dashboard</h2>
@@ -76,7 +77,7 @@
 </div>
 <div class="container">
   <div class="row">
-    <div class="col-12">
+    <div class="col-12 col-md-6">
       <h3 class="my-2">Service Delivery Map</h3>
       <div class="position-relative">
         <div id="map" class="mt-3 mb-2 rounded border" style="height: 500px;"></div>
@@ -87,6 +88,10 @@
           </div>
         </div>
       </div>
+    </div>
+    <div class="col-12 col-md-6">
+      <h3 class="my-2">Visits over Time</h3>
+      <canvas id="visits-over-time" class="mt-3 mb-2 rounded border" style="height: 500px;"></canvas>
     </div>
   </div>
 </div>
@@ -172,7 +177,7 @@
       container: 'map',
       style: 'mapbox://styles/mapbox/dark-v11',
       center: [20, 0], // Centered on Africa (roughly central coordinates)
-      zoom: 3,
+      zoom: 2,
     });
 
     // This loads a map with two layers, one is a cluster with donut
@@ -268,6 +273,69 @@
       console.log('setting loading to none for an error')
       mapLoading.classList.add('d-none');
       // Optionally add error messaging here
+    });
+
+    // Generate last 30 days of dummy data
+    const generateDummyData = () => {
+      const data = [];
+      const labels = [];
+      const today = new Date();
+
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+        // Random number between 10 and 50
+        data.push(Math.floor(Math.random() * 40) + 10);
+      }
+      return { labels, data };
+    };
+
+    const { labels, data } = generateDummyData();
+
+    const ctx = document.getElementById('visits-over-time');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Total Visits',
+          data: data,
+          borderColor: 'rgb(75, 192, 192)',
+          backgroundColor: 'rgba(75, 192, 192, 0.2)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: false,
+        maintainAspectRatio: false,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Visits by Date'
+          },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Number of Visits'
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Date'
+            }
+          }
+        }
+      }
     });
   });
 
