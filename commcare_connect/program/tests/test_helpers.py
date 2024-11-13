@@ -138,7 +138,7 @@ class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
 
     @pytest.mark.parametrize(
         "scenario, visit_statuses, visit_date, flagged_statuses, expected_active_workers, "
-        "expected_total_workers, expected_flags, expected_records_flagged_percentage,"
+        "expected_total_workers, expected_records_flagged_percentage,"
         "total_payment_units_with_flags,total_payment_since_start_date, delivery_per_day_per_worker",
         [
             (
@@ -148,9 +148,8 @@ class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
                 [True] * 3 + [False] * 2,
                 5,
                 5,
-                2,
-                40.0,
-                2,
+                60.0,
+                3,
                 5,
                 1.0,
             ),
@@ -166,7 +165,6 @@ class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
                 [False] * 4,
                 2,
                 4,
-                0,
                 0.0,
                 0,
                 2,
@@ -179,7 +177,6 @@ class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
                 [False, True],
                 2,
                 2,
-                1,
                 50.0,
                 1,
                 2,
@@ -190,7 +187,6 @@ class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
                 [VisitValidationStatus.over_limit, VisitValidationStatus.trial],
                 [now(), now()],
                 [False, False],
-                0,
                 0,
                 0,
                 0.0,
@@ -210,9 +206,8 @@ class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
                 [True] * 4,
                 3,
                 3,
-                2,
-                66.67,
-                2,
+                100,
+                3,
                 3,
                 1.0,
             ),
@@ -226,7 +221,6 @@ class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
         flagged_statuses,
         expected_active_workers,
         expected_total_workers,
-        expected_flags,
         expected_records_flagged_percentage,
         total_payment_units_with_flags,
         total_payment_since_start_date,
@@ -247,7 +241,6 @@ class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
         assert len(opps) == 1
         assert opps[0].active_workers == expected_active_workers
         assert opps[0].total_workers_starting_delivery == expected_total_workers
-        assert opps[0].total_payment_units_with_flags == expected_flags
         assert opps[0].records_flagged_percentage == expected_records_flagged_percentage
         assert opps[0].total_payment_units_with_flags == total_payment_units_with_flags
         assert opps[0].total_payment_since_start_date == total_payment_since_start_date
