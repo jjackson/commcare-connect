@@ -90,24 +90,26 @@
       </div>
     </div>
     <div class="col-12 col-md-6">
-      <h3 class="my-2">Visits over Time</h3>
-      <div style="position: relative; height: 200px; width: 100%;">
-        <canvas id="visits-over-time"></canvas>
-      </div>
-      <div class="row mt-4">
+      <h3 class="my-2">Visit Breakdown</h3>
+      <div class="row mb-4">
         <div class="col-12 col-md-6">
-          <h3 class="my-2">Visits by Program</h3>
+          <h5 class="my-2">By Program</h3>
           <div style="position: relative; height: 200px; width: 100%;">
             <canvas id="visits-by-program"></canvas>
           </div>
         </div>
         <div class="col-12 col-md-6">
-          <h3 class="my-2">Visits by Status</h3>
+          <h5 class="my-2">By Status</h3>
           <div style="position: relative; height: 200px; width: 100%;">
             <canvas id="visits-by-status"></canvas>
           </div>
         </div>
       </div>
+      <h5>Over time</h5>
+      <div style="position: relative; height: 200px; width: 100%;">
+        <canvas id="visits-over-time"></canvas>
+      </div>
+
     </div>
   </div>
 </div>
@@ -338,10 +340,6 @@
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-              title: {
-                display: true,
-                text: 'Visits Over Time'
-              },
               tooltip: {
                 mode: 'index',
                 intersect: false,
@@ -388,7 +386,7 @@
             maintainAspectRatio: false,
             plugins: {
               legend: {
-                position: 'right',
+                position: 'bottom',
                 labels: {
                   boxWidth: 12
                 }
@@ -428,7 +426,7 @@
             maintainAspectRatio: false,
             plugins: {
               legend: {
-                position: 'right',
+                position: 'bottom',
                 labels: {
                   boxWidth: 12
                 }
