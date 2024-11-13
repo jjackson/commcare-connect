@@ -422,7 +422,7 @@ def dashboard_stats_api(request):
 
 @login_required
 @user_passes_test(lambda u: u.is_superuser)
-def visits_over_time_api(request):
+def dashboard_charts_api(request):
     filterset = DashboardFilters(request.GET)
     queryset = UserVisit.objects.all()
     # Use the filtered queryset if available, else use last 30 days
