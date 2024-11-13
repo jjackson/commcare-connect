@@ -315,7 +315,7 @@
         ];
 
         visitsChart = new Chart(ctx, {
-          type: 'line',
+          type: 'bar',
           data: {
             labels: chartData.labels,
             datasets: chartData.datasets.map((dataset, index) => ({
@@ -323,8 +323,7 @@
               data: dataset.data,
               borderColor: colors[index % colors.length].border,
               backgroundColor: colors[index % colors.length].background,
-              fill: true,
-              tension: 0.3
+              borderWidth: 1
             }))
           },
           options: {
@@ -341,18 +340,19 @@
               }
             },
             scales: {
-              y: {
-                beginAtZero: true,
+              x: {
                 stacked: true,
                 title: {
                   display: true,
-                  text: 'Number of Visits'
+                  text: 'Date'
                 }
               },
-              x: {
+              y: {
+                stacked: true,
+                beginAtZero: true,
                 title: {
                   display: true,
-                  text: 'Date'
+                  text: 'Number of Visits'
                 }
               }
             }
