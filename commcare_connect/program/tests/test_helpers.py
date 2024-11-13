@@ -55,7 +55,7 @@ class BaseManagedOpportunityTest:
 class TestGetAnnotatedManagedOpportunity(BaseManagedOpportunityTest):
     @pytest.mark.parametrize(
         "scenario, visit_statuses, passing_assessments, expected_invited,"
-        " expected_passing, expected_delivery, expected_conversion",
+        " expected_passing, expected_delivery, expected_conversion, expected_avg_time_to_convert",
         [
             (
                 "basic_scenario",
@@ -65,9 +65,10 @@ class TestGetAnnotatedManagedOpportunity(BaseManagedOpportunityTest):
                 3,
                 2,
                 66.67,
+                timedelta(days=1),
             ),
-            ("empty_scenario", [], [], 0, 0, 0, 0.0),
-            ("multiple_visits_scenario", [VisitValidationStatus.pending], [True], 1, 1, 1, 100.0),
+            ("empty_scenario", [], [], 0, 0, 0, 0.0, None),
+            ("multiple_visits_scenario", [VisitValidationStatus.pending], [True], 1, 1, 1, 100.0, timedelta(days=1)),
             (
                 "excluded_statuses",
                 [VisitValidationStatus.over_limit, VisitValidationStatus.trial],
@@ -76,6 +77,7 @@ class TestGetAnnotatedManagedOpportunity(BaseManagedOpportunityTest):
                 2,
                 0,
                 0.0,
+                None,
             ),
             (
                 "failed_assessments",
@@ -85,6 +87,7 @@ class TestGetAnnotatedManagedOpportunity(BaseManagedOpportunityTest):
                 1,
                 2,
                 100.0,
+                timedelta(days=1),
             ),
         ],
     )
@@ -97,6 +100,7 @@ class TestGetAnnotatedManagedOpportunity(BaseManagedOpportunityTest):
         expected_passing,
         expected_delivery,
         expected_conversion,
+        expected_avg_time_to_convert,
     ):
         for i, visit_status in enumerate(visit_statuses):
             user = self.create_user_with_access(visit_status=visit_status, passed_assessment=passing_assessments[i])
@@ -115,10 +119,16 @@ class TestGetAnnotatedManagedOpportunity(BaseManagedOpportunityTest):
         opps = get_annotated_managed_opportunity(self.program)
         assert len(opps) == 1
         annotated_opp = opps[0]
-        assert annotated_opp.workers_invited == expected_invited, f"Failed in {scenario}"
-        assert annotated_opp.workers_passing_assessment == expected_passing, f"Failed in {scenario}"
-        assert annotated_opp.workers_starting_delivery == expected_delivery, f"Failed in {scenario}"
-        assert pytest.approx(annotated_opp.percentage_conversion, 0.01) == expected_conversion, f"Failed in {scenario}"
+        assert annotated_opp.workers_invited == expected_invited
+        assert annotated_opp.workers_passing_assessment == expected_passing
+        assert annotated_opp.workers_starting_delivery == expected_delivery
+        assert pytest.approx(annotated_opp.percentage_conversion, 0.01) == expected_conversion
+
+        if expected_avg_time_to_convert:
+            diff = abs(annotated_opp.average_time_to_convert - expected_avg_time_to_convert)
+            assert diff < timedelta(minutes=1)
+        else:
+            assert annotated_opp.average_time_to_convert is None
 
 
 @pytest.mark.django_db
