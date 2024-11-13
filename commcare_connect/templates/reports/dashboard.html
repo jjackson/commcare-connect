@@ -277,68 +277,87 @@
       // Optionally add error messaging here
     });
 
-    // Generate last 30 days of dummy data
-    const generateDummyData = () => {
-      const data = [];
-      const labels = [];
-      const today = new Date();
 
-      for (let i = 29; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-        // Random number between 10 and 50
-        data.push(Math.floor(Math.random() * 40) + 10);
-      }
-      console.log({labels, data});
-      return { labels, data };
-    };
+  });
+  // Update chart when page loads
+  window.addEventListener('DOMContentLoaded', () => {
+        // Replace the chart initialization code with this:
+        const ctx = document.getElementById('visits-over-time');
+    let visitsChart;
 
-    const { labels, data } = generateDummyData();
+    async function updateVisitsChart() {
+      console.log('updating visits chart');
+      try {
+        // Get form data for filters
+        const formElement = document.querySelector('#filterForm form');
+        const formData = new FormData(formElement);
+        const queryString = new URLSearchParams(formData).toString();
 
-    const ctx = document.getElementById('visits-over-time');
-    const chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: 'Total Visits',
-          data: data,
-          borderColor: 'rgb(75, 192, 192)',
-          backgroundColor: 'rgba(75, 192, 192, 0.2)',
-          fill: true,
-          tension: 0.3
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          title: {
-            display: true,
-            text: 'Visits by Date'
-          },
-          tooltip: {
-            mode: 'index',
-            intersect: false,
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            title: {
-              display: true,
-              text: 'Number of Visits'
-            }
-          },
-          x: {
-            title: {
-              display: true,
-              text: 'Date'
-            }
-          }
+        // Fetch data from API
+        const response = await fetch(`{% url 'reports:visits_over_time_api' %}?${queryString}`);
+        console.log('response', response);
+        const chartData = await response.json();
+
+        if (visitsChart) {
+          visitsChart.destroy();
         }
+
+        visitsChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: chartData.labels,
+            datasets: [{
+              label: 'Total Visits',
+              data: chartData.data,
+              borderColor: 'rgb(75, 192, 192)',
+              backgroundColor: 'rgba(75, 192, 192, 0.2)',
+              fill: true,
+              tension: 0.3
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: {
+                display: true,
+                text: 'Visits by Date'
+              },
+              tooltip: {
+                mode: 'index',
+                intersect: false,
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Number of Visits'
+                }
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: 'Date'
+                }
+              }
+            }
+          }
+        });
+      } catch (error) {
+        console.error('Error updating visits chart:', error);
       }
+    }
+
+
+    console.log('updating visits chart on load');
+    updateVisitsChart();
+
+    // Update chart when filters change
+    const formElement = document.querySelector('#filterForm form');
+    formElement.querySelectorAll('select, input').forEach(input => {
+      input.addEventListener('change', updateVisitsChart);
     });
   });
 

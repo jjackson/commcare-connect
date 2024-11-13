@@ -8,7 +8,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.db.models import Max, Q, Sum
+from django.db.models import Count, Max, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -416,5 +416,44 @@ def dashboard_stats_api(request):
             "active_users": active_users,
             "verified_visits": verified_visits,
             "percent_verified": f"{percent_verified:.1f}%",
+        }
+    )
+
+
+@login_required
+@user_passes_test(lambda u: u.is_superuser)
+def visits_over_time_api(request):
+    filterset = DashboardFilters(request.GET)
+
+    # Use the filtered queryset
+    queryset = UserVisit.objects.all()
+
+    if filterset.is_valid():
+        queryset = filterset.filter_queryset(queryset)
+        from_date = filterset.form.cleaned_data["from_date"]
+        to_date = filterset.form.cleaned_data["to_date"]
+    else:
+        to_date = datetime.now().date()
+        from_date = to_date - timedelta(days=30)
+        queryset = queryset.filter(visit_date__gte=from_date, visit_date__lte=to_date)
+
+    # Aggregate visits by date
+    visits_by_date = queryset.values("visit_date").annotate(count=Count("id")).order_by("visit_date")
+
+    # Create a complete date range with 0s for missing dates
+    date_counts = {result["visit_date"]: result["count"] for result in visits_by_date}
+
+    data = []
+    labels = []
+    current_date = from_date
+    while current_date <= to_date:
+        labels.append(current_date.strftime("%b %d"))
+        data.append(date_counts.get(current_date, 0))
+        current_date += timedelta(days=1)
+
+    return JsonResponse(
+        {
+            "labels": labels,
+            "data": data,
         }
     )
