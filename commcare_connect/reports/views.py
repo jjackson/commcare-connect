@@ -435,21 +435,22 @@ def dashboard_charts_api(request):
         from_date = to_date - timedelta(days=30)
         queryset = queryset.filter(visit_date__gte=from_date, visit_date__lte=to_date)
 
-    # Get data for all three charts
-    # 1. Visits over time by program
+    return JsonResponse(
+        {
+            "time_series": _get_time_series_data(queryset, from_date, to_date),
+            "program_pie": _get_program_pie_data(queryset),
+            "status_pie": _get_status_pie_data(queryset),
+        }
+    )
+
+
+def _get_time_series_data(queryset, from_date, to_date):
+    # Get visits over time by program
     visits_by_program_time = (
         queryset.values("visit_date", "opportunity__delivery_type__name")
         .annotate(count=Count("id"))
         .order_by("visit_date", "opportunity__delivery_type__name")
     )
-
-    # 2. Total visits by program
-    visits_by_program = (
-        queryset.values("opportunity__delivery_type__name").annotate(count=Count("id")).order_by("-count")
-    )
-
-    # 3. Visits by status
-    visits_by_status = queryset.values("status").annotate(count=Count("id")).order_by("-count")
 
     # Process time series data
     program_data = {}
@@ -477,21 +478,22 @@ def dashboard_charts_api(request):
 
         time_datasets.append({"name": program_name or "Unknown", "data": data})
 
-    # Process pie chart data
-    program_pie_data = {
+    return {"labels": labels, "datasets": time_datasets}
+
+
+def _get_program_pie_data(queryset):
+    visits_by_program = (
+        queryset.values("opportunity__delivery_type__name").annotate(count=Count("id")).order_by("-count")
+    )
+    return {
         "labels": [item["opportunity__delivery_type__name"] or "Unknown" for item in visits_by_program],
         "data": [item["count"] for item in visits_by_program],
     }
 
-    status_pie_data = {
+
+def _get_status_pie_data(queryset):
+    visits_by_status = queryset.values("status").annotate(count=Count("id")).order_by("-count")
+    return {
         "labels": [item["status"] or "Unknown" for item in visits_by_status],
         "data": [item["count"] for item in visits_by_status],
     }
-
-    return JsonResponse(
-        {
-            "time_series": {"labels": labels, "datasets": time_datasets},
-            "program_pie": program_pie_data,
-            "status_pie": status_pie_data,
-        }
-    )
