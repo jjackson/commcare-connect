@@ -424,10 +424,8 @@ def dashboard_stats_api(request):
 @user_passes_test(lambda u: u.is_superuser)
 def visits_over_time_api(request):
     filterset = DashboardFilters(request.GET)
-
-    # Use the filtered queryset
     queryset = UserVisit.objects.all()
-
+    # Use the filtered queryset if available, else use last 30 days
     if filterset.is_valid():
         queryset = filterset.filter_queryset(queryset)
         from_date = filterset.form.cleaned_data["from_date"]
@@ -437,23 +435,39 @@ def visits_over_time_api(request):
         from_date = to_date - timedelta(days=30)
         queryset = queryset.filter(visit_date__gte=from_date, visit_date__lte=to_date)
 
-    # Aggregate visits by date
-    visits_by_date = queryset.values("visit_date").annotate(count=Count("id")).order_by("visit_date")
+    # Get visits by date and program in a single query
+    visits_by_program = (
+        queryset.values("visit_date", "opportunity__delivery_type__name")
+        .annotate(count=Count("id"))
+        .order_by("visit_date", "opportunity__delivery_type__name")
+    )
 
-    # Create a complete date range with 0s for missing dates
-    date_counts = {result["visit_date"]: result["count"] for result in visits_by_date}
+    # Create lookup dict for program data
+    program_data = {}
+    for visit in visits_by_program:
+        program_name = visit["opportunity__delivery_type__name"]
+        if program_name not in program_data:
+            program_data[program_name] = {}
+        program_data[program_name][visit["visit_date"]] = visit["count"]
 
-    data = []
+    # Create labels and datasets
     labels = []
+    datasets = []
     current_date = from_date
+
+    # Build labels array
     while current_date <= to_date:
         labels.append(current_date.strftime("%b %d"))
-        data.append(date_counts.get(current_date, 0))
         current_date += timedelta(days=1)
 
-    return JsonResponse(
-        {
-            "labels": labels,
-            "data": data,
-        }
-    )
+    # Build dataset for each program
+    for program_name in program_data.keys():
+        data = []
+        current_date = from_date
+        while current_date <= to_date:
+            data.append(program_data[program_name].get(current_date, 0))
+            current_date += timedelta(days=1)
+
+        datasets.append({"name": program_name, "data": data})
+
+    return JsonResponse({"labels": labels, "datasets": datasets})

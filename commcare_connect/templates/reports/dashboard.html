@@ -286,34 +286,46 @@
     let visitsChart;
 
     async function updateVisitsChart() {
-      console.log('updating visits chart');
       try {
-        // Get form data for filters
         const formElement = document.querySelector('#filterForm form');
         const formData = new FormData(formElement);
         const queryString = new URLSearchParams(formData).toString();
 
-        // Fetch data from API
         const response = await fetch(`{% url 'reports:visits_over_time_api' %}?${queryString}`);
-        console.log('response', response);
         const chartData = await response.json();
 
         if (visitsChart) {
           visitsChart.destroy();
         }
 
+        // Assuming the API now returns data in this format:
+        // {
+        //   labels: ['2024-01', '2024-02', ...],
+        //   datasets: [
+        //     { name: 'Program A', data: [10, 20, ...] },
+        //     { name: 'Program B', data: [15, 25, ...] },
+        //   ]
+        // }
+
+        const colors = [
+          { border: 'rgb(75, 192, 192)', background: 'rgba(75, 192, 192, 0.2)' },
+          { border: 'rgb(255, 99, 132)', background: 'rgba(255, 99, 132, 0.2)' },
+          { border: 'rgb(255, 205, 86)', background: 'rgba(255, 205, 86, 0.2)' },
+          { border: 'rgb(54, 162, 235)', background: 'rgba(54, 162, 235, 0.2)' },
+        ];
+
         visitsChart = new Chart(ctx, {
           type: 'line',
           data: {
             labels: chartData.labels,
-            datasets: [{
-              label: 'Total Visits',
-              data: chartData.data,
-              borderColor: 'rgb(75, 192, 192)',
-              backgroundColor: 'rgba(75, 192, 192, 0.2)',
+            datasets: chartData.datasets.map((dataset, index) => ({
+              label: dataset.name,
+              data: dataset.data,
+              borderColor: colors[index % colors.length].border,
+              backgroundColor: colors[index % colors.length].background,
               fill: true,
               tension: 0.3
-            }]
+            }))
           },
           options: {
             responsive: true,
@@ -321,7 +333,7 @@
             plugins: {
               title: {
                 display: true,
-                text: 'Visits by Date'
+                text: 'Visits by Program'
               },
               tooltip: {
                 mode: 'index',
@@ -331,6 +343,7 @@
             scales: {
               y: {
                 beginAtZero: true,
+                stacked: true,
                 title: {
                   display: true,
                   text: 'Number of Visits'
