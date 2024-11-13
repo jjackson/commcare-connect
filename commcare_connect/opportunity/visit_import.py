@@ -11,6 +11,7 @@ from django.db import transaction
 from django.utils.timezone import now
 from tablib import Dataset
 
+from commcare_connect.cache import quickcache
 from commcare_connect.opportunity.models import (
     CatchmentArea,
     CompletedWork,
@@ -277,6 +278,25 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     return PaymentImportStatus(seen_users, missing_users)
 
 
+def _cache_key(date=None):
+    date_key = date or now().date()
+    return [date_key.toordinal()]
+
+
+@quickcache(vary_on=_cache_key, timeout=12 * 60 * 60)
+def fetch_exchange_rates(date=None):
+    base_url = "https://openexchangerates.org/api"
+
+    if date:
+        url = f"{base_url}/historical/{date.strftime('%Y-%m-%d')}.json"
+    else:
+        url = f"{base_url}/latest.json"
+
+    url = f"{url}?app_id={settings.OPEN_EXCHANGE_RATES_API_ID}"
+    rates = json.load(urllib.request.urlopen(url))
+    return rates["rates"]
+
+
 def get_exchange_rate(currency_code, date=None):
     # date should be a date object or None for latest rate
 
@@ -285,38 +305,22 @@ def get_exchange_rate(currency_code, date=None):
     if currency_code == "USD":
         return 1
 
-    rate = get_exchange_rate_from_db(currency_code, date)
+    today = now().date()
+    rate = (
+        ExchangeRate.objects.filter(currency_code=currency_code, rate_date=date or today)
+        .values_list("rate", flat=True)
+        .first()
+    )
+
     if rate:
         return rate
 
-    base_url = "https://openexchangerates.org/api"
-
-    if date:
-        url = f"{base_url}/historical/{date.strftime('%Y-%m-%d')}.json"
-    else:
-        url = f"{base_url}/latest.json"
-    url = f"{url}?app_id={settings.OPEN_EXCHANGE_RATES_API_ID}"
-    rates = json.load(urllib.request.urlopen(url))
-
+    rates = fetch_exchange_rates(date)
     rate = rates["rates"].get(currency_code)
 
     if rate:
-        rate_date = date if date else now().date()
+        rate_date = date or today
         ExchangeRate.objects.create(currency_code=currency_code, rate=rate, rate_date=rate_date)
-
-    return rate
-
-
-def get_exchange_rate_from_db(currency_code, date=None):
-    if currency_code == "USD":
-        return 1
-
-    if not date:
-        date = now().date()
-
-    rate = (
-        ExchangeRate.objects.filter(currency_code=currency_code, rate_date=date).values_list("rate", flat=True).first()
-    )
 
     return rate
 
