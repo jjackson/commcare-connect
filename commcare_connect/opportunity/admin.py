@@ -26,7 +26,6 @@ from commcare_connect.opportunity.tasks import create_learn_modules_and_deliver_
 
 
 admin.site.register(CommCareApp)
-admin.site.register(PaymentUnit)
 admin.site.register(UserInvite)
 admin.site.register(DeliveryType)
 admin.site.register(DeliverUnitFlagRules)
@@ -113,6 +112,7 @@ class AssessmentAdmin(admin.ModelAdmin):
 @admin.register(CompletedWork)
 class CompletedWorkAdmin(admin.ModelAdmin):
     list_display = ["get_username", "get_opp_name", "opportunity_access", "payment_unit", "status"]
+    search_fields = ["get_username", "get_opp_name"]
 
     @admin.display(description="Opportunity Name")
     def get_opp_name(self, obj):
@@ -121,3 +121,13 @@ class CompletedWorkAdmin(admin.ModelAdmin):
     @admin.display(description="Username")
     def get_username(self, obj):
         return obj.opportunity_access.user.username
+
+
+@admin.register(PaymentUnit)
+class PaymentUnitAdmin(admin.ModelAdmin):
+    list_display = ["name", "get_opp_name"]
+    search_fields = ["name"]
+
+    @admin.display(description="Opportunity Name")
+    def get_opp_name(self, obj):
+        return obj.opportunity_access.opportunity.name
