@@ -271,10 +271,16 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
             payment = Payment.objects.create(opportunity_access=access, amount=amount, amount_usd=amount_usd)
             seen_users.add(username)
             payment_ids.append(payment.pk)
-            update_work_payment_date(access)
+        process_work_payment_dates(users)
     missing_users = set(usernames) - seen_users
     send_payment_notification.delay(opportunity.id, payment_ids)
     return PaymentImportStatus(seen_users, missing_users)
+
+
+def process_work_payment_dates(accesses: list):
+    with transaction.atomic():
+        for oa in accesses:
+            update_work_payment_date(oa)
 
 
 def _cache_key(currency_code, date=None):
