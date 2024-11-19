@@ -102,6 +102,7 @@ class CompletedModuleAdmin(admin.ModelAdmin):
 @admin.register(UserVisit)
 class UserVisitAdmin(admin.ModelAdmin):
     list_display = ["deliver_unit", "user", "opportunity", "status"]
+    search_fields = ["opportunity_access__user__username", "opportunity_access__opportunity__name"]
 
 
 @admin.register(Assessment)
@@ -112,7 +113,7 @@ class AssessmentAdmin(admin.ModelAdmin):
 @admin.register(CompletedWork)
 class CompletedWorkAdmin(admin.ModelAdmin):
     list_display = ["get_username", "get_opp_name", "opportunity_access", "payment_unit", "status"]
-    search_fields = ["get_username", "get_opp_name"]
+    search_fields = ["opportunity_access__user__username", "opportunity_access__opportunity__name"]
 
     @admin.display(description="Opportunity Name")
     def get_opp_name(self, obj):
