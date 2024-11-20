@@ -178,11 +178,11 @@ class UserStatusTable(OrgContextTable):
         return record.opportunity_access.display_name
 
     def render_view_profile(self, record):
-        invite_delete_url = reverse(
-            "opportunity:user_invite_delete",
-            args=(self.org_slug, record.opportunity.id, record.id),
-        )
         if not getattr(record.opportunity_access, "accepted", False):
+            invite_delete_url = reverse(
+                "opportunity:user_invite_delete",
+                args=(self.org_slug, record.opportunity.id, record.id),
+            )
             return format_html(
                 (
                     '<button hx-post="{}" hx-swap="none" '
