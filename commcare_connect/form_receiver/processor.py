@@ -242,7 +242,9 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             entity=Count("pk", filter=Q(entity_id=deliver_unit_block.get("entity_id"), deliver_unit=deliver_unit)),
         )
     )
+    payment_unit = deliver_unit.payment_unit
     claim = OpportunityClaim.objects.get(opportunity_access=access)
+    claim_limit = OpportunityClaimLimit.objects.get(opportunity_claim=claim, payment_unit=payment_unit)
     entity_id = deliver_unit_block.get("entity_id")
     entity_name = deliver_unit_block.get("entity_name")
     user_visit = UserVisit(
@@ -267,17 +269,12 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         completed_work, _ = CompletedWork.objects.get_or_create(
             opportunity_access=access,
             entity_id=entity_id,
-            payment_unit=deliver_unit.payment_unit,
-            defaults={
-                "entity_name": entity_name,
-            },
+            payment_unit=payment_unit,
+            defaults={"entity_name": entity_name},
         )
         user_visit.completed_work = completed_work
-        claim_limit = OpportunityClaimLimit.objects.get(
-            opportunity_claim=claim, payment_unit=completed_work.payment_unit
-        )
         if (
-            counts["daily"] >= deliver_unit.payment_unit.max_daily
+            counts["daily"] >= payment_unit.max_daily
             or counts["total"] >= claim_limit.max_visits
             or datetime.date.today() > claim.end_date
         ):
