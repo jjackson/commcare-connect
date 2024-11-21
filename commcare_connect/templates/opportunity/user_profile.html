@@ -45,6 +45,14 @@
           <div class="col">{{access.last_visit_date}}</div>
         </div>
       </div>
+      <div id="menu" class="btn-group btn-group-toggle" data-toggle="buttons" style="position: absolute; top: 0; left: 0;">
+      <label class="btn btn-secondary active">
+        <input type="radio" name="options" id="streets-v12" autocomplete="off" checked> Streets
+      </label>
+      <label class="btn btn-secondary">
+        <input type="radio" name="options" id="satellite-streets-v12" autocomplete="off"> Satellite
+      </label>
+    </div>
        <div class="position-relative">
         <div id="user-visit-map" class="mt-3 mb-2 rounded border" style="height: 300px;"></div>
         <div id="legend" class="card position-absolute bottom-0 end-0 m-2 z-1" x-data="{ show: false}" x-show="show">
@@ -81,7 +89,7 @@
   {{ user_catchments|json_script:"userCatchments" }}
   <script type="module">
     window.addEventListener('DOMContentLoaded', () => {
-      mapboxgl.accessToken = "{{ MAPBOX_TOKEN }}";
+      mapboxgl.accessToken = "pk.eyJ1IjoiaHlhZGF2MTAiLCJhIjoiY2x5ZHYxMDFuMGQzeDJrczZtamd5dXBqcSJ9.bjt_mM0gLycVpn_Q-B3zow";
       const map = new mapboxgl.Map({
         container: 'user-visit-map',
         style: 'mapbox://styles/mapbox/satellite-streets-v12',
@@ -98,6 +106,16 @@
       addAccuracyCircles(map, userVisits);
       const userCatchments = JSON.parse(document.getElementById('userCatchments').textContent);
       addCatchmentAreas(map, userCatchments)
+
+      const styleList = document.getElementById('menu');
+      const inputs = styleList.getElementsByTagName('input');
+
+      for (const input of inputs) {
+          input.onclick = (click) => {
+              const styleId = click.target.id;
+              map.setStyle('mapbox://styles/mapbox/' + styleId);
+          };
+      }
     });
   </script>
 {% endblock %}

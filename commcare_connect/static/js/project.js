@@ -67,7 +67,7 @@ window.addAccuracyCircles = addAccuracyCircles;
 function addCatchmentAreas(map, catchments) {
   const ACTIVE_COLOR = '#3366ff';
   const INACTIVE_COLOR = '#ff4d4d';
-  const CIRCLE_OPACITY = 0.3;
+  const CIRCLE_OPACITY = 0.15;
 
   map.on('load', () => {
     const catchmentCircles = catchments.map((catchment) =>
