@@ -187,7 +187,7 @@ class UserStatusTable(OrgContextTable):
                 (
                     '<button hx-post="{}" hx-swap="none" '
                     'hx-confirm="Please confirm to delete the User Invite." '
-                    'class="btn btn-danger">Delete</button>'
+                    'class="btn btn-danger btn-sm">Delete</button>'
                 ),
                 invite_delete_url,
             )
