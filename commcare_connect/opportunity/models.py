@@ -364,6 +364,9 @@ class PaymentUnit(models.Model):
         null=True,
     )
 
+    def __str__(self):
+        return self.name
+
 
 class DeliverUnit(models.Model):
     app = models.ForeignKey(
