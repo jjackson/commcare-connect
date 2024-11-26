@@ -261,7 +261,7 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     seen_users = set()
     payment_ids = []
     lock_key = f"bulk_update_payments_opportunity_{opportunity.id}"
-    with cache.lock(lock_key, timeout=60):  # Lock expires after 60 seconds if the work is not finished.
+    with cache.lock(lock_key, timeout=60):
         with transaction.atomic():
             usernames = list(payments)
             users = OpportunityAccess.objects.filter(
