@@ -613,9 +613,6 @@ def test_receiver_visit_review_status(
         ({"opp_options": {"start_date": now().date()}}, {}, VisitValidationStatus.approved),
         ({"opp_options": {"start_date": now() + datetime.timedelta(days=2)}}, {}, VisitValidationStatus.trial),
         ({"opp_options": {"end_date": now().date()}}, {}, VisitValidationStatus.approved),
-        # NOTE: this test case fails as opportunities with past end_date are marked
-        # as inactive, and are not processed in the form processor
-        # ({"opp_options": {"end_date": now() - datetime.timedelta(days=2)}}, {}, VisitValidationStatus.over_limit),
     ],
     indirect=["opportunity"],
 )
