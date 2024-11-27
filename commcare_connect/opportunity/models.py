@@ -363,6 +363,8 @@ class PaymentUnit(models.Model):
         blank=True,
         null=True,
     )
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -596,6 +598,7 @@ class OpportunityClaimLimit(models.Model):
     opportunity_claim = models.ForeignKey(OpportunityClaim, on_delete=models.CASCADE)
     payment_unit = models.ForeignKey(PaymentUnit, on_delete=models.CASCADE)
     max_visits = models.IntegerField()
+    end_date = models.DateField(null=True, blank=True)
 
     class Meta:
         unique_together = [
@@ -625,6 +628,7 @@ class OpportunityClaimLimit(models.Model):
                 opportunity_claim=claim,
                 payment_unit=payment_unit,
                 defaults={"max_visits": min(remaining, payment_unit.max_total)},
+                end_date=payment_unit.end_date,
             )
 
 
