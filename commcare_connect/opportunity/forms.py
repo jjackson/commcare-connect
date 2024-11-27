@@ -692,7 +692,7 @@ class PaymentUnitForm(forms.ModelForm):
                     "optional_deliver_units",
                     error=f"{deliver_unit_obj.name} cannot be marked both Required and Optional",
                 )
-            if cleaned_data["end_date"] < now().date():
+            if cleaned_data["end_date"] and cleaned_data["end_date"] < now().date():
                 self.add_error("end_date", "Please provide a valid end date.")
         return cleaned_data
 
