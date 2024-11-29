@@ -262,7 +262,8 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     )
     completed_work_needs_save = False
     today = datetime.date.today()
-    if opportunity.start_date > today or (payment_unit.start_date and payment_unit.start_date > today):
+    paymentunit_startdate = payment_unit.start_date if payment_unit else None
+    if opportunity.start_date > today or (paymentunit_startdate and paymentunit_startdate > today):
         completed_work = None
         user_visit.status = VisitValidationStatus.trial
     else:
