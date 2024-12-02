@@ -1241,7 +1241,6 @@ def user_invite_delete(request, org_slug, opp_id, pk):
 
 @org_admin_required
 @require_POST
-@csrf_exempt
 def resend_user_invite(request, org_slug, opp_id, pk):
     user_invite = get_object_or_404(UserInvite, id=pk)
 
