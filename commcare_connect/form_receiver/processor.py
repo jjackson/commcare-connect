@@ -262,7 +262,9 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         location=xform.metadata.location,
     )
     completed_work_needs_save = False
-    if opportunity.start_date > datetime.date.today():
+    today = datetime.date.today()
+    paymentunit_startdate = payment_unit.start_date if payment_unit else None
+    if opportunity.start_date > today or (paymentunit_startdate and paymentunit_startdate > today):
         completed_work = None
         user_visit.status = VisitValidationStatus.trial
     else:
@@ -276,7 +278,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         if (
             counts["daily"] >= payment_unit.max_daily
             or counts["total"] >= claim_limit.max_visits
-            or datetime.date.today() > claim.end_date
+            or (today > claim.end_date or (claim_limit.end_date and today > claim_limit.end_date))
         ):
             user_visit.status = VisitValidationStatus.over_limit
             if not completed_work.status == CompletedWorkStatus.over_limit:
