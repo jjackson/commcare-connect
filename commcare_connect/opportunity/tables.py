@@ -183,7 +183,7 @@ class UserStatusTable(OrgContextTable):
                 "opportunity:user_invite_delete",
                 args=(self.org_slug, record.opportunity.id, record.id),
             )
-            resend_invite_url = invite_delete_url = reverse(
+            resend_invite_url = reverse(
                 "opportunity:resend_user_invite",
                 args=(self.org_slug, record.opportunity.id, record.id),
             )
