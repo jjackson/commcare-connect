@@ -393,7 +393,7 @@ class CatchmentAreaTable(tables.Table):
         )
 
 
-class UserVisitReviewTable(tables.Table):
+class UserVisitReviewTable(OrgContextTable):
     pk = columns.CheckBoxColumn(
         accessor="pk",
         verbose_name="",
