@@ -64,7 +64,15 @@ def get_annotated_managed_opportunity(program: Program):
             percentage_conversion=calculate_safe_percentage("workers_starting_delivery", "workers_invited"),
             average_time_to_convert=Avg(
                 ExpressionWrapper(
-                    Subquery(earliest_visits) - F("opportunityaccess__invited_date"), output_field=DurationField()
+                    Case(
+                        When(
+                            Q(opportunityaccess__invited_date__isnull=False)
+                            & Q(opportunityaccess__uservisit__isnull=False),
+                            then=Subquery(earliest_visits) - F("opportunityaccess__invited_date"),
+                        ),
+                        default=None,
+                    ),
+                    output_field=DurationField(),
                 ),
                 filter=FILTER_FOR_VALID_VISIT_DATE,
                 distinct=True,
