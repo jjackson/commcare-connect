@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db.models import (
     Avg,
     Case,
@@ -12,7 +14,7 @@ from django.db.models import (
     Value,
     When,
 )
-from django.db.models.functions import Cast, Round
+from django.db.models.functions import Cast, Greatest, Round
 
 from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 from commcare_connect.program.models import ManagedOpportunity, Program
@@ -50,7 +52,7 @@ def get_annotated_managed_opportunity(program: Program):
         .annotate(
             workers_invited=Count("opportunityaccess", distinct=True),
             workers_passing_assessment=Count(
-                "opportunityaccess__assessment",
+                "opportunityaccess__assessment__opportunity_access",
                 filter=Q(
                     opportunityaccess__assessment__passed=True,
                 ),
@@ -64,13 +66,9 @@ def get_annotated_managed_opportunity(program: Program):
             percentage_conversion=calculate_safe_percentage("workers_starting_delivery", "workers_invited"),
             average_time_to_convert=Avg(
                 ExpressionWrapper(
-                    Case(
-                        When(
-                            Q(opportunityaccess__invited_date__isnull=False)
-                            & Q(opportunityaccess__uservisit__isnull=False),
-                            then=Subquery(earliest_visits) - F("opportunityaccess__invited_date"),
-                        ),
-                        default=None,
+                    Greatest(
+                        Subquery(earliest_visits) - F("opportunityaccess__invited_date"),
+                        Value(timedelta(seconds=0)),
                     ),
                     output_field=DurationField(),
                 ),
