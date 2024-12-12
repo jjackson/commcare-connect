@@ -14,7 +14,7 @@ from django.db.models import (
     Value,
     When,
 )
-from django.db.models.functions import Cast, Greatest, Round
+from django.db.models.functions import Cast, Coalesce, Greatest, Round
 
 from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 from commcare_connect.program.models import ManagedOpportunity, Program
@@ -64,16 +64,19 @@ def get_annotated_managed_opportunity(program: Program):
                 distinct=True,
             ),
             percentage_conversion=calculate_safe_percentage("workers_starting_delivery", "workers_invited"),
-            average_time_to_convert=Avg(
-                ExpressionWrapper(
-                    Greatest(
-                        Subquery(earliest_visits) - F("opportunityaccess__invited_date"),
-                        Value(timedelta(seconds=0)),
+            average_time_to_convert=Coalesce(
+                Avg(
+                    ExpressionWrapper(
+                        Greatest(
+                            Subquery(earliest_visits) - F("opportunityaccess__invited_date"),
+                            Value(timedelta(seconds=0)),
+                        ),
+                        output_field=DurationField(),
                     ),
-                    output_field=DurationField(),
+                    filter=FILTER_FOR_VALID_VISIT_DATE,
+                    distinct=True,
                 ),
-                filter=FILTER_FOR_VALID_VISIT_DATE,
-                distinct=True,
+                Value(timedelta(seconds=0)),
             ),
         )
     )
