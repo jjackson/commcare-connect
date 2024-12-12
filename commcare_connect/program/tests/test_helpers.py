@@ -69,7 +69,7 @@ class TestGetAnnotatedManagedOpportunity(BaseManagedOpportunityTest):
                 66.67,
                 timedelta(days=1),
             ),
-            ("empty_scenario", [], [], 0, 0, 0, 0.0, None),
+            ("empty_scenario", [], [], 0, 0, 0, 0.0, timedelta(days=0)),
             ("multiple_visits_scenario", [VisitValidationStatus.pending], [True], 1, 1, 1, 100.0, timedelta(days=1)),
             (
                 "excluded_statuses",
@@ -79,7 +79,7 @@ class TestGetAnnotatedManagedOpportunity(BaseManagedOpportunityTest):
                 2,
                 0,
                 0.0,
-                None,
+                timedelta(days=0),
             ),
             (
                 "failed_assessments",
@@ -121,16 +121,14 @@ class TestGetAnnotatedManagedOpportunity(BaseManagedOpportunityTest):
         opps = get_annotated_managed_opportunity(self.program)
         assert len(opps) == 1
         annotated_opp = opps[0]
+        print(scenario, annotated_opp.average_time_to_convert, expected_avg_time_to_convert)
         assert annotated_opp.workers_invited == expected_invited
         assert annotated_opp.workers_passing_assessment == expected_passing
         assert annotated_opp.workers_starting_delivery == expected_delivery
         assert pytest.approx(annotated_opp.percentage_conversion, 0.01) == expected_conversion
 
-        if expected_avg_time_to_convert:
-            diff = abs(annotated_opp.average_time_to_convert - expected_avg_time_to_convert)
-            assert diff < timedelta(minutes=1)
-        else:
-            assert annotated_opp.average_time_to_convert is None
+        diff = abs(annotated_opp.average_time_to_convert - expected_avg_time_to_convert)
+        assert diff < timedelta(minutes=1)
 
 
 @pytest.mark.django_db
