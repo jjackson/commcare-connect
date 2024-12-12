@@ -69,12 +69,10 @@ def test_opportunity_stats(opportunity: Opportunity, user: User):
     ocl1 = OpportunityClaimLimitFactory(opportunity_claim=claim, payment_unit=payment_unit1)
     ocl2 = OpportunityClaimLimitFactory(opportunity_claim=claim, payment_unit=payment_unit2)
 
-    assert opportunity.claimed_budget == (ocl1.max_visits * payment_unit1.amount) + (
-        ocl2.max_visits * payment_unit2.amount
+    assert opportunity.claimed_budget == (ocl1.max_visits * (payment_unit1.amount + org_pay)) + (
+        ocl2.max_visits * (payment_unit2.amount + org_pay)
     )
-    assert opportunity.remaining_budget == opportunity.total_budget - opportunity.claimed_budget - (
-        opportunity.allotted_visits * org_pay
-    )
+    assert opportunity.remaining_budget == opportunity.total_budget - opportunity.claimed_budget
 
 
 @pytest.mark.django_db
