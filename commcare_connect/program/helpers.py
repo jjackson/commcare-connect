@@ -120,7 +120,7 @@ def get_delivery_performance_report(program: Program, start_date, end_date):
                 distinct=True,
                 filter=date_filter & Q(opportunityaccess__uservisit__completed_work__isnull=False),
             ),
-            deliveries_per_day_per_worker=Case(
+            deliveries_per_worker=Case(
                 When(active_workers=0, then=Value(0)),
                 default=Round(F("total_payment_since_start_date") / F("active_workers"), 2),
                 output_field=FloatField(),
