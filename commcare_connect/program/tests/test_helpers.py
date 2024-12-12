@@ -139,7 +139,7 @@ class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
     @pytest.mark.parametrize(
         "scenario, visit_statuses, visit_date, flagged_statuses, expected_active_workers, "
         "expected_total_workers, expected_records_flagged_percentage,"
-        "total_payment_units_with_flags,total_payment_since_start_date, delivery_per_day_per_worker",
+        "total_payment_units_with_flags,total_payment_since_start_date, deliveries_per_worker",
         [
             (
                 "basic_scenario",
@@ -224,7 +224,7 @@ class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
         expected_records_flagged_percentage,
         total_payment_units_with_flags,
         total_payment_since_start_date,
-        delivery_per_day_per_worker,
+        deliveries_per_worker,
     ):
         for i, visit_status in enumerate(visit_statuses):
             self.create_user_with_visit(
@@ -244,4 +244,4 @@ class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
         assert opps[0].records_flagged_percentage == expected_records_flagged_percentage
         assert opps[0].total_payment_units_with_flags == total_payment_units_with_flags
         assert opps[0].total_payment_since_start_date == total_payment_since_start_date
-        assert opps[0].deliveries_per_day_per_worker == delivery_per_day_per_worker
+        assert opps[0].deliveries_per_worker == deliveries_per_worker
