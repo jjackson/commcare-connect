@@ -115,6 +115,9 @@ class Opportunity(BaseModel):
         opp_access = OpportunityAccess.objects.filter(opportunity=self)
         opportunity_claim = OpportunityClaim.objects.filter(opportunity_access__in=opp_access)
         claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__in=opportunity_claim)
+        org_pay = 0
+        if self.managed:
+            org_pay = self.managedopportunity.org_pay_per_visit
 
         payment_unit_counts = claim_limits.values("payment_unit").annotate(
             visits_count=Sum("max_visits"), amount=F("payment_unit__amount")
@@ -123,7 +126,7 @@ class Opportunity(BaseModel):
         for count in payment_unit_counts:
             visits_count = count["visits_count"]
             amount = count["amount"]
-            claimed += visits_count * amount
+            claimed += visits_count * (amount + org_pay)
 
         return claimed
 
