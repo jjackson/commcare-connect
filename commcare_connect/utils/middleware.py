@@ -52,7 +52,7 @@ class SentryContextMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
         try:
-            from sentry_sdk import Scope  # noqa: F401
+            import sentry_sdk  # noqa: F401
         except ImportError:
             raise MiddlewareNotUsed
 
@@ -60,11 +60,10 @@ class SentryContextMiddleware:
             raise MiddlewareNotUsed
 
     def process_view(self, request, view_func, view_args, view_kwargs):
-        from sentry_sdk import configure_scope
+        from sentry_sdk import set_tag, set_user
 
-        with configure_scope() as scope:
-            if getattr(request, "user", None):
-                scope.set_user("username", request.user.username)
+        if getattr(request, "user", None):
+            set_user({"username": request.user.username})
 
-            if getattr(request, "org", None):
-                scope.set_tag("org", request.org)
+        if getattr(request, "org", None):
+            set_tag("org", request.org)
