@@ -716,3 +716,8 @@ class ExchangeRate(models.Model):
     rate = models.DecimalField(max_digits=10, decimal_places=6)
     rate_date = models.DateField()
     fetched_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["currency_code", "rate_date"], name="unique_currency_code_date")
+        ]

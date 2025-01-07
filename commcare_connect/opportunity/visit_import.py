@@ -309,21 +309,14 @@ def get_exchange_rate(currency_code, date=None):
     if currency_code == "USD":
         return 1
 
-    today = now().date()
-    rate = (
-        ExchangeRate.objects.filter(currency_code=currency_code, rate_date=date or today)
-        .values_list("rate", flat=True)
-        .first()
-    )
+    rate_date = date or now().date()
+    rate = None
 
-    if rate:
-        return rate
-
-    rates = fetch_exchange_rates(date)
-    rate = rates["rates"].get(currency_code)
-
-    if rate:
-        rate_date = date or today
+    try:
+        rate = ExchangeRate.objects.get(currency_code=currency_code, rate_date=rate_date).rate
+    except ExchangeRate.DoesNotExist:
+        rates = fetch_exchange_rates(rate_date)
+        rate = rates["rates"].get(currency_code)
         ExchangeRate.objects.create(currency_code=currency_code, rate=rate, rate_date=rate_date)
 
     return rate
