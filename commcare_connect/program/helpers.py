@@ -52,7 +52,7 @@ def get_annotated_managed_opportunity(program: Program):
         .annotate(
             workers_invited=Count("opportunityaccess", distinct=True),
             workers_passing_assessment=Count(
-                "opportunityaccess__assessment__opportunity_access",
+                "opportunityaccess",
                 filter=Q(
                     opportunityaccess__assessment__passed=True,
                 ),
