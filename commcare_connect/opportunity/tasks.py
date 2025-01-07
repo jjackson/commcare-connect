@@ -119,7 +119,6 @@ def invite_user(user_id, opportunity_access_id):
         opportunity_access=opportunity_access,
         defaults={
             "message_sid": sms_status.sid,
-            "notification_date": now() if sms_status.sid else None,
             "status": UserInviteStatus.accepted if opportunity_access.accepted else UserInviteStatus.invited,
         },
     )
