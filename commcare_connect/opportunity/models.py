@@ -589,6 +589,13 @@ class UserVisit(XFormBaseModel):
     def images(self):
         return BlobMeta.objects.filter(parent_id=self.xform_id, content_type__startswith="image/")
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["xform_id", "entity_id", "deliver_unit"], name="unique_xform_entity_deliver_unit"
+            )
+        ]
+
 
 class OpportunityClaim(models.Model):
     opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE)
