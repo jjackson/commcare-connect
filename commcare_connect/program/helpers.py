@@ -14,7 +14,7 @@ from django.db.models import (
     Value,
     When,
 )
-from django.db.models.functions import Cast, Coalesce, Greatest, Round
+from django.db.models.functions import Cast, Coalesce, Round
 
 from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 from commcare_connect.program.models import ManagedOpportunity, Program
@@ -67,13 +67,11 @@ def get_annotated_managed_opportunity(program: Program):
             average_time_to_convert=Coalesce(
                 Avg(
                     ExpressionWrapper(
-                        Greatest(
-                            Subquery(earliest_visits) - F("opportunityaccess__invited_date"),
-                            Value(timedelta(seconds=0)),
-                        ),
+                        earliest_visits - F("opportunityaccess__invited_date"),
                         output_field=DurationField(),
                     ),
-                    filter=FILTER_FOR_VALID_VISIT_DATE,
+                    filter=FILTER_FOR_VALID_VISIT_DATE
+                    & Q(opportunityaccess__invited_date__lte=Subquery(earliest_visits)),
                     distinct=True,
                 ),
                 Value(timedelta(seconds=0)),

@@ -245,3 +245,38 @@ class TestDeliveryPerformanceReport(BaseManagedOpportunityTest):
         assert opps[0].total_payment_units_with_flags == total_payment_units_with_flags
         assert opps[0].total_payment_since_start_date == total_payment_since_start_date
         assert opps[0].deliveries_per_worker == deliveries_per_worker
+
+
+@pytest.mark.django_db
+def test_average_time_to_convert_for_negative_values():
+    program = ProgramFactory.create()
+    nm_org = OrganizationFactory.create()
+    opp = ManagedOpportunityFactory.create(program=program, organization=nm_org)
+    today = now()
+
+    valid_durations = []
+
+    for r in range(4):
+        user = UserFactory.create()
+        access = OpportunityAccessFactory.create(opportunity=opp, user=user, invited_date=now())
+        AssessmentFactory.create(opportunity=opp, user=user, opportunity_access=access, passed=True)
+
+        if r % 2 == 0:
+            visit_date = today - timedelta(days=1)
+        else:
+            visit_date = today + timedelta(days=4)
+            duration = visit_date - access.invited_date  # Positive duration
+            valid_durations.append(duration)  # Only count valid (positive) durations
+
+        UserVisitFactory.create(
+            user=user,
+            opportunity=opp,
+            opportunity_access=access,
+            visit_date=visit_date,
+            status=VisitValidationStatus.approved,
+        )
+
+    opp = get_annotated_managed_opportunity(program)[0]
+
+    expected_avg = sum(valid_durations, timedelta()) / len(valid_durations)
+    assert opp.average_time_to_convert == expected_avg
