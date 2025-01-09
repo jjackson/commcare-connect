@@ -23,7 +23,7 @@ def update_exchange_rate(apps, schema_editor):
 
     for payment in payments:
         date_paid = payment["date_only"]
-        currency = payment["payment_unit__opportunity__currency"] or payment["invoice__opportunity__currency"]
+        currency = payment["opportunity_access__opportunity__currency"] or payment["invoice__opportunity__currency"]
 
         if currency is "USD":
             exchange_rate = 1
