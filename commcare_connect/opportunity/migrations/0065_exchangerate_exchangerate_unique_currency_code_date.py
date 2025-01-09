@@ -15,13 +15,15 @@ def update_exchange_rate(apps, schema_editor):
     payments = (
         Payment.objects.annotate(date_only=TruncDate("date_paid"))
         .filter(payment_unit__opportunity__currency__isnull=False)
-        .values("id", "date_only", "amount", "payment_unit__opportunity__currency")
+        .values(
+            "id", "date_only", "amount", "opportunity_access__opportunity__currency", "invoice__opportunity__currency"
+        )
         .distinct()
     )
 
     for payment in payments:
         date_paid = payment["date_only"]
-        currency = payment["payment_unit__opportunity__currency"]
+        currency = payment["payment_unit__opportunity__currency"] or payment["invoice__opportunity__currency"]
 
         if currency is "USD":
             exchange_rate = 1
