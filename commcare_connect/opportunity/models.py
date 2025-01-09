@@ -456,7 +456,7 @@ class CompletedWork(models.Model):
     payment_date = models.DateTimeField(null=True)
 
     class Meta:
-        unique_together = ("entity_id", "payment_unit")
+        unique_together = ("opportunity_access", "entity_id", "payment_unit")
 
     def __init__(self, *args, **kwargs):
         self.status = CompletedWorkStatus.incomplete
@@ -591,6 +591,13 @@ class UserVisit(XFormBaseModel):
     @property
     def images(self):
         return BlobMeta.objects.filter(parent_id=self.xform_id, content_type__startswith="image/")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["xform_id", "entity_id", "deliver_unit"], name="unique_xform_entity_deliver_unit"
+            )
+        ]
 
 
 class OpportunityClaim(models.Model):
