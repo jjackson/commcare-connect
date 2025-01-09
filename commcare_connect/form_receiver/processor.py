@@ -1,6 +1,6 @@
 import datetime
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.db.models import Count, Q
 from django.utils.timezone import now
 from geopy.distance import distance
@@ -36,10 +36,6 @@ from commcare_connect.users.models import User
 LEARN_MODULE_JSONPATH = parse("$..module")
 ASSESSMENT_JSONPATH = parse("$..assessment")
 DELIVER_UNIT_JSONPATH = parse("$..deliver")
-
-
-class DuplicateFormException(Exception):
-    pass
 
 
 def process_xform(xform: XForm):
@@ -311,13 +307,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             user_visit.status = VisitValidationStatus.approved
             user_visit.review_status = VisitReviewStatus.agree
 
-        try:
-            user_visit.save()
-        except IntegrityError as e:
-            if "unique_xform_entity_deliver_unit" in str(e):
-                raise DuplicateFormException("Form has already been submitted.")
-            else:
-                raise
+        user_visit.save()
 
         if completed_work is not None:
             if completed_work.completed_count > 0 and completed_work.status == CompletedWorkStatus.incomplete:
