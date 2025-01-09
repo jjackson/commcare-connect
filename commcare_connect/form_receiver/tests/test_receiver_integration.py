@@ -1,12 +1,12 @@
 import datetime
 from copy import deepcopy
+from http import HTTPStatus
 from uuid import uuid4
 
 import pytest
 from django.utils.timezone import now
 from rest_framework.test import APIClient
 
-from commcare_connect.form_receiver.processor import DuplicateFormException
 from commcare_connect.form_receiver.tests.test_receiver_endpoint import add_credentials
 from commcare_connect.form_receiver.tests.xforms import (
     AssessmentStubFactory,
@@ -623,7 +623,6 @@ def test_receiver_same_visit_twice(
     form_json1 = get_form_json_for_payment_unit(payment_units[0])
     form_json2 = deepcopy(form_json1)
     make_request(api_client, form_json1, mobile_user_with_connect_link)
-    with pytest.raises(DuplicateFormException):
-        make_request(api_client, form_json2, mobile_user_with_connect_link)
+    make_request(api_client, form_json2, mobile_user_with_connect_link, HTTPStatus.OK)
     user_visits = UserVisit.objects.filter(user=mobile_user_with_connect_link)
     assert user_visits.count() == 1
