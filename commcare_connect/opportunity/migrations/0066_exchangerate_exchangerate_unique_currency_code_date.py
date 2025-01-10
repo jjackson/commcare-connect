@@ -14,7 +14,6 @@ def update_exchange_rate(apps, schema_editor):
 
     payments = (
         Payment.objects.annotate(date_only=TruncDate("date_paid"))
-        .filter(payment_unit__opportunity__currency__isnull=False)
         .values(
             "id", "date_only", "amount", "opportunity_access__opportunity__currency", "invoice__opportunity__currency"
         )
