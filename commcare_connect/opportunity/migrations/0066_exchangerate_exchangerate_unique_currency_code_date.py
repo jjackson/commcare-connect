@@ -28,9 +28,12 @@ def update_exchange_rate(apps, schema_editor):
             exchange_rate = 1
         else:
             exchange_rate = get_exchange_rate(currency, date_paid)
-            logger.info(
-                f"Payment ID: {payment.id}, original USD: {payment.amount_usd}, USD acc. to new rate: {payment.amount / exchange_rate}"
-            )
+            old_usd = payment.amount_usd
+            new_usd = payment.amount / exchange_rate
+            if old_usd and old_usd != new_usd:
+                logger.info(
+                    f"Payment ID: {payment.id}, original USD: {payment.amount_usd}, USD acc. to new rate: {payment.amount / exchange_rate}"
+                )
         if not exchange_rate:
             raise Exception(f"Invalid currency code {currency}")
 
