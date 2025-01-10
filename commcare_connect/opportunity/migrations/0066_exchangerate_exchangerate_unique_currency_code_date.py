@@ -12,30 +12,45 @@ logger = logging.getLogger(__name__)
 def update_exchange_rate(apps, schema_editor):
     Payment = apps.get_model("opportunity.Payment")
 
-    payments = (
-        Payment.objects.annotate(date_only=TruncDate("date_paid"))
-        .values(
-            "id", "date_only", "amount", "opportunity_access__opportunity__currency", "invoice__opportunity__currency"
-        )
-        .distinct()
+    payments = Payment.objects.annotate(date_only=TruncDate("date_paid")).values(
+        "id",
+        "date_only",
+        "amount",
+        "amount_usd",
+        "opportunity_access__opportunity__currency",
+        "invoice__opportunity__currency",
     )
+
+    payments_to_update = []
 
     for payment in payments:
         date_paid = payment["date_only"]
-        currency = payment["opportunity_access__opportunity__currency"] or payment["invoice__opportunity__currency"]
+        user_payment_currency = payment["opportunity_access__opportunity__currency"]
+        org_payment_currency = payment["invoice__opportunity__currency"]
 
-        if currency is "USD":
+        currency = user_payment_currency or org_payment_currency
+
+        if currency == "USD":
             exchange_rate = 1
         else:
             exchange_rate = get_exchange_rate(currency, date_paid)
-            old_usd = payment.amount_usd
-            new_usd = payment.amount / exchange_rate
-            if old_usd and old_usd != new_usd:
-                logger.info(
-                    f"Payment ID: {payment.id}, original USD: {payment.amount_usd}, USD acc. to new rate: {payment.amount / exchange_rate}"
-                )
+
         if not exchange_rate:
             raise Exception(f"Invalid currency code {currency}")
+
+        old_usd = payment["amount_usd"]
+        new_usd = payment["amount"] / exchange_rate
+
+        # Log discrepancies if old_usd exists and is different from new_usd
+        if old_usd and old_usd != new_usd:
+            logger.info(f"Payment ID: {payment['id']}, original USD: {old_usd}, USD acc. to new rate: {new_usd}")
+
+        # Update only for org payments
+        if old_usd is None and user_payment_currency is None and org_payment_currency:
+            payments_to_update.append(Payment(id=payment["id"], amount_usd=new_usd))
+
+    if payments_to_update:
+        Payment.objects.bulk_update(payments_to_update, ["amount_usd"], batch_size=1000)
 
 
 class Migration(migrations.Migration):
