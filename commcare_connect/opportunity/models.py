@@ -454,6 +454,7 @@ class CompletedWork(models.Model):
     reason = models.CharField(max_length=300, null=True, blank=True)
     status_modified_date = models.DateTimeField(null=True)
     payment_date = models.DateTimeField(null=True)
+    date_created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ("opportunity_access", "entity_id", "payment_unit")
@@ -576,6 +577,7 @@ class UserVisit(XFormBaseModel):
     )
     review_created_on = models.DateTimeField(blank=True, null=True)
     justification = models.CharField(max_length=300, null=True, blank=True)
+    date_created = models.DateTimeField(auto_now_add=True)
 
     def __init__(self, *args, **kwargs):
         self.status = VisitValidationStatus.pending
