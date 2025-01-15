@@ -434,7 +434,7 @@ def dashboard_stats_api(request):
             "active_users": active_users,
             "verified_visits": verified_visits,
             "percent_verified": f"{percent_verified:.1f}%",
-            "total_payments_usd": total_payments_usd,
+            "total_payments_usd": f"${total_payments_usd:.0f}",
         }
     )
 
