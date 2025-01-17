@@ -400,7 +400,7 @@ def dashboard_stats_api(request):
 
     # Use the filtered queryset to calculate stats
     visit_queryset = UserVisit.objects.filter(opportunity__is_test=False)
-    payment_queryset = Payment.objects.all()
+    payment_queryset = Payment.objects.filter(opportunity_access__opportunity__is_test=False)
     if filterset.is_valid():
         visit_queryset = filterset.filter_queryset(visit_queryset)
         raw_filters = filterset.form.cleaned_data
