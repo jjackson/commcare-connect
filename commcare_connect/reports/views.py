@@ -441,7 +441,7 @@ def dashboard_stats_api(request):
 @user_passes_test(lambda u: u.is_superuser)
 def dashboard_charts_api(request):
     filterset = DashboardFilters(request.GET)
-    queryset = UserVisit.objects.all()
+    queryset = UserVisit.objects.filter(opportunity__is_test=False)
     # Use the filtered queryset if available, else use last 30 days
     if filterset.is_valid():
         queryset = filterset.filter_queryset(queryset)
