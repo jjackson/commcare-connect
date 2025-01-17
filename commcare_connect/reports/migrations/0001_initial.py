@@ -4,7 +4,7 @@ from django.db import migrations
 from django_celery_beat.models import CrontabSchedule, PeriodicTask
 
 
-def create_cache_report_work_task(apps, schema_editor):
+def create_cache_report_task(apps, schema_editor):
     schedule, _ = CrontabSchedule.objects.get_or_create(
         minute="00",
         hour="01",
