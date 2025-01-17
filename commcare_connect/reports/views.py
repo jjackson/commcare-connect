@@ -240,9 +240,7 @@ def program_dashboard_report(request):
 def visit_map_data(request):
     filterset = DashboardFilters(request.GET)
 
-    # Use the filtered queryset to calculate stats
-
-    queryset = UserVisit.objects.all()
+    queryset = UserVisit.objects.filter(opportunity__is_test=False)
     if filterset.is_valid():
         queryset = filterset.filter_queryset(queryset)
 
@@ -401,7 +399,7 @@ def dashboard_stats_api(request):
     filterset = DashboardFilters(request.GET)
 
     # Use the filtered queryset to calculate stats
-    visit_queryset = UserVisit.objects.all()
+    visit_queryset = UserVisit.objects.filter(opportunity__is_test=False)
     payment_queryset = Payment.objects.all()
     if filterset.is_valid():
         visit_queryset = filterset.filter_queryset(visit_queryset)
