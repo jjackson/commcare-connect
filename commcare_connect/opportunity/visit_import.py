@@ -1,4 +1,5 @@
 import codecs
+import datetime
 import json
 import textwrap
 import urllib
@@ -32,6 +33,7 @@ VISIT_ID_COL = "visit id"
 STATUS_COL = "status"
 USERNAME_COL = "username"
 AMOUNT_COL = "payment amount"
+DATE_PAID_COL = "paid date"
 REASON_COL = "rejected reason"
 JUSTIFICATION_COL = "justification"
 WORK_ID_COL = "instance id"
@@ -238,6 +240,7 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
 
     username_col_index = _get_header_index(headers, USERNAME_COL)
     amount_col_index = _get_header_index(headers, AMOUNT_COL)
+    date_paid_col_index = _get_header_index(headers, DATE_PAID_COL)
     invalid_rows = []
     payments = {}
     exchange_rate = get_exchange_rate(opportunity.currency)
@@ -247,6 +250,8 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
         row = list(row)
         username = str(row[username_col_index])
         amount_raw = row[amount_col_index]
+        date_paid_raw = row[date_paid_col_index]
+
         if amount_raw:
             if not username:
                 invalid_rows.append((row, "username required"))
@@ -254,7 +259,15 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
                 amount = int(amount_raw)
             except ValueError:
                 invalid_rows.append((row, "amount must be an integer"))
-            payments[username] = amount
+            try:
+                if date_paid_raw:
+                    date_paid = datetime.datetime.strptime(date_paid_raw, "%Y-%m-%d").date()
+                else:
+                    date_paid = None
+            except ValueError:
+                invalid_rows.append((row, "paid date must be in YYYY-MM-DD format"))
+
+            payments[username] = {"amount": amount, "date_paid": date_paid}
 
     if invalid_rows:
         raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
@@ -268,9 +281,16 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
         ).select_related("user")
         for access in users:
             username = access.user.username
-            amount = payments[username]
-            amount_usd = amount / exchange_rate
-            payment = Payment.objects.create(opportunity_access=access, amount=amount, amount_usd=amount_usd)
+            amount = payments[username]["amount"]
+            date_paid = payments[username]["date_paid"]
+            payment_data = {
+                "opportunity_access": access,
+                "amount": amount,
+                "amount_usd": amount / exchange_rate,
+            }
+            if date_paid:
+                payment_data["date_paid"] = date_paid
+            payment = Payment.objects.create(**payment_data)
             seen_users.add(username)
             payment_ids.append(payment.pk)
             update_work_payment_date(access)
