@@ -31,6 +31,7 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentUnitFactory,
     UserVisitFactory,
 )
+from commcare_connect.opportunity.tests.helpers import validate_saved_fields
 from commcare_connect.opportunity.utils.completed_work import update_work_payment_date
 from commcare_connect.opportunity.visit_import import (
     ImportException,
@@ -611,12 +612,4 @@ def test_review_completed_work_status(
 
 def _validate_saved_fields(opportunity_access: OpportunityAccess):
     for completed_work in opportunity_access.completedwork_set.all():
-        assert completed_work.saved_completed_count == completed_work.completed_count
-        assert completed_work.saved_approved_count == completed_work.approved_count
-        if completed_work.status == CompletedWorkStatus.approved:
-            assert completed_work.saved_payment_accrued == completed_work.payment_accrued
-        else:
-            assert completed_work.saved_payment_accrued == 0
-        # usd to usd should be the same
-        assert completed_work.saved_payment_accrued_usd == completed_work.saved_payment_accrued
-        # todo: also validate org payments and currency transfers
+        validate_saved_fields(completed_work)

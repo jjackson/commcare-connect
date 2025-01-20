@@ -39,6 +39,7 @@ from commcare_connect.opportunity.tests.factories import (
     OpportunityClaimFactory,
     PaymentUnitFactory,
 )
+from commcare_connect.opportunity.tests.helpers import validate_saved_fields
 from commcare_connect.opportunity.visit_import import update_payment_accrued
 from commcare_connect.users.models import User
 
@@ -300,7 +301,7 @@ def test_auto_approve_payments_flagged_visit(
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.pending
     assert access.payment_accrued == 0
-    _validate_saved_fields(completed_work)
+    validate_saved_fields(completed_work)
 
 
 def test_auto_approve_payments_unflagged_visit(
@@ -322,7 +323,7 @@ def test_auto_approve_payments_unflagged_visit(
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.pending
     assert access.payment_accrued == 0
-    _validate_saved_fields(completed_work)
+    validate_saved_fields(completed_work)
 
 
 def test_auto_approve_payments_approved_visit(
@@ -344,7 +345,7 @@ def test_auto_approve_payments_approved_visit(
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.approved
     assert access.payment_accrued == completed_work.payment_accrued
-    _validate_saved_fields(completed_work)
+    validate_saved_fields(completed_work)
 
 
 @pytest.mark.parametrize(
@@ -375,7 +376,7 @@ def test_auto_approve_payments_rejected_visit_functions(
     for reason in rejected_reason:
         assert reason in completed_work.reason
     assert access.payment_accrued == completed_work.payment_accrued
-    _validate_saved_fields(completed_work)
+    validate_saved_fields(completed_work)
 
 
 def test_auto_approve_payments_approved_visit_task(
@@ -397,7 +398,7 @@ def test_auto_approve_payments_approved_visit_task(
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.approved
     assert access.payment_accrued == completed_work.payment_accrued
-    _validate_saved_fields(completed_work)
+    validate_saved_fields(completed_work)
 
 
 def test_auto_approve_visits_and_payments(
@@ -418,7 +419,7 @@ def test_auto_approve_visits_and_payments(
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.approved
     assert access.payment_accrued == completed_work.payment_accrued
-    _validate_saved_fields(completed_work)
+    validate_saved_fields(completed_work)
 
 
 @pytest.mark.parametrize(
@@ -632,12 +633,3 @@ def test_receiver_same_visit_twice(
     make_request(api_client, form_json2, mobile_user_with_connect_link, HTTPStatus.OK)
     user_visits = UserVisit.objects.filter(user=mobile_user_with_connect_link)
     assert user_visits.count() == 1
-
-
-def _validate_saved_fields(completed_work):
-    assert completed_work.saved_completed_count == completed_work.completed_count
-    assert completed_work.saved_approved_count == completed_work.approved_count
-    assert completed_work.saved_payment_accrued == completed_work.payment_accrued
-    # usd to usd should be the same
-    assert completed_work.saved_payment_accrued_usd == completed_work.saved_payment_accrued
-    # todo: also validate org payments and currency transfers
