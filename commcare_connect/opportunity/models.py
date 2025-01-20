@@ -472,7 +472,13 @@ class CompletedWork(models.Model):
     saved_completed_count = models.IntegerField(default=0)
     saved_approved_count = models.IntegerField(default=0)
     saved_payment_accrued = models.IntegerField(default=0, help_text="Payment accrued for the FLW.")
+    saved_payment_accrued_usd = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, help_text="Payment accrued for the FLW in USD."
+    )
     saved_org_payment_accrued = models.IntegerField(default=0, help_text="Payment accrued for the organization")
+    saved_org_payment_accrued_usd = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, help_text="Payment accrued for the organization in USD."
+    )
 
     class Meta:
         unique_together = ("opportunity_access", "entity_id", "payment_unit")
