@@ -464,6 +464,15 @@ class CompletedWork(models.Model):
     payment_date = models.DateTimeField(null=True)
     date_created = models.DateTimeField(auto_now_add=True)
 
+    # these fields are the stored/cached versions of the completed_count and approved_count
+    # and the associated calculations needed to do reporting on payments.
+    # it is expected that they are updated every time the completed_count or approved_count is updated,
+    # but should not be used for real-time display of that information until confirmed to be working.
+    saved_completed_count = models.IntegerField(default=0)
+    saved_approved_count = models.IntegerField(default=0)
+    saved_payment_accrued = models.IntegerField(default=0, help_text="Payment accrued for the FLW.")
+    saved_org_payment_accrued = models.IntegerField(default=0, help_text="Payment accrued for the organization")
+
     class Meta:
         unique_together = ("opportunity_access", "entity_id", "payment_unit")
 
