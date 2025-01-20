@@ -11,10 +11,15 @@ from commcare_connect.opportunity.models import (
 def update_status(completed_works, opportunity_access, compute_payment=True):
     """
     Updates the status of completed works and optionally calculates & update total payment_accrued.
+
+    If compute_payment is True, the saved fields related to completed/approved work and payments
+    earned will also be saved against the model.
     """
     payment_accrued = 0
     for completed_work in completed_works:
-        if completed_work.completed_count < 1:
+        made_changes = False
+        completed_count = completed_work.completed_count
+        if completed_count < 1:
             continue
 
         if opportunity_access.opportunity.auto_approve_payments:
@@ -32,12 +37,26 @@ def update_status(completed_works, opportunity_access, compute_payment=True):
             ):
                 completed_work.status = CompletedWorkStatus.pending
 
-            completed_work.save()
+            made_changes = True
 
         if compute_payment:
             approved_count = completed_work.approved_count
+
+            amount_accrued = org_amount_accrued = 0
             if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
-                payment_accrued += approved_count * completed_work.payment_unit.amount
+                amount_accrued = approved_count * completed_work.payment_unit.amount
+                # if it's a managed opportunity we also need to update the org payment amounts
+                if opportunity_access.opportunity.managed:
+                    org_amount_accrued = approved_count * opportunity_access.managed_opportunity.org_pay_per_visit
+                payment_accrued += amount_accrued
+
+            completed_work.saved_completed_count = completed_count
+            completed_work.saved_approved_count = approved_count
+            completed_work.saved_payment_accrued = amount_accrued
+            completed_work.saved_org_payment_accrued = org_amount_accrued
+
+        if made_changes:
+            completed_work.save()
 
     if compute_payment:
         opportunity_access.payment_accrued = payment_accrued
