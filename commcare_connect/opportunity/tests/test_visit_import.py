@@ -606,7 +606,6 @@ def test_review_completed_work_status(
             payment_accrued += cw.payment_accrued
     access.refresh_from_db()
     assert access.payment_accrued == payment_accrued
-    # todo: why does this fail?
     _validate_saved_fields(access)
 
 
