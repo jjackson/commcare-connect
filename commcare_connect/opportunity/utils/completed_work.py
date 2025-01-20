@@ -53,7 +53,7 @@ def _update_status_set_saved_fields_and_get_payment_accrued(completed_work, oppo
     if compute_payment:
         approved_count = completed_work.approved_count
 
-        amount_accrued = org_amount_accrued = 0
+        amount_accrued = amount_accrued_usd = org_amount_accrued = org_amount_accrued_usd = 0
         if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
             from commcare_connect.opportunity.visit_import import get_exchange_rate
 
