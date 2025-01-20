@@ -10,7 +10,6 @@ from django.utils.timezone import now
 from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization
-from commcare_connect.program.models import ManagedOpportunity
 from commcare_connect.users.models import User
 from commcare_connect.utils.db import BaseModel, slugify_uniquely
 
@@ -256,6 +255,8 @@ class OpportunityAccess(models.Model):
 
     @cached_property
     def managed_opportunity(self):
+        from commcare_connect.program.models import ManagedOpportunity
+
         if self.opportunity.managed:
             return ManagedOpportunity.objects.get(id=self.opportunity.id)
 
