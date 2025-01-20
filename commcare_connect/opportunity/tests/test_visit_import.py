@@ -140,6 +140,7 @@ def test_payment_accrued(opportunity: Opportunity):
     for access in access_objects:
         access.refresh_from_db()
         assert access.payment_accrued == sum(payment_unit.amount for payment_unit in payment_units)
+        _validate_saved_fields(access)
 
 
 @pytest.mark.django_db
@@ -167,6 +168,7 @@ def test_duplicate_payment(opportunity: Opportunity, mobile_user: User):
     update_payment_accrued(opportunity, {mobile_user.id})
     access.refresh_from_db()
     assert access.payment_accrued == payment_unit.amount * 2
+    _validate_saved_fields(access)
 
 
 @pytest.mark.django_db
@@ -203,6 +205,7 @@ def test_payment_accrued_optional_deliver_units(opportunity: Opportunity):
     for access in access_objects:
         access.refresh_from_db()
         assert access.payment_accrued == sum(payment_unit.amount for payment_unit in payment_units)
+        _validate_saved_fields(access)
 
 
 @pytest.mark.django_db
@@ -247,6 +250,7 @@ def test_payment_accrued_asymmetric_optional_deliver_units(opportunity: Opportun
     update_payment_accrued(opportunity, {mobile_user.id})
     access.refresh_from_db()
     assert access.payment_accrued == payment_unit.amount * 2
+    _validate_saved_fields(access)
 
 
 @pytest.mark.parametrize(
@@ -602,3 +606,15 @@ def test_review_completed_work_status(
             payment_accrued += cw.payment_accrued
     access.refresh_from_db()
     assert access.payment_accrued == payment_accrued
+    # todo: why does this fail?
+    _validate_saved_fields(access)
+
+
+def _validate_saved_fields(opportunity_access: OpportunityAccess):
+    for completed_work in opportunity_access.completedwork_set.all():
+        assert completed_work.saved_completed_count == completed_work.completed_count
+        assert completed_work.saved_approved_count == completed_work.approved_count
+        assert completed_work.saved_payment_accrued == completed_work.payment_accrued
+        # usd to usd should be the same
+        assert completed_work.saved_payment_accrued_usd == completed_work.saved_payment_accrued
+        # todo: also validate org payments and currency transfers
