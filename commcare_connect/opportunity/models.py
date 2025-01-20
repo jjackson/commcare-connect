@@ -10,6 +10,7 @@ from django.utils.timezone import now
 from django.utils.translation import gettext
 
 from commcare_connect.organization.models import Organization
+from commcare_connect.program.models import ManagedOpportunity
 from commcare_connect.users.models import User
 from commcare_connect.utils.db import BaseModel, slugify_uniquely
 
@@ -252,6 +253,13 @@ class OpportunityAccess(models.Model):
     class Meta:
         indexes = [models.Index(fields=["invite_id"])]
         unique_together = ("user", "opportunity")
+
+    @cached_property
+    def managed_opportunity(self):
+        if self.opportunity.managed:
+            return ManagedOpportunity.objects.get(id=self.opportunity.id)
+
+        return None
 
     # TODO: Convert to a field and calculate this property CompletedModule is saved
     @property
