@@ -614,7 +614,10 @@ def _validate_saved_fields(opportunity_access: OpportunityAccess):
     for completed_work in opportunity_access.completedwork_set.all():
         assert completed_work.saved_completed_count == completed_work.completed_count
         assert completed_work.saved_approved_count == completed_work.approved_count
-        assert completed_work.saved_payment_accrued == completed_work.payment_accrued
+        if completed_work.status == CompletedWorkStatus.approved:
+            assert completed_work.saved_payment_accrued == completed_work.payment_accrued
+        else:
+            assert completed_work.saved_payment_accrued == 0
         # usd to usd should be the same
         assert completed_work.saved_payment_accrued_usd == completed_work.saved_payment_accrued
         # todo: also validate org payments and currency transfers
