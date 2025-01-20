@@ -6,7 +6,6 @@ from commcare_connect.opportunity.models import (
     VisitReviewStatus,
     VisitValidationStatus,
 )
-from commcare_connect.opportunity.visit_import import get_exchange_rate
 
 
 def update_status(completed_works, opportunity_access, compute_payment=True):
@@ -56,6 +55,8 @@ def _update_status_set_saved_fields_and_get_payment_accrued(completed_work, oppo
 
         amount_accrued = org_amount_accrued = 0
         if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
+            from commcare_connect.opportunity.visit_import import get_exchange_rate
+
             amount_accrued = approved_count * completed_work.payment_unit.amount
             exchange_rate = get_exchange_rate(
                 opportunity_access.opportunity.currency, completed_work.status_modified_date
