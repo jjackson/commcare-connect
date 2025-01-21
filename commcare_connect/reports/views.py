@@ -400,7 +400,8 @@ def dashboard_stats_api(request):
 
     # Use the filtered queryset to calculate stats
     visit_queryset = UserVisit.objects.filter(opportunity__is_test=False)
-    payment_queryset = Payment.objects.filter(opportunity_access__opportunity__is_test=False)
+    flw_payment_queryset = Payment.objects.filter(opportunity_access__opportunity__is_test=False)
+    org_payment_queryset = Payment.objects.filter(invoice__opportunity__is_test=False)
     if filterset.is_valid():
         visit_queryset = filterset.filter_queryset(visit_queryset)
         raw_filters = filterset.form.cleaned_data
@@ -410,13 +411,19 @@ def dashboard_stats_api(request):
         to_date = raw_filters.get("to_date")
 
         if program:
-            payment_queryset = payment_queryset.filter(opportunity_access__opportunity__delivery_type=program)
+            flw_payment_queryset = flw_payment_queryset.filter(opportunity_access__opportunity__delivery_type=program)
+            org_payment_queryset = org_payment_queryset.filter(invoice__opportunity__delivery_type=program)
         if organization:
-            payment_queryset = payment_queryset.filter(opportunity_access__opportunity__organization=organization)
+            flw_payment_queryset = flw_payment_queryset.filter(
+                opportunity_access__opportunity__organization=organization
+            )
+            org_payment_queryset = org_payment_queryset.filter(invoice__opportunity__organization=organization)
         if from_date:
-            payment_queryset = payment_queryset.filter(date_paid__gt=from_date)
+            flw_payment_queryset = flw_payment_queryset.filter(date_paid__gt=from_date)
+            org_payment_queryset = org_payment_queryset.filter(date_paid__gt=from_date)
         if to_date:
-            payment_queryset = payment_queryset.filter(date_paid__lte=to_date)
+            flw_payment_queryset = flw_payment_queryset.filter(date_paid__lte=to_date)
+            org_payment_queryset = org_payment_queryset.filter(date_paid__lte=to_date)
 
     # Example stats calculation (adjust based on your needs)
     active_users = visit_queryset.values("opportunity_access__user").distinct().count()
@@ -424,7 +431,8 @@ def dashboard_stats_api(request):
     verified_visits = visit_queryset.filter(status=CompletedWorkStatus.approved).count()
     percent_verified = round(float(verified_visits / total_visits) * 100, 1) if total_visits > 0 else 0
 
-    total_payments_usd = payment_queryset.aggregate(Sum("amount_usd"))["amount_usd__sum"] or 0
+    total_flw_payments_usd = flw_payment_queryset.aggregate(Sum("amount_usd"))["amount_usd__sum"] or 0
+    total_org_payments_usd = org_payment_queryset.aggregate(Sum("amount_usd"))["amount_usd__sum"] or 0
 
     return JsonResponse(
         {
@@ -432,7 +440,8 @@ def dashboard_stats_api(request):
             "active_users": active_users,
             "verified_visits": verified_visits,
             "percent_verified": f"{percent_verified:.1f}%",
-            "total_payments_usd": f"${total_payments_usd:.0f}",
+            "total_flw_payments_usd": f"${total_flw_payments_usd:.0f}",
+            "total_org_payments_usd": f"${total_org_payments_usd:.0f}",
         }
     )
 
