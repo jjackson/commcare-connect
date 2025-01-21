@@ -20,7 +20,7 @@ from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
-from django_tables2 import SingleTableView
+from django_tables2 import RequestConfig, SingleTableView
 from django_tables2.export import TableExport
 from geopy import distance
 
@@ -82,6 +82,7 @@ from commcare_connect.opportunity.tables import (
     SuspendedUsersTable,
     UserPaymentsTable,
     UserStatusTable,
+    UserVisitReviewFilter,
     UserVisitReviewTable,
     UserVisitTable,
 )
@@ -1120,7 +1121,8 @@ def user_visit_review(request, org_slug, opp_id):
     user_visit_reviews = UserVisit.objects.filter(opportunity=opportunity, review_created_on__isnull=False).order_by(
         "visit_date"
     )
-    table = UserVisitReviewTable(user_visit_reviews, org_slug=request.org.slug)
+    review_filter = UserVisitReviewFilter(request.GET, queryset=user_visit_reviews)
+    table = UserVisitReviewTable(review_filter.qs, org_slug=request.org.slug)
     if not is_program_manager:
         table.exclude = ("pk",)
     if request.POST and is_program_manager:
@@ -1130,11 +1132,11 @@ def user_visit_review(request, org_slug, opp_id):
         if review_status in [VisitReviewStatus.agree.value, VisitReviewStatus.disagree.value]:
             user_visits.update(review_status=review_status)
             update_payment_accrued(opportunity=opportunity, users=[visit.user for visit in user_visits])
-
+    RequestConfig(request, paginate={"per_page": 15}).configure(table)
     return render(
         request,
         "opportunity/user_visit_review.html",
-        context=dict(table=table, user_visit_ids=[v.pk for v in user_visit_reviews], opportunity=opportunity),
+        context=dict(table=table, review_filter=review_filter, opportunity=opportunity),
     )
 
 

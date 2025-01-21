@@ -1,6 +1,9 @@
+from crispy_forms.helper import FormHelper
+from crispy_forms.layout import Column, Layout, Row
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from django_filters import ChoiceFilter, FilterSet
 from django_tables2 import columns, tables, utils
 
 from commcare_connect.opportunity.models import (
@@ -13,6 +16,7 @@ from commcare_connect.opportunity.models import (
     UserInvite,
     UserInviteStatus,
     UserVisit,
+    VisitReviewStatus,
     VisitValidationStatus,
 )
 
@@ -390,6 +394,29 @@ class CatchmentAreaTable(tables.Table):
             "longitude",
             "radius",
         )
+
+
+class UserVisitReviewFilter(FilterSet):
+    reivew_status = ChoiceFilter(choices=VisitReviewStatus, empty_label="All Reviews")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.form.helper = FormHelper()
+        self.form.helper.disable_csrf = True
+        self.form.helper.form_class = "form-inline"
+        self.form.helper.layout = Layout(Row(Column("review_status", css_class="col-md-3")))
+
+        self.form.fields["review_status"].widget.attrs.update({"@change": "$refs.reviewFilterForm.submit()"})
+
+        if not self.data:
+            self.data = self.data.copy() if self.data else {}
+            self.data["review_status"] = VisitReviewStatus.pending.value
+            self.form.is_bound = True
+            self.form.data = self.data
+
+    class Meta:
+        model = UserVisit
+        fields = ["review_status"]
 
 
 class UserVisitReviewTable(OrgContextTable):
