@@ -46,12 +46,13 @@ Some useful command are available via the `tasks.py` file:
 
 **Expose your local service to the internet**
 
-- Install loca.lt
-  - `npm install -g localtunnel`
-- Run `lt --port 8000 --subdomain [my-unique-subdomain]` and copy the generated URL
+- Create an account on ngrok and Install ngrok
+  - https://dashboard.ngrok.com/get-started/setup/
+- Create a custom domain on ngrok using this [link](https://dashboard.ngrok.com/domains/new)
+- Run `ngrok http --url=[my-unique-subdomain].ngrok-free.app 8000`
 - Update your `.env` file with the host:
 
-      DJANGO_ALLOWED_HOSTS=[my-unique-subdomain].loca.lt
+      DJANGO_ALLOWED_HOSTS=[my-unique-subdomain].ngrok-free.app
 
 **Create an OAuth2 application on CommCare HQ**
 
@@ -59,7 +60,7 @@ Some useful command are available via the `tasks.py` file:
 - Create a new application with the following settings:
   - Client Type: Confidential
   - Authorization Grant Type: Authorization Code
-  - Redirect URIs: https://[my-unique-subdomain].loca.lt/accounts/commcarehq/login/callback/
+  - Redirect URIs: https://[my-unique-subdomain].ngrok-free.app/accounts/commcarehq/login/callback/
   - Pkce required: False
 - Copy the Client ID and Client Secret
 - Create a new SocialApp locally at http://localhost:8000/admin/socialaccount/socialapp/
@@ -67,7 +68,7 @@ Some useful command are available via the `tasks.py` file:
 **Test the OAuth2 flow**
 
 - Set `COMMCARE_HQ_URL=https://staging.commcarehq.org` in your `.env` file and restart the server.
-- Navigate to http://[my-unique-subdomain].loca.lt/accounts/login/
+- Navigate to http://[my-unique-subdomain].ngrok-free.app/accounts/login/
 - Click the "Log in with CommCare HQ" button
 - You should be redirected to CommCare HQ to log in
 - After logging in, you should be redirected back to the app and logged in
