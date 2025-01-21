@@ -25,7 +25,7 @@
             <div class="card-body">
               <div class="small text-muted mt-1">Amount Earned by FLWs (USD)</div>
               <div class="fw-bold">
-                <span x-show="!isLoading" x-text="stats.total_payments_usd || '$0'" class="display-4">$0</span>
+                <span x-show="!isLoading" x-text="stats.total_flw_earnings_usd || '$0'" class="display-4">$0</span>
                 <span x-show="isLoading">
                   <span class="spinner-border text-secondary opacity-50" role="status"></span>
                   <span class="display-4">&nbsp;</span>
@@ -58,7 +58,7 @@
             <div class="card-body">
               <div class="small text-muted mt-1">Amount Earned by Organizations (USD)</div>
               <div class="fw-bold">
-                <span x-show="!isLoading" x-text="stats.total_payments_usd || '$0'" class="display-4">$0</span>
+                <span x-show="!isLoading" x-text="stats.total_org_earnings_usd || '$0'" class="display-4">$0</span>
                 <span x-show="isLoading">
                   <span class="spinner-border text-secondary opacity-50" role="status"></span>
                   <span class="display-4">&nbsp;</span>
