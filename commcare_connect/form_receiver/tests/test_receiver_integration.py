@@ -39,6 +39,7 @@ from commcare_connect.opportunity.tests.factories import (
     OpportunityClaimFactory,
     PaymentUnitFactory,
 )
+from commcare_connect.opportunity.tests.helpers import validate_saved_fields
 from commcare_connect.opportunity.visit_import import update_payment_accrued
 from commcare_connect.users.models import User
 
@@ -300,6 +301,7 @@ def test_auto_approve_payments_flagged_visit(
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.pending
     assert access.payment_accrued == 0
+    validate_saved_fields(completed_work)
 
 
 def test_auto_approve_payments_unflagged_visit(
@@ -321,6 +323,7 @@ def test_auto_approve_payments_unflagged_visit(
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.pending
     assert access.payment_accrued == 0
+    validate_saved_fields(completed_work)
 
 
 def test_auto_approve_payments_approved_visit(
@@ -342,6 +345,7 @@ def test_auto_approve_payments_approved_visit(
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.approved
     assert access.payment_accrued == completed_work.payment_accrued
+    validate_saved_fields(completed_work)
 
 
 @pytest.mark.parametrize(
@@ -372,6 +376,7 @@ def test_auto_approve_payments_rejected_visit_functions(
     for reason in rejected_reason:
         assert reason in completed_work.reason
     assert access.payment_accrued == completed_work.payment_accrued
+    validate_saved_fields(completed_work)
 
 
 def test_auto_approve_payments_approved_visit_task(
@@ -393,6 +398,7 @@ def test_auto_approve_payments_approved_visit_task(
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.approved
     assert access.payment_accrued == completed_work.payment_accrued
+    validate_saved_fields(completed_work)
 
 
 def test_auto_approve_visits_and_payments(
@@ -413,6 +419,7 @@ def test_auto_approve_visits_and_payments(
     completed_work = CompletedWork.objects.get(opportunity_access=access)
     assert completed_work.status == CompletedWorkStatus.approved
     assert access.payment_accrued == completed_work.payment_accrued
+    validate_saved_fields(completed_work)
 
 
 @pytest.mark.parametrize(
