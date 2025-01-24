@@ -457,9 +457,8 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
             additional_visits = form.cleaned_data["additional_visits"]
             end_date = form.cleaned_data["end_date"]
 
-            claims = OpportunityClaim.objects.filter(pk__in=selected_users)
-
             if additional_visits:
+                claims = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
                 org_pay = opportunity.managedopportunity.org_pay_per_visit if opportunity.managed else 0
 
                 for ocl in claims.all():
@@ -475,8 +474,8 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
                         or 0
                     )
                     if total_budget_sum + opportunity.total_budget > program.budget:
-                        form.add_error("additional_visits", "Additional visits exceed the program budget. ")
-                        render(
+                        form.add_error("additional_visits", "Additional visits exceed the program budget.")
+                        return render(
                             request,
                             "opportunity/add_visits_existing_users.html",
                             {
@@ -491,7 +490,7 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
                 opportunity.save()
 
             if end_date:
-                claims.update(end_date=end_date)
+                OpportunityClaim.objects.filter(pk__in=selected_users).update(end_date=end_date)
 
             return redirect("opportunity:detail", org_slug, pk)
 
