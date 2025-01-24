@@ -115,52 +115,6 @@ class TestUserVisitReviewView:
         assert "pk" not in table.columns.names()
 
 
-class TestAddBudgetExistingUsers:
-    @pytest.fixture(autouse=True)
-    def setup(
-        self,
-        client: Client,
-        program_manager_org: Organization,
-        program_manager_org_user_admin: User,
-        organization: Organization,
-        org_user_admin: User,
-        mobile_user,
-    ):
-        self.client = client
-
-        self.program = ProgramFactory(organization=program_manager_org, budget=1000)
-        self.opportunity = ManagedOpportunityFactory(
-            program=self.program, organization=organization, total_budget=500, org_pay_per_visit=5
-        )
-        payment_unit = PaymentUnitFactory(opportunity=self.opportunity, max_total=10, amount=10)
-
-        budget_per_user = payment_unit.max_total * (payment_unit.amount + self.opportunity.org_pay_per_visit)
-        self.payment_unit = payment_unit
-        self.opportunity.total_budget = budget_per_user * 4
-        self.opportunity.save()
-        self.opportunity.refresh_from_db()
-        self.org_user_admin = org_user_admin
-
-    def test_xyz(self, mobile_user):
-        access = OpportunityAccessFactory(opportunity=self.opportunity, user=mobile_user)
-        claim = OpportunityClaimFactory(opportunity_access=access, end_date=self.opportunity.end_date)
-        ocl = OpportunityClaimLimitFactory(opportunity_claim=claim, payment_unit=self.payment_unit, max_visits=10)
-        assert self.opportunity.total_budget == 600
-        assert self.opportunity.claimed_budget == 150
-
-        url = reverse(
-            "opportunity:add_budget_existing_users", args=(self.opportunity.organization.slug, self.opportunity.pk)
-        )
-        self.client.force_login(self.org_user_admin)
-        response = self.client.post(url, data=dict(selected_users=[claim.id], additional_visits=5))
-
-        assert response.status_code == HTTPStatus.FOUND
-        opportunity = Opportunity.objects.get(pk=self.opportunity.pk)
-        assert opportunity.total_budget == 675
-        assert opportunity.claimed_budget == 225
-        assert OpportunityClaimLimit.objects.get(pk=ocl.pk).max_visits == 15
-
-
 def test_add_budget_existing_users_for_managed_opportunity(
     client, program_manager_org, org_user_admin, organization, mobile_user
 ):
