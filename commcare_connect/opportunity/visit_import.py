@@ -174,7 +174,7 @@ def update_payment_accrued(opportunity: Opportunity, users):
             completed_works = access.completedwork_set.exclude(
                 status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
             ).select_related("payment_unit")
-            update_status(completed_works, access, True)
+            update_status(completed_works, access, compute_payment=True)
 
 
 def get_data_by_visit_id(dataset) -> dict[int, VisitData]:
