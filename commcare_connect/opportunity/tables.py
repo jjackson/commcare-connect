@@ -3,7 +3,7 @@ from crispy_forms.layout import Column, Layout, Row
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
-from django_filters import ChoiceFilter, FilterSet, ModelChoiceFilter
+from django_filters import ChoiceFilter, DateRangeFilter, FilterSet, ModelChoiceFilter
 from django_tables2 import columns, tables, utils
 
 from commcare_connect.opportunity.models import (
@@ -60,6 +60,7 @@ def show_warning(record):
 class UserVisitReviewFilter(FilterSet):
     review_status = ChoiceFilter(choices=VisitReviewStatus.choices, empty_label="All Reviews")
     user = ModelChoiceFilter(queryset=User.objects.none(), empty_label="All Users")
+    visit_date = DateRangeFilter()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -72,6 +73,7 @@ class UserVisitReviewFilter(FilterSet):
             Row(
                 Column("review_status", css_class="col-md-3"),
                 Column("user", css_class="col-md-3"),
+                Column("visit_date", css_class="col-md-3"),
             )
         )
         for field_name in self.form.fields.keys():
@@ -85,7 +87,7 @@ class UserVisitReviewFilter(FilterSet):
 
     class Meta:
         model = UserVisit
-        fields = ["review_status", "user"]
+        fields = ["review_status", "user", "visit_date"]
 
 
 class UserVisitFilter(UserVisitReviewFilter):
