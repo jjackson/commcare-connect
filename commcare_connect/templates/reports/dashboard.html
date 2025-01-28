@@ -268,7 +268,8 @@
       center: [20, 0], // Centered on Africa (roughly central coordinates)
       zoom: 2,
     });
-
+    // add a fullscreen control
+    map.addControl(new mapboxgl.FullscreenControl());
     // This loads a map with two layers, one is a cluster with donut
     // charts based on the visit data, inspired heavily by this mapbox example:
     // https://docs.mapbox.com/mapbox-gl-js/example/cluster-html/
