@@ -255,7 +255,8 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
                 amount = int(amount_raw)
             except ValueError:
                 invalid_rows.append((row, "amount must be an integer"))
-            payments[username] = amount
+            else:
+                payments[username] = amount
 
     if invalid_rows:
         raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
