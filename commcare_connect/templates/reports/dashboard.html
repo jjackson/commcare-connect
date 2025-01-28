@@ -371,13 +371,21 @@
     const statusPieCtx = document.getElementById('visits-by-status');
 
     let timeSeriesChart, programPieChart, statusPieChart;
+    let previousQueryString = '';
 
     async function updateCharts() {
-      try {
-        const formElement = document.querySelector('#filterForm form');
-        const formData = new FormData(formElement);
-        const queryString = new URLSearchParams(formData).toString();
+      const formElement = document.querySelector('#filterForm form');
+      const formData = new FormData(formElement);
+      const queryString = new URLSearchParams(formData).toString();
 
+      // Only update if the query string has changed
+      if (queryString === previousQueryString) {
+        return;
+      }
+
+      previousQueryString = queryString;
+
+      try {
         const response = await fetch(`{% url 'reports:dashboard_charts_api' %}?${queryString}`);
         const data = await response.json();
 
