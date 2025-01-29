@@ -13,19 +13,23 @@ from commcare_connect.opportunity.models import (
     PaymentUnit,
     UserVisit,
 )
+from commcare_connect.organization.models import Organization
+from commcare_connect.program.models import Program
 from commcare_connect.users.models import User
 
 REPLICATION_ALLOWED_MODELS = [
+    Assessment,
+    CompletedModule,
+    CompletedWork,
+    LearnModule,
     Opportunity,
     OpportunityAccess,
-    LearnModule,
-    CompletedModule,
+    Organization,
     Payment,
+    PaymentUnit,
+    Program,
     User,
     UserVisit,
-    CompletedWork,
-    PaymentUnit,
-    Assessment,
 ]
 
 
@@ -34,7 +38,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         secondary_db_alias = settings.SECONDARY_DB_ALIAS
-        if secondary_db_alias == "default":
+        if not secondary_db_alias:
             raise CommandError("'secondary' database needs to be configured")
 
         # Ensure secondary database has table schemas
@@ -68,20 +72,17 @@ class Command(BaseCommand):
 
         # Create publication
         with default_conn.cursor() as cursor:
-            try:
-                # Check if publication exists
-                cursor.execute("SELECT pubname FROM pg_publication WHERE pubname = %s;", [publication_name])
-                if cursor.fetchone():
-                    self.stdout.write(
-                        self.style.WARNING(f"Publication '{publication_name}' already exists. Skipping creation.")
-                    )
-                else:
-                    # Create new publication
-                    tables = ", ".join([f'"{table}"' for table in table_list])
-                    cursor.execute(f"CREATE PUBLICATION {publication_name} FOR TABLE {tables};")
-                    self.stdout.write(self.style.SUCCESS(f"Publication '{publication_name}' created successfully."))
-            except Exception as e:
-                raise CommandError(f"Failed to create publication: {e}")
+            # Check if publication exists
+            cursor.execute("SELECT pubname FROM pg_publication WHERE pubname = %s;", [publication_name])
+            if cursor.fetchone():
+                self.stdout.write(
+                    self.style.WARNING(f"Publication '{publication_name}' already exists. Skipping creation.")
+                )
+            else:
+                # Create new publication
+                tables = ", ".join([f'"{table}"' for table in table_list])
+                cursor.execute(f"CREATE PUBLICATION {publication_name} FOR TABLE {tables};")
+                self.stdout.write(self.style.SUCCESS(f"Publication '{publication_name}' created successfully."))
 
         # Create subscription in the secondary database
         secondary_conn = connections[secondary_db_alias]
@@ -89,32 +90,29 @@ class Command(BaseCommand):
         subscription_name = "tables_for_superset_sub"
 
         with secondary_conn.cursor() as cursor:
-            try:
-                # Check if subscription exists
-                cursor.execute("SELECT subname FROM pg_subscription WHERE subname = %s;", [subscription_name])
-                if cursor.fetchone():
-                    self.stdout.write(
-                        self.style.WARNING(f"Subscription '{subscription_name}' already exists. Skipping creation.")
-                    )
-                else:
-                    # Create new subscription
-                    default_db_settings = default_conn.settings_dict
-                    primary_conn_info = (
-                        f"host={default_db_settings['HOST']} "
-                        f"port={default_db_settings['PORT']} "
-                        f"dbname={default_db_settings['NAME']} "
-                        f"user={default_db_settings['USER']} "
-                        f"password={default_db_settings['PASSWORD']}"
-                    )
-                    cursor.execute(
-                        f"""
-                        CREATE SUBSCRIPTION {subscription_name}
-                        CONNECTION '{primary_conn_info}'
-                        PUBLICATION {publication_name};
-                        """
-                    )
-                    self.stdout.write(self.style.SUCCESS(f"Subscription '{subscription_name}' created successfully."))
-            except Exception as e:
-                raise CommandError(f"Failed to create subscription: {e}")
+            # Check if subscription exists
+            cursor.execute("SELECT subname FROM pg_subscription WHERE subname = %s;", [subscription_name])
+            if cursor.fetchone():
+                self.stdout.write(
+                    self.style.WARNING(f"Subscription '{subscription_name}' already exists. Skipping creation.")
+                )
+            else:
+                # Create new subscription
+                default_db_settings = default_conn.settings_dict
+                primary_conn_info = (
+                    f"host={default_db_settings['HOST']} "
+                    f"port={default_db_settings['PORT']} "
+                    f"dbname={default_db_settings['NAME']} "
+                    f"user={default_db_settings['USER']} "
+                    f"password={default_db_settings['PASSWORD']}"
+                )
+                cursor.execute(
+                    f"""
+                    CREATE SUBSCRIPTION {subscription_name}
+                    CONNECTION '{primary_conn_info}'
+                    PUBLICATION {publication_name};
+                    """
+                )
+                self.stdout.write(self.style.SUCCESS(f"Subscription '{subscription_name}' created successfully."))
 
         self.stdout.write(self.style.SUCCESS("Publication and subscription setup completed."))

@@ -58,14 +58,8 @@ class Command(BaseCommand):
             call_options["database"] = db_alias
             call_command("migrate", *args, **call_options)
 
-        dbs_to_migrate = [
-            db_alias for db_alias in settings.DATABASES.keys() if settings.DATABASES[db_alias].get("MIGRATE", True)
-        ]
-        dbs_to_skip = list(set(settings.DATABASES) - set(dbs_to_migrate))
-
+        dbs_to_migrate = settings.DATABASES.keys()
         print("\nThe following databases will be migrated:\n * {}\n".format("\n * ".join(dbs_to_migrate)))
-        if dbs_to_skip:
-            print("\nThe following databases will be skipped:\n * {}\n".format("\n * ".join(dbs_to_skip)))
 
         jobs = [gevent.spawn(migrate_db, db_alias) for db_alias in dbs_to_migrate]
 
