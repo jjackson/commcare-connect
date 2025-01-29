@@ -2,7 +2,7 @@ from django.conf import settings
 from django.db import DEFAULT_DB_ALIAS
 
 
-class SecondaryDatabaseRouter:
+class ConnectDatabaseRouter:
     """
     A router to direct migration operations for specific models to the secondary database.
     """
@@ -22,7 +22,7 @@ class SecondaryDatabaseRouter:
     def allow_migrate(self, db, app_label, model_name=None, **hints):
         if db == DEFAULT_DB_ALIAS:
             return True
-        elif db == settings.SECONDARY_DB_ALIAS:
+        elif db and db == settings.SECONDARY_DB_ALIAS:
             # Data migrations using RunPython don't need to be
             #   applied on secondary DB as they are replicated
             #   at the database level.
@@ -45,15 +45,15 @@ class SecondaryDatabaseRouter:
             )
 
             ALLOWED_OPERATIONS = (
+                AddField,
+                AlterField,
+                AlterIndexTogether,
+                AlterModelOptions,
+                AlterModelTable,
+                AlterUniqueTogether,
                 CreateModel,
                 DeleteModel,
-                AlterModelTable,
-                AlterModelOptions,
-                AlterUniqueTogether,
-                AlterIndexTogether,
-                AddField,
                 RemoveField,
-                AlterField,
                 RenameField,
             )
 

@@ -30,15 +30,14 @@ DATABASES = {
         default="postgres:///commcare_connect",
     ),
 }
-DATABASES["default"]["ATOMIC_REQUESTS"] = True
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-SECONDARY_DB_ALIAS = "default"
-
+SECONDARY_DB_ALIAS = None
 if env.db("SECONDARY_DATABASE_URL", default=""):
     SECONDARY_DB_ALIAS = "secondary"
     DATABASES[SECONDARY_DB_ALIAS] = env.db("SECONDARY_DATABASE_URL")
-    DATABASE_ROUTERS = ["config.db_router.SecondaryDatabaseRouter"]
+    DATABASE_ROUTERS = ["config.db_router.ConnectDatabaseRouter"]
+
+DATABASES["default"]["ATOMIC_REQUESTS"] = True
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # URLS
