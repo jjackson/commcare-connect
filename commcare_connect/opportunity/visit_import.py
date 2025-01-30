@@ -251,7 +251,7 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
         row = list(row)
         username = str(row[username_col_index])
         amount_raw = row[amount_col_index]
-        payment_date_raw = row[payment_date_col_index]
+        payment_date_raw = str(row[payment_date_col_index])
         if amount_raw:
             if not username:
                 invalid_rows.append((row, "username required"))
@@ -263,7 +263,11 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
                 payments[username] = {"amount": amount}
                 try:
                     if payment_date_raw:
-                        payment_date = datetime.datetime.strptime(payment_date_raw, "%Y-%m-%d").date()
+                        if isinstance(payment_date_raw, datetime.datetime):
+                            # Dataset autoparses valid datetime
+                            payment_date = payment_date_raw
+                        else:
+                            payment_date = datetime.datetime.strptime(payment_date_raw, "%Y-%m-%d").date()
                     else:
                         payment_date = None
                 except ValueError:
