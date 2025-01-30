@@ -68,12 +68,6 @@ class UserVisitReviewFilter(FilterSet):
 
         self.form.fields["review_status"].widget.attrs.update({"@change": "$refs.reviewFilterForm.submit()"})
 
-        if not self.data:
-            self.data = self.data.copy() if self.data else {}
-            self.data["review_status"] = VisitReviewStatus.pending.value
-            self.form.is_bound = True
-            self.form.data = self.data
-
     class Meta:
         model = UserVisit
         fields = ["review_status"]
