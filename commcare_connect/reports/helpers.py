@@ -1,8 +1,9 @@
 import calendar
 from collections import defaultdict
-from datetime import date
+from datetime import datetime
 
 from django.db.models import Max, Q, Sum
+from django.utils.timezone import make_aware
 
 from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, Payment
 
@@ -13,8 +14,8 @@ def get_table_data_for_year_month(year, month=None, delivery_type=None, group_by
         delivery_type_filter = Q(opportunity_access__opportunity__delivery_type__slug=delivery_type)
 
     _, month_end = calendar.monthrange(year, month or 1)
-    start_date = date(year, month or 1, 1)
-    end_date = date(year, month or 12, month_end)
+    start_date = make_aware(datetime(year, month or 1, 1))
+    end_date = make_aware(datetime(year, month or 12, month_end))
     data = []
 
     user_set = defaultdict(set)
