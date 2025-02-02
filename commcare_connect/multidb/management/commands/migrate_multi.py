@@ -51,8 +51,6 @@ class Command(BaseCommand):
         if migration_name is not None:
             args.append(migration_name)
 
-        options["verbosity"] = 0
-
         def migrate_db(db_alias, options=options):
             call_options = copy(options)
             call_options["database"] = db_alias
