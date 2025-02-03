@@ -40,7 +40,7 @@ def get_table_data_for_year_month(year, month=None, delivery_type=None, group_by
 
         user_set[delivery_type_name].add(v.opportunity_access.user_id)
         beneficiary_set[delivery_type_name].add(v.entity_id)
-        service_count[delivery_type_name] += v.approved_count
+        service_count[delivery_type_name] += v.saved_approved_count
 
     payment_query = Payment.objects.filter(
         delivery_type_filter,
