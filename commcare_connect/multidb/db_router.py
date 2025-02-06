@@ -23,41 +23,9 @@ class ConnectDatabaseRouter:
         if db == DEFAULT_DB_ALIAS:
             return True
         elif db and db == settings.SECONDARY_DB_ALIAS:
-            # Data migrations using RunPython don't need to be
-            #   applied on secondary DB as they are replicated
-            #   at the database level.
-            operation = hints.get("operation", None)
-            if operation is None:
+            if "run_on_secondary" in hints:
+                return hints["run_on_secondary"]
+            else:
                 return True
-
-            # Allow schema-only operations
-            from django.db.migrations.operations import (
-                AddField,
-                AlterField,
-                AlterIndexTogether,
-                AlterModelOptions,
-                AlterModelTable,
-                AlterUniqueTogether,
-                CreateModel,
-                DeleteModel,
-                RemoveField,
-                RenameField,
-            )
-
-            ALLOWED_OPERATIONS = (
-                AddField,
-                AlterField,
-                AlterIndexTogether,
-                AlterModelOptions,
-                AlterModelTable,
-                AlterUniqueTogether,
-                CreateModel,
-                DeleteModel,
-                RemoveField,
-                RenameField,
-            )
-
-            if not isinstance(operation, ALLOWED_OPERATIONS):
-                return False
 
         return True
