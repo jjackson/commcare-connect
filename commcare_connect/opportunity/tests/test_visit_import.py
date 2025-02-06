@@ -1,3 +1,4 @@
+import datetime
 import random
 import re
 from datetime import timedelta
@@ -31,6 +32,7 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentUnitFactory,
     UserVisitFactory,
 )
+from commcare_connect.opportunity.tests.helpers import validate_saved_fields
 from commcare_connect.opportunity.utils.completed_work import update_work_payment_date
 from commcare_connect.opportunity.visit_import import (
     ImportException,
@@ -140,6 +142,7 @@ def test_payment_accrued(opportunity: Opportunity):
     for access in access_objects:
         access.refresh_from_db()
         assert access.payment_accrued == sum(payment_unit.amount for payment_unit in payment_units)
+        _validate_saved_fields(access)
 
 
 @pytest.mark.django_db
@@ -167,6 +170,7 @@ def test_duplicate_payment(opportunity: Opportunity, mobile_user: User):
     update_payment_accrued(opportunity, {mobile_user.id})
     access.refresh_from_db()
     assert access.payment_accrued == payment_unit.amount * 2
+    _validate_saved_fields(access)
 
 
 @pytest.mark.django_db
@@ -203,6 +207,7 @@ def test_payment_accrued_optional_deliver_units(opportunity: Opportunity):
     for access in access_objects:
         access.refresh_from_db()
         assert access.payment_accrued == sum(payment_unit.amount for payment_unit in payment_units)
+        _validate_saved_fields(access)
 
 
 @pytest.mark.django_db
@@ -247,6 +252,7 @@ def test_payment_accrued_asymmetric_optional_deliver_units(opportunity: Opportun
     update_payment_accrued(opportunity, {mobile_user.id})
     access.refresh_from_db()
     assert access.payment_accrued == payment_unit.amount * 2
+    _validate_saved_fields(access)
 
 
 @pytest.mark.parametrize(
@@ -285,17 +291,47 @@ def test_bulk_update_payments(opportunity: Opportunity):
     access_objects = []
     for mobile_user in mobile_user_seen:
         access_objects.append(OpportunityAccessFactory(opportunity=opportunity, user=mobile_user))
-    dataset = Dataset(headers=["Username", "Phone Number", "Name", "Payment Amount"])
-    for mobile_user in chain(mobile_user_seen, mobile_user_missing):
-        dataset.append((mobile_user.username, mobile_user.phone_number, mobile_user.name, 50))
+
+    dataset = Dataset(
+        headers=[
+            "Username",
+            "Phone Number",
+            "Name",
+            "Payment Accrued",
+            "Payment Completed",
+            "Payment Amount",
+            "Payment Date (YYYY-MM-DD)",
+        ]
+    )
+
+    payment_date = "2025-01-15"
+    for index, mobile_user in enumerate(chain(mobile_user_seen, mobile_user_missing)):
+        dataset.append(
+            (
+                mobile_user.username,
+                mobile_user.phone_number,
+                mobile_user.name,
+                100,  # Payment Accrued
+                0,  # Payment Completed
+                50,  # Payment Amount
+                payment_date if index != 4 else None,
+            )
+        )
 
     payment_import_status = _bulk_update_payments(opportunity, dataset)
+
     assert payment_import_status.seen_users == {user.username for user in mobile_user_seen}
     assert payment_import_status.missing_users == {user.username for user in mobile_user_missing}
+
     assert Payment.objects.filter(opportunity_access__opportunity=opportunity).count() == 5
-    for access in access_objects:
+
+    for index, access in enumerate(access_objects):
         payment = Payment.objects.get(opportunity_access=access)
         assert payment.amount == 50
+        if index == 4:
+            assert payment.date_paid.date() == datetime.date.today()
+        else:
+            assert payment.date_paid.strftime("%Y-%m-%d") == payment_date
 
 
 @pytest.fixture
@@ -602,3 +638,9 @@ def test_review_completed_work_status(
             payment_accrued += cw.payment_accrued
     access.refresh_from_db()
     assert access.payment_accrued == payment_accrued
+    _validate_saved_fields(access)
+
+
+def _validate_saved_fields(opportunity_access: OpportunityAccess):
+    for completed_work in opportunity_access.completedwork_set.all():
+        validate_saved_fields(completed_work)

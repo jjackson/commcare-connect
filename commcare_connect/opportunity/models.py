@@ -81,7 +81,7 @@ class Opportunity(BaseModel):
     end_date = models.DateField(null=True)
     # to be removed
     budget_per_visit = models.IntegerField(null=True)
-    total_budget = models.IntegerField(null=True)
+    total_budget = models.PositiveBigIntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
     currency = models.CharField(max_length=3, null=True)
     auto_approve_visits = models.BooleanField(default=True)
@@ -115,6 +115,9 @@ class Opportunity(BaseModel):
         opp_access = OpportunityAccess.objects.filter(opportunity=self)
         opportunity_claim = OpportunityClaim.objects.filter(opportunity_access__in=opp_access)
         claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__in=opportunity_claim)
+        org_pay = 0
+        if self.managed:
+            org_pay = self.managedopportunity.org_pay_per_visit
 
         payment_unit_counts = claim_limits.values("payment_unit").annotate(
             visits_count=Sum("max_visits"), amount=F("payment_unit__amount")
@@ -123,7 +126,7 @@ class Opportunity(BaseModel):
         for count in payment_unit_counts:
             visits_count = count["visits_count"]
             amount = count["amount"]
-            claimed += visits_count * amount
+            claimed += visits_count * (amount + org_pay)
 
         return claimed
 
@@ -249,6 +252,15 @@ class OpportunityAccess(models.Model):
     class Meta:
         indexes = [models.Index(fields=["invite_id"])]
         unique_together = ("user", "opportunity")
+
+    @cached_property
+    def managed_opportunity(self):
+        from commcare_connect.program.models import ManagedOpportunity
+
+        if self.opportunity.managed:
+            return ManagedOpportunity.objects.get(id=self.opportunity.id)
+
+        return None
 
     # TODO: Convert to a field and calculate this property CompletedModule is saved
     @property
@@ -414,7 +426,7 @@ class PaymentInvoice(models.Model):
 class Payment(models.Model):
     amount = models.PositiveIntegerField()
     amount_usd = models.DecimalField(max_digits=10, decimal_places=2, null=True)
-    date_paid = models.DateTimeField(auto_now_add=True)
+    date_paid = models.DateTimeField(default=datetime.datetime.utcnow)
     # This is used to indicate payments made to Opportunity Users
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.DO_NOTHING, null=True, blank=True)
     payment_unit = models.ForeignKey(
@@ -451,6 +463,25 @@ class CompletedWork(models.Model):
     reason = models.CharField(max_length=300, null=True, blank=True)
     status_modified_date = models.DateTimeField(null=True)
     payment_date = models.DateTimeField(null=True)
+    date_created = models.DateTimeField(auto_now_add=True)
+
+    # these fields are the stored/cached versions of the completed_count and approved_count
+    # and the associated calculations needed to do reporting on payments.
+    # it is expected that they are updated every time the completed_count or approved_count is updated,
+    # but should not be used for real-time display of that information until confirmed to be working.
+    saved_completed_count = models.IntegerField(default=0)
+    saved_approved_count = models.IntegerField(default=0)
+    saved_payment_accrued = models.IntegerField(default=0, help_text="Payment accrued for the FLW.")
+    saved_payment_accrued_usd = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, help_text="Payment accrued for the FLW in USD."
+    )
+    saved_org_payment_accrued = models.IntegerField(default=0, help_text="Payment accrued for the organization")
+    saved_org_payment_accrued_usd = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, help_text="Payment accrued for the organization in USD."
+    )
+
+    class Meta:
+        unique_together = ("opportunity_access", "entity_id", "payment_unit")
 
     def __init__(self, *args, **kwargs):
         self.status = CompletedWorkStatus.incomplete
@@ -485,7 +516,11 @@ class CompletedWork(models.Model):
         )
         optional_deliver_units = list(du["id"] for du in filter(lambda du: du.get("optional", False), deliver_units))
         # NOTE: The min unit count is the completed required deliver units for an entity_id
-        number_completed = min(unit_counts[deliver_id] for deliver_id in required_deliver_units)
+        if required_deliver_units:
+            number_completed = min(unit_counts[deliver_id] for deliver_id in required_deliver_units)
+        else:
+            # this is an unexpected case, but can show up in old/test data
+            number_completed = 0
         if optional_deliver_units:
             # The sum calculates the number of optional deliver units completed and to process
             # duplicates with extra optional deliver units
@@ -570,6 +605,7 @@ class UserVisit(XFormBaseModel):
     )
     review_created_on = models.DateTimeField(blank=True, null=True)
     justification = models.CharField(max_length=300, null=True, blank=True)
+    date_created = models.DateTimeField(auto_now_add=True)
 
     def __init__(self, *args, **kwargs):
         self.status = VisitValidationStatus.pending
@@ -585,6 +621,13 @@ class UserVisit(XFormBaseModel):
     @property
     def images(self):
         return BlobMeta.objects.filter(parent_id=self.xform_id, content_type__startswith="image/")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["xform_id", "entity_id", "deliver_unit"], name="unique_xform_entity_deliver_unit"
+            )
+        ]
 
 
 class OpportunityClaim(models.Model):
@@ -664,6 +707,7 @@ class UserInvite(models.Model):
     opportunity_access = models.OneToOneField(OpportunityAccess, on_delete=models.CASCADE, null=True, blank=True)
     message_sid = models.CharField(max_length=50, null=True, blank=True)
     status = models.CharField(max_length=50, choices=UserInviteStatus.choices, default=UserInviteStatus.invited)
+    notification_date = models.DateTimeField(null=True)
 
 
 class FormJsonValidationRules(models.Model):
@@ -702,3 +746,15 @@ class CatchmentArea(models.Model):
 
     class Meta:
         unique_together = ("site_code", "opportunity")
+
+
+class ExchangeRate(models.Model):
+    currency_code = models.CharField(max_length=3)
+    rate = models.DecimalField(max_digits=10, decimal_places=6)
+    rate_date = models.DateField()
+    fetched_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["currency_code", "rate_date"], name="unique_currency_code_date")
+        ]
