@@ -24,6 +24,7 @@ from django_tables2 import SingleTableView
 from django_tables2.export import TableExport
 from geopy import distance
 
+from commcare_connect.connect_id_client import fetch_users
 from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.api.serializers import remove_opportunity_access_cache
 from commcare_connect.opportunity.forms import (
@@ -65,6 +66,7 @@ from commcare_connect.opportunity.models import (
     PaymentInvoice,
     PaymentUnit,
     UserInvite,
+    UserInviteStatus,
     UserVisit,
     VisitReviewStatus,
     VisitValidationStatus,
@@ -92,8 +94,10 @@ from commcare_connect.opportunity.tasks import (
     generate_user_status_export,
     generate_visit_export,
     generate_work_status_export,
+    invite_user,
     send_push_notification_task,
     send_sms_task,
+    update_user_and_send_invite,
 )
 from commcare_connect.opportunity.visit_import import (
     ImportException,
@@ -101,6 +105,7 @@ from commcare_connect.opportunity.visit_import import (
     bulk_update_completed_work_status,
     bulk_update_payment_status,
     bulk_update_visit_status,
+    get_exchange_rate,
     update_payment_accrued,
 )
 from commcare_connect.organization.decorators import org_admin_required, org_member_required, org_viewer_required
@@ -1217,10 +1222,13 @@ def invoice_approve(request, org_slug, pk):
         return redirect("opportunity:detail", org_slug, pk)
     invoice_ids = request.POST.getlist("pk")
     invoices = PaymentInvoice.objects.filter(opportunity=opportunity, pk__in=invoice_ids, payment__isnull=True)
+    rate = get_exchange_rate(opportunity.currency)
     for invoice in invoices:
+        amount_in_usd = invoice.amount / rate
         payment = Payment(
             amount=invoice.amount,
             organization=opportunity.organization,
+            amount_usd=amount_in_usd,
             invoice=invoice,
         )
         payment.save()
@@ -1233,5 +1241,30 @@ def invoice_approve(request, org_slug, pk):
 def user_invite_delete(request, org_slug, opp_id, pk):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
     invite = get_object_or_404(UserInvite, pk=pk, opportunity=opportunity)
+    if invite.status != UserInviteStatus.not_found:
+        return HttpResponse(status=403, data="User Invite cannot be deleted.")
     invite.delete()
     return HttpResponse(status=200, headers={"HX-Trigger": "userStatusReload"})
+
+
+@org_admin_required
+@require_POST
+def resend_user_invite(request, org_slug, opp_id, pk):
+    user_invite = get_object_or_404(UserInvite, id=pk)
+
+    if user_invite.notification_date and (now() - user_invite.notification_date) < datetime.timedelta(days=1):
+        return HttpResponse("You can only send one invitation per user every 24 hours. Please try again later.")
+
+    if user_invite.status == UserInviteStatus.not_found:
+        found_user_list = fetch_users([user_invite.phone_number])
+        if not found_user_list:
+            return HttpResponse("The user is not registered on Connect ID yet. Please ask them to sign up first.")
+
+        connect_user = found_user_list[0]
+        update_user_and_send_invite(connect_user, opp_id=pk)
+    else:
+        user = User.objects.get(phone_number=user_invite.phone_number)
+        access, _ = OpportunityAccess.objects.get_or_create(user=user, opportunity_id=opp_id)
+        invite_user.delay(user.id, access.pk)
+
+    return HttpResponse("The invitation has been successfully resent to the user.")
