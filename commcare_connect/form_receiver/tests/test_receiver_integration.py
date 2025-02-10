@@ -5,6 +5,7 @@ from http import HTTPStatus
 from uuid import uuid4
 
 import pytest
+from django.db import IntegrityError
 from django.utils.timezone import now
 from rest_framework.test import APIClient
 
@@ -100,6 +101,7 @@ def test_form_receiver_multiple_module_submissions(
 
     form_json1 = _get_form_json(opportunity.learn_app, module1.id, module1.json)
     form_json2 = _get_form_json(opportunity.learn_app, module2.id, module2.json)
+    form_json2["id"] = str(uuid4())
     current = now()
 
     past_date = current - timedelta(days=5)
@@ -113,6 +115,10 @@ def test_form_receiver_multiple_module_submissions(
     # Subsequent submissions
     form_json1["received_on"] = current
     form_json2["received_on"] = current + timedelta(days=2)
+
+    # change form ids
+    form_json2["id"] = str(uuid4())
+    form_json1["id"] = str(uuid4())
     make_request(api_client, form_json1, mobile_user_with_connect_link)
     make_request(api_client, form_json2, mobile_user_with_connect_link)
 
@@ -133,6 +139,10 @@ def test_form_receiver_multiple_module_submissions(
         module__slug=module2.id,
         date=current + timedelta(days=2),
     ).exists()
+
+    with pytest.raises(IntegrityError) as exc:
+        make_request(api_client, form_json1, mobile_user_with_connect_link)
+        assert "unique_xform_completed_module" in exc
 
 
 @pytest.mark.django_db
