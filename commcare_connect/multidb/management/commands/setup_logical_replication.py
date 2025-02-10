@@ -72,12 +72,15 @@ class Command(BaseCommand):
             else:
                 # Create new subscription
                 default_db_settings = default_conn.settings_dict
+                self.stdout.write("Provide user credentials on primary with only replication privilege")
+                username = input("Enter username: ")
+                password = input("Enter password: ")
                 primary_conn_info = (
                     f"host={default_db_settings['HOST']} "
                     f"port={default_db_settings['PORT']} "
                     f"dbname={default_db_settings['NAME']} "
-                    f"user={default_db_settings['USER']} "
-                    f"password={default_db_settings['PASSWORD']}"
+                    f"user={username} "
+                    f"password={password}"
                 )
                 cursor.execute(
                     f"""
