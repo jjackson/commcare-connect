@@ -350,6 +350,13 @@ class CompletedModule(XFormBaseModel):
     date = models.DateTimeField()
     duration = models.DurationField()
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["xform_id", "module", "opportunity_access"], name="unique_xform_completed_module"
+            )
+        ]
+
 
 class Assessment(XFormBaseModel):
     user = models.ForeignKey(
