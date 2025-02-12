@@ -2,7 +2,7 @@ import calendar
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, OuterRef, Subquery, Sum
+from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, OuterRef, Q, Subquery, Sum
 from django.utils.timezone import make_aware
 
 from commcare_connect.opportunity.models import (
@@ -24,7 +24,7 @@ def get_table_data_for_year_month(
     opportunity=None,
 ):
     if year is None:
-        return []
+        year = datetime.now().year
     filter_kwargs = {"opportunity_access__opportunity__is_test": False}
     filter_kwargs_nm = {"invoice__opportunity__is_test": False}
     if delivery_type:
@@ -54,10 +54,10 @@ def get_table_data_for_year_month(
     visit_data = (
         CompletedWork.objects.annotate(work_date=Max("uservisit__visit_date"))
         .filter(
+            Q(status_modified_date__gte=start_date, status_modified_date__lt=end_date)
+            | Q(status_modified_date__isnull=True, work_date__gte=start_date, work_date__lt=end_date),
             **filter_kwargs,
             status=CompletedWorkStatus.approved,
-            work_date__gte=start_date,
-            work_date__lt=end_date,
         )
         .values("opportunity_access__opportunity__delivery_type__name")
         .annotate(
