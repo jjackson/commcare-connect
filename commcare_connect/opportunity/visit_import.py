@@ -1,4 +1,5 @@
 import codecs
+import datetime
 import json
 import textwrap
 import urllib
@@ -17,6 +18,7 @@ from commcare_connect.opportunity.models import (
     CatchmentArea,
     CompletedWork,
     CompletedWorkStatus,
+    ExchangeRate,
     Opportunity,
     OpportunityAccess,
     Payment,
@@ -32,6 +34,7 @@ VISIT_ID_COL = "visit id"
 STATUS_COL = "status"
 USERNAME_COL = "username"
 AMOUNT_COL = "payment amount"
+PAYMENT_DATE_COL = "payment date (yyyy-mm-dd)"
 REASON_COL = "rejected reason"
 JUSTIFICATION_COL = "justification"
 WORK_ID_COL = "instance id"
@@ -173,7 +176,7 @@ def update_payment_accrued(opportunity: Opportunity, users):
             completed_works = access.completedwork_set.exclude(
                 status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
             ).select_related("payment_unit")
-            update_status(completed_works, access, True)
+            update_status(completed_works, access, compute_payment=True)
 
 
 def get_data_by_visit_id(dataset) -> dict[int, VisitData]:
@@ -238,6 +241,7 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
 
     username_col_index = _get_header_index(headers, USERNAME_COL)
     amount_col_index = _get_header_index(headers, AMOUNT_COL)
+    payment_date_col_index = _get_header_index(headers, PAYMENT_DATE_COL)
     invalid_rows = []
     payments = {}
     exchange_rate = get_exchange_rate(opportunity.currency)
@@ -247,6 +251,7 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
         row = list(row)
         username = str(row[username_col_index])
         amount_raw = row[amount_col_index]
+        payment_date_raw = row[payment_date_col_index]
         if amount_raw:
             if not username:
                 invalid_rows.append((row, "username required"))
@@ -254,36 +259,73 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
                 amount = int(amount_raw)
             except ValueError:
                 invalid_rows.append((row, "amount must be an integer"))
-            payments[username] = amount
+            else:
+                payments[username] = {"amount": amount}
+                try:
+                    if payment_date_raw:
+                        if isinstance(payment_date_raw, datetime.datetime):
+                            # Dataset autoparses valid datetime
+                            payment_date = payment_date_raw
+                        else:
+                            payment_date = datetime.datetime.strptime(payment_date_raw, "%Y-%m-%d").date()
+                    else:
+                        payment_date = None
+                except ValueError:
+                    invalid_rows.append((row, "Payment Date must be in YYYY-MM-DD format"))
+                else:
+                    payments[username]["payment_date"] = payment_date
 
     if invalid_rows:
         raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
 
     seen_users = set()
     payment_ids = []
-    with transaction.atomic():
-        usernames = list(payments)
-        users = OpportunityAccess.objects.filter(
-            user__username__in=usernames, opportunity=opportunity, suspended=False
-        ).select_related("user")
-        for access in users:
-            username = access.user.username
-            amount = payments[username]
-            amount_usd = amount / exchange_rate
-            payment = Payment.objects.create(opportunity_access=access, amount=amount, amount_usd=amount_usd)
-            seen_users.add(username)
-            payment_ids.append(payment.pk)
-            update_work_payment_date(access)
+    lock_key = f"bulk_update_payments_opportunity_{opportunity.id}"
+    with cache.lock(lock_key, timeout=600):
+        with transaction.atomic():
+            usernames = list(payments)
+            users = OpportunityAccess.objects.filter(
+                user__username__in=usernames, opportunity=opportunity, suspended=False
+            ).select_related("user")
+            for access in users:
+                username = access.user.username
+                amount = payments[username]["amount"]
+                payment_date = payments[username]["payment_date"]
+                payment_data = {
+                    "opportunity_access": access,
+                    "amount": amount,
+                    "amount_usd": amount / exchange_rate,
+                }
+                if payment_date:
+                    payment_data["date_paid"] = payment_date
+                payment = Payment.objects.create(**payment_data)
+                seen_users.add(username)
+                payment_ids.append(payment.pk)
+                update_work_payment_date(access)
     missing_users = set(usernames) - seen_users
     send_payment_notification.delay(opportunity.id, payment_ids)
     return PaymentImportStatus(seen_users, missing_users)
 
 
-def _cache_key(currency_code, date=None):
-    return [currency_code, date.toordinal() if date else None]
+def _cache_key(date=None):
+    date_key = date or now().date()
+    return [date_key.toordinal()]
 
 
 @quickcache(vary_on=_cache_key, timeout=12 * 60 * 60)
+def fetch_exchange_rates(date=None):
+    base_url = "https://openexchangerates.org/api"
+
+    if date:
+        url = f"{base_url}/historical/{date.strftime('%Y-%m-%d')}.json"
+    else:
+        url = f"{base_url}/latest.json"
+
+    url = f"{url}?app_id={settings.OPEN_EXCHANGE_RATES_API_ID}"
+    rates = json.load(urllib.request.urlopen(url))
+    return rates["rates"]
+
+
 def get_exchange_rate(currency_code, date=None):
     # date should be a date object or None for latest rate
 
@@ -292,14 +334,19 @@ def get_exchange_rate(currency_code, date=None):
     if currency_code == "USD":
         return 1
 
-    base_url = "https://openexchangerates.org/api"
-    if date:
-        url = f"{base_url}/historical/{date.strftime('%Y-%m-%d')}.json"
-    else:
-        url = f"{base_url}/latest.json"
-    url = f"{url}?app_id={settings.OPEN_EXCHANGE_RATES_API_ID}"
-    rates = json.load(urllib.request.urlopen(url))
-    return rates["rates"].get(currency_code)
+    rate_date = date or now().date()
+    rate = None
+
+    try:
+        rate = ExchangeRate.objects.get(currency_code=currency_code, rate_date=rate_date).rate
+    except ExchangeRate.DoesNotExist:
+        rates = fetch_exchange_rates(rate_date)
+        rate = rates.get(currency_code)
+        if not rate:
+            raise ImportException("Rate not found for opportunity currency")
+        ExchangeRate.objects.create(currency_code=currency_code, rate=rate, rate_date=rate_date)
+
+    return rate
 
 
 def bulk_update_completed_work_status(opportunity: Opportunity, file: UploadedFile) -> CompletedWorkImportStatus:
