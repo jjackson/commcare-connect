@@ -2,7 +2,7 @@ import calendar
 from collections import defaultdict
 from datetime import datetime
 
-from django.db.models import Max, Sum
+from django.db.models import Max, Q, Sum
 from django.utils.timezone import make_aware
 
 from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, Payment
@@ -41,11 +41,11 @@ def get_table_data_for_year_month(
     visit_data = (
         CompletedWork.objects.annotate(work_date=Max("uservisit__visit_date"))
         .filter(
+            Q(status_modified_date__gte=start_date, status_modified_date__lt=end_date)
+            | Q(status_modified_date__isnull=True, work_date__gte=start_date, work_date__lt=end_date),
             **filter_kwargs,
             opportunity_access__opportunity__is_test=False,
             status=CompletedWorkStatus.approved,
-            work_date__gte=start_date,
-            work_date__lt=end_date,
         )
         .select_related("opportunity_access__opportunity__delivery_type")
     )
