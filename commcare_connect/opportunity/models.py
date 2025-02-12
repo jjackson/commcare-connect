@@ -95,6 +95,10 @@ class Opportunity(BaseModel):
         return self.name
 
     @property
+    def org_pay_per_visit(self):
+        return self.managedopportunity.org_pay_per_visit if self.managed else 0
+
+    @property
     def is_setup_complete(self):
         if not (self.paymentunit_set.count() > 0 and self.total_budget and self.start_date and self.end_date):
             return False
@@ -116,9 +120,7 @@ class Opportunity(BaseModel):
         opp_access = OpportunityAccess.objects.filter(opportunity=self)
         opportunity_claim = OpportunityClaim.objects.filter(opportunity_access__in=opp_access)
         claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__in=opportunity_claim)
-        org_pay = 0
-        if self.managed:
-            org_pay = self.managedopportunity.org_pay_per_visit
+        org_pay = self.org_pay_per_visit
 
         payment_unit_counts = claim_limits.values("payment_unit").annotate(
             visits_count=Sum("max_visits"), amount=F("payment_unit__amount")
@@ -133,11 +135,9 @@ class Opportunity(BaseModel):
 
     @property
     def utilised_budget(self):
-        users = OpportunityAccess.objects.filter(opportunity=self)
-        utilised = 0
-        for u in users:
-            utilised += u.payment_accrued
-        return utilised
+        completed_works = CompletedWork.objects.filter(opportunity_access__opportunity=self)
+        org_pay = self.org_pay_per_visit
+        return sum(cw.saved_payment_accrued + org_pay for cw in completed_works)
 
     @property
     def claimed_visits(self):
@@ -163,7 +163,7 @@ class Opportunity(BaseModel):
 
         budget_per_user = 0
         payment_units = self.paymentunit_set.all()
-        org_pay = self.managedopportunity.org_pay_per_visit
+        org_pay = self.org_pay_per_visit
         for pu in payment_units:
             budget_per_user += pu.max_total * (pu.amount + org_pay)
 
