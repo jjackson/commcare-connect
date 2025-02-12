@@ -450,11 +450,8 @@ def dashboard_stats_api(request):
     )
     # org earnings include their share and the money they pass through to FLWs
     total_org_earnings_usd = org_earnings_usd + total_flw_earnings_usd
-
     total_flw_payments_usd = flw_payment_queryset.aggregate(Sum("amount_usd"))["amount_usd__sum"] or 0
-    org_payments_usd = org_payment_queryset.aggregate(Sum("amount_usd"))["amount_usd__sum"] or 0
-    # org payments include their share and the money they pass through to FLWs
-    total_org_payments_usd = org_payments_usd + total_flw_payments_usd
+    total_org_payments_usd = org_payment_queryset.aggregate(Sum("amount_usd"))["amount_usd__sum"] or 0
 
     return JsonResponse(
         {
