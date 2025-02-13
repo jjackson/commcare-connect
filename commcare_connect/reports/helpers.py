@@ -64,11 +64,7 @@ def get_table_data_for_year_month(
             users=Count("opportunity_access__user_id", distinct=True),
             service_count=Sum("saved_approved_count", default=0),
             flw_amount_earned=Sum("saved_payment_accrued", default=0),
-            nm_amount_earned=Sum(
-                F("saved_approved_count")
-                * F("opportunity_access__opportunity__managedopportunity__org_pay_per_visit"),
-                default=0,
-            ),
+            nm_amount_earned=Sum(F("saved_org_payment_accrued") + F("saved_payment_accrued"), default=0),
             avg_time_to_payment=Avg(time_to_payment, default=timedelta(days=0)),
             max_time_to_payment=Max(time_to_payment, default=timedelta(days=0)),
         )
