@@ -23,8 +23,11 @@ def get_table_data_for_year_month(
     network_manager=None,
     opportunity=None,
 ):
-    if year is None:
-        year = datetime.now().year
+    year = year or datetime.now().year
+    _, month_end = calendar.monthrange(year, month or 1)
+    start_date = make_aware(datetime(year, month or 1, 1))
+    end_date = make_aware(datetime(year, month or 12, month_end))
+
     filter_kwargs = {"opportunity_access__opportunity__is_test": False}
     filter_kwargs_nm = {"invoice__opportunity__is_test": False}
     if delivery_type:
@@ -40,9 +43,6 @@ def get_table_data_for_year_month(
         filter_kwargs.update({"opportunity_access__opportunity": opportunity})
         filter_kwargs_nm.update({"invoice__opportunity": opportunity})
 
-    _, month_end = calendar.monthrange(year, month or 1)
-    start_date = make_aware(datetime(year, month or 1, 1))
-    end_date = make_aware(datetime(year, month or 12, month_end))
     data = []
 
     max_visit_date = (
@@ -126,7 +126,8 @@ def get_table_data_for_year_month(
             sum_total_users[user] += amount
 
         flw_amount_paid_data[d_name] = sum(sum_total_users.values())
-        top_five_percent_len = len(sum_total_users) * 5 // 100
+        # take atleast 1 top user in cases where this variable is 0
+        top_five_percent_len = len(sum_total_users) * 5 // 100 or 1
         avg_top_flw_amount_paid_data[d_name] = sum(sorted(sum_total_users.values())[:top_five_percent_len])
 
     if group_by_delivery_type:
