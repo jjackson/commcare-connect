@@ -117,6 +117,61 @@ def test_get_table_data_for_year_month(year, month, delivery_type):
         assert row["avg_top_paid_flws"] == 1700
 
 
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "year, month, delivery_type",
+    [
+        (None, None, None),
+        (datetime.now().year, datetime.now().month, "Delivery Type A"),
+        (datetime.now().year, datetime.now().month, "Delivery Type B"),
+    ],
+)
+def test_get_table_data_for_year_month_by_delivery_type(year, month, delivery_type):
+    now = datetime.now(UTC)
+    delivery_type_names = ["Delivery Type 1", "Delivery Type 2"]
+    for d_name in delivery_type_names:
+        users = MobileUserFactory.create_batch(5)
+        for i, user in enumerate(users):
+            access = OpportunityAccessFactory(
+                user=user,
+                opportunity__is_test=False,
+                opportunity__delivery_type__name=d_name,
+            )
+            cw = CompletedWorkFactory(
+                status_modified_date=now - timedelta(3),
+                opportunity_access=access,
+                status=CompletedWorkStatus.approved,
+                saved_approved_count=1,
+                saved_payment_accrued_usd=i * 100,
+                saved_org_payment_accrued_usd=100,
+                payment_date=now,
+            )
+            UserVisitFactory(
+                visit_date=now - timedelta(i * 10),
+                opportunity_access=access,
+                completed_work=cw,
+                status=VisitValidationStatus.approved,
+            )
+            PaymentFactory(opportunity_access=access, date_paid=now, amount_usd=i * 100, confirmed=True)
+            inv = PaymentInvoiceFactory(opportunity=access.opportunity, amount=100)
+            PaymentFactory(invoice=inv, date_paid=now, amount_usd=100)
+    data = get_table_data_for_year_month(year, month, delivery_type, group_by_delivery_type=True)
+
+    assert len(data)
+    for row in data:
+        assert row["delivery_type"] in delivery_type_names
+        assert row["month"][1] == datetime.now().year
+        assert row["users"] == 5
+        assert row["services"] == 5
+        assert row["avg_time_to_payment"] == 20
+        assert row["max_time_to_payment"] == 40
+        assert row["flw_amount_earned"] == 1000
+        assert row["flw_amount_paid"] == 1000
+        assert row["nm_amount_earned"] == 1500
+        assert row["nm_amount_paid"] == 500
+        assert row["avg_top_paid_flws"] == 400
+
+
 def test_results_to_geojson():
     class MockQuerySet:
         def __init__(self, results):
