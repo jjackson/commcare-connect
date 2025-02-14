@@ -17,6 +17,7 @@ class AdminReportTable(tables.Table):
     flw_amount_paid = SumColumn(verbose_name="FLW Amount Paid")
     nm_amount_earned = SumColumn(verbose_name="NM Amount Earned")
     nm_amount_paid = SumColumn(verbose_name="NM Amount Paid")
+    nm_other_amount_paid = SumColumn(verbose_name="NM Other Amount Paid")
     services = SumColumn(verbose_name="Verified Services")
     avg_top_paid_flws = SumColumn(verbose_name="Average paid to Top FLWs")
 
