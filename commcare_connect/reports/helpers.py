@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from statistics import mean
 
-from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, OuterRef, Subquery, Sum
+from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, OuterRef, Q, Subquery, Sum
 from django.utils.timezone import make_aware
 
 from commcare_connect.opportunity.models import (
@@ -54,9 +54,9 @@ def get_table_data_for_year_month(
     time_to_payment = ExpressionWrapper(F("payment_date") - Subquery(max_visit_date), output_field=DurationField())
     visit_data = (
         CompletedWork.objects.filter(
+            Q(status_modified_date__gte=start_date, status_modified_date__lt=end_date)
+            | Q(status_modified_date__isnull=True, date_created__gte=start_date, date_created__lt=end_date),
             **filter_kwargs,
-            status_modified_date__gte=start_date,
-            status_modified_date__lt=end_date,
             status=CompletedWorkStatus.approved,
             saved_approved_count__gt=0,
             saved_payment_accrued_usd__gt=0,
