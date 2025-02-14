@@ -3,6 +3,7 @@ import datetime
 import json
 import textwrap
 import urllib
+from collections import defaultdict
 from dataclasses import astuple, dataclass
 from decimal import Decimal, InvalidOperation
 
@@ -236,9 +237,9 @@ def bulk_update_payments(opportunity_id: int, headers: list[str], rows: list[lis
     amount_col_index = _get_header_index(headers, AMOUNT_COL)
     payment_date_col_index = _get_header_index(headers, PAYMENT_DATE_COL)
     invalid_rows = []
-    payments = {}
-    exchange_rate = get_exchange_rate(opportunity.currency)
-    if not exchange_rate:
+    payments_by_user = defaultdict(list)
+    exchange_rate_today = get_exchange_rate(opportunity.currency)
+    if not exchange_rate_today:
         raise ImportException(f"Currency code {opportunity.currency} is invalid")
 
     for row in rows:
@@ -254,7 +255,7 @@ def bulk_update_payments(opportunity_id: int, headers: list[str], rows: list[lis
             except ValueError:
                 invalid_rows.append((row, "amount must be an integer"))
             else:
-                payments[username] = {"amount": amount}
+                payment_row = {"amount": amount}
                 try:
                     if payment_date_raw:
                         if isinstance(payment_date_raw, datetime.datetime):
@@ -267,7 +268,8 @@ def bulk_update_payments(opportunity_id: int, headers: list[str], rows: list[lis
                 except ValueError:
                     invalid_rows.append((row, "Payment Date must be in YYYY-MM-DD format"))
                 else:
-                    payments[username]["payment_date"] = payment_date
+                    payment_row["payment_date"] = payment_date
+                payments_by_user[username].append(payment_row)
 
     if invalid_rows:
         raise ImportException(f"{len(invalid_rows)} rows have errors", "<br>".join([str(r) for r in invalid_rows]))
@@ -277,24 +279,30 @@ def bulk_update_payments(opportunity_id: int, headers: list[str], rows: list[lis
     lock_key = f"bulk_update_payments_opportunity_{opportunity.id}"
     with cache.lock(lock_key, timeout=600):
         with transaction.atomic():
-            usernames = list(payments)
+            usernames = payments_by_user.keys()
             users = OpportunityAccess.objects.filter(
                 user__username__in=usernames, opportunity=opportunity, suspended=False
             ).select_related("user")
+
             for access in users:
                 username = access.user.username
-                amount = payments[username]["amount"]
-                payment_date = payments[username]["payment_date"]
-                payment_data = {
-                    "opportunity_access": access,
-                    "amount": amount,
-                    "amount_usd": amount / exchange_rate,
-                }
-                if payment_date:
-                    payment_data["date_paid"] = payment_date
-                payment = Payment.objects.create(**payment_data)
+                for payment_row in payments_by_user[username]:
+                    amount = payment_row["amount"]
+                    payment_date = payment_row["payment_date"]
+                    if payment_date:
+                        exchange_rate = get_exchange_rate(opportunity.currency, payment_date)
+                    else:
+                        exchange_rate = exchange_rate_today
+                    payment_data = {
+                        "opportunity_access": access,
+                        "amount": amount,
+                        "amount_usd": amount / exchange_rate,
+                    }
+                    if payment_date:
+                        payment_data["date_paid"] = payment_date
+                    payment = Payment.objects.create(**payment_data)
+                    payment_ids.append(payment.pk)
                 seen_users.add(username)
-                payment_ids.append(payment.pk)
                 update_work_payment_date(access)
     missing_users = set(usernames) - seen_users
     send_payment_notification.delay(opportunity.id, payment_ids)
