@@ -226,16 +226,9 @@ def _get_header_index(headers: list[str], col_name: str, required=True) -> int:
         raise ImportException(f"Missing required column(s): '{col_name}'")
 
 
-def bulk_update_payment_status(opportunity: Opportunity, file: UploadedFile) -> PaymentImportStatus:
-    file_format = get_file_extension(file)
-    if file_format not in ("csv", "xlsx"):
-        raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
-    imported_data = get_imported_dataset(file, file_format)
-    return _bulk_update_payments(opportunity, imported_data)
-
-
-def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> PaymentImportStatus:
-    headers = [header.lower() for header in imported_data.headers or []]
+def bulk_update_payments(opportunity_id: int, headers: list[str], rows: list[list]):
+    opportunity = Opportunity.objects.get(id=opportunity_id)
+    headers = [header.lower() for header in headers]
     if not headers:
         raise ImportException("The uploaded file did not contain any headers")
 
@@ -247,7 +240,8 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     exchange_rate = get_exchange_rate(opportunity.currency)
     if not exchange_rate:
         raise ImportException(f"Currency code {opportunity.currency} is invalid")
-    for row in imported_data:
+
+    for row in rows:
         row = list(row)
         username = str(row[username_col_index])
         amount_raw = row[amount_col_index]
@@ -276,7 +270,7 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
                     payments[username]["payment_date"] = payment_date
 
     if invalid_rows:
-        raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
+        raise ImportException(f"{len(invalid_rows)} rows have errors", "<br>".join([str(r) for r in invalid_rows]))
 
     seen_users = set()
     payment_ids = []
@@ -304,6 +298,7 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
                 update_work_payment_date(access)
     missing_users = set(usernames) - seen_users
     send_payment_notification.delay(opportunity.id, payment_ids)
+
     return PaymentImportStatus(seen_users, missing_users)
 
 
