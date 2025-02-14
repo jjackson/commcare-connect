@@ -99,12 +99,20 @@ def get_table_data_for_year_month(
         item["opportunity_access__opportunity__delivery_type__name"]: item["nm_amount_earned"] for item in visit_data
     }
     nm_amount_paid = (
-        payment_query.filter(**filter_kwargs_nm)
+        payment_query.filter(**filter_kwargs_nm, invoice__service_delivery=True)
         .values("invoice__opportunity__delivery_type__name")
         .annotate(approved_sum=Sum("amount_usd", default=0))
     )
     nm_amount_paid_data = {
         item["invoice__opportunity__delivery_type__name"]: item["approved_sum"] for item in nm_amount_paid
+    }
+    nm_other_amount_paid = (
+        payment_query.filter(**filter_kwargs_nm, invoice__service_delivery=False)
+        .values("invoice__opportunity__delivery_type__name")
+        .annotate(approved_sum=Sum("amount_usd", default=0))
+    )
+    nm_other_amount_paid_data = {
+        item["invoice__opportunity__delivery_type__name"]: item["approved_sum"] for item in nm_other_amount_paid
     }
 
     flw_amount_paid_data = {}
@@ -147,6 +155,7 @@ def get_table_data_for_year_month(
                     "flw_amount_paid": flw_amount_paid_data.get(delivery_type_name, 0),
                     "nm_amount_earned": nm_amount_earned,
                     "nm_amount_paid": nm_amount_paid,
+                    "nm_other_amount_paid": nm_other_amount_paid_data.get(delivery_type_name, 0),
                     "avg_top_paid_flws": avg_top_flw_amount_paid_data.get(delivery_type_name, 0),
                 }
             )
@@ -166,6 +175,7 @@ def get_table_data_for_year_month(
                 "flw_amount_paid": sum(flw_amount_paid_data.values()),
                 "nm_amount_earned": nm_amount_earned,
                 "nm_amount_paid": nm_amount_paid,
+                "nm_other_amount_paid": sum(nm_other_amount_paid_data.values()),
                 "avg_top_paid_flws": sum(avg_top_flw_amount_paid_data.values()),
             }
         )

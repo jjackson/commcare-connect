@@ -101,6 +101,8 @@ def test_get_table_data_for_year_month(year, month, delivery_type):
         PaymentFactory(opportunity_access=access, date_paid=now, amount_usd=i * 100, confirmed=True)
         inv = PaymentInvoiceFactory(opportunity=access.opportunity, amount=100)
         PaymentFactory(invoice=inv, date_paid=now, amount_usd=100)
+        other_inv = PaymentInvoiceFactory(opportunity=access.opportunity, amount=100, service_delivery=False)
+        PaymentFactory(invoice=other_inv, date_paid=now, amount_usd=100)
     data = get_table_data_for_year_month(year, month, delivery_type)
 
     assert len(data)
@@ -114,6 +116,7 @@ def test_get_table_data_for_year_month(year, month, delivery_type):
         assert row["flw_amount_paid"] == 4500
         assert row["nm_amount_earned"] == 5400
         assert row["nm_amount_paid"] == 1000
+        assert row["nm_other_amount_paid"] == 1000
         assert row["avg_top_paid_flws"] == 1700
 
 
