@@ -297,8 +297,6 @@ def test_bulk_update_payments(opportunity: Opportunity):
             "Username",
             "Phone Number",
             "Name",
-            "Payment Accrued",
-            "Payment Completed",
             "Payment Amount",
             "Payment Date (YYYY-MM-DD)",
         ]
@@ -311,8 +309,6 @@ def test_bulk_update_payments(opportunity: Opportunity):
                 mobile_user.username,
                 mobile_user.phone_number,
                 mobile_user.name,
-                100,  # Payment Accrued
-                0,  # Payment Completed
                 50,  # Payment Amount
                 payment_date if index != 4 else None,
             )
