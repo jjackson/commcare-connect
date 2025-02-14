@@ -2,7 +2,7 @@ import calendar
 from collections import defaultdict
 from datetime import datetime
 
-from django.db.models import Max, Q, Sum
+from django.db.models import Sum
 from django.utils.timezone import make_aware
 
 from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, Payment
@@ -38,17 +38,13 @@ def get_table_data_for_year_month(
     beneficiary_set = defaultdict(set)
     service_count = defaultdict(int)
 
-    visit_data = (
-        CompletedWork.objects.annotate(work_date=Max("uservisit__visit_date"))
-        .filter(
-            Q(status_modified_date__gte=start_date, status_modified_date__lt=end_date)
-            | Q(status_modified_date__isnull=True, work_date__gte=start_date, work_date__lt=end_date),
-            **filter_kwargs,
-            opportunity_access__opportunity__is_test=False,
-            status=CompletedWorkStatus.approved,
-        )
-        .select_related("opportunity_access__opportunity__delivery_type")
-    )
+    visit_data = CompletedWork.objects.filter(
+        status_modified_date__gte=start_date,
+        status_modified_date__lt=end_date,
+        **filter_kwargs,
+        opportunity_access__opportunity__is_test=False,
+        status=CompletedWorkStatus.approved,
+    ).select_related("opportunity_access__opportunity__delivery_type")
     for v in visit_data:
         delivery_type_name = "All"
         if group_by_delivery_type and v.opportunity_access.opportunity.delivery_type:
