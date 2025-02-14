@@ -10,7 +10,7 @@ from commcare_connect.opportunity.tables import SumColumn
 class AdminReportTable(tables.Table):
     month = columns.Column(verbose_name="Month", footer="Total")
     delivery_type = columns.Column(verbose_name="Delivery Type")
-    users = SumColumn(verbose_name="Active Users")
+    users = SumColumn(verbose_name="Eligible Users")
     services = SumColumn(verbose_name="Verified Services")
     approved_payments = SumColumn(verbose_name="Acknowledged Payments")
     total_payments = SumColumn(verbose_name="Total Payments")
