@@ -39,8 +39,8 @@ from commcare_connect.opportunity.visit_import import (
     VisitData,
     _bulk_update_catchments,
     _bulk_update_completed_work_status,
-    _bulk_update_payments,
     _bulk_update_visit_status,
+    bulk_update_payments,
     get_data_by_visit_id,
     update_payment_accrued,
 )
@@ -318,7 +318,7 @@ def test_bulk_update_payments(opportunity: Opportunity):
             )
         )
 
-    payment_import_status = _bulk_update_payments(opportunity, dataset)
+    payment_import_status = bulk_update_payments(opportunity.pk, dataset.headers, list(dataset))
 
     assert payment_import_status.seen_users == {user.username for user in mobile_user_seen}
     assert payment_import_status.missing_users == {user.username for user in mobile_user_missing}
