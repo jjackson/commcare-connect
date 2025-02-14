@@ -44,6 +44,9 @@ def get_table_data_for_year_month(
         **filter_kwargs,
         opportunity_access__opportunity__is_test=False,
         status=CompletedWorkStatus.approved,
+        saved_approved_count__gt=0,
+        saved_payment_accrued_usd__gt=0,
+        saved_org_payment_accrued_usd__gt=0,
     ).select_related("opportunity_access__opportunity__delivery_type")
     for v in visit_data:
         delivery_type_name = "All"
