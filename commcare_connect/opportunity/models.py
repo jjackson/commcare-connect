@@ -418,7 +418,7 @@ class PaymentInvoice(models.Model):
     amount = models.PositiveIntegerField()
     date = models.DateField()
     invoice_number = models.CharField(max_length=50)
-    other_expense = models.BooleanField(default=False)
+    service_delivery = models.BooleanField(default=True)
 
     class Meta:
         unique_together = ("opportunity", "invoice_number")

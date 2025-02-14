@@ -458,8 +458,8 @@ class PaymentInvoiceTable(tables.Table):
     class Meta:
         model = PaymentInvoice
         orderable = False
-        fields = ("pk", "amount", "date", "invoice_number", "other_expense")
-        sequence = ("pk", "amount", "date", "invoice_number", "payment_status", "payment_date", "other_expense")
+        fields = ("pk", "amount", "date", "invoice_number", "service_delivery")
+        sequence = ("pk", "amount", "date", "invoice_number", "payment_status", "payment_date", "service_delivery")
         empty_text = "No Payment Invoices"
 
     def render_payment_status(self, value):
