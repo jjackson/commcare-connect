@@ -238,7 +238,6 @@ class OpportunityInitForm(forms.ModelForm):
         learn_app_domain = self.cleaned_data["learn_app_domain"]
         deliver_app_domain = self.cleaned_data["deliver_app_domain"]
 
-        self.instance.currency = self.cleaned_data["currency"].upper()
         self.instance.learn_app, _ = CommCareApp.objects.get_or_create(
             cc_app_id=learn_app["id"],
             cc_domain=learn_app_domain,
@@ -263,6 +262,7 @@ class OpportunityInitForm(forms.ModelForm):
         )
         self.instance.created_by = self.user.email
         self.instance.modified_by = self.user.email
+        self.instance.currency = self.instance.currency.upper()
 
         if self.managed_opp:
             self.instance.organization = self.cleaned_data.get("organization")
@@ -499,7 +499,8 @@ class OpportunityCreationForm(forms.ModelForm):
         learn_app_domain = self.cleaned_data["learn_app_domain"]
         deliver_app_domain = self.cleaned_data["deliver_app_domain"]
 
-        self.instance.currency = self.cleaned_data["currency"].upper()
+        self.instance.currency = self.instance.currency.upper()
+
         self.instance.learn_app, _ = CommCareApp.objects.get_or_create(
             cc_app_id=learn_app["id"],
             cc_domain=learn_app_domain,
