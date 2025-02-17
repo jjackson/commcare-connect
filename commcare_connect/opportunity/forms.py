@@ -848,7 +848,7 @@ class FormJsonValidationRulesForm(forms.ModelForm):
 class PaymentInvoiceForm(forms.ModelForm):
     class Meta:
         model = PaymentInvoice
-        fields = ("amount", "date", "invoice_number")
+        fields = ("amount", "date", "invoice_number", "service_delivery")
         widgets = {"date": forms.DateInput(attrs={"type": "date", "class": "form-control"})}
 
     def __init__(self, *args, **kwargs):
@@ -860,6 +860,7 @@ class PaymentInvoiceForm(forms.ModelForm):
             Row(Field("amount")),
             Row(Field("date")),
             Row(Field("invoice_number")),
+            Row(Field("service_delivery")),
         )
         self.helper.form_tag = False
 
