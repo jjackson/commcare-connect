@@ -184,7 +184,7 @@ class AggregateColumn(columns.Column):
 
 class SumColumn(columns.Column):
     def render_footer(self, bound_column, table):
-        return sum(getattr(x, bound_column.accessor) or 0 for x in table.data)
+        return sum(bound_column.accessor.resolve(row) or 0 for row in table.data)
 
 
 class BooleanAggregateColumn(columns.BooleanColumn, AggregateColumn):
@@ -510,7 +510,8 @@ class PaymentInvoiceTable(tables.Table):
     class Meta:
         model = PaymentInvoice
         orderable = False
-        fields = ("pk", "amount", "date", "invoice_number")
+        fields = ("pk", "amount", "date", "invoice_number", "service_delivery")
+        sequence = ("pk", "amount", "date", "invoice_number", "payment_status", "payment_date", "service_delivery")
         empty_text = "No Payment Invoices"
 
     def render_payment_status(self, value):

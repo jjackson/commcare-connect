@@ -1,6 +1,7 @@
 import datetime
 import json
 
+from django.db.models import Sum
 from django.utils.encoding import force_str
 from flatten_dict import flatten
 from tablib import Dataset
@@ -98,12 +99,29 @@ def _schema_sort(item):
 
 
 def export_empty_payment_table(opportunity: Opportunity) -> Dataset:
-    headers = ["Username", "Phone Number", "Name", "Payment Amount"]
+    headers = [
+        "Username",
+        "Phone Number",
+        "Name",
+        "Payment Amount",
+        "Payment Date (YYYY-MM-DD)",
+    ]
     dataset = Dataset(title="Export", headers=headers)
 
-    access_objects = OpportunityAccess.objects.filter(opportunity=opportunity, suspended=False).select_related("user")
+    access_objects = (
+        OpportunityAccess.objects.filter(opportunity=opportunity, suspended=False)
+        .select_related("user")
+        .annotate(total_payments=Sum("payment__amount"))
+    )
+
     for access in access_objects:
-        row = (access.user.username, access.user.phone_number, access.user.name, "")
+        row = (
+            access.user.username,
+            access.user.phone_number,
+            access.user.name,
+            "",
+            "",
+        )
         dataset.append(row)
     return dataset
 

@@ -30,8 +30,30 @@ DATABASES = {
         default="postgres:///commcare_connect",
     ),
 }
+
+# DATABASES staging/production
+# ------------------------------------------------------------------------------
+if env("RDS_HOSTNAME", default=None):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": env("RDS_DB_NAME"),
+            "USER": env("RDS_USERNAME"),
+            "PASSWORD": env("RDS_PASSWORD"),
+            "HOST": env("RDS_HOSTNAME"),
+            "PORT": env("RDS_PORT"),
+        }
+    }
+
+SECONDARY_DB_ALIAS = None
+if env("SECONDARY_DATABASE_URL", default=None):
+    SECONDARY_DB_ALIAS = "secondary"
+    DATABASES[SECONDARY_DB_ALIAS] = env.db("SECONDARY_DATABASE_URL")
+    DATABASE_ROUTERS = ["commcare_connect.multidb.db_router.ConnectDatabaseRouter"]
+
 DATABASES["default"]["ATOMIC_REQUESTS"] = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
 
 # URLS
 # ------------------------------------------------------------------------------
@@ -70,6 +92,7 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     "commcare_connect.commcarehq_provider",
     "commcare_connect.form_receiver",
+    "commcare_connect.multidb",
     "commcare_connect.opportunity",
     "commcare_connect.organization",
     "commcare_connect.program",
@@ -125,7 +148,6 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "commcare_connect.utils.middleware.CustomErrorHandlingMiddleware",
     "commcare_connect.utils.middleware.CurrentVersionMiddleware",
-    "commcare_connect.utils.middleware.SentryContextMiddleware",
 ]
 
 # STATIC

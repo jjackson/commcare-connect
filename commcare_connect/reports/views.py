@@ -1,3 +1,4 @@
+import calendar
 from datetime import date, datetime, timedelta
 
 import django_filters
@@ -14,12 +15,22 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils.functional import cached_property
+from django.utils.timezone import now
 from django.views.decorators.http import require_GET
 from django_filters.views import FilterView
 
 from commcare_connect.cache import quickcache
-from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, DeliveryType, Payment, UserVisit
+from commcare_connect.opportunity.models import (
+    CompletedWork,
+    CompletedWorkStatus,
+    DeliveryType,
+    Opportunity,
+    Payment,
+    UserVisit,
+)
 from commcare_connect.organization.models import Organization
+from commcare_connect.program.models import Program
+from commcare_connect.reports.helpers import get_table_data_for_year_month
 from commcare_connect.reports.queries import get_visit_map_queryset
 
 from .tables import AdminReportTable
@@ -37,7 +48,7 @@ def _increment(quarter):
     return (year, q)
 
 
-def _get_quarters_since_start():
+def get_quarters_since_start():
     today = date.today()
     current_quarter = (today.year, (today.month - 1) // 3 + 1)
     quarters = []
@@ -48,8 +59,8 @@ def _get_quarters_since_start():
     return quarters
 
 
-@quickcache(["quarter", "delivery_type", "group_by_delivery_type"], timeout=12 * 60 * 60)
-def _get_table_data_for_quarter(quarter, delivery_type, group_by_delivery_type=False):
+@quickcache(["quarter", "delivery_type", "group_by_delivery_type"], timeout=23 * 60 * 60)
+def get_table_data_for_quarter(quarter, delivery_type, group_by_delivery_type=False):
     if delivery_type:
         delivery_type_filter = Q(opportunity_access__opportunity__delivery_type__slug=delivery_type)
     else:
@@ -179,7 +190,7 @@ class DashboardFilters(django_filters.FilterSet):
     )
     to_date = django_filters.DateTimeFilter(
         widget=forms.DateInput(attrs={"type": "date"}),
-        field_name="visit_date",
+        field_name="visit_date__date",
         lookup_expr="lte",
         label="To Date",
         required=False,
@@ -240,9 +251,7 @@ def program_dashboard_report(request):
 def visit_map_data(request):
     filterset = DashboardFilters(request.GET)
 
-    # Use the filtered queryset to calculate stats
-
-    queryset = UserVisit.objects.all()
+    queryset = UserVisit.objects.filter(opportunity__is_test=False)
     if filterset.is_valid():
         queryset = filterset.filter_queryset(queryset)
 
@@ -300,32 +309,56 @@ class SuperUserRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
 
 
 class DeliveryReportFilters(django_filters.FilterSet):
-    delivery_type = django_filters.ChoiceFilter(method="filter_by_ignore")
-    year = django_filters.ChoiceFilter(method="filter_by_ignore")
-    quarter = django_filters.ChoiceFilter(
-        choices=[(1, "Q1"), (2, "Q2"), (3, "Q3"), (4, "Q4")], label="Quarter", method="filter_by_ignore"
+    delivery_type = django_filters.ChoiceFilter(
+        choices=DeliveryType.objects.values_list("slug", "name"),
+        label="Delivery Type",
+    )
+    year = django_filters.ChoiceFilter(
+        choices=[(year, str(year)) for year in range(2023, datetime.now().year + 1)],
+        label="Year",
+    )
+    month = django_filters.ChoiceFilter(
+        choices=list(enumerate(calendar.month_name))[1:],
+        label="month",
     )
     by_delivery_type = django_filters.BooleanFilter(
-        widget=forms.CheckboxInput(), label="Break up by delivery type", method="filter_by_ignore"
+        widget=forms.CheckboxInput(),
+        label="Break up by delivery type",
+    )
+    program = django_filters.ModelChoiceFilter(
+        queryset=Program.objects.all(),
+        label="Program",
+    )
+    network_manager = django_filters.ModelChoiceFilter(
+        queryset=Organization.objects.filter(program_manager=False),
+        label="Network Manager",
+    )
+    opportunity = django_filters.ModelChoiceFilter(
+        queryset=Opportunity.objects.filter(is_test=False),
+        label="Opportunity",
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        current_year = datetime.now().year
-        year_choices = [(year, str(year)) for year in range(2023, current_year + 1)]
-        self.filters["year"] = django_filters.ChoiceFilter(
-            choices=year_choices, label="Year", method="filter_by_ignore"
+        self.form.helper = FormHelper()
+        self.form.helper.form_class = "form-inline"
+        self.form.helper.layout = Layout(
+            Row(
+                Column("program", css_class="col-md-4"),
+                Column("network_manager", css_class="col-md-4"),
+                Column("opportunity", css_class="col-md-4"),
+            ),
+            Row(
+                Column("delivery_type", css_class="col-md-4"),
+                Column("year", css_class="col-md-4"),
+                Column("month", css_class="col-md-4"),
+            ),
+            Row(Column("by_delivery_type", css_class="col-md-4")),
         )
-
-        delivery_types = DeliveryType.objects.values_list("slug", "name")
-        self.filters["delivery_type"] = django_filters.ChoiceFilter(choices=delivery_types, label="Delivery Type")
-
-    def filter_by_ignore(self, queryset, name, value):
-        return queryset
 
     class Meta:
         model = None
-        fields = ["delivery_type", "year", "quarter", "by_delivery_type"]
+        fields = ["delivery_type", "year", "month", "by_delivery_type", "program", "network_manager", "opportunity"]
         unknown_field_behavior = django_filters.UnknownFieldBehavior.IGNORE
 
 
@@ -352,47 +385,53 @@ class DeliveryStatsReportView(tables.SingleTableMixin, SuperUserRequiredMixin, N
 
     def get_template_names(self):
         if self.request.htmx:
-            template_name = "reports/htmx_table.html"
-        else:
-            template_name = "reports/report_table.html"
+            return ["reports/htmx_table.html"]
+        return ["reports/report_table.html"]
 
-        return template_name
-
-    def get_context_data(self, *args, **kwargs):
+    def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["report_url"] = reverse("reports:delivery_stats_report")
         return context
 
     @cached_property
     def filter_values(self):
-        if not self.filterset.form.is_valid():
-            return None
-        else:
-            return self.filterset.form.cleaned_data
+        filters = {
+            "year": now().year,
+            "month": None,
+            "delivery_type": None,
+            "by_delivery_type": None,
+            "program": None,
+            "network_manager": None,
+            "opportunity": None,
+        }
+        if self.filterset.form.is_valid():
+            filters.update(self.filterset.form.cleaned_data)
+        return filters
 
     @property
     def object_list(self):
-        table_data = []
-        if not self.filter_values:
-            return []
-
         delivery_type = self.filter_values["delivery_type"]
-        year = int(self.filter_values["year"])
-        quarter = self.filter_values["quarter"]
         group_by_delivery_type = self.filter_values["by_delivery_type"]
+        year = int(self.filter_values["year"]) if self.filter_values["year"] else now().year
+        month = int(self.filter_values["month"]) if self.filter_values["month"] else None
+        program = self.filter_values["program"]
+        network_manager = self.filter_values["network_manager"]
+        opportunity = self.filter_values["opportunity"]
 
-        if not year:
-            quarters = _get_quarters_since_start()
-        elif year:
-            if quarter:
-                quarters = [(year, int(quarter))]
-            else:
-                quarters = [(year, q) for q in range(1, 5)]
+        if year and month:
+            return get_table_data_for_year_month(
+                year, month, delivery_type, group_by_delivery_type, program, network_manager, opportunity
+            )
 
-        for q in quarters:
-            data = _get_table_data_for_quarter(q, delivery_type, group_by_delivery_type)
-            table_data += data
-        return table_data
+        data = []
+        for m in range(1, 13):
+            # break if filtering future dates
+            if year == now().year and now().month < m:
+                break
+            data += get_table_data_for_year_month(
+                year, m, delivery_type, group_by_delivery_type, program, network_manager, opportunity
+            )
+        return data
 
 
 @login_required
@@ -401,22 +440,70 @@ def dashboard_stats_api(request):
     filterset = DashboardFilters(request.GET)
 
     # Use the filtered queryset to calculate stats
-    queryset = UserVisit.objects.all()
+    visit_queryset = UserVisit.objects.filter(opportunity__is_test=False)
+    flw_payment_queryset = Payment.objects.filter(opportunity_access__opportunity__is_test=False)
+    org_payment_queryset = Payment.objects.filter(invoice__opportunity__is_test=False)
+    completed_work_queryset = CompletedWork.objects.filter(opportunity_access__opportunity__is_test=False)
     if filterset.is_valid():
-        queryset = filterset.filter_queryset(queryset)
+        visit_queryset = filterset.filter_queryset(visit_queryset)
+        raw_filters = filterset.form.cleaned_data
+        program = raw_filters.get("program")
+        organization = raw_filters.get("organization")
+        from_date = raw_filters.get("from_date")
+        to_date = raw_filters.get("to_date")
+
+        if program:
+            flw_payment_queryset = flw_payment_queryset.filter(opportunity_access__opportunity__delivery_type=program)
+            org_payment_queryset = org_payment_queryset.filter(invoice__opportunity__delivery_type=program)
+            completed_work_queryset = completed_work_queryset.filter(
+                opportunity_access__opportunity__delivery_type=program
+            )
+        if organization:
+            flw_payment_queryset = flw_payment_queryset.filter(
+                opportunity_access__opportunity__organization=organization
+            )
+            org_payment_queryset = org_payment_queryset.filter(invoice__opportunity__organization=organization)
+            completed_work_queryset = completed_work_queryset.filter(
+                opportunity_access__opportunity__organization=organization
+            )
+        if from_date:
+            flw_payment_queryset = flw_payment_queryset.filter(date_paid__gt=from_date)
+            org_payment_queryset = org_payment_queryset.filter(date_paid__gt=from_date)
+            # todo: is this the right date to use here?
+            completed_work_queryset = completed_work_queryset.filter(status_modified_date__gt=from_date)
+        if to_date:
+            flw_payment_queryset = flw_payment_queryset.filter(date_paid__date__lte=to_date)
+            org_payment_queryset = org_payment_queryset.filter(date_paid__date__lte=to_date)
+            completed_work_queryset = completed_work_queryset.filter(status_modified_date__date__lte=to_date)
 
     # Example stats calculation (adjust based on your needs)
-    active_users = queryset.values("opportunity_access__user").distinct().count()
-    total_visits = queryset.count()
-    verified_visits = queryset.filter(status=CompletedWorkStatus.approved).count()
+    active_users = visit_queryset.values("opportunity_access__user").distinct().count()
+    total_visits = visit_queryset.count()
+    verified_visits = visit_queryset.filter(status=CompletedWorkStatus.approved).count()
     percent_verified = round(float(verified_visits / total_visits) * 100, 1) if total_visits > 0 else 0
+
+    total_flw_earnings_usd = (
+        completed_work_queryset.aggregate(Sum("saved_payment_accrued_usd"))["saved_payment_accrued_usd__sum"] or 0
+    )
+    org_earnings_usd = (
+        completed_work_queryset.aggregate(Sum("saved_org_payment_accrued_usd"))["saved_org_payment_accrued_usd__sum"]
+        or 0
+    )
+    # org earnings include their share and the money they pass through to FLWs
+    total_org_earnings_usd = org_earnings_usd + total_flw_earnings_usd
+    total_flw_payments_usd = flw_payment_queryset.aggregate(Sum("amount_usd"))["amount_usd__sum"] or 0
+    total_org_payments_usd = org_payment_queryset.aggregate(Sum("amount_usd"))["amount_usd__sum"] or 0
 
     return JsonResponse(
         {
-            "total_visits": total_visits,
-            "active_users": active_users,
-            "verified_visits": verified_visits,
+            "total_visits": f"{total_visits:,}",
+            "active_users": f"{active_users:,}",
+            "verified_visits": f"{verified_visits:,}",
             "percent_verified": f"{percent_verified:.1f}%",
+            "total_flw_earnings_usd": f"${'{:,.0f}'.format(total_flw_earnings_usd)}",
+            "total_org_earnings_usd": f"${'{:,.0f}'.format(total_org_earnings_usd)}",
+            "total_flw_payments_usd": f"${'{:,.0f}'.format(total_flw_payments_usd)}",
+            "total_org_payments_usd": f"${'{:,.0f}'.format(total_org_payments_usd)}",
         }
     )
 
@@ -425,7 +512,7 @@ def dashboard_stats_api(request):
 @user_passes_test(lambda u: u.is_superuser)
 def dashboard_charts_api(request):
     filterset = DashboardFilters(request.GET)
-    queryset = UserVisit.objects.all()
+    queryset = UserVisit.objects.filter(opportunity__is_test=False)
     # Use the filtered queryset if available, else use last 30 days
     if filterset.is_valid():
         queryset = filterset.filter_queryset(queryset)
