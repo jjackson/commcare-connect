@@ -95,6 +95,4 @@ class ManagedOpportunityInitForm(OpportunityInitForm):
     def save(self, commit=True):
         self.instance.program = self.program
         self.instance.currency = self.program.currency
-        print("#####")
-        print(self.instance.currency)
         return super().save(commit=commit)
