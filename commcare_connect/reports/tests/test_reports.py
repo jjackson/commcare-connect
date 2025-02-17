@@ -1,5 +1,5 @@
-import datetime
 import math
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from factory.faker import Faker
@@ -10,9 +10,12 @@ from commcare_connect.opportunity.tests.factories import (
     CompletedWorkFactory,
     DeliverUnitFactory,
     OpportunityAccessFactory,
+    PaymentFactory,
+    PaymentInvoiceFactory,
     PaymentUnitFactory,
     UserVisitFactory,
 )
+from commcare_connect.reports.helpers import get_table_data_for_year_month
 from commcare_connect.reports.views import _results_to_geojson, get_table_data_for_quarter
 
 
@@ -40,28 +43,137 @@ def test_delivery_stats(opportunity: Opportunity):
                     status=VisitValidationStatus.approved.value,
                     opportunity_access=access,
                     completed_work=completed_work,
-                    visit_date=Faker("date_time_this_month", tzinfo=datetime.UTC),
+                    visit_date=Faker("date_time_this_month", tzinfo=UTC),
                 )
 
-    quarter = math.ceil(datetime.datetime.utcnow().month / 12 * 4)
+    quarter = math.ceil(datetime.utcnow().month / 12 * 4)
 
     # delivery_type filter not applied
-    all_data = get_table_data_for_quarter((datetime.datetime.utcnow().year, quarter), None)
+    all_data = get_table_data_for_quarter((datetime.now().year, quarter), None)
     assert all_data[0]["users"] == 5
     assert all_data[0]["services"] == 10
     assert all_data[0]["beneficiaries"] == 10
 
     # test delivery_type filter
-    filtered_data = get_table_data_for_quarter(
-        (datetime.datetime.utcnow().year, quarter), opportunity.delivery_type.slug
-    )
+    filtered_data = get_table_data_for_quarter((datetime.now().year, quarter), opportunity.delivery_type.slug)
     assert filtered_data == all_data
 
     # unknown delivery-type should have no data
-    unknown_delivery_type_data = get_table_data_for_quarter((datetime.datetime.utcnow().year, quarter), "unknown")
+    unknown_delivery_type_data = get_table_data_for_quarter((datetime.now().year, quarter), "unknown")
     assert unknown_delivery_type_data[0]["users"] == 0
     assert unknown_delivery_type_data[0]["services"] == 0
     assert unknown_delivery_type_data[0]["beneficiaries"] == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "year, month, delivery_type",
+    [
+        (None, None, None),
+        (datetime.now().year, None, None),
+        (datetime.now().year, datetime.now().month, None),
+    ],
+)
+def test_get_table_data_for_year_month(year, month, delivery_type):
+    now = datetime.now(UTC)
+    users = MobileUserFactory.create_batch(10)
+    for i, user in enumerate(users):
+        access = OpportunityAccessFactory(
+            user=user,
+            opportunity__is_test=False,
+            opportunity__delivery_type__name=f"Delivery Type {(i % 2) + 1}",
+        )
+        cw = CompletedWorkFactory(
+            status_modified_date=now - timedelta(3),
+            opportunity_access=access,
+            status=CompletedWorkStatus.approved,
+            saved_approved_count=1,
+            saved_payment_accrued_usd=i * 100,
+            saved_org_payment_accrued_usd=100,
+            payment_date=now,
+        )
+        UserVisitFactory(
+            visit_date=now - timedelta(i * 10),
+            opportunity_access=access,
+            completed_work=cw,
+            status=VisitValidationStatus.approved,
+        )
+        PaymentFactory(opportunity_access=access, date_paid=now, amount_usd=i * 100, confirmed=True)
+        inv = PaymentInvoiceFactory(opportunity=access.opportunity, amount=100)
+        PaymentFactory(invoice=inv, date_paid=now, amount_usd=100)
+        other_inv = PaymentInvoiceFactory(opportunity=access.opportunity, amount=100, service_delivery=False)
+        PaymentFactory(invoice=other_inv, date_paid=now, amount_usd=100)
+    data = get_table_data_for_year_month(year, month, delivery_type)
+
+    assert len(data)
+    for row in data:
+        assert row["month"][1] == datetime.now().year
+        assert row["users"] == 9
+        assert row["services"] == 9
+        assert row["avg_time_to_payment"] == 50
+        assert 0 <= row["max_time_to_payment"] <= 90
+        assert row["flw_amount_earned"] == 4500
+        assert row["flw_amount_paid"] == 4500
+        assert row["nm_amount_earned"] == 5400
+        assert row["nm_amount_paid"] == 1000
+        assert row["nm_other_amount_paid"] == 1000
+        assert row["avg_top_paid_flws"] == 1700
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "year, month, delivery_type",
+    [
+        (None, None, None),
+        (datetime.now().year, datetime.now().month, "delivery_1"),
+        (datetime.now().year, datetime.now().month, "delivery_2"),
+    ],
+)
+def test_get_table_data_for_year_month_by_delivery_type(year, month, delivery_type):
+    now = datetime.now(UTC)
+    delivery_type_slugs = ["delivery_1", "delivery_2"]
+    for slug in delivery_type_slugs:
+        users = MobileUserFactory.create_batch(5)
+        for i, user in enumerate(users):
+            access = OpportunityAccessFactory(
+                user=user,
+                opportunity__is_test=False,
+                opportunity__delivery_type__slug=slug,
+                opportunity__delivery_type__name=slug,
+            )
+            cw = CompletedWorkFactory(
+                status_modified_date=now - timedelta(3),
+                opportunity_access=access,
+                status=CompletedWorkStatus.approved,
+                saved_approved_count=1,
+                saved_payment_accrued_usd=i * 100,
+                saved_org_payment_accrued_usd=100,
+                payment_date=now,
+            )
+            UserVisitFactory(
+                visit_date=now - timedelta(i * 10),
+                opportunity_access=access,
+                completed_work=cw,
+                status=VisitValidationStatus.approved,
+            )
+            PaymentFactory(opportunity_access=access, date_paid=now, amount_usd=i * 100, confirmed=True)
+            inv = PaymentInvoiceFactory(opportunity=access.opportunity, amount=100)
+            PaymentFactory(invoice=inv, date_paid=now, amount_usd=100)
+    data = get_table_data_for_year_month(year, month, delivery_type, group_by_delivery_type=True)
+
+    assert len(data)
+    for row in data:
+        assert row["delivery_type"] in delivery_type_slugs
+        assert row["month"][1] == datetime.now().year
+        assert row["users"] == 4
+        assert row["services"] == 4
+        assert row["avg_time_to_payment"] == 25
+        assert row["max_time_to_payment"] == 40
+        assert row["flw_amount_earned"] == 1000
+        assert row["flw_amount_paid"] == 1000
+        assert row["nm_amount_earned"] == 1400
+        assert row["nm_amount_paid"] == 500
+        assert row["avg_top_paid_flws"] == 400
 
 
 def test_results_to_geojson():
