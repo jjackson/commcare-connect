@@ -2,10 +2,10 @@ import datetime
 from copy import deepcopy
 from datetime import timedelta
 from http import HTTPStatus
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from django.db import IntegrityError
 from django.utils.timezone import now
 from rest_framework.test import APIClient
 
@@ -139,11 +139,12 @@ def test_form_receiver_multiple_module_submissions(
         ).exists()
 
     # Test integrity error for duplicate submissions keeping the id same.
-    with pytest.raises(IntegrityError) as exc:
+    with patch("commcare_connect.form_receiver.views.logger") as mock_logger:
         form_json = _get_form_json(opportunity.learn_app, modules[0].id, modules[0].json)
         form_json["received_on"] = past_date
-        make_request(api_client, form_json, mobile_user_with_connect_link)
-        assert "unique_xform_completed_module" in str(exc.value)
+        make_request(api_client, form_json, mobile_user_with_connect_link, HTTPStatus.OK)
+        xform_id = form_json["id"]
+        mock_logger.info.assert_any_call(f"Learn Module is already completed with form ID: {xform_id}.")
 
 
 @pytest.mark.django_db
