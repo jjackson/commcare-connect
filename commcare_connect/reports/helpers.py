@@ -68,8 +68,12 @@ def get_table_data_for_year_month(
             service_count=Sum("saved_approved_count", default=0),
             flw_amount_earned=Sum("saved_payment_accrued_usd", default=0),
             nm_amount_earned=Sum(F("saved_org_payment_accrued_usd") + F("saved_payment_accrued_usd"), default=0),
-            avg_time_to_payment=Avg(time_to_payment, default=timedelta(days=0)),
-            max_time_to_payment=Max(time_to_payment, default=timedelta(days=0)),
+            avg_time_to_payment=Avg(
+                time_to_payment, default=timedelta(days=0), filter=Q(payment_date__gte=F("date_created"))
+            ),
+            max_time_to_payment=Max(
+                time_to_payment, default=timedelta(days=0), filter=Q(payment_date__gte=F("date_created"))
+            ),
         )
     )
 
