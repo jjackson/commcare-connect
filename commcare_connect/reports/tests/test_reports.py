@@ -90,7 +90,7 @@ def test_get_table_data_for_year_month(year, month, delivery_type):
             saved_approved_count=1,
             saved_payment_accrued_usd=i * 100,
             saved_org_payment_accrued_usd=100,
-            payment_date=now,
+            payment_date=now + timedelta(minutes=1),
         )
         UserVisitFactory(
             visit_date=now - timedelta(i * 10),
@@ -148,7 +148,7 @@ def test_get_table_data_for_year_month_by_delivery_type(year, month, delivery_ty
                 saved_approved_count=1,
                 saved_payment_accrued_usd=i * 100,
                 saved_org_payment_accrued_usd=100,
-                payment_date=now,
+                payment_date=now + timedelta(minutes=1),
             )
             UserVisitFactory(
                 visit_date=now - timedelta(i * 10),
