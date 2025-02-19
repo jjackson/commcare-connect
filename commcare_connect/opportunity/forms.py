@@ -636,8 +636,6 @@ class AddBudgetExistingUsersForm(forms.Form):
         if self.opportunity.managed:
             # NM cannot increase the opportunity budget they can only
             # assign new visits if the opportunity has remaining budget.
-            print("budget_increase", budget_increase)
-            print("self.opportunity.remaining_budget", self.opportunity.remaining_budget)
             if budget_increase > self.opportunity.remaining_budget:
                 raise forms.ValidationError({"additional_visits": "Additional visits exceed the opportunity budget."})
 

@@ -449,15 +449,12 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
     opportunity_access = OpportunityAccess.objects.filter(opportunity=opportunity)
     opportunity_claims = OpportunityClaim.objects.filter(opportunity_access__in=opportunity_access)
 
-    if request.method == "POST":
-        form = AddBudgetExistingUsersForm(
-            opportunity_claims=opportunity_claims, opportunity=opportunity, data=request.POST
-        )
-        if form.is_valid():
-            form.save()
-            return redirect("opportunity:detail", org_slug, pk)
-    else:
-        form = AddBudgetExistingUsersForm(opportunity_claims=opportunity_claims, opportunity=opportunity)
+    form = AddBudgetExistingUsersForm(
+        opportunity_claims=opportunity_claims, opportunity=opportunity, data=request.POST or None
+    )
+    if form.is_valid():
+        form.save()
+        return redirect("opportunity:detail", org_slug, pk)
 
     return render(
         request,
