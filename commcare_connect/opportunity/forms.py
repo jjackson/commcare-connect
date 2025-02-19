@@ -634,18 +634,12 @@ class AddBudgetExistingUsersForm(forms.Form):
         budget_increase = sum((ocl.payment_unit.amount + org_pay) * additional_visits for ocl in claims)
 
         if self.opportunity.managed:
-            managed_opp = self.opportunity.managedopportunity
-            program = managed_opp.program
-
-            budget_used = (
-                ManagedOpportunity.objects.filter(program=program)
-                .exclude(id=managed_opp.id)
-                .aggregate(total=Sum("total_budget"))["total"]
-                or 0
-            )
-
-            if budget_used + self.opportunity.total_budget + budget_increase > program.budget:
-                raise forms.ValidationError({"additional_visits": "Additional visits exceed the program budget."})
+            # NM cannot increase the opportunity budget they can only
+            # assign new visits if the opportunity has remaining budget.
+            print("budget_increase", budget_increase)
+            print("self.opportunity.remaining_budget", self.opportunity.remaining_budget)
+            if budget_increase > self.opportunity.remaining_budget:
+                raise forms.ValidationError({"additional_visits": "Additional visits exceed the opportunity budget."})
 
         return budget_increase
 
@@ -657,8 +651,10 @@ class AddBudgetExistingUsersForm(forms.Form):
         if additional_visits:
             claims = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
             claims.update(max_visits=F("max_visits") + additional_visits)
-            self.opportunity.total_budget += self.budget_increase
-            self.opportunity.save()
+
+            if not self.opportunity.managed:
+                self.opportunity.total_budget += self.budget_increase
+                self.opportunity.save()
 
         if end_date:
             OpportunityClaim.objects.filter(pk__in=selected_users).update(end_date=end_date)
