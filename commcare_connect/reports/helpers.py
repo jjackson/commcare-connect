@@ -23,6 +23,7 @@ def get_table_data_for_year_month(
     program=None,
     network_manager=None,
     opportunity=None,
+    country_currency=None,
 ):
     year = year or datetime.now().year
     _, month_end = calendar.monthrange(year, month or 1)
@@ -43,6 +44,9 @@ def get_table_data_for_year_month(
     if opportunity:
         filter_kwargs.update({"opportunity_access__opportunity": opportunity})
         filter_kwargs_nm.update({"invoice__opportunity": opportunity})
+    if country_currency:
+        filter_kwargs.update({"opportunity_access__opportunity__currency": country_currency})
+        filter_kwargs_nm.update({"invoice__opportunity__currency": country_currency})
 
     data = []
 
