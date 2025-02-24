@@ -658,6 +658,85 @@ class AddBudgetExistingUsersForm(forms.Form):
             OpportunityClaim.objects.filter(pk__in=selected_users).update(end_date=end_date)
 
 
+class AddBudgetNewUsersForm(forms.Form):
+    add_users = forms.IntegerField(
+        required=False,
+        label="Number Of Users",
+        help_text="New Budget = Existing Budget + ∑ (Amount × Max Total × No. of Users) across all payment units.",
+    )
+    total_budget = forms.IntegerField(
+        required=False,
+        label="Opportunity Total Budget",
+        help_text="Set a new total budget or leave empty if adding users.",
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.opportunity = kwargs.pop("opportunity", None)
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("add_users")),
+            Row(Field("total_budget")),
+            Submit(name="submit", value="Submit"),
+        )
+
+        self.fields["total_budget"].initial = self.opportunity.total_budget
+
+    def clean(self):
+        cleaned_data = super().clean()
+        add_users = cleaned_data.get("add_users")
+        total_budget = cleaned_data.get("total_budget")
+
+        if add_users and total_budget and total_budget != self.opportunity.total_budget:
+            raise forms.ValidationError("You can only enter either 'Number of Users' or 'Total Budget', not both.")
+
+        self.budget_increase = self._validate_budget(add_users, total_budget)
+
+        return cleaned_data
+
+    def _validate_budget(self, add_users, total_budget):
+        increased_budget = 0
+        total_program_budget = 0
+        claimed_program_budget = 0
+        org_pay = 0
+
+        if self.opportunity.managed:
+            manage_opp = self.opportunity.managedopportunity
+            org_pay = manage_opp.org_pay_per_visit
+            program = manage_opp.program
+            total_program_budget = program.budget
+            claimed_program_budget = (
+                ManagedOpportunity.objects.filter(program=program)
+                .exclude(id=manage_opp.id)
+                .aggregate(total=Sum("total_budget"))["total"]
+                or 0
+            )
+
+        if add_users:
+            for payment_unit in self.opportunity.paymentunit_set.all():
+                increased_budget += (payment_unit.amount + org_pay) * payment_unit.max_total * add_users
+            if (
+                self.opportunity.managed
+                and self.opportunity.total_budget + increased_budget + claimed_program_budget > total_program_budget
+            ):
+                raise forms.ValidationError({"add_users": "Budget exceeds program budget."})
+        else:
+            if total_budget < self.opportunity.claimed_budget:
+                raise forms.ValidationError({"total_budget": "Total budget cannot be lesser than claimed budget."})
+
+            if self.opportunity.managed and total_budget + claimed_program_budget > total_program_budget:
+                raise forms.ValidationError({"total_budget": "Total budget exceeds program budget."})
+
+            increased_budget = total_budget - self.opportunity.total_budget
+
+        return increased_budget
+
+    def save(self):
+        self.opportunity.total_budget += self.budget_increase
+        self.opportunity.save()
+
+
 class PaymentUnitForm(forms.ModelForm):
     class Meta:
         model = PaymentUnit
