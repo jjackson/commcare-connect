@@ -113,8 +113,8 @@ class UserVisitTable(OrgContextTable):
     )
     reason = columns.Column("Rejected Reason", accessor="reason", visible=False)
     justification = columns.Column("Justification", accessor="justification", visible=False)
-    entity_id = columns.Column("Entity ID", accessor="entity_id", visible=False)
     duration = columns.Column("Duration", accessor="duration", visible=False)
+    entity_id = columns.Column("Entity ID", accessor="entity_id", visible=False)
 
     deliver_unit = columns.Column("Unit Name", accessor="deliver_unit__name")
     entity_name = columns.Column("Entity Name", accessor="entity_name")
