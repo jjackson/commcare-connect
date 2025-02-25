@@ -147,6 +147,7 @@ class UserVisitTable(OrgContextTable):
         empty_text = "No forms."
         orderable = False
         row_attrs = {"class": show_warning}
+        template_name = "django_tables2/bootstrap5.html"
 
 
 class OpportunityPaymentTable(OrgContextTable):
@@ -476,6 +477,7 @@ class UserVisitReviewTable(OrgContextTable):
             "user_visit",
         )
         empty_text = "No visits submitted for review."
+        template_name = "django_tables2/bootstrap5.html"
 
     def render_user_visit(self, record):
         url = reverse(
