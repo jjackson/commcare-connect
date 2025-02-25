@@ -131,13 +131,13 @@
       </div>
   </form>
     <div x-show="selectedOption === 'new' && !disableAddBudgeNewUsers" id="form-container">
+      <div id="loading-text" x-show="true">Loading...</div>
       <div
         x-init="$watch('selectedOption', value => {
          if (value === 'new' && !disableAddBudgeNewUsers) {
            htmx.ajax('GET', '{% url 'opportunity:add_budget_new_users' org_slug=request.org.slug pk=opportunity.pk %}', {target: '#form-container', swap: 'innerHTML'});
          }
        })">
-        Loading...
       </div>
     </div>
 
