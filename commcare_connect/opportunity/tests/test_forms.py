@@ -5,8 +5,14 @@ import random
 import pytest
 from factory.fuzzy import FuzzyDate, FuzzyText
 
-from commcare_connect.opportunity.forms import OpportunityChangeForm, OpportunityCreationForm
-from commcare_connect.opportunity.tests.factories import ApplicationFactory, CommCareAppFactory, OpportunityFactory
+from commcare_connect.opportunity.forms import AddBudgetNewUsersForm, OpportunityChangeForm, OpportunityCreationForm
+from commcare_connect.opportunity.tests.factories import (
+    ApplicationFactory,
+    CommCareAppFactory,
+    OpportunityFactory,
+    PaymentUnitFactory,
+)
+from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
 
 
 class TestOpportunityCreationForm:
@@ -305,3 +311,77 @@ class TestOpportunityChangeForm:
         data.update(data_updates)
         form = OpportunityChangeForm(data=data, instance=valid_opportunity, org_slug=organization.slug)
         assert form.is_valid() == expected_valid
+
+
+class TestAddBudgetNewUsersForm:
+    @pytest.fixture(
+        params=[
+            (5, 1, 2, 2, 200),  # amount, org_pay, max_total, total_user, program_budget
+        ]
+    )
+    def setup(self, request, program_manager_org, organization):
+        amount, org_pay, max_total, total_user, program_budget = request.param
+
+        self.budget_per_user = (amount + org_pay) * max_total  # 12
+        self.opp_total_budget_initially = total_user * self.budget_per_user  # 24
+
+        self.program = ProgramFactory(organization=program_manager_org, budget=program_budget)
+        self.opportunity = ManagedOpportunityFactory(
+            program=self.program,
+            organization=organization,
+            total_budget=self.opp_total_budget_initially,
+            org_pay_per_visit=org_pay,
+            managed=True,
+        )
+        PaymentUnitFactory(opportunity=self.opportunity, max_total=max_total, amount=amount)
+
+    @pytest.mark.parametrize("num_new_users, expected_budget", [(3, 60), (5, 84)])
+    def test_valid_add_users(self, setup, num_new_users, expected_budget):
+        form_data = {"add_users": num_new_users}
+        form = AddBudgetNewUsersForm(data=form_data, opportunity=self.opportunity, program_manager=True)
+
+        assert form.is_valid()
+        form.save()
+        self.opportunity.refresh_from_db()
+        assert self.opportunity.total_budget == self.opp_total_budget_initially + (
+            num_new_users * self.budget_per_user
+        )
+
+    @pytest.mark.parametrize("num_new_users", [200, 500])
+    def test_exceeding_program_budget(self, setup, num_new_users):
+        form_data = {"add_users": num_new_users}
+        form = AddBudgetNewUsersForm(data=form_data, opportunity=self.opportunity, program_manager=True)
+
+        assert not form.is_valid()
+        assert "add_users" in form.errors
+        assert form.errors["add_users"][0] == "Budget exceeds program budget."
+
+    def test_missing_input(self, setup):
+        form_data = {}
+        form = AddBudgetNewUsersForm(data=form_data, opportunity=self.opportunity, program_manager=True)
+
+        assert not form.is_valid()
+        assert "Please provide either the number of users or a total budget." in form.errors["__all__"]
+
+    def test_non_program_manager_access(self, setup):
+        form_data = {"add_users": 2}
+        form = AddBudgetNewUsersForm(data=form_data, opportunity=self.opportunity, program_manager=False)
+
+        assert not form.is_valid()
+        assert "__all__" in form.errors
+        assert "Only program managers are allowed to add budgets for managed opportunities." in form.errors["__all__"]
+
+    @pytest.mark.parametrize("new_budget, is_valid", [(150, True), (201, False)])
+    def test_changing_total_budget(self, setup, new_budget, is_valid):
+        form_data = {"total_budget": new_budget}
+        form = AddBudgetNewUsersForm(data=form_data, opportunity=self.opportunity, program_manager=True)
+
+        if is_valid:
+            assert form.is_valid()
+            form.save()
+            self.opportunity.refresh_from_db()
+            assert self.opportunity.total_budget == new_budget
+        else:
+            assert not form.is_valid()
+            assert "total_budget" in form.errors
+            assert form.errors["total_budget"][0] == "Total budget exceeds program budget."
