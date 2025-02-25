@@ -701,7 +701,7 @@ class AddBudgetNewUsersForm(forms.Form):
 
         if add_users and total_budget and total_budget != self.opportunity.total_budget:
             raise forms.ValidationError(
-                "Only one field can be updated at a time: either 'Numbeclear of Users' or 'Total Budget'."
+                "Only one field can be updated at a time: either 'Number of Users' or 'Total Budget'."
             )
 
         self.budget_increase = self._validate_budget(add_users, total_budget)
