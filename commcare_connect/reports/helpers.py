@@ -23,6 +23,7 @@ def get_table_data_for_year_month(
     program=None,
     network_manager=None,
     opportunity=None,
+    country_currency=None,
 ):
     year = year or datetime.now().year
     _, month_end = calendar.monthrange(year, month or 1)
@@ -43,6 +44,9 @@ def get_table_data_for_year_month(
     if opportunity:
         filter_kwargs.update({"opportunity_access__opportunity": opportunity})
         filter_kwargs_nm.update({"invoice__opportunity": opportunity})
+    if country_currency:
+        filter_kwargs.update({"opportunity_access__opportunity__currency": country_currency})
+        filter_kwargs_nm.update({"invoice__opportunity__currency": country_currency})
 
     data = []
 
@@ -68,8 +72,12 @@ def get_table_data_for_year_month(
             service_count=Sum("saved_approved_count", default=0),
             flw_amount_earned=Sum("saved_payment_accrued_usd", default=0),
             nm_amount_earned=Sum(F("saved_org_payment_accrued_usd") + F("saved_payment_accrued_usd"), default=0),
-            avg_time_to_payment=Avg(time_to_payment, default=timedelta(days=0)),
-            max_time_to_payment=Max(time_to_payment, default=timedelta(days=0)),
+            avg_time_to_payment=Avg(
+                time_to_payment, default=timedelta(days=0), filter=Q(payment_date__gte=F("date_created"))
+            ),
+            max_time_to_payment=Max(
+                time_to_payment, default=timedelta(days=0), filter=Q(payment_date__gte=F("date_created"))
+            ),
         )
     )
 
