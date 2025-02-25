@@ -477,16 +477,22 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
 @org_member_required
 def add_budget_new_users(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=pk)
-    form = AddBudgetNewUsersForm(opportunity=opportunity)
-    if request.method == "POST":
-        form = AddBudgetNewUsersForm(opportunity=opportunity, data=request.POST)
+    program_manager = (
+        getattr(request, "org_membership", None) and request.org_membership.is_program_manager
+    ) or request.user.is_superuser
 
-        if form.is_valid():
-            form.save()
-            redirect_url = reverse("opportunity:detail", args=[org_slug, pk])
-            response = HttpResponse()
-            response["HX-Redirect"] = redirect_url
-            return response
+    form = AddBudgetNewUsersForm(
+        opportunity=opportunity,
+        program_manager=program_manager,
+        data=request.POST or None,
+    )
+
+    if form.is_valid():
+        form.save()
+        redirect_url = reverse("opportunity:detail", args=[org_slug, pk])
+        response = HttpResponse()
+        response["HX-Redirect"] = redirect_url
+        return response
 
     csrf_token = get_token(request)
     form_html = f"""

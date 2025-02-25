@@ -672,6 +672,7 @@ class AddBudgetNewUsersForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity", None)
+        self.program_manager = kwargs.pop("program_manager", False)
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
@@ -688,8 +689,16 @@ class AddBudgetNewUsersForm(forms.Form):
         add_users = cleaned_data.get("add_users")
         total_budget = cleaned_data.get("total_budget")
 
+        if self.opportunity.managed and not self.program_manager:
+            raise forms.ValidationError("Only program managers are allowed to add budgets for managed opportunities.")
+
+        if not add_users and not total_budget:
+            raise forms.ValidationError("Please provide either the number of users or a total budget.")
+
         if add_users and total_budget and total_budget != self.opportunity.total_budget:
-            raise forms.ValidationError("You can only enter either 'Number of Users' or 'Total Budget', not both.")
+            raise forms.ValidationError(
+                "Only one field can be updated at a time: either 'Numbeclear of Users' or 'Total Budget'."
+            )
 
         self.budget_increase = self._validate_budget(add_users, total_budget)
 
