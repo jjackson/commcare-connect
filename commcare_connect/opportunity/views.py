@@ -234,10 +234,6 @@ class OpportunityEdit(OrganizationUserMemberRoleMixin, UpdateView):
         if users or filter_country or filter_credential:
             add_connect_users.delay(users, form.instance.id, filter_country, filter_credential)
 
-        additional_users = form.cleaned_data["additional_users"]
-        if additional_users:
-            for payment_unit in opportunity.paymentunit_set.all():
-                opportunity.total_budget += payment_unit.amount * payment_unit.max_total * additional_users
         end_date = form.cleaned_data["end_date"]
         if end_date:
             opportunity.end_date = end_date

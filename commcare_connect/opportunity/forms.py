@@ -103,9 +103,8 @@ class OpportunityChangeForm(
             Row(Field("delivery_type")),
             Row(Field("description")),
             Row(Field("short_description")),
-            Row(Field("currency")),
             Row(
-                Field("additional_users", wrapper_class="form-group col-md-6 mb-0"),
+                Field("currency", wrapper_class="form-group col-md-6 mb-0"),
                 Field("end_date", wrapper_class="form-group col-md-6 mb-0"),
             ),
             HTML("<hr />"),
@@ -120,9 +119,6 @@ class OpportunityChangeForm(
             Submit("submit", "Submit"),
         )
 
-        self.fields["additional_users"] = forms.IntegerField(
-            required=False, help_text="Adds budget for additional users."
-        )
         self.fields["end_date"] = forms.DateField(
             widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
             required=False,
@@ -130,6 +126,9 @@ class OpportunityChangeForm(
         )
         self.initial["end_date"] = self.instance.end_date.isoformat()
         self.currently_active = self.instance.active
+
+        if self.instance.managed:
+            self.fields["currency"].disabled = True
 
     def clean_active(self):
         active = self.cleaned_data["active"]

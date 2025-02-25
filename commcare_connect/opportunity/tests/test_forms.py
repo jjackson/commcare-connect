@@ -156,7 +156,6 @@ class TestOpportunityChangeForm:
             "currency": "EUR",
             "is_test": False,
             "delivery_type": valid_opportunity.delivery_type.id,
-            "additional_users": 5,
             "end_date": (datetime.date.today() + datetime.timedelta(days=60)).isoformat(),
             "users": "+1234567890\n+9876543210",
             "filter_country": "US",
@@ -173,7 +172,6 @@ class TestOpportunityChangeForm:
             "currency",
             "is_test",
             "delivery_type",
-            "additional_users",
             "end_date",
             "users",
             "filter_country",
@@ -214,15 +212,6 @@ class TestOpportunityChangeForm:
     @pytest.mark.parametrize(
         "test_data",
         [
-            pytest.param(
-                {
-                    "field": "additional_users",
-                    "value": "invalid",
-                    "error_expected": True,
-                    "error_message": "Enter a whole number.",
-                },
-                id="invalid_additional_users",
-            ),
             pytest.param(
                 {
                     "field": "end_date",
