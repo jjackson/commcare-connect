@@ -1,3 +1,4 @@
+import calendar
 from datetime import date, datetime, timedelta
 
 import django_filters
@@ -14,17 +15,34 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils.functional import cached_property
+from django.utils.timezone import now
 from django.views.decorators.http import require_GET
 from django_filters.views import FilterView
 
 from commcare_connect.cache import quickcache
-from commcare_connect.opportunity.models import CompletedWork, CompletedWorkStatus, DeliveryType, Payment, UserVisit
+from commcare_connect.opportunity.models import (
+    CompletedWork,
+    CompletedWorkStatus,
+    DeliveryType,
+    Opportunity,
+    Payment,
+    UserVisit,
+)
 from commcare_connect.organization.models import Organization
+from commcare_connect.program.models import Program
+from commcare_connect.reports.helpers import get_table_data_for_year_month
 from commcare_connect.reports.queries import get_visit_map_queryset
 
 from .tables import AdminReportTable
 
 ADMIN_REPORT_START = (2023, 1)
+COUNTRY_CURRENCY_CHOICES = [
+    ("ETB", "Ethiopia"),
+    ("KES", "Kenya"),
+    ("MWK", "Malawi"),
+    ("MZN", "Mozambique"),
+    ("NGN", "Nigeria"),
+]
 
 
 def _increment(quarter):
@@ -298,32 +316,58 @@ class SuperUserRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
 
 
 class DeliveryReportFilters(django_filters.FilterSet):
-    delivery_type = django_filters.ChoiceFilter(method="filter_by_ignore")
-    year = django_filters.ChoiceFilter(method="filter_by_ignore")
-    quarter = django_filters.ChoiceFilter(
-        choices=[(1, "Q1"), (2, "Q2"), (3, "Q3"), (4, "Q4")], label="Quarter", method="filter_by_ignore"
+    delivery_type = django_filters.ChoiceFilter(
+        choices=DeliveryType.objects.values_list("slug", "name"),
+        label="Delivery Type",
+    )
+    year = django_filters.ChoiceFilter(
+        choices=[(year, str(year)) for year in range(2023, datetime.now().year + 1)],
+        label="Year",
+    )
+    month = django_filters.ChoiceFilter(
+        choices=list(enumerate(calendar.month_name))[1:],
+        label="month",
     )
     by_delivery_type = django_filters.BooleanFilter(
-        widget=forms.CheckboxInput(), label="Break up by delivery type", method="filter_by_ignore"
+        widget=forms.CheckboxInput(),
+        label="Break up by delivery type",
     )
+    program = django_filters.ModelChoiceFilter(
+        queryset=Program.objects.all(),
+        label="Program",
+    )
+    network_manager = django_filters.ModelChoiceFilter(
+        queryset=Organization.objects.filter(program_manager=False),
+        label="Network Manager",
+    )
+    opportunity = django_filters.ModelChoiceFilter(
+        queryset=Opportunity.objects.filter(is_test=False),
+        label="Opportunity",
+    )
+    country_currency = django_filters.ChoiceFilter(choices=COUNTRY_CURRENCY_CHOICES, label="Country")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        current_year = datetime.now().year
-        year_choices = [(year, str(year)) for year in range(2023, current_year + 1)]
-        self.filters["year"] = django_filters.ChoiceFilter(
-            choices=year_choices, label="Year", method="filter_by_ignore"
+        self.form.helper = FormHelper()
+        self.form.helper.form_class = "form-inline"
+        self.form.helper.layout = Layout(
+            Row(
+                Column("program", css_class="col-md-3"),
+                Column("network_manager", css_class="col-md-3"),
+                Column("opportunity", css_class="col-md-3"),
+                Column("country_currency", css_class="col-md-3"),
+            ),
+            Row(
+                Column("delivery_type", css_class="col-md-4"),
+                Column("year", css_class="col-md-4"),
+                Column("month", css_class="col-md-4"),
+            ),
+            Row(Column("by_delivery_type", css_class="col-md-4")),
         )
-
-        delivery_types = DeliveryType.objects.values_list("slug", "name")
-        self.filters["delivery_type"] = django_filters.ChoiceFilter(choices=delivery_types, label="Delivery Type")
-
-    def filter_by_ignore(self, queryset, name, value):
-        return queryset
 
     class Meta:
         model = None
-        fields = ["delivery_type", "year", "quarter", "by_delivery_type"]
+        fields = ["delivery_type", "year", "month", "by_delivery_type", "program", "network_manager", "opportunity"]
         unknown_field_behavior = django_filters.UnknownFieldBehavior.IGNORE
 
 
@@ -350,47 +394,62 @@ class DeliveryStatsReportView(tables.SingleTableMixin, SuperUserRequiredMixin, N
 
     def get_template_names(self):
         if self.request.htmx:
-            template_name = "reports/htmx_table.html"
-        else:
-            template_name = "reports/report_table.html"
+            return ["reports/htmx_table.html"]
+        return ["reports/report_table.html"]
 
-        return template_name
-
-    def get_context_data(self, *args, **kwargs):
+    def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["report_url"] = reverse("reports:delivery_stats_report")
         return context
 
     @cached_property
     def filter_values(self):
-        if not self.filterset.form.is_valid():
-            return None
-        else:
-            return self.filterset.form.cleaned_data
+        filters = {
+            "year": now().year,
+            "month": None,
+            "delivery_type": None,
+            "by_delivery_type": None,
+            "program": None,
+            "network_manager": None,
+            "opportunity": None,
+            "country_currency": None,
+        }
+        if self.filterset.form.is_valid():
+            filters.update(self.filterset.form.cleaned_data)
+        return filters
 
     @property
     def object_list(self):
-        table_data = []
-        if not self.filter_values:
-            return []
-
         delivery_type = self.filter_values["delivery_type"]
-        year = int(self.filter_values["year"])
-        quarter = self.filter_values["quarter"]
         group_by_delivery_type = self.filter_values["by_delivery_type"]
+        year = int(self.filter_values["year"]) if self.filter_values["year"] else now().year
+        month = int(self.filter_values["month"]) if self.filter_values["month"] else None
+        program = self.filter_values["program"]
+        network_manager = self.filter_values["network_manager"]
+        opportunity = self.filter_values["opportunity"]
+        country_currency = self.filter_values["country_currency"]
 
-        if not year:
-            quarters = get_quarters_since_start()
-        elif year:
-            if quarter:
-                quarters = [(year, int(quarter))]
-            else:
-                quarters = [(year, q) for q in range(1, 5)]
+        if year and month:
+            return get_table_data_for_year_month(
+                year,
+                month,
+                delivery_type,
+                group_by_delivery_type,
+                program,
+                network_manager,
+                opportunity,
+                country_currency,
+            )
 
-        for q in quarters:
-            data = get_table_data_for_quarter(q, delivery_type, group_by_delivery_type)
-            table_data += data
-        return table_data
+        data = []
+        for m in range(1, 13):
+            # break if filtering future dates
+            if year == now().year and now().month < m:
+                break
+            data += get_table_data_for_year_month(
+                year, m, delivery_type, group_by_delivery_type, program, network_manager, opportunity, country_currency
+            )
+        return data
 
 
 @login_required
