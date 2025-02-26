@@ -671,7 +671,7 @@ class AddBudgetNewUsersForm(forms.Form):
     total_budget = forms.IntegerField(
         required=False,
         label="Opportunity Total Budget",
-        help_text="Set a new total budget or leave empty if adding users.",
+        help_text="Set a new total budget or leave it unchanged when adding users.",
     )
 
     def __init__(self, *args, **kwargs):
