@@ -84,7 +84,7 @@ def test_get_table_data_for_year_month(from_date, to_date):
             opportunity__delivery_type__name=f"Delivery Type {(i % 2) + 1}",
         )
         cw = CompletedWorkFactory(
-            status_modified_date=now - timedelta(3),
+            status_modified_date=now,
             opportunity_access=access,
             status=CompletedWorkStatus.approved,
             saved_approved_count=1,
@@ -139,7 +139,7 @@ def test_get_table_data_for_year_month_by_delivery_type(delivery_type):
                 opportunity__delivery_type__name=slug,
             )
             cw = CompletedWorkFactory(
-                status_modified_date=now - timedelta(3),
+                status_modified_date=now,
                 opportunity_access=access,
                 status=CompletedWorkStatus.approved,
                 saved_approved_count=1,
@@ -185,7 +185,7 @@ def test_get_table_data_for_year_month_by_country_currency(opp_currency, filter_
             opportunity__currency=opp_currency,
         )
         cw = CompletedWorkFactory(
-            status_modified_date=now - timedelta(3),
+            status_modified_date=now,
             opportunity_access=access,
             status=CompletedWorkStatus.approved,
             saved_approved_count=1,
