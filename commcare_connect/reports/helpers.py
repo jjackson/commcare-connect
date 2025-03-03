@@ -11,6 +11,7 @@ from commcare_connect.opportunity.models import (
     UserVisit,
     VisitValidationStatus,
 )
+from commcare_connect.utils.datetime import get_month_series
 
 
 def get_table_data_for_year_month(
@@ -23,8 +24,27 @@ def get_table_data_for_year_month(
     opportunity=None,
     country_currency=None,
 ):
-    from_date = from_date or now()
-    to_date = to_date or now()
+    from_date = from_date or now().date()
+    to_date = to_date if to_date and to_date <= now().date() else now().date()
+    timeseries = get_month_series(from_date, to_date)
+    visit_data_dict = defaultdict(
+        lambda: {
+            "users": 0,
+            "services": 0,
+            "flw_amount_earned": 0,
+            "nm_amount_earned": 0,
+            "avg_time_to_payment": 0,
+            "max_time_to_payment": 0,
+            "nm_amount_paid": 0,
+            "nm_other_amount_paid": 0,
+            "flw_amount_paid": 0,
+            "avg_top_paid_flws": 0,
+        }
+    )
+    if not group_by_delivery_type:
+        for date in timeseries:
+            key = date.strftime("%Y-%m"), "All"
+            visit_data_dict[key].update({"month_group": date, "delivery_type_name": "All"})
 
     filter_kwargs = {"opportunity_access__opportunity__is_test": False}
     filter_kwargs_nm = {"invoice__opportunity__is_test": False}
@@ -95,22 +115,8 @@ def get_table_data_for_year_month(
         )
         .order_by("month_group")
     )
-    visit_data_dict = defaultdict(
-        lambda: {
-            "users": 0,
-            "services": 0,
-            "flw_amount_earned": 0,
-            "nm_amount_earned": 0,
-            "avg_time_to_payment": 0,
-            "max_time_to_payment": 0,
-            "nm_amount_paid": 0,
-            "nm_other_amount_paid": 0,
-            "flw_amount_paid": 0,
-            "avg_top_paid_flws": 0,
-        }
-    )
     for item in visit_data:
-        group_key = item["month_group"], item.get("delivery_type_name", "All")
+        group_key = item["month_group"].strftime("%Y-%m"), item.get("delivery_type_name", "All")
         visit_data_dict[group_key].update(item)
 
     payment_query = Payment.objects.filter(
@@ -133,7 +139,7 @@ def get_table_data_for_year_month(
         .order_by("month_group")
     )
     for item in nm_amount_paid_data:
-        group_key = item["month_group"], item.get("delivery_type_name", "All")
+        group_key = item["month_group"].strftime("%Y-%m"), item.get("delivery_type_name", "All")
         visit_data_dict[group_key].update(item)
 
     avg_top_flw_amount_paid = (
@@ -148,9 +154,8 @@ def get_table_data_for_year_month(
     )
     delivery_type_grouped_users = defaultdict(set)
     for item in avg_top_flw_amount_paid:
-        delivery_type_grouped_users[(item["month_group"], item.get("delivery_type_name", "All"))].add(
-            (item["opportunity_access__user_id"], item["approved_sum"])
-        )
+        group_key = item["month_group"].strftime("%Y-%m"), item.get("delivery_type_name", "All")
+        delivery_type_grouped_users[group_key].add((item["opportunity_access__user_id"], item["approved_sum"]))
     for group_key, users in delivery_type_grouped_users.items():
         sum_total_users = defaultdict(int)
         for user, amount in users:

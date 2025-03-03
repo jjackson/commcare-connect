@@ -71,7 +71,7 @@ def test_delivery_stats(opportunity: Opportunity):
     "from_date, to_date",
     [
         (None, None),
-        (now() - timedelta(30), now()),
+        ((now() - timedelta(30)).date(), now().date()),
     ],
 )
 def test_get_table_data_for_year_month(from_date, to_date):
@@ -107,6 +107,8 @@ def test_get_table_data_for_year_month(from_date, to_date):
 
     assert len(data)
     for row in data:
+        if row["month_group"].month != now.month or row["month_group"].year != now.year:
+            continue
         assert row["month_group"].month == now.month
         assert row["month_group"].year == now.year
         assert row["users"] == 9
@@ -160,6 +162,8 @@ def test_get_table_data_for_year_month_by_delivery_type(delivery_type):
 
     assert len(data)
     for row in data:
+        if row["month_group"].month != now.month or row["month_group"].year != now.year:
+            continue
         assert row["delivery_type_name"] in delivery_type_slugs
         assert row["users"] == 4
         assert row["services"] == 4
@@ -209,6 +213,9 @@ def test_get_table_data_for_year_month_by_country_currency(opp_currency, filter_
     if opp_currency == filter_currency:
         assert len(data)
         for row in data:
+            if row["month_group"].month != now.month or row["month_group"].year != now.year:
+                continue
+
             assert row["users"] == 9
             assert row["services"] == 9
             assert row["avg_time_to_payment"] == 50
