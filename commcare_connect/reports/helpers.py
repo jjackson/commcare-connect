@@ -150,7 +150,7 @@ def get_table_data_for_year_month(
                 {
                     "delivery_type": delivery_type_name,
                     "month": (month, year),
-                    "connectid_users": connectid_user_count_data.get(str(start_date.date()), 0),
+                    "connectid_users": connectid_user_count_data.get(start_date.strftime("%Y-%m"), 0),
                     "users": user_count_data[delivery_type_name],
                     "services": service_count_data[delivery_type_name],
                     "avg_time_to_payment": avg_time_to_payment_data.get(delivery_type_name),
@@ -171,7 +171,7 @@ def get_table_data_for_year_month(
             {
                 "delivery_type": "All",
                 "month": (month, year),
-                "connectid_users": connectid_user_count_data.get(str(start_date.date()), 0),
+                "connectid_users": connectid_user_count_data.get(start_date.strftime("%Y-%m"), 0),
                 "users": sum(user_count_data.values()),
                 "services": sum(service_count_data.values()),
                 "avg_time_to_payment": mean(avg_time_to_payment_data.values() or [0]),
