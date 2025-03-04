@@ -8,7 +8,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.storage import storages
-from django.db.models import F, Q, Sum
+from django.db.models import Q, Sum
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -20,7 +20,7 @@ from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
-from django_tables2 import SingleTableView
+from django_tables2 import RequestConfig, SingleTableView
 from django_tables2.export import TableExport
 from geopy import distance
 
@@ -82,6 +82,8 @@ from commcare_connect.opportunity.tables import (
     SuspendedUsersTable,
     UserPaymentsTable,
     UserStatusTable,
+    UserVisitFilter,
+    UserVisitReviewFilter,
     UserVisitReviewTable,
     UserVisitTable,
 )
@@ -448,24 +450,13 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=pk)
     opportunity_access = OpportunityAccess.objects.filter(opportunity=opportunity)
     opportunity_claims = OpportunityClaim.objects.filter(opportunity_access__in=opportunity_access)
-    form = AddBudgetExistingUsersForm(opportunity_claims=opportunity_claims)
 
-    if request.method == "POST":
-        form = AddBudgetExistingUsersForm(opportunity_claims=opportunity_claims, data=request.POST)
-        if form.is_valid():
-            selected_users = form.cleaned_data["selected_users"]
-            additional_visits = form.cleaned_data["additional_visits"]
-            if form.cleaned_data["end_date"]:
-                OpportunityClaim.objects.filter(pk__in=selected_users).update(end_date=form.cleaned_data["end_date"])
-            if additional_visits:
-                OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users).update(
-                    max_visits=F("max_visits") + additional_visits
-                )
-
-            for ocl in OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users).all():
-                opportunity.total_budget += ocl.payment_unit.amount * additional_visits
-            opportunity.save()
-            return redirect("opportunity:detail", org_slug, pk)
+    form = AddBudgetExistingUsersForm(
+        opportunity_claims=opportunity_claims, opportunity=opportunity, data=request.POST or None
+    )
+    if form.is_valid():
+        form.save()
+        return redirect("opportunity:detail", org_slug, pk)
 
     return render(
         request,
@@ -685,11 +676,20 @@ def user_visits_list(request, org_slug=None, opp_id=None, pk=None):
     opportunity = get_opportunity_or_404(pk=opp_id, org_slug=org_slug)
     opportunity_access = get_object_or_404(OpportunityAccess, pk=pk, opportunity=opportunity)
     user_visits = opportunity_access.uservisit_set.order_by("visit_date")
-    user_visits_table = UserVisitTable(user_visits, org_slug=request.org.slug)
+    visit_filter = UserVisitFilter(request.GET, queryset=user_visits, managed_opportunity=opportunity.managed)
+    user_visits_table = UserVisitTable(visit_filter.qs, org_slug=request.org.slug)
+    if not opportunity.managed:
+        user_visits_table.exclude = ("review_status",)
+    RequestConfig(request, paginate={"per_page": 15}).configure(user_visits_table)
     return render(
         request,
         "opportunity/user_visits_list.html",
-        context=dict(opportunity=opportunity, table=user_visits_table, user_name=opportunity_access.display_name),
+        context=dict(
+            opportunity=opportunity,
+            table=user_visits_table,
+            user_name=opportunity_access.display_name,
+            visit_filter=visit_filter,
+        ),
     )
 
 
@@ -1120,7 +1120,8 @@ def user_visit_review(request, org_slug, opp_id):
     user_visit_reviews = UserVisit.objects.filter(opportunity=opportunity, review_created_on__isnull=False).order_by(
         "visit_date"
     )
-    table = UserVisitReviewTable(user_visit_reviews, org_slug=request.org.slug)
+    review_filter = UserVisitReviewFilter(request.GET, queryset=user_visit_reviews)
+    table = UserVisitReviewTable(review_filter.qs, org_slug=request.org.slug)
     if not is_program_manager:
         table.exclude = ("pk",)
     if request.POST and is_program_manager:
@@ -1130,11 +1131,11 @@ def user_visit_review(request, org_slug, opp_id):
         if review_status in [VisitReviewStatus.agree.value, VisitReviewStatus.disagree.value]:
             user_visits.update(review_status=review_status)
             update_payment_accrued(opportunity=opportunity, users=[visit.user for visit in user_visits])
-
+    RequestConfig(request, paginate={"per_page": 15}).configure(table)
     return render(
         request,
         "opportunity/user_visit_review.html",
-        context=dict(table=table, user_visit_ids=[v.pk for v in user_visit_reviews], opportunity=opportunity),
+        context=dict(table=table, review_filter=review_filter, opportunity=opportunity),
     )
 
 
