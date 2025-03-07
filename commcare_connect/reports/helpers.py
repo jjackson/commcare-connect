@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import datetime
 
 from django.db import models
 from django.db.models.functions import ExtractDay, TruncMonth
@@ -30,6 +31,8 @@ def get_table_data_for_year_month(
     start_date, end_date = get_start_end_dates_from_month_range(from_date, to_date)
     visit_data_dict = defaultdict(
         lambda: {
+            "month_group": from_date,
+            "delivery_type_name": "All",
             "users": 0,
             "services": 0,
             "flw_amount_earned": 0,
@@ -161,6 +164,7 @@ def get_table_data_for_year_month(
         group_key = item["month_group"].strftime("%Y-%m"), item.get("delivery_type_name", "All")
         delivery_type_grouped_users[group_key].add((item["opportunity_access__user_id"], item["approved_sum"]))
     for group_key, users in delivery_type_grouped_users.items():
+        month_group, delivery_type_name = group_key
         sum_total_users = defaultdict(int)
         for user, amount in users:
             sum_total_users[user] += amount
@@ -169,5 +173,12 @@ def get_table_data_for_year_month(
         top_five_percent_len = len(sum_total_users) // 20 or 1
         flw_amount_paid = sum(sum_total_users.values())
         avg_top_paid_flws = sum(sorted(sum_total_users.values(), reverse=True)[:top_five_percent_len])
-        visit_data_dict[group_key].update({"flw_amount_paid": flw_amount_paid, "avg_top_paid_flws": avg_top_paid_flws})
+        visit_data_dict[group_key].update(
+            {
+                "month_group": datetime.strptime(month_group, "%Y-%m"),
+                "delivery_type_name": delivery_type_name,
+                "flw_amount_paid": flw_amount_paid,
+                "avg_top_paid_flws": avg_top_paid_flws,
+            }
+        )
     return list(visit_data_dict.values())
