@@ -186,8 +186,12 @@ def get_table_data_for_year_month(
 
     connectid_user_count = fetch_user_counts()
     total_connectid_user_count = 0
+    total_eligible_user_count = 0
     for group_key in visit_data_dict.keys():
         month_group = group_key[0]
         total_connectid_user_count += connectid_user_count.get(month_group, 0)
-        visit_data_dict[group_key].update({"connectid_users": total_connectid_user_count})
+        total_eligible_user_count += visit_data_dict[group_key].get("users", 0)
+        visit_data_dict[group_key].update(
+            {"connectid_users": total_connectid_user_count, "total_eligible_users": total_eligible_user_count}
+        )
     return list(visit_data_dict.values())
