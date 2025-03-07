@@ -5,6 +5,7 @@ from django.db import models
 from django.db.models.functions import ExtractDay, TruncMonth
 from django.utils.timezone import now
 
+from commcare_connect.connect_id_client import fetch_user_counts
 from commcare_connect.opportunity.models import (
     CompletedWork,
     CompletedWorkStatus,
@@ -33,6 +34,7 @@ def get_table_data_for_year_month(
         lambda: {
             "month_group": from_date,
             "delivery_type_name": "All",
+            "connectid_users": 0,
             "users": 0,
             "services": 0,
             "flw_amount_earned": 0,
@@ -181,4 +183,11 @@ def get_table_data_for_year_month(
                 "avg_top_paid_flws": avg_top_paid_flws,
             }
         )
+
+    connectid_user_count = fetch_user_counts()
+    total_connectid_user_count = 0
+    for group_key in visit_data_dict.keys():
+        month_group = group_key[0]
+        total_connectid_user_count += connectid_user_count.get(month_group, 0)
+        visit_data_dict[group_key].update({"connectid_users": total_connectid_user_count})
     return list(visit_data_dict.values())
