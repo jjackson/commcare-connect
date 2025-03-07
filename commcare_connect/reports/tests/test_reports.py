@@ -89,7 +89,7 @@ def get_month_range_start_end(months=1):
         (get_month_range_start_end(13)),
     ],
 )
-def test_get_table_data_for_year_month(from_date, to_date, httpx_mock):
+def test_get_table_data_for_year_month(from_date, to_date):
     users = MobileUserFactory.create_batch(10)
     months = get_month_series(
         from_date or datetime(now().year, now().month, 1).date(),
@@ -125,14 +125,12 @@ def test_get_table_data_for_year_month(from_date, to_date, httpx_mock):
                 other_inv = PaymentInvoiceFactory(opportunity=access.opportunity, amount=100, service_delivery=False)
                 PaymentFactory(invoice=other_inv, date_paid=today, amount_usd=100)
 
-    httpx_mock.add_response(method="GET", json={})
     data = get_table_data_for_year_month(from_date=from_date, to_date=to_date)
 
     assert len(data)
     for row in data:
         assert date(row["month_group"].year, row["month_group"].month, 1) in months
         assert row["users"] == 9
-        assert row["connectid_users"] == 5
         assert row["services"] == 9
         assert row["avg_time_to_payment"] == 50
         assert 0 <= row["max_time_to_payment"] <= 90
@@ -149,7 +147,7 @@ def test_get_table_data_for_year_month(from_date, to_date, httpx_mock):
     "delivery_type",
     [(None), ("delivery_1"), ("delivery_2")],
 )
-def test_get_table_data_for_year_month_by_delivery_type(delivery_type, httpx_mock):
+def test_get_table_data_for_year_month_by_delivery_type(delivery_type):
     now = datetime.now(UTC)
     delivery_type_slugs = ["delivery_1", "delivery_2"]
     for slug in delivery_type_slugs:
@@ -180,7 +178,6 @@ def test_get_table_data_for_year_month_by_delivery_type(delivery_type, httpx_moc
             inv = PaymentInvoiceFactory(opportunity=access.opportunity, amount=100)
             PaymentFactory(invoice=inv, date_paid=now, amount_usd=100)
 
-    httpx_mock.add_response(method="GET", json={})
     data = get_table_data_for_year_month(delivery_type=delivery_type, group_by_delivery_type=True)
 
     assert len(data)
@@ -189,7 +186,6 @@ def test_get_table_data_for_year_month_by_delivery_type(delivery_type, httpx_moc
             continue
         assert row["delivery_type_name"] in delivery_type_slugs
         assert row["users"] == 4
-        assert row["connectid_users"] == 5
         assert row["services"] == 4
         assert row["avg_time_to_payment"] == 25
         assert row["max_time_to_payment"] == 40
