@@ -1,4 +1,5 @@
 import datetime
+from functools import partial
 
 from django.db import transaction
 from django.db.models import Count, Q
@@ -318,7 +319,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
                 completed_work.save()
 
     update_payment_accrued(opportunity, [user.id])
-    download_user_visit_attachments.delay(user_visit.id)
+    transaction.on_commit(partial(download_user_visit_attachments.delay, user_visit.id))
 
 
 def get_or_create_deliver_unit(app, unit_data):
