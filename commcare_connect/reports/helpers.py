@@ -47,6 +47,7 @@ def get_table_data_for_year_month(
             "avg_top_paid_flws": 0,
         }
     )
+    group_by_delivery_type = group_by_delivery_type or delivery_type
     if not group_by_delivery_type:
         for date in timeseries:
             key = date.strftime("%Y-%m"), "All"
