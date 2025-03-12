@@ -150,10 +150,13 @@
         <button class="btn btn-danger" disabled>Reject</button>
       {% else %}
         {% if visit.flagged and visit.opportunity.managed %}
-          <button id="flagged_approve" class="btn btn-danger" role="button" data-bs-toggle="modal" data-bs-target="#justification-modal">Approve</button>
+          <button class="btn btn-success" role="button" data-bs-toggle="modal" data-bs-target="#justification-modal">Approve</button>
         {% else %}
-          <button class="btn btn-success"  hx-post="{% url 'opportunity:approve_visit' org_slug=request.org.slug pk=visit.id %}" role="button">Approve</button>
-        {% end if%}
+          <form method="POST" class="d-inline-block" action="{% url "opportunity:approve_visit" org_slug=request.org.slug pk=visit.id %}">
+            {% csrf_token %}
+             <button class="btn btn-success">Approve</button>
+          </form>
+        {% endif %}
         <button class="btn btn-danger" role="button" data-bs-toggle="modal" data-bs-target="#user-visit-reject-modal">Reject</button>
       {% endif %}
     </div>
@@ -184,9 +187,8 @@
     </div>
   </div>
 </div>
-{% endblock modal %}
 
-{% block modal %}
+
 <div class="modal" tabindex="-1" id="justification-modal">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -198,19 +200,20 @@
         <div class="modal-body">
             {% csrf_token %}
             <div class="mb-3">
-              <label for="rejection-reason" class="form-label">Justification</label>
-              <textarea class="form-control" id="justification" rows="3" name="reason">{{ justification }}</textarea>
+              <label for="justification" class="form-label">Justification</label>
+              <textarea required class="form-control" id="justification" rows="3" name="justification">{{ justification }}</textarea>
             </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          <button type="submit" class="btn btn-danger">Approve</button>
+          <button type="submit" class="btn btn-success">Approve</button>
         </div>
       </form>
     </div>
   </div>
 </div>
 {% endblock modal %}
+
 
 {% block inline_javascript %}
 {{ block.super }}
