@@ -166,7 +166,6 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                     to_update.append(visit)
                 user_ids.add(visit.user_id)
 
-            print(missing_justifications)
             if missing_justifications:
                 raise ImportException(get_missing_justification_message(missing_justifications))
 
