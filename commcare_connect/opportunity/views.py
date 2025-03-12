@@ -108,6 +108,7 @@ from commcare_connect.opportunity.visit_import import (
     bulk_update_catchments,
     bulk_update_completed_work_status,
     bulk_update_payment_status,
+    bulk_update_visit_review_status,
     bulk_update_visit_status,
     get_exchange_rate,
     update_payment_accrued,
@@ -469,17 +470,16 @@ def review_visit_import(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=pk)
     file = request.FILES.get("visits")
     try:
-        status = bulk_update_visit_status(opportunity, file)
+        status = bulk_update_visit_review_status(opportunity, file)
     except ImportException as e:
         messages.error(request, e.message)
+        return redirect("opportunity:detail", org_slug, pk)
     else:
-        message = f"Visit status updated successfully for {len(status)} visits."
+        message = f"Visit review updated successfully for {len(status)} visits."
         if status.missing_visits:
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
-    if opportunity.managed:
         return redirect("opportunity:user_visit_review", org_slug, pk)
-    return redirect("opportunity:detail", org_slug, pk)
 
 
 @org_member_required
