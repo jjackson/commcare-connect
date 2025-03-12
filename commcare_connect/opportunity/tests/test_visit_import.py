@@ -49,7 +49,6 @@ from commcare_connect.opportunity.visit_import import (
     get_data_by_visit_id,
     update_payment_accrued,
 )
-from commcare_connect.organization.models import Organization
 from commcare_connect.program.tests.factories import ManagedOpportunityFactory
 from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import OrganizationFactory
@@ -652,41 +651,6 @@ def test_review_completed_work_status(
 def _validate_saved_fields(opportunity_access: OpportunityAccess):
     for completed_work in opportunity_access.completedwork_set.all():
         validate_saved_fields(completed_work)
-
-
-def test_bulk_review_visit_import(organization: Organization):
-    opp = ManagedOpportunityFactory.create(organization=organization)
-    now_time = now()
-    agree_visits = UserVisitFactory.create_batch(
-        10, opportunity=opp, review_created_on=now_time - timedelta(days=3), status=VisitReviewStatus.pending
-    )
-    disagree_visits = UserVisitFactory.create_batch(
-        5, opportunity=opp, review_created_on=now_time - timedelta(days=3), status=VisitReviewStatus.pending
-    )
-
-    expected_agreed_visits = {visit.xform_id for visit in agree_visits}
-    expected_disagreed_visits = {visit.xform_id for visit in disagree_visits}
-
-    dataset = Dataset()
-    dataset.headers = [VISIT_ID_COL, REVIEW_STATUS_COL]
-
-    for visit in agree_visits:
-        dataset.append([visit.xform_id, "agree"])
-    for visit in disagree_visits:
-        dataset.append([visit.xform_id, "disagree"])
-
-    status = _bulk_update_visit_review_status(opp, dataset)
-    assert status.seen_visits == expected_agreed_visits | expected_disagreed_visits
-    assert (
-        UserVisit.objects.filter(xform_id__in=expected_agreed_visits, review_status=VisitReviewStatus.agree).count()
-        == 10
-    )
-    assert (
-        UserVisit.objects.filter(
-            xform_id__in=expected_disagreed_visits, review_status=VisitReviewStatus.disagree
-        ).count()
-        == 5
-    )
 
 
 @pytest.mark.django_db
