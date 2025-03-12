@@ -641,7 +641,6 @@ def bulk_update_visit_review_status(opportunity: Opportunity, file: UploadedFile
 
 
 def _bulk_update_visit_review_status(opportunity: Opportunity, dataset: Dataset):
-    # Validate headers
     headers = [header.lower() if header else header for header in dataset.headers or []]
     if not headers:
         raise ImportException("The uploaded file did not contain any headers")
