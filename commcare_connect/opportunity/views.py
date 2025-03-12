@@ -465,6 +465,23 @@ def update_visit_status_import(request, org_slug=None, pk=None):
     return redirect("opportunity:detail", org_slug, pk)
 
 
+def review_visit_import(request, org_slug=None, pk=None):
+    opportunity = get_opportunity_or_404(org_slug=org_slug, pk=pk)
+    file = request.FILES.get("visits")
+    try:
+        status = bulk_update_visit_status(opportunity, file)
+    except ImportException as e:
+        messages.error(request, e.message)
+    else:
+        message = f"Visit status updated successfully for {len(status)} visits."
+        if status.missing_visits:
+            message += status.get_missing_message()
+        messages.success(request, mark_safe(message))
+    if opportunity.managed:
+        return redirect("opportunity:user_visit_review", org_slug, pk)
+    return redirect("opportunity:detail", org_slug, pk)
+
+
 @org_member_required
 def add_budget_existing_users(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=pk)
