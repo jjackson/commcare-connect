@@ -621,8 +621,8 @@ class ReviewVisitRowData:
         if not status:
             raise ImportException("Missing review status in the dataset.")
 
-        for choice in VisitReviewStatus.values:
-            if choice.lower() == status.lower():
+        for choice, label in VisitReviewStatus.choices:
+            if choice.lower() == status.lower() or label.lower() == status.lower():
                 return choice
 
         raise ImportException(f"Invalid review status: '{status}'. Allowed values: {VisitReviewStatus.values}")
@@ -637,7 +637,7 @@ def bulk_update_visit_review_status(opportunity: Opportunity, file: UploadedFile
         raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
 
     imported_data = get_imported_dataset(file, file_format)
-    return _bulk_update_visit_status(opportunity, imported_data)
+    return _bulk_update_visit_review_status(opportunity, imported_data)
 
 
 def _bulk_update_visit_review_status(opportunity: Opportunity, dataset: Dataset):
@@ -646,7 +646,7 @@ def _bulk_update_visit_review_status(opportunity: Opportunity, dataset: Dataset)
         raise ImportException("The uploaded file did not contain any headers")
 
     visit_data = {
-        data.visit_id: data.review_status for row in dataset if (data := ReviewVisitRowData(list(row), headers))
+        data.visit_id: data.review_status for row in dataset if any(row) and (data := ReviewVisitRowData(row, headers))
     }
 
     if not visit_data:
