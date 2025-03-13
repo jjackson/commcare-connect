@@ -599,8 +599,9 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
 
 
 class ReviewVisitRowData:
-    def __init__(self, row: list[str], headers: list[str]):
+    def __init__(self, row_number: int, row: list[str], headers: list[str]):
         self.row = row
+        self.row_number = row_number
         self.headers = headers
         self.visit_id = self._get_visit_id()
         self.review_status = self._get_review_status()
@@ -610,7 +611,7 @@ class ReviewVisitRowData:
         visit_id = self.row[index].strip() if index < len(self.row) and self.row[index] else None
 
         if not visit_id:
-            raise ImportException("Missing visit ID in the dataset.")
+            raise ImportException(f"Missing visit ID in the dataset at row {self.row_number}.")
 
         return visit_id
 
@@ -619,13 +620,15 @@ class ReviewVisitRowData:
         status = self.row[index].strip() if index < len(self.row) and self.row[index] else None
 
         if not status:
-            raise ImportException("Missing review status in the dataset.")
+            raise ImportException(f"Missing review status in the dataset at row {self.row_number}.")
 
         for choice, label in VisitReviewStatus.choices:
             if choice.lower() == status.lower() or label.lower() == status.lower():
                 return choice
 
-        raise ImportException(f"Invalid review status: '{status}'. Allowed values: {VisitReviewStatus.values}")
+        raise ImportException(
+            f"Invalid review status '{status}' at row {self.row_number}. Allowed values: {VisitReviewStatus.values}"
+        )
 
 
 def bulk_update_visit_review_status(opportunity: Opportunity, file: UploadedFile) -> VisitImportStatus:
@@ -646,7 +649,9 @@ def _bulk_update_visit_review_status(opportunity: Opportunity, dataset: Dataset)
         raise ImportException("The uploaded file did not contain any headers")
 
     visit_data = {
-        data.visit_id: data.review_status for row in dataset if any(row) and (data := ReviewVisitRowData(row, headers))
+        data.visit_id: data.review_status
+        for row_number, row in enumerate(dataset, start=2)  # row 1 is of headers
+        if any(row) and (data := ReviewVisitRowData(row_number, row, headers))
     }
 
     if not visit_data:
