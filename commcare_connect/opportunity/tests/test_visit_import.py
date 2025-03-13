@@ -301,6 +301,8 @@ def test_bulk_update_payments(opportunity: Opportunity):
             "Payment Completed",
             "Payment Amount",
             "Payment Date (YYYY-MM-DD)",
+            "Payment Method",
+            "Payment Operator",
         ]
     )
 
@@ -315,6 +317,8 @@ def test_bulk_update_payments(opportunity: Opportunity):
                 0,  # Payment Completed
                 50,  # Payment Amount
                 payment_date if index != 4 else None,
+                f"method-{index}",
+                f"operator-{index}",
             )
         )
 
@@ -332,6 +336,8 @@ def test_bulk_update_payments(opportunity: Opportunity):
             assert payment.date_paid.date() == datetime.date.today()
         else:
             assert payment.date_paid.strftime("%Y-%m-%d") == payment_date
+        assert payment.payment_method == f"method-{index}"
+        assert payment.payment_operator == f"operator-{index}"
 
 
 @pytest.fixture
