@@ -173,7 +173,7 @@ class OpportunityPaymentTable(OrgContextTable):
 class UserPaymentsTable(tables.Table):
     class Meta:
         model = Payment
-        fields = ("amount", "date_paid")
+        fields = ("amount", "date_paid", "payment_method", "payment_operator")
         orderable = False
         empty_text = "No payments made for this user"
         template_name = "django_tables2/bootstrap5.html"
