@@ -794,20 +794,25 @@ class TestBulkReviewVisitImport:
             ([VISIT_ID_COL], ["visit_1"], ImportException, "Missing required column(s): 'program manager review'"),
             ([REVIEW_STATUS_COL], ["agree"], ImportException, "Missing required column(s): 'visit id'"),
             # Missing visit ID
-            ([VISIT_ID_COL, REVIEW_STATUS_COL], ["", "agree"], ImportException, "Missing visit ID in the dataset."),
+            (
+                [VISIT_ID_COL, REVIEW_STATUS_COL],
+                ["", "agree"],
+                ImportException,
+                "Missing visit ID in the dataset at row 2.",
+            ),
             # Missing review status
             (
                 [VISIT_ID_COL, REVIEW_STATUS_COL],
                 ["visit_1", ""],
                 ImportException,
-                "Missing review status in the dataset.",
+                "Missing review status in the dataset at row 2.",
             ),
             # Invalid review status
             (
                 [VISIT_ID_COL, REVIEW_STATUS_COL],
                 ["visit_1", "not_a_valid_status"],
                 ImportException,
-                "Invalid review status: 'not_a_valid_status'",
+                f"Invalid review status 'not_a_valid_status' at row 2. Allowed values: {VisitReviewStatus.values}",
             ),
         ],
     )
@@ -817,5 +822,5 @@ class TestBulkReviewVisitImport:
         dataset.append(row)
 
         with pytest.raises(expected_exception, match=re.escape(expected_message)):
-            for row in dataset:
-                ReviewVisitRowData(row, dataset.headers)
+            for row_number, row in enumerate(dataset, start=2):
+                ReviewVisitRowData(row_number, row, dataset.headers)
