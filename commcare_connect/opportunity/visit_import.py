@@ -658,7 +658,9 @@ def _bulk_update_visit_review_status(opportunity: Opportunity, dataset: Dataset)
         return VisitImportStatus(set(), set())
 
     visit_ids = set(visit_data.keys())
-    existing_visits = UserVisit.objects.filter(xform_id__in=visit_ids, review_created_on__isnull=False)
+    existing_visits = UserVisit.objects.filter(xform_id__in=visit_ids, review_created_on__isnull=False).only(
+        "id", "xform_id", "review_status", "user_id"
+    )
 
     to_update = []
     user_ids = set()
