@@ -47,6 +47,8 @@ RADIUS_COL = "radius"
 AREA_NAME_COL = "area name"
 ACTIVE_COL = "active"
 SITE_CODE_COL = "site code"
+PAYMENT_METHOD_COL = "payment method"
+PAYMENT_OPERATOR_COL = "payment operator"
 REVIEW_STATUS_COL = "program manager review"
 
 
@@ -244,6 +246,8 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     username_col_index = _get_header_index(headers, USERNAME_COL)
     amount_col_index = _get_header_index(headers, AMOUNT_COL)
     payment_date_col_index = _get_header_index(headers, PAYMENT_DATE_COL)
+    payment_method_col_index = _get_header_index(headers, PAYMENT_METHOD_COL)
+    payment_operator_col_index = _get_header_index(headers, PAYMENT_OPERATOR_COL)
     invalid_rows = []
     payments = {}
     exchange_rate = get_exchange_rate(opportunity.currency)
@@ -254,28 +258,33 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
         username = str(row[username_col_index])
         amount_raw = row[amount_col_index]
         payment_date_raw = row[payment_date_col_index]
-        if amount_raw:
-            if not username:
-                invalid_rows.append((row, "username required"))
-            try:
-                amount = int(amount_raw)
-            except ValueError:
-                invalid_rows.append((row, "amount must be an integer"))
-            else:
-                payments[username] = {"amount": amount}
-                try:
-                    if payment_date_raw:
-                        if isinstance(payment_date_raw, datetime.datetime):
-                            # Dataset autoparses valid datetime
-                            payment_date = payment_date_raw
-                        else:
-                            payment_date = datetime.datetime.strptime(payment_date_raw, "%Y-%m-%d").date()
-                    else:
-                        payment_date = None
-                except ValueError:
-                    invalid_rows.append((row, "Payment Date must be in YYYY-MM-DD format"))
+        payment_method = row[payment_method_col_index]
+        payment_operator = row[payment_operator_col_index]
+        if not amount_raw:
+            continue
+        if not username:
+            invalid_rows.append((row, "username required"))
+        try:
+            amount = int(amount_raw)
+        except ValueError:
+            invalid_rows.append((row, "amount must be an integer"))
+        else:
+            payments[username] = {"amount": amount}
+        try:
+            if payment_date_raw:
+                if isinstance(payment_date_raw, datetime.datetime):
+                    # Dataset autoparses valid datetime
+                    payment_date = payment_date_raw
                 else:
-                    payments[username]["payment_date"] = payment_date
+                    payment_date = datetime.datetime.strptime(payment_date_raw, "%Y-%m-%d").date()
+            else:
+                payment_date = None
+        except ValueError:
+            invalid_rows.append((row, "Payment Date must be in YYYY-MM-DD format"))
+        else:
+            payments[username]["payment_date"] = payment_date
+        payments[username]["payment_method"] = payment_method
+        payments[username]["payment_operator"] = payment_operator
 
     if invalid_rows:
         raise ImportException(f"{len(invalid_rows)} have errors", invalid_rows)
@@ -293,10 +302,14 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
                 username = access.user.username
                 amount = payments[username]["amount"]
                 payment_date = payments[username]["payment_date"]
+                payment_method = payments[username]["payment_method"]
+                payment_operator = payments[username]["payment_operator"]
                 payment_data = {
                     "opportunity_access": access,
                     "amount": amount,
                     "amount_usd": amount / exchange_rate,
+                    "payment_method": payment_method,
+                    "payment_operator": payment_operator,
                 }
                 if payment_date:
                     payment_data["date_paid"] = payment_date
