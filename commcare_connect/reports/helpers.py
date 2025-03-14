@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from django.db import models
-from django.db.models.functions import ExtractDay, TruncMonth
+from django.db.models.functions import Coalesce, ExtractDay, TruncMonth
 from django.utils.timezone import now
 
 from commcare_connect.connect_id_client import fetch_user_counts
@@ -15,6 +15,38 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.utils.datetime import get_month_series, get_start_end_dates_from_month_range
+
+ADMIN_REPORT_START = "2023-01"
+
+
+def _get_cumulative_count(count_data: dict[str, int]):
+    data = defaultdict(int)
+    from_date = datetime.strptime(ADMIN_REPORT_START, "%Y-%m").date()
+    to_date = datetime.today().date()
+    timeseries = get_month_series(from_date, to_date)
+    total_eligible_user_count = 0
+    for month in timeseries:
+        key = month.strftime("%Y-%m")
+        total_eligible_user_count += count_data.get(key, 0)
+        data[key] = total_eligible_user_count
+    return data
+
+
+def get_connectid_user_counts_cumulative():
+    connectid_user_count = fetch_user_counts()
+    return _get_cumulative_count(connectid_user_count)
+
+
+def get_eligible_user_counts_cumulative():
+    visit_data = (
+        CompletedWork.objects.filter(status=CompletedWorkStatus.approved, saved_approved_count__gt=0)
+        .annotate(month_group=TruncMonth(Coalesce("status_modified_date", "date_created")))
+        .values("month_group")
+        .annotate(users=models.Count("opportunity_access__user_id", distinct=True))
+        .order_by("month_group")
+    )
+    visit_data_dict = {item["month_group"].strftime("%Y-%m"): item["users"] for item in visit_data}
+    return _get_cumulative_count(visit_data_dict)
 
 
 def get_table_data_for_year_month(
@@ -187,14 +219,14 @@ def get_table_data_for_year_month(
             }
         )
 
-    connectid_user_count = fetch_user_counts()
-    total_connectid_user_count = 0
-    total_eligible_user_count = 0
+    connectid_user_count = get_connectid_user_counts_cumulative()
+    total_eligible_user_counts = get_eligible_user_counts_cumulative()
     for group_key in visit_data_dict.keys():
         month_group = group_key[0]
-        total_connectid_user_count += connectid_user_count.get(month_group, 0)
-        total_eligible_user_count += visit_data_dict[group_key].get("users", 0)
         visit_data_dict[group_key].update(
-            {"connectid_users": total_connectid_user_count, "total_eligible_users": total_eligible_user_count}
+            {
+                "connectid_users": connectid_user_count.get(month_group, 0),
+                "total_eligible_users": total_eligible_user_counts.get(month_group, 0),
+            }
         )
     return list(visit_data_dict.values())
