@@ -518,6 +518,7 @@ def test_update_work_payment_date_fully(opportunity):
 def test_update_work_payment_date_with_precise_dates(opportunity):
     user = MobileUserFactory()
     access = OpportunityAccessFactory(opportunity=opportunity, user=user, accepted=True)
+    now = timezone.now()
 
     payment_units = [
         PaymentUnitFactory(opportunity=opportunity, amount=5),
@@ -532,6 +533,7 @@ def test_update_work_payment_date_with_precise_dates(opportunity):
         payment_unit=payment_units[0],
         status=CompletedWorkStatus.approved.value,
         payment_date=None,
+        status_modified_date=now - timedelta(4),
     )
 
     completed_work_2 = CompletedWorkFactory(
@@ -539,12 +541,11 @@ def test_update_work_payment_date_with_precise_dates(opportunity):
         payment_unit=payment_units[1],
         status=CompletedWorkStatus.approved.value,
         payment_date=None,
+        status_modified_date=now - timedelta(2),
     )
 
     create_user_visits_for_completed_work(opportunity, user, access, payment_units[0], completed_work_1)
     create_user_visits_for_completed_work(opportunity, user, access, payment_units[1], completed_work_2)
-
-    now = timezone.now()
 
     payment_1 = PaymentFactory(opportunity_access=access, amount=7)
     payment_2 = PaymentFactory(opportunity_access=access, amount=3)
