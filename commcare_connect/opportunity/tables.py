@@ -339,6 +339,7 @@ class DeliverStatusTable(OrgContextTable):
 class CompletedWorkTable(tables.Table):
     id = columns.Column("Instance Id", visible=False)
     username = columns.Column(accessor="opportunity_access__user__username", visible=False)
+    phone_number = columns.Column(accessor="opportunity_access__user__phone_number", visible=False)
     entity_id = columns.Column(visible=False)
     reason = columns.Column("Rejected Reason", accessor="reason", visible=False)
     display_name = columns.Column("Name of the User", accessor="opportunity_access__display_name")
@@ -359,6 +360,7 @@ class CompletedWorkTable(tables.Table):
         sequence = (
             "id",
             "username",
+            "phone_number",
             "display_name",
             "entity_id",
             "entity_name",
@@ -455,6 +457,7 @@ class UserVisitReviewTable(OrgContextTable):
             "th__input": {"@click": "toggleSelectAll()", "x-bind:checked": "selectAll"},
         },
     )
+    visit_id = columns.Column("Visit ID", accessor="xform_id", visible=False)
     username = columns.Column(accessor="user__username", verbose_name="Username")
     name = columns.Column(accessor="user__name", verbose_name="Name of the User", orderable=True)
     justification = columns.Column(verbose_name="Justification")
