@@ -118,11 +118,7 @@ def get_table_data_for_year_month(
         models.F("payment_date") - models.Subquery(max_visit_date), output_field=models.DurationField()
     )
     base_visit_data_qs = CompletedWork.objects.filter(
-        **filter_kwargs,
-        status=CompletedWorkStatus.approved,
-        saved_approved_count__gt=0,
-        saved_payment_accrued_usd__gt=0,
-        saved_org_payment_accrued_usd__gt=0,
+        **filter_kwargs, status=CompletedWorkStatus.approved, saved_approved_count__gt=0
     )
     visit_data = (
         base_visit_data_qs.annotate(
@@ -152,7 +148,10 @@ def get_table_data_for_year_month(
         visit_data_dict[group_key].update(item)
 
     visit_time_to_payment_data = (
-        base_visit_data_qs.filter(payment_date__range=(start_date, end_date))
+        base_visit_data_qs.filter(
+            payment_date__range=(start_date, end_date),
+            saved_payment_accrued_usd__gt=0,
+        )
         .annotate(
             month_group=TruncMonth("payment_date"),
             delivery_type_name=models.F("opportunity_access__opportunity__delivery_type__name"),
