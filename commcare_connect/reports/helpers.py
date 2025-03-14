@@ -107,8 +107,6 @@ def get_table_data_for_year_month(
         filter_kwargs.update({"opportunity_access__opportunity__currency": country_currency})
         filter_kwargs_nm.update({"invoice__opportunity__currency": country_currency})
 
-    group_values = ["month_group"]
-
     max_visit_date = (
         UserVisit.objects.filter(completed_work_id=models.OuterRef("id"), status=VisitValidationStatus.approved)
         .values_list("visit_date")
@@ -121,18 +119,10 @@ def get_table_data_for_year_month(
         **filter_kwargs, status=CompletedWorkStatus.approved, saved_approved_count__gt=0
     )
     visit_data = (
-        base_visit_data_qs.annotate(
-            filter_date=models.Case(
-                models.When(status_modified_date__isnull=True, then=models.F("date_created")),
-                default=models.F("status_modified_date"),
-            )
-        )
+        base_visit_data_qs.annotate(filter_date=Coalesce("status_modified_date", "date_created"))
         .filter(filter_date__range=(start_date, end_date))
-        .annotate(
-            month_group=TruncMonth("filter_date"),
-            delivery_type_name=models.F("opportunity_access__opportunity__delivery_type__name"),
-        )
-        .values(*group_values)
+        .annotate(month_group=TruncMonth("filter_date"))
+        .values("month_group")
         .annotate(
             users=models.Count("opportunity_access__user_id", distinct=True),
             services=models.Sum("saved_approved_count", default=0),
@@ -152,11 +142,8 @@ def get_table_data_for_year_month(
             payment_date__range=(start_date, end_date),
             saved_payment_accrued_usd__gt=0,
         )
-        .annotate(
-            month_group=TruncMonth("payment_date"),
-            delivery_type_name=models.F("opportunity_access__opportunity__delivery_type__name"),
-        )
-        .values(*group_values)
+        .annotate(month_group=TruncMonth("payment_date"))
+        .values("month_group")
         .annotate(
             avg_time_to_payment=models.Avg(ExtractDay(time_to_payment), default=0),
             max_time_to_payment=models.Max(ExtractDay(time_to_payment), default=0),
@@ -170,11 +157,8 @@ def get_table_data_for_year_month(
     payment_query = Payment.objects.filter(date_paid__range=(start_date, end_date))
     nm_amount_paid_data = (
         payment_query.filter(**filter_kwargs_nm)
-        .annotate(
-            delivery_type_name=models.F("invoice__opportunity__delivery_type__name"),
-            month_group=TruncMonth("date_paid"),
-        )
-        .values(*group_values)
+        .annotate(month_group=TruncMonth("date_paid"))
+        .values("month_group")
         .annotate(
             nm_amount_paid=models.Sum("amount_usd", default=0, filter=models.Q(invoice__service_delivery=True)),
             nm_other_amount_paid=models.Sum("amount_usd", default=0, filter=models.Q(invoice__service_delivery=False)),
@@ -187,11 +171,8 @@ def get_table_data_for_year_month(
 
     avg_top_flw_amount_paid = (
         payment_query.filter(**filter_kwargs, confirmed=True)
-        .annotate(
-            delivery_type_name=models.F("opportunity_access__opportunity__delivery_type__name"),
-            month_group=TruncMonth("date_paid"),
-        )
-        .values(*group_values, "opportunity_access__user_id")
+        .annotate(month_group=TruncMonth("date_paid"))
+        .values("month_group", "opportunity_access__user_id")
         .annotate(approved_sum=models.Sum("amount_usd", default=0))
         .order_by("month_group")
     )
