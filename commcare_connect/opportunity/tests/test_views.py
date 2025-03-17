@@ -192,11 +192,9 @@ def test_approve_visit(
         opportunity=opportunity, opportunity_access=access, flagged=True, status=VisitValidationStatus.pending
     )
     user = MembershipFactory.create(organization=opportunity.organization).user
-    print("opportunity.organization.slug", opportunity.organization.slug)
     approve_url = reverse("opportunity:approve_visit", args=(opportunity.organization.slug, visit.id))
     client.force_login(user)
     response = client.post(approve_url, {"justification": justification}, follow=True)
-    print(response.status_code)
     visit.refresh_from_db()
     assert visit.status == VisitValidationStatus.approved
     expected_redirect_url = None
