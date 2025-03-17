@@ -24,11 +24,11 @@ def _get_cumulative_count(count_data: dict[str, int]):
     from_date = datetime.strptime(ADMIN_REPORT_START, "%Y-%m").date()
     to_date = datetime.today().date()
     timeseries = get_month_series(from_date, to_date)
-    total_eligible_user_count = 0
+    total_count = 0
     for month in timeseries:
         key = month.strftime("%Y-%m")
-        total_eligible_user_count += count_data.get(key, 0)
-        data[key] = total_eligible_user_count
+        total_count += count_data.get(key, 0)
+        data[key] = total_count
     return data
 
 
