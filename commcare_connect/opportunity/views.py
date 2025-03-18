@@ -17,6 +17,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 from django.utils.timezone import now
+from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
@@ -315,6 +316,10 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
         context["export_form"] = PaymentExportForm()
         context["review_visit_export_form"] = ReviewVisitExportForm()
         context["user_is_network_manager"] = object.managed and object.organization == self.request.org
+        import_visit_helper_text = _(
+            'The file must contain at least the "Visit ID"{extra} and "Status" column. The import is case-insensitive.'
+        ).format(extra=_(', "Justification"') if object.managed else "")
+        context["import_visit_helper_text"] = import_visit_helper_text
         return context
 
 
@@ -907,6 +912,7 @@ def visit_verification(request, org_slug=None, pk=None):
 
 
 @org_member_required
+@require_POST
 def approve_visit(request, org_slug=None, pk=None):
     user_visit = UserVisit.objects.get(pk=pk)
     opp_id = user_visit.opportunity_id
@@ -914,10 +920,19 @@ def approve_visit(request, org_slug=None, pk=None):
         user_visit.status = VisitValidationStatus.approved
         if user_visit.opportunity.managed:
             user_visit.review_created_on = now()
+
+            if user_visit.flagged:
+                justification = request.POST.get("justification")
+                if not justification:
+                    messages.error(request, "Justification is mandatory for flagged visits.")
+                user_visit.justification = justification
+
         user_visit.save()
         update_payment_accrued(opportunity=user_visit.opportunity, users=[user_visit.user])
+
     if user_visit.opportunity.managed:
         return redirect("opportunity:user_visit_review", org_slug, opp_id)
+
     return redirect(
         "opportunity:user_visits_list", org_slug=org_slug, opp_id=opp_id, pk=user_visit.opportunity_access_id
     )
