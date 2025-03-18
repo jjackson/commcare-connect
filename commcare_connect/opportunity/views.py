@@ -17,6 +17,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 from django.utils.timezone import now
+from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
@@ -311,6 +312,10 @@ class OpportunityDetail(OrganizationUserMixin, DetailView):
         context["visit_export_form"] = VisitExportForm()
         context["export_form"] = PaymentExportForm()
         context["user_is_network_manager"] = object.managed and object.organization == self.request.org
+        import_visit_helper_text = _(
+            'The file must contain at least the "Visit ID"{extra} and "Status" column. The import is case-insensitive.'
+        ).format(extra=_(', "Justification"') if object.managed else "")
+        context["import_visit_helper_text"] = import_visit_helper_text
         return context
 
 
