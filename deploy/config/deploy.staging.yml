@@ -21,4 +21,4 @@ servers:
     logging:
       options:
         awslogs-group: 'commcare-connect-staging-celery'
-        tag: 'web-{{.ID}}'
+        tag: 'celery-{{.ID}}'
