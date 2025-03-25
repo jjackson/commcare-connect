@@ -10,6 +10,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
+from django.db.models import Q
 from django.utils.timezone import now
 from tablib import Dataset
 
@@ -186,14 +187,19 @@ def get_missing_justification_message(visits_ids):
     return f"Justification is required for flagged visits: {id_list}"
 
 
-def update_payment_accrued(opportunity: Opportunity, users):
-    """Updates payment accrued for completed and approved CompletedWork instances."""
+def update_payment_accrued(opportunity: Opportunity, users, incremental=False):
+    """Updates payment accrued for completed and approved CompletedWork instances.
+    Skips already processed completed works when incremental is true."""
+
     access_objects = OpportunityAccess.objects.filter(user__in=users, opportunity=opportunity, suspended=False)
+    completed_work_filter = ~Q(status=CompletedWorkStatus.rejected)
+    if incremental:
+        completed_work_filter |= ~Q(status=CompletedWorkStatus.approved)
+        completed_work_filter &= Q(saved_approved_count=0)
     for access in access_objects:
         with cache.lock(f"update_payment_accrued_lock_{access.id}", timeout=900):
-            completed_works = access.completedwork_set.exclude(status=CompletedWorkStatus.rejected).select_related(
-                "payment_unit"
-            )
+            completed_works = access.completedwork_set.filter(completed_work_filter).select_related("payment_unit")
+
             update_status(completed_works, access, compute_payment=True)
 
 
