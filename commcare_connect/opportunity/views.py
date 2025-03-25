@@ -775,7 +775,7 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
         [
             cw
             for cw in CompletedWork.objects.filter(opportunity_access=access, status=CompletedWorkStatus.pending)
-            if cw.approved_count
+            if cw.saved_approved_count
         ]
     )
     user_catchment_data = [

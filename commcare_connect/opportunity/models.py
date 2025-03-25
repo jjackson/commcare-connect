@@ -272,7 +272,10 @@ class OpportunityAccess(models.Model):
     @property
     def visit_count(self):
         return sum(
-            [cw.completed for cw in self.completedwork_set.exclude(status=CompletedWorkStatus.over_limit).all()]
+            [
+                cw.saved_completed_count
+                for cw in self.completedwork_set.exclude(status=CompletedWorkStatus.over_limit).all()
+            ]
         )
 
     @property
