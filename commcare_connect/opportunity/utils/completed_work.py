@@ -1,13 +1,95 @@
-from django.db.models import Sum
+from collections import defaultdict
+
+from django.db.models import Prefetch, Sum
 
 from commcare_connect.opportunity.models import (
     CompletedWork,
     CompletedWorkStatus,
+    DeliverUnit,
     OpportunityAccess,
     Payment,
+    PaymentUnit,
+    UserVisit,
     VisitReviewStatus,
     VisitValidationStatus,
 )
+
+
+def get_completed_work_completed_approved_count(completed_works):
+    counts = defaultdict(lambda: {"completed": 0, "approved": 0})
+
+    completed_works = completed_works.prefetch_related(
+        Prefetch("uservisit_set", queryset=UserVisit.objects.all()), "payment_unit"
+    )
+
+    payment_units = PaymentUnit.objects.filter(
+        id__in=completed_works.values_list("payment_unit_id", flat=True)
+    ).values("id", "parent_payment_unit")
+    deliver_units = DeliverUnit.objects.filter(
+        payment_unit__in=completed_works.values_list("payment_unit_id", flat=True)
+    ).values("id", "optional", "payment_unit_id")
+
+    payment_unit_map = defaultdict(lambda: defaultdict(list))
+    for payment_unit in payment_units:
+        parent_id = payment_unit["parent_payment_unit"]
+        payment_unit_map[parent_id]["child_payment_units"].append(payment_unit["id"])
+
+    deliver_unit_map = defaultdict(lambda: {})
+    for deliver_unit in deliver_units:
+        pu_id = deliver_unit["payment_unit_id"]
+        du_id = deliver_unit["id"]
+        optional = deliver_unit.get("optional", False)
+        deliver_unit_map[pu_id][du_id] = optional
+
+    for completed_work in completed_works:
+        if completed_work.id in counts:
+            continue
+
+        unit_counts = defaultdict(int)
+        approved_unit_counts = defaultdict(int)
+
+        for user_visit in completed_work.uservisit_set.all():
+            unit_counts[user_visit.deliver_unit_id] += 1
+            if user_visit.status == VisitValidationStatus.approved.value:
+                approved_unit_counts[user_visit.deliver_unit_id] += 1
+
+        required_deliver_units = [
+            du_id for du_id, optional in deliver_unit_map[completed_work.payment_unit_id].items() if not optional
+        ]
+        optional_deliver_units = [
+            du_id for du_id, optional in deliver_unit_map[completed_work.payment_unit_id].items() if optional
+        ]
+
+        number_completed = min([unit_counts[deliver_id] for deliver_id in required_deliver_units], default=0)
+        number_approved = min([approved_unit_counts[deliver_id] for deliver_id in required_deliver_units], default=0)
+
+        if optional_deliver_units:
+            optional_completed = sum(unit_counts[deliver_id] for deliver_id in optional_deliver_units)
+            number_completed = min(number_completed, optional_completed)
+
+            optional_approved = sum(approved_unit_counts[deliver_id] for deliver_id in optional_deliver_units)
+            number_approved = min(number_approved, optional_approved)
+
+        child_payment_units = payment_unit_map[completed_work.payment_unit_id].get("child_payment_units", [])
+        if child_payment_units:
+            child_completed_works = CompletedWork.objects.filter(
+                opportunity_access=completed_work.opportunity_access,
+                payment_unit__in=child_payment_units,
+                entity_id=completed_work.entity_id,
+            )
+            child_completed_work_count = child_approved_work_count = 0
+            for child_completed_work in child_completed_works:
+                if child_completed_work.id not in counts:
+                    counts[child_completed_work.id]["approved"] = child_completed_work.approved_count
+                    counts[child_completed_work.id]["completed"] = child_completed_work.completed_count
+                child_approved_work_count += counts[child_completed_work.id]["approved"]
+                child_completed_work_count += counts[child_completed_work.id]["completed"]
+            number_completed = min(number_completed, child_completed_work_count)
+            number_approved = min(number_approved, child_approved_work_count)
+
+        counts[completed_work.id]["approved"] = number_approved
+        counts[completed_work.id]["completed"] = number_completed
+    return counts
 
 
 def update_status(completed_works, opportunity_access, compute_payment=True):
@@ -30,9 +112,9 @@ def update_status(completed_works, opportunity_access, compute_payment=True):
 
 def update_status_and_set_saved_fields(completed_works, opportunity, compute_payment):
     to_update = []
+    completed_approved_count = get_completed_work_completed_approved_count(completed_works)
     for completed_work in completed_works:
-        # completed_count = completed_approved_count[completed_work.id]["completed"]
-        completed_count = completed_work.completed_count
+        completed_count = completed_approved_count[completed_work.id]["completed"]
         if completed_count < 1:
             continue
 
@@ -56,7 +138,7 @@ def update_status_and_set_saved_fields(completed_works, opportunity, compute_pay
             updated = True
 
         if compute_payment:
-            approved_count = completed_work.approved_count
+            approved_count = completed_approved_count[completed_work.id]["approved"]
 
             amount_accrued = amount_accrued_usd = org_amount_accrued = org_amount_accrued_usd = 0
             if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
@@ -84,6 +166,7 @@ def update_status_and_set_saved_fields(completed_works, opportunity, compute_pay
     CompletedWork.objects.bulk_update(
         to_update,
         fields=[
+            "reason",
             "status",
             "status_modified_date",
             "saved_completed_count",
