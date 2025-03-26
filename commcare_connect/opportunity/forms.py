@@ -146,6 +146,13 @@ class OpportunityChangeForm(
                 raise ValidationError("Cannot reactivate opportunity with reused applications", code="app_reused")
         return active
 
+    def clean_users(self):
+        users = self.cleaned_data["users"]
+        if users and not self.instance.is_setup_complete:
+            raise ValidationError("Please finish setting up the opportunity before inviting users.")
+
+        return users
+
 
 class OpportunityInitForm(forms.ModelForm):
     managed_opp = False
