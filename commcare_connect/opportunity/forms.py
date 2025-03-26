@@ -147,7 +147,7 @@ class OpportunityChangeForm(
         return active
 
     def clean_users(self):
-        users = self.cleaned_data["users"]
+        users = super().clean_users()
         if users and not self.instance.is_setup_complete:
             raise ValidationError("Please finish setting up the opportunity before inviting users.")
 
