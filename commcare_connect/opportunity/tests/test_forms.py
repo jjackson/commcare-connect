@@ -320,7 +320,11 @@ class TestOpportunityChangeForm:
     def test_for_incomplete_opp(self, base_form_data, valid_opportunity, organization):
         data = data = base_form_data.copy()
         PaymentUnit.objects.filter(opportunity=valid_opportunity).delete()  # making opp incomplete explicitly
-        form = OpportunityChangeForm(data=data, instance=valid_opportunity, org_slug=organization.slug)
+        form = OpportunityChangeForm(
+            data=data,
+            instance=valid_opportunity,
+            org_slug=organization.slug,
+        )
         assert not form.is_valid()
         assert "users" in form.errors
         assert "Please finish setting up the opportunity before inviting users." in form.errors["users"]
