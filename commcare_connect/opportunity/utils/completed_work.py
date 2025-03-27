@@ -26,17 +26,17 @@ def get_completed_work_completed_approved_count(completed_works):
         payment_unit__in=completed_works.values_list("payment_unit_id", flat=True)
     ).values("id", "optional", "payment_unit_id")
 
-    payment_unit_map = defaultdict(lambda: defaultdict(list))
+    parent_child_payment_unit_map = defaultdict(list)
     for payment_unit in payment_units:
         parent_id = payment_unit["parent_payment_unit"]
-        payment_unit_map[parent_id]["child_payment_units"].append(payment_unit["id"])
+        parent_child_payment_unit_map[parent_id].append(payment_unit["id"])
 
-    deliver_unit_map = defaultdict(lambda: {})
+    deliver_unit_map = defaultdict(list)
     for deliver_unit in deliver_units:
         pu_id = deliver_unit["payment_unit_id"]
         du_id = deliver_unit["id"]
         optional = deliver_unit.get("optional", False)
-        deliver_unit_map[pu_id][du_id] = optional
+        deliver_unit_map[pu_id].append((du_id, optional))
 
     for completed_work in completed_works:
         if completed_work.id in counts:
@@ -51,10 +51,10 @@ def get_completed_work_completed_approved_count(completed_works):
                 approved_unit_counts[user_visit.deliver_unit_id] += 1
 
         required_deliver_units = [
-            du_id for du_id, optional in deliver_unit_map[completed_work.payment_unit_id].items() if not optional
+            du_id for du_id, optional in deliver_unit_map[completed_work.payment_unit_id] if not optional
         ]
         optional_deliver_units = [
-            du_id for du_id, optional in deliver_unit_map[completed_work.payment_unit_id].items() if optional
+            du_id for du_id, optional in deliver_unit_map[completed_work.payment_unit_id] if optional
         ]
 
         number_completed = min([unit_counts[deliver_id] for deliver_id in required_deliver_units], default=0)
@@ -67,7 +67,7 @@ def get_completed_work_completed_approved_count(completed_works):
             optional_approved = sum(approved_unit_counts[deliver_id] for deliver_id in optional_deliver_units)
             number_approved = min(number_approved, optional_approved)
 
-        child_payment_units = payment_unit_map[completed_work.payment_unit_id].get("child_payment_units", [])
+        child_payment_units = parent_child_payment_unit_map[completed_work.payment_unit_id]
         if child_payment_units:
             child_completed_works = CompletedWork.objects.filter(
                 opportunity_access=completed_work.opportunity_access,
