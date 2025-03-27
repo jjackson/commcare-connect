@@ -10,7 +10,6 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
-from django.db.models import Q
 from django.utils.timezone import now
 from tablib import Dataset
 
@@ -192,13 +191,19 @@ def update_payment_accrued(opportunity: Opportunity, users: list, incremental=Fa
     Skips already processed completed works when incremental is true."""
 
     access_objects = OpportunityAccess.objects.filter(user__in=users, opportunity=opportunity, suspended=False)
-    completed_work_filter = ~Q(status=CompletedWorkStatus.rejected)
+    filter_kwargs = {}
+    exclude_status = [CompletedWorkStatus.rejected]
     if incremental:
-        completed_work_filter |= ~Q(status=CompletedWorkStatus.approved)
-        completed_work_filter &= Q(saved_approved_count=0)
+        exclude_status.append(CompletedWorkStatus.approved)
+        filter_kwargs["saved_approved_count"] = 0
+
     for access in access_objects:
         with cache.lock(f"update_payment_accrued_lock_{access.id}", timeout=900):
-            completed_works = access.completedwork_set.filter(completed_work_filter).select_related("payment_unit")
+            completed_works = (
+                access.completedwork_set.filter(**filter_kwargs)
+                .exclude(status__in=exclude_status)
+                .select_related("payment_unit")
+            )
 
             update_status(completed_works, access, compute_payment=True)
 
