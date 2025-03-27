@@ -178,7 +178,7 @@ def _bulk_update_visit_status(opportunity: Opportunity, dataset: Dataset):
                 to_update, fields=["status", "reason", "review_created_on", "justification", "status_modified_date"]
             )
             missing_visits |= set(visit_batch) - seen_visits
-    update_payment_accrued(opportunity, users=user_ids)
+    update_payment_accrued(opportunity, users=list(user_ids))
     return VisitImportStatus(seen_visits, missing_visits)
 
 
@@ -187,7 +187,7 @@ def get_missing_justification_message(visits_ids):
     return f"Justification is required for flagged visits: {id_list}"
 
 
-def update_payment_accrued(opportunity: Opportunity, users, incremental=False):
+def update_payment_accrued(opportunity: Opportunity, users: list, incremental=False):
     """Updates payment accrued for completed and approved CompletedWork instances.
     Skips already processed completed works when incremental is true."""
 
@@ -425,7 +425,7 @@ def _bulk_update_completed_work_status(opportunity: Opportunity, dataset: Datase
                 user_ids.add(completed_work.opportunity_access.user_id)
             CompletedWork.objects.bulk_update(to_update, fields=["status", "reason", "status_modified_date"])
             missing_completed_works |= set(work_batch) - seen_completed_works
-        update_payment_accrued(opportunity, users=user_ids)
+        update_payment_accrued(opportunity, users=list(user_ids))
     return CompletedWorkImportStatus(seen_completed_works, missing_completed_works)
 
 
@@ -712,7 +712,7 @@ def _bulk_update_visit_review_status(opportunity: Opportunity, dataset: Dataset)
             UserVisit.objects.bulk_update(to_update, fields=["review_status"])
 
     if user_ids:
-        update_payment_accrued(opportunity=opportunity, users=user_ids)
+        update_payment_accrued(opportunity=opportunity, users=list(user_ids))
 
     missing_visits = visit_ids - {visit.xform_id for visit in existing_visits}
 
