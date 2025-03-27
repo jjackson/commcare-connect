@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from django.db.models import Prefetch, Sum
+from django.db.models import Sum
 
 from commcare_connect.opportunity.models import (
     CompletedWork,
@@ -9,7 +9,6 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     Payment,
     PaymentUnit,
-    UserVisit,
     VisitReviewStatus,
     VisitValidationStatus,
 )
@@ -18,9 +17,7 @@ from commcare_connect.opportunity.models import (
 def get_completed_work_completed_approved_count(completed_works):
     counts = defaultdict(lambda: {"completed": 0, "approved": 0})
 
-    completed_works = completed_works.prefetch_related(
-        Prefetch("uservisit_set", queryset=UserVisit.objects.all()), "payment_unit"
-    )
+    completed_works = completed_works.prefetch_related("uservisit_set")
 
     payment_units = PaymentUnit.objects.filter(
         id__in=completed_works.values_list("payment_unit_id", flat=True)
