@@ -29,6 +29,7 @@ from geopy import distance
 from commcare_connect.connect_id_client import fetch_users
 from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.api.serializers import remove_opportunity_access_cache
+from commcare_connect.opportunity.app_xml import AppNoBuildException
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     AddBudgetNewUsersForm,
@@ -1359,3 +1360,17 @@ def resend_user_invite(request, org_slug, opp_id, pk):
         invite_user.delay(user.id, access.pk)
 
     return HttpResponse("The invitation has been successfully resent to the user.")
+
+
+def sync_deliver_units(request, org_slug, opp_id):
+    response_html = ""
+    try:
+        create_learn_modules_and_deliver_units.delay(opp_id)
+        response_html = """
+              <i class="bi bi-check-lg text-success" id="sync-button">Sync Completed</i>
+          """
+    except AppNoBuildException:
+        response_html = """
+              <i class="bi bi-exclamation text-warning fs-6" id="sync-button">No new updates available.</i>
+          """
+    return HttpResponse(response_html)
