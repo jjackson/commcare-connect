@@ -803,6 +803,23 @@ class PaymentUnitForm(forms.ModelForm):
             Row(Column("start_date"), Column("end_date")),
             Row(Field("required_deliver_units")),
             Row(Field("optional_deliver_units")),
+            Row(
+                Column(
+                    HTML(
+                        f"""
+                        <button type="button" class="btn btn-sm btn-outline-info" id="sync-button"
+                            hx-post="{reverse('opportunity:sync_delivery_units', args=('hy-superuser', 2))}"
+                            hx-trigger="click"
+                            hx-swap="outerHTML"
+                            hx-on:click="this.innerHTML=&quot;<span class='spinner-border spinner-border-sm'
+                            role='status' aria-hidden='true'></span> Syncing...&quot;; this.disabled=true;">
+                            <span id="sync-text">Sync Delivery Units</span>
+                        </button>
+                        """
+                    ),
+                    css_class="col-md-3 d-flex align-items-center mb-3",
+                )
+            ),
             Row(Field("payment_units")),
             Field("max_total", wrapper_class="form-group col-md-4 mb-0"),
             Field("max_daily", wrapper_class="form-group col-md-4 mb-0"),
