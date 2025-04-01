@@ -1,6 +1,7 @@
 import datetime
 import json
 from functools import reduce
+from http import HTTPStatus
 
 from celery.result import AsyncResult
 from crispy_forms.utils import render_crispy_form
@@ -1363,14 +1364,12 @@ def resend_user_invite(request, org_slug, opp_id, pk):
 
 
 def sync_deliver_units(request, org_slug, opp_id):
-    response_html = ""
+    status = status = HTTPStatus.OK
+    message = "Delivery unit sync completed."
     try:
         create_learn_modules_and_deliver_units.delay(opp_id)
-        response_html = """
-              <i class="bi bi-check-lg text-success" id="sync-button">Sync Completed</i>
-          """
     except AppNoBuildException:
-        response_html = """
-              <i class="bi bi-exclamation text-warning fs-6" id="sync-button">No new updates available.</i>
-          """
-    return HttpResponse(response_html)
+        status = HTTPStatus.BAD_REQUEST
+        message = "No new updates available"
+
+    return HttpResponse(content=message, status=status)
