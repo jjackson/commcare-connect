@@ -812,7 +812,7 @@ class PaymentUnitForm(forms.ModelForm):
                 hx-post="{reverse('opportunity:sync_deliver_units', args=(org_slug, opportunity_id))}"
                 hx-trigger="click" hx-swap="none" hx-on::after-request="alert(event?.detail?.xhr?.response);
                 event.detail.successful && location.reload();
-                this.removeAttribute('disabled'); this.innerHTML='Sync Delivery Units';""
+                this.removeAttribute('disabled'); this.innerHTML='Sync Deliver Units';""
                 hx-disabled-elt="this"
                 hx-on:click="this.innerHTML=&quot;<span class=\\
                 'spinner-border spinner-border-sm'></span> Syncing...&quot;;">
