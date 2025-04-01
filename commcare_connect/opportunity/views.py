@@ -1371,7 +1371,7 @@ def sync_deliver_units(request, org_slug, opp_id):
     status = status = HTTPStatus.OK
     message = "Delivery unit sync completed."
     try:
-        create_learn_modules_and_deliver_units.delay(opp_id)
+        create_learn_modules_and_deliver_units.apply(args=[opp_id], throw=True)
     except AppNoBuildException:
         status = HTTPStatus.BAD_REQUEST
         message = "No new updates available"
