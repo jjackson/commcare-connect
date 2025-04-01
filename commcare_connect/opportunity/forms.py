@@ -816,7 +816,7 @@ class PaymentUnitForm(forms.ModelForm):
                 hx-disabled-elt="this"
                 hx-on:click="this.innerHTML=&quot;<span class=\\
                 'spinner-border spinner-border-sm'></span> Syncing...&quot;;">
-                <span id="sync-text">Sync Delivery Units</span>
+                <span id="sync-text">Sync Deliver Units</span>
                 </button>
                 """
             ),
