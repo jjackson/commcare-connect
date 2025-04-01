@@ -793,6 +793,9 @@ class PaymentUnitForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         deliver_units = kwargs.pop("deliver_units", [])
         payment_units = kwargs.pop("payment_units", [])
+        org_slug = kwargs.pop("org_slug")
+        opportunity_id = kwargs.pop("opportunity_id")
+
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
@@ -806,7 +809,7 @@ class PaymentUnitForm(forms.ModelForm):
             HTML(
                 f"""
                 <button type="button" class="btn btn-sm btn-outline-info mb-3" id="sync-button"
-                hx-post="{reverse('opportunity:sync_delivery_units', args=('hy-superuser', 2))}"
+                hx-post="{reverse('opportunity:sync_deliver_units', args=(org_slug, opportunity_id))}"
                 hx-trigger="click" hx-swap="none" hx-on::after-request="alert(event?.detail?.xhr?.response);
                 event.detail.successful && location.reload();
                 this.removeAttribute('disabled'); this.innerHTML='Sync Delivery Units';""

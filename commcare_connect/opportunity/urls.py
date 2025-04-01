@@ -126,5 +126,5 @@ urlpatterns = [
     path("<int:pk>/invoice/approve/", views.invoice_approve, name="invoice_approve"),
     path("<int:opp_id>/user_invite_delete/<int:pk>/", views.user_invite_delete, name="user_invite_delete"),
     path("<int:opp_id>/resend_invite/<int:pk>", resend_user_invite, name="resend_user_invite"),
-    path("<int:opp_id>/sync_delivery_units/", sync_deliver_units, name="sync_delivery_units"),
+    path("<int:opp_id>/sync_deliver_units/", sync_deliver_units, name="sync_deliver_units"),
 ]
