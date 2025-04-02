@@ -801,6 +801,9 @@ class PaymentUnitForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         deliver_units = kwargs.pop("deliver_units", [])
         payment_units = kwargs.pop("payment_units", [])
+        org_slug = kwargs.pop("org_slug")
+        opportunity_id = kwargs.pop("opportunity_id")
+
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
@@ -811,6 +814,20 @@ class PaymentUnitForm(forms.ModelForm):
             Row(Column("start_date"), Column("end_date")),
             Row(Field("required_deliver_units")),
             Row(Field("optional_deliver_units")),
+            HTML(
+                f"""
+                <button type="button" class="btn btn-sm btn-outline-info mb-3" id="sync-button"
+                hx-post="{reverse('opportunity:sync_deliver_units', args=(org_slug, opportunity_id))}"
+                hx-trigger="click" hx-swap="none" hx-on::after-request="alert(event?.detail?.xhr?.response);
+                event.detail.successful && location.reload();
+                this.removeAttribute('disabled'); this.innerHTML='Sync Deliver Units';""
+                hx-disabled-elt="this"
+                hx-on:click="this.innerHTML=&quot;<span class=\\
+                'spinner-border spinner-border-sm'></span> Syncing...&quot;;">
+                <span id="sync-text">Sync Deliver Units</span>
+                </button>
+                """
+            ),
             Row(Field("payment_units")),
             Field("max_total", wrapper_class="form-group col-md-4 mb-0"),
             Field("max_daily", wrapper_class="form-group col-md-4 mb-0"),
