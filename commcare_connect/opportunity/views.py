@@ -1,6 +1,7 @@
 import datetime
 import json
 from functools import reduce
+from http import HTTPStatus
 
 from celery.result import AsyncResult
 from crispy_forms.utils import render_crispy_form
@@ -29,6 +30,7 @@ from geopy import distance
 from commcare_connect.connect_id_client import fetch_users
 from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.api.serializers import remove_opportunity_access_cache
+from commcare_connect.opportunity.app_xml import AppNoBuildException
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     AddBudgetNewUsersForm,
@@ -611,6 +613,8 @@ def add_payment_unit(request, org_slug=None, pk=None):
         deliver_units=deliver_units,
         data=request.POST or None,
         payment_units=opportunity.paymentunit_set.filter(parent_payment_unit__isnull=True).all(),
+        org_slug=org_slug,
+        opportunity_id=opportunity.pk,
     )
     if form.is_valid():
         form.instance.opportunity = opportunity
@@ -666,6 +670,8 @@ def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
         instance=payment_unit,
         data=request.POST or None,
         payment_units=opportunity_payment_units,
+        org_slug=org_slug,
+        opportunity_id=opportunity.pk,
     )
     if form.is_valid():
         form.save()
@@ -1359,3 +1365,15 @@ def resend_user_invite(request, org_slug, opp_id, pk):
         invite_user.delay(user.id, access.pk)
 
     return HttpResponse("The invitation has been successfully resent to the user.")
+
+
+def sync_deliver_units(request, org_slug, opp_id):
+    status = HTTPStatus.OK
+    message = "Delivery unit sync completed."
+    try:
+        create_learn_modules_and_deliver_units(opp_id)
+    except AppNoBuildException:
+        status = HTTPStatus.BAD_REQUEST
+        message = "Failed to retrieve updates. No available build at the moment."
+
+    return HttpResponse(content=message, status=status)
