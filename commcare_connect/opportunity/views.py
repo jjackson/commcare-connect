@@ -1368,12 +1368,12 @@ def resend_user_invite(request, org_slug, opp_id, pk):
 
 
 def sync_deliver_units(request, org_slug, opp_id):
-    status = status = HTTPStatus.OK
+    status = HTTPStatus.OK
     message = "Delivery unit sync completed."
     try:
-        create_learn_modules_and_deliver_units.apply(args=[opp_id], throw=True)
+        create_learn_modules_and_deliver_units(opp_id)
     except AppNoBuildException:
         status = HTTPStatus.BAD_REQUEST
-        message = "No new updates available"
+        message = "Failed to retrieve updates. No available build at the moment."
 
     return HttpResponse(content=message, status=status)
