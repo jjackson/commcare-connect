@@ -123,7 +123,7 @@ from commcare_connect.organization.decorators import org_admin_required, org_mem
 from commcare_connect.program.models import ManagedOpportunity, ProgramApplication
 from commcare_connect.program.tables import ProgramInvitationTable
 from commcare_connect.users.models import User
-from commcare_connect.utils.celery import get_task_progress_message
+from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 from commcare_connect.utils.file import get_file_extension
 
@@ -423,7 +423,7 @@ def export_status(request, org_slug, task_id):
     task = AsyncResult(task_id)
     task_meta = task._get_task_meta()
     status = task_meta.get("status")
-    progress = {"complete": status == "SUCCESS", "message": get_task_progress_message(task)}
+    progress = {"complete": status == CELERY_TASK_SUCCESS, "message": get_task_progress_message(task)}
     if status == "FAILURE":
         progress["error"] = task_meta.get("result")
     return render(
