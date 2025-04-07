@@ -6,7 +6,7 @@ from crispy_forms.layout import HTML, Column, Field, Fieldset, Row, Submit
 from dateutil.relativedelta import relativedelta
 from django import forms
 from django.core.exceptions import ValidationError
-from django.db.models import Q, Sum, TextChoices
+from django.db.models import F, Q, Sum, TextChoices
 from django.urls import reverse
 from django.utils.timezone import now
 
@@ -19,9 +19,12 @@ from commcare_connect.opportunity.models import (
     HQApiKey,
     Opportunity,
     OpportunityAccess,
+    OpportunityClaim,
+    OpportunityClaimLimit,
     OpportunityVerificationFlags,
     PaymentInvoice,
     PaymentUnit,
+    VisitReviewStatus,
     VisitValidationStatus,
 )
 from commcare_connect.organization.models import Organization
@@ -34,6 +37,7 @@ FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Afri
 class OpportunityUserInviteForm(forms.Form):
     def __init__(self, *args, **kwargs):
         org_slug = kwargs.pop("org_slug", None)
+        self.opportunity = kwargs.pop("opportunity", None)
         credentials = connect_id_client.fetch_credentials(org_slug)
         super().__init__(*args, **kwargs)
 
@@ -70,6 +74,10 @@ class OpportunityUserInviteForm(forms.Form):
 
     def clean_users(self):
         user_data = self.cleaned_data["users"]
+
+        if user_data and self.opportunity and not self.opportunity.is_setup_complete:
+            raise ValidationError("Please finish setting up the opportunity before inviting users.")
+
         split_users = [line.strip() for line in user_data.splitlines() if line.strip()]
         return split_users
 
@@ -91,6 +99,9 @@ class OpportunityChangeForm(
         ]
 
     def __init__(self, *args, **kwargs):
+        kwargs["opportunity"] = kwargs.get(
+            "instance", None
+        )  # passing the opportunity instance to OpportunityUserInviteForm
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
@@ -101,9 +112,8 @@ class OpportunityChangeForm(
             Row(Field("delivery_type")),
             Row(Field("description")),
             Row(Field("short_description")),
-            Row(Field("currency")),
             Row(
-                Field("additional_users", wrapper_class="form-group col-md-6 mb-0"),
+                Field("currency", wrapper_class="form-group col-md-6 mb-0"),
                 Field("end_date", wrapper_class="form-group col-md-6 mb-0"),
             ),
             HTML("<hr />"),
@@ -118,16 +128,18 @@ class OpportunityChangeForm(
             Submit("submit", "Submit"),
         )
 
-        self.fields["additional_users"] = forms.IntegerField(
-            required=False, help_text="Adds budget for additional users."
-        )
         self.fields["end_date"] = forms.DateField(
             widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
             required=False,
             help_text="Extends opportunity end date for all users.",
         )
-        self.initial["end_date"] = self.instance.end_date.isoformat()
-        self.currently_active = self.instance.active
+        if self.instance:
+            if self.instance.end_date:
+                self.initial["end_date"] = self.instance.end_date.isoformat()
+            self.currently_active = self.instance.active
+
+        if self.instance.managed:
+            self.fields["currency"].disabled = True
 
     def clean_active(self):
         active = self.cleaned_data["active"]
@@ -237,6 +249,7 @@ class OpportunityInitForm(forms.ModelForm):
         deliver_app = self.cleaned_data["deliver_app"]
         learn_app_domain = self.cleaned_data["learn_app_domain"]
         deliver_app_domain = self.cleaned_data["deliver_app_domain"]
+
         self.instance.learn_app, _ = CommCareApp.objects.get_or_create(
             cc_app_id=learn_app["id"],
             cc_domain=learn_app_domain,
@@ -261,6 +274,7 @@ class OpportunityInitForm(forms.ModelForm):
         )
         self.instance.created_by = self.user.email
         self.instance.modified_by = self.user.email
+        self.instance.currency = self.instance.currency.upper()
 
         if self.managed_opp:
             self.instance.organization = self.cleaned_data.get("organization")
@@ -496,6 +510,9 @@ class OpportunityCreationForm(forms.ModelForm):
         deliver_app = self.cleaned_data["deliver_app"]
         learn_app_domain = self.cleaned_data["learn_app_domain"]
         deliver_app_domain = self.cleaned_data["deliver_app_domain"]
+
+        self.instance.currency = self.instance.currency.upper()
+
         self.instance.learn_app, _ = CommCareApp.objects.get_or_create(
             cc_app_id=learn_app["id"],
             cc_domain=learn_app_domain,
@@ -574,6 +591,29 @@ class VisitExportForm(forms.Form):
         return [VisitValidationStatus(status) for status in statuses]
 
 
+class ReviewVisitExportForm(forms.Form):
+    format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="xlsx")
+    date_range = forms.ChoiceField(choices=DateRanges.choices, initial=DateRanges.LAST_30_DAYS)
+    status = forms.MultipleChoiceField(choices=[("all", "All")] + VisitReviewStatus.choices, initial=["all"])
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("format")),
+            Row(Field("date_range")),
+            Row(Field("status")),
+        )
+        self.helper.form_tag = False
+
+    def clean_status(self):
+        statuses = self.cleaned_data["status"]
+        if not statuses or "all" in statuses:
+            return []
+
+        return [VisitReviewStatus(status) for status in statuses]
+
+
 class PaymentExportForm(forms.Form):
     format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="xlsx")
 
@@ -606,10 +646,143 @@ class AddBudgetExistingUsersForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         opportunity_claims = kwargs.pop("opportunity_claims", [])
+        self.opportunity = kwargs.pop("opportunity", None)
         super().__init__(*args, **kwargs)
 
         choices = [(opp_claim.id, opp_claim.id) for opp_claim in opportunity_claims]
         self.fields["selected_users"] = forms.MultipleChoiceField(choices=choices, widget=forms.CheckboxSelectMultiple)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        selected_users = cleaned_data.get("selected_users")
+        additional_visits = cleaned_data.get("additional_visits")
+
+        if not selected_users and not additional_visits and not cleaned_data.get("end_date"):
+            raise forms.ValidationError("Please select users and specify either additional visits or end date.")
+
+        if additional_visits and selected_users:
+            self.budget_increase = self._validate_budget(selected_users, additional_visits)
+
+        return cleaned_data
+
+    def _validate_budget(self, selected_users, additional_visits):
+        claims = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
+        org_pay = self.opportunity.managedopportunity.org_pay_per_visit if self.opportunity.managed else 0
+
+        budget_increase = sum((ocl.payment_unit.amount + org_pay) * additional_visits for ocl in claims)
+
+        if self.opportunity.managed:
+            # NM cannot increase the opportunity budget they can only
+            # assign new visits if the opportunity has remaining budget.
+            if budget_increase > self.opportunity.remaining_budget:
+                raise forms.ValidationError({"additional_visits": "Additional visits exceed the opportunity budget."})
+
+        return budget_increase
+
+    def save(self):
+        selected_users = self.cleaned_data["selected_users"]
+        additional_visits = self.cleaned_data["additional_visits"]
+        end_date = self.cleaned_data["end_date"]
+
+        if additional_visits:
+            claims = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
+            claims.update(max_visits=F("max_visits") + additional_visits)
+
+            if not self.opportunity.managed:
+                self.opportunity.total_budget += self.budget_increase
+                self.opportunity.save()
+
+        if end_date:
+            OpportunityClaim.objects.filter(pk__in=selected_users).update(end_date=end_date)
+
+
+class AddBudgetNewUsersForm(forms.Form):
+    add_users = forms.IntegerField(
+        required=False,
+        label="Number Of Users",
+        help_text="New Budget = Existing Budget + sum of (Amount × Max Total × Number of Users) "
+        "for all payment units.",
+    )
+    total_budget = forms.IntegerField(
+        required=False,
+        label="Opportunity Total Budget",
+        help_text="Set a new total budget or leave it unchanged when using Number of Users.",
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.opportunity = kwargs.pop("opportunity", None)
+        self.program_manager = kwargs.pop("program_manager", False)
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Row(Field("add_users")),
+            Row(Field("total_budget")),
+            Submit(name="submit", value="Submit"),
+        )
+
+        self.fields["total_budget"].initial = self.opportunity.total_budget
+
+    def clean(self):
+        cleaned_data = super().clean()
+        add_users = cleaned_data.get("add_users")
+        total_budget = cleaned_data.get("total_budget")
+
+        if self.opportunity.managed and not self.program_manager:
+            raise forms.ValidationError("Only program managers are allowed to add budgets for managed opportunities.")
+
+        if not add_users and not total_budget:
+            raise forms.ValidationError("Please provide either the number of users or a total budget.")
+
+        if add_users and total_budget and total_budget != self.opportunity.total_budget:
+            raise forms.ValidationError(
+                "Only one field can be updated at a time: either 'Number of Users' or 'Total Budget'."
+            )
+
+        self.budget_increase = self._validate_budget(add_users, total_budget)
+
+        return cleaned_data
+
+    def _validate_budget(self, add_users, total_budget):
+        increased_budget = 0
+        total_program_budget = 0
+        claimed_program_budget = 0
+        org_pay = 0
+
+        if self.opportunity.managed:
+            manage_opp = self.opportunity.managedopportunity
+            org_pay = manage_opp.org_pay_per_visit
+            program = manage_opp.program
+            total_program_budget = program.budget
+            claimed_program_budget = (
+                ManagedOpportunity.objects.filter(program=program)
+                .exclude(id=manage_opp.id)
+                .aggregate(total=Sum("total_budget"))["total"]
+                or 0
+            )
+
+        if add_users:
+            for payment_unit in self.opportunity.paymentunit_set.all():
+                increased_budget += (payment_unit.amount + org_pay) * payment_unit.max_total * add_users
+            if (
+                self.opportunity.managed
+                and self.opportunity.total_budget + increased_budget + claimed_program_budget > total_program_budget
+            ):
+                raise forms.ValidationError({"add_users": "Budget exceeds program budget."})
+        else:
+            if total_budget < self.opportunity.claimed_budget:
+                raise forms.ValidationError({"total_budget": "Total budget cannot be lesser than claimed budget."})
+
+            if self.opportunity.managed and total_budget + claimed_program_budget > total_program_budget:
+                raise forms.ValidationError({"total_budget": "Total budget exceeds program budget."})
+
+            increased_budget = total_budget - self.opportunity.total_budget
+
+        return increased_budget
+
+    def save(self):
+        self.opportunity.total_budget += self.budget_increase
+        self.opportunity.save()
 
 
 class PaymentUnitForm(forms.ModelForm):
@@ -628,6 +801,9 @@ class PaymentUnitForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         deliver_units = kwargs.pop("deliver_units", [])
         payment_units = kwargs.pop("payment_units", [])
+        org_slug = kwargs.pop("org_slug")
+        opportunity_id = kwargs.pop("opportunity_id")
+
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
@@ -638,6 +814,20 @@ class PaymentUnitForm(forms.ModelForm):
             Row(Column("start_date"), Column("end_date")),
             Row(Field("required_deliver_units")),
             Row(Field("optional_deliver_units")),
+            HTML(
+                f"""
+                <button type="button" class="btn btn-sm btn-outline-info mb-3" id="sync-button"
+                hx-post="{reverse('opportunity:sync_deliver_units', args=(org_slug, opportunity_id))}"
+                hx-trigger="click" hx-swap="none" hx-on::after-request="alert(event?.detail?.xhr?.response);
+                event.detail.successful && location.reload();
+                this.removeAttribute('disabled'); this.innerHTML='Sync Deliver Units';""
+                hx-disabled-elt="this"
+                hx-on:click="this.innerHTML=&quot;<span class=\\
+                'spinner-border spinner-border-sm'></span> Syncing...&quot;;">
+                <span id="sync-text">Sync Deliver Units</span>
+                </button>
+                """
+            ),
             Row(Field("payment_units")),
             Field("max_total", wrapper_class="form-group col-md-4 mb-0"),
             Field("max_daily", wrapper_class="form-group col-md-4 mb-0"),
@@ -848,7 +1038,7 @@ class FormJsonValidationRulesForm(forms.ModelForm):
 class PaymentInvoiceForm(forms.ModelForm):
     class Meta:
         model = PaymentInvoice
-        fields = ("amount", "date", "invoice_number")
+        fields = ("amount", "date", "invoice_number", "service_delivery")
         widgets = {"date": forms.DateInput(attrs={"type": "date", "class": "form-control"})}
 
     def __init__(self, *args, **kwargs):
@@ -860,6 +1050,7 @@ class PaymentInvoiceForm(forms.ModelForm):
             Row(Field("amount")),
             Row(Field("date")),
             Row(Field("invoice_number")),
+            Row(Field("service_delivery")),
         )
         self.helper.form_tag = False
 

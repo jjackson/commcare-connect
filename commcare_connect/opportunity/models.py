@@ -5,6 +5,7 @@ from uuid import uuid4
 from django.conf import settings
 from django.db import models
 from django.db.models import Count, F, Max, Q, Sum
+from django.utils.dateparse import parse_datetime
 from django.utils.functional import cached_property
 from django.utils.timezone import now
 from django.utils.translation import gettext
@@ -94,6 +95,10 @@ class Opportunity(BaseModel):
         return self.name
 
     @property
+    def org_pay_per_visit(self):
+        return self.managedopportunity.org_pay_per_visit if self.managed else 0
+
+    @property
     def is_setup_complete(self):
         if not (self.paymentunit_set.count() > 0 and self.total_budget and self.start_date and self.end_date):
             return False
@@ -115,9 +120,7 @@ class Opportunity(BaseModel):
         opp_access = OpportunityAccess.objects.filter(opportunity=self)
         opportunity_claim = OpportunityClaim.objects.filter(opportunity_access__in=opp_access)
         claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__in=opportunity_claim)
-        org_pay = 0
-        if self.managed:
-            org_pay = self.managedopportunity.org_pay_per_visit
+        org_pay = self.org_pay_per_visit
 
         payment_unit_counts = claim_limits.values("payment_unit").annotate(
             visits_count=Sum("max_visits"), amount=F("payment_unit__amount")
@@ -133,15 +136,8 @@ class Opportunity(BaseModel):
     @property
     def utilised_budget(self):
         completed_works = CompletedWork.objects.filter(opportunity_access__opportunity=self)
-        payment_unit_counts = completed_works.values("payment_unit").annotate(
-            completed_count=Count("id"), amount=F("payment_unit__amount")
-        )
-        utilised = 0
-        for payment_unit_count in payment_unit_counts:
-            completed_count = payment_unit_count["completed_count"]
-            amount = payment_unit_count["amount"]
-            utilised += completed_count * amount
-        return utilised
+        org_pay = self.org_pay_per_visit
+        return sum(cw.saved_payment_accrued + org_pay for cw in completed_works)
 
     @property
     def claimed_visits(self):
@@ -167,7 +163,7 @@ class Opportunity(BaseModel):
 
         budget_per_user = 0
         payment_units = self.paymentunit_set.all()
-        org_pay = self.managedopportunity.org_pay_per_visit
+        org_pay = self.org_pay_per_visit
         for pu in payment_units:
             budget_per_user += pu.max_total * (pu.amount + org_pay)
 
@@ -199,7 +195,7 @@ class Opportunity(BaseModel):
 
     @property
     def is_active(self):
-        return self.active and self.end_date and self.end_date >= now().date()
+        return bool(self.active and self.end_date and self.end_date >= now().date())
 
 
 class OpportunityVerificationFlags(models.Model):
@@ -269,14 +265,17 @@ class OpportunityAccess(models.Model):
         learn_modules_count = learn_modules.count()
         if learn_modules_count <= 0:
             return 0
-        completed_modules = self.completedmodule_set.count()
+        completed_modules = self.unique_completed_modules.count()
         percentage = (completed_modules / learn_modules_count) * 100
         return round(percentage, 2)
 
     @property
     def visit_count(self):
-        return sum(
-            [cw.completed for cw in self.completedwork_set.exclude(status=CompletedWorkStatus.over_limit).all()]
+        return (
+            self.completedwork_set.exclude(status=CompletedWorkStatus.over_limit).aggregate(
+                total=Sum("saved_completed_count")
+            )["total"]
+            or 0
         )
 
     @property
@@ -333,6 +332,10 @@ class OpportunityAccess(models.Model):
             status = "Not completed"
         return status
 
+    @property
+    def unique_completed_modules(self):
+        return self.completedmodule_set.order_by("module", "date").distinct("module")
+
 
 class CompletedModule(XFormBaseModel):
     user = models.ForeignKey(
@@ -345,6 +348,13 @@ class CompletedModule(XFormBaseModel):
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE, null=True)
     date = models.DateTimeField()
     duration = models.DurationField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["xform_id", "module", "opportunity_access"], name="unique_xform_completed_module"
+            )
+        ]
 
 
 class Assessment(XFormBaseModel):
@@ -418,6 +428,7 @@ class PaymentInvoice(models.Model):
     amount = models.PositiveIntegerField()
     date = models.DateField()
     invoice_number = models.CharField(max_length=50)
+    service_delivery = models.BooleanField(default=True)
 
     class Meta:
         unique_together = ("opportunity", "invoice_number")
@@ -441,6 +452,8 @@ class Payment(models.Model):
     # This is used to indicate Payments made to Network Manager organizations
     organization = models.ForeignKey(Organization, on_delete=models.DO_NOTHING, null=True, blank=True)
     invoice = models.OneToOneField(PaymentInvoice, on_delete=models.DO_NOTHING, null=True, blank=True)
+    payment_method = models.CharField(max_length=50, null=True, blank=True)
+    payment_operator = models.CharField(max_length=50, null=True, blank=True)
 
 
 class CompletedWorkStatus(models.TextChoices):
@@ -621,6 +634,18 @@ class UserVisit(XFormBaseModel):
     @property
     def images(self):
         return BlobMeta.objects.filter(parent_id=self.xform_id, content_type__startswith="image/")
+
+    @property
+    def duration(self):
+        duration = None
+        start = self.form_json["metadata"].get("timeStart")
+        end = self.form_json["metatdata"].get("timeEnd")
+        if start and end:
+            try:
+                duration = parse_datetime(end) - parse_datetime(start)
+            except (TypeError, ValueError):
+                pass
+        return duration
 
     class Meta:
         constraints = [
