@@ -17,6 +17,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     UserVisit,
+    VisitReviewStatus,
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
@@ -24,6 +25,7 @@ from commcare_connect.opportunity.tables import (
     CompletedWorkTable,
     DeliverStatusTable,
     UserStatusTable,
+    UserVisitReviewTable,
     UserVisitTable,
 )
 
@@ -40,9 +42,9 @@ def export_user_visit_data(
     user_visits = user_visits.order_by("visit_date")
 
     table = UserVisitTable(user_visits)
-    exclude_columns = ("visit_date", "form_json", "details", "justification")
+    exclude_columns = ("visit_date", "form_json", "details", "justification", "review_status")
     if opportunity.managed:
-        exclude_columns = ("visit_date", "form_json", "details")
+        exclude_columns = ("visit_date", "form_json", "details", "review_status")
     columns = [
         column
         for column in table.columns.iterall()
@@ -65,6 +67,29 @@ def export_user_visit_data(
             row_data = [force_str(col, strings_only=True) for col in row]
             dataset.append(row_data)
         return dataset
+
+
+def export_user_visit_review_data(
+    opportunity: Opportunity, date_range: DateRanges, status: list[VisitReviewStatus]
+) -> Dataset:
+    user_visits = UserVisit.objects.filter(opportunity=opportunity, review_created_on__isnull=False)
+    if date_range.get_cutoff_date():
+        user_visits = user_visits.filter(review_created_on__gte=date_range.get_cutoff_date())
+    if status and "all" not in status:
+        user_visits = user_visits.filter(review_status__in=status)
+    user_visits = user_visits.order_by("visit_date")
+    table = UserVisitReviewTable(user_visits)
+    exclude_columns = {"pk", "details", "user_visit"}
+
+    columns = []
+    headers = []
+    for column in table.columns.iterall():
+        if not (column.column.exclude_from_export or column.name in exclude_columns):
+            columns.append(column)
+            headers.append(force_str(column.header, strings_only=True))
+
+    dataset = append_row_data(Dataset(title="Export Review User Visit", headers=headers), table=table, columns=columns)
+    return dataset
 
 
 def get_flattened_dataset(headers: list[str], data: list[list]) -> Dataset:
@@ -105,6 +130,8 @@ def export_empty_payment_table(opportunity: Opportunity) -> Dataset:
         "Name",
         "Payment Amount",
         "Payment Date (YYYY-MM-DD)",
+        "Payment Method",
+        "Payment Operator",
     ]
     dataset = Dataset(title="Export", headers=headers)
 
@@ -119,6 +146,8 @@ def export_empty_payment_table(opportunity: Opportunity) -> Dataset:
             access.user.username,
             access.user.phone_number,
             access.user.name,
+            "",
+            "",
             "",
             "",
         )
@@ -161,7 +190,11 @@ def export_catchment_area_table(opportunity):
 def get_dataset(table, export_title):
     columns = [column for column in table.columns.iterall()]
     headers = [force_str(column.header, strings_only=True) for column in columns]
-    dataset = Dataset(title=export_title, headers=headers)
+    dataset = append_row_data(Dataset(title=export_title, headers=headers), table, columns)
+    return dataset
+
+
+def append_row_data(dataset, table, columns):
     for row in table.rows:
         row_value = []
         for column in columns:
