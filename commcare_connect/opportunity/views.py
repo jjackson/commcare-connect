@@ -8,7 +8,8 @@ from crispy_forms.utils import render_crispy_form
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.core.files.storage import storages
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage, storages
 from django.db.models import Q, Sum
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
@@ -113,15 +114,15 @@ from commcare_connect.opportunity.visit_import import (
     ImportException,
     bulk_update_catchments,
     bulk_update_completed_work_status,
-    bulk_update_payment_status,
     bulk_update_visit_review_status,
     bulk_update_visit_status,
     get_exchange_rate,
-    get_imported_dataset,
     update_payment_accrued,
 )
 from commcare_connect.organization.decorators import org_admin_required, org_member_required, org_viewer_required
 from commcare_connect.program.models import ManagedOpportunity, ProgramApplication
+from commcare_connect.program.tables import ProgramInvitationTable
+from commcare_connect.users.models import User
 from commcare_connect.utils.celery import get_task_progress_message
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 from commcare_connect.utils.file import get_file_extension
@@ -590,9 +591,11 @@ def payment_import(request, org_slug=None, pk=None):
     file_format = get_file_extension(file)
     if file_format not in ("csv", "xlsx"):
         raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
-    imported_data = get_imported_dataset(file, file_format)
-    rows = list(imported_data)
-    result = bulk_update_payments_task.delay(opportunity.pk, imported_data.headers or [], rows)
+
+    file_path = f"{opportunity.pk}_{datetime.datetime.now().isoformat}_payment_import"
+    saved_path = default_storage.save(file_path, ContentFile(file.read()))
+    result = bulk_update_payments_task.delay(opportunity.pk, saved_path, file_format)
+
     redirect_url = reverse("opportunity:detail", args=(request.org.slug, pk))
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 
