@@ -268,8 +268,12 @@ class CompletedWorkSerializer(serializers.ModelSerializer):
         for visit in visits:
             if not visit:
                 continue
+
+            flags_dict = {}
             for slug, reason in visit.get("flags", []):
-                flags.append({slug: reason})
+                flags_dict[slug] = reason
+
+            flags.append(flags_dict)
         return flags
 
 
