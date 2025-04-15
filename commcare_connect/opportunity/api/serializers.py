@@ -264,16 +264,13 @@ class CompletedWorkSerializer(serializers.ModelSerializer):
 
     def get_flags(self, obj):
         visits = obj.uservisit_set.exclude(status=VisitValidationStatus.approved).values_list("flag_reason", flat=True)
-        flags = []
+        flags = {}
         for visit in visits:
             if not visit:
                 continue
 
-            flags_dict = {}
             for slug, reason in visit.get("flags", []):
-                flags_dict[slug] = reason
-
-            flags.append(flags_dict)
+                flags[slug] = reason
         return flags
 
 

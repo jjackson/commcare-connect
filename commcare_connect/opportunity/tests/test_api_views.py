@@ -242,13 +242,11 @@ def test_delivery_progress_endpoint(
     assert len(response.data["deliveries"]) == 1
     assert len(response.data["payments"]) == 0
     assert response.data["deliveries"][0].keys() == CompletedWorkSerializer().get_fields().keys()
-    assert response.data["deliveries"][0]["flags"] == [
-        {
-            "duration": "The form was completed too quickly.",
-            "attachment_missing": "Form was submitted without attachments.",
-        }
-    ]
 
+    assert response.data["deliveries"][0]["flags"] == {
+        "duration": "The form was completed too quickly.",
+        "attachment_missing": "Form was submitted without attachments.",
+    }
     Payment.objects.create(amount=10, date_paid=datetime.date.today(), opportunity_access=access)
     response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
     assert response.status_code == 200
