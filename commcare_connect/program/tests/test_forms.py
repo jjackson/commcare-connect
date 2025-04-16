@@ -137,7 +137,7 @@ class TestManagedOpportunityInitForm:
 
     def test_form_validation_missing_data(self):
         invalid_data = self.form_data.copy()
-        invalid_data.pop("learn_app")
+        invalid_data["learn_app"] = None
         form = ManagedOpportunityInitForm(
             data=invalid_data, program=self.program, domains=self.domains, org_slug=self.organization.slug
         )
