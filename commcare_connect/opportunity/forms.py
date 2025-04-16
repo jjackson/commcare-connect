@@ -234,17 +234,17 @@ class OpportunityInitForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        try:
-            if cleaned_data:
+        if cleaned_data:
+            try:
                 cleaned_data["learn_app"] = json.loads(cleaned_data["learn_app"])
                 cleaned_data["deliver_app"] = json.loads(cleaned_data["deliver_app"])
 
                 if cleaned_data["learn_app"]["id"] == cleaned_data["deliver_app"]["id"]:
                     self.add_error("learn_app", "Learn app and Deliver app cannot be same")
                     self.add_error("deliver_app", "Learn app and Deliver app cannot be same")
-                return cleaned_data
-        except KeyError:
-            raise forms.ValidationError("Invalid app data")
+            except KeyError:
+                raise forms.ValidationError("Invalid app data")
+            return cleaned_data
 
     def save(self, commit=True):
         organization = Organization.objects.get(slug=self.org_slug)
