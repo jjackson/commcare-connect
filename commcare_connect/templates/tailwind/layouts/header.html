@@ -24,8 +24,10 @@
                     <ul class="p-2 w-full">
                         {% for membership in request.memberships %}
                         <li class="p-2 hover:bg-gray-100 rounded cursor-pointer text-left">
+                          <a href="{% url 'opportunity:list' membership.organization.slug %}">
                             <p class="text-brand-deep-purple text-sm font-medium">{{ membership.organization.name }}</p>
                             <p class="text-xs text-gray-400">{% if membership.organization.program_manager %}Program Manager{% else %}Network Manager{% endif %}</p>
+                          </a>
                         </li>
                         {% endfor %}
                         <li class="p-2 rounded cursor-pointer text-left">
@@ -51,7 +53,9 @@
                     <ul class="p-2 w-full">
                         <li class="p-2 text-left">
                             <p class="text-brand-deep-purple font-medium">{{ request.user.username }}</p>
-                            <span class="text-gray-400 text-sm">Role</span>
+                            {% if request.org %}
+                                <span class="text-gray-400 text-sm">{{ request.org_membership.role }}</span>
+                            {% endif %}
                         </li>
                         <li class="p-2 hover:bg-gray-100 rounded cursor-pointer text-left">
                             <p class="text-brand-deep-purple"><a href="{% url 'users:detail' request.user.pk %}">{% translate "Profile" %}</a></p>
