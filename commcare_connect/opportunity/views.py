@@ -22,8 +22,8 @@ from django.utils.timezone import now
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
-from django.views.generic import CreateView, DetailView, ListView, UpdateView
-from django_tables2 import RequestConfig, SingleTableView
+from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
+from django_tables2 import RequestConfig, SingleTableMixin, SingleTableView
 from django_tables2.export import TableExport
 from geopy import distance
 
@@ -53,6 +53,7 @@ from commcare_connect.opportunity.forms import (
 from commcare_connect.opportunity.helpers import (
     get_annotated_opportunity_access,
     get_annotated_opportunity_access_deliver_status,
+    get_opportunity_list_data,
     get_payment_report_data,
 )
 from commcare_connect.opportunity.models import (
@@ -82,9 +83,11 @@ from commcare_connect.opportunity.tables import (
     DeliverStatusTable,
     LearnStatusTable,
     OpportunityPaymentTable,
+    OpportunityTable,
     PaymentInvoiceTable,
     PaymentReportTable,
     PaymentUnitTable,
+    ProgramManagerOpportunityTable,
     SuspendedUsersTable,
     UserPaymentsTable,
     UserStatusTable,
@@ -119,8 +122,7 @@ from commcare_connect.opportunity.visit_import import (
     update_payment_accrued,
 )
 from commcare_connect.organization.decorators import org_admin_required, org_member_required, org_viewer_required
-from commcare_connect.program.models import ManagedOpportunity, ProgramApplication
-from commcare_connect.program.tables import ProgramInvitationTable
+from commcare_connect.program.models import ManagedOpportunity
 from commcare_connect.users.models import User
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 
@@ -156,28 +158,25 @@ class OrgContextSingleTableView(SingleTableView):
         return kwargs
 
 
-class OpportunityList(OrganizationUserMixin, ListView):
-    model = Opportunity
-    paginate_by = 10
+class OpportunityList(OrganizationUserMixin, SingleTableMixin, TemplateView):
+    template_name = "tailwind/pages/opportunities_list.html"
+    paginate_by = 15
+    base_columns = ["program", "start_date", "end_date", "status", "opportunity"]
+    pm_columns = ["active_workers", "total_deliveries", "verified_deliveries", "worker_earnings"]
+    nm_columns = ["pending_invites", "inactive_workers", "pending_approvals", "payments_due"]
 
-    def get_queryset(self):
-        ordering = self.request.GET.get("sort", "name")
-        if ordering not in ["name", "-name", "start_date", "-start_date", "end_date", "-end_date"]:
-            ordering = "name"
+    def get_allowed_columns(self):
+        extra_columns = self.pm_columns if self.request.org.program_manager else self.nm_columns
+        return self.base_columns + extra_columns
 
-        return Opportunity.objects.filter(organization=self.request.org).order_by(ordering)
+    def get_table_class(self):
+        if self.request.org.program_manager:
+            return ProgramManagerOpportunityTable
+        return OpportunityTable
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["opportunity_init_url"] = reverse("opportunity:init", kwargs={"org_slug": self.request.org.slug})
-
-        program_invitation_table = None
-        if self.request.org_membership and self.request.org_membership.is_admin or self.request.user.is_superuser:
-            program_invitations = ProgramApplication.objects.filter(organization=self.request.org)
-            program_invitation_table = ProgramInvitationTable(program_invitations)
-        context["program_invitation_table"] = program_invitation_table
-        context["base_template"] = "opportunity/base.html"
-        return context
+    def get_table_data(self):
+        org = self.request.org
+        return get_opportunity_list_data(org, self.request.org.program_manager)
 
 
 class OpportunityCreate(OrganizationUserMemberRoleMixin, CreateView):
