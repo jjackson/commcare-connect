@@ -51,7 +51,6 @@ from commcare_connect.opportunity.views import (
     update_visit_status_import,
     user_profile,
     user_visit_review,
-    user_visits_list,
     verification_flags_config,
     visit_verification,
 )
@@ -98,7 +97,17 @@ urlpatterns = [
     path("<int:pk>/user_status_export/", view=export_user_status, name="user_status_export"),
     path("<int:pk>/deliver_status_table/", view=OpportunityDeliverStatusTable.as_view(), name="deliver_status_table"),
     path("<int:pk>/deliver_status_export/", view=export_deliver_status, name="deliver_status_export"),
-    path("<int:opp_id>/user_visits/<int:pk>/", view=user_visits_list, name="user_visits_list"),
+    path(
+        "<int:opp_id>/user_visits/<int:pk>/",
+        view=views.user_visit_verification,
+        name="user_visits_list",
+    ),
+    path(
+        "<int:opp_id>/user_visit_verification_table/<int:pk>/",
+        view=views.VisitVerificationTableView.as_view(),
+        name="user_visit_verification_table",
+    ),
+    path("<int:opp_id>/user_visit_details/<int:pk>/", view=views.user_visit_details, name="user_visit_details"),
     path("<int:opp_id>/payment/<int:access_id>/delete/<int:pk>/", view=payment_delete, name="payment_delete"),
     path("<int:opp_id>/user_profile/<int:pk>/", view=user_profile, name="user_profile"),
     path("<int:pk>/send_message", view=send_message_mobile_users, name="send_message_mobile_users"),
