@@ -595,7 +595,7 @@ class IndexColumn(tables.Column):
         return value
 
 
-class BaseOpportunityList(tables.Table):
+class BaseOpportunityList(OrgContextTable):
     stats_style = "underline underline-offset-2 justify-center"
 
     def __init__(self, *args, **kwargs):
@@ -728,11 +728,11 @@ class OpportunityTable(BaseOpportunityList):
         actions = [
             {
                 "title": "View Opportunity",
-                "url": reverse("opportunity:detail", args=[record.organization.slug, record.id]),
+                "url": reverse("opportunity:detail", args=[self.org_slug, record.id]),
             },
             {
                 "title": "View Workers",
-                "url": reverse("opportunity:worker_list", args=[record.organization.slug, record.id]),
+                "url": reverse("opportunity:worker_list", args=[self.org_slug, record.id]),
             },
         ]
 
@@ -740,7 +740,7 @@ class OpportunityTable(BaseOpportunityList):
             actions.append(
                 {
                     "title": "View Invoices",
-                    "url": reverse("opportunity:detail", args=[record.organization.slug, record.id]),
+                    "url": reverse("opportunity:detail", args=[self.org_slug, record.id]),
                     # "url": reverse("opportunity:tw_invoice_list", args=[record.organization.slug, record.id]),
                 }
             )
@@ -809,11 +809,11 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
         actions = [
             {
                 "title": "View Opportunity",
-                "url": reverse("opportunity:detail", args=[record.organization.slug, record.id]),
+                "url": reverse("opportunity:detail", args=[self.org_slug, record.id]),
             },
             {
                 "title": "View Workers",
-                "url": reverse("opportunity:worker_list", args=[record.organization.slug, record.id]),
+                "url": reverse("opportunity:worker_list", args=[self.org_slug, record.id]),
             },
         ]
 
@@ -821,7 +821,7 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
             actions.append(
                 {
                     "title": "View Invoices",
-                    "url": reverse("opportunity:detail", args=[record.organization.slug, record.id]),
+                    "url": reverse("opportunity:detail", args=[self.org_slug, record.id]),
                     # "url": reverse("opportunity:tw_invoice_list", args=[record.organization.slug, record.id]),
                 }
             )
@@ -1058,7 +1058,7 @@ class WorkerPaymentsTable(tables.Table):
         )
 
 
-class WorkerLearnTable(tables.Table):
+class WorkerLearnTable(OrgContextTable):
     index = IndexColumn()
     user = UserInfoColumn()
     suspended = SuspendedIndicatorColumn()
@@ -1114,7 +1114,7 @@ class WorkerLearnTable(tables.Table):
         return "Passed" if value else "Failed"
 
     def render_action(self, record):
-        url = reverse("opportunity:worker_learn_progress", args=(record.opportunity.organization.slug, record.id))
+        url = reverse("opportunity:worker_learn_progress", args=(self.org_slug, record.id))
         return format_html(
             """ <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-end">
                 <a href="{url}"><i class="fa-solid fa-chevron-right text-brand-deep-purple"></i></a>
