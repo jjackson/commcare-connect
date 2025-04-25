@@ -1224,10 +1224,6 @@ class WorkerLearnStatusTable(tables.Table):
     duration = DurationColumn(accessor="duration", orderable=False)
     time = tables.Column(accessor="date", verbose_name="Time Completed", orderable=False)
 
-    def __init__(self, *args, **kwargs):
-        self.use_view_url = True
-        super().__init__(*args, **kwargs)
-
     def render_time(self, value):
         if value:
             value = localtime(value)
