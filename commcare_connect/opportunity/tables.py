@@ -887,6 +887,7 @@ class UserVisitVerificationTable(tables.Table):
             "hx-indicator": "#visit-loading-indicator",
             "hx-target": "#visit-details",
             "hx-params": "none",
+            "hx-swap": "innerHTML",
             "@click": lambda record: f"selectedRow = {record.id}",
             ":class": lambda record: f"selectedRow == {record.id} && 'active'",
         }
