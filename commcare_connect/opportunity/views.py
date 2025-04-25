@@ -183,6 +183,11 @@ class OpportunityList(OrganizationUserMixin, SingleTableMixin, TemplateView):
             return ProgramManagerOpportunityTable
         return OpportunityTable
 
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        kwargs['org_slug'] = self.request.org.slug
+        return kwargs
+
     def get_table_data(self):
         org = self.request.org
         return get_opportunity_list_data(org, self.request.org.program_manager)
@@ -1712,7 +1717,7 @@ def worker_main(request, org_slug=None, opp_id=None):
 def worker_learn(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     data = get_worker_learn_table_data(opp)
-    table = WorkerLearnTable(data)
+    table = WorkerLearnTable(data, org_slug=org_slug)
     RequestConfig(request, paginate={"per_page": 10}).configure(table)
     return render(request, "tailwind/components/tables/table.html", {"table": table})
 
