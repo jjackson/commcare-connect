@@ -1017,6 +1017,7 @@ class WorkerStatusTable(tables.Table):
     days_to_start_delivery = DurationColumn()
 
     def __init__(self, *args, **kwargs):
+        self.use_view_url = True
         super().__init__(*args, **kwargs)
 
     def render_lastActive(self, value):
@@ -1041,6 +1042,7 @@ class WorkerPaymentsTable(tables.Table):
     total_confirmed_paid = tables.Column(verbose_name="Confirm")
 
     def __init__(self, *args, **kwargs):
+        self.use_view_url = True
         super().__init__(*args, **kwargs)
 
     class Meta:
@@ -1089,6 +1091,7 @@ class WorkerLearnTable(OrgContextTable):
     )
 
     def __init__(self, *args, **kwargs):
+        self.use_view_url = True
         super().__init__(*args, **kwargs)
 
     class Meta:
@@ -1163,6 +1166,7 @@ class WorkerDeliveryTable(tables.Table):
     def __init__(self, *args, **kwargs):
         self.org_slug = kwargs.pop("org_slug")
         self.opp_id = kwargs.pop("opp_id")
+        self.use_view_url = True
         super().__init__(*args, **kwargs)
         self._seen_users = set()
 
