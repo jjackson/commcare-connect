@@ -1127,6 +1127,8 @@ class WorkerLearnTable(OrgContextTable):
 
 
 class WorkerDeliveryTable(tables.Table):
+    use_view_url = True
+
     id = tables.Column(visible=False)
     index = IndexColumn()
     user = tables.Column(orderable=False, verbose_name="Name")
