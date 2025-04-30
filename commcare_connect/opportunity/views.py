@@ -11,7 +11,8 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage, storages
-from django.db.models import Count, Max, Min, Q, Sum
+from django.db.models import Count, Max, Q, Sum
+from django.db.models.functions import Greatest
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
 from django.middleware.csrf import get_token
@@ -1743,7 +1744,9 @@ def worker_payments(request, org_slug=None, opp_id=None):
     query_set = OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0).order_by(
         "-payment_accrued"
     )
-    query_set = query_set.annotate(last_active=Min("uservisit__visit_date"), last_paid=Max("payment__date_paid"))
+    query_set = query_set.annotate(
+        last_active=Greatest(Max("uservisit__visit_date"), Max("completedmodule__date"), "date_learn_started"),
+        last_paid=Max("payment__date_paid"))
     table = WorkerPaymentsTable(query_set)
     RequestConfig(request, paginate={"per_page": 10}).configure(table)
     return render(request, "tailwind/components/tables/table.html", {"table": table})
