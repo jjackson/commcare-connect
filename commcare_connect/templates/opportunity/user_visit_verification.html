@@ -278,6 +278,7 @@
           });
         },
         navigateDate(direction) {
+          if (this.selectedDate == "") return;
           const currentDate = this.selectedDate;
           const newDate = new Date(currentDate);
           newDate.setDate(newDate.getDate() + direction);
