@@ -44,14 +44,8 @@
             {% url 'program:home' request.org.slug as program_home_url %}
             {% include "tailwind/components/sidenav-items.html" with name='Programs' icon='table-columns'  target=program_home_url %}
             {% include "tailwind/components/sidenav-items.html" with name='Opportunities' icon='table-cells-large'  target='/opportunities' %}
-            {% include "tailwind/components/sidenav-items.html" with name='Analytics' icon='chart-pie'  target='/analytics' %}
             {% include "tailwind/components/sidenav-items.html" with name='My Organization' icon='buildings'  target='/organization' %}
         </div>
     </div>
 
-    <!-- Bottom Section -->
-    <div>
-        {% include "tailwind/components/sidenav-items.html" with name='Help & FAQ' icon='circle-question'  target='/help & FAQ' %}
-        {% include "tailwind/components/sidenav-items.html" with name='Settings' icon='gear'  target='/settings' %}
-    </div>
 </div>
