@@ -1037,7 +1037,7 @@ class WorkerPaymentsTable(tables.Table):
     suspended = SuspendedIndicatorColumn()
     last_active = tables.Column()
     payment_accrued = tables.Column(verbose_name="Accrued")
-    total_paid = tables.Column()
+    total_paid = tables.Column(accessor="total_paid_d")
     last_paid = tables.DateColumn(format="d-M-Y")
     confirmed_paid = tables.Column(verbose_name="Confirm")
 
@@ -1047,7 +1047,7 @@ class WorkerPaymentsTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user", "suspended", "payment_accrued", "total_paid", "confirmed_paid")
+        fields = ("user", "suspended", "payment_accrued", "confirmed_paid")
         sequence = (
             "index",
             "user",
