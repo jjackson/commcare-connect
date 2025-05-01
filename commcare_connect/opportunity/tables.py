@@ -1039,7 +1039,7 @@ class WorkerPaymentsTable(tables.Table):
     payment_accrued = tables.Column(verbose_name="Accrued")
     total_paid = tables.Column()
     last_paid = tables.DateColumn(format="d-M-Y")
-    total_confirmed_paid = tables.Column(verbose_name="Confirm")
+    confirmed_paid = tables.Column(verbose_name="Confirm")
 
     def __init__(self, *args, **kwargs):
         self.use_view_url = True
@@ -1047,7 +1047,7 @@ class WorkerPaymentsTable(tables.Table):
 
     class Meta:
         model = OpportunityAccess
-        fields = ("user", "suspended", "payment_accrued", "total_paid", "total_confirmed_paid")
+        fields = ("user", "suspended", "payment_accrued", "total_paid", "confirmed_paid")
         sequence = (
             "index",
             "user",
@@ -1056,7 +1056,7 @@ class WorkerPaymentsTable(tables.Table):
             "payment_accrued",
             "total_paid",
             "last_paid",
-            "total_confirmed_paid",
+            "confirmed_paid",
         )
 
 
