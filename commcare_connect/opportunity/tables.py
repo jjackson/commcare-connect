@@ -990,9 +990,9 @@ def get_duration_min(total_seconds):
     parts = []
     if days:
         parts.append(f"{days} day{'s' if days != 1 else ''}")
-    if hours:
+    elif hours:
         parts.append(f"{hours} hr")
-    if minutes or not parts:
+    elif minutes or not parts:
         parts.append(f"{minutes} min")
 
     return " ".join(parts)
@@ -1084,14 +1084,12 @@ class WorkerLearnTable(OrgContextTable):
         verbose_name="",
         orderable=False,
         template_code="""
-            <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-end">
-                <a><i class="fa-solid fa-chevron-right text-brand-deep-purple"></i></a>
-            </div>
         """,
     )
 
     def __init__(self, *args, **kwargs):
         self.use_view_url = True
+        self.opp_id = kwargs.pop("opp_id")
         super().__init__(*args, **kwargs)
 
     class Meta:
@@ -1117,7 +1115,7 @@ class WorkerLearnTable(OrgContextTable):
         return "Passed" if value else "Failed"
 
     def render_action(self, record):
-        url = reverse("opportunity:worker_learn_progress", args=(self.org_slug, record.id))
+        url = reverse("opportunity:worker_learn_progress", args=(self.org_slug, self.opp_id, record.id))
         return format_html(
             """ <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-end">
                 <a href="{url}"><i class="fa-solid fa-chevron-right text-brand-deep-purple"></i></a>
@@ -1126,7 +1124,7 @@ class WorkerLearnTable(OrgContextTable):
         )
 
 
-class WorkerDeliveryTable(tables.Table):
+class WorkerDeliveryTable(OrgContextTable):
     use_view_url = True
 
     id = tables.Column(visible=False)
@@ -1134,7 +1132,7 @@ class WorkerDeliveryTable(tables.Table):
     user = tables.Column(orderable=False, verbose_name="Name")
     suspended = SuspendedIndicatorColumn()
     last_active = tables.Column()
-    payment_unit = tables.Column()
+    payment_unit = tables.Column(orderable=False)
     started = tables.Column(accessor="started_delivery")
     delivered = tables.Column(accessor="completed")
     pending = tables.Column()
@@ -1166,7 +1164,6 @@ class WorkerDeliveryTable(tables.Table):
         )
 
     def __init__(self, *args, **kwargs):
-        self.org_slug = kwargs.pop("org_slug")
         self.opp_id = kwargs.pop("opp_id")
         self.use_view_url = True
         super().__init__(*args, **kwargs)
