@@ -1704,6 +1704,7 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
             "opportunity": opp,
             "tabs": tabs,
             "visit_export_form": visit_export_form,
+            # This same form is used for multiple types of export
             "export_form": export_form,
             "export_task_id": request.GET.get("export_task_id"),
             "path": path,
@@ -1724,7 +1725,7 @@ def worker_main(request, org_slug=None, opp_id=None):
 def worker_learn(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     data = get_worker_learn_table_data(opp)
-    table = WorkerLearnTable(data, org_slug=org_slug)
+    table = WorkerLearnTable(data, org_slug=org_slug, opp_id=opp_id)
     RequestConfig(request, paginate={"per_page": 10}).configure(table)
     return render(request, "tailwind/components/tables/table.html", {"table": table})
 
@@ -1753,8 +1754,9 @@ def worker_payments(request, org_slug=None, opp_id=None):
 
 
 @org_member_required
-def worker_learn_status_view(request, org_slug, access_id):
-    access = get_object_or_404(OpportunityAccess, pk=access_id)
+def worker_learn_status_view(request, org_slug, opp_id, access_id):
+    opportunity = get_object_or_404(Opportunity, pk=opp_id)
+    access = get_object_or_404(OpportunityAccess, opportunity=opportunity, pk=access_id)
     completed_modules = CompletedModule.objects.filter(opportunity_access=access)
     total_duration = datetime.timedelta(0)
     for cm in completed_modules:
