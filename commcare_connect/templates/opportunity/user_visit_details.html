@@ -258,14 +258,17 @@
   x-data="{showRejectModal: false, showApproveModal: false}"
   id="visit-actions"
   hx-swap-oob="true">
-  <div class="flex gap-4">
-    <button class="button button-md outline-style" @click="showRejectModal = true; showApproveModal = false;">Reject</button>
+  <div>
+    <button class="button button-md positive-light"
     {% if user_visit.opportunity.managed %}
-    <button class="button button-md primary-dark" @click="showRejectModal = false; showApproveModal = true;">Approve</button>
+      @click="showRejectModal = false; showApproveModal = true;"
     {% else %}
-    <button hx-post="{% url "opportunity:approve_visit" org_slug=request.org.slug pk=user_visit.id %}"
-      hx-swap="none" type="submit" class="button button-md positive-dark">Approve</button>
-    {% endif %}
+      hx-post="{% url "opportunity:approve_visit" org_slug=request.org.slug pk=user_visit.id %}"
+      hx-swap="none"
+    {% endif %}>
+      Approve
+    </button>
+    <button class="button button-md negative-light" @click="showRejectModal = true; showApproveModal = false;">Reject</button>
   </div>
 
   <div x-cloak x-show="showRejectModal" x-transition.opacity class="modal-backdrop">
@@ -284,7 +287,7 @@
           <textarea class="base-textarea" id="rejection-reason" rows="3" name="reason" id="reason"
             placeholder="Please provide a reason for rejecting visit.">{{ reason }}</textarea>
         </div>
-        <div class="footer flex justify-end gap-4">
+        <div class="footer flex justify-end">
           <button @click="showRejectModal = false" type="button" class="button button-md outline-style">
             Close
           </button>
@@ -313,7 +316,7 @@
           <textarea required class="base-textarea" id="justification" rows="3" name="justification"
             placeholder="Please provide a reason for approving flagged visits.">{{ justification }}</textarea>
         </div>
-        <div class="footer flex justify-end gap-4">
+        <div class="footer flex justify-end">
           <button @click="showApproveModal = false" type="button" class="button button-md outline-style">
             Close
           </button>
