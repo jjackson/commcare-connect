@@ -1758,8 +1758,7 @@ def worker_payments(request, org_slug=None, opp_id=None):
 
 @org_member_required
 def worker_learn_status_view(request, org_slug, opp_id, access_id):
-    opportunity = get_object_or_404(Opportunity, pk=opp_id)
-    access = get_object_or_404(OpportunityAccess, opportunity=opportunity, pk=access_id)
+    access = get_object_or_404(OpportunityAccess, opportunity__id=opp_id, pk=access_id)
     completed_modules = CompletedModule.objects.filter(opportunity_access=access)
     total_duration = datetime.timedelta(0)
     for cm in completed_modules:
