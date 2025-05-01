@@ -1379,15 +1379,7 @@ def user_visit_verification(request, org_slug, opp_id, pk):
     opportunity_access = get_object_or_404(OpportunityAccess, opportunity=opportunity, pk=pk)
     is_program_manager = is_program_manager_of_opportunity(request, opportunity)
 
-    user_visit_counts = UserVisit.objects.filter(opportunity_access=opportunity_access).aggregate(
-        pending=Count("id", filter=Q(status=VisitValidationStatus.pending)),
-        rejected=Count("id", filter=Q(status=VisitValidationStatus.rejected)),
-        flagged=Count(
-            "id", filter=Q(flagged=True, status__in=[VisitValidationStatus.approved, VisitValidationStatus.rejected])
-        ),
-        total=Count("*"),
-    )
-
+    user_visit_counts = get_user_visit_counts(opportunity_access_id=pk)
     visits = UserVisit.objects.filter(opportunity_access=opportunity_access)
     flagged_info = defaultdict(lambda: {"name": "", "approved": 0, "rejected": 0})
     for visit in visits:
@@ -1397,63 +1389,6 @@ def user_visit_verification(request, org_slug, opp_id, pk):
                 flagged_info[flag]["name"] = flag
     flagged_info = flagged_info.values()
     last_payment_details = Payment.objects.filter(opportunity_access=opportunity_access).order_by("-date_paid").first()
-
-    tabs = [
-        {
-            "name": "pending",
-            "label": "Pending",
-            "count": user_visit_counts.get("pending", 0),
-        },
-        {
-            "name": "approved",
-            "label": "Approved",
-            "count": user_visit_counts.get("approved", 0),
-        },
-        {
-            "name": "rejected",
-            "label": "Rejected",
-            "count": user_visit_counts.get("rejected", 0),
-        },
-        {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
-    ]
-
-    if opportunity.managed:
-        tabs.insert(
-            1,
-            {
-                "name": "disagree",
-                "label": "Revalidate",
-                "count": user_visit_counts.get("revalidate", 0),
-            },
-        )
-        tabs.insert(
-            1,
-            {
-                "name": "pending_review",
-                "label": "Review",
-                "count": user_visit_counts.get("pending_review", 0),
-            },
-        )
-
-    if is_program_manager:
-        tabs = [
-            {
-                "name": "pending_review",
-                "label": "Pending",
-                "count": user_visit_counts.get("pending_review", 0),
-            },
-            {
-                "name": "disagree",
-                "label": "Disagree",
-                "count": user_visit_counts.get("revalidate", 0),
-            },
-            {
-                "name": "agree",
-                "label": "Agree",
-                "count": user_visit_counts.get("approved", 0),
-            },
-            {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
-        ]
 
     response = render(
         request,
@@ -1474,7 +1409,7 @@ def user_visit_verification(request, org_slug, opp_id, pk):
 
 def get_user_visit_counts(opportunity_access_id: int, date):
     opportunity_access = OpportunityAccess.objects.get(id=opportunity_access_id)
-    visit_count_kwargs = dict(approved=Count("id", filter=Q(status=VisitValidationStatus.approved)))
+    visit_count_kwargs = {}
     if opportunity_access.opportunity.managed:
         visit_count_kwargs = dict(
             pending_review=Count(
@@ -1499,6 +1434,8 @@ def get_user_visit_counts(opportunity_access_id: int, date):
                 ),
             ),
         )
+    else:
+        visit_count_kwargs = dict(approved=Count("id", filter=Q(status=VisitValidationStatus.approved)))
 
     filter_kwargs = {"opportunity_access": opportunity_access}
     if date:
@@ -1508,9 +1445,7 @@ def get_user_visit_counts(opportunity_access_id: int, date):
         **visit_count_kwargs,
         pending=Count("id", filter=Q(status=VisitValidationStatus.pending)),
         rejected=Count("id", filter=Q(status=VisitValidationStatus.rejected)),
-        flagged=Count(
-            "id", filter=Q(flagged=True, status__in=[VisitValidationStatus.approved, VisitValidationStatus.rejected])
-        ),
+        flagged=Count("id", filter=Q(flagged=True)),
         total=Count("*"),
     )
     return user_visit_counts
@@ -1711,13 +1646,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
                     other_forms.append((visit_data, dist.m, other_lat, other_lon, other_precision))
         user_forms.sort(key=lambda x: x[1])
         other_forms.sort(key=lambda x: x[1])
-        visit_data.update(
-            {
-                "lat": lat,
-                "lon": lon,
-                "precision": precision,
-            }
-        )
+        visit_data.update({"lat": lat, "lon": lon, "precision": precision})
     return render(
         request,
         "opportunity/user_visit_details.html",
