@@ -674,6 +674,10 @@ class BaseOpportunityList(tables.Table):
             text,
         )
 
+    def format_date(self, date):
+       return date.strftime("%d-%b-%Y") if date else '--'
+
+
     def _render_div(self, value, extra_classes=""):
         base_classes = "flex text-sm font-normal truncate text-brand-deep-purple " "overflow-clip overflow-ellipsis"
         all_classes = f"{base_classes} {extra_classes}".strip()
@@ -686,10 +690,10 @@ class BaseOpportunityList(tables.Table):
         return self._render_div(value if value else "--", extra_classes="justify-start")
 
     def render_start_date(self, value):
-        return self._render_div(value, extra_classes="justify-center")
+        return self._render_div(self.format_date(value), extra_classes="justify-center")
 
     def render_end_date(self, value):
-        return self._render_div(value, extra_classes="justify-center")
+        return self._render_div(self.format_date(value), extra_classes="justify-center")
 
 
 class OpportunityTable(BaseOpportunityList):
@@ -766,7 +770,7 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
         verbose_name=header_with_tooltip("Verified Deliveries", "Approved service deliveries.")
     )
     worker_earnings = tables.Column(
-        verbose_name=header_with_tooltip("Worker Earnings", "Approved service deliveries"), accessor="total_accrued"
+        verbose_name=header_with_tooltip("Worker Earnings", "Payments accrued by workers"), accessor="total_accrued"
     )
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="")
 
