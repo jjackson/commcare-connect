@@ -151,6 +151,14 @@ def get_opportunity_or_404(pk, org_slug):
     raise Http404("Opportunity not found.")
 
 
+def is_program_manager_of_opportunity(request, opportunity):
+    return (
+        opportunity.managed
+        and opportunity.managedopportunity.program.organization.slug == request.org.slug
+        and (request.org.program_manager and (request.org_membership.is_admin or request.user.is_superuser))
+    )
+
+
 class OrgContextSingleTableView(SingleTableView):
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
