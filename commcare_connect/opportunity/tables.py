@@ -724,7 +724,7 @@ class OpportunityTable(BaseOpportunityList):
     def render_payments_due(self, value):
         if value is None:
             value = 0
-        return self._render_div(f"${value}", extra_classes=self.stats_style)
+        return self._render_div(value, extra_classes=self.stats_style)
 
     def render_actions(self, record):
         actions = [

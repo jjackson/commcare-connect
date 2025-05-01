@@ -199,7 +199,7 @@ def get_opportunity_list_data(organization, program_manager=False):
         ),
         total_paid=Coalesce(
             Sum(
-                "opportunityaccess__payment__amount_usd",
+                "opportunityaccess__payment__amount",
                 filter=Q(opportunityaccess__payment__confirmed=True),
                 distinct=True,
             ),
