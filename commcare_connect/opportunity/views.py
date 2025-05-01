@@ -1482,42 +1482,6 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
 
     def get_context_data(self, **kwargs):
         user_visit_counts = get_user_visit_counts(self.kwargs["pk"], self.filter_date)
-        tabs = [
-            {
-                "name": "pending",
-                "label": "Pending",
-                "count": user_visit_counts.get("pending", 0),
-            },
-            {
-                "name": "approved",
-                "label": "Approved",
-                "count": user_visit_counts.get("approved", 0),
-            },
-            {
-                "name": "rejected",
-                "label": "Rejected",
-                "count": user_visit_counts.get("rejected", 0),
-            },
-            {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
-        ]
-
-        if self.opportunity.managed:
-            tabs.insert(
-                1,
-                {
-                    "name": "disagree",
-                    "label": "Revalidate",
-                    "count": user_visit_counts.get("revalidate", 0),
-                },
-            )
-            tabs.insert(
-                1,
-                {
-                    "name": "pending_review",
-                    "label": "Review",
-                    "count": user_visit_counts.get("pending_review", 0),
-                },
-            )
 
         if self.is_program_manager:
             tabs = [
@@ -1538,6 +1502,43 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                 },
                 {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
             ]
+        else:
+            tabs = [
+                {
+                    "name": "pending",
+                    "label": "Pending",
+                    "count": user_visit_counts.get("pending", 0),
+                },
+                {
+                    "name": "approved",
+                    "label": "Approved",
+                    "count": user_visit_counts.get("approved", 0),
+                },
+                {
+                    "name": "rejected",
+                    "label": "Rejected",
+                    "count": user_visit_counts.get("rejected", 0),
+                },
+                {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
+            ]
+
+            if self.opportunity.managed:
+                tabs.insert(
+                    1,
+                    {
+                        "name": "disagree",
+                        "label": "Revalidate",
+                        "count": user_visit_counts.get("revalidate", 0),
+                    },
+                )
+                tabs.insert(
+                    1,
+                    {
+                        "name": "pending_review",
+                        "label": "Review",
+                        "count": user_visit_counts.get("pending_review", 0),
+                    },
+                )
         context = super().get_context_data(**kwargs)
         context["opportunity_access"] = self.opportunity_access
         context["tabs"] = tabs
