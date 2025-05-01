@@ -761,17 +761,15 @@ class OpportunityTable(BaseOpportunityList):
 
 class ProgramManagerOpportunityTable(BaseOpportunityList):
     active_workers = tables.Column(
-        verbose_name=header_with_tooltip("Active Workers", tooltip_text="Delivered forms in the last 3 days.")
+        verbose_name="Active Workers"
     )
     total_deliveries = tables.Column(
-        verbose_name=header_with_tooltip("Total Deliveries", "Total services delivered so far.")
+        verbose_name="Total Deliveries"
     )
     verified_deliveries = tables.Column(
-        verbose_name=header_with_tooltip("Verified Deliveries", "Approved service deliveries.")
+        verbose_name="Verified Deliveries"
     )
-    worker_earnings = tables.Column(
-        verbose_name=header_with_tooltip("Worker Earnings", "Payments accrued by workers"), accessor="total_accrued"
-    )
+    worker_earnings = tables.Column(verbose_name="Worker Earnings", accessor="total_accrued")
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="")
 
     class Meta(BaseOpportunityList.Meta):
