@@ -37,7 +37,7 @@
   </ul>
   <div class="w-full space-y-4">
     <div class="flex gap-4 h-32 items-center p-4 profile-bg bg-brand-indigo rounded-2xl">
-      <div x-data="{ isStatusModalOpen: false, isTimelineModalOpen: false }"
+      <div x-data="{ isStatusModalOpen: false }"
            class="profile-card w=full h-full flex gap-4 text-white relative">
         <div class="profile-left flex flex-col justify-center items-center">
           <div class="h-12 w-12 rounded-full overflow-hidden relative">
@@ -55,17 +55,6 @@
           </div>
           <div class="share-icon flex justify-center mt-4">
             <div class="relative">
-              <i class="fa-light fa-code-merge cursor-pointer"
-                 @click="isTimelineModalOpen = true"></i>
-              <!-- Timeline Modal -->
-              <div x-show="isTimelineModalOpen"
-                   x-cloak
-                   class="fixed inset-0 bg-black/50 bg-opacity-50 transition-opacity z-40"
-                   @click="isTimelineModalOpen = false"></div>
-              <div x-show="isTimelineModalOpen"
-                   x-cloak
-                   class="absolute top-15 -left-8 w-110 h-120 bg-white rounded-2xl shadow-xl z-50"
-                   @click.stop>{% include "tailwind/components/user_timeline.html" %}</div>
               <!-- Status Modal -->
               <div x-show="isStatusModalOpen"
                    x-cloak
