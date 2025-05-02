@@ -9,14 +9,9 @@ from crispy_forms.utils import render_crispy_form
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-<<<<<<< HEAD
-from django.core.files.storage import storages
-from django.db.models import Count, Q, Sum
-=======
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage, storages
-from django.db.models import Q, Sum
->>>>>>> ui-main
+from django.db.models import Count, Q, Sum
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
 from django.middleware.csrf import get_token
