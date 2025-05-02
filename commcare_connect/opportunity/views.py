@@ -468,8 +468,6 @@ def update_visit_status_import(request, org_slug=None, pk=None):
         if status.missing_visits:
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
-    if opportunity.managed:
-        return redirect("opportunity:user_visit_review", org_slug, pk)
     return redirect("opportunity:detail", org_slug, pk)
 
 
@@ -486,7 +484,7 @@ def review_visit_import(request, org_slug=None, pk=None):
         if status.missing_visits:
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
-        return redirect("opportunity:user_visit_review", org_slug, pk)
+    return redirect("opportunity:detail", org_slug, pk)
 
 
 @org_member_required
@@ -888,54 +886,6 @@ def get_application(request, org_slug=None):
             name = app["name"]
             options.append(format_html("<option value='{}'>{}</option>", value, name))
     return HttpResponse("\n".join(options))
-
-
-@org_viewer_required
-def visit_verification(request, org_slug=None, pk=None):
-    user_visit = get_object_or_404(UserVisit, pk=pk)
-    serializer = XFormSerializer(data=user_visit.form_json)
-    access_id = OpportunityAccess.objects.get(user=user_visit.user, opportunity=user_visit.opportunity).id
-    serializer.is_valid()
-    xform = serializer.save()
-    user_forms = []
-    other_forms = []
-    lat = None
-    lon = None
-    precision = None
-    if user_visit.location:
-        locations = UserVisit.objects.filter(opportunity=user_visit.opportunity).exclude(pk=pk).select_related("user")
-        lat, lon, _, precision = user_visit.location.split(" ")
-        for loc in locations:
-            if loc.location is None:
-                continue
-            other_lat, other_lon, _, other_precision = loc.location.split(" ")
-            dist = distance.distance((lat, lon), (other_lat, other_lon))
-            if dist.m <= 250:
-                if user_visit.user_id == loc.user_id:
-                    user_forms.append((loc, dist.m, other_lat, other_lon, other_precision))
-                else:
-                    other_forms.append((loc, dist.m, other_lat, other_lon, other_precision))
-        user_forms.sort(key=lambda x: x[1])
-        other_forms.sort(key=lambda x: x[1])
-    reason = user_visit.reason
-    if user_visit.flag_reason and not reason:
-        reason = "\n".join([flag[1] for flag in user_visit.flag_reason.get("flags", [])])
-    return render(
-        request,
-        "opportunity/visit_verification.html",
-        context={
-            "visit": user_visit,
-            "xform": xform,
-            "access_id": access_id,
-            "user_forms": user_forms[:5],
-            "other_forms": other_forms[:5],
-            "visit_lat": lat,
-            "visit_lon": lon,
-            "visit_precision": precision,
-            "MAPBOX_TOKEN": settings.MAPBOX_TOKEN,
-            "reason": reason,
-        },
-    )
 
 
 @org_member_required
