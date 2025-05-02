@@ -30,4 +30,4 @@ factory-boy
 django-debug-toolbar
 pytest-django
 
-git-build-branch @ git+https://github.com/dimagi/git-build-branch@884beea8de8c126b8601ed3ba6cde5bcbf9d5023
+git-build-branch @ git+https://github.com/dimagi/git-build-branch

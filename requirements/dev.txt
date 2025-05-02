@@ -77,7 +77,7 @@ gevent==24.11.1
     # via
     #   -c requirements/base.txt
     #   git-build-branch
-git-build-branch @ git+https://github.com/dimagi/git-build-branch@884beea8de8c126b8601ed3ba6cde5bcbf9d5023
+git-build-branch @ git+https://github.com/dimagi/git-build-branch
     # via -r requirements/dev.in
 greenlet==3.1.1
     # via
