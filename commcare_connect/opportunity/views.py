@@ -25,7 +25,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
-from django_tables2 import RequestConfig, SingleTableMixin, SingleTableView
+from django_tables2 import SingleTableMixin, SingleTableView
 from django_tables2.export import TableExport
 from geopy import distance
 
@@ -93,8 +93,6 @@ from commcare_connect.opportunity.tables import (
     SuspendedUsersTable,
     UserPaymentsTable,
     UserStatusTable,
-    UserVisitReviewFilter,
-    UserVisitReviewTable,
     UserVisitVerificationTable,
 )
 from commcare_connect.opportunity.tasks import (
@@ -172,7 +170,6 @@ class OrgContextSingleTableView(SingleTableView):
 class OpportunityList(OrganizationUserMixin, SingleTableMixin, TemplateView):
     template_name = "tailwind/pages/opportunities_list.html"
     paginate_by = 15
-
 
     def get_table_class(self):
         if self.request.org.program_manager:
@@ -945,7 +942,6 @@ def visit_verification(request, org_slug=None, pk=None):
 @require_POST
 def approve_visit(request, org_slug=None, pk=None):
     user_visit = UserVisit.objects.get(pk=pk)
-    opp_id = user_visit.opportunity_id
     if user_visit.status != VisitValidationStatus.approved:
         user_visit.status = VisitValidationStatus.approved
         if user_visit.opportunity.managed:
@@ -960,15 +956,7 @@ def approve_visit(request, org_slug=None, pk=None):
         user_visit.save()
         update_payment_accrued(opportunity=user_visit.opportunity, users=[user_visit.user])
 
-    if request.htmx:
-        return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
-
-    if user_visit.opportunity.managed:
-        return redirect("opportunity:user_visit_review", org_slug, opp_id)
-
-    return redirect(
-        "opportunity:user_visits_list", org_slug=org_slug, opp_id=opp_id, pk=user_visit.opportunity_access_id
-    )
+    return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
 
 @org_member_required
@@ -981,9 +969,7 @@ def reject_visit(request, org_slug=None, pk=None):
     user_visit.save()
     access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=user_visit.opportunity_id)
     update_payment_accrued(opportunity=access.opportunity, users=[access.user])
-    if request.htmx:
-        return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
-    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity_id, pk=access.id)
+    return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
 
 @org_member_required
@@ -1197,20 +1183,7 @@ def opportunity_user_invite(request, org_slug=None, pk=None):
 @org_member_required
 def user_visit_review(request, org_slug, opp_id):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
-    if not opportunity.managed:
-        return redirect("opportunity:detail", org_slug, opp_id)
-    is_program_manager = (
-        request.org_membership != None  # noqa: E711
-        and request.org_membership.is_admin
-        and request.org.program_manager
-    )
-    user_visit_reviews = UserVisit.objects.filter(opportunity=opportunity, review_created_on__isnull=False).order_by(
-        "visit_date"
-    )
-    review_filter = UserVisitReviewFilter(request.GET, queryset=user_visit_reviews)
-    table = UserVisitReviewTable(review_filter.qs, org_slug=request.org.slug)
-    if not is_program_manager:
-        table.exclude = ("pk",)
+    is_program_manager = is_program_manager_of_opportunity(request, opportunity)
     if request.POST and is_program_manager:
         review_status = request.POST.get("review_status").lower()
         updated_reviews = request.POST.getlist("pk")
@@ -1219,15 +1192,7 @@ def user_visit_review(request, org_slug, opp_id):
             user_visits.update(review_status=review_status)
             update_payment_accrued(opportunity=opportunity, users=[visit.user for visit in user_visits])
 
-    if request.htmx:
-        return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
-
-    RequestConfig(request, paginate={"per_page": 15}).configure(table)
-    return render(
-        request,
-        "opportunity/user_visit_review.html",
-        context=dict(table=table, review_filter=review_filter, opportunity=opportunity),
-    )
+    return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
 
 @org_member_required
