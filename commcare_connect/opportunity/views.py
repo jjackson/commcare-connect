@@ -1062,7 +1062,7 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
     # Clear the cached opportunity access for the suspended user
     remove_opportunity_access_cache(access.user, access.opportunity)
 
-    return redirect("opportunity:user_profile", org_slug, opp_id, pk)
+    return redirect("opportunity:user_visits_list", org_slug, opp_id, pk)
 
 
 @org_member_required
@@ -1305,6 +1305,10 @@ def user_visit_verification(request, org_slug, opp_id, pk):
                 flagged_info[flag]["name"] = flag
     flagged_info = flagged_info.values()
     last_payment_details = Payment.objects.filter(opportunity_access=opportunity_access).order_by("-date_paid").first()
+    pending_payment = max(opportunity_access.payment_accrued - opportunity_access.total_paid, 0)
+    pending_completed_work_count = CompletedWork.objects.filter(
+        opportunity_access=opportunity_access, status=CompletedWorkStatus.pending, saved_approved_count__gt=0
+    ).count()
 
     response = render(
         request,
@@ -1318,6 +1322,8 @@ def user_visit_verification(request, org_slug, opp_id, pk):
             "MAPBOX_TOKEN": settings.MAPBOX_TOKEN,
             "opportunity": opportunity_access.opportunity,
             "is_program_manager": is_program_manager,
+            "pending_completed_work_count": pending_completed_work_count,
+            "pending_payment": pending_payment,
         },
     )
     return response
