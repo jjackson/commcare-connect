@@ -1424,7 +1424,7 @@ def user_visit_verification(request, org_slug, opp_id, pk):
     return response
 
 
-def get_user_visit_counts(opportunity_access_id: int, date):
+def get_user_visit_counts(opportunity_access_id: int, date=None):
     opportunity_access = OpportunityAccess.objects.get(id=opportunity_access_id)
     visit_count_kwargs = {}
     if opportunity_access.opportunity.managed:
@@ -1434,6 +1434,7 @@ def get_user_visit_counts(opportunity_access_id: int, date):
                 filter=Q(
                     status=VisitValidationStatus.approved,
                     review_status=VisitReviewStatus.pending,
+                    review_created_on__isnull=False,
                 ),
             ),
             disagree=Count(
@@ -1441,18 +1442,18 @@ def get_user_visit_counts(opportunity_access_id: int, date):
                 filter=Q(
                     status=VisitValidationStatus.approved,
                     review_status=VisitReviewStatus.disagree,
+                    review_created_on__isnull=False,
                 ),
             ),
-            approved=Count(
+            agree=Count(
                 "id",
                 filter=Q(
                     status=VisitValidationStatus.approved,
                     review_status=VisitReviewStatus.agree,
+                    review_created_on__isnull=False,
                 ),
             ),
         )
-    else:
-        visit_count_kwargs = dict(approved=Count("id", filter=Q(status=VisitValidationStatus.approved)))
 
     filter_kwargs = {"opportunity_access": opportunity_access}
     if date:
@@ -1460,6 +1461,7 @@ def get_user_visit_counts(opportunity_access_id: int, date):
 
     user_visit_counts = UserVisit.objects.filter(**filter_kwargs).aggregate(
         **visit_count_kwargs,
+        approved=Count("id", filter=Q(status=VisitValidationStatus.approved)),
         pending=Count("id", filter=Q(status=VisitValidationStatus.pending)),
         rejected=Count("id", filter=Q(status=VisitValidationStatus.rejected)),
         flagged=Count("id", filter=Q(flagged=True)),
@@ -1510,12 +1512,12 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                 {
                     "name": "disagree",
                     "label": "Disagree",
-                    "count": user_visit_counts.get("revalidate", 0),
+                    "count": user_visit_counts.get("disagree", 0),
                 },
                 {
                     "name": "agree",
                     "label": "Agree",
-                    "count": user_visit_counts.get("approved", 0),
+                    "count": user_visit_counts.get("agree", 0),
                 },
                 {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
             ]
@@ -1525,37 +1527,48 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                     "name": "pending",
                     "label": "Pending",
                     "count": user_visit_counts.get("pending", 0),
-                },
-                {
-                    "name": "approved",
-                    "label": "Approved",
-                    "count": user_visit_counts.get("approved", 0),
-                },
-                {
-                    "name": "rejected",
-                    "label": "Rejected",
-                    "count": user_visit_counts.get("rejected", 0),
-                },
-                {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
+                }
             ]
 
             if self.opportunity.managed:
-                tabs.insert(
-                    1,
-                    {
-                        "name": "disagree",
-                        "label": "Revalidate",
-                        "count": user_visit_counts.get("revalidate", 0),
-                    },
-                )
-                tabs.insert(
-                    1,
+                dynamic_tabs = [
                     {
                         "name": "pending_review",
                         "label": "Review",
                         "count": user_visit_counts.get("pending_review", 0),
                     },
-                )
+                    {
+                        "name": "disagree",
+                        "label": "Revalidate",
+                        "count": user_visit_counts.get("disagree", 0),
+                    },
+                    {
+                        "name": "agree",
+                        "label": "Approved",
+                        "count": user_visit_counts.get("agree", 0),
+                    },
+                ]
+            else:
+                dynamic_tabs = [
+                    {
+                        "name": "approved",
+                        "label": "Approved",
+                        "count": user_visit_counts.get("approved", 0),
+                    },
+                ]
+
+            tabs.extend(dynamic_tabs)
+            tabs.extend(
+                [
+                    {
+                        "name": "rejected",
+                        "label": "Rejected",
+                        "count": user_visit_counts.get("rejected", 0),
+                    },
+                    {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
+                ]
+            )
+
         context = super().get_context_data(**kwargs)
         context["opportunity_access"] = self.opportunity_access
         context["tabs"] = tabs
@@ -1579,13 +1592,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
             filter_kwargs.update({"status": VisitValidationStatus.pending})
             self.exclude_columns = ["last_activity"]
         if self.filter_status == "approved":
-            filter_kwargs.update(
-                {
-                    "review_status": VisitReviewStatus.agree,
-                    "status": VisitValidationStatus.approved,
-                    "flagged": True,
-                }
-            )
+            filter_kwargs.update({"status": VisitValidationStatus.approved})
         if self.filter_status == "rejected":
             filter_kwargs.update({"status": VisitValidationStatus.rejected})
 
@@ -1594,6 +1601,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                 {
                     "review_status": VisitReviewStatus.pending,
                     "status": VisitValidationStatus.approved,
+                    "review_created_on__isnull": False,
                 }
             )
         if self.filter_status == "disagree":
@@ -1601,6 +1609,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                 {
                     "review_status": VisitReviewStatus.disagree,
                     "status": VisitValidationStatus.approved,
+                    "review_created_on__isnull": False,
                 }
             )
         if self.filter_status == "agree":
@@ -1608,12 +1617,9 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                 {
                     "review_status": VisitReviewStatus.agree,
                     "status": VisitValidationStatus.approved,
-                    "flagged": True,
+                    "review_created_on__isnull": False,
                 }
             )
-
-        if self.is_program_manager:
-            filter_kwargs.update({"review_created_on__isnull": False})
 
         return UserVisit.objects.filter(**filter_kwargs).order_by("visit_date")
 
