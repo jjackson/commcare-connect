@@ -15,6 +15,8 @@ from django_tables2 import columns, utils
 from commcare_connect.opportunity.models import (
     CatchmentArea,
     CompletedWork,
+    DeliverUnit,
+    LearnModule,
     OpportunityAccess,
     Payment,
     PaymentInvoice,
@@ -23,7 +25,7 @@ from commcare_connect.opportunity.models import (
     UserInviteStatus,
     UserVisit,
     VisitReviewStatus,
-    VisitValidationStatus, LearnModule, DeliverUnit,
+    VisitValidationStatus,
 )
 from commcare_connect.users.models import User
 
@@ -655,8 +657,7 @@ class BaseOpportunityList(OrgContextTable):
         )
 
     def format_date(self, date):
-       return date.strftime("%d-%b-%Y") if date else '--'
-
+        return date.strftime("%d-%b-%Y") if date else "--"
 
     def _render_div(self, value, extra_classes=""):
         base_classes = "flex text-sm font-normal truncate text-brand-deep-purple " "overflow-clip overflow-ellipsis"
@@ -739,15 +740,9 @@ class OpportunityTable(BaseOpportunityList):
 
 
 class ProgramManagerOpportunityTable(BaseOpportunityList):
-    active_workers = tables.Column(
-        verbose_name="Active Workers"
-    )
-    total_deliveries = tables.Column(
-        verbose_name="Total Deliveries"
-    )
-    verified_deliveries = tables.Column(
-        verbose_name="Verified Deliveries"
-    )
+    active_workers = tables.Column(verbose_name="Active Workers")
+    total_deliveries = tables.Column(verbose_name="Total Deliveries")
+    verified_deliveries = tables.Column(verbose_name="Verified Deliveries")
     worker_earnings = tables.Column(verbose_name="Worker Earnings", accessor="total_accrued")
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="")
 
@@ -1247,6 +1242,7 @@ class DeliverUnitTable(tables.Table):
         fields = ("index", "slug", "name")
         empty_text = "No Deliver units for this opportunity."
 
+
 class PaymentUnitTable(OrgContextTable):
     index = IndexColumn()
     name = tables.Column(verbose_name="Payment Unit Name")
@@ -1254,7 +1250,7 @@ class PaymentUnitTable(OrgContextTable):
     deliver_units = tables.Column(verbose_name="Delivery Units")
 
     def __init__(self, *args, **kwargs):
-        self.can_edit = kwargs.pop('can_edit', False)
+        self.can_edit = kwargs.pop("can_edit", False)
         super().__init__(*args, **kwargs)
 
     class Meta:
@@ -1268,19 +1264,21 @@ class PaymentUnitTable(OrgContextTable):
         count = deliver_units.count()
         deliver_units = deliver_units.all()
 
-        detail_html = ''.join(
-            [f'<div class="w-full"><span>{unit.name}</span> {"(<i>optional</i>)" if unit.optional else ""}</div>'
-             for unit in deliver_units]
+        detail_html = "".join(
+            [
+                f'<div class="w-full"><span>{unit.name}</span> {"(<i>optional</i>)" if unit.optional else ""}</div>'
+                for unit in deliver_units
+            ]
         )
 
-        edit_button = ''
+        edit_button = ""
         if self.can_edit:
-            url = reverse('opportunity:edit_payment_unit', args=(self.org_slug, record.opportunity.id, record.id))
+            url = reverse("opportunity:edit_payment_unit", args=(self.org_slug, record.opportunity.id, record.id))
             edit_button = f'<a href="{url}"><i class="fa-thin fa-pencil me-2"></i></a>'
 
         context = {
-            'count': count,
-            'detail_html': detail_html,
-            'edit_button': edit_button,
+            "count": count,
+            "detail_html": detail_html,
+            "edit_button": edit_button,
         }
-        return render_to_string('tailwind/pages/opportunity_dashboard/extendable_payment_unit_row.html', context)
+        return render_to_string("tailwind/pages/opportunity_dashboard/extendable_payment_unit_row.html", context)

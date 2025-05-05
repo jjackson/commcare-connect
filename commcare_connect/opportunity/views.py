@@ -55,11 +55,13 @@ from commcare_connect.opportunity.forms import (
 from commcare_connect.opportunity.helpers import (
     get_annotated_opportunity_access,
     get_annotated_opportunity_access_deliver_status,
+    get_opportunity_delivery_progress,
+    get_opportunity_funnel_progress,
     get_opportunity_list_data,
+    get_opportunity_worker_progress,
     get_payment_report_data,
     get_worker_learn_table_data,
-    get_worker_table_data, get_opportunity_delivery_progress, get_opportunity_worker_progress,
-    get_opportunity_funnel_progress,
+    get_worker_table_data,
 )
 from commcare_connect.opportunity.models import (
     BlobMeta,
@@ -70,6 +72,7 @@ from commcare_connect.opportunity.models import (
     DeliverUnit,
     DeliverUnitFlagRules,
     FormJsonValidationRules,
+    LearnModule,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
@@ -82,11 +85,13 @@ from commcare_connect.opportunity.models import (
     UserInviteStatus,
     UserVisit,
     VisitReviewStatus,
-    VisitValidationStatus, LearnModule,
+    VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
     CompletedWorkTable,
     DeliverStatusTable,
+    DeliverUnitTable,
+    LearnModuleTable,
     LearnStatusTable,
     OpportunityPaymentTable,
     OpportunityTable,
@@ -103,7 +108,7 @@ from commcare_connect.opportunity.tables import (
     WorkerLearnTable,
     WorkerPaymentsTable,
     WorkerStatusTable,
-    get_duration_min, LearnModuleTable, DeliverUnitTable,
+    get_duration_min,
 )
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
@@ -316,8 +321,11 @@ class OpportunityFinalize(OrganizationUserMemberRoleMixin, UpdateView):
 
 
 def is_program_manager_of_opportunity(request, opportunity):
-    return (opportunity.managed and opportunity.managedopportunity.program.organization == request.org.slug
-            and (request.org_membership.is_admin or request.user.is_superuser))
+    return (
+        opportunity.managed
+        and opportunity.managedopportunity.program.organization == request.org.slug
+        and (request.org_membership.is_admin or request.user.is_superuser)
+    )
 
 
 class OpportunityDashboard(OrganizationUserMixin, DetailView):
@@ -346,10 +354,10 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
                 return value.strftime("%Y-%m-%d")
             return str(value)
 
-        path = [{"title": 'opportunities',
-                 "url": reverse('opportunity:list', kwargs={"org_slug": request.org.slug})},
-                {"title": object.name, "url": reverse('opportunity:detail', args=(request.org.slug, object.id))}]
-
+        path = [
+            {"title": "opportunities", "url": reverse("opportunity:list", kwargs={"org_slug": request.org.slug})},
+            {"title": object.name, "url": reverse("opportunity:detail", args=(request.org.slug, object.id))},
+        ]
 
         resources = [
             {"name": "Learn App", "count": learn_module_count, "icon": "fa-book-open-cover"},
@@ -394,8 +402,8 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
         program_manager = is_program_manager_of_opportunity(request, object)
         context["basic_details"] = basic_details
         context["resources"] = resources
-        context["path"]= path
-        context["program_manager"]= program_manager
+        context["path"] = path
+        context["program_manager"] = program_manager
 
         return context
 
@@ -1745,7 +1753,7 @@ def worker_payments(request, org_slug=None, opp_id=None):
         last_active=Greatest(Max("uservisit__visit_date"), Max("completedmodule__date"), "date_learn_started"),
         last_paid=Max("payment__date_paid"),
         confirmed_paid=Sum("payment__amount", filter=Q(payment__confirmed=True)),
-        total_paid_d=Sum("payment__amount")
+        total_paid_d=Sum("payment__amount"),
     )
     table = WorkerPaymentsTable(query_set)
     RequestConfig(request, paginate={"per_page": 10}).configure(table)
@@ -1775,16 +1783,21 @@ def learn_module_table(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     data = LearnModule.objects.filter(app=opp.learn_app)
     table = LearnModuleTable(data)
-    return render(request, "tables/single_table.html",
-                  {'table': table})
+    return render(request, "tables/single_table.html", {"table": table})
+
 
 @org_member_required
 def deliver_unit_table(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     unit = DeliverUnit.objects.filter(app=opp.deliver_app)
     table = DeliverUnitTable(unit)
-    return render(request, "tables/single_table.html",
-                  {'table': table,})
+    return render(
+        request,
+        "tables/single_table.html",
+        {
+            "table": table,
+        },
+    )
 
 
 class OpportunityPaymentUnitTableView(OrganizationUserMixin, OrgContextSingleTableView):
@@ -1796,9 +1809,9 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, OrgContextSingleTab
         opportunity_id = self.kwargs["pk"]
         org_slug = self.kwargs["org_slug"]
         self.opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
-        return PaymentUnit.objects.filter(opportunity=self.opportunity).prefetch_related(
-            'deliver_units'
-        ).order_by("name")
+        return (
+            PaymentUnit.objects.filter(opportunity=self.opportunity).prefetch_related("deliver_units").order_by("name")
+        )
 
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
@@ -1814,20 +1827,23 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
 
     funnel_progress = [
         {"stage": "Invited", "count": aggregates["workers_invited"], "icon": "envelope"},
-        {"stage": "Accepted", "count": aggregates["workers_invited"] - aggregates["pending_invites"],
-         "icon": "circle-check"},
-        {"stage": "Started Learning", "count": aggregates["started_learning_count"],
-         "icon": "book-open-cover"},
+        {
+            "stage": "Accepted",
+            "count": aggregates["workers_invited"] - aggregates["pending_invites"],
+            "icon": "circle-check",
+        },
+        {"stage": "Started Learning", "count": aggregates["started_learning_count"], "icon": "book-open-cover"},
         {"stage": "Completed Learning", "count": aggregates["completed_learning"], "icon": "book-blank"},
-        {"stage": "Completed Assessment", "count": aggregates["completed_assessments"],
-         "icon": "award-simple"},
+        {"stage": "Completed Assessment", "count": aggregates["completed_assessments"], "icon": "award-simple"},
         {"stage": "Claimed Job", "count": aggregates["claimed_job"], "icon": "user-check"},
-        {"stage": "Started Delivery", "count": aggregates["started_deliveries"],
-         "icon": "house-chimney-user"},
+        {"stage": "Started Delivery", "count": aggregates["started_deliveries"], "icon": "house-chimney-user"},
     ]
 
-    return render(request, "tailwind/pages/opportunity_dashboard/opportunity_funnel_progress.html",
-                  {"funnel_progress": funnel_progress})
+    return render(
+        request,
+        "tailwind/pages/opportunity_dashboard/opportunity_funnel_progress.html",
+        {"funnel_progress": funnel_progress},
+    )
 
 
 @org_member_required
@@ -1837,8 +1853,8 @@ def opportunity_worker_progress(request, org_slug, opp_id):
     def safe_percent(numerator, denominator):
         return (numerator / denominator) * 100 if denominator else 0
 
-    verified_percentage = safe_percent(aggregates["approved_deliveries"] , aggregates["total_deliveries"])
-    rejected_percentage = safe_percent(aggregates["rejected_deliveries"] , aggregates["total_deliveries"])
+    verified_percentage = safe_percent(aggregates["approved_deliveries"], aggregates["total_deliveries"])
+    rejected_percentage = safe_percent(aggregates["rejected_deliveries"], aggregates["total_deliveries"])
     earned_percentage = safe_percent(aggregates["total_accrued"], aggregates["total_budget"])
     paid_percentage = safe_percent(aggregates["total_paid"], aggregates["total_accrued"])
 
@@ -1886,7 +1902,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             "progress": [
                 {
                     "title": "Earned",
-                    "total": aggregates['total_budget'],
+                    "total": aggregates["total_budget"],
                     "value": f"{earned_percentage:.2f}%",
                     "badge_type": True,
                     "percent": earned_percentage,
@@ -1902,7 +1918,11 @@ def opportunity_worker_progress(request, org_slug, opp_id):
         },
     ]
 
-    return render(request, "tailwind/pages/opportunity_dashboard/opportunity_worker_progress.html", {"worker_progress": worker_progress})
+    return render(
+        request,
+        "tailwind/pages/opportunity_dashboard/opportunity_worker_progress.html",
+        {"worker_progress": worker_progress},
+    )
 
 
 @org_member_required
@@ -1928,19 +1948,23 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
     ]
 
     if opportunity.managed and is_program_manager:
-        deliveries_panels.append({
-            "icon": "fa-clipboard-list-check",
-            "name": "Services Delivered",
-            "status": "Pending PM Review",
-            "value": stats["visits_pending_for_pm_review"],
-        })
+        deliveries_panels.append(
+            {
+                "icon": "fa-clipboard-list-check",
+                "name": "Services Delivered",
+                "status": "Pending PM Review",
+                "value": stats["visits_pending_for_pm_review"],
+            }
+        )
     else:
-        deliveries_panels.append({
-            "icon": "fa-clipboard-list-check",
-            "name": "Services Delivered",
-            "status": "Awaiting Review",
-            "value": stats["flagged_deliveries_waiting_for_review"],
-        })
+        deliveries_panels.append(
+            {
+                "icon": "fa-clipboard-list-check",
+                "name": "Services Delivered",
+                "status": "Awaiting Review",
+                "value": stats["flagged_deliveries_waiting_for_review"],
+            }
+        )
 
     opp_stats = [
         {
@@ -1950,8 +1974,12 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "url": status_url,
             "panels": [
                 {"icon": "fa-user-group", "name": "Workers", "status": "Invited", "value": stats["workers_invited"]},
-                {"icon": "fa-user-check", "name": "Workers", "status": "Yet to Accept Invitation",
-                 "value": stats["pending_invites"]},
+                {
+                    "icon": "fa-user-check",
+                    "name": "Workers",
+                    "status": "Yet to Accept Invitation",
+                    "value": stats["pending_invites"],
+                },
                 {
                     "icon": "fa-clipboard-list",
                     "name": "Workers",
@@ -1967,7 +1995,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "url": delivery_url,
             "sub_heading": "Last Delivery",
             "value": stats["most_recent_delivery"] or "--",
-            "panels": deliveries_panels
+            "panels": deliveries_panels,
         },
         {
             "title": "Worker Payments",
@@ -1991,5 +2019,6 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
         },
     ]
 
-    return render(request, "tailwind/pages/opportunity_dashboard/opportunity_delivery_stat.html",
-                  {"opp_stats": opp_stats})
+    return render(
+        request, "tailwind/pages/opportunity_dashboard/opportunity_delivery_stat.html", {"opp_stats": opp_stats}
+    )
