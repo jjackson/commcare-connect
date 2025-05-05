@@ -26,7 +26,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
-from django_tables2 import SingleTableMixin, SingleTableView
+from django_tables2 import RequestConfig, SingleTableMixin, SingleTableView
 from django_tables2.export import TableExport
 from geopy import distance
 
