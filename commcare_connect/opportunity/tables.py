@@ -1065,13 +1065,13 @@ class WorkerPaymentsTable(tables.Table):
 
     def render_last_paid(self, record, value):
         return render_to_string(
-            'tailwind/components/worker_page/last_paid.html',
+            "tailwind/components/worker_page/last_paid.html",
             {
                 "record": record,
                 "value": value.strftime("%d-%b-%Y %H:%M") if value else "--",
                 "org_slug": self.org_slug,
                 "opp_id": self.opp_id,
-            }
+            },
         )
 
 
@@ -1229,6 +1229,21 @@ class WorkerDeliveryTable(OrgContextTable):
         display_index = next(self._row_counter)
 
         return display_index
+
+    def render_delivered(self, record, value):
+        rows = [
+            {"label": "Completed", "value": record.completed},
+            {"label": "Incomplete", "value": record.incomplete},
+            {"label": "Duplicate", "value": record.duplicate},
+            {"label": "Over limit", "value": record.over_limit},
+        ]
+        return render_to_string(
+            "tailwind/components/worker_page/deliver_column.html",
+            {
+                "value": value,
+                "rows": rows,
+            },
+        )
 
 
 class WorkerLearnStatusTable(tables.Table):
