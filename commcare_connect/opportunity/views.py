@@ -97,8 +97,6 @@ from commcare_connect.opportunity.tables import (
     SuspendedUsersTable,
     UserPaymentsTable,
     UserStatusTable,
-    UserVisitReviewFilter,
-    UserVisitReviewTable,
     UserVisitVerificationTable,
     WorkerDeliveryTable,
     WorkerLearnStatusTable,
@@ -164,6 +162,14 @@ def get_opportunity_or_404(pk, org_slug):
     raise Http404("Opportunity not found.")
 
 
+def is_program_manager_of_opportunity(request, opportunity):
+    return (
+        opportunity.managed
+        and opportunity.managedopportunity.program.organization.slug == request.org.slug
+        and (request.org.program_manager and (request.org_membership.is_admin or request.user.is_superuser))
+    )
+
+
 class OrgContextSingleTableView(SingleTableView):
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
@@ -174,13 +180,6 @@ class OrgContextSingleTableView(SingleTableView):
 class OpportunityList(OrganizationUserMixin, SingleTableMixin, TemplateView):
     template_name = "tailwind/pages/opportunities_list.html"
     paginate_by = 15
-    base_columns = ["program", "start_date", "end_date", "status", "opportunity"]
-    pm_columns = ["active_workers", "total_deliveries", "verified_deliveries", "worker_earnings"]
-    nm_columns = ["pending_invites", "inactive_workers", "pending_approvals", "payments_due"]
-
-    def get_allowed_columns(self):
-        extra_columns = self.pm_columns if self.request.org.program_manager else self.nm_columns
-        return self.base_columns + extra_columns
 
     def get_table_class(self):
         if self.request.org.program_manager:
@@ -194,7 +193,9 @@ class OpportunityList(OrganizationUserMixin, SingleTableMixin, TemplateView):
 
     def get_table_data(self):
         org = self.request.org
-        return get_opportunity_list_data(org, self.request.org.program_manager)
+        query_set = get_opportunity_list_data(org, self.request.org.program_manager)
+        query_set = query_set.order_by("status", "start_date", "end_date")
+        return query_set
 
 
 class OpportunityCreate(OrganizationUserMemberRoleMixin, CreateView):
@@ -540,9 +541,6 @@ def update_visit_status_import(request, org_slug=None, pk=None):
         if status.missing_visits:
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
-    if opportunity.managed:
-        return redirect("opportunity:worker_list", org_slug, pk)
-
     url = reverse("opportunity:worker_list", args=(org_slug, pk)) + "?active_tab=delivery"
     return redirect(url)
 
@@ -560,7 +558,7 @@ def review_visit_import(request, org_slug=None, pk=None):
         if status.missing_visits:
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
-        return redirect("opportunity:user_visit_review", org_slug, pk)
+    return redirect("opportunity:detail", org_slug, pk)
 
 
 @org_member_required
@@ -951,59 +949,10 @@ def get_application(request, org_slug=None):
     return HttpResponse("\n".join(options))
 
 
-@org_viewer_required
-def visit_verification(request, org_slug=None, pk=None):
-    user_visit = get_object_or_404(UserVisit, pk=pk)
-    serializer = XFormSerializer(data=user_visit.form_json)
-    access_id = OpportunityAccess.objects.get(user=user_visit.user, opportunity=user_visit.opportunity).id
-    serializer.is_valid()
-    xform = serializer.save()
-    user_forms = []
-    other_forms = []
-    lat = None
-    lon = None
-    precision = None
-    if user_visit.location:
-        locations = UserVisit.objects.filter(opportunity=user_visit.opportunity).exclude(pk=pk).select_related("user")
-        lat, lon, _, precision = user_visit.location.split(" ")
-        for loc in locations:
-            if loc.location is None:
-                continue
-            other_lat, other_lon, _, other_precision = loc.location.split(" ")
-            dist = distance.distance((lat, lon), (other_lat, other_lon))
-            if dist.m <= 250:
-                if user_visit.user_id == loc.user_id:
-                    user_forms.append((loc, dist.m, other_lat, other_lon, other_precision))
-                else:
-                    other_forms.append((loc, dist.m, other_lat, other_lon, other_precision))
-        user_forms.sort(key=lambda x: x[1])
-        other_forms.sort(key=lambda x: x[1])
-    reason = user_visit.reason
-    if user_visit.flag_reason and not reason:
-        reason = "\n".join([flag[1] for flag in user_visit.flag_reason.get("flags", [])])
-    return render(
-        request,
-        "opportunity/visit_verification.html",
-        context={
-            "visit": user_visit,
-            "xform": xform,
-            "access_id": access_id,
-            "user_forms": user_forms[:5],
-            "other_forms": other_forms[:5],
-            "visit_lat": lat,
-            "visit_lon": lon,
-            "visit_precision": precision,
-            "MAPBOX_TOKEN": settings.MAPBOX_TOKEN,
-            "reason": reason,
-        },
-    )
-
-
 @org_member_required
 @require_POST
 def approve_visit(request, org_slug=None, pk=None):
     user_visit = UserVisit.objects.get(pk=pk)
-    opp_id = user_visit.opportunity_id
     if user_visit.status != VisitValidationStatus.approved:
         user_visit.status = VisitValidationStatus.approved
         if user_visit.opportunity.managed:
@@ -1018,15 +967,7 @@ def approve_visit(request, org_slug=None, pk=None):
         user_visit.save()
         update_payment_accrued(opportunity=user_visit.opportunity, users=[user_visit.user])
 
-    if request.htmx:
-        return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
-
-    if user_visit.opportunity.managed:
-        return redirect("opportunity:user_visit_review", org_slug, opp_id)
-
-    return redirect(
-        "opportunity:user_visits_list", org_slug=org_slug, opp_id=opp_id, pk=user_visit.opportunity_access_id
-    )
+    return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
 
 @org_member_required
@@ -1039,9 +980,7 @@ def reject_visit(request, org_slug=None, pk=None):
     user_visit.save()
     access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=user_visit.opportunity_id)
     update_payment_accrued(opportunity=access.opportunity, users=[access.user])
-    if request.htmx:
-        return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
-    return redirect("opportunity:user_visits_list", org_slug=org_slug, opp_id=user_visit.opportunity_id, pk=access.id)
+    return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
 
 @org_member_required
@@ -1184,7 +1123,7 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
     # Clear the cached opportunity access for the suspended user
     remove_opportunity_access_cache(access.user, access.opportunity)
 
-    return redirect("opportunity:user_profile", org_slug, opp_id, pk)
+    return redirect("opportunity:user_visits_list", org_slug, opp_id, pk)
 
 
 @org_member_required
@@ -1255,20 +1194,7 @@ def opportunity_user_invite(request, org_slug=None, pk=None):
 @org_member_required
 def user_visit_review(request, org_slug, opp_id):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
-    if not opportunity.managed:
-        return redirect("opportunity:detail", org_slug, opp_id)
-    is_program_manager = (
-        request.org_membership != None  # noqa: E711
-        and request.org_membership.is_admin
-        and request.org.program_manager
-    )
-    user_visit_reviews = UserVisit.objects.filter(opportunity=opportunity, review_created_on__isnull=False).order_by(
-        "visit_date"
-    )
-    review_filter = UserVisitReviewFilter(request.GET, queryset=user_visit_reviews)
-    table = UserVisitReviewTable(review_filter.qs, org_slug=request.org.slug)
-    if not is_program_manager:
-        table.exclude = ("pk",)
+    is_program_manager = is_program_manager_of_opportunity(request, opportunity)
     if request.POST and is_program_manager:
         review_status = request.POST.get("review_status").lower()
         updated_reviews = request.POST.getlist("pk")
@@ -1277,15 +1203,7 @@ def user_visit_review(request, org_slug, opp_id):
             user_visits.update(review_status=review_status)
             update_payment_accrued(opportunity=opportunity, users=[visit.user for visit in user_visits])
 
-    if request.htmx:
-        return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
-
-    RequestConfig(request, paginate={"per_page": 15}).configure(table)
-    return render(
-        request,
-        "opportunity/user_visit_review.html",
-        context=dict(table=table, review_filter=review_filter, opportunity=opportunity),
-    )
+    return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
 
 @org_member_required
@@ -1436,38 +1354,9 @@ def sync_deliver_units(request, org_slug, opp_id):
 def user_visit_verification(request, org_slug, opp_id, pk):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
     opportunity_access = get_object_or_404(OpportunityAccess, opportunity=opportunity, pk=pk)
-    is_program_manager = request.org.program_manager and (
-        (request.org_membership != None and request.org_membership.is_admin) or request.user.is_superuser  # noqa: E711
-    )
+    is_program_manager = is_program_manager_of_opportunity(request, opportunity)
 
-    user_visit_counts = UserVisit.objects.filter(opportunity_access=opportunity_access).aggregate(
-        pending=Count("id", filter=Q(status=VisitValidationStatus.pending)),
-        pending_review=Count(
-            "id",
-            filter=Q(
-                status=VisitValidationStatus.approved,
-                review_status=VisitReviewStatus.pending,
-            ),
-        ),
-        revalidate=Count(
-            "id",
-            filter=Q(
-                status=VisitValidationStatus.approved,
-                review_status=VisitReviewStatus.disagree,
-            ),
-        ),
-        approved=Count(
-            "id",
-            filter=Q(
-                status=VisitValidationStatus.approved,
-                review_status=VisitReviewStatus.agree,
-            ),
-        ),
-        rejected=Count("id", filter=Q(status=VisitValidationStatus.rejected)),
-        flagged=Count("id", filter=Q(flagged=True)),
-        total=Count("*"),
-    )
-
+    user_visit_counts = get_user_visit_counts(opportunity_access_id=pk)
     visits = UserVisit.objects.filter(opportunity_access=opportunity_access)
     flagged_info = defaultdict(lambda: {"name": "", "approved": 0, "rejected": 0})
     for visit in visits:
@@ -1477,63 +1366,10 @@ def user_visit_verification(request, org_slug, opp_id, pk):
                 flagged_info[flag]["name"] = flag
     flagged_info = flagged_info.values()
     last_payment_details = Payment.objects.filter(opportunity_access=opportunity_access).order_by("-date_paid").first()
-
-    tabs = [
-        {
-            "name": "pending",
-            "label": "Pending",
-            "count": user_visit_counts.get("pending", 0),
-        },
-        {
-            "name": "approved",
-            "label": "Approved",
-            "count": user_visit_counts.get("approved", 0),
-        },
-        {
-            "name": "rejected",
-            "label": "Rejected",
-            "count": user_visit_counts.get("rejected", 0),
-        },
-        {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
-    ]
-
-    if opportunity.managed:
-        tabs.insert(
-            1,
-            {
-                "name": "disagree",
-                "label": "Revalidate",
-                "count": user_visit_counts.get("revalidate", 0),
-            },
-        )
-        tabs.insert(
-            1,
-            {
-                "name": "pending_review",
-                "label": "Review",
-                "count": user_visit_counts.get("pending_review", 0),
-            },
-        )
-
-    if is_program_manager:
-        tabs = [
-            {
-                "name": "pending_review",
-                "label": "Pending",
-                "count": user_visit_counts.get("pending_review", 0),
-            },
-            {
-                "name": "disagree",
-                "label": "Disagree",
-                "count": user_visit_counts.get("revalidate", 0),
-            },
-            {
-                "name": "agree",
-                "label": "Agree",
-                "count": user_visit_counts.get("approved", 0),
-            },
-            {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
-        ]
+    pending_payment = max(opportunity_access.payment_accrued - opportunity_access.total_paid, 0)
+    pending_completed_work_count = CompletedWork.objects.filter(
+        opportunity_access=opportunity_access, status=CompletedWorkStatus.pending, saved_approved_count__gt=0
+    ).count()
 
     response = render(
         request,
@@ -1542,21 +1378,68 @@ def user_visit_verification(request, org_slug, opp_id, pk):
             "header_title": "Worker",
             "opportunity_access": opportunity_access,
             "counts": user_visit_counts,
-            "tabs": tabs,
             "flagged_info": flagged_info,
             "last_payment_details": last_payment_details,
             "MAPBOX_TOKEN": settings.MAPBOX_TOKEN,
             "opportunity": opportunity_access.opportunity,
             "is_program_manager": is_program_manager,
+            "pending_completed_work_count": pending_completed_work_count,
+            "pending_payment": pending_payment,
         },
     )
     return response
 
 
+def get_user_visit_counts(opportunity_access_id: int, date=None):
+    opportunity_access = OpportunityAccess.objects.get(id=opportunity_access_id)
+    visit_count_kwargs = {}
+    if opportunity_access.opportunity.managed:
+        visit_count_kwargs = dict(
+            pending_review=Count(
+                "id",
+                filter=Q(
+                    status=VisitValidationStatus.approved,
+                    review_status=VisitReviewStatus.pending,
+                    review_created_on__isnull=False,
+                ),
+            ),
+            disagree=Count(
+                "id",
+                filter=Q(
+                    status=VisitValidationStatus.approved,
+                    review_status=VisitReviewStatus.disagree,
+                    review_created_on__isnull=False,
+                ),
+            ),
+            agree=Count(
+                "id",
+                filter=Q(
+                    status=VisitValidationStatus.approved,
+                    review_status=VisitReviewStatus.agree,
+                    review_created_on__isnull=False,
+                ),
+            ),
+        )
+
+    filter_kwargs = {"opportunity_access": opportunity_access}
+    if date:
+        filter_kwargs.update({"visit_date__date": date})
+
+    user_visit_counts = UserVisit.objects.filter(**filter_kwargs).aggregate(
+        **visit_count_kwargs,
+        approved=Count("id", filter=Q(status=VisitValidationStatus.approved)),
+        pending=Count("id", filter=Q(status=VisitValidationStatus.pending)),
+        rejected=Count("id", filter=Q(status=VisitValidationStatus.rejected)),
+        flagged=Count("id", filter=Q(flagged=True)),
+        total=Count("*"),
+    )
+    return user_visit_counts
+
+
 class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
     model = UserVisit
     table_class = UserVisitVerificationTable
-    template_name = "tailwind/base_table.html"
+    template_name = "opportunity/user_visit_verification_table.html"
     exclude_columns = []
 
     def get_paginate_by(self, table_data):
@@ -1575,7 +1458,6 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
         )
         query_params = request.GET.urlencode()
         response["HX-Replace-Url"] = f"{url}?{query_params}"
-        response["HX-Trigger"] = json.dumps({"load-total-pages": self.table.paginator.num_pages})
         return response
 
     def get_table_kwargs(self):
@@ -1583,16 +1465,91 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
         kwargs["organization"] = self.request.org
         return kwargs
 
+    def get_context_data(self, **kwargs):
+        user_visit_counts = get_user_visit_counts(self.kwargs["pk"], self.filter_date)
+
+        if self.is_program_manager:
+            tabs = [
+                {
+                    "name": "pending_review",
+                    "label": "Pending",
+                    "count": user_visit_counts.get("pending_review", 0),
+                },
+                {
+                    "name": "disagree",
+                    "label": "Disagree",
+                    "count": user_visit_counts.get("disagree", 0),
+                },
+                {
+                    "name": "agree",
+                    "label": "Agree",
+                    "count": user_visit_counts.get("agree", 0),
+                },
+                {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
+            ]
+        else:
+            tabs = [
+                {
+                    "name": "pending",
+                    "label": "Pending",
+                    "count": user_visit_counts.get("pending", 0),
+                }
+            ]
+
+            if self.opportunity.managed:
+                dynamic_tabs = [
+                    {
+                        "name": "pending_review",
+                        "label": "Review",
+                        "count": user_visit_counts.get("pending_review", 0),
+                    },
+                    {
+                        "name": "disagree",
+                        "label": "Revalidate",
+                        "count": user_visit_counts.get("disagree", 0),
+                    },
+                    {
+                        "name": "agree",
+                        "label": "Approved",
+                        "count": user_visit_counts.get("agree", 0),
+                    },
+                ]
+            else:
+                dynamic_tabs = [
+                    {
+                        "name": "approved",
+                        "label": "Approved",
+                        "count": user_visit_counts.get("approved", 0),
+                    },
+                ]
+
+            tabs.extend(dynamic_tabs)
+            tabs.extend(
+                [
+                    {
+                        "name": "rejected",
+                        "label": "Rejected",
+                        "count": user_visit_counts.get("rejected", 0),
+                    },
+                    {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
+                ]
+            )
+
+        context = super().get_context_data(**kwargs)
+        context["opportunity_access"] = self.opportunity_access
+        context["tabs"] = tabs
+        return context
+
     def get_queryset(self):
         self.opportunity = get_opportunity_or_404(self.kwargs["opp_id"], self.kwargs["org_slug"])
-        self.is_program_manager = self.request.org.program_manager and (
-            (self.request.org_membership != None and self.request.org_membership.is_admin)  # noqa: E711
-            or self.request.user.is_superuser
+        self.opportunity_access = get_object_or_404(
+            OpportunityAccess, opportunity=self.opportunity, pk=self.kwargs["pk"]
         )
+        self.is_program_manager = is_program_manager_of_opportunity(self.request, self.opportunity)
 
         self.filter_status = self.request.GET.get("filter_status")
         self.filter_date = self.request.GET.get("filter_date")
-        filter_kwargs = {"opportunity_access": self.kwargs["pk"]}
+        filter_kwargs = {"opportunity_access": self.opportunity_access}
         if self.filter_date:
             date = datetime.datetime.strptime(self.filter_date, "%Y-%m-%d")
             filter_kwargs.update({"visit_date__date": date})
@@ -1602,8 +1559,6 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
             self.exclude_columns = ["last_activity"]
         if self.filter_status == "approved":
             filter_kwargs.update({"status": VisitValidationStatus.approved})
-            if self.opportunity.managed:
-                filter_kwargs.update({"review_status": VisitReviewStatus.agree})
         if self.filter_status == "rejected":
             filter_kwargs.update({"status": VisitValidationStatus.rejected})
 
@@ -1612,6 +1567,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                 {
                     "review_status": VisitReviewStatus.pending,
                     "status": VisitValidationStatus.approved,
+                    "review_created_on__isnull": False,
                 }
             )
         if self.filter_status == "disagree":
@@ -1619,6 +1575,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                 {
                     "review_status": VisitReviewStatus.disagree,
                     "status": VisitValidationStatus.approved,
+                    "review_created_on__isnull": False,
                 }
             )
         if self.filter_status == "agree":
@@ -1626,21 +1583,16 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                 {
                     "review_status": VisitReviewStatus.agree,
                     "status": VisitValidationStatus.approved,
-                    "flagged": True,
+                    "review_created_on__isnull": False,
                 }
             )
 
-        if self.is_program_manager:
-            filter_kwargs.update({"review_created_on__isnull": False})
         return UserVisit.objects.filter(**filter_kwargs).order_by("visit_date")
 
 
 @org_member_required
 def user_visit_details(request, org_slug, opp_id, pk):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
-    is_program_manager = request.org.program_manager and (
-        (request.org_membership != None and request.org_membership.is_admin) or request.user.is_superuser  # noqa: E711
-    )
 
     user_visit = get_object_or_404(UserVisit, pk=pk, opportunity=opportunity)
     serializer = XFormSerializer(data=user_visit.form_json)
@@ -1653,6 +1605,12 @@ def user_visit_details(request, org_slug, opp_id, pk):
     lat = None
     lon = None
     precision = None
+    visit_data = {
+        "entity_name": user_visit.entity_name,
+        "user__name": user_visit.user.name,
+        "status": user_visit.get_status_display(),
+        "visit_date": user_visit.visit_date,
+    }
     if user_visit.location:
         locations = UserVisit.objects.filter(opportunity=user_visit.opportunity).exclude(pk=pk).select_related("user")
         lat, lon, _, precision = user_visit.location.split(" ")
@@ -1678,15 +1636,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
                     other_forms.append((visit_data, dist.m, other_lat, other_lon, other_precision))
         user_forms.sort(key=lambda x: x[1])
         other_forms.sort(key=lambda x: x[1])
-        visit_data = {
-            "entity_name": loc.entity_name,
-            "user__name": loc.user.name,
-            "status": loc.get_status_display(),
-            "visit_date": loc.visit_date,
-            "lat": lat,
-            "lon": lon,
-            "precision": precision,
-        }
+        visit_data.update({"lat": lat, "lon": lon, "precision": precision})
     return render(
         request,
         "opportunity/user_visit_details.html",
@@ -1696,7 +1646,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
             user_forms=user_forms[:5],
             other_forms=other_forms[:5],
             visit_data=visit_data,
-            is_program_manager=is_program_manager,
+            is_program_manager=is_program_manager_of_opportunity(request, opportunity),
         ),
     )
 
