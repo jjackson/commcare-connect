@@ -147,4 +147,11 @@ urlpatterns = [
         views.worker_learn_status_view,
         name="worker_learn_progress",
     ),
+    path("<int:opp_id>/opportunity_delivery_stats/", views.opportunity_delivery_stats, name="delivery_stats"),
+    path("<int:opp_id>/opportunity_worker_progress_stats/", views.opportunity_worker_progress,
+         name="worker_progress_stats"),
+    path("<int:opp_id>/opportunity_funnel_progress_stats/", views.opportunity_funnel_progress,
+         name="funnel_progress_stats"),
+    path("<int:opp_id>/learn_module", views.learn_module_table, name="learn_module_table"),
+    path("<int:opp_id>/deliver_unit_table", views.deliver_unit_table, name="deliver_unit_table"),
 ]
