@@ -5,7 +5,7 @@
 
 {% block content %}
     <div class="container md:max-w-screen-2xl mx-auto flex flex-col gap-4">
-
+      {% include 'tailwind/components/breadcrumbs.html' with path=path %}
         <div class="flex flex-col gap-8 w-full rounded-lg p-4 {% if not object.is_test %}bg-brand-deep-purple{% else %}bg-white shadow-xs{% endif %}">
           <div class="flex items-center {% if object.is_test %}gap-6{% endif %} relative" x-data="{ isOpen: false }">
               <h3 class="text-sm font-medium text-brand-sky flex-1">{% if object.manged %}{{ object.program_name }}{% endif %}</h3>
@@ -31,6 +31,9 @@
                       toggleModal() {
                           this.showModal = !this.showModal;
                           document.body.style.overflow = this.showModal ? 'hidden' : 'auto';
+                          if (this.showModal) {
+                            document.body.dispatchEvent(new CustomEvent('tabShown'));
+                          }
                       }
                   }">
                       <!-- apps list -->
@@ -67,9 +70,9 @@
                   <div class="w-0.5 h-10 {% if not object.is_test %}bg-white{% else %}bg-slate-200{% endif %} bg-opacity-30"></div>
                   {% endif %}
                   {% endfor %}
-                  <div class="">
-                      <span class="badge badge-md positive-dark">
-                         {{ object.status }}
+                  <div>
+                      <span class="badge badge-md {% if object.current_status == 'Active'%} positive-dark {% elif object.current_status == 'Ended' %} warning-dark {% else %} negative-dark {% endif %}">
+                         {{ object.current_status }}
                       </span>
                   </div>
               </div>
