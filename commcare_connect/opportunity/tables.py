@@ -1257,7 +1257,6 @@ class PaymentUnitTable(OrgContextTable):
         self.can_edit = kwargs.pop('can_edit', False)
         super().__init__(*args, **kwargs)
 
-
     class Meta:
         model = PaymentUnit
         orderable = False
@@ -1269,50 +1268,19 @@ class PaymentUnitTable(OrgContextTable):
         count = deliver_units.count()
         deliver_units = deliver_units.all()
 
-        detail_html = f'''
-                <div class="grid grid-flow-row gap-8 w-full" style="grid-template-columns: repeat(3, minmax(0, 1fr));">
-                    {''.join([f'<div class="w-full"><span>{unit.name}</span> {"(<i>optional</i>)" if unit.optional else ""}</div>' for unit in deliver_units])}
-                </div>
-            '''
-        edit_button=''
-        if self.can_edit:
-            print("org_slug", self.org_slug)
-            url = reverse('opportunity:edit_payment_unit', args=(self.org_slug, record.opportunity.id, record.id))
-            edit_button = mark_safe(f'<a href="{url}"><i class="fa-thin fa-pencil me-2"></i></a>')
+        detail_html = ''.join(
+            [f'<div class="w-full"><span>{unit.name}</span> {"(<i>optional</i>)" if unit.optional else ""}</div>'
+             for unit in deliver_units]
+        )
 
-        return format_html('''
-            <div class="flex justify-between items-center">
-                <span>{count}</span>
-                <div x-data="{{ expanded: false }}">
-                    {edit_button}
-                    <button class="cursor-pointer btn btn-primary btn-sm"
-                            @click="expanded = true; $el.closest('tr').insertAdjacentHTML('afterend', $refs.detailRow.innerHTML)"
-                            x-show="!expanded">
-                        <i class="fa-light fa-chevron-down"></i>
-                    </button>
-                    <button class="cursor-pointer btn btn-secondary btn-sm"
-                            @click.prevent="
-                                const detailRow = $el.closest('tr').nextElementSibling;
-                                if (detailRow && detailRow.classList.contains('detail-row')) {{{{
-                                    detailRow.remove();
-                                }}}}
-                                expanded = false
-                            "
-                            x-show="expanded">
-                        <i class="fa-light fa-chevron-up"></i>
-                    </button>
-                    <template x-ref="detailRow">
-                        <tr class="detail-row">
-                            <td colspan="8">
-                                <div class="p-3 bg-slate-100 rounded-lg">
-                                    <div class="mb-4">Delivery units</div>
-                                    <div class="flex gap-16">
-                                        {detail_html}
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                    </template>
-                </div>
-            </div>
-        ''', count=count, edit_button=edit_button, detail_html=mark_safe(detail_html))
+        edit_button = ''
+        if self.can_edit:
+            url = reverse('opportunity:edit_payment_unit', args=(self.org_slug, record.opportunity.id, record.id))
+            edit_button = f'<a href="{url}"><i class="fa-thin fa-pencil me-2"></i></a>'
+
+        context = {
+            'count': count,
+            'detail_html': detail_html,
+            'edit_button': edit_button,
+        }
+        return render_to_string('tailwind/pages/opportunity_dashboard/extendable_payment_unit_row.html', context)
