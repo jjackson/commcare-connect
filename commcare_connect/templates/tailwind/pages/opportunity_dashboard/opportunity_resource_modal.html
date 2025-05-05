@@ -52,7 +52,7 @@
                     <!-- Learn App Content -->
                     <div x-show="selectedTab === 'Learn App'"
                             hx-get="{% url 'opportunity:learn_module_table' request.org.slug opp_id %}"
-                            hx-trigger="load"
+                            hx-trigger="tabShown from:body"
                             hx-swap="innerHTML"
                             class=" rounded-lg h-full w-full">
                         <div class="flex justify-center items-center h-full">
@@ -63,7 +63,7 @@
                     <!-- Delivery App Content -->
                     <div x-show="selectedTab === 'Delivery App'"
                             hx-get="{% url 'opportunity:deliver_unit_table' request.org.slug opp_id %}"
-                            hx-trigger="load"
+                            hx-trigger="tabShown from:body"
                             hx-swap="innerHTML"
                             class="rounded-lg h-full w-full">
                         <div class="flex justify-center items-center h-full">
@@ -74,7 +74,7 @@
                     <!-- Payment Units Content -->
                     <div x-show="selectedTab === 'Payments Units'"
                             hx-get="{% url 'opportunity:payment_unit_table' request.org.slug opp_id %}"
-                            hx-trigger="load"
+                           hx-trigger="tabShown from:body"
                             hx-swap="innerHTML"
                             class="rounded-lg h-full w-full">
                         <div class="flex justify-center items-center h-full">

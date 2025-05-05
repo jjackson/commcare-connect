@@ -1243,7 +1243,6 @@ class PaymentUnitTable(OrgContextTable):
 
     def __init__(self, *args, **kwargs):
         self.can_edit = kwargs.pop('can_edit', False)
-        self.org_slug = kwargs.pop('org_slug')
         super().__init__(*args, **kwargs)
 
 
@@ -1265,8 +1264,8 @@ class PaymentUnitTable(OrgContextTable):
             '''
         edit_button=''
         if self.can_edit:
-            url = reverse('opportunity:edit_payment_unit', args=(self.org_slug,
-                          record.opportunity.id, record.id))
+            print("org_slug", self.org_slug)
+            url = reverse('opportunity:edit_payment_unit', args=(self.org_slug, record.opportunity.id, record.id))
             edit_button = mark_safe(f'<a href="{url}"><i class="fa-thin fa-pencil me-2"></i></a>')
 
         return format_html('''
