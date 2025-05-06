@@ -1,13 +1,28 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.db.models import Count, F, Max, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.timezone import now
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, UpdateView
 from django_tables2 import SingleTableView
 
+from commcare_connect.opportunity.models import (
+    OpportunityAccess,
+    PaymentInvoice,
+    UserVisit,
+    VisitReviewStatus,
+    VisitValidationStatus,
+)
 from commcare_connect.opportunity.views import OpportunityInit
-from commcare_connect.organization.decorators import org_admin_required, org_program_manager_required
+from commcare_connect.organization.decorators import (
+    org_admin_required,
+    org_member_required,
+    org_program_manager_required,
+)
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
 from commcare_connect.program.helpers import get_annotated_managed_opportunity, get_delivery_performance_report
@@ -73,7 +88,7 @@ class ProgramCreateOrUpdate(ProgramManagerMixin, UpdateView):
         return response
 
     def get_success_url(self):
-        return reverse("program:list", kwargs={"org_slug": self.request.org.slug})
+        return reverse("program:home", kwargs={"org_slug": self.request.org.slug})
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -277,3 +292,115 @@ class DeliveryPerformanceTableView(ProgramManagerMixin, SingleTableView):
         start_date = self.request.GET.get("start_date") or None
         end_date = self.request.GET.get("end_date") or None
         return get_delivery_performance_report(program, start_date, end_date)
+
+
+@org_member_required
+def program_home(request, org_slug):
+    org = Organization.objects.get(slug=org_slug)
+    is_program_manager = request.org.program_manager and (
+        (request.org_membership != None and request.org_membership.is_admin) or request.user.is_superuser  # noqa: E711
+    )
+    if is_program_manager:
+        return program_manager_home(request, org)
+    return network_manager_home(request, org)
+
+
+def program_manager_home(request, org):
+    programs = (
+        Program.objects.filter(organization=org)
+        .order_by("-start_date")
+        .annotate(
+            invited=Count("programapplication"),
+            applied=Count(
+                "programapplication",
+                filter=Q(
+                    programapplication__status__in=[
+                        ProgramApplicationStatus.APPLIED,
+                        ProgramApplicationStatus.ACCEPTED,
+                    ]
+                ),
+            ),
+            accepted=Count(
+                "programapplication",
+                filter=Q(programapplication__status=ProgramApplicationStatus.ACCEPTED),
+            ),
+        )
+    )
+
+    pending_review = (
+        UserVisit.objects.filter(
+            status=VisitValidationStatus.approved,
+            review_status=VisitReviewStatus.pending,
+            opportunity__managed=True,
+            opportunity__managedopportunity__program__in=programs,
+        )
+        .values("opportunity__id", "opportunity__name", "opportunity__organization__name")
+        .annotate(count=Count("id"))
+    )
+
+    pending_payments = (
+        PaymentInvoice.objects.filter(
+            opportunity__managed=True,
+            opportunity__managedopportunity__program__in=programs,
+            payment__isnull=True,
+        )
+        .values("opportunity__id", "opportunity__name", "opportunity__organization__name")
+        .annotate(count=Count("id"))
+    )
+
+    organizations = Organization.objects.exclude(pk=org.pk)
+    recent_activities = [
+        {"title": "Pending Review", "rows": pending_review},
+        {"title": "Pending Payments", "rows": pending_payments},
+    ]
+
+    context = {
+        "programs": programs,
+        "organizations": organizations,
+        "recent_activities": recent_activities,
+    }
+    return render(request, "program/pm_home.html", context)
+
+
+def network_manager_home(request, org):
+    programs = Program.objects.filter(programapplication__organization=org).annotate(
+        status=F("programapplication__status"), invite_date=F("programapplication__date_created")
+    )
+
+    results = sorted(programs, key=lambda x: (x.invite_date, x.start_date), reverse=True)
+    pending_review = (
+        UserVisit.objects.filter(
+            status="pending",
+            opportunity__managed=True,
+            opportunity__managedopportunity__program__in=programs,
+            opportunity__organization=org,
+        )
+        .values("opportunity__id", "opportunity__name", "opportunity__organization__name")
+        .annotate(count=Count("id", distinct=True))
+    )
+    access_qs = OpportunityAccess.objects.filter(
+        opportunity__managed=True, opportunity__managedopportunity__program__in=programs, opportunity__organization=org
+    )
+    pending_payments = (
+        access_qs.annotate(pending_payment=F("payment_accrued") - Sum("payment__amount"))
+        .filter(pending_payment__gte=0)
+        .values("opportunity__id", "opportunity__name", "opportunity__organization__name")
+        .annotate(count=Count("id", distinct=True))
+    )
+    three_days_before = now() - timedelta(days=3)
+    inactive_workers = (
+        access_qs.annotate(
+            learn_module_date=Max("completedmodule__date"),
+            user_visit_date=Max("uservisit__visit_date"),
+        )
+        .filter(Q(user_visit_date__lte=three_days_before) | Q(learn_module_date__lte=three_days_before))
+        .values("opportunity__id", "opportunity__name", "opportunity__organization__name")
+        .annotate(count=Count("id", distinct=True))
+    )
+    recent_activities = [
+        {"title": "Pending Review", "rows": pending_review},
+        {"title": "Pending Payments", "rows": pending_payments},
+        {"title": "Inactive Workers", "rows": inactive_workers},
+    ]
+    context = {"programs": results, "recent_activities": recent_activities}
+    return render(request, "program/home.html", context)
