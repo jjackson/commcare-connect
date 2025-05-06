@@ -27,12 +27,7 @@ from commcare_connect.organization.models import Organization
 from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
 from commcare_connect.program.helpers import get_annotated_managed_opportunity, get_delivery_performance_report
 from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplication, ProgramApplicationStatus
-from commcare_connect.program.tables import (
-    DeliveryPerformanceTable,
-    FunnelPerformanceTable,
-    ProgramApplicationTable,
-    ProgramTable,
-)
+from commcare_connect.program.tables import DeliveryPerformanceTable, FunnelPerformanceTable, ProgramApplicationTable
 
 
 class ProgramManagerMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -52,15 +47,6 @@ ALLOWED_ORDERINGS = {
     "end_date": "end_date",
     "-end_date": "-end_date",
 }
-
-
-class ProgramList(ProgramManagerMixin, SingleTableView):
-    model = Program
-    paginate_by = 10
-    table_class = ProgramTable
-
-    def get_queryset(self):
-        return Program.objects.filter(organization=self.request.org).order_by("start_date")
 
 
 class ProgramCreateOrUpdate(ProgramManagerMixin, UpdateView):
