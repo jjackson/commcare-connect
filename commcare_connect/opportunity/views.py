@@ -320,14 +320,6 @@ class OpportunityFinalize(OrganizationUserMemberRoleMixin, UpdateView):
         return response
 
 
-def is_program_manager_of_opportunity(request, opportunity):
-    return (
-        opportunity.managed
-        and opportunity.managedopportunity.program.organization == request.org.slug
-        and (request.org_membership.is_admin or request.user.is_superuser)
-    )
-
-
 class OpportunityDashboard(OrganizationUserMixin, DetailView):
     model = Opportunity
     template_name = "tailwind/pages/opportunity_dashboard/dashboard.html"
@@ -354,56 +346,51 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
                 return value.strftime("%Y-%m-%d")
             return str(value)
 
-        path = [
+        context["path"] = [
             {"title": "opportunities", "url": reverse("opportunity:list", kwargs={"org_slug": request.org.slug})},
             {"title": object.name, "url": reverse("opportunity:detail", args=(request.org.slug, object.id))},
         ]
 
-        resources = [
+        context["resources"] = [
             {"name": "Learn App", "count": learn_module_count, "icon": "fa-book-open-cover"},
             {"name": "Delivery App", "count": deliver_unit_count, "icon": "fa-clipboard-check"},
             {"name": "Payments Units", "count": payment_unit_count, "icon": "fa-hand-holding-dollar"},
         ]
 
-        basic_details = [
+        context["basic_details"] = [
             {
                 "name": "Delivery Type",
                 "count": safe_display(object.delivery_type and object.delivery_type.name),
-                "icon": "file-check",
+                "icon": "fa-file-check",
             },
             {
                 "name": "Start Date",
                 "count": safe_display(object.start_date),
-                "icon": "calendar-range",
+                "icon": "fa-calendar-range",
             },
             {
                 "name": "End Date",
                 "count": safe_display(object.end_date),
-                "icon": "arrow-right",
+                "icon": "fa-arrow-right",
             },
             {
                 "name": "Max Workers",
                 "count": safe_display(object.number_of_users),
                 "icon": "users",
-                "color": "brand-mango",
+                "color": "fa-brand-mango",
             },
             {
                 "name": "Max Service Deliveries",
                 "count": safe_display(object.allotted_visits),
-                "icon": "gears",
+                "icon": "fa-gears",
             },
             {
                 "name": "Max Budget",
                 "count": safe_display(object.total_budget),
-                "icon": "money-bill",
+                "icon": "fa-money-bill",
             },
         ]
-
-        program_manager = is_program_manager_of_opportunity(request, object)
-        context["basic_details"] = basic_details
-        context["resources"] = resources
-        context["path"] = path
-        context["program_manager"] = program_manager
+        context["is_program_manager"] = is_program_manager_of_opportunity(request, object)
 
         return context
 

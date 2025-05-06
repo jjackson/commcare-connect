@@ -156,6 +156,6 @@ urlpatterns = [
         views.opportunity_funnel_progress,
         name="funnel_progress_stats",
     ),
-    path("<int:opp_id>/learn_module", views.learn_module_table, name="learn_module_table"),
+    path("<int:opp_id>/learn_module_table", views.learn_module_table, name="learn_module_table"),
     path("<int:opp_id>/deliver_unit_table", views.deliver_unit_table, name="deliver_unit_table"),
 ]
