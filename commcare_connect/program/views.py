@@ -380,4 +380,4 @@ def network_manager_home(request, org):
         {"title": "Inactive Workers", "rows": inactive_workers},
     ]
     context = {"programs": results, "recent_activities": recent_activities}
-    return render(request, "program/home.html", context)
+    return render(request, "program/nm_home.html", context)
