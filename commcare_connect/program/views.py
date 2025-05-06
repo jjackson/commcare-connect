@@ -123,7 +123,7 @@ class ManagedOpportunityInit(ProgramManagerMixin, OpportunityInit):
             self.program = Program.objects.get(pk=self.kwargs.get("pk"))
         except Program.DoesNotExist:
             messages.error(request, "Program not found.")
-            return redirect(reverse("program:list", kwargs={"org_slug": request.org.slug}))
+            return redirect(reverse("program:home", kwargs={"org_slug": request.org.slug}))
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
