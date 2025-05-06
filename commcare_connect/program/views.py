@@ -335,6 +335,7 @@ def program_manager_home(request, org):
         "programs": programs,
         "organizations": organizations,
         "recent_activities": recent_activities,
+        "is_program_manager": True,
     }
     return render(request, "program/pm_home.html", context)
 
@@ -379,5 +380,9 @@ def network_manager_home(request, org):
         {"title": "Pending Payments", "rows": pending_payments},
         {"title": "Inactive Workers", "rows": inactive_workers},
     ]
-    context = {"programs": results, "recent_activities": recent_activities}
+    context = {
+        "programs": results,
+        "recent_activities": recent_activities,
+        "is_program_manager": False,
+    }
     return render(request, "program/nm_home.html", context)
