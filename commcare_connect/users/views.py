@@ -31,14 +31,6 @@ from .models import ConnectIDUserLink
 User = get_user_model()
 
 
-class UserDetailView(LoginRequiredMixin, DetailView):
-    model = User
-    slug_field = "id"
-    slug_url_kwarg = "id"
-
-
-user_detail_view = UserDetailView.as_view()
-
 
 class UserUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = User
