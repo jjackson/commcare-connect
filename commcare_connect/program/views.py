@@ -66,6 +66,7 @@ class ProgramList(ProgramManagerMixin, SingleTableView):
 class ProgramCreateOrUpdate(ProgramManagerMixin, UpdateView):
     model = Program
     form_class = ProgramForm
+    template_name = "program/program_form.html"
 
     def get_object(self, queryset=None):
         pk = self.kwargs.get("pk")
@@ -89,16 +90,6 @@ class ProgramCreateOrUpdate(ProgramManagerMixin, UpdateView):
 
     def get_success_url(self):
         return reverse("program:home", kwargs={"org_slug": self.request.org.slug})
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["is_edit"] = self.object is not None
-        return context
-
-    def get_template_names(self):
-        view = ("add", "edit")[self.object is not None]
-        template = f"program/program_{view}.html"
-        return template
 
 
 class ManagedOpportunityList(ProgramManagerMixin, ListView):
@@ -166,7 +157,7 @@ def invite_organization(request, org_slug, pk):
     else:
         messages.info(request, "The invitation for this organization has been updated.")
 
-    return redirect(reverse("program:applications", kwargs={"org_slug": org_slug, "pk": pk}))
+    return redirect(reverse("program:home", kwargs={"org_slug": org_slug}))
 
 
 class ProgramApplicationList(ProgramManagerMixin, SingleTableView):
