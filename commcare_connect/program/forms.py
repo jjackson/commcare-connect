@@ -2,12 +2,12 @@ from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Field, Layout, Row, Submit
 from django import forms
 
-from commcare_connect.opportunity.forms import OpportunityInitForm
+from commcare_connect.opportunity.forms import SELECT_CLASS, OpportunityInitForm
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplicationStatus
+from commcare_connect.utils.forms import DATE_INPUT, INPUT_CLASS, TEXTAREA_CLASS
 
 HALF_WIDTH_FIELD = "form-group col-md-6 mb-0"
-DATE_INPUT = forms.DateInput(format="%Y-%m-%d", attrs={"type": "date", "class": "form-control"})
 
 
 class ProgramForm(forms.ModelForm):
@@ -30,18 +30,20 @@ class ProgramForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            Row(Field("name")),
-            Row(Field("description")),
-            Row(Field("delivery_type")),
+            Row(Field("name", css_class=INPUT_CLASS)),
+            Row(Field("description", css_class=TEXTAREA_CLASS)),
+            Row(Field("delivery_type", css_class=SELECT_CLASS)),
             Row(
-                Field("budget", wrapper_class=HALF_WIDTH_FIELD),
-                Field("currency", wrapper_class=HALF_WIDTH_FIELD),
+                Field("budget", css_class=INPUT_CLASS),
+                Field("currency", css_class=INPUT_CLASS),
+                css_class="grid grid-cols-2 gap-2",
             ),
             Row(
-                Field("start_date", wrapper_class=HALF_WIDTH_FIELD),
-                Field("end_date", wrapper_class=HALF_WIDTH_FIELD),
+                Field("start_date", css_class=INPUT_CLASS),
+                Field("end_date", css_class=INPUT_CLASS),
+                css_class="grid grid-cols-2 gap-2",
             ),
-            Submit("submit", "Submit"),
+            Submit("submit", "Submit", css_class="button button-md primary-dark"),
         )
 
     def clean(self):
@@ -57,11 +59,8 @@ class ProgramForm(forms.ModelForm):
         if not self.instance.pk:
             self.instance.organization = self.organization
             self.instance.created_by = self.user.email
-
         self.instance.modified_by = self.user.email
-
         self.instance.currency = self.cleaned_data["currency"].upper()
-
         return super().save(commit=commit)
 
 
