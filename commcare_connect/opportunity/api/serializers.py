@@ -247,6 +247,7 @@ class CompletedWorkSerializer(serializers.ModelSerializer):
     deliver_unit_slug = serializers.CharField(source="payment_unit.pk")
     visit_date = serializers.DateTimeField(source="completion_date")
     flags = serializers.SerializerMethodField()
+    reason = serializers.SerializerMethodField()
 
     class Meta:
         model = CompletedWork
@@ -272,6 +273,11 @@ class CompletedWorkSerializer(serializers.ModelSerializer):
             for slug, reason in visit.get("flags", []):
                 flags[slug] = reason
         return flags
+
+    def get_reason(self, obj):
+        if obj.reason in ["None", "null"]:
+            return None
+        return obj.reason
 
 
 class PaymentSerializer(serializers.ModelSerializer):
