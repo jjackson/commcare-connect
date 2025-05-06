@@ -21,7 +21,10 @@ class OrganizationChangeForm(forms.ModelForm):
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
             layout.Row(layout.Field("name"), css_class="flex flex-col"),
-            layout.Submit("submit", gettext("Update"), css_class="button button-md primary-dark float-end"),
+            layout.Div(
+                layout.Submit("submit", gettext("Update"), css_class="button button-md primary-dark"),
+                css_class="flex justify-end"
+            ),
         )
 
 

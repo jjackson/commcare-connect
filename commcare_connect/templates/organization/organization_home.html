@@ -3,7 +3,7 @@
 {% load crispy_forms_tags %}
 {% block content %}
 
-<p class="my-5 text-sm max-w-screen-lg mx-auto font-medium text-brand-deep-purple">My Organization</p>
+<p class="my-5 text-sm max-w-screen-lg mx-auto font-medium text-brand-deep-purple">{{request.org.name}}</p>
 
 <div
   class="flex flex-col max-w-screen-lg mx-auto gap-2"
@@ -87,16 +87,21 @@
   <!-- Tab Content Containers -->
   <div class="w-full">
     <!-- Details Content (Already rendered) -->
-    <div x-show="selectedTab === 'details'" class="w-full mt-4">
-        <form method="post">
+    <div x-show="selectedTab === 'details'" class="w-full mt-6">
+      <h2 class="text-xl font-semibold text-brand-deep-purple mb-4">Organization</h2>
+      <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100 mb-10">
+        <form method="post" class="bg-white">
           {% csrf_token %}
           {% crispy form %}
         </form>
-        <h1 class="mt-16 text-lg mb-2">Add Credential</h1>
+      </div>
+       <h2 class="text-xl font-semibold text-brand-deep-purple mb-4">Add Credential</h2>
+      <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
         <form method="post" action="{% url 'organization:add_members' org_slug=organization.slug %}">
           {% csrf_token %}
           {% crispy add_credential_form %}
         </form>
+      </div>
     </div>
 
     <div
