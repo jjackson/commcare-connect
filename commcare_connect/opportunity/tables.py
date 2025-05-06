@@ -1239,6 +1239,7 @@ class DeliverUnitTable(tables.Table):
 
     class Meta:
         model = DeliverUnit
+        orderable = False
         fields = ("index", "slug", "name")
         empty_text = "No Deliver units for this opportunity."
 
@@ -1260,25 +1261,17 @@ class PaymentUnitTable(OrgContextTable):
         empty_text = "No payment units for this opportunity."
 
     def render_deliver_units(self, record):
-        deliver_units = record.deliver_units
+        deliver_units = record.deliver_units.all()
         count = deliver_units.count()
-        deliver_units = deliver_units.all()
 
-        detail_html = "".join(
-            [
-                f'<div class="w-full"><span>{unit.name}</span> {"(<i>optional</i>)" if unit.optional else ""}</div>'
-                for unit in deliver_units
-            ]
-        )
-
-        edit_button = ""
         if self.can_edit:
-            url = reverse("opportunity:edit_payment_unit", args=(self.org_slug, record.opportunity.id, record.id))
-            edit_button = f'<a href="{url}"><i class="fa-thin fa-pencil me-2"></i></a>'
+            edit_url = reverse("opportunity:edit_payment_unit", args=(self.org_slug, record.opportunity.id, record.id))
+        else:
+            edit_url = None
 
         context = {
             "count": count,
-            "detail_html": detail_html,
-            "edit_button": edit_button,
+            "deliver_units": deliver_units,
+            "edit_url": edit_url,
         }
         return render_to_string("tailwind/pages/opportunity_dashboard/extendable_payment_unit_row.html", context)

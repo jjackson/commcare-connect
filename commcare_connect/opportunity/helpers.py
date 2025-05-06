@@ -406,10 +406,7 @@ def get_opportunity_worker_progress(opp_id):
         ),
         total_visits=Count("uservisit", distinct=True),
     )
-
-    aggregates["total_budget"] = opportunity["total_budget"]
-    aggregates["start_date"] = opportunity["start_date"]
-    aggregates["end_date"] = opportunity["end_date"]
+    aggregates.update(opportunity)
 
     start_date = aggregates["start_date"]
     end_date = aggregates["end_date"] or today
@@ -430,7 +427,7 @@ def get_opportunity_worker_progress(opp_id):
 
     aggregates["total_days"] = total_days
     aggregates["average_visits_per_day"] = (
-        round(float(aggregates["total_visits"]) / total_days, 1) if aggregates["total_visits"] else 0
+        round(float(aggregates["total_visits"]) / total_days, 1) if aggregates["total_visits"] and total_days else 0
     )
 
     aggregates["maximum_visit_in_a_day"] = maximum_visit_in_a_day

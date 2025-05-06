@@ -203,12 +203,8 @@ class Opportunity(BaseModel):
         return self.managedopportunity.program.name if self.managed else None
 
     @property
-    def current_status(self):
-        if self.is_active:
-            return "Active"
-        if self.end_date and self.end_date < now().date():
-            return "Ended"
-        return "Inactive"
+    def has_ended(self):
+        return bool(self.end_date and self.end_date < now().date())
 
 
 class OpportunityVerificationFlags(models.Model):
