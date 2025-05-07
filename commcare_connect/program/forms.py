@@ -1,5 +1,5 @@
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Field, Layout, Row, Submit
+from crispy_forms.layout import Button, Field, Layout, Row, Submit
 from crispy_tailwind.tailwind import CSSContainer
 from django import forms
 
@@ -43,7 +43,16 @@ class ProgramForm(forms.ModelForm):
                 Field("end_date"),
                 css_class="grid grid-cols-2 gap-2",
             ),
-            Submit("submit", "Submit", css_class="button button-md primary-dark"),
+            Row(
+                Button(
+                    "close",
+                    "Close",
+                    css_class="button button-md outline-style",
+                    **{"@click": "showProgramAddModal = showProgramEditModal = false"},
+                ),
+                Submit("submit", "Submit", css_class="button button-md primary-dark"),
+                css_class="float-end",
+            ),
         )
 
     def clean(self):
