@@ -342,7 +342,9 @@ def program_manager_home(request, org):
 
 def network_manager_home(request, org):
     programs = Program.objects.filter(programapplication__organization=org).annotate(
-        status=F("programapplication__status"), invite_date=F("programapplication__date_created")
+        status=F("programapplication__status"),
+        invite_date=F("programapplication__date_created"),
+        application_id=F("programapplication__id"),
     )
 
     results = sorted(programs, key=lambda x: (x.invite_date, x.start_date), reverse=True)
