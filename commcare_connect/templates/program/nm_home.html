@@ -69,8 +69,7 @@
 
           <!-- button -->
           {% if program.status == 'invited' %}
-            <form x-data="{ }"
-                  hx-post="{% url "program:apply_or_decline_application" request.org.slug program.id program.id "apply" %}"
+            <form hx-post="{% url "program:apply_or_decline_application" request.org.slug program.id program.application_id "apply" %}"
                   hx-swap="none"
                   @htmx:after-request="setApplied">
               {% csrf_token %}
