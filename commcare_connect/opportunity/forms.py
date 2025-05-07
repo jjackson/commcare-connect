@@ -104,35 +104,54 @@ class OpportunityChangeForm(
         ]
 
     def __init__(self, *args, **kwargs):
-        kwargs["opportunity"] = kwargs.get(
-            "instance", None
-        )  # passing the opportunity instance to OpportunityUserInviteForm
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            Row(Field("name")),
-            Row(Field("active", css_class="form-check-input", wrapper_class="form-check form-switch")),
-            Row(Field("is_test", css_class="form-check-input", wrapper_class="form-check form-switch")),
-            Row(Field("delivery_type")),
-            Row(Field("description")),
-            Row(Field("short_description")),
             Row(
-                Field("currency", wrapper_class="form-group col-md-6 mb-0"),
-                Field("end_date", wrapper_class="form-group col-md-6 mb-0"),
-            ),
-            HTML("<hr />"),
-            Fieldset(
-                "Invite Users",
-                Row(Field("users")),
-                Row(
-                    Field("filter_country", wrapper_class="form-group col-md-6 mb-0"),
-                    Field("filter_credential", wrapper_class="form-group col-md-6 mb-0"),
+                HTML("<div class='col-span-2'><h6 class='title-sm'>Opportunity Details</h6>  <span class='hint'>Edit the details of the opportunity. All fields are mandatory.  </span> </div>"),
+                Column(
+                    Field("name", css_class=BASE_INPUT_CLASS,wrapper_class="w-full"),
+                    Field("short_description", css_class=BASE_INPUT_CLASS,wrapper_class="w-full"),
+                    Field("description", css_class=TEXTAREA_CLASS,wrapper_class="w-full"),
                 ),
+                Column(
+                    Field("delivery_type", css_class=BASE_INPUT_CLASS),
+                    Field("active", css_class=CHECKBOX_CLASS,wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg"),
+                    Field("is_test", css_class=CHECKBOX_CLASS,wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg"),
+                ),
+                css_class="grid grid-cols-2 gap-4 p-6 card_bg"
             ),
-            Submit("submit", "Submit"),
+            Row(
+                HTML("<div class='col-span-2'><h6 class='title-sm'>Date</h6>  <span class='hint'>Optional: If not specified, the opportunity start & end dates will apply to the form submissions.</span> </div>"),
+                Column(
+                    Field("end_date", css_class=BASE_INPUT_CLASS),
+                ),
+                Column(
+                    Field("currency", css_class=SELECT_CLASS),
+                    Field("additional_users", css_class=BASE_INPUT_CLASS)
+                ),
+                css_class="grid grid-cols-2 gap-4 p-6 card_bg"
+            ),
+            Row(
+                HTML("<div class='col-span-2'><h6 class='title-sm'>Invite Workers</h6></div>"),
+                Row(
+                    Field("filter_country", css_class=BASE_INPUT_CLASS,wrapper_class="w-full"),
+                    Field("filter_credential", css_class=BASE_INPUT_CLASS,wrapper_class="w-full"),
+                    css_class="flex gap-2"
+                ),
+                Row(Field("users", css_class=TEXTAREA_CLASS,wrapper_class="w-full"),css_class="col-span-2"),
+                css_class="grid grid-cols-2 gap-4 p-6 card_bg"
+            ),
+            Row(
+                Submit("submit", "Submit",css_class="button button-md primary-dark"),
+                css_class="flex justify-end"
+            )
         )
 
+        self.fields["additional_users"] = forms.IntegerField(
+            required=False, help_text="Adds budget for additional users."
+        )
         self.fields["end_date"] = forms.DateField(
             widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
             required=False,
@@ -142,9 +161,6 @@ class OpportunityChangeForm(
             if self.instance.end_date:
                 self.initial["end_date"] = self.instance.end_date.isoformat()
             self.currently_active = self.instance.active
-
-        if self.instance.managed:
-            self.fields["currency"].disabled = True
 
     def clean_active(self):
         active = self.cleaned_data["active"]
