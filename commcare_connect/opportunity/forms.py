@@ -738,9 +738,8 @@ class AddBudgetNewUsersForm(forms.Form):
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            Row(Field("add_users")),
-            Row(Field("total_budget")),
-            Submit(name="submit", value="Submit"),
+            Row(Field("add_users"), Field("total_budget"), css_class="grid grid-cols-2 gap-4"),
+            Row(Submit("submit", "Submit", css_class="button button-md primary-dark"), css_class="flex justify-end")
         )
 
         self.fields["total_budget"].initial = self.opportunity.total_budget

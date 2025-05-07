@@ -520,11 +520,32 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
         form.save()
         return redirect("opportunity:detail", org_slug, pk)
 
+    tabs = [
+        {
+            "key": "existing_users",
+            "label": "Existing Users",
+        },]
+    # Nm are not allowed to increase the managed opportunity budget so do not provide that tab.
+    if not opportunity.managed or is_program_manager_of_opportunity(request, opportunity):
+        tabs.append({
+            "key": "new_users",
+            "label": "New Users",
+        })
+
+    path = [
+        {"title": "Opportunities", "url": reverse("opportunity:list", args=(request.org.slug,))},
+        {"title": opportunity.name, "url": reverse("opportunity:detail", args=(request.org.slug, opportunity.pk))},
+        {"title": "Add budget", }
+    ]
+
+
     return render(
         request,
         "opportunity/add_visits_existing_users.html",
         {
             "form": form,
+            "tabs": tabs,
+            "path": path,
             "opportunity_claims": opportunity_claims,
             "budget_per_visit": opportunity.budget_per_visit_new,
             "opportunity": opportunity,
