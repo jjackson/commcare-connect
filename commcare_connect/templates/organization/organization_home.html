@@ -1,7 +1,6 @@
 {% extends "tailwind/base.html" %}
 {% load static %}
 {% load crispy_forms_tags %}
-{% load django_tables2 %}
 {% block content %}
 
 <p class="my-5 text-sm max-w-screen-lg mx-auto font-medium text-brand-deep-purple">{{request.org.name}}</p>
@@ -95,7 +94,7 @@
     x-show="selectedTab === 'members'"
     id="invoice_members_container"
     class="w-full"
-    hx-get="{% url 'organization:org_member_table' request.org.slug %}?{% querystring %}"
+    hx-get="{% url 'organization:org_member_table' request.org.slug %}"
     hx-swap="innerHTML"
     hx-trigger="loadMembers from:body"
   ></div>
