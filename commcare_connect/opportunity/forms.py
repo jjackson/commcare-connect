@@ -839,7 +839,7 @@ class PaymentUnitForm(forms.ModelForm):
                        Field("payment_units")),
                 Column(Field("optional_deliver_units"), Div(HTML(
                     f"""
-                    <button type="button" class="button button-md bg-amber-100 border border-amber-300/10" id="sync-button"
+                    <button type="button" class="button button-md outline-style" id="sync-button"
                     hx-post="{reverse('opportunity:sync_deliver_units', args=(org_slug, opportunity_id))}"
                     hx-trigger="click" hx-swap="none" hx-on::after-request="alert(event?.detail?.xhr?.response);
                     event.detail.successful && location.reload();
