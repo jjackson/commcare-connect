@@ -657,10 +657,16 @@ def add_payment_unit(request, org_slug=None, pk=None):
     elif request.POST:
         messages.error(request, "Invalid Data")
         return redirect("opportunity:add_payment_units", org_slug=request.org.slug, pk=opportunity.id)
+
+    path = [
+        {"title": "Opportunities", "url": reverse("opportunity:list", args=(request.org.slug,))},
+        {"title": opportunity.name, "url": reverse("opportunity:detail", args=(request.org.slug, opportunity.pk))},
+        {"title": "Payment unit",}
+    ]
     return render(
         request,
         "partial_form.html" if request.GET.get("partial") == "True" else "form.html",
-        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Payment Unit Create", form=form),
+        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Payment Unit Create", form=form, path=path),
     )
 
 
@@ -713,10 +719,16 @@ def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
         )
         messages.success(request, f"Payment unit {form.instance.name} updated. Please reset the budget")
         return redirect("opportunity:finalize", org_slug=request.org.slug, pk=opportunity.id)
+
+    path = [
+        {"title": "Opportunities", "url": reverse("opportunity:list", args=(request.org.slug,))},
+        {"title": opportunity.name, "url": reverse("opportunity:detail", args=(request.org.slug, opportunity.pk))},
+        {"title": "Payment unit", }
+    ]
     return render(
         request,
         "form.html",
-        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Payment Unit Edit", form=form),
+        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Payment Unit Edit", form=form, path=path),
     )
 
 
