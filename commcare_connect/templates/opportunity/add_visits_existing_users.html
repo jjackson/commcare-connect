@@ -203,7 +203,7 @@
         <div
           x-show="selectedTab === 'new_users'"
         >
-          <h3 class="mb-2">Add Visits for Existing Users</h3>
+          <h3 class="mb-2">Add Budget for New Users</h3>
           <div
             id="new_user_container"
             hx-get="{% url 'opportunity:add_budget_new_users' org_slug=request.org.slug pk=opportunity.pk %}"
