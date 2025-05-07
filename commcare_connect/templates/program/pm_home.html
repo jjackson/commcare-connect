@@ -152,7 +152,9 @@
                     Reject
                   </button>
                   <button class="button button-md primary-dark" value="accept"
-                    hx-post="{% url 'program:manage_application' request.org.slug application.id 'accept' %}">
+                    hx-post="{% url 'program:manage_application' request.org.slug application.id 'accept' %}"
+                    hx-swap="outerHTML"
+                    hx-target="body">
                   Accept
                   </button>
                 </div>

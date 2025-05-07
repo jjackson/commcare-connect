@@ -175,13 +175,7 @@ class ProgramApplicationList(ProgramManagerMixin, SingleTableView):
 @require_POST
 def manage_application(request, org_slug, application_id, action):
     application = get_object_or_404(ProgramApplication, id=application_id)
-    redirect_url = reverse(
-        "program:applications",
-        kwargs={
-            "org_slug": org_slug,
-            "pk": application.program.id,
-        },
-    )
+    redirect_url = reverse("program:home", kwargs={"org_slug": org_slug})
 
     status_mapping = {
         "accept": ProgramApplicationStatus.ACCEPTED,
@@ -208,7 +202,7 @@ def manage_application(request, org_slug, application_id, action):
 def apply_or_decline_application(request, application_id, action, org_slug=None, pk=None):
     application = get_object_or_404(ProgramApplication, id=application_id, status=ProgramApplicationStatus.INVITED)
 
-    redirect_url = reverse("opportunity:list", kwargs={"org_slug": org_slug})
+    redirect_url = reverse("program:home", kwargs={"org_slug": org_slug})
 
     action_map = {
         "apply": {
@@ -346,8 +340,8 @@ def network_manager_home(request, org):
         invite_date=F("programapplication__date_created"),
         application_id=F("programapplication__id"),
     )
-
     results = sorted(programs, key=lambda x: (x.invite_date, x.start_date), reverse=True)
+
     pending_review = (
         UserVisit.objects.filter(
             status="pending",
