@@ -7,25 +7,22 @@
 
 <div
   class="flex flex-col max-w-screen-lg mx-auto gap-2"
-   x-cloak
+  x-cloak
   x-data="{
       selectedTab: '{{ request.GET.active_tab|default:'details' }}',
-      selectedOption: '',
-      isViewPermissionModalOpen: false,
       showAddMemberModal: false,
-      changeTab(tab) {
-        this.selectedTab = tab;
-        const url = new URL(window.location);
-        url.searchParams.set('active_tab', tab);
-        window.history.pushState({}, '', url);
-      },
-      init() {
-        if (this.selectedTab === 'members') {
-          htmx.trigger('#invoice_members_container', 'loadMembers');
-        }
-      }
+      isHistoryAvailable: false,
     }"
-  x-init="init()"
+  x-effect="
+      const url = new URL(window.location);
+      url.searchParams.set('active_tab', selectedTab);
+      window.history.pushState({}, '', url);
+
+      if (selectedTab === 'members' && !isHistoryAvailable) {
+        htmx.trigger('#invoice_members_container', 'loadMembers');
+        isHistoryAvailable = true
+      }
+  "
 >
 
   <!-- Tabs -->
@@ -33,7 +30,7 @@
     <div class="flex h-full px-2 gap-x-8">
       <!-- Details Tab -->
       <div
-        @click="changeTab('details'); selectedRows = []"
+        @click="selectedTab = 'details';"
         class="relative flex items-center h-full text-sm cursor-pointer"
         :class="{
                 'text-brand-deep-purple font-medium': selectedTab === 'details',
@@ -49,9 +46,7 @@
 
       <!-- Members Tab -->
       <div
-        @click="changeTab('members'); selectedRows = []; $nextTick(() => {
-                htmx.trigger('#invoice_members_container', 'loadMembers');
-            })"
+        @click="selectedTab = 'members';"
         id="members-tab"
         class="relative flex items-center h-full text-sm cursor-pointer"
         :class="{
@@ -69,15 +64,6 @@
 
     <!-- Options -->
     <div x-show="selectedTab === 'members'" class="flex items-center gap-x-4">
-      <button type="button" class="button-icon">
-        <i class="fa-light fa-pen-line"></i>
-      </button>
-      <button type="button" class="button-icon">
-        <i class="fa-light fa-user-slash"></i>
-      </button>
-      <button type="button" class="button-icon">
-        <i class="fa-light fa-trash"></i>
-      </button>
       <button class="button button-md outline-style" @click="showAddMemberModal = true">
         Add Members
       </button>
