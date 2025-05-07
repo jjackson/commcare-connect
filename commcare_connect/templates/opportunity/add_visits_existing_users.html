@@ -37,6 +37,7 @@
     return {
       modalOpen: false,
       additionalVisits: 0,
+      budgetPerVisit: budgetPerVisit,
       selected_users: [],
       end_date: '',
       openModal() {
@@ -46,13 +47,23 @@
         this.modalOpen = false;
       },
       isSelected(id) {
-        return this.selected_users.includes(id);
-      },
+      return this.selected_users.includes(id);
+    },
+      toggleSelectAll() {
+      const checkboxes = document.querySelectorAll('input[name="selected_users"]');
+      if (this.selected_users.length === checkboxes.length - 1) {
+        this.selected_users = [];
+      } else {
+        this.selected_users = Array.from(checkboxes)
+          .filter(cb => cb.id !== 'select_all_users')
+          .map(cb => cb.value);
+      }
+    },
       totalVisits() {
-        return this.selected_users.length * this.additionalVisits;
+        return this.selected_users.length * (parseInt(this.additionalVisits) || 0);;
       },
       calculatedBudget() {
-        return this.totalVisits() * budgetPerVisit;
+        return (this.totalVisits() * budgetPerVisit)
       }
     };
 }
@@ -85,7 +96,7 @@
         <!-- Add budget for existing users-->
         <div x-show="selectedTab === 'existing_users'">
           <form method="post"
-                x-data="handleExistingBudgetComponent({{budget_per_visit}})"
+                x-data="handleExistingBudgetComponent({{ budget_per_visit }})"
           >
             {% csrf_token %}
 
@@ -102,8 +113,10 @@
               <thead>
               <tr>
                 <th>
-                  <input type="checkbox" name="selected_users" id="id_selected_users" value="{{ opp_claim.id }}"
+                  <input type="checkbox" name="selected_users" id="select_all_users" value="{{ opp_claim.id }}"
                          x-model="selected_users"
+                         @click="toggleSelectAll()"
+                         :checked="selected_users.length === {{ opportunity_claims|length }}"
                          class="simple-checkbox {% if form.selected_users.errors %}is-invalid{% endif %}"/>
                 </th>
                 <th>Name</th>
@@ -117,7 +130,7 @@
               {% for opp_claim in opportunity_claims %}
               <tr>
                 <td>
-                  <input type="checkbox" name="selected_users" id="id_selected_users" value="{{ opp_claim.id }}"
+                  <input type="checkbox" name="selected_users"  id="id_selected_users_{{ opp_claim.id }}" value="{{ opp_claim.id }}"
                          x-model="selected_users"
                          class="simple-checkbox {% if form.selected_users.errors %}is-invalid{% endif %}"/>
                 </td>
