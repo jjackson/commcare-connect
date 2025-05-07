@@ -101,9 +101,14 @@
             {% csrf_token %}
 
             {% if form.selected_users.errors %}
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-              Please select users to update.
-              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            <div class="flex rounded-lg border border-red-300 bg-red-50 text-red-800 px-4 py-3 mb-4" role="alert">
+              <span class="text-red-800 flex-1">Please select users to update.</span>
+              <button type="button"
+                      class="text-red-500 hover:text-red-700"
+                      aria-label="Close"
+                      @click="event.target.closest('div[role=alert]').remove()">
+                &times;
+              </button>
             </div>
             {% endif %}
 
