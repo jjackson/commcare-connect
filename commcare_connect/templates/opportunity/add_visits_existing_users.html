@@ -154,11 +154,11 @@
                 <div class="flex-1">{{ form.additional_visits|as_crispy_field }}</div>
                 <div class="flex-1">{{ form.end_date|as_crispy_field }}</div>
               </div>
-              <button type="button" class="button button-md primary-dark mt-4"
-                      @click="openModal(); end_date = document.getElementById('id_end_date').value">
-                Save
-              </button>
             </div>
+            <button type="button" class="button button-md primary-dark mt-4 float-end"
+                    @click="openModal(); end_date = document.getElementById('id_end_date').value">
+              Save
+            </button>
             {% else %}
             <div class="text-center">
               <b>No Opportunity Claims yet.</b> <br/>
