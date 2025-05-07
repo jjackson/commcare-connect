@@ -168,8 +168,12 @@ def is_program_manager_of_opportunity(request, opportunity):
         and opportunity.managedopportunity.program.organization.slug == request.org.slug
         and (
             request.org.program_manager
-            and request.org_membership
-            and (request.org_membership.is_admin or request.user.is_superuser)
+            and
+            (
+                (request.org_membership and request.org_membership.is_admin)
+                or
+                request.user.is_superuser
+            )
         )
     )
 
@@ -1235,12 +1239,11 @@ def invoice_list(request, org_slug, pk):
         queryset,
         org_slug=org_slug,
         opp_id=pk,
-        exclude=("actions",) if program_manager else tuple(),
+        exclude=("actions",) if not program_manager else tuple(),
         csrf_token=csrf_token,
     )
 
     form = PaymentInvoiceForm(opportunity=opportunity)
-
     RequestConfig(request, paginate={"per_page": 10}).configure(table)
     return render(
         request,

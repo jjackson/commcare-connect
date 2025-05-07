@@ -5,18 +5,12 @@
 {% block content %}
 
 <ul class="breadcrumb">
-  {% if program_manager %}
-    <li>
-      <a class="text-gray-500 cursor-none">{{opportunity.organization.slug}}</a>
-      <i class="fa-solid fa-chevron-right"></i>
-    </li>
-   {% endif %}
   <li>
     <a href='{% url "opportunity:detail" request.org.slug opportunity.pk %}'>{{ opportunity.name }}</a>
     <i class="fa-solid fa-chevron-right"></i>
   </li>
   <li>
-    <a class="text-gray-500 cursor-none">Invoices</a>
+    <a class="cursor-none">Invoices</a>
   </li>
 </ul>
 
