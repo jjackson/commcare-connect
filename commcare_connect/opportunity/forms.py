@@ -829,16 +829,17 @@ class PaymentUnitForm(forms.ModelForm):
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            Row(
-                Column(Field("name"), Field("description")),
-                Column(Field("amount"), TwoColRow("max_total", "max_daily"), Field("start_date"),
-                       Field("end_date")),
-                css_class="grid grid-cols-2 gap-4 p-6 card_bg"),
-            Row(
-                Column(Field("required_deliver_units"),
-                       Field("payment_units")),
-                Column(Field("optional_deliver_units"), Div(HTML(
-                    f"""
+            Div(
+                Row(
+                    Column(Field("name"), Field("description")),
+                    Column(Field("amount"), TwoColRow("max_total", "max_daily"), Field("start_date"),
+                           Field("end_date")),
+                    css_class="grid grid-cols-2 gap-4 p-6 card_bg"),
+                Row(
+                    Column(Field("required_deliver_units"),
+                           Field("payment_units")),
+                    Column(Field("optional_deliver_units"), Div(HTML(
+                        f"""
                     <button type="button" class="button button-md outline-style" id="sync-button"
                     hx-post="{reverse('opportunity:sync_deliver_units', args=(org_slug, opportunity_id))}"
                     hx-trigger="click" hx-swap="none" hx-on::after-request="alert(event?.detail?.xhr?.response);
@@ -850,9 +851,10 @@ class PaymentUnitForm(forms.ModelForm):
                     </button>
 
                 """
-                ))),
-                css_class="grid grid-cols-2 gap-4 p-6 card_bg"),
-            Row(Submit("submit", "Submit", css_class="button button-md primary-dark"), css_class="flex justify-end"))
+                    ))),
+                    css_class="grid grid-cols-2 gap-4 p-6 card_bg"),
+                Row(Submit("submit", "Submit", css_class="button button-md primary-dark"), css_class="flex justify-end")
+                , css_class="flex flex-col gap-4"))
         deliver_unit_choices = [(deliver_unit.id, deliver_unit.name) for deliver_unit in deliver_units]
         payment_unit_choices = [(payment_unit.id, payment_unit.name) for payment_unit in payment_units]
         self.fields["required_deliver_units"] = forms.MultipleChoiceField(
