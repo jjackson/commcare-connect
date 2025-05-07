@@ -4,11 +4,7 @@
   <div class="flex flex-col gap-4">
     {% for program in programs %}
         <div class="flex flex-col p-6 rounded-xl shadow-sm bg-white gap-5 relative"
-             x-data="{
-              showOpp: false,
-              status: '{{ program.status }}',
-              setApplied(e) { if(e?.detail?.successful) this.status = 'applied'}
-             }">
+             x-data="{ showOpp: false, status: '{{ program.status }}' }">
         <div class="absolute w-8 bg-brand-mango h-2 top-0 -translate-y-1/2 left-6 rounded-full"></div>
         <div class="flex w-full justify-between">
           <!-- program details -->
@@ -70,11 +66,10 @@
           <!-- button -->
           {% if program.status == 'invited' %}
             <form hx-post="{% url "program:apply_or_decline_application" request.org.slug program.id program.application_id "apply" %}"
-                  hx-swap="none"
-                  @htmx:after-request="setApplied">
+                  hx-swap="outerHTML"
+                  hx-target="body">
               {% csrf_token %}
-              <button class="button button-md" type="submit"
-                      :class="{'neutral disabled': status == 'applied', 'primary-dark': status == 'invited'}">
+              <button class="button button-md primary-dark" type="submit">
                 <span class="relative z-20">Apply</span>
               </button>
             </form>
@@ -93,7 +88,7 @@
         </div>
         {% if program.status == 'accepted' %}
           {% if program.managedopportunity_set.all %}
-            <div id="opportunity-container" class="flex flex-col gap-y-4 py-4" x-show="showOpp" x-cloak>
+            <div id="opportunity-container" class="flex flex-col gap-y-4 py-4" style="display:none;" x-cloak x-show="showOpp">
               {% for opportunity in program.managedopportunity_set.all %}
                 <div class="relative flex flex-col gap-5 p-6 bg-white rounded-xl border border-gray-200">
                   <div class="flex justify-between w-full">
