@@ -35,16 +35,6 @@ FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Afri
 
 SELECT_CLASS = "base-dropdown"
 CHECKBOX_CLASS = "simple-toggle"
-BASE_INPUT_CLASS = "base-input"
-TEXTAREA_CLASS = "base-textarea"
-PRIMARY_BUTTON_CLASS = "button button-md primary-dark float-end"
-
-class TwoColRow(Row):
-    def __init__(self, *fields, **kwargs):
-        flex_fields = [Field(field, wrapper_class="flex-1") for field in fields]
-        kwargs.setdefault("css_class", "flex gap-4")
-        super().__init__(*flex_fields, **kwargs)
-
 
 class OpportunityUserInviteForm(forms.Form):
     def __init__(self, *args, **kwargs):
@@ -832,8 +822,11 @@ class PaymentUnitForm(forms.ModelForm):
             Div(
                 Row(
                     Column(Field("name"), Field("description")),
-                    Column(Field("amount"), TwoColRow("max_total", "max_daily"), Field("start_date"),
-                           Field("end_date")),
+                    Column(
+                        Field("amount"),
+                        Row(Field("max_total"), Field("max_daily"), css_class="grid grid-cols-2 gap-4"),
+                        Field("start_date"),
+                        Field("end_date")),
                     css_class="grid grid-cols-2 gap-4 p-6 card_bg"),
                 Row(
                     Column(Field("required_deliver_units"),
