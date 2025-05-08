@@ -923,6 +923,7 @@ class SendMessageMobileUsersForm(forms.Form):
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
+        self.helper.css_container = CSSContainer(FORM_BASE_STYLE)
         self.helper.layout = Layout(
             Row(Field("selected_users")),
             Row(Field("title")),
