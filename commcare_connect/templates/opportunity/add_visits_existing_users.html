@@ -25,7 +25,6 @@
 
          // initially load the form once
         if (tab === 'new_users' && !this.newUsersLoaded) {
-          console.log(tab)
           htmx.trigger('#new_user_container', 'loadNewUserForm');
         }
 
