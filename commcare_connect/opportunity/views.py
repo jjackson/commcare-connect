@@ -865,6 +865,11 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
             send_sms_task.delay(selected_user_ids, body)
         return redirect("opportunity:detail", org_slug=request.org.slug, pk=pk)
 
+    path = [
+        {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
+        {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
+        {"title": "Send Message", "url": request.path},
+    ]
     return render(
         request,
         "opportunity/send_message.html",
@@ -874,6 +879,7 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
             form=form,
             users=users,
             user_ids=list(user_ids),
+            path=path,
         ),
     )
 
