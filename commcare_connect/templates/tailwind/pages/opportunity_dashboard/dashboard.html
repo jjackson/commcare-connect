@@ -67,8 +67,10 @@
                           </div>
                       </div>
                   </div>
+
+                  <!--Separator Between basic detail columns-->
                   {% if not forloop.last and forloop.counter != 2 %}
-                  <div class="w-0.5 h-10 {% if not object.is_test %}bg-white{% else %}bg-slate-200{% endif %} bg-opacity-30"></div>
+                      <div class="w-0.5 h-10 {% if not object.is_test %}bg-white{% else %}bg-slate-200{% endif %} bg-opacity-30"></div>
                   {% endif %}
                   {% endfor %}
                   <div>
