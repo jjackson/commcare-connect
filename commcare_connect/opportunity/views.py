@@ -376,8 +376,8 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
             {
                 "name": "Max Workers",
                 "count": safe_display(object.number_of_users),
-                "icon": "users",
-                "color": "fa-brand-mango",
+                "icon": "fa-users",
+                "color": "brand-mango",
             },
             {
                 "name": "Max Service Deliveries",
