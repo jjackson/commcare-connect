@@ -4,15 +4,7 @@
 
 {% block content %}
 
-<ul class="breadcrumb">
-  <li>
-    <a href='{% url "opportunity:detail" request.org.slug opportunity.pk %}'>{{ opportunity.name }}</a>
-    <i class="fa-solid fa-chevron-right"></i>
-  </li>
-  <li>
-    <a class="cursor-none">Invoices</a>
-  </li>
-</ul>
+{% include 'tailwind/components/breadcrumbs.html' with path=path %}
 
 
 <p class="my-5 text-sm font-medium text-brand-deep-purple">{{ opportunity.name }}</p>
