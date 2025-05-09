@@ -167,7 +167,7 @@ class OpportunityPaymentTable(OrgContextTable):
             "opportunity:worker_list",
             kwargs={"org_slug": self.org_slug, "opp_id": record.opportunity.id},
         )
-        return mark_safe(f'<a href="{url}&active_tab=payments">View Details</a>')
+        return mark_safe(f'<a href="{url}?active_tab=payments">View Details</a>')
 
     class Meta:
         model = OpportunityAccess
