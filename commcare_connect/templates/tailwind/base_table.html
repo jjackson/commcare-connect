@@ -68,11 +68,17 @@
   <div class="table-footer w-full flex items-center justify-between h-14  bg-slate-50  text-brand-deep-purple py-2 px-4 rounded-lg">
     <div class="flex items-center gap-2 max-w-fit text-brand-deep-purple text-sm">
         {% if table.page.has_previous %}
-            <a href="{% querystring table.prefixed_page_field=table.page.previous_page_number %}"
+            <button
+              @click="
+                 const url = new URL(window.location.href);
+                 url.searchParams.set('{{ table.prefixed_page_field }}', '{{ table.page.previous_page_number }}');
+                 window.location.href = url.toString();
+                 return false;
+               "
                class="button-icon"
                aria-label="{% trans 'Previous page' %}">
                 <i class="fa-light fa-chevron-left"></i>
-            </a>
+            </button>
         {% else %}
             <span class="button-icon opacity-50 cursor-not-allowed" aria-hidden="true">
                 <i class="fa-light fa-chevron-left"></i>
@@ -96,11 +102,17 @@
         >        <span class="whitespace-nowrap ml-1">of {{ table.paginator.num_pages }}</span>
 
         {% if table.page.has_next %}
-            <a href="{% querystring table.prefixed_page_field=table.page.next_page_number %}"
+            <button
+               @click="
+                   const url = new URL(window.location.href);
+                   url.searchParams.set('{{ table.prefixed_page_field }}', '{{ table.page.next_page_number }}');
+                   window.location.href = url.toString();
+                   return false;
+                 "
                class="button-icon"
                aria-label="{% trans 'Next page' %}">
                 <i class="fa-light fa-chevron-right"></i>
-            </a>
+            </button>
         {% else %}
             <span class="button-icon opacity-50 cursor-not-allowed" aria-hidden="true">
                 <i class="fa-light fa-chevron-right"></i>
