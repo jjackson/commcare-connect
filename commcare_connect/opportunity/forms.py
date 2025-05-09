@@ -1059,64 +1059,17 @@ class PaymentInvoiceForm(forms.ModelForm):
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            Column(
-                Row(
-                    Row(
-                        Div(
-                            Field(
-                                "amount",
-                                css_class=f"{'border-red-500 ring-2 ring-red-500/70  pr-8 mb-1' if self.errors.get('amount') else ''}",
-                            ),
-                            HTML(
-                                '<i class="fas fa-exclamation-circle text-red-500 absolute right-2 top-1/2 transform -translate-y-1/2 mt-1"></i>'
-                            )
-                            if self.errors.get("amount")
-                            else HTML(""),
-                            css_class="relative w-full",
-                        ),
-                        css_class="flex-1",
-                    ),
-                    Row(
-                        Div(
-                            Field(
-                                "date",
-                                css_class=f"{'border-red-500 ring-2 ring-red-500/70 pr-8 mb-1' if self.errors.get('date') else ''}",
-                            ),
-                            HTML(
-                                '<i class="fas fa-exclamation-circle text-red-500 absolute right-2 top-1/2 transform -translate-y-1/2 mt-1"></i>'
-                            )
-                            if self.errors.get("date")
-                            else HTML(""),
-                            css_class="relative w-full",
-                        ),
-                        css_class="flex-1",
-                    ),
-                    Row(
-                        Div(
-                            Field(
-                                "invoice_number",
-                                css_class=f"{'border-red-500 ring-2 ring-red-500/70  pr-8 mb-1' if self.errors.get('invoice_number') else ''}",
-                            ),
-                            HTML(
-                                '<i class="fas fa-exclamation-circle text-red-500 absolute right-2 top-1/2 transform -translate-y-1/2 mt-1"></i>'
-                            )
-                            if self.errors.get("invoice_number")
-                            else HTML(""),
-                            css_class="relative w-full",
-                        ),
-                        css_class="flex-1",
-                    ),
-                    Row(
-                        Field(
-                            "service_delivery",
-                            css_class=CHECKBOX_CLASS,
-                            wrapper_class="w-full bg-slate-100 flex items-center justify-between p-4 rounded-lg",
-                        ),
-                    ),
-                    css_class="flex flex-col gap-2",
+            Row(
+                Field("amount"),
+                Field("date"),
+                Field("invoice_number"),
+                Field(
+                    "service_delivery",
+                    css_class=CHECKBOX_CLASS,
+                    wrapper_class="flex p-4 justify-between rounded-lg bg-gray-100",
                 ),
-                css_class="flex flex-col gap-4",
-            )
+                css_class="flex flex-col",
+            ),
         )
         self.helper.form_tag = False
 
