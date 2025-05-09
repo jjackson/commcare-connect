@@ -829,9 +829,9 @@ class PaymentUnitForm(forms.ModelForm):
                         Field("end_date")),
                     css_class="grid grid-cols-2 gap-4 p-6 card_bg"),
                 Row(
-                    Column(Field("required_deliver_units"),
-                           Field("payment_units")),
-                    Column(Field("optional_deliver_units"), Div(HTML(
+                    Field("required_deliver_units"),
+                    Field("payment_units"),
+                    Field("optional_deliver_units"), Div(HTML(
                         f"""
                     <button type="button" class="button button-md outline-style" id="sync-button"
                     hx-post="{reverse('opportunity:sync_deliver_units', args=(org_slug, opportunity_id))}"
@@ -844,7 +844,7 @@ class PaymentUnitForm(forms.ModelForm):
                     </button>
 
                 """
-                    ))),
+                    )),
                     css_class="grid grid-cols-2 gap-4 p-6 card_bg"),
                 Row(Submit("submit", "Submit", css_class="button button-md primary-dark"), css_class="flex justify-end")
                 , css_class="flex flex-col gap-4"))
