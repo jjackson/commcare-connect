@@ -1254,6 +1254,11 @@ def invoice_list(request, org_slug, pk):
             "table": table,
             "form": form,
             "program_manager": program_manager,
+            "path": [
+                {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
+                {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, pk))},
+                {"title": "Invoices", "url": reverse("opportunity:invoice_list", args=(org_slug, pk))},
+            ],
         },
     )
 
