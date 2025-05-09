@@ -267,8 +267,13 @@ def get_opportunity_list_data(organization, program_manager=False):
         queryset = queryset.annotate(
             total_workers=Count("opportunityaccess", distinct=True),
             active_workers=F("total_workers") - F("inactive_workers"),
-            total_deliveries=Sum("opportunityaccess__completedwork__saved_completed_count", distinct=True),
-            verified_deliveries=Sum("opportunityaccess__completedwork__saved_approved_count", distinct=True),
+            total_deliveries=Coalesce(
+                Sum("opportunityaccess__completedwork__saved_completed_count", distinct=True),
+                Value(0)
+            ),
+            verified_deliveries=Coalesce(
+                Sum("opportunityaccess__completedwork__saved_approved_count", distinct=True),
+                Value(0)),
         )
 
     return queryset
