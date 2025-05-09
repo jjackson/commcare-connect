@@ -16,3 +16,4 @@ bg-slate-100
 gap-16
 
 font-bold
+border-red-500

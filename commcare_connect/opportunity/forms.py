@@ -33,9 +33,8 @@ from commcare_connect.users.models import User
 
 FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Africa"), ("+91", "India")]
 
-BASE_INPUT_CLASS = "base-input"
+
 SELECT_CLASS = "base-dropdown"
-TEXTAREA_CLASS = "base-textarea"
 CHECKBOX_CLASS = "simple-toggle"
 
 
@@ -111,40 +110,40 @@ class OpportunityChangeForm(
             Row(
                 HTML("<div class='col-span-2'><h6 class='title-sm'>Opportunity Details</h6>  <span class='hint'>Edit the details of the opportunity. All fields are mandatory.  </span> </div>"),
                 Column(
-                    Field("name", css_class=BASE_INPUT_CLASS,wrapper_class="w-full"),
-                    Field("short_description", css_class=BASE_INPUT_CLASS,wrapper_class="w-full"),
-                    Field("description", css_class=TEXTAREA_CLASS,wrapper_class="w-full"),
+                    Field("name", wrapper_class="w-full"),
+                    Field("short_description", wrapper_class="w-full"),
+                    Field("description", wrapper_class="w-full"),
                 ),
                 Column(
-                    Field("delivery_type", css_class=BASE_INPUT_CLASS),
-                    Field("active", css_class=CHECKBOX_CLASS,wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg"),
-                    Field("is_test", css_class=CHECKBOX_CLASS,wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg"),
+                    Field("delivery_type"),
+                    Field("active", css_class=CHECKBOX_CLASS, wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg"),
+                    Field("is_test", css_class=CHECKBOX_CLASS, wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg"),
                 ),
                 css_class="grid grid-cols-2 gap-4 p-6 card_bg"
             ),
             Row(
                 HTML("<div class='col-span-2'><h6 class='title-sm'>Date</h6>  <span class='hint'>Optional: If not specified, the opportunity start & end dates will apply to the form submissions.</span> </div>"),
                 Column(
-                    Field("end_date", css_class=BASE_INPUT_CLASS),
+                    Field("end_date"),
                 ),
                 Column(
-                    Field("currency", css_class=SELECT_CLASS),
-                    Field("additional_users", css_class=BASE_INPUT_CLASS)
+                    Field("currency"),
+                    Field("additional_users")
                 ),
                 css_class="grid grid-cols-2 gap-4 p-6 card_bg"
             ),
             Row(
                 HTML("<div class='col-span-2'><h6 class='title-sm'>Invite Workers</h6></div>"),
                 Row(
-                    Field("filter_country", css_class=BASE_INPUT_CLASS,wrapper_class="w-full"),
-                    Field("filter_credential", css_class=BASE_INPUT_CLASS,wrapper_class="w-full"),
+                    Field("filter_country", wrapper_class="w-full"),
+                    Field("filter_credential", wrapper_class="w-full"),
                     css_class="flex gap-2"
                 ),
-                Row(Field("users", css_class=TEXTAREA_CLASS,wrapper_class="w-full"),css_class="col-span-2"),
+                Row(Field("users", wrapper_class="w-full"), css_class="col-span-2"),
                 css_class="grid grid-cols-2 gap-4 p-6 card_bg"
             ),
             Row(
-                Submit("submit", "Submit",css_class="button button-md primary-dark"),
+                Submit("submit", "Submit", css_class="button button-md primary-dark"),
                 css_class="flex justify-end"
             )
         )
@@ -198,28 +197,28 @@ class OpportunityInitForm(forms.ModelForm):
             Row(
                 HTML("<div class='col-span-2'><h6 class='title-sm'>Opportunity Details</h6>  <span class='hint'>Add the details of the opportunity. All fields are mandatory.</span> </div>"),
                 Column(
-                    Field("name", css_class=BASE_INPUT_CLASS),
-                    Field("short_description", css_class=BASE_INPUT_CLASS),
-                    Field("description", css_class=TEXTAREA_CLASS),
+                    Field("name"),
+                    Field("short_description"),
+                    Field("description"),
                 ),
                 Column(
-                    Field("currency", css_class=BASE_INPUT_CLASS),
-                    Field("api_key", css_class=BASE_INPUT_CLASS),
+                    Field("currency"),
+                    Field("api_key"),
                 ),
                 css_class="grid grid-cols-2 gap-4 card_bg"
             ),
             Row(
                 HTML("<div class='col-span-2'><h6 class='title-sm'>Apps</h6>  <span class='hint'>Add required apps to the opportunity. All fields are mandatory.</span> </div>"),
                 Column(
-                    Field("learn_app_domain", css_class=SELECT_CLASS),
-                    Field("learn_app", css_class=SELECT_CLASS),
-                    Field("learn_app_description", css_class=TEXTAREA_CLASS),
-                    Field("learn_app_passing_score", css_class=BASE_INPUT_CLASS),
+                    Field("learn_app_domain"),
+                    Field("learn_app"),
+                    Field("learn_app_description"),
+                    Field("learn_app_passing_score"),
                     data_loading_states=True,
                 ),
                 Column(
-                    Field("deliver_app_domain", css_class=SELECT_CLASS),
-                    Field("deliver_app", css_class=SELECT_CLASS),
+                    Field("deliver_app_domain"),
+                    Field("deliver_app"),
                     data_loading_states=True,
                 ),
                 css_class="grid grid-cols-2 gap-4 card_bg my-4"
@@ -331,8 +330,8 @@ class OpportunityFinalizeForm(forms.ModelForm):
             "total_budget",
         ]
         widgets = {
-            "start_date": forms.DateInput(attrs={"type": "date", "class": BASE_INPUT_CLASS}),
-            "end_date": forms.DateInput(attrs={"type": "date", "class": BASE_INPUT_CLASS}),
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "end_date": forms.DateInput(attrs={"type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -357,9 +356,8 @@ class OpportunityFinalizeForm(forms.ModelForm):
                         oninput=f"id_total_budget.value = ({self.budget_per_user} + {self.payment_units_max_total}"
                         f"* parseInt(document.getElementById('id_org_pay_per_visit')?.value || 0)) "
                         f"* parseInt(this.value || 0)",
-                        css_class=BASE_INPUT_CLASS
                     ),
-                    Field("total_budget", readonly=True, wrapper_class="form-group ", css_class=BASE_INPUT_CLASS),
+                    Field("total_budget", readonly=True, wrapper_class="form-group "),
                 css_class="grid grid-cols-2 gap-6"
             ),
            Row(
@@ -377,7 +375,6 @@ class OpportunityFinalizeForm(forms.ModelForm):
                         oninput=f"id_total_budget.value = ({self.budget_per_user} + {self.payment_units_max_total}"
                         f"* parseInt(this.value || 0)) "
                         f"* parseInt(document.getElementById('id_max_users')?.value || 0)",
-                        css_class=BASE_INPUT_CLASS,
                     )
                 ),
             )
@@ -844,8 +841,8 @@ class PaymentUnitForm(forms.ModelForm):
             "end_date": "Optional. If not specified opportunity end date applies to form submissions.",
         }
         widgets = {
-            "start_date": forms.DateInput(attrs={"type": "date", "class": BASE_INPUT_CLASS}),
-            "end_date": forms.DateInput(attrs={"type": "date", "class": BASE_INPUT_CLASS}),
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "end_date": forms.DateInput(attrs={"type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -860,20 +857,20 @@ class PaymentUnitForm(forms.ModelForm):
         self.helper.layout = Layout(
             Row(
                 Column(
-                    Field("name", css_class=BASE_INPUT_CLASS),
-                    Field("description",css_class=TEXTAREA_CLASS),
+                    Field("name"),
+                    Field("description"),
                 ),
                 Column(
                     Row(
-                        Field("start_date", css_class=BASE_INPUT_CLASS),
-                        Field("end_date", css_class=BASE_INPUT_CLASS),
+                        Field("start_date"),
+                        Field("end_date"),
                         css_class="grid grid-cols-2 gap-4"),
                     Row(
-                        Field("max_total", css_class=BASE_INPUT_CLASS),
-                        Field("max_daily", css_class=BASE_INPUT_CLASS),
+                        Field("max_total"),
+                        Field("max_daily"),
                         css_class="grid grid-cols-2 gap-4"
                     ),
-                    Field("amount", css_class=BASE_INPUT_CLASS),
+                    Field("amount"),
                 ),
                 css_class="grid grid-cols-2 gap-4"
             ),
