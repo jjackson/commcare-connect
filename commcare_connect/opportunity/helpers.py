@@ -369,14 +369,14 @@ def get_opportunity_delivery_progress(opp_id):
         inactive_workers=OpportunityAnnotations.inactive_workers(three_days_ago),
         deliveries_from_yesterday=Count(
             "uservisit",
-            filter=Q(uservisit__completed_work__isnull=False, uservisit__visit_date__gte=yesterday),
+            filter=Q(uservisit__visit_date__gte=yesterday),
             distinct=True,
         ),
-        most_recent_delivery=Max("uservisit__visit_date", filter=Q(uservisit__completed_work__isnull=False)),
-        total_deliveries=Count("opportunityaccess__completedwork", distinct=True),
+        most_recent_delivery=Max("uservisit__visit_date"),
+        total_deliveries=Count("opportunityaccess__uservisit", distinct=True),
         flagged_deliveries_waiting_for_review=Count(
-            "opportunityaccess__completedwork",
-            filter=Q(opportunityaccess__completedwork__status=CompletedWorkStatus.pending),
+            "opportunityaccess__uservisit",
+            filter=Q(opportunityaccess__uservisit__status=VisitValidationStatus.pending),
             distinct=True,
         ),
         visits_pending_for_pm_review=Count(
@@ -401,15 +401,15 @@ def get_opportunity_worker_progress(opp_id):
     opportunity = Opportunity.objects.filter(id=opp_id).values("start_date", "end_date", "total_budget").first()
 
     aggregates = Opportunity.objects.filter(id=opp_id).aggregate(
-        total_deliveries=Count("opportunityaccess__completedwork", distinct=True),
+        total_deliveries=Count("opportunityaccess__uservisit", distinct=True),
         approved_deliveries=Count(
-            "opportunityaccess__completedwork",
-            filter=Q(opportunityaccess__completedwork__status=CompletedWorkStatus.approved),
+            "opportunityaccess__uservisit",
+            filter=Q(opportunityaccess__uservisit__status=VisitValidationStatus.approved),
             distinct=True,
         ),
         rejected_deliveries=Count(
-            "opportunityaccess__completedwork",
-            filter=Q(opportunityaccess__completedwork__status=CompletedWorkStatus.rejected),
+            "opportunityaccess__uservisit",
+            filter=Q(opportunityaccess__uservisit__status=VisitValidationStatus.rejected),
             distinct=True,
         ),
         total_accrued=OpportunityAnnotations.total_accrued(),
