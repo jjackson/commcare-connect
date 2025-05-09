@@ -1267,7 +1267,10 @@ def invoice_create(request, org_slug=None, pk=None):
     if request.POST and form.is_valid():
         form.save()
         form = PaymentInvoiceForm(opportunity=opportunity)
-        return redirect("opportunity:invoice_list", org_slug, pk)
+        redirect_url = reverse("opportunity:invoice_list", args=[org_slug, pk])
+        response = HttpResponse(status=200)
+        response['HX-Redirect'] = redirect_url
+        return response
     return HttpResponse(render_crispy_form(form))
 
 
