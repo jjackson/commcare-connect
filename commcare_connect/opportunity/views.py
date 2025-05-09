@@ -1261,7 +1261,7 @@ def invoice_list(request, org_slug, pk):
 @org_member_required
 def invoice_create(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(pk, org_slug)
-    if not is_program_manager_of_opportunity(request, opportunity):
+    if not opportunity.managed or is_program_manager_of_opportunity(request, opportunity):
         return redirect("opportunity:detail", org_slug, pk)
     form = PaymentInvoiceForm(data=request.POST or None, opportunity=opportunity)
     if request.POST and form.is_valid():

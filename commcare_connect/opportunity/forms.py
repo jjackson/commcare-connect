@@ -33,9 +33,6 @@ from commcare_connect.users.models import User
 
 FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Africa"), ("+91", "India")]
 
-
-BASE_INPUT_CLASS = "base-input"
-SELECT_CLASS = "base-dropdown"
 CHECKBOX_CLASS = "simple-toggle"
 
 
@@ -585,9 +582,9 @@ class VisitExportForm(forms.Form):
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Row(
-                Field("format", css_class=SELECT_CLASS),
-                Field("date_range", css_class=SELECT_CLASS),
-                Field("status", css_class=SELECT_CLASS),
+                Field("format"),
+                Field("date_range"),
+                Field("status"),
                 Field(
                     "flatten_form_data",
                     css_class=CHECKBOX_CLASS,
@@ -636,7 +633,7 @@ class PaymentExportForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            Row(Field("format", css_class=SELECT_CLASS), css_class="flex flex-col"),
+            Row(Field("format"), css_class="flex flex-col"),
         )
         self.helper.form_tag = False
 
@@ -1054,7 +1051,7 @@ class PaymentInvoiceForm(forms.ModelForm):
     class Meta:
         model = PaymentInvoice
         fields = ("amount", "date", "invoice_number", "service_delivery")
-        widgets = {"date": forms.DateInput(attrs={"type": "date", "class": BASE_INPUT_CLASS})}
+        widgets = {"date": forms.DateInput(attrs={"type": "date"})}
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
@@ -1068,7 +1065,7 @@ class PaymentInvoiceForm(forms.ModelForm):
                         Div(
                             Field(
                                 "amount",
-                                css_class=f"{BASE_INPUT_CLASS} {'border-red-500 ring-2 ring-red-500/70  pr-8 mb-1' if self.errors.get('amount') else ''}",
+                                css_class=f"{'border-red-500 ring-2 ring-red-500/70  pr-8 mb-1' if self.errors.get('amount') else ''}",
                             ),
                             HTML(
                                 '<i class="fas fa-exclamation-circle text-red-500 absolute right-2 top-1/2 transform -translate-y-1/2 mt-1"></i>'
@@ -1083,7 +1080,7 @@ class PaymentInvoiceForm(forms.ModelForm):
                         Div(
                             Field(
                                 "date",
-                                css_class=f"{BASE_INPUT_CLASS} {'border-red-500 ring-2 ring-red-500/70 pr-8 mb-1' if self.errors.get('date') else ''}",
+                                css_class=f"{'border-red-500 ring-2 ring-red-500/70 pr-8 mb-1' if self.errors.get('date') else ''}",
                             ),
                             HTML(
                                 '<i class="fas fa-exclamation-circle text-red-500 absolute right-2 top-1/2 transform -translate-y-1/2 mt-1"></i>'
@@ -1098,7 +1095,7 @@ class PaymentInvoiceForm(forms.ModelForm):
                         Div(
                             Field(
                                 "invoice_number",
-                                css_class=f"{BASE_INPUT_CLASS} {'border-red-500 ring-2 ring-red-500/70  pr-8 mb-1' if self.errors.get('invoice_number') else ''}",
+                                css_class=f"{'border-red-500 ring-2 ring-red-500/70  pr-8 mb-1' if self.errors.get('invoice_number') else ''}",
                             ),
                             HTML(
                                 '<i class="fas fa-exclamation-circle text-red-500 absolute right-2 top-1/2 transform -translate-y-1/2 mt-1"></i>'
