@@ -110,22 +110,38 @@ function opportunityTabs() {
     init() {
       const urlParams = new URLSearchParams(window.location.search);
       const tab = urlParams.get('active_tab') || 'workers';
-      this.setTab(tab, true);
+      this.setTab(tab, true, true);
     },
-    setTab(tab, updateUrl = true) {
+    setTab(tab, updateUrl = true, isInit = false) {
+      if (this.selectedTab == tab) return;
+
       this.selectedTab = tab;
       this.selectedOption = '';
 
       if (updateUrl) {
         const url = new URL(window.location.href);
         url.searchParams.set('active_tab', tab);
+
+        // removed page param from main url on tab change
+        if (!isInit) {
+          url.searchParams.delete('page');
+        }
+
         window.history.replaceState({}, '', url);
       }
 
       this.$nextTick(() => {
         const tabElement = document.querySelector(`#${tab}-tab`);
         const container = document.querySelector('#opportunity_worker_container');
-        const url = tabElement?.dataset?.url;
+        let url = tabElement?.dataset?.url;
+
+        // removed page param from htmx url on tab change
+        if (!isInit) {
+          const cleanUrl = new URL(url, window.location.origin);
+          cleanUrl.searchParams.delete('page');
+          url = cleanUrl.toString();
+        }
+
         if (url && container) {
           htmx.ajax('GET', url, {
             target: container,
