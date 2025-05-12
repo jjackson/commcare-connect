@@ -1647,6 +1647,21 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
         },
     ]
 
+    is_program_manager = is_program_manager_of_opportunity(request, opportunity=opp)
+
+    import_export_delivery_urls = {
+        "export_url": reverse(
+            "opportunity:review_visit_export" if is_program_manager else "opportunity:visit_export",
+            args=(request.org.slug, opp_id)
+        ),
+        "import_url": reverse(
+            "opportunity:review_visit_import" if is_program_manager else "opportunity:visit_import",
+            args=(request.org.slug, opp_id)
+        )
+    }
+
+
+
     return render(
         request,
         "tailwind/pages/opportunity_worker.html",
@@ -1658,6 +1673,7 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
             "export_form": export_form,
             "export_task_id": request.GET.get("export_task_id"),
             "path": path,
+            "import_export_delivery_urls": import_export_delivery_urls
         },
     )
 
