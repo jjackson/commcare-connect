@@ -338,15 +338,12 @@ def network_manager_home(request, org):
         UserVisit.objects.filter(
             status="pending",
             opportunity__managed=True,
-            opportunity__managedopportunity__program__in=programs,
             opportunity__organization=org,
         )
         .values("opportunity__id", "opportunity__name", "opportunity__organization__name")
         .annotate(count=Count("id", distinct=True))
     )
-    access_qs = OpportunityAccess.objects.filter(
-        opportunity__managed=True, opportunity__managedopportunity__program__in=programs, opportunity__organization=org
-    )
+    access_qs = OpportunityAccess.objects.filter(opportunity__managed=True, opportunity__organization=org)
     pending_payments = (
         access_qs.annotate(pending_payment=F("payment_accrued") - Sum("payment__amount"))
         .filter(pending_payment__gte=0)
