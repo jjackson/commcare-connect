@@ -615,9 +615,9 @@ class ReviewVisitExportForm(forms.Form):
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Row(
-                Field("format", css_class=SELECT_CLASS),
-                Field("date_range", css_class=SELECT_CLASS),
-                Field("status", css_class=SELECT_CLASS)
+                Field("format"),
+                Field("date_range"),
+                Field("status")
             )
         )
         self.helper.form_tag = False
@@ -637,7 +637,7 @@ class PaymentExportForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            Row(Field("format", css_class=SELECT_CLASS), css_class="flex flex-col"),
+            Row(Field("format"), css_class="flex flex-col"),
         )
         self.helper.form_tag = False
 
