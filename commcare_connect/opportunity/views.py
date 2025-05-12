@@ -1646,7 +1646,7 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
         },
     ]
 
-    is_program_manager = True
+    is_program_manager = opp.managed and is_program_manager_of_opportunity(request, opp)
 
     import_export_delivery_urls = {
         "export_url": reverse(
