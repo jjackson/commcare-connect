@@ -1,0 +1,95 @@
+import itertools
+from datetime import timedelta
+
+import django_tables2 as tables
+
+
+STOP_CLICK_PROPAGATION = {
+    "td": {
+        "@click.stop": ""
+    }
+}
+
+
+class OrgContextTable(tables.Table):
+    def __init__(self, *args, **kwargs):
+        self.org_slug = kwargs.pop("org_slug", None)
+        super().__init__(*args, **kwargs)
+
+
+class ClickableRowsTable(OrgContextTable):
+    """
+        A base table class that makes rows clickable using Alpine.js.
+        - Adds 'x-data' to the <table> tag.
+        - Adds '@click' and 'cursor-pointer' class to <tr> tags.
+        Subclasses must implement the get_row_click_url(self, record) method.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.attrs = self.attrs or {}
+        self.attrs.setdefault('x-data', '')
+
+        self.row_attrs = self.row_attrs or {}
+        self.row_attrs['@click'] = self._get_url
+        self.row_attrs['style'] = 'cursor: pointer;'
+
+    def _get_url(self, record):
+        url = self.row_click_url(record)
+        return f"window.location.href='{url}'"
+
+    def row_click_url(self, record):
+        """
+        Subclasses MUST override this method.
+        It should return the URL string for the row's click action.
+        """
+        raise NotImplementedError(
+            f"Table '{self.__class__.__name__}' inheriting from "
+            f"'ClickableAlpineRowsTable' must implement the "
+            f"'get_row_click_url(self, record)' method."
+        )
+
+
+class IndexColumn(tables.Column):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("verbose_name", "#")
+        kwargs.setdefault("orderable", False)
+        kwargs.setdefault("empty_values", ())
+        super().__init__(*args, **kwargs)
+
+    def render(self, value, record, bound_column, bound_row, **kwargs):
+        table = bound_row._table
+        page = getattr(table, "page", None)
+        if page:
+            start_index = (page.number - 1) * page.paginator.per_page + 1
+        else:
+            start_index = 1
+        if not hasattr(table, "_row_counter") or getattr(table, "_row_counter_start", None) != start_index:
+            table._row_counter = itertools.count(start=start_index)
+            table._row_counter_start = start_index
+        value = next(table._row_counter)
+        return value
+
+
+def get_duration_min(total_seconds):
+    total_seconds = int(total_seconds)
+    minutes = (total_seconds // 60) % 60
+    hours = (total_seconds // 3600) % 24
+    days = total_seconds // 86400
+
+    parts = []
+    if days:
+        parts.append(f"{days} day{'s' if days != 1 else ''}")
+    elif hours:
+        parts.append(f"{hours} hr")
+    elif minutes or not parts:
+        parts.append(f"{minutes} min")
+
+    return " ".join(parts)
+
+
+class DurationColumn(tables.Column):
+    def render(self, value):
+        total_seconds = int(value.total_seconds() if isinstance(value, timedelta) else 0)
+        return get_duration_min(total_seconds)
