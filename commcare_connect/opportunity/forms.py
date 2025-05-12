@@ -617,8 +617,9 @@ class ReviewVisitExportForm(forms.Form):
             Row(
                 Field("format"),
                 Field("date_range"),
-                Field("status")
-            )
+                Field("status"),
+                css_class="flex flex-col",
+            ),
         )
         self.helper.form_tag = False
 
