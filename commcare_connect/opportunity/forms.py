@@ -614,9 +614,11 @@ class ReviewVisitExportForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            Row(Field("format")),
-            Row(Field("date_range")),
-            Row(Field("status")),
+            Row(
+                Field("format", css_class=SELECT_CLASS),
+                Field("date_range", css_class=SELECT_CLASS),
+                Field("status", css_class=SELECT_CLASS)
+            )
         )
         self.helper.form_tag = False
 
