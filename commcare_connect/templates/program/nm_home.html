@@ -65,18 +65,14 @@
 
           <!-- button -->
           {% if program.status == 'invited' %}
-            <form hx-post="{% url "program:apply_or_decline_application" request.org.slug program.id program.application_id "apply" %}"
+            <button hx-post="{% url "program:apply_or_decline_application" request.org.slug program.id program.application_id "apply" %}"
                   hx-swap="outerHTML"
-                  hx-target="body">
-              {% csrf_token %}
-              <button class="button button-md primary-dark" type="submit">
-                <span class="relative z-20">Apply</span>
-              </button>
-            </form>
-          {% elif program.status == 'applied' %}
-            <button class="button button-md neutral disabled">
-              <span class="relative z-20">Apply</span>
+                  hx-target="body"
+                  class="button button-md primary-dark">
+              Apply
             </button>
+          {% elif program.status == 'applied' %}
+            <button class="button button-md neutral disabled">Apply</button>
           {% elif program.status == 'accepted' %}
             {% if program.managedopportunity_set.all %}
               <button class="button button-md outline-style" @click="showOpp = !showOpp">
