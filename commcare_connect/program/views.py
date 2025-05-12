@@ -186,14 +186,12 @@ def manage_application(request, org_slug, application_id, action):
 
     new_status = status_mapping.get(action, None)
     if new_status is None:
-        messages.error(request, "Action not allowed.")
         return redirect(redirect_url)
 
     application.status = new_status
     application.modified_by = request.user.email
     application.save()
 
-    messages.success(request, f"Application has been {action}ed successfully.")
     return redirect(redirect_url)
 
 
@@ -218,14 +216,11 @@ def apply_or_decline_application(request, application_id, action, org_slug=None,
     }
 
     if action not in action_map:
-        messages.error(request, "Action not allowed.")
         return redirect(redirect_url)
 
     application.status = action_map[action]["status"]
     application.modified_by = request.user.email
     application.save()
-
-    messages.success(request, action_map[action]["message"])
 
     return redirect(redirect_url)
 
