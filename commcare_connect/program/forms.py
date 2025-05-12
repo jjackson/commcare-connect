@@ -1,12 +1,12 @@
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Button, Field, Layout, Row, Submit
-from crispy_tailwind.tailwind import CSSContainer
 from django import forms
 
 from commcare_connect.opportunity.forms import OpportunityInitForm
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplicationStatus
-from commcare_connect.utils.forms import DATE_INPUT, FORM_BASE_STYLE
+
+DATE_INPUT = forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"})
 
 
 class ProgramForm(forms.ModelForm):
@@ -28,7 +28,6 @@ class ProgramForm(forms.ModelForm):
         self.organization = kwargs.pop("organization")
         super().__init__(*args, **kwargs)
         self.helper = FormHelper(self)
-        self.helper.css_container = CSSContainer(FORM_BASE_STYLE)
         self.helper.layout = Layout(
             Field("name"),
             Field("description"),
