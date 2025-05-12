@@ -584,9 +584,9 @@ class VisitExportForm(forms.Form):
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Row(
-                Field("format", css_class=SELECT_CLASS),
-                Field("date_range", css_class=SELECT_CLASS),
-                Field("status", css_class=SELECT_CLASS),
+                Field("format"),
+                Field("date_range"),
+                Field("status"),
                 Field(
                     "flatten_form_data",
                     css_class=CHECKBOX_CLASS,
