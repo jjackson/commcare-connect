@@ -72,7 +72,7 @@
               Apply
             </button>
           {% elif program.status == 'applied' %}
-            <button class="button button-md neutral disabled">Apply</button>
+            <button class="button button-md neutral" disabled>Apply</button>
           {% elif program.status == 'accepted' %}
             {% if program.managedopportunity_set.all %}
               <button class="button button-md outline-style" @click="showOpp = !showOpp">
