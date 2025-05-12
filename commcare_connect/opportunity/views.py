@@ -1325,6 +1325,18 @@ def user_visit_verification(request, org_slug, opp_id, pk):
         opportunity_access=opportunity_access, status=CompletedWorkStatus.pending, saved_approved_count__gt=0
     ).count()
 
+    path = []
+    if opportunity.managed:
+        path.append({"title": "Programs", "url": reverse("program:list", args=(org_slug,))})
+    path.extend(
+        [
+            {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
+            {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opp_id))},
+            {"title": "Workers", "url": reverse("opportunity:worker_list", args=(org_slug, opp_id))},
+            {"title": "Worker", "url": request.path},
+        ]
+    )
+
     response = render(
         request,
         "opportunity/user_visit_verification.html",
@@ -1339,6 +1351,7 @@ def user_visit_verification(request, org_slug, opp_id, pk):
             "is_program_manager": is_program_manager,
             "pending_completed_work_count": pending_completed_work_count,
             "pending_payment": pending_payment,
+            "path": path,
         },
     )
     return response
@@ -1699,7 +1712,7 @@ def worker_payments(request, org_slug=None, opp_id=None):
         last_active=Greatest(Max("uservisit__visit_date"), Max("completedmodule__date"), "date_learn_started"),
         last_paid=Max("payment__date_paid"),
         confirmed_paid=Sum("payment__amount", filter=Q(payment__confirmed=True)),
-        total_paid_d=Sum("payment__amount")
+        total_paid_d=Sum("payment__amount"),
     )
     table = WorkerPaymentsTable(query_set)
     RequestConfig(request, paginate={"per_page": 10}).configure(table)
