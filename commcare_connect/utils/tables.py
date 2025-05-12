@@ -22,7 +22,7 @@ class ClickableRowsTable(OrgContextTable):
         A base table class that makes rows clickable using Alpine.js.
         - Adds 'x-data' to the <table> tag.
         - Adds '@click' and 'cursor-pointer' class to <tr> tags.
-        Subclasses must implement the get_row_click_url(self, record) method.
+        Subclasses must implement the row_click_url(self, record) method.
     """
 
     def __init__(self, *args, **kwargs):
@@ -46,8 +46,8 @@ class ClickableRowsTable(OrgContextTable):
         """
         raise NotImplementedError(
             f"Table '{self.__class__.__name__}' inheriting from "
-            f"'ClickableAlpineRowsTable' must implement the "
-            f"'get_row_click_url(self, record)' method."
+            f"'ClickableRowsTable' must implement the "
+            f"'row_click_url(self, record)' method."
         )
 
 
