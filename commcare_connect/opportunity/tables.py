@@ -1035,11 +1035,11 @@ class WorkerStatusTable(tables.Table):
 
 class WorkerPaymentsTable(tables.Table):
     index = IndexColumn()
-    user = UserInfoColumn()
+    user = UserInfoColumn(footer="Total")
     suspended = SuspendedIndicatorColumn()
     last_active = tables.Column()
-    payment_accrued = tables.Column(verbose_name="Accrued")
-    total_paid = tables.Column(accessor="total_paid_d")
+    payment_accrued = tables.Column(verbose_name="Accrued", footer=lambda table: sum(x.payment_accrued or 0 for x in table.data))
+    total_paid = tables.Column(accessor="total_paid_d", footer=lambda table: sum(x.total_paid_d or 0 for x in table.data))
     last_paid = tables.Column()
     confirmed_paid = tables.Column(verbose_name="Confirm")
 
@@ -1144,15 +1144,15 @@ class WorkerDeliveryTable(OrgContextTable):
 
     id = tables.Column(visible=False)
     index = IndexColumn()
-    user = tables.Column(orderable=False, verbose_name="Name")
+    user = tables.Column(orderable=False, verbose_name="Name", footer="Total")
     suspended = SuspendedIndicatorColumn()
     last_active = tables.Column()
     payment_unit = tables.Column(orderable=False)
     started = tables.Column(accessor="started_delivery")
-    delivered = tables.Column(accessor="completed")
-    pending = tables.Column()
-    approved = tables.Column()
-    rejected = tables.Column()
+    delivered = tables.Column(accessor="completed", footer=lambda table: sum(x.completed for x in table.data))
+    pending = tables.Column(footer=lambda table: sum(x.pending for x in table.data))
+    approved = tables.Column(footer=lambda table: sum(x.approved for x in table.data))
+    rejected = tables.Column(footer=lambda table: sum(x.rejected for x in table.data))
     action = tables.TemplateColumn(
         verbose_name="",
         orderable=False,
