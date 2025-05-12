@@ -29,6 +29,8 @@ from commcare_connect.program.helpers import get_annotated_managed_opportunity, 
 from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplication, ProgramApplicationStatus
 from commcare_connect.program.tables import DeliveryPerformanceTable, FunnelPerformanceTable, ProgramApplicationTable
 
+from .utils import is_program_manager
+
 
 class ProgramManagerMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
@@ -266,10 +268,7 @@ class DeliveryPerformanceTableView(ProgramManagerMixin, SingleTableView):
 @org_member_required
 def program_home(request, org_slug):
     org = Organization.objects.get(slug=org_slug)
-    is_program_manager = request.org.program_manager and (
-        (request.org_membership != None and request.org_membership.is_admin) or request.user.is_superuser  # noqa: E711
-    )
-    if is_program_manager:
+    if is_program_manager(request):
         return program_manager_home(request, org)
     return network_manager_home(request, org)
 
