@@ -1316,7 +1316,7 @@ def user_visit_verification(request, org_slug, opp_id, pk):
 
     path = []
     if opportunity.managed:
-        path.append({"title": "Programs", "url": reverse("program:list", args=(org_slug,))})
+        path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
     path.extend(
         [
             {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
