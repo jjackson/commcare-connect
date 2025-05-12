@@ -1608,7 +1608,6 @@ def user_visit_details(request, org_slug, opp_id, pk):
 def opportunity_worker(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     base_kwargs = {"org_slug": org_slug, "opp_id": opp_id}
-    visit_export_form = VisitExportForm()
     export_form = PaymentExportForm()
 
     path = [
@@ -1647,7 +1646,7 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
         },
     ]
 
-    is_program_manager = is_program_manager_of_opportunity(request, opportunity=opp)
+    is_program_manager = opp.managed and is_program_manager_of_opportunity(request, opportunity=opp)
 
     import_export_delivery_urls = {
         "export_url": reverse(
@@ -1659,6 +1658,8 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
             args=(request.org.slug, opp_id)
         )
     }
+
+    visit_export_form = ReviewVisitExportForm() if is_program_manager else VisitExportForm()
 
 
 
