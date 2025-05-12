@@ -69,9 +69,10 @@
     <div class="flex items-center gap-2 max-w-fit text-brand-deep-purple text-sm">
         {% if table.page.has_previous %}
             <button
+              type="button"
               @click="goToPage('{{ table.prefixed_page_field }}', {{ table.page.previous_page_number }})"
-               class="button-icon"
-               aria-label="{% trans 'Previous page' %}">
+              class="button-icon"
+              aria-label="{% trans 'Previous page' %}">
                 <i class="fa-light fa-chevron-left"></i>
             </button>
         {% else %}
@@ -94,9 +95,10 @@
 
         {% if table.page.has_next %}
             <button
+              type="button"
               @click="goToPage('{{ table.prefixed_page_field }}', {{ table.page.next_page_number }})"
-               class="button-icon"
-               aria-label="{% trans 'Next page' %}">
+              class="button-icon"
+              aria-label="{% trans 'Next page' %}">
                 <i class="fa-light fa-chevron-right"></i>
             </button>
         {% else %}
