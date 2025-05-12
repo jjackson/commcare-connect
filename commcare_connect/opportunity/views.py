@@ -418,17 +418,18 @@ def export_user_visits(request, org_slug, pk):
 def review_visit_export(request, org_slug, pk):
     get_opportunity_or_404(org_slug=request.org.slug, pk=pk)
     form = ReviewVisitExportForm(data=request.POST)
+    redirect_url = reverse("opportunity:worker_list", args=(org_slug, pk))
+    redirect_url = f"{redirect_url}?active_tab=delivery"
     if not form.is_valid():
         messages.error(request, form.errors)
-        return redirect("opportunity:detail", request.org.slug, pk)
+        return redirect(redirect_url)
 
     export_format = form.cleaned_data["format"]
     date_range = DateRanges(form.cleaned_data["date_range"])
     status = form.cleaned_data["status"]
 
     result = generate_review_visit_export.delay(pk, date_range, status, export_format)
-    redirect_url = reverse("opportunity:detail", args=(request.org.slug, pk))
-    return redirect(f"{redirect_url}?export_task_id={result.id}")
+    return redirect(f"{redirect_url}&export_task_id={result.id}")
 
 
 @org_member_required
@@ -489,17 +490,18 @@ def update_visit_status_import(request, org_slug=None, pk=None):
 def review_visit_import(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=pk)
     file = request.FILES.get("visits")
+    redirect_url = reverse("opportunity:worker_list", args=(org_slug, pk))
+    redirect_url = f"{redirect_url}?active_tab=delivery"
     try:
         status = bulk_update_visit_review_status(opportunity, file)
     except ImportException as e:
         messages.error(request, e.message)
-        return redirect("opportunity:detail", org_slug, pk)
     else:
         message = f"Visit review updated successfully for {len(status)} visits."
         if status.missing_visits:
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
-    return redirect("opportunity:detail", org_slug, pk)
+    return redirect(redirect_url)
 
 
 @org_member_required
