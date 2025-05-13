@@ -1,3 +1,5 @@
+{% load i18n %}
+
 <div class="flex justify-between items-center">
     <span>{{ count }}</span>
     <div x-data="{ expanded: false }">
@@ -30,7 +32,7 @@
                                 <div class="w-full">
                                     <span>{{ unit.name }}</span>
                                     {% if unit.optional %}
-                                        (<i>optional</i>)
+                                        (<i>{% translate "Optional" %}</i>)
                                     {% endif %}
                                 </div>
                             {% endfor %}
