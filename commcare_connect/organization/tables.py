@@ -8,6 +8,7 @@ from commcare_connect.organization.models import UserOrganizationMembership
 
 class OrgMemberTable(tables.Table):
     use_view_url = True
+
     index = IndexColumn()
     user = columns.Column(verbose_name="member", accessor="user__email")
     accepted = columns.Column(verbose_name="Status")

@@ -426,17 +426,18 @@ def export_user_visits(request, org_slug, pk):
 def review_visit_export(request, org_slug, pk):
     get_opportunity_or_404(org_slug=request.org.slug, pk=pk)
     form = ReviewVisitExportForm(data=request.POST)
+    redirect_url = reverse("opportunity:worker_list", args=(org_slug, pk))
+    redirect_url = f"{redirect_url}?active_tab=delivery"
     if not form.is_valid():
         messages.error(request, form.errors)
-        return redirect("opportunity:detail", request.org.slug, pk)
+        return redirect(redirect_url)
 
     export_format = form.cleaned_data["format"]
     date_range = DateRanges(form.cleaned_data["date_range"])
     status = form.cleaned_data["status"]
 
     result = generate_review_visit_export.delay(pk, date_range, status, export_format)
-    redirect_url = reverse("opportunity:detail", args=(request.org.slug, pk))
-    return redirect(f"{redirect_url}?export_task_id={result.id}")
+    return redirect(f"{redirect_url}&export_task_id={result.id}")
 
 
 @org_member_required
@@ -497,17 +498,18 @@ def update_visit_status_import(request, org_slug=None, pk=None):
 def review_visit_import(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=pk)
     file = request.FILES.get("visits")
+    redirect_url = reverse("opportunity:worker_list", args=(org_slug, pk))
+    redirect_url = f"{redirect_url}?active_tab=delivery"
     try:
         status = bulk_update_visit_review_status(opportunity, file)
     except ImportException as e:
         messages.error(request, e.message)
-        return redirect("opportunity:detail", org_slug, pk)
     else:
         message = f"Visit review updated successfully for {len(status)} visits."
         if status.missing_visits:
             message += status.get_missing_message()
         messages.success(request, mark_safe(message))
-    return redirect("opportunity:detail", org_slug, pk)
+    return redirect(redirect_url)
 
 
 @org_member_required
@@ -1684,7 +1686,6 @@ def user_visit_details(request, org_slug, opp_id, pk):
 def opportunity_worker(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     base_kwargs = {"org_slug": org_slug, "opp_id": opp_id}
-    visit_export_form = VisitExportForm()
     export_form = PaymentExportForm()
 
     path = [
@@ -1723,6 +1724,23 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
         },
     ]
 
+    is_program_manager = opp.managed and is_program_manager_of_opportunity(request, opp)
+
+    import_export_delivery_urls = {
+        "export_url": reverse(
+            "opportunity:review_visit_export" if is_program_manager else "opportunity:visit_export",
+            args=(request.org.slug, opp_id)
+        ),
+        "import_url": reverse(
+            "opportunity:review_visit_import" if is_program_manager else "opportunity:visit_import",
+            args=(request.org.slug, opp_id)
+        )
+    }
+
+    visit_export_form = ReviewVisitExportForm() if is_program_manager else VisitExportForm()
+
+
+
     return render(
         request,
         "tailwind/pages/opportunity_worker.html",
@@ -1734,6 +1752,7 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
             "export_form": export_form,
             "export_task_id": request.GET.get("export_task_id"),
             "path": path,
+            "import_export_delivery_urls": import_export_delivery_urls
         },
     )
 
