@@ -966,6 +966,7 @@ class UserInfoColumn(tables.Column):
     def __init__(self, *args, **kwargs):
         kwargs.setdefault("orderable", True)
         kwargs.setdefault("verbose_name", "Name")
+        kwargs.setdefault("order_by", "user__name")
         super().__init__(*args, **kwargs)
 
     def render(self, value):
