@@ -1301,12 +1301,16 @@ def user_visit_verification(request, org_slug, opp_id, pk):
 
     user_visit_counts = get_user_visit_counts(opportunity_access_id=pk)
     visits = UserVisit.objects.filter(opportunity_access=opportunity_access)
-    flagged_info = defaultdict(lambda: {"name": "", "approved": 0, "rejected": 0})
+    flagged_info = defaultdict(lambda: {"name": "", "approved": 0, "pending": 0, "rejected": 0})
     for visit in visits:
         for flag in visit.flags:
-            if visit.status in (VisitValidationStatus.approved, VisitValidationStatus.rejected):
-                flagged_info[flag][visit.status] += 1
-                flagged_info[flag]["name"] = flag
+            if visit.status == VisitValidationStatus.approved:
+                flagged_info[flag]["approved"] += 1
+            if visit.status == VisitValidationStatus.rejected:
+                flagged_info[flag]["rejected"] += 1
+            if visit.status in (VisitValidationStatus.pending, VisitValidationStatus.duplicate):
+                flagged_info[flag]["pending"] += 1
+            flagged_info[flag]["name"] = flag
     flagged_info = flagged_info.values()
     last_payment_details = Payment.objects.filter(opportunity_access=opportunity_access).order_by("-date_paid").first()
     pending_payment = max(opportunity_access.payment_accrued - opportunity_access.total_paid, 0)
