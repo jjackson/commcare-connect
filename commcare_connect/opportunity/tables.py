@@ -25,8 +25,8 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.users.models import User
-from commcare_connect.utils.tables import OrgContextTable, IndexColumn, ClickableRowsTable, STOP_CLICK_PROPAGATION, \
-    DurationColumn
+from commcare_connect.utils.tables import OrgContextTable, IndexColumn, ClickableRowsTable, \
+    DurationColumn, DMYTColumn, TEXT_CENTER_ATTR, STOP_CLICK_PROPAGATION_ATTR
 
 
 class OpportunityContextTable(OrgContextTable):
@@ -638,9 +638,9 @@ class BaseOpportunityList(ClickableRowsTable):
 
     status = tables.Column(verbose_name="Status", accessor="status", orderable=True)
 
-    program = tables.Column()
-    start_date = tables.DateColumn(format="d-M-Y")
-    end_date = tables.DateColumn(format="d-M-Y")
+    program = tables.Column(attrs=TEXT_CENTER_ATTR)
+    start_date = DMYTColumn(attrs=TEXT_CENTER_ATTR)
+    end_date = DMYTColumn(attrs=TEXT_CENTER_ATTR)
 
     class Meta:
         sequence = (
@@ -679,10 +679,6 @@ class BaseOpportunityList(ClickableRowsTable):
             text,
         )
 
-    def format_date(self, date):
-       return date.strftime("%d-%b-%Y") if date else '--'
-
-
     def _render_div(self, value, extra_classes=""):
         base_classes = "flex text-sm font-normal truncate text-brand-deep-purple " "overflow-clip overflow-ellipsis"
         all_classes = f"{base_classes} {extra_classes}".strip()
@@ -694,11 +690,6 @@ class BaseOpportunityList(ClickableRowsTable):
     def render_program(self, value):
         return self._render_div(value if value else "--", extra_classes="justify-start")
 
-    def render_start_date(self, value):
-        return self._render_div(self.format_date(value), extra_classes="justify-center")
-
-    def render_end_date(self, value):
-        return self._render_div(self.format_date(value), extra_classes="justify-center")
 
 
 class OpportunityTable(BaseOpportunityList):
@@ -706,7 +697,7 @@ class OpportunityTable(BaseOpportunityList):
     inactive_workers = tables.Column()
     pending_approvals = tables.Column()
     payments_due = tables.Column()
-    actions = tables.Column(empty_values=(), orderable=False, verbose_name="", attrs=STOP_CLICK_PROPAGATION)
+    actions = tables.Column(empty_values=(), orderable=False, verbose_name="", attrs=STOP_CLICK_PROPAGATION_ATTR)
 
     class Meta(BaseOpportunityList.Meta):
         sequence = BaseOpportunityList.Meta.sequence + (
@@ -764,16 +755,16 @@ class OpportunityTable(BaseOpportunityList):
 
 class ProgramManagerOpportunityTable(BaseOpportunityList):
     active_workers = tables.Column(
-        verbose_name="Active Workers"
+        verbose_name="Active Workers", attrs=TEXT_CENTER_ATTR
     )
     total_deliveries = tables.Column(
-        verbose_name="Total Deliveries"
+        verbose_name="Total Deliveries", attrs=TEXT_CENTER_ATTR
     )
     verified_deliveries = tables.Column(
-        verbose_name="Verified Deliveries"
+        verbose_name="Verified Deliveries", attrs=TEXT_CENTER_ATTR
     )
     worker_earnings = tables.Column(verbose_name="Worker Earnings", accessor="total_accrued")
-    actions = tables.Column(empty_values=(), orderable=False, verbose_name="", attrs=STOP_CLICK_PROPAGATION)
+    actions = tables.Column(empty_values=(), orderable=False, verbose_name="", attrs=STOP_CLICK_PROPAGATION_ATTR)
 
     class Meta(BaseOpportunityList.Meta):
         sequence = BaseOpportunityList.Meta.sequence + (
@@ -999,27 +990,18 @@ class WorkerStatusTable(tables.Table):
     index = IndexColumn()
     user = UserInfoColumn()
     suspended = SuspendedIndicatorColumn()
-    invited_date = tables.DateColumn(format="d-M-Y")
-    last_active = tables.Column()
-    started_learn = tables.DateColumn(format="d-M-Y", verbose_name="Started Learn", accessor="date_learn_started")
-    completed_learn = tables.DateColumn(format="d-M-Y")
+    invited_date = DMYTColumn()
+    last_active = DMYTColumn()
+    started_learn = DMYTColumn(verbose_name="Started Learn", accessor="date_learn_started")
+    completed_learn = DMYTColumn()
     days_to_complete_learn = DurationColumn(verbose_name="Time to Complete Learning")
-    first_delivery = tables.Column()
+    first_delivery = DMYTColumn()
     days_to_start_delivery = DurationColumn(verbose_name="Time to Start Deliver")
 
     def __init__(self, *args, **kwargs):
         self.use_view_url = True
         super().__init__(*args, **kwargs)
 
-    def render_lastActive(self, value):
-        return format_html(
-            """
-            <div class="flex flex-col items-start">
-                <p class="text-sm text-slate-900 ">{}</p>
-            </div>
-            """,
-            value,
-        )
 
     class Meta:
         order_by = ("-last_active",)
@@ -1029,10 +1011,10 @@ class WorkerPaymentsTable(tables.Table):
     index = IndexColumn()
     user = UserInfoColumn()
     suspended = SuspendedIndicatorColumn()
-    last_active = tables.Column()
+    last_active = DMYTColumn()
     payment_accrued = tables.Column(verbose_name="Accrued")
     total_paid = tables.Column(accessor="total_paid_d")
-    last_paid = tables.DateColumn(format="d-M-Y")
+    last_paid = DMYTColumn()
     confirmed_paid = tables.Column(verbose_name="Confirm")
 
     def __init__(self, *args, **kwargs):
@@ -1059,19 +1041,15 @@ class WorkerLearnTable(ClickableRowsTable):
     index = IndexColumn()
     user = UserInfoColumn()
     suspended = SuspendedIndicatorColumn()
-    last_active = tables.Column()
-    started_learning = tables.DateColumn(
-        format="d-M-Y", accessor="date_learn_started", verbose_name="Started Learning"
-    )
+    last_active = DMYTColumn()
+    started_learning = DMYTColumn(accessor="date_learn_started", verbose_name="Started Learning")
     modules_completed = tables.TemplateColumn(
         accessor="modules_completed_percentage",
         template_code="""
                             {% include "tailwind/components/progressbar/simple-progressbar.html" with text=flag progress=value|default:0 %}
                         """,
     )
-    completed_learning = tables.DateColumn(
-        format="d-M-Y", accessor="completed_learn", verbose_name="Completed Learning"
-    )
+    completed_learning = DMYTColumn( accessor="completed_learn", verbose_name="Completed Learning")
     assessment = tables.Column(accessor="passed_assessment")
     attempts = tables.Column(accessor="assesment_count")
     learning_hours = DurationColumn()
@@ -1131,9 +1109,9 @@ class WorkerDeliveryTable(ClickableRowsTable):
     index = IndexColumn()
     user = tables.Column(orderable=False, verbose_name="Name")
     suspended = SuspendedIndicatorColumn()
-    last_active = tables.Column()
+    last_active = DMYTColumn()
     payment_unit = tables.Column(orderable=False)
-    started = tables.Column(accessor="started_delivery")
+    started = DMYTColumn(accessor="started_delivery")
     delivered = tables.Column(accessor="completed")
     pending = tables.Column()
     approved = tables.Column()
@@ -1174,6 +1152,13 @@ class WorkerDeliveryTable(ClickableRowsTable):
     def row_click_url(self, record):
         return reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id, record.id))
 
+    def render_last_active(self, value, record, column, bound_column, **kwargs):
+        if record.user.id in self._seen_users:
+            return ""
+
+        self._seen_users.add(record.user.id)
+        return column.render(value=value, record=record, bound_column=bound_column)
+
     def render_action(self, record):
         url = reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id, record.id))
         template = """
@@ -1186,7 +1171,6 @@ class WorkerDeliveryTable(ClickableRowsTable):
     def render_user(self, value):
         if value.id in self._seen_users:
             return ""
-        self._seen_users.add(value.id)
         return format_html(
             """
             <div class="flex flex-col items-start w-40">
