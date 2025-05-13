@@ -1384,7 +1384,7 @@ def get_user_visit_counts(opportunity_access_id: int, date=None):
     user_visit_counts = UserVisit.objects.filter(**filter_kwargs).aggregate(
         **visit_count_kwargs,
         approved=Count("id", filter=Q(status=VisitValidationStatus.approved)),
-        pending=Count("id", filter=Q(status=VisitValidationStatus.pending)),
+        pending=Count("id", filter=Q(status__in=[VisitValidationStatus.pending, VisitValidationStatus.duplicate])),
         rejected=Count("id", filter=Q(status=VisitValidationStatus.rejected)),
         flagged=Count("id", filter=Q(flagged=True)),
         total=Count("*"),
@@ -1511,7 +1511,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
             filter_kwargs.update({"visit_date__date": date})
 
         if self.filter_status == "pending":
-            filter_kwargs.update({"status": VisitValidationStatus.pending})
+            filter_kwargs.update({"status__in": [VisitValidationStatus.pending, VisitValidationStatus.duplicate]})
             self.exclude_columns = ["last_activity"]
         if self.filter_status == "approved":
             filter_kwargs.update({"status": VisitValidationStatus.approved})
