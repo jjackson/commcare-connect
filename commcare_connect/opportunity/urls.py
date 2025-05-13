@@ -143,7 +143,10 @@ urlpatterns = [
         views.worker_learn_status_view,
         name="worker_learn_progress",
     ),
-    path("<int:opp_id>/worker_payment_history/<int:access_id>",
+    path(
+        "<int:opp_id>/worker_payment_history/<int:access_id>",
         views.worker_payment_history,
-        name="worker_payment_history"),
+        name="worker_payment_history",
+    ),
+    path("<int:opp_id>/worker_flag_counts/<int:access_id>", views.worker_flag_counts, name="worker_flag_counts"),
 ]

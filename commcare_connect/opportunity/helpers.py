@@ -159,6 +159,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
         queryset = (
             OpportunityAccess.objects.filter(opportunity=opportunity)
             .annotate(
+                payment_unit_id=Value(payment_unit.pk),
                 payment_unit=Value(payment_unit.name, output_field=CharField()),
                 started_delivery=Coalesce(started_delivery_sq, Value(None, output_field=DateTimeField())),
                 _last_visit_val=Coalesce(last_visit_sq, Value(None, output_field=DateTimeField())),
