@@ -1428,7 +1428,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
             tabs = [
                 {
                     "name": "pending_review",
-                    "label": "Pending",
+                    "label": "Pending Review",
                     "count": user_visit_counts.get("pending_review", 0),
                 },
                 {
