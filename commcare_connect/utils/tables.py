@@ -2,13 +2,16 @@ import itertools
 from datetime import timedelta
 
 import django_tables2 as tables
+from django.utils.html import escape
+from django.utils.timezone import is_aware, localtime # For timezone handling
+import datetime
 
 
-STOP_CLICK_PROPAGATION = {
-    "td": {
-        "@click.stop": ""
-    }
-}
+STOP_CLICK_PROPAGATION_ATTR = {"td": {"@click.stop": ""}}
+TEXT_CENTER_ATTR = {"td": {"class": "text-center"}}
+
+DATE_TIME_FORMAT  ="%d-%b-%Y %H:%M"
+DATE_FORMAT = "%d-%b-%Y"
 
 
 class OrgContextTable(tables.Table):
@@ -93,3 +96,35 @@ class DurationColumn(tables.Column):
     def render(self, value):
         total_seconds = int(value.total_seconds() if isinstance(value, timedelta) else 0)
         return get_duration_min(total_seconds)
+
+
+class DMYTColumn(tables.Column):
+    """
+    A custom django-tables2 column that formats datetime objects.
+    If the time component is present, it displays both date and time.
+    Otherwise, it displays only the date.
+    Handles None values by returning a default string.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def render(self, value, record=None, bound_column=None):
+        if value is None:
+            return "—"
+
+        final_value = str(value)  # original_value_for_fallback
+
+        # Handle datetime.datetime objects
+        if isinstance(value, datetime.datetime):
+            # If the datetime object is timezone-aware, convert it to local time
+            # This ensures consistent display regardless of the original timezone
+            if is_aware(value):
+                value = localtime(value)
+                final_value = value.strftime(DATE_TIME_FORMAT)
+
+        # Handle datetime.date objects (which have no time component)
+        elif isinstance(value, datetime.date):
+            final_value = value.strftime(DATE_FORMAT)
+
+        return final_value
