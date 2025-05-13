@@ -56,13 +56,13 @@
               <div class="flex justify-between items-center py-3">
                 <span class="text-xs w-27">Name</span>
                 <i class="fa-light fa-circle-check text-green-600"></i>
-                <i class="fa-light fa-circle-xmark text-brand-sunset "></i>
+                <i class="fa-light fa-flag-swallowtail text-brand-mango"></i>
               </div>
               {% for flag in flagged_info %}
                 <div class="flex justify-between items-center py-3 pr-1">
                   <span class="text-xs w-25">{{ flag.name }}</span>
                   <span class="text-xs">{{ flag.approved }}</span>
-                  <span class="text-xs">{{ flag.rejected }}</span>
+                  <span class="text-xs">{{ flag.pending }}</span>
                 </div>
               {% endfor %}
             </div>
