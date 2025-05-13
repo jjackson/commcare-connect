@@ -979,12 +979,12 @@ class WorkerStatusTable(tables.Table):
     user = UserInfoColumn()
     suspended = SuspendedIndicatorColumn()
     invited_date = tables.DateColumn(format="d-M-Y")
-    last_active = tables.DateColumn(format="d-M-Y")
+    last_active = tables.Column()
     started_learn = tables.DateColumn(format="d-M-Y", verbose_name="Started Learn", accessor="date_learn_started")
     completed_learn = tables.DateColumn(format="d-M-Y")
-    days_to_complete_learn = DurationColumn()
+    days_to_complete_learn = DurationColumn(verbose_name="Time to Complete Learning")
     first_delivery = tables.Column()
-    days_to_start_delivery = DurationColumn()
+    days_to_start_delivery = DurationColumn(verbose_name="Time to Start Deliver")
 
     def __init__(self, *args, **kwargs):
         self.use_view_url = True
@@ -999,6 +999,9 @@ class WorkerStatusTable(tables.Table):
             """,
             value,
         )
+
+    class Meta:
+        order_by = ("-last_active",)
 
 
 class WorkerPaymentsTable(tables.Table):
@@ -1028,13 +1031,14 @@ class WorkerPaymentsTable(tables.Table):
             "last_paid",
             "confirmed_paid",
         )
+        order_by = ("-last_active",)
 
 
 class WorkerLearnTable(ClickableRowsTable):
     index = IndexColumn()
     user = UserInfoColumn()
     suspended = SuspendedIndicatorColumn()
-    last_active = tables.DateColumn(format="d-M-Y")
+    last_active = tables.Column()
     started_learning = tables.DateColumn(
         format="d-M-Y", accessor="date_learn_started", verbose_name="Started Learning"
     )
@@ -1078,6 +1082,8 @@ class WorkerLearnTable(ClickableRowsTable):
             "learning_hours",
             "action",
         )
+
+        order_by = ("-last_active",)
 
     def row_click_url(self, record):
         return reverse("opportunity:worker_learn_progress", args=(self.org_slug, self.opp_id, record.id))
@@ -1135,6 +1141,7 @@ class WorkerDeliveryTable(ClickableRowsTable):
             "rejected",
             "action",
         )
+        order_by = ("-last_active",)
 
 
     def __init__(self, *args, **kwargs):
