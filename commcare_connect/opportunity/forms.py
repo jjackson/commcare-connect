@@ -1,8 +1,8 @@
 import datetime
 import json
 
-from crispy_forms.helper import FormHelper, Layout
-from crispy_forms.layout import HTML, Column, Div, Field, Fieldset, Layout, Row, Submit
+from crispy_forms.helper import FormHelper
+from crispy_forms.layout import HTML, Column, Field, Fieldset, Layout, Row, Submit
 from dateutil.relativedelta import relativedelta
 from django import forms
 from django.core.exceptions import ValidationError
@@ -106,7 +106,12 @@ class OpportunityChangeForm(
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Row(
-                HTML("<div class='col-span-2'><h6 class='title-sm'>Opportunity Details</h6>  <span class='hint'>Edit the details of the opportunity. All fields are mandatory.  </span> </div>"),
+                HTML(
+                    "<div class='col-span-2'>"
+                    "<h6 class='title-sm'>Opportunity Details</h6>"
+                    "<span class='hint'>Edit the details of the opportunity. All fields are mandatory.</span>"
+                    "</div>"
+                ),
                 Column(
                     Field("name", wrapper_class="w-full"),
                     Field("short_description", wrapper_class="w-full"),
@@ -114,36 +119,44 @@ class OpportunityChangeForm(
                 ),
                 Column(
                     Field("delivery_type"),
-                    Field("active", css_class=CHECKBOX_CLASS, wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg"),
-                    Field("is_test", css_class=CHECKBOX_CLASS, wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg"),
+                    Field(
+                        "active",
+                        css_class=CHECKBOX_CLASS,
+                        wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg",
+                    ),
+                    Field(
+                        "is_test",
+                        css_class=CHECKBOX_CLASS,
+                        wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg",
+                    ),
                 ),
-                css_class="grid grid-cols-2 gap-4 p-6 card_bg"
+                css_class="grid grid-cols-2 gap-4 p-6 card_bg",
             ),
             Row(
-                HTML("<div class='col-span-2'><h6 class='title-sm'>Date</h6>  <span class='hint'>Optional: If not specified, the opportunity start & end dates will apply to the form submissions.</span> </div>"),
+                HTML(
+                    "<div class='col-span-2'>"
+                    "<h6 class='title-sm'>Date</h6>"
+                    "<span class='hint'>Optional: If not specified, the opportunity start & end dates will"
+                    " apply to the form submissions.</span>"
+                    "</div>"
+                ),
                 Column(
                     Field("end_date"),
                 ),
-                Column(
-                    Field("currency"),
-                    Field("additional_users")
-                ),
-                css_class="grid grid-cols-2 gap-4 p-6 card_bg"
+                Column(Field("currency"), Field("additional_users")),
+                css_class="grid grid-cols-2 gap-4 p-6 card_bg",
             ),
             Row(
                 HTML("<div class='col-span-2'><h6 class='title-sm'>Invite Workers</h6></div>"),
                 Row(
                     Field("filter_country", wrapper_class="w-full"),
                     Field("filter_credential", wrapper_class="w-full"),
-                    css_class="flex gap-2"
+                    css_class="flex gap-2",
                 ),
                 Row(Field("users", wrapper_class="w-full"), css_class="col-span-2"),
-                css_class="grid grid-cols-2 gap-4 p-6 card_bg"
+                css_class="grid grid-cols-2 gap-4 p-6 card_bg",
             ),
-            Row(
-                Submit("submit", "Submit", css_class="button button-md primary-dark"),
-                css_class="flex justify-end"
-            )
+            Row(Submit("submit", "Submit", css_class="button button-md primary-dark"), css_class="flex justify-end"),
         )
 
         self.fields["additional_users"] = forms.IntegerField(
@@ -193,7 +206,12 @@ class OpportunityInitForm(forms.ModelForm):
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Row(
-                HTML("<div class='col-span-2'><h6 class='title-sm'>Opportunity Details</h6>  <span class='hint'>Add the details of the opportunity. All fields are mandatory.</span> </div>"),
+                HTML(
+                    "<div class='col-span-2'>"
+                    "<h6 class='title-sm'>Opportunity Details</h6>"
+                    "<span class='hint'>Add the details of the opportunity. All fields are mandatory.</span>"
+                    "</div>"
+                ),
                 Column(
                     Field("name"),
                     Field("short_description"),
@@ -203,10 +221,15 @@ class OpportunityInitForm(forms.ModelForm):
                     Field("currency"),
                     Field("api_key"),
                 ),
-                css_class="grid grid-cols-2 gap-4 card_bg"
+                css_class="grid grid-cols-2 gap-4 card_bg",
             ),
             Row(
-                HTML("<div class='col-span-2'><h6 class='title-sm'>Apps</h6>  <span class='hint'>Add required apps to the opportunity. All fields are mandatory.</span> </div>"),
+                HTML(
+                    "<div class='col-span-2'>"
+                    "<h6 class='title-sm'>Apps</h6>"
+                    "<span class='hint'>Add required apps to the opportunity. All fields are mandatory.</span>"
+                    "</div>"
+                ),
                 Column(
                     Field("learn_app_domain"),
                     Field("learn_app"),
@@ -219,12 +242,9 @@ class OpportunityInitForm(forms.ModelForm):
                     Field("deliver_app"),
                     data_loading_states=True,
                 ),
-                css_class="grid grid-cols-2 gap-4 card_bg my-4"
+                css_class="grid grid-cols-2 gap-4 card_bg my-4",
             ),
-            Row(
-                Submit("submit", "Submit",css_class="button button-md primary-dark"),
-                css_class="flex justify-end"
-            )
+            Row(Submit("submit", "Submit", css_class="button button-md primary-dark"), css_class="flex justify-end"),
         )
 
         domain_choices = [(domain, domain) for domain in self.domains]
@@ -344,24 +364,21 @@ class OpportunityFinalizeForm(forms.ModelForm):
         self.helper.layout = Layout(
             Row(
                 Field(
-                        "start_date",
-                        help="Start date can't be edited if it was set in past" if self.is_start_date_readonly else None,
-                        wrapper_class="flex-1"
-                    ),
-                Field("end_date",wrapper_class="flex-1"),
+                    "start_date",
+                    help="Start date can't be edited if it was set in past" if self.is_start_date_readonly else None,
+                    wrapper_class="flex-1",
+                ),
+                Field("end_date", wrapper_class="flex-1"),
                 Field(
-                        "max_users",
-                        oninput=f"id_total_budget.value = ({self.budget_per_user} + {self.payment_units_max_total}"
-                        f"* parseInt(document.getElementById('id_org_pay_per_visit')?.value || 0)) "
-                        f"* parseInt(this.value || 0)",
-                    ),
-                    Field("total_budget", readonly=True, wrapper_class="form-group "),
-                css_class="grid grid-cols-2 gap-6"
+                    "max_users",
+                    oninput=f"id_total_budget.value = ({self.budget_per_user} + {self.payment_units_max_total}"
+                    f"* parseInt(document.getElementById('id_org_pay_per_visit')?.value || 0)) "
+                    f"* parseInt(this.value || 0)",
+                ),
+                Field("total_budget", readonly=True, wrapper_class="form-group "),
+                css_class="grid grid-cols-2 gap-6",
             ),
-           Row(
-             Submit("submit", "Submit",css_class="button button-md primary-dark"),
-             css_class="flex justify-end"
-           )
+            Row(Submit("submit", "Submit", css_class="button button-md primary-dark"), css_class="flex justify-end"),
         )
 
         if self.opportunity.managed:
@@ -862,27 +879,20 @@ class PaymentUnitForm(forms.ModelForm):
                     Field("description"),
                 ),
                 Column(
-                    Row(
-                        Field("start_date"),
-                        Field("end_date"),
-                        css_class="grid grid-cols-2 gap-4"),
-                    Row(
-                        Field("max_total"),
-                        Field("max_daily"),
-                        css_class="grid grid-cols-2 gap-4"
-                    ),
+                    Row(Field("start_date"), Field("end_date"), css_class="grid grid-cols-2 gap-4"),
+                    Row(Field("max_total"), Field("max_daily"), css_class="grid grid-cols-2 gap-4"),
                     Field("amount"),
                 ),
-                css_class="grid grid-cols-2 gap-4"
+                css_class="grid grid-cols-2 gap-4",
             ),
             HTML('<div class="bg-gray-200 h-0.5 w-full my-8"></div>'),
             Row(
                 Column(
                     Field("required_deliver_units", css_class=CHECKBOX_CLASS),
-                    Field("optional_deliver_units", css_class=CHECKBOX_CLASS)
+                    Field("optional_deliver_units", css_class=CHECKBOX_CLASS),
                 ),
                 Column(Field("payment_units", css_class=CHECKBOX_CLASS)),
-                css_class="grid grid-cols-2 gap-4"
+                css_class="grid grid-cols-2 gap-4",
             ),
             HTML(
                 f"""
@@ -899,9 +909,9 @@ class PaymentUnitForm(forms.ModelForm):
                 """
             ),
             Row(
-                Submit(name="submit", value="Submit",css_class="button button-md primary-dark"),
-                css_class="flex justify-end"
-            )
+                Submit(name="submit", value="Submit", css_class="button button-md primary-dark"),
+                css_class="flex justify-end",
+            ),
         )
         deliver_unit_choices = [(deliver_unit.id, deliver_unit.name) for deliver_unit in deliver_units]
         payment_unit_choices = [(payment_unit.id, payment_unit.name) for payment_unit in payment_units]
@@ -957,10 +967,10 @@ class SendMessageMobileUsersForm(forms.Form):
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            Row(Field("selected_users")),
-            Row(Field("title")),
-            Row(Field("body")),
-            Row(Field("message_type")),
+            Field("selected_users"),
+            Field("title"),
+            Field("body"),
+            Field("message_type"),
             Submit(name="submit", value="Submit"),
         )
 
@@ -996,18 +1006,21 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
 
         self.helper = FormHelper(self)
         self.helper.form_tag = False
+
         self.helper.layout = Layout(
             Row(
-                Field("duplicate", css_class="form-check-input", wrapper_class="form-check form-switch"),
-                Field("gps", css_class="form-check-input", wrapper_class="form-check form-switch"),
-                Field("catchment_areas", css_class="form-check-input", wrapper_class="form-check form-switch"),
+                Field("duplicate", css_class=f"{CHECKBOX_CLASS} block"),
+                Field("gps", css_class=f"{CHECKBOX_CLASS} block"),
+                Field("catchment_areas", css_class=f"{CHECKBOX_CLASS} block"),
+                css_class="grid grid-cols-3 gap-2",
             ),
             Row(Field("location")),
             Fieldset(
                 "Form Submission Hours",
                 Row(
-                    Column(Field("form_submission_start")),
-                    Column(Field("form_submission_end")),
+                    Field("form_submission_start"),
+                    Field("form_submission_end"),
+                    css_class="grid grid-cols-2 gap-2",
                 ),
             ),
         )
@@ -1037,11 +1050,9 @@ class DeliverUnitFlagsForm(forms.ModelForm):
         self.helper.layout = Layout(
             Row(
                 Column(Field("deliver_unit")),
-                Column(
-                    HTML("<div class='fw-bold mb-3'>Attachments</div>"),
-                    Field("check_attachments", css_class="form-check-input", wrapper_class="form-check form-switch"),
-                ),
+                Column(Field("check_attachments", css_class=CHECKBOX_CLASS)),
                 Column(Field("duration")),
+                css_class="grid grid-cols-3 gap-2",
             ),
         )
         self.fields["deliver_unit"] = forms.ModelChoiceField(
@@ -1074,13 +1085,15 @@ class FormJsonValidationRulesForm(forms.ModelForm):
                 Column(Field("name")),
                 Column(Field("question_path")),
                 Column(Field("question_value")),
+                css_class="grid grid-cols-3 gap-2",
             ),
-            Row(Column(Field("deliver_unit"))),
+            Field("deliver_unit"),
         )
         self.helper.render_hidden_fields = True
 
         self.fields["deliver_unit"] = forms.ModelMultipleChoiceField(
-            queryset=DeliverUnit.objects.filter(app=self.opportunity.deliver_app), widget=forms.CheckboxSelectMultiple
+            queryset=DeliverUnit.objects.filter(app=self.opportunity.deliver_app),
+            widget=forms.CheckboxSelectMultiple,
         )
 
 
