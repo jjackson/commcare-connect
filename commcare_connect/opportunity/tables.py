@@ -15,6 +15,7 @@ from django_tables2 import columns, utils
 from commcare_connect.opportunity.models import (
     CatchmentArea,
     CompletedWork,
+    CompletedWorkStatus,
     OpportunityAccess,
     Payment,
     PaymentInvoice,
@@ -1147,7 +1148,7 @@ class WorkerDeliveryTable(OrgContextTable):
     user = tables.Column(orderable=False, verbose_name="Name", footer="Total")
     suspended = SuspendedIndicatorColumn()
     last_active = tables.Column()
-    payment_unit = tables.Column(orderable=False)
+    payment_unit = tables.Column(accessor="payment_unit__name", orderable=False)
     started = tables.Column(accessor="started_delivery")
     delivered = tables.Column(accessor="completed", footer=lambda table: sum(x.completed for x in table.data))
     pending = tables.Column(footer=lambda table: sum(x.pending for x in table.data))
@@ -1243,6 +1244,33 @@ class WorkerDeliveryTable(OrgContextTable):
                 "value": value,
                 "rows": rows,
             },
+        )
+
+    def _render_flag_counts(self, record, value, status, status_title):
+        return render_to_string(
+            "tailwind/components/worker_page/fetch_flag_counts.html",
+            {
+                "record": record,
+                "payment_unit_id": record.payment_unit_id,
+                "value": value,
+                "org_slug": self.org_slug,
+                "opp_id": self.opp_id,
+                "status_title": status_title,
+                "status": status,
+            },
+        )
+
+    def render_pending(self, record, value):
+        return self._render_flag_counts(record, value, status=CompletedWorkStatus.pending, status_title="Pending Info")
+
+    def render_approved(self, record, value):
+        return self._render_flag_counts(
+            record, value, status=CompletedWorkStatus.approved, status_title="Approved Info"
+        )
+
+    def render_rejected(self, record, value):
+        return self._render_flag_counts(
+            record, value, status=CompletedWorkStatus.rejected, status_title="Rejected Info"
         )
 
 

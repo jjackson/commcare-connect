@@ -1,6 +1,6 @@
 import datetime
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from functools import reduce
 from http import HTTPStatus
 
@@ -1705,15 +1705,37 @@ def worker_learn_status_view(request, org_slug, opp_id, access_id):
 @org_member_required
 def worker_payment_history(request, org_slug, opp_id, access_id):
     access = get_object_or_404(OpportunityAccess, opportunity__id=opp_id, pk=access_id)
-    queryset = Payment.objects.filter(opportunity_access=access).order_by('-date_paid')
-    payments = queryset.values('date_paid', 'amount')
+    queryset = Payment.objects.filter(opportunity_access=access).order_by("-date_paid")
+    payments = queryset.values("date_paid", "amount")
 
     return render(
         request,
         "tailwind/components/worker_page/payment_history.html",
+        context=dict(access=access, payments=payments, latest_payment=queryset.first()),
+    )
+
+
+@org_member_required
+def worker_flag_counts(request, org_slug, opp_id, access_id):
+    access = get_object_or_404(OpportunityAccess, opportunity__id=opp_id, pk=access_id)
+    status = request.GET.get("status", CompletedWorkStatus.pending)
+    payment_unit_id = request.GET.get("payment_unit_id")
+
+    visits = UserVisit.objects.filter(
+        completed_work__opportunity_access=access,
+        completed_work__status=status,
+    )
+
+    if payment_unit_id:
+        visits = visits.filter(completed_work__payment_unit__id=payment_unit_id)
+
+    all_flags = [flag for visit in visits.all() for flag in visit.flags]
+    counts = Counter(all_flags)
+    return render(
+        request,
+        "tailwind/components/worker_page/flag_counts.html",
         context=dict(
             access=access,
-            payments=payments,
-            latest_payment=queryset.first()
+            flag_counts=counts.items(),
         ),
     )
