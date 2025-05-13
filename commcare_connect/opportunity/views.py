@@ -168,12 +168,7 @@ def is_program_manager_of_opportunity(request, opportunity):
         and opportunity.managedopportunity.program.organization.slug == request.org.slug
         and (
             request.org.program_manager
-            and
-            (
-                (request.org_membership and request.org_membership.is_admin)
-                or
-                request.user.is_superuser
-            )
+            and ((request.org_membership and request.org_membership.is_admin) or request.user.is_superuser)
         )
     )
 
@@ -875,6 +870,11 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
             send_sms_task.delay(selected_user_ids, body)
         return redirect("opportunity:detail", org_slug=request.org.slug, pk=pk)
 
+    path = [
+        {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
+        {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
+        {"title": "Send Message", "url": request.path},
+    ]
     return render(
         request,
         "opportunity/send_message.html",
@@ -884,6 +884,7 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
             form=form,
             users=users,
             user_ids=list(user_ids),
+            path=path,
         ),
     )
 
@@ -1006,6 +1007,11 @@ def verification_flags_config(request, org_slug=None, pk=None):
                 fj_form.save()
         messages.success(request, "Verification flags saved successfully.")
 
+    path = [
+        {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
+        {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
+        {"title": "Verification Flags Config", "url": request.path},
+    ]
     return render(
         request,
         "opportunity/verification_flags_config.html",
@@ -1015,6 +1021,7 @@ def verification_flags_config(request, org_slug=None, pk=None):
             form=form,
             deliver_unit_formset=deliver_unit_formset,
             form_json_formset=form_json_formset,
+            path=path,
         ),
     )
 
@@ -1276,7 +1283,7 @@ def invoice_create(request, org_slug=None, pk=None):
         form = PaymentInvoiceForm(opportunity=opportunity)
         redirect_url = reverse("opportunity:invoice_list", args=[org_slug, pk])
         response = HttpResponse(status=200)
-        response['HX-Redirect'] = redirect_url
+        response["HX-Redirect"] = redirect_url
         return response
     return HttpResponse(render_crispy_form(form))
 
@@ -1761,7 +1768,7 @@ def worker_payments(request, org_slug=None, opp_id=None):
         last_active=Greatest(Max("uservisit__visit_date"), Max("completedmodule__date"), "date_learn_started"),
         last_paid=Max("payment__date_paid"),
         confirmed_paid=Sum("payment__amount", filter=Q(payment__confirmed=True)),
-        total_paid_d=Sum("payment__amount")
+        total_paid_d=Sum("payment__amount"),
     )
     table = WorkerPaymentsTable(query_set)
     RequestConfig(request, paginate={"per_page": 10}).configure(table)
