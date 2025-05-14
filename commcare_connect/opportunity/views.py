@@ -1146,7 +1146,7 @@ def import_catchment_area(request, org_slug=None, pk=None):
 
 @org_member_required
 def opportunity_user_invite(request, org_slug=None, pk=None):
-    opportunity = get_object_or_404(Opportunity, organization=request.org, id=pk)
+    opportunity = get_opportunity_or_404(org_slug=request.org.slug, pk=pk)
     form = OpportunityUserInviteForm(data=request.POST or None, org_slug=request.org.slug, opportunity=opportunity)
     if form.is_valid():
         users = form.cleaned_data["users"]
