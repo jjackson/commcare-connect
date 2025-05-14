@@ -5,22 +5,19 @@
 {% block content %}
 <div class="max-w-screen-lg mx-auto py-8 px-4">
 
-  <div class="mb-10">
-    <h2 class="text-xl font-semibold text-brand-deep-purple mb-4">{% translate "Edit Name" %}</h2>
-
-    <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-      <div
-        id="edit-name-fields"
-        hx-get="{% url 'users:update' %}"
-        hx-trigger="load"
-        hx-swap="innerHTML"
-      >
-        <div class="text-gray-500 text-sm italic">{% translate "Loading..." %}</div>
-      </div>
+  <h2 class="text-xl font-semibold text-brand-deep-purple mb-4">{% translate "Edit Name" %}</h2>
+  <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+    <div
+      id="edit-name-fields"
+      hx-get="{% url 'users:update' %}"
+      hx-trigger="load"
+      hx-swap="innerHTML"
+    >
+      <div class="text-gray-500 text-sm italic">{% translate "Loading..." %}</div>
     </div>
   </div>
 
-
+<!--Primary Secondary Email form -->
   <div class="mt-10 pt-6 border-t border-gray-200">
     <h2 class="text-xl font-semibold text-brand-deep-purple mb-4">{% translate "E-mail Addresses" %}</h2>
 
@@ -64,10 +61,10 @@
             <button class="button button-md outline-style text-red-600 hover:bg-red-50 border-red-300 hover:border-red-400" type="submit" name="action_remove">
               <i class="fa-solid fa-trash mr-1"></i> {% translate 'Remove' %}
             </button>
-            <button class="secondaryAction button button-md primary-light" type="submit" name="action_send">
+            <button class="button button-md primary-light" type="submit" name="action_send">
               <i class="fa-solid fa-rotate-right mr-1"></i> {% translate 'Re-send Verification' %}
             </button>
-            <button class="secondaryAction button button-md primary-dark" type="submit" name="action_primary">
+            <button class="button button-md primary-dark" type="submit" name="action_primary">
               <i class="fa-solid fa-check mr-1"></i> {% translate 'Make Primary' %}
             </button>
           </div>
@@ -84,16 +81,14 @@
 
   </div>
 
-
+<!--Add E-mail form -->
   <div class="mt-10 pt-6 border-t border-gray-200">
     <h2 class="text-xl font-semibold text-brand-deep-purple mb-4">{% translate "Add E-mail Address" %}</h2>
 
     <div class="space-y-4 bg-white p-6 rounded-lg shadow-sm border border-gray-100">
     <form id="add_email" method="post" action="{% url 'account_email' %}" >
       {% csrf_token %}
-
       {% crispy form %}
-
       <div class="mt-6 flex justify-end">
         <button class="button button-md primary-dark" name="action_add" type="submit" form="add_email">
           <i class="fa-solid fa-plus mr-1"></i> {% translate "Add E-mail" %}
