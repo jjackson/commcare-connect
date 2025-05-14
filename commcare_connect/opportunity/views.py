@@ -1321,6 +1321,9 @@ def user_visit_verification(request, org_slug, opp_id, pk):
     path = []
     if opportunity.managed:
         path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
+        path.append(
+            {"title": opportunity.managedopportunity.program.name, "url": reverse("program:home", args=(org_slug,))}
+        )
     path.extend(
         [
             {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
@@ -1617,11 +1620,17 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
     visit_export_form = VisitExportForm()
     export_form = PaymentExportForm()
 
-    path = [
-        {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
-        {"title": opp.name, "url": reverse("opportunity:detail", args=(org_slug, opp_id))},
-        {"title": "Workers", "url": reverse("opportunity:worker_list", args=(org_slug, opp_id))},
-    ]
+    path = []
+    if opp.managed:
+        path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
+        path.append({"title": opp.managedopportunity.program.name, "url": reverse("program:home", args=(org_slug,))})
+    path.extend(
+        [
+            {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
+            {"title": opp.name, "url": reverse("opportunity:detail", args=(org_slug, opp_id))},
+            {"title": "Workers", "url": reverse("opportunity:worker_list", args=(org_slug, opp_id))},
+        ]
+    )
 
     raw_qs = request.GET.urlencode()
     query = f"?{raw_qs}" if raw_qs else ""
