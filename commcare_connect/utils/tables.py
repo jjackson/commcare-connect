@@ -13,6 +13,13 @@ TEXT_CENTER_ATTR = {"td": {"class": "text-center"}}
 DATE_TIME_FORMAT  ="%d-%b-%Y %H:%M"
 DATE_FORMAT = "%d-%b-%Y"
 
+def merge_attrs(*dicts):
+    merged = {}
+    for d in dicts:
+        for key, val in d.items():
+            merged.setdefault(key, {}).update(val)
+    return merged
+
 
 class OrgContextTable(tables.Table):
     def __init__(self, *args, **kwargs):
