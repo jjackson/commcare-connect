@@ -26,7 +26,7 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.users.models import User
 from commcare_connect.utils.tables import OrgContextTable, IndexColumn, ClickableRowsTable, \
-    DurationColumn, DMYTColumn, TEXT_CENTER_ATTR, STOP_CLICK_PROPAGATION_ATTR
+    DurationColumn, DMYTColumn, TEXT_CENTER_ATTR, STOP_CLICK_PROPAGATION_ATTR, merge_attrs
 
 
 class OpportunityContextTable(OrgContextTable):
@@ -656,9 +656,6 @@ class BaseOpportunityList(ClickableRowsTable):
     def row_click_url(self, record):
         return reverse("opportunity:detail", args=(self.org_slug, record.id))
 
-    def excluded_columns(self):
-        return ["actions"]
-
 
     def render_status(self, value):
         if value == 0:
@@ -690,13 +687,24 @@ class BaseOpportunityList(ClickableRowsTable):
     def render_program(self, value):
         return self._render_div(value if value else "--", extra_classes="justify-start")
 
+    def render_worker_list_url_column(self, value, opp_id, active_tab="workers", sort=None):
+        url = reverse("opportunity:worker_list", args=(self.org_slug, opp_id))
+        url = f"{url}?active_tab={active_tab}"
+
+        if sort:
+            url += "&"+sort
+        value = format_html('<a href="{}">{}</a>', url, value)
+        return self._render_div(value, extra_classes=self.stats_style)
+
 
 
 class OpportunityTable(BaseOpportunityList):
-    pending_invites = tables.Column()
-    inactive_workers = tables.Column()
-    pending_approvals = tables.Column()
-    payments_due = tables.Column()
+    col_attrs = merge_attrs(TEXT_CENTER_ATTR, STOP_CLICK_PROPAGATION_ATTR)
+
+    pending_invites = tables.Column(attrs=col_attrs)
+    inactive_workers = tables.Column(attrs=col_attrs)
+    pending_approvals =tables.Column(attrs=col_attrs)
+    payments_due = tables.Column(attrs=col_attrs)
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="", attrs=STOP_CLICK_PROPAGATION_ATTR)
 
     class Meta(BaseOpportunityList.Meta):
@@ -708,19 +716,21 @@ class OpportunityTable(BaseOpportunityList):
             "actions",
         )
 
-    def render_pending_invites(self, value):
-        return self._render_div(value, extra_classes=self.stats_style)
+    def render_pending_invites(self, value, record):
+        return self.render_worker_list_url_column(value=value, opp_id=record.id)
 
-    def render_inactive_workers(self, value):
-        return self._render_div(value, extra_classes=self.stats_style)
+    def render_inactive_workers(self, value, record):
+        return self.render_worker_list_url_column(value=value, opp_id=record.id, sort='sort=last_active')
 
-    def render_pending_approvals(self, value):
-        return self._render_div(value, extra_classes=self.stats_style)
+    def render_pending_approvals(self, value, record):
+        return self.render_worker_list_url_column(value=value, opp_id=record.id, active_tab="delivery",
+                                                  sort='sort=-pending')
 
-    def render_payments_due(self, value):
+    def render_payments_due(self, value, record):
         if value is None:
             value = 0
-        return self._render_div(value, extra_classes=self.stats_style)
+        return self.render_worker_list_url_column(value=value, opp_id=record.id, active_tab="payments",
+                                                  sort='sort=-total_paid')
 
     def render_actions(self, record):
         actions = [
@@ -754,16 +764,19 @@ class OpportunityTable(BaseOpportunityList):
 
 
 class ProgramManagerOpportunityTable(BaseOpportunityList):
+    col_attrs = merge_attrs(TEXT_CENTER_ATTR, STOP_CLICK_PROPAGATION_ATTR)
+
     active_workers = tables.Column(
-        verbose_name="Active Workers", attrs=TEXT_CENTER_ATTR
+        verbose_name="Active Workers", attrs=col_attrs
     )
     total_deliveries = tables.Column(
-        verbose_name="Total Deliveries", attrs=TEXT_CENTER_ATTR
+        verbose_name="Total Deliveries", attrs=col_attrs
     )
     verified_deliveries = tables.Column(
-        verbose_name="Verified Deliveries", attrs=TEXT_CENTER_ATTR
+        verbose_name="Verified Deliveries", attrs=col_attrs
     )
-    worker_earnings = tables.Column(verbose_name="Worker Earnings", accessor="total_accrued")
+    worker_earnings = tables.Column(verbose_name="Worker Earnings", accessor="total_accrued",
+                                    attrs=col_attrs)
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="", attrs=STOP_CLICK_PROPAGATION_ATTR)
 
     class Meta(BaseOpportunityList.Meta):
@@ -775,16 +788,21 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
             "actions",
         )
 
-    def render_active_workers(self, value):
-        return self._render_div(value, extra_classes=self.stats_style)
 
-    def render_total_deliveries(self, value):
-        return self._render_div(value, extra_classes=self.stats_style)
+    def render_active_workers(self, value, record):
+        return self.render_worker_list_url_column(value=value, opp_id=record.id)
 
-    def render_verified_deliveries(self, value):
-        return self._render_div(value, extra_classes=self.stats_style)
 
-    def render_worker_earnings(self, value):
+    def render_total_deliveries(self, value, record):
+        return self.render_worker_list_url_column(value=value, opp_id=record.id, active_tab="delivery", sort="sort=-delivered")
+
+    def render_verified_deliveries(self, value, record):
+        return self.render_worker_list_url_column(value=value, opp_id=record.id, active_tab="delivery", sort="sort=-approved")
+
+    def render_worker_earnings(self, value, record):
+        url = reverse("opportunity:worker_list", args=(self.org_slug, record.id))
+        url += "?active_tab=payments&sort=-payment_accrued"
+        value = format_html('<a href="{}">{}</a>', url, value)
         return self._render_div(value, extra_classes=self.stats_style)
 
     def render_opportunity(self, record):
@@ -1152,12 +1170,6 @@ class WorkerDeliveryTable(ClickableRowsTable):
     def row_click_url(self, record):
         return reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id, record.id))
 
-    def render_last_active(self, value, record, column, bound_column, **kwargs):
-        if record.user.id in self._seen_users:
-            return ""
-
-        self._seen_users.add(record.user.id)
-        return column.render(value=value, record=record, bound_column=bound_column)
 
     def render_action(self, record):
         url = reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id, record.id))
@@ -1171,6 +1183,8 @@ class WorkerDeliveryTable(ClickableRowsTable):
     def render_user(self, value):
         if value.id in self._seen_users:
             return ""
+
+        self._seen_users.add(value.id)
         return format_html(
             """
             <div class="flex flex-col items-start w-40">
