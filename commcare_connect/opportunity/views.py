@@ -371,13 +371,12 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
             {
                 "name": "End Date",
                 "count": safe_display(object.end_date),
-                "icon": "fa-arrow-right",
+                "icon": "fa-arrow-right !text-brand-mango",  # color is also changed",
             },
             {
                 "name": "Max Workers",
                 "count": safe_display(object.number_of_users),
-                "icon": "fa-users",
-                "color": "brand-mango",
+                "icon": "fa-users"
             },
             {
                 "name": "Max Service Deliveries",
@@ -1912,8 +1911,16 @@ def opportunity_worker_progress(request, org_slug, opp_id):
     )
 
 
+
 @org_member_required
 def opportunity_delivery_stats(request, org_slug, opp_id):
+    panel_type_2 = {
+        "body": "bg-brand-marigold/10 border border-brand-marigold",
+        "icon_bg": "!bg-orange-300",
+        "text_color": "!text-orange-500",
+    }
+
+
     opportunity = get_opportunity_or_404(opp_id, org_slug)
     is_program_manager = is_program_manager_of_opportunity(request, opportunity)
 
@@ -1972,8 +1979,8 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "name": "Workers",
                     "status": "Inactive last 3 days",
                     "value": stats["inactive_workers"],
-                    "type": "2",
                     "url": status_url,
+                    **panel_type_2,
                 },
             ],
         },
