@@ -36,7 +36,7 @@ class UserUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = User
     fields = ["name"]
     success_message = _("Information successfully updated")
-    template_name = "account/user_update.html"
+    template_name = "users/user_form.html"
 
     def get_success_url(self):
         assert self.request.user.is_authenticated  # for mypy to know that the user is authenticated
@@ -45,19 +45,6 @@ class UserUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     def get_object(self):
         return self.request.user
 
-    def get(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        form = self.get_form()
-        csrf_token = get_token(self.request)
-        form_html = f"""
-            <form id="user-update"
-                  action="{reverse('users:update')}"
-                  method="post">
-                <input type="hidden" name="csrfmiddlewaretoken" value="{csrf_token}">
-                {render_crispy_form(form)}
-            </form>
-            """
-        return HttpResponse(mark_safe(form_html))
 
 
 user_update_view = UserUpdateView.as_view()
