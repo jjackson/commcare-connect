@@ -45,15 +45,9 @@ class OpportunityUserInviteForm(forms.Form):
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            Fieldset(
-                "",
-                Row(Field("users")),
-                Row(
-                    Field("filter_country", wrapper_class="form-group col-md-6 mb-0"),
-                    Field("filter_credential", wrapper_class="form-group col-md-6 mb-0"),
-                ),
-            ),
-            Submit("submit", "Submit"),
+            Field("users"),
+            Row(Field("filter_country"), Field("filter_credential"), css_class="grid grid-cols-2 gap-4"),
+            Submit("submit", "Submit", css_class="button button-md primary-dark float-end"),
         )
 
         self.fields["users"] = forms.CharField(
