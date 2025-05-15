@@ -43,19 +43,13 @@ class OpportunityUserInviteForm(forms.Form):
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            HTML(
-                (
-                    "<div class='text-sm'>"
-                    "Enter the phone numbers of the users you want to add to this opportunity, one on each line."
-                    "</div>"
-                ),
-            ),
             Field("users"),
             Submit("submit", "Submit", css_class="button button-md primary-dark float-end"),
         )
         self.fields["users"] = forms.CharField(
             widget=forms.Textarea,
             required=False,
+            help_text="Enter the phone numbers of the users you want to add to this opportunity, one on each line.",
         )
 
     def clean_users(self):
