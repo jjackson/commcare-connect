@@ -387,11 +387,26 @@ def get_opportunity_delivery_progress(opp_id):
             filter=Q(opportunityaccess__uservisit__status=VisitValidationStatus.pending),
             distinct=True,
         ),
+        flagged_deliveries_waiting_for_review_since_yesterday=Count(
+            "opportunityaccess__uservisit",
+            filter=Q(
+                opportunityaccess__uservisit__status=VisitValidationStatus.pending,
+                opportunityaccess__uservisit__visit_date__gte=yesterday
+            ),
+            distinct=True,
+        ),
         visits_pending_for_pm_review=Count(
             "uservisit",
             filter=Q(uservisit__review_status=VisitReviewStatus.pending)
             & Q(uservisit__review_created_on__isnull=False),
             distinct=True
+        ),
+        visits_pending_for_pm_review_since_yesterday=Count(
+            "uservisit",
+            filter=Q(uservisit__review_status=VisitReviewStatus.pending) &
+                   Q(uservisit__review_created_on__isnull=False) &
+                   Q(uservisit__review_created_on__gte=yesterday),
+            distinct=True,
         ),
         recent_payment=Max("opportunityaccess__payment__date_paid"),
         total_accrued=OpportunityAnnotations.total_accrued(),

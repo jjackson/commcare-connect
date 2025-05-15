@@ -1849,15 +1849,15 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             "title": "Daily Active Workers",
             "progress": [
                 {
-                    "title": "Maximum",
+                    "title": "Maximum Achieved",
                     "total": aggregates["maximum_visit_in_a_day"],
                     "value": aggregates["maximum_visit_in_a_day"],
                     "badge_type": False,
                     "percent": 100,
                 },
                 {
-                    "title": "Average",
-                    "total": aggregates["average_visits_per_day"],
+                    "title": "Active Yesterday",
+                    "total": aggregates["maximum_visit_in_a_day"],
                     "value": aggregates["average_visits_per_day"],
                     "badge_type": False,
                     "percent": 100,
@@ -1868,16 +1868,16 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             "title": "Verification",
             "progress": [
                 {
-                    "title": "Verified",
+                    "title": "Approved",
                     "total": aggregates["total_deliveries"],
-                    "value": aggregates["approved_deliveries"],
+                    "value": f"{verified_percentage:.2f}%",
                     "badge_type": True,
-                    "percent": verified_percentage,
+                    "percent": verified_percentage
                 },
                 {
                     "title": "Rejected",
                     "total": aggregates["total_deliveries"],
-                    "value": aggregates["rejected_deliveries"],
+                    "value": f"{rejected_percentage:.2f}%",
                     "badge_type": True,
                     "percent": rejected_percentage,
                 },
@@ -1922,7 +1922,6 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
 
 
     opportunity = get_opportunity_or_404(opp_id, org_slug)
-    is_program_manager = is_program_manager_of_opportunity(request, opportunity)
 
     stats = get_opportunity_delivery_progress(opportunity.id)
 
@@ -1944,6 +1943,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "name": "Services Delivered",
             "status": "Awaiting Review",
             "value": stats["flagged_deliveries_waiting_for_review"],
+            "incr": stats["flagged_deliveries_waiting_for_review_since_yesterday"],
         },
     ]
 
@@ -1954,14 +1954,15 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                 "name": "Services Delivered",
                 "status": "Pending PM Review",
                 "value": stats["visits_pending_for_pm_review"],
+                "incr": stats["visits_pending_for_pm_review_since_yesterday"],
             }
         )
 
     opp_stats = [
         {
             "title": "Workers",
-            "sub_heading": "Active Yesterday",
-            "value": stats["deliveries_from_yesterday"],
+            "sub_heading": "",
+            "value": "", #stats["deliveries_from_yesterday"]
             "url": status_url,
             "panels": [
                 {"icon": "fa-user-group", "name": "Workers", "status": "Invited", "value": stats["workers_invited"]},
