@@ -46,7 +46,8 @@ class OpportunityAnnotations:
         return Count(
             "opportunityaccess__id",
             filter=~Q(opportunityaccess__uservisit__visit_date__gte=days_ago)
-                   & ~Q(opportunityaccess__completedmodule__date__gte=days_ago),
+                   & ~Q(opportunityaccess__completedmodule__date__gte=days_ago)
+                   & Q(opportunityaccess__date_learn_started__isnull=False),
             distinct=True,
         )
 
@@ -88,6 +89,12 @@ class OpportunityAnnotations:
     @staticmethod
     def workers_invited():
         return Count("userinvite", distinct=True)
+
+    @staticmethod
+    def started_learning():
+        return Count(
+            "opportunityaccess", filter=Q(opportunityaccess__date_learn_started__isnull=False), distinct=True
+        )
 
 
 def get_annotated_opportunity_access(opportunity: Opportunity):
@@ -266,7 +273,8 @@ def get_opportunity_list_data(organization, program_manager=False):
     if program_manager:
         queryset = queryset.annotate(
             total_workers=Count("opportunityaccess", distinct=True),
-            active_workers=F("total_workers") - F("inactive_workers"),
+            started_learning=OpportunityAnnotations.started_learning(),
+            active_workers=F("started_learning") - F("inactive_workers"),
             total_deliveries=Coalesce(
                 Sum("opportunityaccess__completedwork__saved_completed_count", distinct=True),
                 Value(0)
@@ -466,9 +474,7 @@ def get_opportunity_funnel_progress(opp_id):
     aggregates = Opportunity.objects.filter(id=opp_id).aggregate(
         workers_invited=OpportunityAnnotations.workers_invited(),
         pending_invites=OpportunityAnnotations.pending_invites(),
-        started_learning_count=Count(
-            "opportunityaccess__user", filter=Q(opportunityaccess__date_learn_started__isnull=False), distinct=True
-        ),
+        started_learning_count=OpportunityAnnotations.started_learning(),
         claimed_job=Count("opportunityaccess__opportunityclaim", distinct=True),
         started_deliveries=Count("uservisit__user", distinct=True),
         completed_assessments=Count("assessment__user", filter=Q(assessment__passed=True), distinct=True),
