@@ -1938,25 +1938,22 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "status": "Total",
             "value": stats["total_deliveries"],
             "incr": stats["deliveries_from_yesterday"],
-        }
+        },
+        {
+            "icon": "fa-clipboard-list-check",
+            "name": "Services Delivered",
+            "status": "Awaiting Review",
+            "value": stats["flagged_deliveries_waiting_for_review"],
+        },
     ]
 
-    if opportunity.managed and is_program_manager:
+    if opportunity.managed:
         deliveries_panels.append(
             {
                 "icon": "fa-clipboard-list-check",
                 "name": "Services Delivered",
                 "status": "Pending PM Review",
                 "value": stats["visits_pending_for_pm_review"],
-            }
-        )
-    else:
-        deliveries_panels.append(
-            {
-                "icon": "fa-clipboard-list-check",
-                "name": "Services Delivered",
-                "status": "Awaiting Review",
-                "value": stats["flagged_deliveries_waiting_for_review"],
             }
         )
 
