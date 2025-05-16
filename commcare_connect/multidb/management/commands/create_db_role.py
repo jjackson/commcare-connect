@@ -58,28 +58,40 @@ class Command(BaseCommand):
                 self.stdout.write(f"Granting CONNECT permission on database '{db_name}' to role '{username}'...")
                 cursor.execute(f'GRANT CONNECT ON DATABASE "{db_name}" TO "{username}";')
 
-                self.stdout.write(f"Granting SELECT on non-protected tables to role '{username}'...")
+                self.stdout.write(f"Managing SELECT permissions on tables in 'public' schema for role '{username}'...")
                 # Get all tables in the public schema
                 cursor.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public';")
                 all_tables = [row[0] for row in cursor.fetchall()]
 
                 granted_tables_count = 0
-                skipped_tables_count = 0
+                revoked_or_skipped_tables_count = 0
 
                 for table_name in all_tables:
                     if table_name in PROTECTED_TABLES:
-                        self.stdout.write(f"  Skipping SELECT on protected table: {table_name}")
-                        # Optionally, ensure no SELECT rights if the role might inherit them elsewhere
-                        # cursor.execute(f'REVOKE SELECT ON TABLE "{table_name}" FROM "{username}";')
-                        # Not strictly needed for new roles
-                        skipped_tables_count += 1
+                        self.stdout.write(
+                            f"  Ensuring NO SELECT on protected table: {table_name} (revoking if necessary)"
+                        )
+                        # Using CASCADE to remove dependent permissions if any
+                        cursor.execute(f'REVOKE SELECT ON TABLE "{table_name}" FROM "{username}" CASCADE;')
+                        revoked_or_skipped_tables_count += 1
                     else:
-                        self.stdout.write(f"  Granting SELECT on table: {table_name}")
+                        self.stdout.write(f"  Ensuring SELECT on non-protected table: {table_name} (granting)")
                         cursor.execute(f'GRANT SELECT ON TABLE "{table_name}" TO "{username}";')
                         granted_tables_count += 1
 
+                # Also revoke permissions on all columns for protected tables
+                # This is an additional safeguard
+                for table_name in PROTECTED_TABLES:
+                    # Check if table exists before trying to revoke column permissions,
+                    # as PROTECTED_TABLES might list tables not in the current DB (e.g. from other apps)
+                    if table_name in all_tables:
+                        self.stdout.write(
+                            f"  Additionally ensuring no column-level SELECT on protected table: {table_name}"
+                        )
+                        cursor.execute(f'REVOKE SELECT ON "{table_name}" FROM "{username}" CASCADE;')
+
                 self.stdout.write(
-                    f"Granted SELECT on {granted_tables_count} table(s), skipped {skipped_tables_count} protected table(s)."  # noqa: E501
+                    f"SELECT granted on {granted_tables_count} table(s). SELECT explicitly revoked or confirmed absent on {revoked_or_skipped_tables_count} protected table(s)."  # noqa: E501
                 )
 
             if role_exists:
