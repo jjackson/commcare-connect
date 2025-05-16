@@ -1136,7 +1136,7 @@ class WorkerDeliveryTable(ClickableRowsTable):
     user = tables.Column(orderable=False, verbose_name="Name", footer="Total")
     suspended = SuspendedIndicatorColumn()
     last_active = DMYTColumn()
-    payment_unit = tables.Column(accessor="payment_unit__name", orderable=False)
+    payment_unit = tables.Column(orderable=False)
     started = DMYTColumn(accessor="started_delivery")
     delivered = tables.Column(accessor="completed", footer=lambda table: sum(x.completed for x in table.data))
     pending = tables.Column(footer=lambda table: sum(x.pending for x in table.data))
