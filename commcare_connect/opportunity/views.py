@@ -249,11 +249,6 @@ class OpportunityEdit(OrganizationUserMemberRoleMixin, UpdateView):
     def get_success_url(self):
         return reverse("opportunity:detail", args=(self.request.org.slug, self.object.id))
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["org_slug"] = self.request.org.slug
-        return kwargs
-
     def form_valid(self, form):
         opportunity = form.instance
         opportunity.modified_by = self.request.user.email
