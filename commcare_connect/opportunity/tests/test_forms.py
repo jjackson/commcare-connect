@@ -153,8 +153,8 @@ class TestOpportunityChangeForm:
             "users": "+1234567890\n+9876543210",
         }
 
-    def test_form_initialization(self, valid_opportunity, organization):
-        form = OpportunityChangeForm(instance=valid_opportunity, org_slug=organization.slug)
+    def test_form_initialization(self, valid_opportunity):
+        form = OpportunityChangeForm(instance=valid_opportunity)
         expected_fields = {
             "name",
             "description",
@@ -189,10 +189,10 @@ class TestOpportunityChangeForm:
             "currency",
         ],
     )
-    def test_required_fields(self, valid_opportunity, organization, field, base_form_data):
+    def test_required_fields(self, valid_opportunity, field, base_form_data):
         data = base_form_data.copy()
         data[field] = ""
-        form = OpportunityChangeForm(data=data, instance=valid_opportunity, org_slug=organization.slug)
+        form = OpportunityChangeForm(data=data, instance=valid_opportunity)
         assert not form.is_valid()
         assert field in form.errors
 
@@ -219,10 +219,10 @@ class TestOpportunityChangeForm:
             ),
         ],
     )
-    def test_field_validation(self, valid_opportunity, organization, base_form_data, test_data):
+    def test_field_validation(self, valid_opportunity, base_form_data, test_data):
         data = base_form_data.copy()
         data[test_data["field"]] = test_data["value"]
-        form = OpportunityChangeForm(data=data, instance=valid_opportunity, org_slug=organization.slug)
+        form = OpportunityChangeForm(data=data, instance=valid_opportunity)
         if test_data["error_expected"]:
             assert not form.is_valid()
             assert test_data["error_message"] in str(form.errors[test_data["field"]])
@@ -270,7 +270,7 @@ class TestOpportunityChangeForm:
 
         PaymentUnitFactory(opportunity=inactive_opp)
 
-        form = OpportunityChangeForm(data=base_form_data, instance=inactive_opp, org_slug=organization.slug)
+        form = OpportunityChangeForm(data=base_form_data, instance=inactive_opp)
 
         assert form.is_valid() == app_scenario["expected_valid"]
         if not app_scenario["expected_valid"]:
@@ -285,20 +285,16 @@ class TestOpportunityChangeForm:
             ({"currency": "USD", "additional_users": -5}, True),
         ],
     )
-    def test_valid_combinations(self, valid_opportunity, organization, base_form_data, data_updates, expected_valid):
+    def test_valid_combinations(self, valid_opportunity, base_form_data, data_updates, expected_valid):
         data = base_form_data.copy()
         data.update(data_updates)
-        form = OpportunityChangeForm(data=data, instance=valid_opportunity, org_slug=organization.slug)
+        form = OpportunityChangeForm(data=data, instance=valid_opportunity)
         assert form.is_valid() == expected_valid
 
-    def test_for_incomplete_opp(self, base_form_data, valid_opportunity, organization):
+    def test_for_incomplete_opp(self, base_form_data, valid_opportunity):
         data = data = base_form_data.copy()
         PaymentUnit.objects.filter(opportunity=valid_opportunity).delete()  # making opp incomplete explicitly
-        form = OpportunityChangeForm(
-            data=data,
-            instance=valid_opportunity,
-            org_slug=organization.slug,
-        )
+        form = OpportunityChangeForm(data=data, instance=valid_opportunity)
         assert not form.is_valid()
         assert "users" in form.errors
         assert "Please finish setting up the opportunity before inviting users." in form.errors["users"]
