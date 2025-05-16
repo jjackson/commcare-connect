@@ -1087,7 +1087,7 @@ class WorkerLearnTable(OrgContextTable):
     modules_completed = tables.TemplateColumn(
         accessor="modules_completed_percentage",
         template_code="""
-                            {% include "tailwind/components/progressbar/simple-progressbar.html" with text=flag progress=value|default:0 %}
+                            {% include "tailwind/components/progressbar/simple-progressbar.html" with text=flag percentage=value|default:0 %}
                         """,
     )
     completed_learning = tables.DateColumn(
@@ -1149,7 +1149,7 @@ class WorkerDeliveryTable(OrgContextTable):
     suspended = SuspendedIndicatorColumn()
     last_active = tables.Column()
     payment_unit = tables.Column(accessor="payment_unit__name", orderable=False)
-    started = tables.Column(accessor="started_delivery")
+    delivery_progress = tables.Column(accessor="total_visits", empty_values=())
     delivered = tables.Column(accessor="completed", footer=lambda table: sum(x.completed for x in table.data))
     pending = tables.Column(footer=lambda table: sum(x.pending for x in table.data))
     approved = tables.Column(footer=lambda table: sum(x.approved for x in table.data))
@@ -1171,7 +1171,7 @@ class WorkerDeliveryTable(OrgContextTable):
             "suspended",
             "last_active",
             "payment_unit",
-            "started",
+            "delivery_progress",
             "delivered",
             "pending",
             "approved",
@@ -1184,6 +1184,27 @@ class WorkerDeliveryTable(OrgContextTable):
         self.use_view_url = True
         super().__init__(*args, **kwargs)
         self._seen_users = set()
+
+
+    def render_delivery_progress(self, record):
+        current = record.completed_visits
+        total = record.total_visits
+
+        if not total:
+            return "-"
+
+        percentage = round((current / total) * 100, 2)
+
+        context = {
+            "current": current,
+            "percentage": percentage,
+            "total": total,
+            "number_style": True,
+        }
+
+        return render_to_string("tailwind/components/progressbar/simple-progressbar.html", context)
+
+
 
     def render_action(self, record):
         url = reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id, record.id))
