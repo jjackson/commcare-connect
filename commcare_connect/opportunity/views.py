@@ -1672,10 +1672,13 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
     raw_qs = request.GET.urlencode()
     query = f"?{raw_qs}" if raw_qs else ""
 
+    workers_count = UserInvite.objects.filter(opportunity_id=opp_id).count()
+    worker_label = f"Workers ({workers_count})"
+
     tabs = [
         {
             "key": "workers",
-            "label": "Workers",
+            "label": worker_label,
             "url": reverse("opportunity:worker_table", kwargs=base_kwargs) + query,
             "trigger": "loadWorkers",
         },
