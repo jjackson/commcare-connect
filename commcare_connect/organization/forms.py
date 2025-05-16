@@ -20,7 +20,7 @@ class OrganizationChangeForm(forms.ModelForm):
 
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
-            layout.Row(layout.Field("name"), css_class="flex flex-col"),
+            layout.Field("name"),
             layout.Div(
                 layout.Submit("submit", gettext("Update"), css_class="button button-md primary-dark"),
                 css_class="flex justify-end"
@@ -48,7 +48,6 @@ class MembershipForm(forms.ModelForm):
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
             layout.Row(
-                layout.HTML("<h4>Add new member</h4>"),
                 layout.Field("email", wrapper_class="col-md-5"),
                 layout.Field("role", wrapper_class="col-md-5"),
                 layout.Div(
