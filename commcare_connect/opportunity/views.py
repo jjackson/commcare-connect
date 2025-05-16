@@ -109,7 +109,6 @@ from commcare_connect.opportunity.tables import (
     WorkerPaymentsTable,
     WorkerStatusTable,
 )
-from commcare_connect.utils.tables import get_duration_min
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     bulk_update_payments_task,
@@ -141,6 +140,7 @@ from commcare_connect.users.models import User
 from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 from commcare_connect.utils.file import get_file_extension
+from commcare_connect.utils.tables import get_duration_min
 
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -998,6 +998,8 @@ def fetch_attachment(self, org_slug, blob_id):
 @org_member_required
 def verification_flags_config(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(pk=pk, org_slug=org_slug)
+    if opportunity.managed and not is_program_manager_of_opportunity(opportunity):
+        return redirect("opportunity:detail", org_slug=org_slug, pk=pk)
     verification_flags = OpportunityVerificationFlags.objects.filter(opportunity=opportunity).first()
     form = OpportunityVerificationFlagsConfigForm(instance=verification_flags, data=request.POST or None)
     deliver_unit_count = DeliverUnit.objects.filter(app=opportunity.deliver_app).count()
