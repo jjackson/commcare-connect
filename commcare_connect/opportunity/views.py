@@ -1999,7 +1999,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
         {
             "icon": "fa-clipboard-list-check",
             "name": "Services Delivered",
-            "status": "Awaiting Review",
+            "status": "Awaiting NM Review",
             "value": stats["flagged_deliveries_waiting_for_review"],
             "incr": stats["flagged_deliveries_waiting_for_review_since_yesterday"],
         },
@@ -2020,7 +2020,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
         {
             "title": "Workers",
             "sub_heading": "",
-            "value": "", #stats["deliveries_from_yesterday"]
+            "value": "",
             "url": status_url,
             "panels": [
                 {"icon": "fa-user-group", "name": "Workers", "status": "Invited", "value": stats["workers_invited"]},
@@ -2058,6 +2058,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "name": "Payments",
                     "status": "Earned",
                     "value": stats["total_accrued"],
+                    "incr": stats["accrued_since_yesterday"]
                 },
                 {
                     "icon": "fa-hand-holding-droplet",
