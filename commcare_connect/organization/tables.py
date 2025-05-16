@@ -20,15 +20,15 @@ class OrgMemberTable(tables.Table):
         sequence = ("index", "user", "accepted", "role")
 
     def render_accepted(self, value):
-        color = "green-600" if value else "orange-600"
-        bg_color = f"{color}/20"
+        text_color = "text-green-600" if value else "text-orange-600"
+        bg_color = "bg-green-600/20" if value else "bg-orange-600/20"
         text = "Accepted" if value else "Pending"
 
         return format_html(
             '<div class="flex justify-start text-sm font-normal truncate text-brand-deep-purple overflow-clip overflow-ellipsis">'
-            '<span class="badge badge-sm bg-{} text-{}">{}</span>'
+            '<span class="badge badge-sm {} {}">{}</span>'
             '</div>',
-            bg_color, color, text
+            bg_color, text_color, text
         )
 
     def render_role(self, value):
