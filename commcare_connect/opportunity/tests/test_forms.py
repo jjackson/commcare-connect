@@ -122,16 +122,6 @@ class TestOpportunityCreationForm:
 
 @pytest.mark.django_db
 class TestOpportunityChangeForm:
-    @pytest.fixture(autouse=True)
-    def setup_credentials_mock(self, monkeypatch):
-        self.mock_credentials = [
-            type("Credential", (), {"slug": "cert1", "name": "Work for test"}),
-            type("Credential", (), {"slug": "cert2", "name": "Work for test"}),
-        ]
-        monkeypatch.setattr(
-            "commcare_connect.connect_id_client.fetch_credentials", lambda org_slug: self.mock_credentials
-        )
-
     @pytest.fixture
     def valid_opportunity(self, organization):
         opp = OpportunityFactory(
@@ -161,8 +151,6 @@ class TestOpportunityChangeForm:
             "delivery_type": valid_opportunity.delivery_type.id,
             "end_date": (datetime.date.today() + datetime.timedelta(days=60)).isoformat(),
             "users": "+1234567890\n+9876543210",
-            "filter_country": "US",
-            "filter_credential": "cert1",
         }
 
     def test_form_initialization(self, valid_opportunity, organization):
@@ -177,8 +165,6 @@ class TestOpportunityChangeForm:
             "delivery_type",
             "end_date",
             "users",
-            "filter_country",
-            "filter_credential",
         }
         assert all(field in form.fields for field in expected_fields)
 
@@ -191,8 +177,6 @@ class TestOpportunityChangeForm:
             "is_test": valid_opportunity.is_test,
             "delivery_type": valid_opportunity.delivery_type.id,
             "end_date": valid_opportunity.end_date.isoformat(),
-            "filter_country": [""],
-            "filter_credential": [""],
         }
         assert all(form.initial.get(key) == value for key, value in expected_initial.items())
 
