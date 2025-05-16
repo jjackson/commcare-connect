@@ -4,7 +4,7 @@ from django.db import connection
 # Define tables that the role should NOT have SELECT access to.
 # Customize this list based on your application's needs.
 PROTECTED_TABLES = [
-    "auth_user",
+    "users_user",
     "django_session",
     "account_emailaddress",
     "account_emailconfirmation",
