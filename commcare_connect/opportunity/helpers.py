@@ -390,6 +390,15 @@ def get_opportunity_delivery_progress(opp_id):
     three_days_ago = today - timedelta(days=3)
     yesterday = today - timedelta(days=1)
 
+    accrued_since_yesterday = CompletedWork.objects.filter(
+        opportunity_access__opportunity_id=opp_id,
+        status_modified_date__gte=yesterday,
+        status=CompletedWorkStatus.approved
+    ).aggregate(
+        sum_accrued=Coalesce(Sum('saved_payment_accrued'), Value(0))
+    )['sum_accrued'] or 0
+
+
     aggregates = Opportunity.objects.filter(id=opp_id).aggregate(
         inactive_workers=OpportunityAnnotations.inactive_workers(three_days_ago),
         deliveries_from_yesterday=Count(
@@ -432,6 +441,7 @@ def get_opportunity_delivery_progress(opp_id):
         pending_invites=OpportunityAnnotations.pending_invites()
     )
     aggregates["payments_due"] = aggregates["total_accrued"] - aggregates["total_paid"]
+    aggregates["accrued_since_yesterday"] = accrued_since_yesterday
 
 
     return aggregates
