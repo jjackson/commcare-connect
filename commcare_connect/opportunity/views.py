@@ -1158,7 +1158,7 @@ def opportunity_user_invite(request, org_slug=None, pk=None):
     return render(
         request,
         "form.html",
-        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Invite Users", form=form),
+        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Invite Workers", form=form),
     )
 
 
@@ -1703,17 +1703,15 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
     import_export_delivery_urls = {
         "export_url": reverse(
             "opportunity:review_visit_export" if is_program_manager else "opportunity:visit_export",
-            args=(request.org.slug, opp_id)
+            args=(request.org.slug, opp_id),
         ),
         "import_url": reverse(
             "opportunity:review_visit_import" if is_program_manager else "opportunity:visit_import",
-            args=(request.org.slug, opp_id)
-        )
+            args=(request.org.slug, opp_id),
+        ),
     }
 
     visit_export_form = ReviewVisitExportForm() if is_program_manager else VisitExportForm()
-
-
 
     return render(
         request,
@@ -1726,7 +1724,7 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
             "export_form": export_form,
             "export_task_id": request.GET.get("export_task_id"),
             "path": path,
-            "import_export_delivery_urls": import_export_delivery_urls
+            "import_export_delivery_urls": import_export_delivery_urls,
         },
     )
 
