@@ -109,7 +109,6 @@ from commcare_connect.opportunity.tables import (
     WorkerPaymentsTable,
     WorkerStatusTable,
 )
-from commcare_connect.utils.tables import get_duration_min
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     bulk_update_payments_task,
@@ -141,6 +140,7 @@ from commcare_connect.users.models import User
 from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 from commcare_connect.utils.file import get_file_extension
+from commcare_connect.utils.tables import get_duration_min
 
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -393,7 +393,8 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
             },
         ]
         context["is_program_manager"] = is_program_manager_of_opportunity(request, object)
-
+        context["export_form"] = PaymentExportForm()
+        context["export_task_id"] = request.GET.get("export_task_id")
         return context
 
 
