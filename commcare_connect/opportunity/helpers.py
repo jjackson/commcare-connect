@@ -20,7 +20,7 @@ from django.db.models import (
     Subquery,
     Sum,
     Value,
-    When,
+    When, BooleanField,
 )
 from django.db.models.functions import Coalesce, Greatest, Round, TruncDate
 from django.utils.timezone import now
@@ -325,7 +325,10 @@ def get_worker_learn_table_data(opportunity):
         .values("min_date")
     )
 
-    assessments_qs = Assessment.objects.filter(user=OuterRef("user"), opportunity=OuterRef("opportunity"), passed=True)
+    assessment_exists = Assessment.objects.filter(
+        user=OuterRef("user"),
+        opportunity=OuterRef("opportunity")
+    )
 
     duration_subquery = (
         CompletedModule.objects.filter(opportunity_access=OuterRef("pk"))
@@ -343,7 +346,6 @@ def get_worker_learn_table_data(opportunity):
             ),
             default=None,
         ),
-        passed_assessment=Exists(assessments_qs),
         assesment_count=Count("assessment", distinct=True),
         learning_hours=Subquery(duration_subquery, output_field=DurationField()),
         modules_completed_percentage=Round(
