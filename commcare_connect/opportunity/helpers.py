@@ -325,11 +325,6 @@ def get_worker_learn_table_data(opportunity):
         .values("min_date")
     )
 
-    assessment_exists = Assessment.objects.filter(
-        user=OuterRef("user"),
-        opportunity=OuterRef("opportunity")
-    )
-
     duration_subquery = (
         CompletedModule.objects.filter(opportunity_access=OuterRef("pk"))
         .values("opportunity_access")
