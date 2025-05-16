@@ -1205,18 +1205,22 @@ class WorkerDeliveryTable(OrgContextTable):
         """
         return format_html(template, url)
 
-    def render_user(self, value):
+    def render_user(self, value, record):
         if value.id in self._seen_users:
             return ""
 
         self._seen_users.add(value.id)
+
+        url = reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id, record.id))
+
         return format_html(
             """
-            <div class="flex flex-col items-start w-40">
-                <p class="text-sm text-slate-900">{}</p>
-                <p class="text-xs text-slate-400">{}</p>
-            </div>
+                <a href="{}" class="w-40">
+                    <p class="text-sm text-slate-900">{}</p>
+                    <p class="text-xs text-slate-400">{}</p>
+                </a>
             """,
+            url,
             value.name,
             value.username,
         )
