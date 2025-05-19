@@ -11,8 +11,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage, storages
-from django.db.models import Case, Count, F, Max, OuterRef, Q, Subquery, Sum, When
-from django.db.models.fields import DecimalField
+from django.db.models import Count, Max, Q, Sum
 from django.db.models.functions import Greatest
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
@@ -1238,28 +1237,6 @@ def payment_report(request, org_slug, pk):
             cards=cards,
         ),
     )
-
-
-class PaymentInvoiceTableView(OrganizationUserMixin, SingleTableView):
-    model = PaymentInvoice
-    paginate_by = 25
-    table_class = PaymentInvoiceTable
-    template_name = "tables/single_table.html"
-
-    def get_table_kwargs(self):
-        kwargs = super().get_table_kwargs()
-        if not is_program_manager(self.request):  # noqa: E711
-            kwargs["exclude"] = ("pk",)
-        return kwargs
-
-    def get_queryset(self):
-        opportunity_id = self.kwargs["pk"]
-        opportunity = get_opportunity_or_404(org_slug=self.request.org.slug, pk=opportunity_id)
-        filter_kwargs = dict(opportunity=opportunity)
-        table_filter = self.request.GET.get("filter")
-        if table_filter is not None and table_filter in ["paid", "pending"]:
-            filter_kwargs["payment__isnull"] = table_filter == "pending"
-        return PaymentInvoice.objects.filter(**filter_kwargs).order_by("date")
 
 
 @org_member_required
