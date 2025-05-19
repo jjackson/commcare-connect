@@ -514,18 +514,35 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
     )
     if form.is_valid():
         form.save()
-        return redirect("opportunity:detail", org_slug, pk)
+
+        additional_visits = form.cleaned_data.get("additional_visits")
+        selected_users = form.cleaned_data.get("selected_users")
+        end_date = form.cleaned_data.get("end_date")
+        message_parts = []
+
+        if additional_visits and selected_users:
+            visit_text = f"{additional_visits} visit{'s' if additional_visits != 1 else ''}"
+            user_text = f"{len(selected_users)} worker{'s' if len(selected_users) != 1 else ''}"
+            message_parts.append(f"Added {visit_text} to {user_text}.")
+            if not opportunity.managed:
+                message_parts.append(f"Budget increased by {form.budget_increase:.2f}.")
+
+        if end_date:
+            message_parts.append(f"Extended opportunity end date to {end_date} for selected workers.")
+
+        messages.success(request, " ".join(message_parts))
+        return redirect("opportunity:add_budget_existing_users", org_slug, pk)
 
     tabs = [
         {
-            "key": "existing_users",
-            "label": "Existing Users",
+            "key": "existing_workers",
+            "label": "Existing Workers",
         },]
     # Nm are not allowed to increase the managed opportunity budget so do not provide that tab.
     if not opportunity.managed or is_program_manager_of_opportunity(request, opportunity):
         tabs.append({
-            "key": "new_users",
-            "label": "New Users",
+            "key": "new_workers",
+            "label": "New Workers",
         })
 
     path = [
@@ -564,7 +581,15 @@ def add_budget_new_users(request, org_slug=None, pk=None):
 
     if form.is_valid():
         form.save()
-        redirect_url = reverse("opportunity:detail", args=[org_slug, pk])
+        budget_increase = form.budget_increase
+        direction = "added to" if budget_increase >= 0 else "removed from"
+        messages.success(
+            request,
+            f"{opportunity.currency} {abs(form.budget_increase)} was {direction} the opportunity budget."
+        )
+
+        redirect_url = reverse("opportunity:add_budget_existing_users", args=[org_slug, pk])
+        redirect_url += "?active_tab=new_users"
         response = HttpResponse()
         response["HX-Redirect"] = redirect_url
         return response
