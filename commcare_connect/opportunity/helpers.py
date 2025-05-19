@@ -2,6 +2,7 @@ from collections import namedtuple
 from datetime import timedelta
 
 from django.db.models import (
+    BooleanField,
     Case,
     CharField,
     Count,
@@ -106,7 +107,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
             .values("opportunity_access_id")
             .annotate(min_visit_date=Min("visit_date"))
             .values("min_visit_date")[:1],
-            output_field=DateTimeField(null=True)
+            output_field=DateTimeField(null=True),
         )
 
         last_visit_sq = Subquery(
@@ -114,7 +115,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
             .values("opportunity_access_id")
             .annotate(max_visit_date=Max("visit_date"))
             .values("max_visit_date")[:1],
-            output_field=DateTimeField(null=True)
+            output_field=DateTimeField(null=True),
         )
 
         last_module_sq = Subquery(
@@ -122,7 +123,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
             .values("opportunity_access_id")
             .annotate(max_module_date=Max("date"))
             .values("max_module_date")[:1],
-            output_field=DateTimeField(null=True)
+            output_field=DateTimeField(null=True),
         )
 
         duplicate_sq = Subquery(
@@ -134,20 +135,18 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
             .values("opportunity_access_id")
             .annotate(duplicate_count=Count("id", distinct=True))
             .values("duplicate_count")[:1],
-            output_field=IntegerField()
+            output_field=IntegerField(),
         )
 
         def completed_work_status_subquery(status_value):
             return Subquery(
                 CompletedWork.objects.filter(
-                    opportunity_access_id=OuterRef("pk"),
-                    payment_unit=payment_unit,
-                    status=status_value
+                    opportunity_access_id=OuterRef("pk"), payment_unit=payment_unit, status=status_value
                 )
                 .values("opportunity_access_id")
                 .annotate(status_count=Count("id", distinct=True))
                 .values("status_count")[:1],
-                output_field=IntegerField()
+                output_field=IntegerField(),
             )
 
         pending_count_sq = completed_work_status_subquery(CompletedWorkStatus.pending)
@@ -338,8 +337,6 @@ def get_worker_learn_table_data(opportunity):
         .values("min_date")
     )
 
-    assessments_qs = Assessment.objects.filter(user=OuterRef("user"), opportunity=OuterRef("opportunity"), passed=True)
-
     duration_subquery = (
         CompletedModule.objects.filter(opportunity_access=OuterRef("pk"))
         .values("opportunity_access")
@@ -356,7 +353,6 @@ def get_worker_learn_table_data(opportunity):
             ),
             default=None,
         ),
-        passed_assessment=Exists(assessments_qs),
         assesment_count=Count("assessment", distinct=True),
         learning_hours=Subquery(duration_subquery, output_field=DurationField()),
         modules_completed_percentage=Round(

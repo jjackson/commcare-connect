@@ -26,8 +26,16 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.users.models import User
-from commcare_connect.utils.tables import OrgContextTable, IndexColumn, ClickableRowsTable, \
-    DurationColumn, DMYTColumn, TEXT_CENTER_ATTR, STOP_CLICK_PROPAGATION_ATTR, merge_attrs
+from commcare_connect.utils.tables import (
+    STOP_CLICK_PROPAGATION_ATTR,
+    TEXT_CENTER_ATTR,
+    ClickableRowsTable,
+    DMYTColumn,
+    DurationColumn,
+    IndexColumn,
+    OrgContextTable,
+    merge_attrs,
+)
 
 
 class OpportunityContextTable(OrgContextTable):
@@ -648,7 +656,6 @@ class BaseOpportunityList(ClickableRowsTable):
     def row_click_url(self, record):
         return reverse("opportunity:detail", args=(self.org_slug, record.id))
 
-
     def render_status(self, value):
         if value == 0:
             badge_class = "badge badge-sm bg-green-600/20 text-green-600"
@@ -687,10 +694,9 @@ class BaseOpportunityList(ClickableRowsTable):
         url = f"{url}?active_tab={active_tab}"
 
         if sort:
-            url += "&"+sort
+            url += "&" + sort
         value = format_html('<a href="{}">{}</a>', url, value)
         return self._render_div(value, extra_classes=self.stats_style)
-
 
 
 class OpportunityTable(BaseOpportunityList):
@@ -698,7 +704,7 @@ class OpportunityTable(BaseOpportunityList):
 
     pending_invites = tables.Column(attrs=col_attrs)
     inactive_workers = tables.Column(attrs=col_attrs)
-    pending_approvals =tables.Column(attrs=col_attrs)
+    pending_approvals = tables.Column(attrs=col_attrs)
     payments_due = tables.Column(attrs=col_attrs)
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="", attrs=STOP_CLICK_PROPAGATION_ATTR)
 
@@ -1026,9 +1032,9 @@ class WorkerPaymentsTable(tables.Table):
     suspended = SuspendedIndicatorColumn()
     last_active = DMYTColumn()
     payment_accrued = tables.Column(verbose_name="Accrued", footer=lambda table: sum(x.payment_accrued or 0 for x in table.data))
-    total_paid = tables.Column(accessor="total_paid_d", footer=lambda table: sum(x.total_paid_d or 0 for x in table.data))
+    total_paid = tables.Column(verbose_name="Total Paid", footer=lambda table: sum(x.total_paid or 0 for x in table.data))
     last_paid = DMYTColumn()
-    confirmed_paid = tables.Column(verbose_name="Confirm")
+    confirmed_paid = tables.Column(verbose_name="Confirm", accessor="total_confirmed_paid")
 
     def __init__(self, *args, **kwargs):
         self.use_view_url = True
@@ -1076,7 +1082,7 @@ class WorkerLearnTable(ClickableRowsTable):
                         """,
     )
     completed_learning = DMYTColumn( accessor="completed_learn", verbose_name="Completed Learning")
-    assessment = tables.Column(accessor="passed_assessment")
+    assessment = tables.Column(accessor="assessment_status")
     attempts = tables.Column(accessor="assesment_count")
     learning_hours = DurationColumn()
     action = tables.TemplateColumn(
@@ -1112,11 +1118,6 @@ class WorkerLearnTable(ClickableRowsTable):
 
     def row_click_url(self, record):
         return reverse("opportunity:worker_learn_progress", args=(self.org_slug, self.opp_id, record.id))
-
-    def render_assessment(self, value, record):
-        if not record.date_learn_started:
-            return "--"
-        return "Passed" if value else "Failed"
 
     def render_action(self, record):
         url = reverse("opportunity:worker_learn_progress", args=(self.org_slug, self.opp_id, record.id))
@@ -1272,15 +1273,10 @@ class WorkerDeliveryTable(ClickableRowsTable):
 class WorkerLearnStatusTable(tables.Table):
     index = IndexColumn()
     module_name = tables.Column(accessor="module__name", orderable=False)
-    date = tables.DateColumn(format="d-M-Y", verbose_name="Date Completed", accessor="date", orderable=False)
+    date = DMYTColumn(verbose_name="Date Completed", accessor="date", orderable=False)
     duration = DurationColumn(accessor="duration", orderable=False)
     time = tables.Column(accessor="date", verbose_name="Time Completed", orderable=False)
 
-    def render_time(self, value):
-        if value:
-            value = localtime(value)
-            return value.strftime("%H:%M")
-        return "--"
 
     class Meta:
-        sequence = ("index", "module_name", "date", "time", "duration")
+        sequence = ("index", "module_name", "date", "duration")
