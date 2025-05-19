@@ -11,7 +11,8 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage, storages
-from django.db.models import Count, Max, Q, Sum
+from django.db.models import Count, Max, Q, Sum, Case, When, F, OuterRef, Subquery
+from django.db.models.fields import DecimalField
 from django.db.models.functions import Greatest
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
@@ -558,9 +559,6 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=pk)
     opportunity_access = OpportunityAccess.objects.filter(opportunity=opportunity)
     opportunity_claims = OpportunityClaim.objects.filter(opportunity_access__in=opportunity_access)
-    program_manager = (
-        getattr(request, "org_membership", None) and request.org_membership.is_program_manager
-    ) or request.user.is_superuser
 
     form = AddBudgetExistingUsersForm(
         opportunity_claims=opportunity_claims,
@@ -571,15 +569,35 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
         form.save()
         return redirect("opportunity:detail", org_slug, pk)
 
+    tabs = [
+        {
+            "key": "existing_users",
+            "label": "Existing Users",
+        },]
+    # Nm are not allowed to increase the managed opportunity budget so do not provide that tab.
+    if not opportunity.managed or is_program_manager_of_opportunity(request, opportunity):
+        tabs.append({
+            "key": "new_users",
+            "label": "New Users",
+        })
+
+    path = [
+        {"title": "Opportunities", "url": reverse("opportunity:list", args=(request.org.slug,))},
+        {"title": opportunity.name, "url": reverse("opportunity:detail", args=(request.org.slug, opportunity.pk))},
+        {"title": "Add budget", }
+    ]
+
+
     return render(
         request,
         "opportunity/add_visits_existing_users.html",
         {
             "form": form,
+            "tabs": tabs,
+            "path": path,
             "opportunity_claims": opportunity_claims,
             "budget_per_visit": opportunity.budget_per_visit_new,
             "opportunity": opportunity,
-            "disable_add_budget_for_new_users": opportunity.managed and not program_manager,
         },
     )
 
@@ -708,10 +726,16 @@ def add_payment_unit(request, org_slug=None, pk=None):
     elif request.POST:
         messages.error(request, "Invalid Data")
         return redirect("opportunity:add_payment_units", org_slug=request.org.slug, pk=opportunity.id)
+
+    path = [
+        {"title": "Opportunities", "url": reverse("opportunity:list", args=(request.org.slug,))},
+        {"title": opportunity.name, "url": reverse("opportunity:detail", args=(request.org.slug, opportunity.pk))},
+        {"title": "Payment unit",}
+    ]
     return render(
         request,
         "partial_form.html" if request.GET.get("partial") == "True" else "form.html",
-        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Payment Unit Create", form=form),
+        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Payment Unit Create", form=form, path=path),
     )
 
 
@@ -764,10 +788,16 @@ def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
         )
         messages.success(request, f"Payment unit {form.instance.name} updated. Please reset the budget")
         return redirect("opportunity:finalize", org_slug=request.org.slug, pk=opportunity.id)
+
+    path = [
+        {"title": "Opportunities", "url": reverse("opportunity:list", args=(request.org.slug,))},
+        {"title": opportunity.name, "url": reverse("opportunity:detail", args=(request.org.slug, opportunity.pk))},
+        {"title": "Payment unit", }
+    ]
     return render(
         request,
         "form.html",
-        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Payment Unit Edit", form=form),
+        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Payment Unit Edit", form=form, path=path),
     )
 
 
@@ -1180,7 +1210,7 @@ def import_catchment_area(request, org_slug=None, pk=None):
 @org_member_required
 def opportunity_user_invite(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(org_slug=request.org.slug, pk=pk)
-    form = OpportunityUserInviteForm(data=request.POST or None, org_slug=request.org.slug, opportunity=opportunity)
+    form = OpportunityUserInviteForm(data=request.POST or None, opportunity=opportunity)
     if form.is_valid():
         users = form.cleaned_data["users"]
         if users:
@@ -1702,10 +1732,12 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
     raw_qs = request.GET.urlencode()
     query = f"?{raw_qs}" if raw_qs else ""
 
+    workers_count = UserInvite.objects.filter(opportunity_id=opp_id).count()
+
     tabs = [
         {
             "key": "workers",
-            "label": "Workers",
+            "label": f"Workers ({workers_count})",
             "url": reverse("opportunity:worker_table", kwargs=base_kwargs) + query,
             "trigger": "loadWorkers",
         },
@@ -1790,14 +1822,13 @@ def worker_delivery(request, org_slug=None, opp_id=None):
 @org_member_required
 def worker_payments(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
+
     query_set = OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0).order_by(
         "-payment_accrued"
     )
     query_set = query_set.annotate(
         last_active=Greatest(Max("uservisit__visit_date"), Max("completedmodule__date"), "date_learn_started"),
         last_paid=Max("payment__date_paid"),
-        confirmed_paid=Sum("payment__amount", filter=Q(payment__confirmed=True)),
-        total_paid_d=Sum("payment__amount"),
     )
     table = WorkerPaymentsTable(query_set)
     RequestConfig(request, paginate={"per_page": 10}).configure(table)
