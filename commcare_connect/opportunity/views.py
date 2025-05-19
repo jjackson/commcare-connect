@@ -505,9 +505,6 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=pk)
     opportunity_access = OpportunityAccess.objects.filter(opportunity=opportunity)
     opportunity_claims = OpportunityClaim.objects.filter(opportunity_access__in=opportunity_access)
-    program_manager = (
-        getattr(request, "org_membership", None) and request.org_membership.is_program_manager
-    ) or request.user.is_superuser
 
     form = AddBudgetExistingUsersForm(
         opportunity_claims=opportunity_claims,
@@ -547,7 +544,6 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
             "opportunity_claims": opportunity_claims,
             "budget_per_visit": opportunity.budget_per_visit_new,
             "opportunity": opportunity,
-            "disable_add_budget_for_new_users": opportunity.managed and not program_manager,
         },
     )
 
