@@ -1901,6 +1901,8 @@ def opportunity_worker_progress(request, org_slug, opp_id):
     rejected_percentage = safe_percent(aggregates["rejected_deliveries"], aggregates["total_deliveries"])
     earned_percentage = safe_percent(aggregates["total_accrued"], aggregates["total_budget"])
     paid_percentage = safe_percent(aggregates["total_paid"], aggregates["total_accrued"])
+    visits_since_yesterday_percent = safe_percent(aggregates["visits_since_yesterday"],
+                                                  aggregates["maximum_visit_in_a_day"])
 
     worker_progress = [
         {
@@ -1911,14 +1913,14 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                     "total": aggregates["maximum_visit_in_a_day"],
                     "value": aggregates["maximum_visit_in_a_day"],
                     "badge_type": False,
-                    "percent": 100,
+                    "percent": 100 if aggregates["maximum_visit_in_a_day"] else 0,
                 },
                 {
                     "title": "Active Yesterday",
-                    "total": aggregates["maximum_visit_in_a_day"],
-                    "value": aggregates["average_visits_per_day"],
+                    "total": aggregates["visits_since_yesterday"],
+                    "value": aggregates["visits_since_yesterday"],
                     "badge_type": False,
-                    "percent": 100,
+                    "percent": visits_since_yesterday_percent,
                 },
             ],
         },

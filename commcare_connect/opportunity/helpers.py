@@ -449,6 +449,7 @@ def get_opportunity_delivery_progress(opp_id):
 
 def get_opportunity_worker_progress(opp_id):
     today = now().date()
+    yesterday = today - timedelta(days=1)
     opportunity = Opportunity.objects.filter(id=opp_id).values("start_date", "end_date", "total_budget").first()
 
     aggregates = Opportunity.objects.filter(id=opp_id).aggregate(
@@ -466,14 +467,10 @@ def get_opportunity_worker_progress(opp_id):
         total_accrued=OpportunityAnnotations.total_accrued(),
         total_paid=OpportunityAnnotations.total_paid(),
         total_visits=Count("uservisit", distinct=True),
+        visits_since_yesterday=Count("uservisit", filter=Q(uservisit__visit_date__gte=yesterday), distinct=True)
     )
     aggregates.update(opportunity)
 
-    start_date = aggregates["start_date"]
-    end_date = aggregates["end_date"] or today
-    effective_end_date = min(end_date, today)
-
-    total_days = max((effective_end_date - start_date).days, 1)
 
     max_visits_qs = (
         UserVisit.objects.filter(opportunity_id=opp_id)
@@ -485,11 +482,6 @@ def get_opportunity_worker_progress(opp_id):
     )
 
     maximum_visit_in_a_day = max_visits_qs.first() or 0
-
-    aggregates["total_days"] = total_days
-    aggregates["average_visits_per_day"] = (
-        round(float(aggregates["total_visits"]) / total_days, 1) if aggregates["total_visits"] and total_days else 0
-    )
 
     aggregates["maximum_visit_in_a_day"] = maximum_visit_in_a_day
 
