@@ -1707,6 +1707,8 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     base_kwargs = {"org_slug": org_slug, "opp_id": opp_id}
     export_form = PaymentExportForm()
+    visit_export_form = VisitExportForm()
+    review_visit_export_form = ReviewVisitExportForm()
 
     path = [
         {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
@@ -1748,9 +1750,14 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
 
     is_program_manager = opp.managed and is_program_manager_of_opportunity(request, opp)
 
+
     import_export_delivery_urls = {
-        "export_url": reverse(
-            "opportunity:review_visit_export" if is_program_manager else "opportunity:visit_export",
+        "export_url_for_pm": reverse(
+            "opportunity:review_visit_export",
+            args=(request.org.slug, opp_id),
+        ),
+        "export_url_for_nm": reverse(
+            "opportunity:visit_export",
             args=(request.org.slug, opp_id),
         ),
         "import_url": reverse(
@@ -1759,7 +1766,11 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
         ),
     }
 
-    visit_export_form = ReviewVisitExportForm() if is_program_manager else VisitExportForm()
+    import_visit_helper_text = _(
+        'The file must contain at least the "Visit ID"{extra} and "Status" column. The import is case-insensitive.'
+    ).format(extra=_(', "Justification"') if opp.managed else "")
+
+    export_user_visit_title = _("Import PM Review Sheet" if is_program_manager else "Import Verified Visits")
 
     return render(
         request,
@@ -1773,6 +1784,9 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
             "export_task_id": request.GET.get("export_task_id"),
             "path": path,
             "import_export_delivery_urls": import_export_delivery_urls,
+            "import_visit_helper_text": import_visit_helper_text,
+            "export_user_visit_title": export_user_visit_title,
+            "review_visit_export_form": review_visit_export_form
         },
     )
 
