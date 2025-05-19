@@ -2,6 +2,7 @@ from collections import namedtuple
 from datetime import timedelta
 
 from django.db.models import (
+    BooleanField,
     Case,
     CharField,
     Count,
@@ -20,7 +21,7 @@ from django.db.models import (
     Subquery,
     Sum,
     Value,
-    When, BooleanField,
+    When,
 )
 from django.db.models.functions import Coalesce, Greatest, Round, TruncDate
 from django.utils.timezone import now
@@ -163,7 +164,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
             .values("opportunity_access_id")
             .annotate(min_visit_date=Min("visit_date"))
             .values("min_visit_date")[:1],
-            output_field=DateTimeField(null=True)
+            output_field=DateTimeField(null=True),
         )
 
         last_visit_sq = Subquery(
@@ -171,7 +172,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
             .values("opportunity_access_id")
             .annotate(max_visit_date=Max("visit_date"))
             .values("max_visit_date")[:1],
-            output_field=DateTimeField(null=True)
+            output_field=DateTimeField(null=True),
         )
 
         last_module_sq = Subquery(
@@ -179,20 +180,30 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
             .values("opportunity_access_id")
             .annotate(max_module_date=Max("date"))
             .values("max_module_date")[:1],
-            output_field=DateTimeField(null=True)
+            output_field=DateTimeField(null=True),
+        )
+
+        duplicate_sq = Subquery(
+            CompletedWork.objects.filter(
+                opportunity_access_id=OuterRef("pk"),
+                payment_unit=payment_unit,
+                saved_completed_count__gt=1,
+            )
+            .values("opportunity_access_id")
+            .annotate(duplicate_count=Count("id", distinct=True))
+            .values("duplicate_count")[:1],
+            output_field=IntegerField(),
         )
 
         def completed_work_status_subquery(status_value):
             return Subquery(
                 CompletedWork.objects.filter(
-                    opportunity_access_id=OuterRef("pk"),
-                    payment_unit=payment_unit,
-                    status=status_value
+                    opportunity_access_id=OuterRef("pk"), payment_unit=payment_unit, status=status_value
                 )
                 .values("opportunity_access_id")
                 .annotate(status_count=Count("id", distinct=True))
                 .values("status_count")[:1],
-                output_field=IntegerField()
+                output_field=IntegerField(),
             )
 
         pending_count_sq = completed_work_status_subquery(CompletedWorkStatus.pending)
@@ -204,6 +215,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
         queryset = (
             OpportunityAccess.objects.filter(opportunity=opportunity)
             .annotate(
+                payment_unit_id=Value(payment_unit.pk),
                 payment_unit=Value(payment_unit.name, output_field=CharField()),
                 started_delivery=Coalesce(started_delivery_sq, Value(None, output_field=DateTimeField())),
                 _last_visit_val=Coalesce(last_visit_sq, Value(None, output_field=DateTimeField())),
@@ -211,6 +223,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
                 pending=Coalesce(pending_count_sq, Value(0)),
                 approved=Coalesce(approved_count_sq, Value(0)),
                 rejected=Coalesce(rejected_count_sq, Value(0)),
+                duplicate=Coalesce(duplicate_sq, Value(0)),
                 over_limit=Coalesce(over_limit_count_sq, Value(0)),
                 incomplete=Coalesce(incomplete_count_sq, Value(0)),
             )
@@ -230,7 +243,6 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
         access_objects += queryset
     access_objects.sort(key=lambda a: a.user.name)
     return access_objects
-
 
 
 def get_payment_report_data(opportunity: Opportunity):
