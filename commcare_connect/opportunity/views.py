@@ -141,6 +141,7 @@ from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.tables import get_duration_min
+from django.utils.translation import gettext as _
 
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
