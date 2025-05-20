@@ -268,6 +268,7 @@
   id="visit-actions"
   hx-swap-oob="true">
 {% if is_program_manager %}
+  {% if user_visit.review_created_on %}
   <div class="flex gap-4">
     <form hx-post="{% url "opportunity:user_visit_review" request.org.slug user_visit.opportunity_id %}"
       hx-swap="none">
@@ -276,6 +277,7 @@
       <button class="button button-md primary-dark" value="agree" name="review_status">Agree</button>
     </form>
   </div>
+  {% endif %}
 {% else %}
   <div>
     <button class="button button-md positive-light"
