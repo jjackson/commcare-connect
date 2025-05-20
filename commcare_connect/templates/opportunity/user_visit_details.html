@@ -71,8 +71,6 @@
         this.modalCurrentIndex = index;
     }
 }">
-
-
   <!-- Message Section -->
   {% if user_visit.justification %}
   <div class="px-4 py-3 mt-1 mb-3 border rounded-md border-gray-200 bg-slate-50">
@@ -169,10 +167,29 @@
   <hr class="h-px bg-gray-200 border-0">
 
   <!-- Map -->
+  {% if user_visit.location %}
   <div>
     <p class="mb-3 text-sm font-medium text-brand-deep-purple">Map</p>
-    <div class="w-full rounded-lg h-64" id="user-visit-map"></div>
+    <div class="relative">
+      <div class="w-full rounded-lg h-64" id="user-visit-map"></div>
+      <div id="mapbox-menu" class="absolute top-0 left-0 m-1 inline-flex primary-light rounded-lg">
+        <label class="py-1 px-2 text-sm has-checked:bg-brand-indigo has-checked:text-white rounded-lg">
+          <input class="hidden" type="radio" name="options" id="streets-v12" checked> Streets
+        </label>
+        <label class="py-1 px-2 text-sm has-checked:bg-brand-indigo has-checked:text-white rounded-lg">
+          <input class="hidden" type="radio" name="options" id="satellite-streets-v12"> Satellite
+        </label>
+      </div>
+
+      <div id="legend" class="absolute right-0 top-0 bg-white/75 p-2 rounded-lg m-1">
+        <h4 class="text-sm font-bold">Service Records</h4>
+        <div class="text-sm"><i class="fa-solid fa-location-dot text-green-600"></i> Under review</div>
+        <div class="text-sm"><i class="fa-solid fa-location-dot text-sky-600"></i> Closest from this user</div>
+        <div class="text-sm"><i class="fa-solid fa-location-dot text-red-600"></i> Closest from others</div>
+      </div>
+    </div>
   </div>
+  {% endif %}
 
   <!-- Popup Modal -->
   <div x-cloak
