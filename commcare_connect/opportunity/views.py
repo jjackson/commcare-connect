@@ -1454,7 +1454,6 @@ def get_user_visit_counts(opportunity_access_id: int, date=None):
             pending_review=Count(
                 "id",
                 filter=Q(
-                    status=VisitValidationStatus.approved,
                     review_status=VisitReviewStatus.pending,
                     review_created_on__isnull=False,
                 ),
@@ -1462,7 +1461,6 @@ def get_user_visit_counts(opportunity_access_id: int, date=None):
             disagree=Count(
                 "id",
                 filter=Q(
-                    status=VisitValidationStatus.approved,
                     review_status=VisitReviewStatus.disagree,
                     review_created_on__isnull=False,
                 ),
@@ -1622,7 +1620,6 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
             filter_kwargs.update(
                 {
                     "review_status": VisitReviewStatus.pending,
-                    "status": VisitValidationStatus.approved,
                     "review_created_on__isnull": False,
                 }
             )
@@ -1630,7 +1627,6 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
             filter_kwargs.update(
                 {
                     "review_status": VisitReviewStatus.disagree,
-                    "status": VisitValidationStatus.approved,
                     "review_created_on__isnull": False,
                 }
             )
