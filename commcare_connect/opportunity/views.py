@@ -1555,7 +1555,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                 dynamic_tabs = [
                     {
                         "name": "pending_review",
-                        "label": "Review",
+                        "label": "PM Review",
                         "count": user_visit_counts.get("pending_review", 0),
                     },
                     {
