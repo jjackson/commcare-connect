@@ -4,7 +4,7 @@
 
 {% include 'tailwind/components/breadcrumbs.html' with path=path %}
 
-<div class="flex flex-col w-full gap-2" x-data="opportunityTabs()" x-init="init()">
+<div x-cloak class="flex flex-col w-full gap-2" x-data="opportunityTabs()" x-init="init()">
   <!-- Tabs -->
   <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
     <ul class="tabs">

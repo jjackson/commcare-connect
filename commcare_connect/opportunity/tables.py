@@ -834,7 +834,7 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
             actions.append(
                 {
                     "title": "View Invoices",
-                    "url": reverse("opportunity:invoice_list", args=[record.organization.slug, record.id]),
+                    "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.id]),
                 }
             )
 
@@ -1009,6 +1009,7 @@ class WorkerStatusTable(tables.Table):
     user = UserInfoColumn()
     suspended = SuspendedIndicatorColumn()
     invited_date = DMYTColumn()
+    accepted = columns.Column()
     last_active = DMYTColumn()
     started_learn = DMYTColumn(verbose_name="Started Learn", accessor="date_learn_started")
     completed_learn = DMYTColumn()
