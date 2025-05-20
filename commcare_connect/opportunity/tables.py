@@ -830,6 +830,8 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
 class UserVisitVerificationTable(tables.Table):
     date_time = columns.DateTimeColumn(verbose_name="Date", accessor="visit_date", format="d M, Y H:i")
     entity_name = columns.Column(verbose_name="Entity Name")
+    deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
+    payment_unit = columns.Column(verbose_name="Payment Unit", accessor="completed_work__payment_unit__name")
     flags = columns.TemplateColumn(
         verbose_name="Flags",
         orderable=False,
@@ -865,6 +867,8 @@ class UserVisitVerificationTable(tables.Table):
         sequence = (
             "date_time",
             "entity_name",
+            "deliver_unit",
+            "payment_unit",
             "flags",
             "last_activity",
             "icons",
