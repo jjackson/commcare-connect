@@ -1,5 +1,6 @@
 import datetime
 import json
+import sys
 from collections import Counter, defaultdict
 from functools import reduce
 from http import HTTPStatus
@@ -1648,8 +1649,10 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
 @org_member_required
 def user_visit_details(request, org_slug, opp_id, pk):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
-
     user_visit = get_object_or_404(UserVisit, pk=pk, opportunity=opportunity)
+    verification_flags_config = opportunity.opportunityverificationflags
+    deliver_unit_flags_config = DeliverUnitFlagRules.objects.filter(opportunity=opportunity, deliver_unit=user_visit.deliver_unit)
+
     serializer = XFormSerializer(data=user_visit.form_json)
     serializer.is_valid()
     xform = serializer.save()
@@ -1666,6 +1669,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
         "status": user_visit.get_status_display(),
         "visit_date": user_visit.visit_date,
     }
+    closest_distance = sys.maxsize
     if user_visit.location:
         locations = UserVisit.objects.filter(opportunity=user_visit.opportunity).exclude(pk=pk).select_related("user")
         lat, lon, _, precision = user_visit.location.split(" ")
@@ -1674,6 +1678,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
                 continue
             other_lat, other_lon, _, other_precision = loc.location.split(" ")
             dist = distance.distance((lat, lon), (other_lat, other_lon))
+            closest_distance = int(min(closest_distance, dist.m))
             if dist.m <= 250:
                 visit_data = {
                     "entity_name": loc.entity_name,
@@ -1702,6 +1707,9 @@ def user_visit_details(request, org_slug, opp_id, pk):
             other_forms=other_forms[:5],
             visit_data=visit_data,
             is_program_manager=is_program_manager_of_opportunity(request, opportunity),
+            closest_distance=closest_distance,
+            verification_flags_config=verification_flags_config,
+            deliver_unit_flags_config=deliver_unit_flags_config,
         ),
     )
 
