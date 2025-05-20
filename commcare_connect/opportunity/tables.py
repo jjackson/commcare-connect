@@ -928,7 +928,8 @@ class UserVisitVerificationTable(tables.Table):
                 status.append(record.review_status)
         if record.status in VisitValidationStatus:
             if (
-                record.review_status in VisitReviewStatus.pending.value
+                record.review_status != VisitReviewStatus.agree.value
+                and record.review_created_on
                 and record.status == VisitValidationStatus.approved
             ):
                 status.append("approved_pending_review")
