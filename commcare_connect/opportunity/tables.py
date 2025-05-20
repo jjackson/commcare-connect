@@ -983,7 +983,6 @@ class WorkerStatusTable(tables.Table):
     user = UserInfoColumn()
     suspended = SuspendedIndicatorColumn()
     invited_date = DMYTColumn()
-    accepted = columns.Column()
     last_active = DMYTColumn()
     started_learn = DMYTColumn(verbose_name="Started Learn", accessor="date_learn_started")
     completed_learn = DMYTColumn()
