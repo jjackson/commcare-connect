@@ -85,13 +85,14 @@ class OpportunityAnnotations:
     def pending_invites():
         return Count(
             "userinvite",
-            filter=~Q(userinvite__status=UserInviteStatus.accepted),
+            filter=~Q(userinvite__status=UserInviteStatus.not_found)
+                   & ~Q(userinvite__status=UserInviteStatus.accepted),
             distinct=True,
         )
 
     @staticmethod
     def workers_invited():
-        return Count("userinvite", distinct=True)
+        return Count("userinvite", distinct=True, filter=~Q(userinvite__status=UserInviteStatus.not_found))
 
     @staticmethod
     def started_learning():

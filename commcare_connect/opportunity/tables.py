@@ -952,7 +952,10 @@ class UserInfoColumn(tables.Column):
         kwargs.setdefault("order_by", "user__name")
         super().__init__(*args, **kwargs)
 
-    def render(self, value):
+    def render(self, value, record):
+        if not record.accepted:
+            return "-"
+
         return format_html(
             """
             <div class="flex flex-col items-start w-40">
@@ -1159,7 +1162,11 @@ class WorkerDeliveryTable(ClickableRowsTable):
         """
         return format_html(template, url)
 
-    def render_user(self, value):
+    def render_user(self, value, record):
+
+        if not record.accepted:
+            return "-"
+
         if value.id in self._seen_users:
             return ""
 
