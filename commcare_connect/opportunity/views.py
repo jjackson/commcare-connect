@@ -1751,8 +1751,7 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
     raw_qs = request.GET.urlencode()
     query = f"?{raw_qs}" if raw_qs else ""
 
-    workers_count = UserInvite.objects.filter(opportunity_id=opp_id).count()
-
+    workers_count = UserInvite.objects.filter(opportunity_id=opp_id).exclude(status=UserInviteStatus.not_found).count()
     tabs = [
         {
             "key": "workers",
