@@ -952,6 +952,8 @@ def approve_visit(request, org_slug=None, pk=None):
         user_visit.status = VisitValidationStatus.approved
         if user_visit.opportunity.managed:
             user_visit.review_created_on = now()
+            if user_visit.review_status == VisitReviewStatus.disagree:
+                user_visit.review_status = VisitReviewStatus.pending
 
             if user_visit.flagged:
                 justification = request.POST.get("justification")
