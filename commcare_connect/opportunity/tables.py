@@ -921,7 +921,7 @@ class UserVisitVerificationTable(tables.Table):
             )
 
         status = []
-        if record.opportunity.managed and record.review_status:
+        if record.opportunity.managed and record.review_status and record.review_created_on:
             if record.review_status == VisitReviewStatus.pending.value:
                 status.append("pending_review")
             else:
