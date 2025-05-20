@@ -1399,6 +1399,9 @@ def user_visit_verification(request, org_slug, opp_id, pk):
     flagged_info = defaultdict(lambda: {"name": "", "approved": 0, "pending": 0, "rejected": 0})
     for visit in visits:
         for flag in visit.flags:
+            if flag == "form_submission_period":
+                flag = "Off Hours"
+            flag = flag.capitalize()
             if visit.status == VisitValidationStatus.approved:
                 flagged_info[flag]["approved"] += 1
             if visit.status == VisitValidationStatus.rejected:
