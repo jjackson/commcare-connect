@@ -1,4 +1,5 @@
 import itertools
+from urllib.parse import urlencode
 
 import django_tables2 as tables
 from crispy_forms.helper import FormHelper
@@ -721,17 +722,19 @@ class OpportunityTable(BaseOpportunityList):
         return self.render_worker_list_url_column(value=value, opp_id=record.id)
 
     def render_inactive_workers(self, value, record):
-        return self.render_worker_list_url_column(value=value, opp_id=record.id, sort='sort=last_active')
+        return self.render_worker_list_url_column(value=value, opp_id=record.id, sort="sort=last_active")
 
     def render_pending_approvals(self, value, record):
-        return self.render_worker_list_url_column(value=value, opp_id=record.id, active_tab="delivery",
-                                                  sort='sort=-pending')
+        return self.render_worker_list_url_column(
+            value=value, opp_id=record.id, active_tab="delivery", sort="sort=-pending"
+        )
 
     def render_payments_due(self, value, record):
         if value is None:
             value = 0
-        return self.render_worker_list_url_column(value=value, opp_id=record.id, active_tab="payments",
-                                                  sort='sort=-total_paid')
+        return self.render_worker_list_url_column(
+            value=value, opp_id=record.id, active_tab="payments", sort="sort=-total_paid"
+        )
 
     def render_actions(self, record):
         actions = [
@@ -1129,7 +1132,51 @@ class WorkerLearnTable(ClickableRowsTable):
         )
 
 
-class WorkerDeliveryTable(ClickableRowsTable):
+class TotalFlagCountsColumn(tables.Column):
+    def __init__(self, *args, status=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = status
+
+    def render_footer(self, bound_column, table):
+        total = sum(bound_column.accessor.resolve(row) for row in table.data)
+
+        url = reverse("opportunity:worker_flag_counts", args=[table.org_slug, table.opp_id])
+        params = {"status": self.status}
+        full_url = f"{url}?{urlencode(params)}"
+
+        return render_to_string(
+            "tailwind/components/worker_page/fetch_flag_counts.html",
+            {
+                "counts_url": full_url,
+                "value": total,
+                "status": self.status,
+            },
+        )
+
+
+class TotalDeliveredColumn(tables.Column):
+    def render_footer(self, bound_column, table):
+        completed = sum(row.completed for row in table.data)
+        incomplete = sum(row.incomplete for row in table.data)
+        duplicate = sum(row.duplicate for row in table.data)
+        over_limit = sum(row.over_limit for row in table.data)
+
+        rows = [
+            {"label": "Completed", "value": completed},
+            {"label": "Incomplete", "value": incomplete},
+            {"label": "Duplicate", "value": duplicate},
+            {"label": "Over limit", "value": over_limit},
+        ]
+        return render_to_string(
+            "tailwind/components/worker_page/deliver_column.html",
+            {
+                "value": completed,
+                "rows": rows,
+            },
+        )
+
+
+class WorkerDeliveryTable(OrgContextTable):
     use_view_url = True
 
     id = tables.Column(visible=False)
@@ -1139,10 +1186,10 @@ class WorkerDeliveryTable(ClickableRowsTable):
     last_active = DMYTColumn()
     payment_unit = tables.Column(orderable=False)
     started = DMYTColumn(accessor="started_delivery")
-    delivered = tables.Column(accessor="completed", footer=lambda table: sum(x.completed for x in table.data))
-    pending = tables.Column(footer=lambda table: sum(x.pending for x in table.data))
-    approved = tables.Column(footer=lambda table: sum(x.approved for x in table.data))
-    rejected = tables.Column(footer=lambda table: sum(x.rejected for x in table.data))
+    delivered = TotalDeliveredColumn(accessor="completed")
+    pending = TotalFlagCountsColumn(status=CompletedWorkStatus.pending)
+    approved = TotalFlagCountsColumn(status=CompletedWorkStatus.approved)
+    rejected = TotalFlagCountsColumn(status=CompletedWorkStatus.rejected)
     action = tables.TemplateColumn(
         verbose_name="",
         orderable=False,
@@ -1169,7 +1216,6 @@ class WorkerDeliveryTable(ClickableRowsTable):
         )
         order_by = ("-last_active",)
 
-
     def __init__(self, *args, **kwargs):
         self.opp_id = kwargs.pop("opp_id")
         self.use_view_url = True
@@ -1178,7 +1224,6 @@ class WorkerDeliveryTable(ClickableRowsTable):
 
     def row_click_url(self, record):
         return reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id, record.id))
-
 
     def render_action(self, record):
         url = reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id, record.id))
@@ -1242,32 +1287,33 @@ class WorkerDeliveryTable(ClickableRowsTable):
             },
         )
 
-    def _render_flag_counts(self, record, value, status, status_title):
+    def _render_flag_counts(self, record, value, status):
+        url = reverse("opportunity:worker_flag_counts", args=[self.org_slug, self.opp_id])
+
+        params = {
+            "status": status,
+            "payment_unit_id": record.payment_unit_id,
+            "access_id": record.pk,
+        }
+        full_url = f"{url}?{urlencode(params)}"
+
         return render_to_string(
             "tailwind/components/worker_page/fetch_flag_counts.html",
             {
-                "record": record,
-                "payment_unit_id": record.payment_unit_id,
+                "counts_url": full_url,
                 "value": value,
-                "org_slug": self.org_slug,
-                "opp_id": self.opp_id,
-                "status_title": status_title,
                 "status": status,
             },
         )
 
     def render_pending(self, record, value):
-        return self._render_flag_counts(record, value, status=CompletedWorkStatus.pending, status_title="Pending Info")
+        return self._render_flag_counts(record, value, status=CompletedWorkStatus.pending)
 
     def render_approved(self, record, value):
-        return self._render_flag_counts(
-            record, value, status=CompletedWorkStatus.approved, status_title="Approved Info"
-        )
+        return self._render_flag_counts(record, value, status=CompletedWorkStatus.approved)
 
     def render_rejected(self, record, value):
-        return self._render_flag_counts(
-            record, value, status=CompletedWorkStatus.rejected, status_title="Rejected Info"
-        )
+        return self._render_flag_counts(record, value, status=CompletedWorkStatus.rejected)
 
 
 class WorkerLearnStatusTable(tables.Table):

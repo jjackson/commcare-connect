@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage, storages
-from django.db.models import Count, Max, Q, Sum, Case, When, F, OuterRef, Subquery
+from django.db.models import Case, Count, F, Max, OuterRef, Q, Subquery, Sum, When
 from django.db.models.fields import DecimalField
 from django.db.models.functions import Greatest
 from django.forms import modelformset_factory
@@ -1805,18 +1805,23 @@ def worker_payment_history(request, org_slug, opp_id, access_id):
 
 
 @org_member_required
-def worker_flag_counts(request, org_slug, opp_id, access_id):
-    access = get_object_or_404(OpportunityAccess, opportunity__id=opp_id, pk=access_id)
+def worker_flag_counts(request, org_slug, opp_id):
+    access_id = request.GET.get("access_id", None)
+    filters = {}
+    if access_id:
+        access = get_object_or_404(OpportunityAccess, opportunity__id=opp_id, pk=access_id)
+        filters["completed_work__opportunity_access"] = access
+    else:
+        opportunity = get_object_or_404(Opportunity, id=opp_id)
+        filters["completed_work__opportunity_access__opportunity"] = opportunity
+
     status = request.GET.get("status", CompletedWorkStatus.pending)
     payment_unit_id = request.GET.get("payment_unit_id")
-
-    visits = UserVisit.objects.filter(
-        completed_work__opportunity_access=access,
-        completed_work__status=status,
-    )
-
+    filters["completed_work__status"] = status
     if payment_unit_id:
-        visits = visits.filter(completed_work__payment_unit__id=payment_unit_id)
+        filters["completed_work__payment_unit__id"] = payment_unit_id
+
+    visits = UserVisit.objects.filter(**filters)
 
     all_flags = [flag for visit in visits.all() for flag in visit.flags]
     counts = Counter(all_flags)
@@ -1824,7 +1829,6 @@ def worker_flag_counts(request, org_slug, opp_id, access_id):
         request,
         "tailwind/components/worker_page/flag_counts.html",
         context=dict(
-            access=access,
             flag_counts=counts.items(),
         ),
     )

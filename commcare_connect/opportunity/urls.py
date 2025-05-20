@@ -147,5 +147,5 @@ urlpatterns = [
         views.worker_payment_history,
         name="worker_payment_history",
     ),
-    path("<int:opp_id>/worker_flag_counts/<int:access_id>", views.worker_flag_counts, name="worker_flag_counts"),
+    path("<int:opp_id>/worker_flag_counts/", views.worker_flag_counts, name="worker_flag_counts"),
 ]
