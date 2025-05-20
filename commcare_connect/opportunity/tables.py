@@ -1086,9 +1086,12 @@ class WorkerLearnTable(OrgContextTable):
 
         order_by = ("-last_active",)
 
-    def render_user(self, value):
-        url = reverse("opportunity:worker_learn_progress", args=(self.org_slug, self.opp_id, record.id))
+    def render_user(self, value, record):
 
+        if not record.accepted:
+            return "-"
+
+        url = reverse("opportunity:worker_learn_progress", args=(self.org_slug, self.opp_id, record.id))
         return format_html(
             """
             <a href="{}" class="flex flex-col items-start w-40">
