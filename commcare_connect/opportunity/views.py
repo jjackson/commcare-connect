@@ -652,7 +652,12 @@ def add_payment_units(request, org_slug=None, pk=None):
     if request.POST:
         return add_payment_unit(request, org_slug=org_slug, pk=pk)
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=pk)
-    return render(request, "opportunity/add_payment_units.html", dict(opportunity=opportunity))
+    paymentunit_count = PaymentUnit.objects.filter(opportunity=opportunity).count()
+    return render(
+        request,
+        "opportunity/add_payment_units.html",
+        dict(opportunity=opportunity, paymentunit_count=paymentunit_count)
+    )
 
 
 @org_member_required
