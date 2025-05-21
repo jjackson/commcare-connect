@@ -31,7 +31,6 @@ from commcare_connect.users.models import User
 from commcare_connect.utils.tables import (
     STOP_CLICK_PROPAGATION_ATTR,
     TEXT_CENTER_ATTR,
-    ClickableRowsTable,
     DMYTColumn,
     DurationColumn,
     IndexColumn,
@@ -571,7 +570,7 @@ def header_with_tooltip(label, tooltip_text):
     )
 
 
-class BaseOpportunityList(ClickableRowsTable):
+class BaseOpportunityList(OrgContextTable):
     stats_style = "underline underline-offset-2 justify-center"
 
     def __init__(self, *args, **kwargs):
@@ -633,9 +632,6 @@ class BaseOpportunityList(ClickableRowsTable):
             "end_date",
         )
 
-    def row_click_url(self, record):
-        return reverse("opportunity:detail", args=(self.org_slug, record.id))
-
     def render_status(self, value):
         if value == 0:
             badge_class = "badge badge-sm bg-green-600/20 text-green-600"
@@ -663,7 +659,9 @@ class BaseOpportunityList(ClickableRowsTable):
         all_classes = f"{base_classes} {extra_classes}".strip()
         return format_html('<div class="{}">{}</div>', all_classes, value)
 
-    def render_opportunity(self, value):
+    def render_opportunity(self, value, record):
+        url = reverse("opportunity:detail", args=(self.org_slug, record.id))
+        value = format_html('<a href="{}">{}</a>', url, value)
         return self._render_div(value, extra_classes="justify-start")
 
     def render_program(self, value):
@@ -747,13 +745,11 @@ class OpportunityTable(BaseOpportunityList):
 
 
 class ProgramManagerOpportunityTable(BaseOpportunityList):
-    col_attrs = merge_attrs(TEXT_CENTER_ATTR, STOP_CLICK_PROPAGATION_ATTR)
-
-    active_workers = tables.Column(verbose_name="Active Workers", attrs=col_attrs)
-    total_deliveries = tables.Column(verbose_name="Total Deliveries", attrs=col_attrs)
-    verified_deliveries = tables.Column(verbose_name="Verified Deliveries", attrs=col_attrs)
-    worker_earnings = tables.Column(verbose_name="Worker Earnings", accessor="total_accrued", attrs=col_attrs)
-    actions = tables.Column(empty_values=(), orderable=False, verbose_name="", attrs=STOP_CLICK_PROPAGATION_ATTR)
+    active_workers = tables.Column(verbose_name="Active Workers", attrs=TEXT_CENTER_ATTR)
+    total_deliveries = tables.Column(verbose_name="Total Deliveries", attrs=TEXT_CENTER_ATTR)
+    verified_deliveries = tables.Column(verbose_name="Verified Deliveries", attrs=TEXT_CENTER_ATTR)
+    worker_earnings = tables.Column(verbose_name="Worker Earnings", accessor="total_accrued", attrs=TEXT_CENTER_ATTR)
+    actions = tables.Column(empty_values=(), orderable=False, verbose_name="")
 
     class Meta(BaseOpportunityList.Meta):
         sequence = BaseOpportunityList.Meta.sequence + (
@@ -784,13 +780,15 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
         return self._render_div(value, extra_classes=self.stats_style)
 
     def render_opportunity(self, record):
+        url = reverse("opportunity:detail", args=(self.org_slug, record.id))
         html = format_html(
             """
-            <div class="flex flex-col items-start w-40">
+            <a href={} class="flex flex-col items-start w-40">
                 <p class="text-sm text-slate-900">{}</p>
                 <p class="text-xs text-slate-400">{}</p>
-            </div>
+            </a>
             """,
+            url,
             record.name,
             record.organization.name,
         )
@@ -1041,7 +1039,7 @@ class WorkerPaymentsTable(tables.Table):
         )
 
 
-class WorkerLearnTable(ClickableRowsTable):
+class WorkerLearnTable(OrgContextTable):
     index = IndexColumn()
     user = UserInfoColumn()
     suspended = SuspendedIndicatorColumn()
@@ -1050,7 +1048,7 @@ class WorkerLearnTable(ClickableRowsTable):
     modules_completed = tables.TemplateColumn(
         accessor="modules_completed_percentage",
         template_code="""
-                            {% include "tailwind/components/progressbar/simple-progressbar.html" with text=flag progress=value|default:0 %}
+                            {% include "tailwind/components/progressbar/simple-progressbar.html" with text=flag percentage=value|default:0 %}
                         """,
     )
     completed_learning = DMYTColumn(accessor="completed_learn", verbose_name="Completed Learning")
@@ -1088,8 +1086,23 @@ class WorkerLearnTable(ClickableRowsTable):
 
         order_by = ("-last_active",)
 
-    def row_click_url(self, record):
-        return reverse("opportunity:worker_learn_progress", args=(self.org_slug, self.opp_id, record.id))
+    def render_user(self, value, record):
+
+        if not record.accepted:
+            return "-"
+
+        url = reverse("opportunity:worker_learn_progress", args=(self.org_slug, self.opp_id, record.id))
+        return format_html(
+            """
+            <a href="{}" class="flex flex-col items-start w-40">
+                <p class="text-sm text-slate-900">{}</p>
+                <p class="text-xs text-slate-400">{}</p>
+            </div>
+            """,
+            url,
+            value.name,
+            value.username,
+        )
 
     def render_action(self, record):
         url = reverse("opportunity:worker_learn_progress", args=(self.org_slug, self.opp_id, record.id))
@@ -1101,7 +1114,7 @@ class WorkerLearnTable(ClickableRowsTable):
         )
 
 
-class WorkerDeliveryTable(ClickableRowsTable):
+class WorkerDeliveryTable(OrgContextTable):
     use_view_url = True
 
     id = tables.Column(visible=False)
@@ -1110,7 +1123,7 @@ class WorkerDeliveryTable(ClickableRowsTable):
     suspended = SuspendedIndicatorColumn()
     last_active = DMYTColumn()
     payment_unit = tables.Column(orderable=False)
-    started = DMYTColumn(accessor="started_delivery")
+    delivery_progress = tables.Column(accessor="total_visits", empty_values=())
     delivered = tables.Column(accessor="completed", footer=lambda table: sum(x.completed for x in table.data))
     pending = tables.Column(footer=lambda table: sum(x.pending for x in table.data))
     approved = tables.Column(footer=lambda table: sum(x.approved for x in table.data))
@@ -1132,7 +1145,7 @@ class WorkerDeliveryTable(ClickableRowsTable):
             "suspended",
             "last_active",
             "payment_unit",
-            "started",
+            "delivery_progress",
             "delivered",
             "pending",
             "approved",
@@ -1147,8 +1160,25 @@ class WorkerDeliveryTable(ClickableRowsTable):
         super().__init__(*args, **kwargs)
         self._seen_users = set()
 
-    def row_click_url(self, record):
-        return reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id, record.id))
+
+    def render_delivery_progress(self, record):
+        current = record.completed_visits
+        total = record.total_visits
+
+        if not total:
+            return "-"
+
+        percentage = round((current / total) * 100, 2)
+
+        context = {
+            "current": current,
+            "percentage": percentage,
+            "total": total,
+            "number_style": True,
+        }
+
+        return render_to_string("tailwind/components/progressbar/simple-progressbar.html", context)
+
 
     def render_action(self, record):
         url = reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id, record.id))
@@ -1159,18 +1189,22 @@ class WorkerDeliveryTable(ClickableRowsTable):
         """
         return format_html(template, url)
 
-    def render_user(self, value):
+    def render_user(self, value, record):
         if value.id in self._seen_users:
             return ""
 
         self._seen_users.add(value.id)
+
+        url = reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id, record.id))
+
         return format_html(
             """
-            <div class="flex flex-col items-start w-40">
-                <p class="text-sm text-slate-900">{}</p>
-                <p class="text-xs text-slate-400">{}</p>
-            </div>
+                <a href="{}" class="w-40">
+                    <p class="text-sm text-slate-900">{}</p>
+                    <p class="text-xs text-slate-400">{}</p>
+                </a>
             """,
+            url,
             value.name,
             value.username,
         )
