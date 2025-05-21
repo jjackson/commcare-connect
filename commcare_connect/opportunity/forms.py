@@ -363,10 +363,11 @@ class OpportunityFinalizeForm(forms.ModelForm):
                 ),
             )
             self.fields["org_pay_per_visit"] = forms.IntegerField(
-                required=True, widget=forms.NumberInput(attrs={"class": "form-control"})
+                required=True, widget=forms.NumberInput(attrs={"class": "form-control"}),
+                initial=self.instance.org_pay_per_visit
             )
 
-        self.fields["max_users"] = forms.IntegerField(label="Max Workers")
+        self.fields["max_users"] = forms.IntegerField(label="Max Workers", initial=int(self.instance.number_of_users))
         self.fields["start_date"].disabled = self.is_start_date_readonly
         self.fields["total_budget"].widget.attrs.update({"class": "form-control-plaintext"})
 
