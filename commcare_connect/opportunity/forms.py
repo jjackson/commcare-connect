@@ -366,7 +366,7 @@ class OpportunityFinalizeForm(forms.ModelForm):
                 required=True, widget=forms.NumberInput(attrs={"class": "form-control"})
             )
 
-        self.fields["max_users"] = forms.IntegerField()
+        self.fields["max_users"] = forms.IntegerField(label="Max Workers")
         self.fields["start_date"].disabled = self.is_start_date_readonly
         self.fields["total_budget"].widget.attrs.update({"class": "form-control-plaintext"})
 
