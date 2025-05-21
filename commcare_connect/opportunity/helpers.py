@@ -214,7 +214,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
         incomplete_count_sq = completed_work_status_subquery(CompletedWorkStatus.incomplete)
 
         queryset = (
-            OpportunityAccess.objects.filter(opportunity=opportunity)
+            OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True)
             .annotate(
                 payment_unit_id=Value(payment_unit.pk),
                 payment_unit=Value(payment_unit.name, output_field=CharField()),
@@ -376,7 +376,7 @@ def get_worker_learn_table_data(opportunity):
         .annotate(total_duration=Sum("duration"))
         .values("total_duration")[:1]
     )
-    queryset = OpportunityAccess.objects.filter(opportunity=opportunity).annotate(
+    queryset = OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True).annotate(
         last_active=OpportunityAnnotations.last_active(),
         completed_modules_count=Count("completedmodule__module", distinct=True),
         completed_learn=Case(

@@ -1853,7 +1853,8 @@ def worker_delivery(request, org_slug=None, opp_id=None):
 def worker_payments(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
 
-    query_set = OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0).order_by(
+    query_set = OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0,
+                                                 accepted=True).order_by(
         "-payment_accrued"
     )
     query_set = query_set.annotate(
