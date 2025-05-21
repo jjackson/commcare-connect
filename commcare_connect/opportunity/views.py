@@ -1929,6 +1929,8 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, OrgContextSingleTab
         kwargs["org_slug"] = self.request.org.slug
         program_manager = is_program_manager_of_opportunity(self.request, self.opportunity)
         kwargs["can_edit"] = not self.opportunity.managed or program_manager
+        if self.opportunity.managed:
+            kwargs["org_pay_per_visit"] = self.opportunity.org_pay_per_visit
         return kwargs
 
 
