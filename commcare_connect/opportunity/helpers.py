@@ -417,7 +417,8 @@ def get_opportunity_delivery_progress(opp_id):
             distinct=True,
         ),
         most_recent_delivery=Max("uservisit__visit_date"),
-        total_deliveries=Count("opportunityaccess__uservisit", distinct=True),
+        total_deliveries=Count("opportunityaccess__uservisit",
+                               filter=~Q(opportunityaccess__uservisit__status=VisitValidationStatus.duplicate), distinct=True),
         flagged_deliveries_waiting_for_review=Count(
             "opportunityaccess__uservisit",
             filter=Q(opportunityaccess__uservisit__status=VisitValidationStatus.pending),
