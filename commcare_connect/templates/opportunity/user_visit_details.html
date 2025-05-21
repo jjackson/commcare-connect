@@ -273,23 +273,41 @@
     <form hx-post="{% url "opportunity:user_visit_review" request.org.slug user_visit.opportunity_id %}"
       hx-swap="none">
       <input type="hidden" value="{{ user_visit.pk }}" name="pk" />
-      <button class="button button-md outline-style" value="disagree" name="review_status">Disagree</button>
-      <button class="button button-md primary-dark" value="agree" name="review_status">Agree</button>
+      <button class="button button-md outline-style"
+        {% if user_visit.review_status != "disagree" %}value="disagree"{% else %}disabled{% endif %}
+        name="review_status">
+        Disagree
+      </button>
+      <button class="button button-md primary-dark"
+        {% if user_visit.review_status != "agree" %}value="agree"{% else %}disabled{% endif %}
+        name="review_status">
+        Agree
+      </button>
     </form>
   </div>
   {% endif %}
 {% else %}
   <div>
     <button class="button button-md positive-light"
-    {% if user_visit.opportunity.managed %}
+    {% if user_visit.status == "approved"%}
+      disabled
+      {% if user_visit.opportunity.managed %}
       @click="showRejectModal = false; showApproveModal = true;"
-    {% else %}
+      {% else %}
       hx-post="{% url "opportunity:approve_visit" org_slug=request.org.slug pk=user_visit.id %}"
       hx-swap="none"
+      {% endif %}
     {% endif %}>
       Approve
     </button>
-    <button class="button button-md negative-light" @click="showRejectModal = true; showApproveModal = false;">Reject</button>
+    <button class="button button-md negative-light"
+    {% if user_visit.status != "rejected" %}
+      @click="showRejectModal = true; showApproveModal = false;"
+    {% else %}
+      disabled
+    {% endif %}>
+      Reject
+    </button>
   </div>
 
   <div x-cloak x-show="showRejectModal" x-transition.opacity class="modal-backdrop">
