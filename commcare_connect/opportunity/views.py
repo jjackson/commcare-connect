@@ -1917,9 +1917,7 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, OrgContextSingleTab
         opportunity_id = self.kwargs["pk"]
         org_slug = self.kwargs["org_slug"]
         self.opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
-        return (
-            PaymentUnit.objects.filter(opportunity=self.opportunity).prefetch_related("deliver_units").order_by("name")
-        )
+        return PaymentUnit.objects.filter(opportunity=self.opportunity).prefetch_related("deliver_units")
 
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
