@@ -1401,6 +1401,8 @@ def user_visit_verification(request, org_slug, opp_id, pk):
         for flag in visit.flags:
             if flag == "form_submission_period":
                 flag = "Off Hours"
+            if flag == "attachment_missing":
+                flag = "No Attachment"
             flag = flag.capitalize()
             if visit.status == VisitValidationStatus.approved:
                 flagged_info[flag]["approved"] += 1
