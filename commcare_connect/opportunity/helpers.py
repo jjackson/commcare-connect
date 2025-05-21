@@ -418,7 +418,8 @@ def get_opportunity_delivery_progress(opp_id):
         ),
         most_recent_delivery=Max("uservisit__visit_date"),
         total_deliveries=Count("opportunityaccess__uservisit",
-                               filter=~Q(opportunityaccess__uservisit__status=VisitValidationStatus.duplicate), distinct=True),
+                               filter=~Q(opportunityaccess__uservisit__status=VisitValidationStatus.duplicate),
+                               distinct=True),
         flagged_deliveries_waiting_for_review=Count(
             "opportunityaccess__uservisit",
             filter=Q(opportunityaccess__uservisit__status=VisitValidationStatus.pending),
@@ -461,7 +462,7 @@ def get_opportunity_delivery_progress(opp_id):
 def get_opportunity_worker_progress(opp_id):
     today = now().date()
     yesterday = today - timedelta(days=1)
-    opportunity = Opportunity.objects.filter(id=opp_id).values("start_date", "end_date", "total_budget").first()
+    opportunity = Opportunity.objects.filter(id=opp_id).values("start_date", "end_date", "total_budget", "currency").first()
 
     aggregates = Opportunity.objects.filter(id=opp_id).aggregate(
         total_deliveries=Count("opportunityaccess__uservisit", distinct=True),
