@@ -1822,9 +1822,17 @@ def worker_flag_counts(request, org_slug, opp_id):
         filters["completed_work__payment_unit__id"] = payment_unit_id
 
     visits = UserVisit.objects.filter(**filters)
-
     all_flags = [flag for visit in visits.all() for flag in visit.flags]
-    counts = Counter(all_flags)
+    counts = dict(Counter(all_flags))
+
+    completed_work_ids = visits.values_list('completed_work_id', flat=True)
+    duplicate_count = CompletedWork.objects.filter(
+        id__in=completed_work_ids,
+        saved_completed_count__gt=1
+    ).count()
+    if duplicate_count:
+        counts["Duplicate"] = duplicate_count
+
     return render(
         request,
         "tailwind/components/worker_page/flag_counts.html",
