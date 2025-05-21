@@ -371,7 +371,7 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
             },
             {
                 "name": "Max Budget",
-                "count": safe_display(object.total_budget),
+                "count": f"{object.currency} {object.total_budget or 0 :,}",
                 "icon": "fa-money-bill",
             },
         ]
@@ -2045,18 +2045,18 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             ],
         },
         {
-            "title": "Payments to Workers",
+            "title": f"Payments to Workers ({aggregates['currency']})",
             "progress": [
                 {
                     "title": "Earned",
-                    "total": aggregates["total_budget"],
+                    "total": f"{aggregates['total_budget']:,}",
                     "value": f"{earned_percentage:.2f}%",
                     "badge_type": True,
                     "percent": earned_percentage,
                 },
                 {
                     "title": "Paid",
-                    "total": aggregates["total_accrued"],
+                    "total": f"{aggregates['total_accrued']:,}",
                     "value": f"{paid_percentage:.2f}%",
                     "badge_type": True,
                     "percent": paid_percentage,
@@ -2151,7 +2151,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "panels": deliveries_panels,
         },
         {
-            "title": "Worker Payments",
+            "title": f"Worker Payments ({opportunity.currency})",
             "sub_heading": "Last Payment",
             "url": payment_url,
             "value": stats["recent_payment"] or "--",
@@ -2160,14 +2160,14 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "icon": "fa-hand-holding-dollar",
                     "name": "Payments",
                     "status": "Earned",
-                    "value": stats["total_accrued"],
+                    "value": f"{stats['total_accrued']:,}",
                     "incr": stats["accrued_since_yesterday"]
                 },
                 {
                     "icon": "fa-hand-holding-droplet",
                     "name": "Payments",
                     "status": "Due",
-                    "value": stats["payments_due"],
+                    "value": f"{stats['payments_due']:,}",
                 },
             ],
         },

@@ -711,6 +711,8 @@ class OpportunityTable(BaseOpportunityList):
     def render_payments_due(self, value, record):
         if value is None:
             value = 0
+
+        value = f"{record.currency} {value :,}"
         return self.render_worker_list_url_column(
             value=value, opp_id=record.id, active_tab="payments", sort="sort=-total_paid"
         )
@@ -780,6 +782,7 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
     def render_worker_earnings(self, value, record):
         url = reverse("opportunity:worker_list", args=(self.org_slug, record.id))
         url += "?active_tab=payments&sort=-payment_accrued"
+        value = f"{record.currency} {value :,}"
         value = format_html('<a href="{}">{}</a>', url, value)
         return self._render_div(value, extra_classes=self.stats_style)
 
@@ -1016,6 +1019,16 @@ class WorkerPaymentsTable(tables.Table):
         self.org_slug = kwargs.pop("org_slug", "")
         self.opp_id = kwargs.pop("opp_id", "")
         super().__init__(*args, **kwargs)
+
+        try:
+            currency = self.data[0].opportunity.currency
+        except (IndexError, AttributeError):
+            currency = ""
+
+            # Update column headers with currency
+        self.columns["payment_accrued"].column.verbose_name = f"Accrued ({currency})"
+        self.columns["total_paid"].column.verbose_name = f"Total Paid ({currency})"
+        self.columns["confirmed_paid"].column.verbose_name = f"Confirm ({currency})"
 
     class Meta:
         model = OpportunityAccess
