@@ -1158,13 +1158,11 @@ class TotalDeliveredColumn(tables.Column):
     def render_footer(self, bound_column, table):
         completed = sum(row.completed for row in table.data)
         incomplete = sum(row.incomplete for row in table.data)
-        duplicate = sum(row.duplicate for row in table.data)
         over_limit = sum(row.over_limit for row in table.data)
 
         rows = [
             {"label": "Completed", "value": completed},
             {"label": "Incomplete", "value": incomplete},
-            {"label": "Duplicate", "value": duplicate},
             {"label": "Over limit", "value": over_limit},
         ]
         return render_to_string(
@@ -1276,7 +1274,6 @@ class WorkerDeliveryTable(OrgContextTable):
         rows = [
             {"label": "Completed", "value": record.completed},
             {"label": "Incomplete", "value": record.incomplete},
-            {"label": "Duplicate", "value": record.duplicate},
             {"label": "Over limit", "value": record.over_limit},
         ]
         return render_to_string(
@@ -1322,7 +1319,6 @@ class WorkerLearnStatusTable(tables.Table):
     date = DMYTColumn(verbose_name="Date Completed", accessor="date", orderable=False)
     duration = DurationColumn(accessor="duration", orderable=False)
     time = tables.Column(accessor="date", verbose_name="Time Completed", orderable=False)
-
 
     class Meta:
         sequence = ("index", "module_name", "date", "duration")
