@@ -47,10 +47,10 @@ class OpportunityAnnotations:
     @staticmethod
     def inactive_workers(days_ago):
         return Count(
-            "opportunityaccess__id",
-            filter=~Q(opportunityaccess__uservisit__visit_date__gte=days_ago)
-                   & ~Q(opportunityaccess__completedmodule__date__gte=days_ago)
-                   & Q(opportunityaccess__date_learn_started__isnull=False),
+            "opportunityaccess",
+            filter=Q(opportunityaccess__date_learn_started__isnull=False) &
+                   ~Q(opportunityaccess__uservisit__visit_date__gte=days_ago) &
+                   ~Q(opportunityaccess__completedmodule__date__gte=days_ago),
             distinct=True,
         )
 
