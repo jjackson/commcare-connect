@@ -166,15 +166,6 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
             payment_unit=payment_unit
         ).values("max_visits")[:1], output_field=IntegerField())
 
-        completed_visit_sq = Subquery(UserVisit.objects.filter(
-            opportunity_access_id=OuterRef("pk"),
-            deliver_unit__payment_unit=payment_unit
-        ).exclude(
-            status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial]
-        ).values("opportunity_access_id").annotate(
-            total=Count("*")
-        ).values("total")[:1], output_field=IntegerField())
-
         last_visit_sq = Subquery(
             UserVisit.objects.filter(opportunity_access_id=OuterRef("pk"))
             .values("opportunity_access_id")
@@ -226,7 +217,6 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
                 payment_unit_id=Value(payment_unit.pk),
                 payment_unit=Value(payment_unit.name, output_field=CharField()),
                 total_visits=Coalesce(total_visits_sq, Value(None, output_field=IntegerField())),  # Optional
-                completed_visits=Coalesce(completed_visit_sq, Value(0)),
                 _last_visit_val=Coalesce(last_visit_sq, Value(None, output_field=DateTimeField())),
                 _last_module_val=Coalesce(last_module_sq, Value(None, output_field=DateTimeField())),
                 pending=Coalesce(pending_count_sq, Value(0)),
@@ -404,7 +394,7 @@ def get_worker_learn_table_data(opportunity):
 
 
 def get_opportunity_delivery_progress(opp_id):
-    today = now()
+    today = now().replace(hour=0, minute=0, second=0, microsecond=0)
     three_days_ago = today - timedelta(days=3)
     yesterday = today - timedelta(days=1)
 
@@ -425,8 +415,7 @@ def get_opportunity_delivery_progress(opp_id):
             distinct=True,
         ),
         most_recent_delivery=Max("uservisit__visit_date"),
-        total_deliveries=Count("opportunityaccess__uservisit",
-                               filter=~Q(opportunityaccess__uservisit__status=VisitValidationStatus.duplicate),
+        total_deliveries=Count("opportunityaccess__completedwork",
                                distinct=True),
         flagged_deliveries_waiting_for_review=Count(
             "opportunityaccess__uservisit",
@@ -473,37 +462,22 @@ def get_opportunity_worker_progress(opp_id):
     opportunity = Opportunity.objects.filter(id=opp_id).values("start_date", "end_date", "total_budget", "currency").first()
 
     aggregates = Opportunity.objects.filter(id=opp_id).aggregate(
-        total_deliveries=Count("opportunityaccess__uservisit", distinct=True),
+        total_deliveries=Count("opportunityaccess__completedwork", distinct=True),
         approved_deliveries=Count(
-            "opportunityaccess__uservisit",
-            filter=Q(opportunityaccess__uservisit__status=VisitValidationStatus.approved),
+            "opportunityaccess__completedwork",
+            filter=Q(opportunityaccess__completedwork__status=CompletedWorkStatus.approved),
             distinct=True,
         ),
         rejected_deliveries=Count(
-            "opportunityaccess__uservisit",
-            filter=Q(opportunityaccess__uservisit__status=VisitValidationStatus.rejected),
+            "opportunityaccess__completedwork",
+            filter=Q(opportunityaccess__completedwork__status=CompletedWorkStatus.rejected),
             distinct=True,
         ),
         total_accrued=OpportunityAnnotations.total_accrued(),
         total_paid=OpportunityAnnotations.total_paid(),
-        total_visits=Count("uservisit", distinct=True),
         visits_since_yesterday=Count("uservisit", filter=Q(uservisit__visit_date__gte=yesterday), distinct=True)
     )
     aggregates.update(opportunity)
-
-
-    max_visits_qs = (
-        UserVisit.objects.filter(opportunity_id=opp_id)
-        .annotate(visit_day=TruncDate("visit_date"))
-        .values("visit_day")
-        .annotate(day_count=Count("id"))
-        .order_by("-day_count")
-        .values_list("day_count", flat=True)
-    )
-
-    maximum_visit_in_a_day = max_visits_qs.first() or 0
-
-    aggregates["maximum_visit_in_a_day"] = maximum_visit_in_a_day
 
     return aggregates
 

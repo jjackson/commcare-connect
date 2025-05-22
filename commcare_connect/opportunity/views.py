@@ -2035,42 +2035,21 @@ def opportunity_worker_progress(request, org_slug, opp_id):
     rejected_percentage = safe_percent(aggregates["rejected_deliveries"], aggregates["total_deliveries"])
     earned_percentage = safe_percent(aggregates["total_accrued"], aggregates["total_budget"])
     paid_percentage = safe_percent(aggregates["total_paid"], aggregates["total_accrued"])
-    visits_since_yesterday_percent = safe_percent(aggregates["visits_since_yesterday"],
-                                                  aggregates["maximum_visit_in_a_day"])
 
     worker_progress = [
-        {
-            "title": "Daily Active Workers",
-            "progress": [
-                {
-                    "title": "Maximum Achieved",
-                    "total": aggregates["maximum_visit_in_a_day"],
-                    "value": aggregates["maximum_visit_in_a_day"],
-                    "badge_type": False,
-                    "percent": 100 if aggregates["maximum_visit_in_a_day"] else 0,
-                },
-                {
-                    "title": "Active Yesterday",
-                    "total": aggregates["visits_since_yesterday"],
-                    "value": aggregates["visits_since_yesterday"],
-                    "badge_type": False,
-                    "percent": visits_since_yesterday_percent,
-                },
-            ],
-        },
         {
             "title": "Verification",
             "progress": [
                 {
                     "title": "Approved",
-                    "total": aggregates["total_deliveries"],
+                    "total": aggregates["approved_deliveries"],
                     "value": f"{verified_percentage:.2f}%",
                     "badge_type": True,
                     "percent": verified_percentage
                 },
                 {
                     "title": "Rejected",
-                    "total": aggregates["total_deliveries"],
+                    "total": aggregates["rejected_deliveries"],
                     "value": f"{rejected_percentage:.2f}%",
                     "badge_type": True,
                     "percent": rejected_percentage,
@@ -2082,14 +2061,14 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             "progress": [
                 {
                     "title": "Earned",
-                    "total": intcomma(aggregates['total_budget']),
+                    "total": "",
                     "value": f"{earned_percentage:.2f}%",
                     "badge_type": True,
                     "percent": earned_percentage,
                 },
                 {
                     "title": "Paid",
-                    "total": intcomma(aggregates['total_accrued']),
+                    "total": aggregates["total_paid"],
                     "value": f"{paid_percentage:.2f}%",
                     "badge_type": True,
                     "percent": paid_percentage,

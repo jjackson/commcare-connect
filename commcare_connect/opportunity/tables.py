@@ -657,7 +657,7 @@ class BaseOpportunityList(OrgContextTable):
     def render_opportunity(self, value, record):
         url = reverse("opportunity:detail", args=(self.org_slug, record.id))
         value = format_html('<a href="{}">{}</a>', url, value)
-        return self._render_div(value, extra_classes="justify-start")
+        return self._render_div(value, extra_classes="justify-start text-wrap")
 
     def render_program(self, value):
         return self._render_div(value if value else "--", extra_classes="justify-start")
@@ -812,7 +812,7 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
         url = reverse("opportunity:detail", args=(self.org_slug, record.id))
         html = format_html(
             """
-            <a href={} class="flex flex-col items-start w-40">
+            <a href={} class="flex flex-col items-start text-wrap w-50">
                 <p class="text-sm text-slate-900">{}</p>
                 <p class="text-xs text-slate-400">{}</p>
             </a>
@@ -1274,7 +1274,7 @@ class WorkerDeliveryTable(OrgContextTable):
 
 
     def render_delivery_progress(self, record):
-        current = record.completed_visits
+        current = record.completed
         total = record.total_visits
 
         if not total:
