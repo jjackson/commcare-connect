@@ -143,6 +143,8 @@ from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.tables import get_duration_min
 from django.utils.translation import gettext as _
 
+from django.contrib.humanize.templatetags.humanize import intcomma
+
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
@@ -371,7 +373,7 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
             },
             {
                 "name": "Max Budget",
-                "count": f"{object.currency} {object.total_budget or 0 :,}",
+                "count": f"{object.currency} {intcomma(object.total_budget)}",
                 "icon": "fa-money-bill",
             },
         ]
@@ -2052,14 +2054,14 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             "progress": [
                 {
                     "title": "Earned",
-                    "total": f"{aggregates['total_budget']:,}",
+                    "total": intcomma(aggregates['total_budget']),
                     "value": f"{earned_percentage:.2f}%",
                     "badge_type": True,
                     "percent": earned_percentage,
                 },
                 {
                     "title": "Paid",
-                    "total": f"{aggregates['total_accrued']:,}",
+                    "total": intcomma(aggregates['total_accrued']),
                     "value": f"{paid_percentage:.2f}%",
                     "badge_type": True,
                     "percent": paid_percentage,
@@ -2163,14 +2165,14 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "icon": "fa-hand-holding-dollar",
                     "name": "Payments",
                     "status": "Earned",
-                    "value": f"{stats['total_accrued']:,}",
+                    "value": intcomma(stats['total_accrued']),
                     "incr": stats["accrued_since_yesterday"]
                 },
                 {
                     "icon": "fa-hand-holding-droplet",
                     "name": "Payments",
                     "status": "Due",
-                    "value": f"{stats['payments_due']:,}",
+                    "value": intcomma(stats['payments_due']),
                 },
             ],
         },
