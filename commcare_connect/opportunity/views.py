@@ -653,7 +653,12 @@ def add_payment_units(request, org_slug=None, pk=None):
     if request.POST:
         return add_payment_unit(request, org_slug=org_slug, pk=pk)
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=pk)
-    return render(request, "opportunity/add_payment_units.html", dict(opportunity=opportunity))
+    paymentunit_count = PaymentUnit.objects.filter(opportunity=opportunity).count()
+    return render(
+        request,
+        "opportunity/add_payment_units.html",
+        dict(opportunity=opportunity, paymentunit_count=paymentunit_count)
+    )
 
 
 @org_member_required
@@ -1940,15 +1945,15 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, OrgContextSingleTab
         opportunity_id = self.kwargs["pk"]
         org_slug = self.kwargs["org_slug"]
         self.opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
-        return (
-            PaymentUnit.objects.filter(opportunity=self.opportunity).prefetch_related("deliver_units").order_by("name")
-        )
+        return PaymentUnit.objects.filter(opportunity=self.opportunity).prefetch_related("deliver_units")
 
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["org_slug"] = self.request.org.slug
         program_manager = is_program_manager_of_opportunity(self.request, self.opportunity)
         kwargs["can_edit"] = not self.opportunity.managed or program_manager
+        if self.opportunity.managed:
+            kwargs["org_pay_per_visit"] = self.opportunity.org_pay_per_visit
         return kwargs
 
 
@@ -2073,8 +2078,8 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
     stats = get_opportunity_delivery_progress(opportunity.id)
 
     worker_list_url = reverse("opportunity:worker_list", args=(org_slug, opp_id))
-    status_url = worker_list_url + "?active_tab=workers"
-    delivery_url = worker_list_url + "?active_tab=delivery"
+    status_url = worker_list_url + "?active_tab=workers&sort=last_active"
+    delivery_url = worker_list_url + "?active_tab=delivery&sort=-pending"
     payment_url = worker_list_url + "?active_tab=payments"
 
     deliveries_panels = [
