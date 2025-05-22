@@ -1,5 +1,6 @@
 import datetime
 import json
+import sys
 from collections import Counter, defaultdict
 from functools import reduce
 from http import HTTPStatus
@@ -951,6 +952,8 @@ def approve_visit(request, org_slug=None, pk=None):
         user_visit.status = VisitValidationStatus.approved
         if user_visit.opportunity.managed:
             user_visit.review_created_on = now()
+            if user_visit.review_status == VisitReviewStatus.disagree:
+                user_visit.review_status = VisitReviewStatus.pending
 
             if user_visit.flagged:
                 justification = request.POST.get("justification")
@@ -1396,6 +1399,11 @@ def user_visit_verification(request, org_slug, opp_id, pk):
     flagged_info = defaultdict(lambda: {"name": "", "approved": 0, "pending": 0, "rejected": 0})
     for visit in visits:
         for flag in visit.flags:
+            if flag == "form_submission_period":
+                flag = "Off Hours"
+            if flag == "attachment_missing":
+                flag = "No Attachment"
+            flag = flag.capitalize()
             if visit.status == VisitValidationStatus.approved:
                 flagged_info[flag]["approved"] += 1
             if visit.status == VisitValidationStatus.rejected:
@@ -1453,7 +1461,6 @@ def get_user_visit_counts(opportunity_access_id: int, date=None):
             pending_review=Count(
                 "id",
                 filter=Q(
-                    status=VisitValidationStatus.approved,
                     review_status=VisitReviewStatus.pending,
                     review_created_on__isnull=False,
                 ),
@@ -1461,7 +1468,6 @@ def get_user_visit_counts(opportunity_access_id: int, date=None):
             disagree=Count(
                 "id",
                 filter=Q(
-                    status=VisitValidationStatus.approved,
                     review_status=VisitReviewStatus.disagree,
                     review_created_on__isnull=False,
                 ),
@@ -1555,7 +1561,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                 dynamic_tabs = [
                     {
                         "name": "pending_review",
-                        "label": "Review",
+                        "label": "PM Review",
                         "count": user_visit_counts.get("pending_review", 0),
                     },
                     {
@@ -1621,7 +1627,6 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
             filter_kwargs.update(
                 {
                     "review_status": VisitReviewStatus.pending,
-                    "status": VisitValidationStatus.approved,
                     "review_created_on__isnull": False,
                 }
             )
@@ -1629,7 +1634,6 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
             filter_kwargs.update(
                 {
                     "review_status": VisitReviewStatus.disagree,
-                    "status": VisitValidationStatus.approved,
                     "review_created_on__isnull": False,
                 }
             )
@@ -1648,8 +1652,10 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
 @org_member_required
 def user_visit_details(request, org_slug, opp_id, pk):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
-
     user_visit = get_object_or_404(UserVisit, pk=pk, opportunity=opportunity)
+    verification_flags_config = opportunity.opportunityverificationflags
+    deliver_unit_flags_config = DeliverUnitFlagRules.objects.filter(opportunity=opportunity, deliver_unit=user_visit.deliver_unit)
+
     serializer = XFormSerializer(data=user_visit.form_json)
     serializer.is_valid()
     xform = serializer.save()
@@ -1666,6 +1672,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
         "status": user_visit.get_status_display(),
         "visit_date": user_visit.visit_date,
     }
+    closest_distance = sys.maxsize
     if user_visit.location:
         locations = UserVisit.objects.filter(opportunity=user_visit.opportunity).exclude(pk=pk).select_related("user")
         lat, lon, _, precision = user_visit.location.split(" ")
@@ -1674,6 +1681,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
                 continue
             other_lat, other_lon, _, other_precision = loc.location.split(" ")
             dist = distance.distance((lat, lon), (other_lat, other_lon))
+            closest_distance = int(min(closest_distance, dist.m))
             if dist.m <= 250:
                 visit_data = {
                     "entity_name": loc.entity_name,
@@ -1702,6 +1710,9 @@ def user_visit_details(request, org_slug, opp_id, pk):
             other_forms=other_forms[:5],
             visit_data=visit_data,
             is_program_manager=is_program_manager_of_opportunity(request, opportunity),
+            closest_distance=closest_distance,
+            verification_flags_config=verification_flags_config,
+            deliver_unit_flags_config=deliver_unit_flags_config,
         ),
     )
 

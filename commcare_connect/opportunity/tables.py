@@ -853,6 +853,8 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
 class UserVisitVerificationTable(tables.Table):
     date_time = columns.DateTimeColumn(verbose_name="Date", accessor="visit_date", format="d M, Y H:i")
     entity_name = columns.Column(verbose_name="Entity Name")
+    deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
+    payment_unit = columns.Column(verbose_name="Payment Unit", accessor="completed_work__payment_unit__name")
     flags = columns.TemplateColumn(
         verbose_name="Flags",
         orderable=False,
@@ -888,6 +890,8 @@ class UserVisitVerificationTable(tables.Table):
         sequence = (
             "date_time",
             "entity_name",
+            "deliver_unit",
+            "payment_unit",
             "flags",
             "last_activity",
             "icons",
@@ -940,14 +944,15 @@ class UserVisitVerificationTable(tables.Table):
             )
 
         status = []
-        if record.opportunity.managed and record.review_status:
+        if record.opportunity.managed and record.review_status and record.review_created_on:
             if record.review_status == VisitReviewStatus.pending.value:
                 status.append("pending_review")
             else:
                 status.append(record.review_status)
         if record.status in VisitValidationStatus:
             if (
-                record.review_status in VisitReviewStatus.pending.value
+                record.review_status != VisitReviewStatus.agree.value
+                and record.review_created_on
                 and record.status == VisitValidationStatus.approved
             ):
                 status.append("approved_pending_review")
