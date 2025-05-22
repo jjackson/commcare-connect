@@ -142,6 +142,9 @@ from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.tables import get_duration_min
+from django.utils.translation import gettext as _
+
+from django.contrib.humanize.templatetags.humanize import intcomma
 
 
 class OrganizationUserMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -371,7 +374,7 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
             },
             {
                 "name": "Max Budget",
-                "count": safe_display(object.total_budget),
+                "count": f"{object.currency} {intcomma(object.total_budget)}",
                 "icon": "fa-money-bill",
             },
         ]
@@ -535,18 +538,35 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
     )
     if form.is_valid():
         form.save()
-        return redirect("opportunity:detail", org_slug, pk)
+
+        additional_visits = form.cleaned_data.get("additional_visits")
+        selected_users = form.cleaned_data.get("selected_users")
+        end_date = form.cleaned_data.get("end_date")
+        message_parts = []
+
+        if additional_visits and selected_users:
+            visit_text = f"{additional_visits} visit{'s' if additional_visits != 1 else ''}"
+            user_text = f"{len(selected_users)} worker{'s' if len(selected_users) != 1 else ''}"
+            message_parts.append(f"Added {visit_text} to {user_text}.")
+            if not opportunity.managed:
+                message_parts.append(f"Budget increased by {form.budget_increase:.2f}.")
+
+        if end_date:
+            message_parts.append(f"Extended opportunity end date to {end_date} for selected workers.")
+
+        messages.success(request, " ".join(message_parts))
+        return redirect("opportunity:add_budget_existing_users", org_slug, pk)
 
     tabs = [
         {
-            "key": "existing_users",
-            "label": "Existing Users",
+            "key": "existing_workers",
+            "label": "Existing Workers",
         },]
     # Nm are not allowed to increase the managed opportunity budget so do not provide that tab.
     if not opportunity.managed or is_program_manager_of_opportunity(request, opportunity):
         tabs.append({
-            "key": "new_users",
-            "label": "New Users",
+            "key": "new_workers",
+            "label": "New Workers",
         })
 
     path = [
@@ -583,7 +603,15 @@ def add_budget_new_users(request, org_slug=None, pk=None):
 
     if form.is_valid():
         form.save()
-        redirect_url = reverse("opportunity:detail", args=[org_slug, pk])
+        budget_increase = form.budget_increase
+        direction = "added to" if budget_increase >= 0 else "removed from"
+        messages.success(
+            request,
+            f"{opportunity.currency} {abs(form.budget_increase)} was {direction} the opportunity budget."
+        )
+
+        redirect_url = reverse("opportunity:add_budget_existing_users", args=[org_slug, pk])
+        redirect_url += "?active_tab=new_users"
         response = HttpResponse()
         response["HX-Redirect"] = redirect_url
         return response
@@ -1726,6 +1754,8 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     base_kwargs = {"org_slug": org_slug, "opp_id": opp_id}
     export_form = PaymentExportForm()
+    visit_export_form = VisitExportForm()
+    review_visit_export_form = ReviewVisitExportForm()
 
     path = []
     if opp.managed:
@@ -1742,8 +1772,7 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
     raw_qs = request.GET.urlencode()
     query = f"?{raw_qs}" if raw_qs else ""
 
-    workers_count = UserInvite.objects.filter(opportunity_id=opp_id).count()
-
+    workers_count = UserInvite.objects.filter(opportunity_id=opp_id).exclude(status=UserInviteStatus.not_found).count()
     tabs = [
         {
             "key": "workers",
@@ -1773,9 +1802,14 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
 
     is_program_manager = opp.managed and is_program_manager_of_opportunity(request, opp)
 
+
     import_export_delivery_urls = {
-        "export_url": reverse(
-            "opportunity:review_visit_export" if is_program_manager else "opportunity:visit_export",
+        "export_url_for_pm": reverse(
+            "opportunity:review_visit_export",
+            args=(request.org.slug, opp_id),
+        ),
+        "export_url_for_nm": reverse(
+            "opportunity:visit_export",
             args=(request.org.slug, opp_id),
         ),
         "import_url": reverse(
@@ -1784,7 +1818,11 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
         ),
     }
 
-    visit_export_form = ReviewVisitExportForm() if is_program_manager else VisitExportForm()
+    import_visit_helper_text = _(
+        'The file must contain at least the "Visit ID"{extra} and "Status" column. The import is case-insensitive.'
+    ).format(extra=_(', "Justification"') if opp.managed else "")
+
+    export_user_visit_title = _("Import PM Review Sheet" if is_program_manager else "Import Verified Visits")
 
     return render(
         request,
@@ -1798,6 +1836,9 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
             "export_task_id": request.GET.get("export_task_id"),
             "path": path,
             "import_export_delivery_urls": import_export_delivery_urls,
+            "import_visit_helper_text": import_visit_helper_text,
+            "export_user_visit_title": export_user_visit_title,
+            "review_visit_export_form": review_visit_export_form
         },
     )
 
@@ -1833,7 +1874,8 @@ def worker_delivery(request, org_slug=None, opp_id=None):
 def worker_payments(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
 
-    query_set = OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0).order_by(
+    query_set = OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0,
+                                                 accepted=True).order_by(
         "-payment_accrued"
     )
     query_set = query_set.annotate(
@@ -2036,18 +2078,18 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             ],
         },
         {
-            "title": "Payments to Workers",
+            "title": f"Payments to Workers ({aggregates['currency']})",
             "progress": [
                 {
                     "title": "Earned",
-                    "total": aggregates["total_budget"],
+                    "total": intcomma(aggregates['total_budget']),
                     "value": f"{earned_percentage:.2f}%",
                     "badge_type": True,
                     "percent": earned_percentage,
                 },
                 {
                     "title": "Paid",
-                    "total": aggregates["total_accrued"],
+                    "total": intcomma(aggregates['total_accrued']),
                     "value": f"{paid_percentage:.2f}%",
                     "badge_type": True,
                     "percent": paid_percentage,
@@ -2142,7 +2184,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "panels": deliveries_panels,
         },
         {
-            "title": "Worker Payments",
+            "title": f"Worker Payments ({opportunity.currency})",
             "sub_heading": "Last Payment",
             "url": payment_url,
             "value": stats["recent_payment"] or "--",
@@ -2151,14 +2193,14 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "icon": "fa-hand-holding-dollar",
                     "name": "Payments",
                     "status": "Earned",
-                    "value": stats["total_accrued"],
+                    "value": intcomma(stats['total_accrued']),
                     "incr": stats["accrued_since_yesterday"]
                 },
                 {
                     "icon": "fa-hand-holding-droplet",
                     "name": "Payments",
                     "status": "Due",
-                    "value": stats["payments_due"],
+                    "value": intcomma(stats['payments_due']),
                 },
             ],
         },
