@@ -647,7 +647,7 @@
   }
 
   .tab {
-    @apply relative flex h-full cursor-pointer items-center gap-1 text-sm text-gray-500;
+    @apply relative flex h-full cursor-pointer items-center gap-1 text-sm text-gray-500 text-nowrap;
 
     /* Active Tabs */
     &:is(.tab-active, [aria-selected='true']):not(.tab-disabled, [disabled]),
