@@ -61,7 +61,7 @@
            x-effect="document.body.style.overflow = expanded ? 'hidden' : 'auto'"
            :class="{'error': !termsValid && termsTouched}">
         <div class="flex items-start w-full gap-2">
-          <input type="checkbox" class="simple-checkbox aspect-square" required />
+          <div><input type="checkbox" class="simple-checkbox" required x-model="termsChecked" /></div>
           <p class="hint">
             <span>{% blocktranslate %}I have read and agree to Dimagi's <a class="text-brand-indigo font-medium" href="https://dimagi.com/terms-privacy-dimagi/" target="_blank">Privacy Policy</a> and <a class="text-brand-indigo font-medium" href="http://www.dimagi.com/terms/latest/aup/" target="_blank">Acceptable Use Policy</a>.{% endblocktranslate %}</span>
           </p>
