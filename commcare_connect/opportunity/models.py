@@ -245,6 +245,7 @@ class OpportunityAccess(models.Model):
     suspension_reason = models.CharField(max_length=300, null=True, blank=True)
     invited_date = models.DateTimeField(auto_now_add=True, editable=False, null=True)
     completed_learn_date = models.DateTimeField(null=True)
+    last_active = models.DateTimeField(null=True)
 
     class Meta:
         indexes = [models.Index(fields=["invite_id"])]
