@@ -1,1 +1,15 @@
-{% extends "base.html" %}
+{% extends "tailwind/base.html" %}
+
+{% load i18n %}
+
+{% block content %}
+{% if request.user.is_authenticated %}
+<div class="container md:max-w-screen-lg mx-auto flex flex-col gap-6">
+  <p>
+    {% blocktrans %}
+      Welcome to CommCare Connect. You can enter an organizational workspace or create a new one through the dropdown on the top right of this page.
+    {% endblocktrans %}
+  </p>
+</div>
+{% endif %}
+{% endblock %}
