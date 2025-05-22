@@ -63,10 +63,7 @@
         <div class="flex items-start w-full gap-2">
           <input type="checkbox" class="simple-checkbox aspect-square" required />
           <p class="hint">
-            <span>{% blocktranslate %}By accessing CommCare Connect, you accept our {% endblocktranslate %}</span>
-            <button class="font-medium cursor-pointer text-brand-indigo"
-                    x-on:click.prevent="expanded = true">Terms & Conditions and Privacy Policy</button>
-            <div x-show="expanded" x-cloak>{% include "account/terms-and-conditions-modal.html" %}</div>
+            <span>{% blocktranslate %}I have read and agree to Dimagi's <a class="text-brand-indigo font-medium" href="https://dimagi.com/terms-privacy-dimagi/" target="_blank">Privacy Policy</a> and <a class="text-brand-indigo font-medium" href="http://www.dimagi.com/terms/latest/aup/" target="_blank">Acceptable Use Policy</a>.{% endblocktranslate %}</span>
           </p>
         </div>
         <p class="error-msg">{% blocktranslate %}You must accept the terms and conditions{% endblocktranslate %}</p>
