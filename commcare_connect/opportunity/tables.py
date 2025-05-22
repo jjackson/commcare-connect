@@ -37,6 +37,7 @@ from commcare_connect.utils.tables import (
     OrgContextTable,
     merge_attrs,
 )
+from django.contrib.humanize.templatetags.humanize import intcomma
 
 
 class OpportunityContextTable(OrgContextTable):
@@ -710,7 +711,7 @@ class OpportunityTable(BaseOpportunityList):
         if value is None:
             value = 0
 
-        value = f"{record.currency} {value :,}"
+        value = f"{record.currency} {intcomma(value)}"
         return self.render_worker_list_url_column(
             value=value, opp_id=record.id, active_tab="payments", sort="sort=-total_paid"
         )
@@ -778,7 +779,7 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
     def render_worker_earnings(self, value, record):
         url = reverse("opportunity:worker_list", args=(self.org_slug, record.id))
         url += "?active_tab=payments&sort=-payment_accrued"
-        value = f"{record.currency} {value :,}"
+        value = f"{record.currency} {intcomma(value)}"
         value = format_html('<a href="{}">{}</a>', url, value)
         return self._render_div(value, extra_classes=self.stats_style)
 
@@ -1007,8 +1008,11 @@ class WorkerPaymentsTable(tables.Table):
     user = UserInfoColumn(footer="Total")
     suspended = SuspendedIndicatorColumn()
     last_active = DMYTColumn()
-    payment_accrued = tables.Column(verbose_name="Accrued", footer=lambda table: sum(x.payment_accrued or 0 for x in table.data))
-    total_paid = tables.Column(verbose_name="Total Paid", footer=lambda table: sum(x.total_paid or 0 for x in table.data))
+    payment_accrued = tables.Column(verbose_name="Accrued",
+                                    footer=lambda table: intcomma(
+                                        sum(x.payment_accrued or 0 for x in table.data)))
+    total_paid = tables.Column(verbose_name="Total Paid",
+                               footer=lambda table: intcomma(sum(x.total_paid or 0 for x in table.data)))
     last_paid = DMYTColumn()
     confirmed_paid = tables.Column(verbose_name="Confirm", accessor="total_confirmed_paid")
 
