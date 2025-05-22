@@ -34,13 +34,14 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.tasks import bulk_approve_completed_work
 from commcare_connect.opportunity.tests.factories import (
     CatchmentAreaFactory,
+    CompletedModuleFactory,
     DeliverUnitFactory,
     DeliverUnitFlagRulesFactory,
     FormJsonValidationRulesFactory,
     LearnModuleFactory,
     OpportunityAccessFactory,
     OpportunityClaimFactory,
-    PaymentUnitFactory, CompletedModuleFactory,
+    PaymentUnitFactory,
 )
 from commcare_connect.opportunity.tests.helpers import validate_saved_fields
 from commcare_connect.opportunity.visit_import import update_payment_accrued
@@ -712,22 +713,58 @@ def test_update_completed_learn_date(opportunity, mobile_user):
     assert learn_modules_count == 3
 
     # module1 submissions the first date which module one completed should be: three_days_ago
-    CompletedModuleFactory(user=mobile_user, opportunity=opportunity, module=module1, date=two_days_ago,
-                           opportunity_access=access, xform_id=uuid4())
-    CompletedModuleFactory(user=mobile_user, opportunity=opportunity, module=module1, date=future_date,
-                           opportunity_access=access, xform_id=uuid4())
-    CompletedModuleFactory(user=mobile_user, opportunity=opportunity, module=module1, date=three_days_ago,
-                           opportunity_access=access, xform_id=uuid4())
+    CompletedModuleFactory(
+        user=mobile_user,
+        opportunity=opportunity,
+        module=module1,
+        date=two_days_ago,
+        opportunity_access=access,
+        xform_id=uuid4(),
+    )
+    CompletedModuleFactory(
+        user=mobile_user,
+        opportunity=opportunity,
+        module=module1,
+        date=future_date,
+        opportunity_access=access,
+        xform_id=uuid4(),
+    )
+    CompletedModuleFactory(
+        user=mobile_user,
+        opportunity=opportunity,
+        module=module1,
+        date=three_days_ago,
+        opportunity_access=access,
+        xform_id=uuid4(),
+    )
 
     # module2 submission the first date which module2 completed should be: today
-    CompletedModuleFactory(user=mobile_user, opportunity=opportunity, module=module2, date=today,
-                           opportunity_access=access, xform_id=uuid4())
+    CompletedModuleFactory(
+        user=mobile_user,
+        opportunity=opportunity,
+        module=module2,
+        date=today,
+        opportunity_access=access,
+        xform_id=uuid4(),
+    )
 
     # module3 submission the first date which module3 completed should be: tomorrow
-    CompletedModuleFactory(user=mobile_user, opportunity=opportunity, module=module3, date=tomorrow,
-                           opportunity_access=access, xform_id=uuid4())
-    CompletedModuleFactory(user=mobile_user, opportunity=opportunity, module=module3, date=future_date,
-                           opportunity_access=access, xform_id=uuid4())
+    CompletedModuleFactory(
+        user=mobile_user,
+        opportunity=opportunity,
+        module=module3,
+        date=tomorrow,
+        opportunity_access=access,
+        xform_id=uuid4(),
+    )
+    CompletedModuleFactory(
+        user=mobile_user,
+        opportunity=opportunity,
+        module=module3,
+        date=future_date,
+        opportunity_access=access,
+        xform_id=uuid4(),
+    )
 
     # the completed learn date should be of tomorrow
     update_completed_learn_date(access)

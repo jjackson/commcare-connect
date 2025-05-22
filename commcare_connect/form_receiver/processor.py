@@ -2,7 +2,7 @@ import datetime
 from functools import partial
 
 from django.db import transaction
-from django.db.models import Count, Q, Min
+from django.db.models import Count, Min, Q
 from django.utils.timezone import now
 from geopy.distance import distance
 from jsonpath_ng import JSONPathError
@@ -115,14 +115,14 @@ def update_completed_learn_date(access):
     if not access.completed_learn_date and access.learn_progress == 100.0:
         # Get the earliest completion date for each unique module
         earliest_dates = (
-            CompletedModule.objects
-            .filter(opportunity_access=access)
+            CompletedModule.objects.filter(opportunity_access=access)
             .values("module")
             .annotate(earliest_date=Min("date"))
         )
         completed_learn_date = max(entry["earliest_date"] for entry in earliest_dates)
         access.completed_learn_date = completed_learn_date
         access.save()
+
 
 def process_assessments(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, blocks: list[dict]):
     """Process assessments from a form received from CommCare HQ.
