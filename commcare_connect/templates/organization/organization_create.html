@@ -11,7 +11,7 @@
   <form action="{% url 'organization_create' %}" method="post">
     {% csrf_token %}
     {{ form|crispy }}
-    <button class="button button-md primary-dark" type="submit">Create Organization</button>
+    <button class="button button-md primary-dark float-end" type="submit">Create Organization</button>
   </form>
 </div>
 {% endblock content %}
