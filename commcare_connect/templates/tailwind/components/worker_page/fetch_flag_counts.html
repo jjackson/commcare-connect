@@ -37,9 +37,8 @@
          style="display: none">
 
         <div
-            hx-get="{% url 'opportunity:worker_flag_counts' org_slug=org_slug opp_id=opp_id access_id=record.pk %}?status={{status}}&payment_unit_id={{payment_unit_id}}"
+            hx-get="{{counts_url}}"
             hx-trigger="load_flag_counts_{{status}} from:closest div[x-data]" hx-target="find .flags_counter">
-            <p class="text-xs text-slate-400">{{ status_title }}</p>
             <div class="flags_counter">
                 <p class="text-slate-500">Loading..</p>
             </div>

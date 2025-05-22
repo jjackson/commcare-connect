@@ -1,4 +1,5 @@
 import itertools
+from urllib.parse import urlencode
 
 import django_tables2 as tables
 from crispy_forms.helper import FormHelper
@@ -557,17 +558,10 @@ def date_with_time_popup(table, date):
 def header_with_tooltip(label, tooltip_text):
     return mark_safe(
         f"""
-        <div class="relative inline-flex justify-center items-center group cursor-default">
-            <span>{label}</span>
-            <i class="fa-regular fa-circle-question text-xs text-slate-400 ml-1 cursor-help"></i>
-            <div class="fixed hidden group-hover:block z-50 pointer-events-none -translate-x-[15%] -translate-y-[70%] transform">
-                <div class="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-white"></div>
-                <div class="relative bg-white w-28 rounded p-2 text-slate-500 text-xs whitespace-normal break-words">
-                    {tooltip_text}
-                </div>
-            </div>
+        <div x-data x-tooltip.raw="{tooltip_text}">
+            {label}
         </div>
-    """
+        """
     )
 
 
@@ -681,10 +675,26 @@ class BaseOpportunityList(OrgContextTable):
 class OpportunityTable(BaseOpportunityList):
     col_attrs = merge_attrs(TEXT_CENTER_ATTR, STOP_CLICK_PROPAGATION_ATTR)
 
-    pending_invites = tables.Column(attrs=col_attrs)
-    inactive_workers = tables.Column(attrs=col_attrs)
-    pending_approvals = tables.Column(attrs=col_attrs)
-    payments_due = tables.Column(attrs=col_attrs)
+    pending_invites = tables.Column(
+        verbose_name=header_with_tooltip(
+            "Pending Invites", "Workers not yet clicked on invite link or started learning in app"
+        ),
+        attrs=col_attrs,
+    )
+    inactive_workers = tables.Column(
+        verbose_name=header_with_tooltip("Inactive Workers", "Did not submit a Learn or Deliver form in 3 day"),
+        attrs=col_attrs,
+    )
+    pending_approvals = tables.Column(
+        verbose_name=header_with_tooltip(
+            "Pending Approvals", "Deliveries that are flagged and require NM or PM approval"
+        ),
+        attrs=col_attrs,
+    )
+    payments_due = tables.Column(
+        verbose_name=header_with_tooltip("Payments Due", "Worker payments accrued minus the amount paid"),
+        attrs=col_attrs,
+    )
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="", attrs=STOP_CLICK_PROPAGATION_ATTR)
 
     class Meta(BaseOpportunityList.Meta):
@@ -748,10 +758,25 @@ class OpportunityTable(BaseOpportunityList):
 
 
 class ProgramManagerOpportunityTable(BaseOpportunityList):
-    active_workers = tables.Column(verbose_name="Active Workers", attrs=TEXT_CENTER_ATTR)
-    total_deliveries = tables.Column(verbose_name="Total Deliveries", attrs=TEXT_CENTER_ATTR)
-    verified_deliveries = tables.Column(verbose_name="Verified Deliveries", attrs=TEXT_CENTER_ATTR)
-    worker_earnings = tables.Column(verbose_name="Worker Earnings", accessor="total_accrued", attrs=TEXT_CENTER_ATTR)
+
+    active_workers = tables.Column(
+        verbose_name=header_with_tooltip(
+            "Active Workers", "Worker delivered a Learn or Deliver form in the last 3 days"
+        ),
+        attrs=TEXT_CENTER_ATTR,
+    )
+    total_deliveries = tables.Column(
+        verbose_name=header_with_tooltip("Total Deliveries", "Payment units completed"), attrs=TEXT_CENTER_ATTR
+    )
+    verified_deliveries = tables.Column(
+        verbose_name=header_with_tooltip("Verified Deliveries", "Payment units fully approved by PM and NM"),
+        attrs=TEXT_CENTER_ATTR,
+    )
+    worker_earnings = tables.Column(
+        verbose_name=header_with_tooltip("Worker Earnings", "Total payment accrued to worker"),
+        accessor="total_accrued",
+        attrs=TEXT_CENTER_ATTR,
+    )
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="")
 
     class Meta(BaseOpportunityList.Meta):
@@ -832,6 +857,8 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
 class UserVisitVerificationTable(tables.Table):
     date_time = columns.DateTimeColumn(verbose_name="Date", accessor="visit_date", format="d M, Y H:i")
     entity_name = columns.Column(verbose_name="Entity Name")
+    deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
+    payment_unit = columns.Column(verbose_name="Payment Unit", accessor="completed_work__payment_unit__name")
     flags = columns.TemplateColumn(
         verbose_name="Flags",
         orderable=False,
@@ -867,6 +894,8 @@ class UserVisitVerificationTable(tables.Table):
         sequence = (
             "date_time",
             "entity_name",
+            "deliver_unit",
+            "payment_unit",
             "flags",
             "last_activity",
             "icons",
@@ -919,14 +948,15 @@ class UserVisitVerificationTable(tables.Table):
             )
 
         status = []
-        if record.opportunity.managed and record.review_status:
+        if record.opportunity.managed and record.review_status and record.review_created_on:
             if record.review_status == VisitReviewStatus.pending.value:
                 status.append("pending_review")
             else:
                 status.append(record.review_status)
         if record.status in VisitValidationStatus:
             if (
-                record.review_status in VisitReviewStatus.pending.value
+                record.review_status != VisitReviewStatus.agree.value
+                and record.review_created_on
                 and record.status == VisitValidationStatus.approved
             ):
                 status.append("approved_pending_review")
@@ -988,9 +1018,14 @@ class WorkerStatusTable(tables.Table):
     user = UserInfoColumn()
     suspended = SuspendedIndicatorColumn()
     invited_date = DMYTColumn()
-    last_active = DMYTColumn()
-    started_learn = DMYTColumn(verbose_name="Started Learn", accessor="date_learn_started")
-    completed_learn = DMYTColumn()
+    last_active = DMYTColumn(verbose_name=header_with_tooltip("Last Active", "Submitted a Learn or Deliver form"))
+    started_learn = DMYTColumn(
+        verbose_name=header_with_tooltip("Started Learn", "Submitted the first Learn form"),
+        accessor="date_learn_started",
+    )
+    completed_learn = DMYTColumn(
+        verbose_name=header_with_tooltip("Completed Learn", "Completed all Learn modules except assessment")
+    )
     days_to_complete_learn = DurationColumn(verbose_name="Time to Complete Learning")
     first_delivery = DMYTColumn()
     days_to_start_delivery = DurationColumn(verbose_name="Time to Start Deliver")
@@ -1073,6 +1108,7 @@ class WorkerLearnTable(OrgContextTable):
     )
     completed_learning = DMYTColumn(accessor="completed_learn", verbose_name="Completed Learning")
     assessment = tables.Column(accessor="assessment_status")
+
     attempts = tables.Column(accessor="assesment_count")
     learning_hours = DurationColumn()
     action = tables.TemplateColumn(
@@ -1134,6 +1170,48 @@ class WorkerLearnTable(OrgContextTable):
         )
 
 
+class TotalFlagCountsColumn(tables.Column):
+    def __init__(self, *args, status=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = status
+
+    def render_footer(self, bound_column, table):
+        total = sum(bound_column.accessor.resolve(row) for row in table.data)
+
+        url = reverse("opportunity:worker_flag_counts", args=[table.org_slug, table.opp_id])
+        params = {"status": self.status}
+        full_url = f"{url}?{urlencode(params)}"
+
+        return render_to_string(
+            "tailwind/components/worker_page/fetch_flag_counts.html",
+            {
+                "counts_url": full_url,
+                "value": total,
+                "status": self.status,
+            },
+        )
+
+
+class TotalDeliveredColumn(tables.Column):
+    def render_footer(self, bound_column, table):
+        completed = sum(row.completed for row in table.data)
+        incomplete = sum(row.incomplete for row in table.data)
+        over_limit = sum(row.over_limit for row in table.data)
+
+        rows = [
+            {"label": "Completed", "value": completed},
+            {"label": "Incomplete", "value": incomplete},
+            {"label": "Over limit", "value": over_limit},
+        ]
+        return render_to_string(
+            "tailwind/components/worker_page/deliver_column.html",
+            {
+                "value": completed,
+                "rows": rows,
+            },
+        )
+
+
 class WorkerDeliveryTable(OrgContextTable):
     use_view_url = True
 
@@ -1144,10 +1222,24 @@ class WorkerDeliveryTable(OrgContextTable):
     last_active = DMYTColumn()
     payment_unit = tables.Column(orderable=False)
     delivery_progress = tables.Column(accessor="total_visits", empty_values=())
-    delivered = tables.Column(accessor="completed", footer=lambda table: sum(x.completed for x in table.data))
-    pending = tables.Column(footer=lambda table: sum(x.pending for x in table.data))
-    approved = tables.Column(footer=lambda table: sum(x.approved for x in table.data))
-    rejected = tables.Column(footer=lambda table: sum(x.rejected for x in table.data))
+    delivered = TotalDeliveredColumn(
+        verbose_name=header_with_tooltip("Delivered", "Delivered number of payment units"),
+        accessor="completed"
+    )
+    pending = TotalFlagCountsColumn(
+        verbose_name=header_with_tooltip("Pending", "Payment units with pending approvals with NM or PM"),
+        status=CompletedWorkStatus.pending
+    )
+    approved = TotalFlagCountsColumn(
+        verbose_name=header_with_tooltip(
+            "Approved", "Payment units that are fully approved automatically or manually by NM and PM"
+        ),
+        status=CompletedWorkStatus.approved
+    )
+    rejected = TotalFlagCountsColumn(
+        verbose_name=header_with_tooltip("Rejected", "Payment units that are rejected"),
+        status=CompletedWorkStatus.rejected)
+
     action = tables.TemplateColumn(
         verbose_name="",
         orderable=False,
@@ -1259,7 +1351,6 @@ class WorkerDeliveryTable(OrgContextTable):
         rows = [
             {"label": "Completed", "value": record.completed},
             {"label": "Incomplete", "value": record.incomplete},
-            {"label": "Duplicate", "value": record.duplicate},
             {"label": "Over limit", "value": record.over_limit},
         ]
         return render_to_string(
@@ -1270,32 +1361,33 @@ class WorkerDeliveryTable(OrgContextTable):
             },
         )
 
-    def _render_flag_counts(self, record, value, status, status_title):
+    def _render_flag_counts(self, record, value, status):
+        url = reverse("opportunity:worker_flag_counts", args=[self.org_slug, self.opp_id])
+
+        params = {
+            "status": status,
+            "payment_unit_id": record.payment_unit_id,
+            "access_id": record.pk,
+        }
+        full_url = f"{url}?{urlencode(params)}"
+
         return render_to_string(
             "tailwind/components/worker_page/fetch_flag_counts.html",
             {
-                "record": record,
-                "payment_unit_id": record.payment_unit_id,
+                "counts_url": full_url,
                 "value": value,
-                "org_slug": self.org_slug,
-                "opp_id": self.opp_id,
-                "status_title": status_title,
                 "status": status,
             },
         )
 
     def render_pending(self, record, value):
-        return self._render_flag_counts(record, value, status=CompletedWorkStatus.pending, status_title="Pending Info")
+        return self._render_flag_counts(record, value, status=CompletedWorkStatus.pending)
 
     def render_approved(self, record, value):
-        return self._render_flag_counts(
-            record, value, status=CompletedWorkStatus.approved, status_title="Approved Info"
-        )
+        return self._render_flag_counts(record, value, status=CompletedWorkStatus.approved)
 
     def render_rejected(self, record, value):
-        return self._render_flag_counts(
-            record, value, status=CompletedWorkStatus.rejected, status_title="Rejected Info"
-        )
+        return self._render_flag_counts(record, value, status=CompletedWorkStatus.rejected)
 
 
 class WorkerLearnStatusTable(tables.Table):
@@ -1340,16 +1432,24 @@ class PaymentUnitTable(OrgContextTable):
     name = tables.Column(verbose_name="Payment Unit Name")
     max_total = tables.Column(verbose_name="Total Deliveries")
     deliver_units = tables.Column(verbose_name="Delivery Units")
+    org_pay = tables.Column(verbose_name="Org pay", empty_values=())
 
     def __init__(self, *args, **kwargs):
         self.can_edit = kwargs.pop("can_edit", False)
+        # For managed opp
+        self.org_pay_per_visit = kwargs.pop("org_pay_per_visit", False)
+        if not self.org_pay_per_visit:
+            kwargs["exclude"] = "org_pay"
         super().__init__(*args, **kwargs)
 
     class Meta:
         model = PaymentUnit
         orderable = False
-        fields = ("index", "name", "start_date", "end_date", "amount", "max_total", "max_daily", "deliver_units")
+        fields = ("index", "name", "start_date", "end_date", "amount", "org_pay", "max_total", "max_daily", "deliver_units")
         empty_text = "No payment units for this opportunity."
+
+    def render_org_pay(self, record):
+        return self.org_pay_per_visit
 
     def render_deliver_units(self, record):
         deliver_units = record.deliver_units.all()
