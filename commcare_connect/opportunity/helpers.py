@@ -227,7 +227,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
                 incomplete=Coalesce(incomplete_count_sq, Value(0)),
             )
             .annotate(
-                last_active_d=Greatest(
+                last_active=Greatest(
                     F('_last_visit_val'),
                     F('_last_module_val'),
                     F('date_learn_started')
@@ -326,7 +326,7 @@ def get_worker_table_data(opportunity):
     )
 
     queryset = OpportunityAccess.objects.filter(opportunity=opportunity).annotate(
-        last_active_d=OpportunityAnnotations.last_active(),
+        last_active=OpportunityAnnotations.last_active(),
         completed_modules_count=Count(
             "completedmodule__module",
             distinct=True,
@@ -375,7 +375,7 @@ def get_worker_learn_table_data(opportunity):
         .values("total_duration")[:1]
     )
     queryset = OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True).annotate(
-        last_active_d=OpportunityAnnotations.last_active(),
+        last_active=OpportunityAnnotations.last_active(),
         completed_modules_count=Count("completedmodule__module", distinct=True),
         completed_learn=Case(
             When(
