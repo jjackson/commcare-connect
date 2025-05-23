@@ -659,7 +659,10 @@ class UserVisit(XFormBaseModel):
     @property
     def flags(self):
         if self.flag_reason is not None:
-            return [flag for flag, _ in self.flag_reason.get("flags", [])]
+            from commcare_connect.utils.flags import FlagLabels
+
+            flags = [FlagLabels.get_label(flag) for flag, _ in self.flag_reason.get("flags", [])]
+            return flags
         return []
 
     class Meta:

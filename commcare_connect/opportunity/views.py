@@ -141,6 +141,7 @@ from commcare_connect.users.models import User
 from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 from commcare_connect.utils.file import get_file_extension
+from commcare_connect.utils.flags import FlagLabels
 from commcare_connect.utils.tables import get_duration_min
 from django.utils.translation import gettext as _
 
@@ -1428,22 +1429,18 @@ def user_visit_verification(request, org_slug, opp_id, pk):
     is_program_manager = is_program_manager_of_opportunity(request, opportunity)
 
     user_visit_counts = get_user_visit_counts(opportunity_access_id=pk)
-    visits = UserVisit.objects.filter(opportunity_access=opportunity_access)
+    visits = UserVisit.objects.filter(opportunity_access=opportunity_access, flagged=True, flag_reason__isnull=False)
     flagged_info = defaultdict(lambda: {"name": "", "approved": 0, "pending": 0, "rejected": 0})
     for visit in visits:
-        for flag in visit.flags:
-            if flag == "form_submission_period":
-                flag = "Off Hours"
-            if flag == "attachment_missing":
-                flag = "No Attachment"
-            flag = flag.capitalize()
+        for flag, _description in visit.flag_reason.get("flags", []):
+            flag_label = FlagLabels.get_label(flag)
             if visit.status == VisitValidationStatus.approved:
-                flagged_info[flag]["approved"] += 1
+                flagged_info[flag_label]["approved"] += 1
             if visit.status == VisitValidationStatus.rejected:
-                flagged_info[flag]["rejected"] += 1
+                flagged_info[flag_label]["rejected"] += 1
             if visit.status in (VisitValidationStatus.pending, VisitValidationStatus.duplicate):
-                flagged_info[flag]["pending"] += 1
-            flagged_info[flag]["name"] = flag
+                flagged_info[flag_label]["pending"] += 1
+            flagged_info[flag_label]["name"] = flag_label
     flagged_info = flagged_info.values()
     last_payment_details = Payment.objects.filter(opportunity_access=opportunity_access).order_by("-date_paid").first()
     pending_payment = max(opportunity_access.payment_accrued - opportunity_access.total_paid, 0)
@@ -1733,6 +1730,12 @@ def user_visit_details(request, org_slug, opp_id, pk):
         user_forms.sort(key=lambda x: x[1])
         other_forms.sort(key=lambda x: x[1])
         visit_data.update({"lat": lat, "lon": lon, "precision": precision})
+
+    flags = []
+    if user_visit.flagged and user_visit.flag_reason:
+        flags = [
+            (FlagLabels.get_label(flag), description) for flag, description in user_visit.flag_reason.get("flags", [])
+        ]
     return render(
         request,
         "opportunity/user_visit_details.html",
@@ -1746,6 +1749,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
             closest_distance=closest_distance,
             verification_flags_config=verification_flags_config,
             deliver_unit_flags_config=deliver_unit_flags_config,
+            flags=flags,
         ),
     )
 
