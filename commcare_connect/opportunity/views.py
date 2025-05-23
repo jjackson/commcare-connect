@@ -1879,7 +1879,7 @@ def worker_payments(request, org_slug=None, opp_id=None):
         "-payment_accrued"
     )
     query_set = query_set.annotate(
-        last_active=Greatest(Max("uservisit__visit_date"), Max("completedmodule__date"), "date_learn_started"),
+        last_active_d=Greatest(Max("uservisit__visit_date"), Max("completedmodule__date"), "date_learn_started"),
         last_paid=Max("payment__date_paid"),
     )
     table = WorkerPaymentsTable(query_set, org_slug=org_slug, opp_id=opp_id)
