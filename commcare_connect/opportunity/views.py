@@ -342,7 +342,7 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
 
         context["resources"] = [
             {"name": "Learn App", "count": learn_module_count, "icon": "fa-book-open-cover"},
-            {"name": "Delivery App", "count": deliver_unit_count, "icon": "fa-clipboard-check"},
+            {"name": "Deliver App", "count": deliver_unit_count, "icon": "fa-clipboard-check"},
             {"name": "Payments Units", "count": payment_unit_count, "icon": "fa-hand-holding-dollar"},
         ]
 

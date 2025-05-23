@@ -24,10 +24,10 @@
                             <div x-show="selectedTab === 'Learn App'"></div>
                         </li>
                         <!-- Delivery App Tab -->
-                        <li @click="selectedTab = 'Delivery App'"
-                            :class="{ 'active': selectedTab === 'Delivery App' }">
-                            <span>Delivery App</span>
-                            <div x-show="selectedTab === 'Delivery App'"></div>
+                        <li @click="selectedTab = 'Deliver App'"
+                            :class="{ 'active': selectedTab === 'Deliver App' }">
+                            <span>Deliver App</span>
+                            <div x-show="selectedTab === 'Deliver App'"></div>
                         </li>
                         <!-- Payment Units Tab -->
                         <li @click="selectedTab = 'Payments Units'"
@@ -56,8 +56,8 @@
                         </div>
                     </div>
 
-                    <!-- Delivery App Content -->
-                    <div x-show="selectedTab === 'Delivery App'"
+                    <!-- Deliver App Content -->
+                    <div x-show="selectedTab === 'Deliver App'"
                             hx-get="{% url 'opportunity:deliver_unit_table' request.org.slug opp_id %}"
                             hx-trigger="tabShown from:body"
                             hx-swap="innerHTML"
