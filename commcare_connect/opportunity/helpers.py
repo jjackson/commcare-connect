@@ -526,7 +526,7 @@ def get_opportunity_funnel_progress(opp_id):
         ),
         completed_learning=Count(
             "opportunityaccess__user",
-            filter=Q(opportunityaccess__completed_learn__isnull=False),
+            filter=Q(opportunityaccess__completed_learn_date__isnull=False),
             distinct=True,
         ),
     ).first()
