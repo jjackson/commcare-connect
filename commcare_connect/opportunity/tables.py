@@ -1087,7 +1087,7 @@ class WorkerPaymentsTable(tables.Table):
             "tailwind/components/worker_page/last_paid.html",
             {
                 "record": record,
-                "value": value.strftime("%d-%b-%Y %H:%M") if value else "--",
+                "value": value.strftime("%d-%b-%Y") if value else "--",
                 "org_slug": self.org_slug,
                 "opp_id": self.opp_id,
             },
