@@ -66,8 +66,6 @@ def back_fill_completed_learn_date(apps, schema_editor):
                     completed_learn_date = max(entry["earliest_date"] for entry in earliest_dates)
                     user.completed_learn_date = completed_learn_date
 
-                print(user.last_active, user.completed_learn_date)
-
             if access:
                 OpportunityAccess.objects.bulk_update(access, ["completed_learn_date", "last_active"])
 
