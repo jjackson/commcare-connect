@@ -337,7 +337,7 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
             return str(value)
 
         context["path"] = [
-            {"title": "opportunities", "url": reverse("opportunity:list", kwargs={"org_slug": request.org.slug})},
+            {"title": "Opportunities", "url": reverse("opportunity:list", kwargs={"org_slug": request.org.slug})},
             {"title": object.name, "url": reverse("opportunity:detail", args=(request.org.slug, object.id))},
         ]
 
