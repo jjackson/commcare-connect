@@ -2138,6 +2138,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "value": header_with_tooltip(stats["total_deliveries"],
                                          "Total delivered so far excluding duplicates"),
             "incr": stats["deliveries_from_yesterday"],
+            "url": delivery_url,
         },
         {
             "icon": "fa-clipboard-list-check",
@@ -2166,9 +2167,9 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "title": "Workers",
             "sub_heading": "",
             "value": "",
-            "url": status_url,
             "panels": [
-                {"icon": "fa-user-group", "name": "Workers", "status": "Invited", "value": stats["workers_invited"]},
+                {"icon": "fa-user-group", "name": "Workers", "status": "Invited", "value": stats["workers_invited"],
+                 "url": status_url, },
                 {
                     "icon": "fa-user-check",
                     "name": "Workers",
@@ -2188,7 +2189,6 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
         },
         {
             "title": "Services Delivered",
-            "url": delivery_url,
             "sub_heading": "Last Delivery",
             "value": stats["most_recent_delivery"] or "--",
             "panels": deliveries_panels,
@@ -2196,7 +2196,6 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
         {
             "title": f"Worker Payments ({opportunity.currency})",
             "sub_heading": "Last Payment",
-            "url": payment_url,
             "value": stats["recent_payment"] or "--",
             "panels": [
                 {
@@ -2205,7 +2204,8 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "status": "Earned",
                     "value": header_with_tooltip(intcomma(stats['total_accrued']),
                                                  "Worker payment accrued based on approved service deliveries"),
-                    "incr": stats["accrued_since_yesterday"]
+                    "incr": stats["accrued_since_yesterday"],
+                    "url": payment_url,
                 },
                 {
                     "icon": "fa-hand-holding-droplet",
