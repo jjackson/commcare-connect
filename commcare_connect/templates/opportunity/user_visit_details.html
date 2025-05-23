@@ -178,7 +178,7 @@
     </div>
     {% endif %}
     {% if user_visit.flagged %}
-      {% for flag in user_visit.flag_reason.flags %}
+      {% for flag in flags %}
         <div>
           <div class="text-sm text-brand-blue-light">{{ flag.0 }}</div>
           <div class="text-sm font-normal text-brand-deep-purple">{{ flag.1 }}</div>
