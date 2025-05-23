@@ -2028,7 +2028,7 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
                                                                      "Workers that have completed all Learn modules but not assessment"),
          "icon": "book-blank"},
         {"stage": "Completed Assessment",
-         "count": header_with_tooltip(result["completed_assessments"], "Workers that passed the assessment"),
+         "count": header_with_tooltip(result.completed_assessments, "Workers that passed the assessment"),
          "icon": "award-simple"},
         {"stage": "Claimed Job", "count": header_with_tooltip(result.claimed_job,
                                                               "Workers that have read the Opportunity terms and started download of the Deliver app"),
