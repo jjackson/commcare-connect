@@ -365,7 +365,7 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
             {
                 "name": "Max Workers",
                 "count": header_with_tooltip(safe_display(object.number_of_users),
-                                             "Maximum number of payment units that can be delivered. Each payment unit is a service delivery"),
+                                             "Maximum allowed workers in the Opportunity"),
                 "icon": "fa-users"
             },
             {
