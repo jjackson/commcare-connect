@@ -316,14 +316,15 @@
 {% else %}
   <div>
     <button class="button button-md positive-light"
-    {% if user_visit.status == "approved"%}
-      disabled
+    {% if user_visit.status != "approved"%}
       {% if user_visit.opportunity.managed %}
       @click="showRejectModal = false; showApproveModal = true;"
       {% else %}
       hx-post="{% url "opportunity:approve_visit" org_slug=request.org.slug pk=user_visit.id %}"
       hx-swap="none"
       {% endif %}
+    {% else %}
+      disabled
     {% endif %}>
       Approve
     </button>
