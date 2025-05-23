@@ -2004,17 +2004,17 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
     aggregates = get_opportunity_funnel_progress(opp_id)
 
     funnel_progress = [
-        {"stage": "Invited", "count": aggregates["workers_invited"], "icon": "envelope"},
+        {"stage": "Invited", "count": aggregates.workers_invited, "icon": "envelope"},
         {
             "stage": "Accepted",
-            "count": aggregates["workers_invited"] - aggregates["pending_invites"],
+            "count": aggregates.workers_invited - aggregates.pending_invites,
             "icon": "circle-check",
         },
-        {"stage": "Started Learning", "count": aggregates["started_learning_count"], "icon": "book-open-cover"},
-        {"stage": "Completed Learning", "count": aggregates["completed_learning"], "icon": "book-blank"},
-        {"stage": "Completed Assessment", "count": aggregates["completed_assessments"], "icon": "award-simple"},
-        {"stage": "Claimed Job", "count": aggregates["claimed_job"], "icon": "user-check"},
-        {"stage": "Started Delivery", "count": aggregates["started_deliveries"], "icon": "house-chimney-user"},
+        {"stage": "Started Learning", "count": aggregates.started_learning_count, "icon": "book-open-cover"},
+        {"stage": "Completed Learning", "count": aggregates.completed_learning, "icon": "book-blank"},
+        {"stage": "Completed Assessment", "count": aggregates.completed_assessments, "icon": "award-simple"},
+        {"stage": "Claimed Job", "count": aggregates.claimed_job, "icon": "user-check"},
+        {"stage": "Started Delivery", "count": aggregates.started_deliveries, "icon": "house-chimney-user"},
     ]
 
     return render(
@@ -2026,15 +2026,27 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
 
 @org_member_required
 def opportunity_worker_progress(request, org_slug, opp_id):
-    aggregates = get_opportunity_worker_progress(opp_id)
+    result = get_opportunity_worker_progress(opp_id)
 
     def safe_percent(numerator, denominator):
         return (numerator / denominator) * 100 if denominator else 0
 
-    verified_percentage = safe_percent(aggregates["approved_deliveries"], aggregates["total_deliveries"])
-    rejected_percentage = safe_percent(aggregates["rejected_deliveries"], aggregates["total_deliveries"])
-    earned_percentage = safe_percent(aggregates["total_accrued"], aggregates["total_budget"])
-    paid_percentage = safe_percent(aggregates["total_paid"], aggregates["total_accrued"])
+    verified_percentage = safe_percent(
+        result.approved_deliveries or 0,
+        result.total_deliveries or 0
+    )
+    rejected_percentage = safe_percent(
+        result.rejected_deliveries or 0,
+        result.total_deliveries or 0
+    )
+    earned_percentage = safe_percent(
+        result.total_accrued or 0,
+        result.total_budget or 0
+    )
+    paid_percentage = safe_percent(
+        result.total_paid or 0,
+        result.total_accrued or 0
+    )
 
     worker_progress = [
         {
@@ -2042,14 +2054,14 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             "progress": [
                 {
                     "title": "Approved",
-                    "total": aggregates["approved_deliveries"],
+                    "total": result.approved_deliveries or 0,
                     "value": f"{verified_percentage:.2f}%",
                     "badge_type": True,
-                    "percent": verified_percentage
+                    "percent": verified_percentage,
                 },
                 {
                     "title": "Rejected",
-                    "total": aggregates["rejected_deliveries"],
+                    "total": result.rejected_deliveries or 0,
                     "value": f"{rejected_percentage:.2f}%",
                     "badge_type": True,
                     "percent": rejected_percentage,
@@ -2057,18 +2069,18 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             ],
         },
         {
-            "title": f"Payments to Workers ({aggregates['currency']})",
+            "title": f"Payments to Workers ({result.currency})",
             "progress": [
                 {
                     "title": "Earned",
-                    "total": "",
+                    "total": f"{intcomma(result.total_budget)}",
                     "value": f"{earned_percentage:.2f}%",
                     "badge_type": True,
                     "percent": earned_percentage,
                 },
                 {
                     "title": "Paid",
-                    "total": aggregates["total_paid"],
+                    "total": result.total_paid or 0,
                     "value": f"{paid_percentage:.2f}%",
                     "badge_type": True,
                     "percent": paid_percentage,
@@ -2108,15 +2120,15 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "icon": "fa-clipboard-list-check",
             "name": "Services Delivered",
             "status": "Total",
-            "value": stats["total_deliveries"],
-            "incr": stats["deliveries_from_yesterday"],
+            "value": stats.total_deliveries,
+            "incr": stats.deliveries_from_yesterday,
         },
         {
             "icon": "fa-clipboard-list-check",
             "name": "Services Delivered",
             "status": "Awaiting NM Review",
-            "value": stats["flagged_deliveries_waiting_for_review"],
-            "incr": stats["flagged_deliveries_waiting_for_review_since_yesterday"],
+            "value": stats.flagged_deliveries_waiting_for_review,
+            "incr": stats.flagged_deliveries_waiting_for_review_since_yesterday,
         },
     ]
 
@@ -2126,8 +2138,8 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                 "icon": "fa-clipboard-list-check",
                 "name": "Services Delivered",
                 "status": "Pending PM Review",
-                "value": stats["visits_pending_for_pm_review"],
-                "incr": stats["visits_pending_for_pm_review_since_yesterday"],
+                "value": stats.visits_pending_for_pm_review,
+                "incr": stats.visits_pending_for_pm_review_since_yesterday,
             }
         )
 
@@ -2138,18 +2150,18 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "value": "",
             "url": status_url,
             "panels": [
-                {"icon": "fa-user-group", "name": "Workers", "status": "Invited", "value": stats["workers_invited"]},
+                {"icon": "fa-user-group", "name": "Workers", "status": "Invited", "value": stats.workers_invited},
                 {
                     "icon": "fa-user-check",
                     "name": "Workers",
                     "status": "Yet to Accept Invitation",
-                    "value": stats["pending_invites"],
+                    "value": stats.pending_invites,
                 },
                 {
                     "icon": "fa-clipboard-list",
                     "name": "Workers",
                     "status": "Inactive last 3 days",
-                    "value": stats["inactive_workers"],
+                    "value": stats.inactive_workers,
                     "url": status_url,
                     **panel_type_2,
                 },
@@ -2159,27 +2171,27 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "title": "Services Delivered",
             "url": delivery_url,
             "sub_heading": "Last Delivery",
-            "value": stats["most_recent_delivery"] or "--",
+            "value": stats.most_recent_delivery or "--",
             "panels": deliveries_panels,
         },
         {
             "title": f"Worker Payments ({opportunity.currency})",
             "sub_heading": "Last Payment",
             "url": payment_url,
-            "value": stats["recent_payment"] or "--",
+            "value": stats.recent_payment or "--",
             "panels": [
                 {
                     "icon": "fa-hand-holding-dollar",
                     "name": "Payments",
                     "status": "Earned",
-                    "value": intcomma(stats['total_accrued']),
-                    "incr": stats["accrued_since_yesterday"]
+                    "value": intcomma(stats.total_accrued),
+                    "incr": stats.accrued_since_yesterday
                 },
                 {
                     "icon": "fa-hand-holding-droplet",
                     "name": "Payments",
                     "status": "Due",
-                    "value": intcomma(stats['payments_due']),
+                    "value": intcomma(stats.payments_due),
                 },
             ],
         },
