@@ -107,7 +107,7 @@ from commcare_connect.opportunity.tables import (
     WorkerLearnStatusTable,
     WorkerLearnTable,
     WorkerPaymentsTable,
-    WorkerStatusTable,
+    WorkerStatusTable, header_with_tooltip,
 )
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
@@ -364,17 +364,20 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
             },
             {
                 "name": "Max Workers",
-                "count": safe_display(object.number_of_users),
+                "count": header_with_tooltip(safe_display(object.number_of_users),
+                                             "Maximum number of payment units that can be delivered. Each payment unit is a service delivery"),
                 "icon": "fa-users"
             },
             {
                 "name": "Max Service Deliveries",
-                "count": safe_display(object.allotted_visits),
+                "count": header_with_tooltip(safe_display(object.allotted_visits),
+                                             "Maximum number of payment units that can be delivered. Each payment unit is a service delivery"),
                 "icon": "fa-gears",
             },
             {
                 "name": "Max Budget",
-                "count": f"{object.currency} {intcomma(object.total_budget)}",
+                "count": header_with_tooltip(f"{object.currency} {intcomma(object.total_budget)}",
+                                             "Maximum payments that can be made for workers and organization"),
                 "icon": "fa-money-bill",
             },
         ]
@@ -2003,18 +2006,36 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, OrgContextSingleTab
 def opportunity_funnel_progress(request, org_slug, opp_id):
     aggregates = get_opportunity_funnel_progress(opp_id)
 
+    accepted = aggregates["workers_invited"] - aggregates["pending_invites"]
+
     funnel_progress = [
-        {"stage": "Invited", "count": aggregates["workers_invited"], "icon": "envelope"},
+        {"stage": "Invited",
+         "count": header_with_tooltip(aggregates["workers_invited"],
+                                      "Number of phone numbers to whom an SMS or push notification was sent and ConnectID exists"),
+         "icon": "envelope"},
         {
             "stage": "Accepted",
-            "count": aggregates["workers_invited"] - aggregates["pending_invites"],
+            "count": header_with_tooltip(accepted,
+                                         "Workers that have clicked on the SMS or push notification or gone into Learn app"),
             "icon": "circle-check",
         },
-        {"stage": "Started Learning", "count": aggregates["started_learning_count"], "icon": "book-open-cover"},
-        {"stage": "Completed Learning", "count": aggregates["completed_learning"], "icon": "book-blank"},
-        {"stage": "Completed Assessment", "count": aggregates["completed_assessments"], "icon": "award-simple"},
-        {"stage": "Claimed Job", "count": aggregates["claimed_job"], "icon": "user-check"},
-        {"stage": "Started Delivery", "count": aggregates["started_deliveries"], "icon": "house-chimney-user"},
+        {"stage": "Started Learning",
+         "count": header_with_tooltip(aggregates["started_learning_count"],
+                                      "Workers that have submitted the first Learn form"),
+         "icon": "book-open-cover"
+         },
+        {"stage": "Completed Learning", "count": header_with_tooltip(aggregates["completed_learning"],
+                                                                     "Workers that have completed all Learn modules but not assessment"),
+         "icon": "book-blank"},
+        {"stage": "Completed Assessment",
+         "count": header_with_tooltip(aggregates["completed_assessments"], "Workers that passed the assessment"),
+         "icon": "award-simple"},
+        {"stage": "Claimed Job", "count": header_with_tooltip(aggregates["claimed_job"],
+                                                              "Workers that have read the Opportunity terms and started download of the Deliver app"),
+         "icon": "user-check"},
+        {"stage": "Started Delivery", "count": header_with_tooltip(aggregates["started_deliveries"],
+                                                                   "Workers that have submitted at least 1 Learn form"),
+         "icon": "house-chimney-user"},
     ]
 
     return render(
@@ -2042,15 +2063,19 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             "progress": [
                 {
                     "title": "Approved",
-                    "total": aggregates["approved_deliveries"],
-                    "value": f"{verified_percentage:.2f}%",
+                    "total": header_with_tooltip(aggregates["approved_deliveries"],
+                                                 "Number of Service Deliveries Approved by both PM and NM or Auto-approved"),
+                    "value": header_with_tooltip(f"{verified_percentage:.2f}%",
+                                                 "Percentage Approved out of Delivered"),
                     "badge_type": True,
                     "percent": verified_percentage
                 },
                 {
                     "title": "Rejected",
-                    "total": aggregates["rejected_deliveries"],
-                    "value": f"{rejected_percentage:.2f}%",
+                    "total": header_with_tooltip(aggregates["rejected_deliveries"],
+                                                 "Number of Service Deliveries Rejected"),
+                    "value": header_with_tooltip(f"{rejected_percentage:.2f}%",
+                                                 "Percentage Rejected out of Delivered"),
                     "badge_type": True,
                     "percent": rejected_percentage,
                 },
@@ -2061,15 +2086,17 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             "progress": [
                 {
                     "title": "Earned",
-                    "total": "",
-                    "value": f"{earned_percentage:.2f}%",
+                    "total": header_with_tooltip(aggregates["total_accrued"], "Earned Amount"),
+                    "value": header_with_tooltip(f"{earned_percentage:.2f}%",
+                                                 "Percentage Earned by all workers out of Max Budget in the Opportunity"),
                     "badge_type": True,
                     "percent": earned_percentage,
                 },
                 {
                     "title": "Paid",
-                    "total": aggregates["total_paid"],
-                    "value": f"{paid_percentage:.2f}%",
+                    "total": header_with_tooltip(aggregates["total_paid"], "Paid Amount to All Workers"),
+                    "value": header_with_tooltip(f"{paid_percentage:.2f}%",
+                                                 "Percentage Paid to all  workers out of Earned amount"),
                     "badge_type": True,
                     "percent": paid_percentage,
                 },
@@ -2108,14 +2135,16 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "icon": "fa-clipboard-list-check",
             "name": "Services Delivered",
             "status": "Total",
-            "value": stats["total_deliveries"],
+            "value": header_with_tooltip(stats["total_deliveries"],
+                                         "Total delivered so far excluding duplicates"),
             "incr": stats["deliveries_from_yesterday"],
         },
         {
             "icon": "fa-clipboard-list-check",
             "name": "Services Delivered",
-            "status": "Awaiting NM Review",
-            "value": stats["flagged_deliveries_waiting_for_review"],
+            "status": "Pending NM Review",
+            "value": header_with_tooltip(stats["flagged_deliveries_waiting_for_review"],
+                                         "Flagged and pending review with NM"),
             "incr": stats["flagged_deliveries_waiting_for_review_since_yesterday"],
         },
     ]
@@ -2126,7 +2155,8 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                 "icon": "fa-clipboard-list-check",
                 "name": "Services Delivered",
                 "status": "Pending PM Review",
-                "value": stats["visits_pending_for_pm_review"],
+                "value": header_with_tooltip(stats["visits_pending_for_pm_review"],
+                                             "Flagged and pending review with PM"),
                 "incr": stats["visits_pending_for_pm_review_since_yesterday"],
             }
         )
@@ -2149,7 +2179,8 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "icon": "fa-clipboard-list",
                     "name": "Workers",
                     "status": "Inactive last 3 days",
-                    "value": stats["inactive_workers"],
+                    "value": header_with_tooltip(stats["inactive_workers"],
+                                                 "Did not submit a Learn or Deliver form in the last 3 days"),
                     "url": status_url,
                     **panel_type_2,
                 },
@@ -2172,14 +2203,16 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "icon": "fa-hand-holding-dollar",
                     "name": "Payments",
                     "status": "Earned",
-                    "value": intcomma(stats['total_accrued']),
+                    "value": header_with_tooltip(intcomma(stats['total_accrued']),
+                                                 "Worker payment accrued based on approved service deliveries"),
                     "incr": stats["accrued_since_yesterday"]
                 },
                 {
                     "icon": "fa-hand-holding-droplet",
                     "name": "Payments",
                     "status": "Due",
-                    "value": intcomma(stats['payments_due']),
+                    "value": header_with_tooltip(intcomma(stats['payments_due']),
+                                                 "Worker payments reported as paid"),
                 },
             ],
         },

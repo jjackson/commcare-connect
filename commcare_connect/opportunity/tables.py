@@ -558,9 +558,9 @@ def date_with_time_popup(table, date):
 def header_with_tooltip(label, tooltip_text):
     return mark_safe(
         f"""
-        <div x-data x-tooltip.raw="{tooltip_text}">
+        <span x-data x-tooltip.raw="{tooltip_text}">
             {label}
-        </div>
+        </span>
         """
     )
 
