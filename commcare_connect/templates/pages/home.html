@@ -3,13 +3,20 @@
 {% load i18n %}
 
 {% block content %}
-{% if request.user.is_authenticated %}
-<div class="container md:max-w-screen-lg mx-auto flex flex-col gap-6">
-  <p>
-    {% blocktrans %}
-      Welcome to CommCare Connect. You can enter an organizational workspace or create a new one through the dropdown on the top right of this page.
-    {% endblocktrans %}
-  </p>
+{% if not request.user.is_authenticated %}
+<div class="py-8 px-4 mx-auto max-w-screen-xl text-center lg:py-16">
+    <h1 class="mb-4 text-4xl font-extrabold tracking-tight leading-none text-gray-900 md:text-5xl lg:text-6xl">CommCare Connect</h1>
+    <p class="mb-8 text-lg font-normal text-gray-500 lg:text-xl sm:px-16 lg:px-48">
+      {% blocktrans %}Unlocking more impact from Frontline Workers{% endblocktrans %}
+    </p>
+    <div class="flex flex-col space-y-4 sm:flex-row sm:justify-center sm:space-y-0">
+      <a href="{% url 'account_signup' %}" class="button button-md primary-dark !inline-flex items-center">
+            Create Account
+            <svg class="w-3.5 h-3.5 ms-2 rtl:rotate-180" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 10">
+                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1 5h12m0 0L9 1m4 4L9 9"/>
+            </svg>
+      </a>
+    </div>
 </div>
 {% endif %}
 {% endblock %}
