@@ -318,7 +318,7 @@ def program_manager_home(request, org):
     )
 
     pending_payments = _make_recent_activity_data(
-        pending_payments_data, org.slug, "opportunity:worker_list", {"active_tab": "payments"}
+        pending_payments_data, org.slug, "opportunity:worker_list", {"active_tab": "payments"}, small_text=True
     )
 
     organizations = Organization.objects.exclude(pk=org.pk)
@@ -375,7 +375,7 @@ def network_manager_home(request, org):
         for data in pending_payments_data_opps
     ]
     pending_payments = _make_recent_activity_data(
-        pending_payments_data, org.slug, "opportunity:worker_list", {"active_tab": "payments"}
+        pending_payments_data, org.slug, "opportunity:worker_list", {"active_tab": "payments"}, small_text=True
     )
 
     three_days_before = now() - timedelta(days=3)
@@ -404,7 +404,9 @@ def network_manager_home(request, org):
     return render(request, "program/nm_home.html", context)
 
 
-def _make_recent_activity_data(data: list[dict], org_slug: str, url_slug: str, url_get_kwargs: dict = {}):
+def _make_recent_activity_data(
+    data: list[dict], org_slug: str, url_slug: str, url_get_kwargs: dict = {}, small_text=False
+):
     get_string = "&".join([f"{key}={value}" for key, value in url_get_kwargs.items()])
     return [
         {
@@ -413,6 +415,7 @@ def _make_recent_activity_data(data: list[dict], org_slug: str, url_slug: str, u
             "count": row.get("count", 0),
             "url": reverse(url_slug, kwargs={"org_slug": org_slug, "opp_id": row["opportunity__id"]})
             + f"?{get_string}",
+            "small_text": small_text,
         }
         for row in data
     ]
