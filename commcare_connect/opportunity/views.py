@@ -1024,7 +1024,7 @@ def fetch_attachment(self, org_slug, blob_id):
 @org_member_required
 def verification_flags_config(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(pk=pk, org_slug=org_slug)
-    if opportunity.managed and not is_program_manager_of_opportunity(opportunity):
+    if opportunity.managed and not is_program_manager_of_opportunity(request, opportunity):
         return redirect("opportunity:detail", org_slug=org_slug, pk=pk)
     verification_flags = OpportunityVerificationFlags.objects.filter(opportunity=opportunity).first()
     form = OpportunityVerificationFlagsConfigForm(instance=verification_flags, data=request.POST or None)
