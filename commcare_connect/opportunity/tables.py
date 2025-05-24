@@ -1274,8 +1274,8 @@ class WorkerDeliveryTable(OrgContextTable):
 
 
     def render_delivery_progress(self, record):
-        current = record.completed
-        total = record.total_visits
+        current = record.completed or 10
+        total = record.total_visits or 100
 
         if not total:
             return "-"
@@ -1283,9 +1283,8 @@ class WorkerDeliveryTable(OrgContextTable):
         percentage = round((current / total) * 100, 2)
 
         context = {
-            "current": current,
             "percentage": percentage,
-            "total": total,
+            "total": current,
             "number_style": True,
         }
 
