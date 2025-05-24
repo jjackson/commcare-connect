@@ -2,7 +2,8 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.db.models import Count, F, Max, Q, Sum
+from django.db.models import CharField, Count, F, Max, Q, Sum, Value
+from django.db.models.functions import Concat
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.timezone import now
@@ -11,6 +12,7 @@ from django.views.generic import ListView, UpdateView
 from django_tables2 import SingleTableView
 
 from commcare_connect.opportunity.models import (
+    Opportunity,
     OpportunityAccess,
     PaymentInvoice,
     UserVisit,
@@ -312,7 +314,7 @@ def program_manager_home(request, org):
             payment__isnull=True,
         )
         .values("opportunity__id", "opportunity__name", "opportunity__organization__name")
-        .annotate(count=Count("id"))
+        .annotate(count=Concat(F("opportunity__currency"), Value(" "), Sum("amount"), output_field=CharField()))
     )
 
     pending_payments = _make_recent_activity_data(
@@ -355,15 +357,27 @@ def network_manager_home(request, org):
         pending_review_data, org.slug, "opportunity:worker_list", {"active_tab": "delivery"}
     )
     access_qs = OpportunityAccess.objects.filter(opportunity__managed=True, opportunity__organization=org)
-    pending_payments_data = (
-        access_qs.annotate(pending_payment=F("payment_accrued") - Sum("payment__amount"))
+
+    pending_payments_data_opps = (
+        Opportunity.objects.filter(managed=True, organization=org)
+        .annotate(
+            pending_payment=Sum("opportunityaccess__payment_accrued") - Sum("opportunityaccess__payment__amount")
+        )
         .filter(pending_payment__gte=0)
-        .values("opportunity__id", "opportunity__name", "opportunity__organization__name")
-        .annotate(count=Count("id", distinct=True))
     )
+    pending_payments_data = [
+        {
+            "opportunity__id": data.id,
+            "opportunity__name": data.name,
+            "opportunity__organization__name": data.organization.name,
+            "count": f"{data.currency} {data.pending_payment}",
+        }
+        for data in pending_payments_data_opps
+    ]
     pending_payments = _make_recent_activity_data(
         pending_payments_data, org.slug, "opportunity:worker_list", {"active_tab": "payments"}
     )
+
     three_days_before = now() - timedelta(days=3)
     inactive_workers_data = (
         access_qs.annotate(
