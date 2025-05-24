@@ -2212,7 +2212,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "name": "Payments",
                     "status": "Due",
                     "value": header_with_tooltip(intcomma(stats['payments_due']),
-                                                 "Worker payments reported as paid"),
+                                                 "Worker payments reported as due"),
                 },
             ],
         },
