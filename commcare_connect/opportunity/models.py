@@ -113,6 +113,8 @@ class Opportunity(BaseModel):
 
     @property
     def remaining_budget(self) -> int:
+        if self.total_budget is None:
+            return 0
         return self.total_budget - self.claimed_budget
 
     @property
@@ -158,6 +160,8 @@ class Opportunity(BaseModel):
 
     @property
     def number_of_users(self):
+        if self.total_budget is None:
+            return 0
         if not self.managed:
             return self.total_budget / self.budget_per_user
 
