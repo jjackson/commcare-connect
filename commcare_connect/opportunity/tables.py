@@ -979,8 +979,9 @@ class UserVisitVerificationTable(tables.Table):
                 tooltip = meta.get("tooltip")
                 icon_html = f'<i class="{icon_class} text-brand-deep-purple ml-4"></i>'
                 if tooltip:
-                    icon_html = header_with_tooltip(icons_html, tooltip)
+                    icon_html = header_with_tooltip(icon_html, tooltip)
                 icons_html += icon_html
+
         justify_class = "justify-end" if len(status) == 1 else "justify-between"
 
         return format_html(
