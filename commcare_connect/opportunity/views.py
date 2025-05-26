@@ -1575,7 +1575,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
             tabs = [
                 {
                     "name": "pending_review",
-                    "label": "Pending Review",
+                    "label": "Pending PM Review",
                     "count": user_visit_counts.get("pending_review", 0),
                 },
                 {
@@ -1594,7 +1594,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
             tabs = [
                 {
                     "name": "pending",
-                    "label": "Pending",
+                    "label": "Pending NM Review",
                     "count": user_visit_counts.get("pending", 0),
                 }
             ]
@@ -1603,7 +1603,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                 dynamic_tabs = [
                     {
                         "name": "pending_review",
-                        "label": "PM Review",
+                        "label": "Pending PM Review",
                         "count": user_visit_counts.get("pending_review", 0),
                     },
                     {
