@@ -1469,7 +1469,8 @@ def user_visit_verification(request, org_slug, opp_id, pk):
         [
             {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
             {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opp_id))},
-            {"title": "Workers", "url": reverse("opportunity:worker_list", args=(org_slug, opp_id))},
+            {"title": "Workers",
+             "url": reverse("opportunity:worker_list", args=(org_slug, opp_id)) + "?active_tab=delivery"},
             {"title": "Worker", "url": request.path},
         ]
     )
