@@ -116,7 +116,20 @@
                 <i class="fa-light fa-chevron-right"></i>
             </span>
         {% endif %}
-    </div>
+       <!-- Right: Page Size Selector -->
+      <div class="flex items-center gap-2 text-sm">
+        <label for="page-size" class="whitespace-nowrap">{% trans "Rows per page:" %}</label>
+        <select
+          id="page-size"
+          name="page_size"
+          class="base-input w-24"
+          @change="goToPage('page_size', $event.target.value)">
+          <option value="20" {% if request.GET.page_size == '20' %}selected{% endif %}>20</option>
+          <option value="30" {% if request.GET.page_size == '30' %}selected{% endif %}>30</option>
+          <option value="50" {% if request.GET.page_size == '50' %}selected{% endif %}>50</option>
+          <option value="100" {% if request.GET.page_size == '100' %}selected{% endif %}>100</option>
+        </select>
+      </div>
 </div>
   {% endif %}
 

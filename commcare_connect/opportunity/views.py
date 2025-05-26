@@ -141,7 +141,7 @@ from commcare_connect.users.models import User
 from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 from commcare_connect.utils.file import get_file_extension
-from commcare_connect.utils.tables import get_duration_min
+from commcare_connect.utils.tables import get_duration_min, get_validated_page_size
 from django.utils.translation import gettext as _
 
 from django.contrib.humanize.templatetags.humanize import intcomma
@@ -186,6 +186,9 @@ class OpportunityList(OrganizationUserMixin, SingleTableMixin, TemplateView):
         if self.request.org.program_manager:
             return ProgramManagerOpportunityTable
         return OpportunityTable
+
+    def get_paginate_by(self, table):
+        return get_validated_page_size(self.request)
 
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
@@ -1261,7 +1264,7 @@ def payment_report(request, org_slug, pk):
     )
     data, total_user_payment_accrued, total_nm_payment_accrued = get_payment_report_data(opportunity)
     table = PaymentReportTable(data)
-    RequestConfig(request, paginate={"per_page": 15}).configure(table)
+    RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
 
     cards = [
         {
@@ -1323,7 +1326,7 @@ def invoice_list(request, org_slug, pk):
     )
 
     form = PaymentInvoiceForm(opportunity=opportunity)
-    RequestConfig(request, paginate={"per_page": 10}).configure(table)
+    RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
     return render(
         request,
         "tailwind/pages/invoice_list.html",
@@ -1542,7 +1545,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
     exclude_columns = []
 
     def get_paginate_by(self, table_data):
-        return self.request.GET.get("per_page", 10)
+        return get_validated_page_size(self.request)
 
     def get_table(self, **kwargs):
         kwargs["exclude"] = self.exclude_columns
@@ -1853,7 +1856,7 @@ def worker_main(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
     data = get_worker_table_data(opportunity)
     table = WorkerStatusTable(data)
-    RequestConfig(request, paginate={"per_page": 10}).configure(table)
+    RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
     return render(request, "tailwind/components/tables/table.html", {"table": table})
 
 
@@ -1862,7 +1865,7 @@ def worker_learn(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     data = get_worker_learn_table_data(opp)
     table = WorkerLearnTable(data, org_slug=org_slug, opp_id=opp_id)
-    RequestConfig(request, paginate={"per_page": 10}).configure(table)
+    RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
     return render(request, "tailwind/components/tables/table.html", {"table": table})
 
 
@@ -1871,7 +1874,7 @@ def worker_delivery(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
     data = get_annotated_opportunity_access_deliver_status(opportunity)
     table = WorkerDeliveryTable(data, org_slug=org_slug, opp_id=opp_id)
-    RequestConfig(request, paginate={"per_page": 10}).configure(table)
+    RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
     return render(request, "tailwind/components/tables/table.html", {"table": table})
 
 
@@ -1888,7 +1891,7 @@ def worker_payments(request, org_slug=None, opp_id=None):
         last_paid=Max("payment__date_paid"),
     )
     table = WorkerPaymentsTable(query_set, org_slug=org_slug, opp_id=opp_id)
-    RequestConfig(request, paginate={"per_page": 10}).configure(table)
+    RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
     return render(request, "tailwind/components/tables/table.html", {"table": table})
 
 
