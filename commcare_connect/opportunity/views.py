@@ -2026,7 +2026,7 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
         },
         {"stage": "Started Learning",
          "count": header_with_tooltip(aggregates["started_learning_count"],
-                                      "Workers who started downloading the Learn app"),
+                                      "Started download of the Learn app"),
          "icon": "book-open-cover"
          },
         {"stage": "Completed Learning", "count": header_with_tooltip(aggregates["completed_learning"],

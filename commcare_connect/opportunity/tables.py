@@ -1020,15 +1020,18 @@ class WorkerStatusTable(tables.Table):
     invited_date = DMYTColumn()
     last_active = DMYTColumn(verbose_name=header_with_tooltip("Last Active", "Submitted a Learn or Deliver form"))
     started_learn = DMYTColumn(
-        verbose_name=header_with_tooltip("Started Learn", "Submitted the first Learn form"),
+        verbose_name=header_with_tooltip("Started Learn", "Started download of the Learn app"),
         accessor="date_learn_started",
     )
     completed_learn = DMYTColumn(
         verbose_name=header_with_tooltip("Completed Learn", "Completed all Learn modules except assessment")
     )
-    days_to_complete_learn = DurationColumn(verbose_name="Time to Complete Learning")
-    first_delivery = DMYTColumn()
-    days_to_start_delivery = DurationColumn(verbose_name="Time to Start Deliver")
+    days_to_complete_learn = DurationColumn(verbose_name=header_with_tooltip("Time to Complete Learning",
+                                                                             "Difference between Completed Learn and Started Learn"))
+    first_delivery = DMYTColumn(
+        verbose_name=header_with_tooltip("First Delivery", "Time stamp of when the first learn form was delivered"))
+    days_to_start_delivery = DurationColumn(verbose_name=header_with_tooltip("Time to Start Deliver",
+                                                                             "Time it took to deliver the first deliver form after invitation"))
 
     def __init__(self, *args, **kwargs):
         self.use_view_url = True
