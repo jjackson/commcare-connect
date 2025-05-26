@@ -2184,7 +2184,6 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "status": "Inactive last 3 days",
                     "value": header_with_tooltip(stats["inactive_workers"],
                                                  "Did not submit a Learn or Deliver form in the last 3 days"),
-                    "url": status_url,
                     **panel_type_2,
                 },
             ],
