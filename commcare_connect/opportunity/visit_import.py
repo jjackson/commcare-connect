@@ -369,14 +369,9 @@ def get_exchange_rate(currency_code, date=None):
     rate_date = date or now().date()
     rate = None
 
-    try:
-        rate = ExchangeRate.objects.get(currency_code=currency_code, rate_date=rate_date).rate
-    except ExchangeRate.DoesNotExist:
-        rates = fetch_exchange_rates(rate_date)
-        rate = rates.get(currency_code)
-        if not rate:
-            raise ImportException("Rate not found for opportunity currency")
-        ExchangeRate.objects.create(currency_code=currency_code, rate=rate, rate_date=rate_date)
+    rate = ExchangeRate.latest_exchange_rate(currency_code=currency_code, rate_date=rate_date).rate
+    if not rate:
+        raise ImportException("Rate not found for opportunity currency")
 
     return rate
 
