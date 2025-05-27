@@ -12,8 +12,8 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage, storages
-from django.db.models import Count, Max, Q, Sum
-from django.db.models.functions import Greatest
+from django.db.models import Count, Max, Q, Sum, Subquery, OuterRef, Value
+from django.db.models.functions import Greatest, Coalesce
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
 from django.middleware.csrf import get_token
@@ -1883,6 +1883,15 @@ def worker_delivery(request, org_slug=None, opp_id=None):
 def worker_payments(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
 
+    def get_payment_subquery(confirmed: bool = False) -> Subquery:
+        qs = Payment.objects.filter(opportunity_access=OuterRef("pk"))
+        if confirmed:
+            qs = qs.filter(confirmed=True)
+        subquery = qs.values("opportunity_access").annotate(
+            total=Sum("amount")
+        ).values("total")[:1]
+        return Coalesce(Subquery(subquery), Value(0))
+
     query_set = OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0,
                                                  accepted=True).order_by(
         "-payment_accrued"
@@ -1890,6 +1899,8 @@ def worker_payments(request, org_slug=None, opp_id=None):
     query_set = query_set.annotate(
         last_active=Greatest(Max("uservisit__visit_date"), Max("completedmodule__date"), "date_learn_started"),
         last_paid=Max("payment__date_paid"),
+        total_paid_d =get_payment_subquery(),
+        confirmed_paid_d =get_payment_subquery(True),
     )
     table = WorkerPaymentsTable(query_set, org_slug=org_slug, opp_id=opp_id)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
