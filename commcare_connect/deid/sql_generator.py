@@ -7,8 +7,10 @@ def generate_anonymization_sql(anonymization_configs: list[AnonymizationConfig])
     """
     Generates SQL statements to anonymize the database based on the provided configurations.
 
-    For each model and field specified in the configuration with a 'drop_field' strategy,
-    this function creates an 'ALTER TABLE ... DROP COLUMN IF EXISTS ...;' statement.
+    This function creates:
+    1. SQL to drop all views in the 'public' schema to prevent dependency errors.
+    2. For each model and field specified in the configuration with a 'drop_field' strategy,
+       an 'ALTER TABLE ... DROP COLUMN IF EXISTS ...;' statement.
     It uses Django's model metadata to determine the correct database table and column names.
     The generated SQL is wrapped in a single transaction.
     """
@@ -18,22 +20,38 @@ def generate_anonymization_sql(anonymization_configs: list[AnonymizationConfig])
     sql_statements.append("-- Ensure this script is run only on a non-production, copied database! --")
     sql_statements.append("\nBEGIN;")  # Start a transaction
 
+    # Drop all views in the public schema first to avoid dependency issues
+    sql_statements.append("\n-- Step 1: Drop all views in the public schema to avoid dependencies --")
+    # This PL/pgSQL block iterates through all views in the 'public' schema and drops them.
+    # Using CASCADE for views is generally safe as they don't hold data themselves
+    # and it handles inter-view dependencies.
+    sql_statements.append(
+        """
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT viewname FROM pg_catalog.pg_views WHERE schemaname = 'public') LOOP
+        EXECUTE 'DROP VIEW IF EXISTS public."' || r.viewname || '" CASCADE;';
+    END LOOP;
+END $$;
+"""
+    )
+    sql_statements.append("-- End of dropping all views in public schema --")
+
+    sql_statements.append("\n-- Step 2: Drop specified columns from tables --")
     for config in anonymization_configs:
         model_class = config.model
         table_name = model_class._meta.db_table
         sql_statements.append(f'\n-- Anonymizing table: "{table_name}" (Model: {model_class.__name__})')
 
         for field_config in config.fields:
-            model_field_name = field_config.field_name  # This is the Django model field name
+            model_field_name = field_config.field_name
             try:
-                # Get the actual database column name from the model field
                 db_column_name = model_class._meta.get_field(model_field_name).column
-
                 if field_config.anonymization_strategy == STRATEGY_DROP_FIELD:
-                    # Use IF EXISTS for idempotency and quote identifiers
                     sql_statements.append(f'ALTER TABLE "{table_name}" DROP COLUMN IF EXISTS "{db_column_name}";')
                 else:
-                    # Placeholder for future strategies
                     sql_statements.append(
                         f"-- SKIPPING: Unknown or unsupported anonymization strategy "
                         f"'{field_config.anonymization_strategy}' for field '{model_field_name}' "
@@ -44,7 +62,6 @@ def generate_anonymization_sql(anonymization_configs: list[AnonymizationConfig])
                     f"-- WARNING: Field '{model_field_name}' not found in model '{model_class.__name__}' "
                     f'(table "{table_name}"). Cannot determine column name. Skipping.'
                 )
-        # A newline will be added before the next model's comment or by the final join/print
 
     sql_statements.append("\nCOMMIT;")  # End transaction
     sql_statements.append("-- End of De-identification Script --")
