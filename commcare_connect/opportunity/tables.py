@@ -929,7 +929,7 @@ class UserVisitVerificationTable(tables.Table):
                                         "tooltip": "Manually approved by NM"},
             VisitValidationStatus.approved: {"icon": "fa-solid fa-circle-check", "tooltip": "Auto-approved"},
             VisitValidationStatus.rejected: {"icon": "fa-light fa-ban", "tooltip": "Rejected by NM"},
-            VisitValidationStatus.pending: {"icon": "fa-light fa-flag-swallowtail", "tooltip": "Waiting for Review"},
+            VisitValidationStatus.pending: {"icon": "fa-light fa-flag-swallowtail", "tooltip": "Waiting for NM Review"},
             VisitValidationStatus.duplicate: {"icon": "fa-light fa-clone",  "tooltip": "Duplicate Visit"},
             VisitValidationStatus.trial: {"icon": "fa-light fa-marker", "tooltip": "Trail Visit"},
             VisitValidationStatus.over_limit: {"icon": "fa-light fa-marker",  "tooltip": "Daily limit exceeded"},
