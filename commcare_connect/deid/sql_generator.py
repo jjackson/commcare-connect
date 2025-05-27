@@ -3,7 +3,7 @@ from django.core.exceptions import FieldDoesNotExist
 from commcare_connect.deid.config import STRATEGY_DROP_FIELD, AnonymizationConfig
 
 # Define a default name for the read-only role
-DEFAULT_READONLY_ROLE_NAME = "anonymized_readonly_user"
+DEFAULT_READONLY_ROLE_NAME = "ccc_data_analyst"
 
 
 def generate_anonymization_sql(
