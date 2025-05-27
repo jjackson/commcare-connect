@@ -1063,10 +1063,10 @@ class WorkerPaymentsTable(tables.Table):
     payment_accrued = tables.Column(verbose_name="Accrued",
                                     footer=lambda table: intcomma(
                                         sum(x.payment_accrued or 0 for x in table.data)))
-    total_paid = tables.Column(verbose_name="Total Paid",
+    total_paid = tables.Column(verbose_name="Total Paid", accessor="total_paid_d",
                                footer=lambda table: intcomma(sum(x.total_paid or 0 for x in table.data)))
     last_paid = DMYTColumn()
-    confirmed_paid = tables.Column(verbose_name="Confirm", accessor="total_confirmed_paid")
+    confirmed_paid = tables.Column(verbose_name="Confirm", accessor="confirmed_paid_d")
 
     def __init__(self, *args, **kwargs):
         self.use_view_url = True
