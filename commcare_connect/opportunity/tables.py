@@ -1124,7 +1124,7 @@ class WorkerLearnTable(OrgContextTable):
                         """,
     )
     completed_learning = DMYTColumn(accessor="completed_learn", verbose_name="Completed Learning")
-    assessment = tables.Column(accessor="assessment_status")
+    assessment = tables.Column(accessor="assessment_status_rank")
 
     attempts = tables.Column(accessor="assesment_count")
     learning_hours = DurationColumn()
@@ -1185,6 +1185,16 @@ class WorkerLearnTable(OrgContextTable):
             </div>""",
             url=url,
         )
+
+    def render_assessment(self, value):
+        status = '-'
+        if value == 2:
+            status = 'Passed'
+        elif value == 1:
+            status = 'Failed'
+
+        return status
+
 
 
 class TotalFlagCountsColumn(tables.Column):
