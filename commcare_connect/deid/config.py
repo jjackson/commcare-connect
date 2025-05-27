@@ -2,8 +2,9 @@ from dataclasses import dataclass
 
 from django.db import models
 
-from commcare_connect.opportunity.models import CompletedWork, UserVisit
-from commcare_connect.users.models import User
+from commcare_connect.connect_id_client.models import ConnectIdUser, DemoUser
+from commcare_connect.opportunity.models import CompletedWork, UserInvite, UserVisit
+from commcare_connect.users.models import ConnectIDUserLink, User
 
 STRATEGY_DROP_FIELD = "drop_field"
 
@@ -40,6 +41,21 @@ def get_fields_to_anonymize() -> list[AnonymizationConfig]:
         CompletedWork: [
             "entity_name",
             "entity_id",
+        ],
+        ConnectIdUser: [
+            "name",
+            "username",
+            "phone_number",
+        ],
+        ConnectIDUserLink: [
+            "commcare_username",
+        ],
+        DemoUser: [
+            "phone_number",
+        ],
+        UserInvite: [
+            "phone_number",
+            "message_sid",
         ],
     }
     return [
