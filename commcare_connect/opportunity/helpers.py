@@ -108,24 +108,29 @@ def get_deliveries_count_subquery(status=None):
     ), 0)
 
 
-total_accrued_sq = Coalesce(Subquery(OpportunityAccess.objects.filter(
-    opportunity_id=OuterRef("pk")
-).values("opportunity_id").annotate(
-    total=Sum("payment_accrued")
-).values("total"), output_field=IntegerField()), 0)
+def total_accrued_sq():
+    return Coalesce(Subquery(OpportunityAccess.objects.filter(
+        opportunity_id=OuterRef("pk")
+    ).values("opportunity_id").annotate(
+        total=Sum("payment_accrued")
+    ).values("total"), output_field=IntegerField()), 0)
 
-total_paid_sq = Coalesce(Subquery(Payment.objects.filter(
-    opportunity_access__opportunity_id=OuterRef("pk")
-).values("opportunity_access__opportunity_id").annotate(
-    total=Sum("amount")
-).values("total"), output_field=IntegerField()), 0)
 
-deliveries_from_yesterday_sq = Coalesce(Subquery(UserVisit.objects.filter(
-    opportunity_id=OuterRef("pk"),
-    visit_date__gte=now().date() - timedelta(1)
-).values("opportunity_id").annotate(
-    count=Count("id", distinct=True)
-).values("count"), output_field=IntegerField()), 0)
+def total_paid_sq():
+    Coalesce(Subquery(Payment.objects.filter(
+        opportunity_access__opportunity_id=OuterRef("pk")
+    ).values("opportunity_access__opportunity_id").annotate(
+        total=Sum("amount")
+    ).values("total"), output_field=IntegerField()), 0)
+
+
+def deliveries_from_yesterday_sq():
+    Coalesce(Subquery(UserVisit.objects.filter(
+        opportunity_id=OuterRef("pk"),
+        visit_date__gte=now().date() - timedelta(1)
+    ).values("opportunity_id").annotate(
+        count=Count("id", distinct=True)
+    ).values("count"), output_field=IntegerField()), 0)
 
 
 def get_annotated_opportunity_access(opportunity: Opportunity):
@@ -490,7 +495,7 @@ def get_opportunity_delivery_progress(opp_id):
 
     annotated_opportunity =  Opportunity.objects.filter(id=opp_id).annotate(
         inactive_workers=OpportunityAnnotations.inactive_workers(three_days_ago),
-        deliveries_from_yesterday=deliveries_from_yesterday_sq,
+        deliveries_from_yesterday=deliveries_from_yesterday_sq(),
         accrued_since_yesterday=accrued_since_yesterday_sq,
         most_recent_delivery=most_recent_delivery_sq,
         total_deliveries=get_deliveries_count_subquery(),
@@ -501,8 +506,8 @@ def get_opportunity_delivery_progress(opp_id):
         recent_payment=recent_payment_sq,
         workers_invited=OpportunityAnnotations.workers_invited(),
         pending_invites=OpportunityAnnotations.pending_invites(),
-        total_accrued=total_accrued_sq,
-        total_paid=total_paid_sq,
+        total_accrued=total_accrued_sq(),
+        total_paid=total_paid_sq(),
         payments_due=ExpressionWrapper(
             F("total_accrued") - F("total_paid"),
             output_field=IntegerField()
@@ -519,9 +524,9 @@ def get_opportunity_worker_progress(opp_id):
         total_deliveries=get_deliveries_count_subquery(),
         approved_deliveries=get_deliveries_count_subquery(CompletedWorkStatus.approved),
         rejected_deliveries=get_deliveries_count_subquery(CompletedWorkStatus.rejected),
-        total_accrued=total_accrued_sq,
-        total_paid=total_paid_sq,
-        visits_since_yesterday=deliveries_from_yesterday_sq,
+        total_accrued=total_accrued_sq(),
+        total_paid=total_paid_sq(),
+        visits_since_yesterday=deliveries_from_yesterday_sq(),
     ).first()
 
 
