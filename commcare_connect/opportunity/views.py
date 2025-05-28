@@ -1758,7 +1758,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
         ),
     )
 
-
+@org_member_required
 def opportunity_worker(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     base_kwargs = {"org_slug": org_slug, "opp_id": opp_id}

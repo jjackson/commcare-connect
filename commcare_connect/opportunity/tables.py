@@ -1296,6 +1296,8 @@ class WorkerDeliveryTable(OrgContextTable):
             "rejected",
             "action",
         )
+        order_by=("user.name", "-last_active")
+
 
 
     def __init__(self, *args, **kwargs):
