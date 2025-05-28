@@ -6,6 +6,7 @@
         activeTab: '{{ request.GET.filter_status|default:"all" }}',
         page: {{ request.GET.page|default:"1" }},
         updateUrlAndRequest() {
+          // Update URL params before HTMX call so table headers can pick them up
           const url = new URL(window.location);
           const formData = new FormData(this.$el);
           const params = new URLSearchParams();
