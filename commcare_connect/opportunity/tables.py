@@ -922,7 +922,7 @@ class UserVisitVerificationTable(tables.Table):
             ":class": lambda record: f"selectedRow == {record.id} && 'active'",
         }
 
-    def render_icons(self, record):
+    def get_icons(self, statuses):
         status_meta = {
             # Review Status Pending, Visit Status Approved
             "approved_pending_review": {"icon": "fa-solid fa-circle-check text-slate-300/50",
@@ -930,30 +930,42 @@ class UserVisitVerificationTable(tables.Table):
             VisitValidationStatus.approved: {"icon": "fa-solid fa-circle-check", "tooltip": "Auto-approved"},
             VisitValidationStatus.rejected: {"icon": "fa-light fa-ban", "tooltip": "Rejected by NM"},
             VisitValidationStatus.pending: {"icon": "fa-light fa-flag-swallowtail", "tooltip": "Waiting for NM Review"},
-            VisitValidationStatus.duplicate: {"icon": "fa-light fa-clone",  "tooltip": "Duplicate Visit"},
+            VisitValidationStatus.duplicate: {"icon": "fa-light fa-clone", "tooltip": "Duplicate Visit"},
             VisitValidationStatus.trial: {"icon": "fa-light fa-marker", "tooltip": "Trail Visit"},
-            VisitValidationStatus.over_limit: {"icon": "fa-light fa-marker",  "tooltip": "Daily limit exceeded"},
+            VisitValidationStatus.over_limit: {"icon": "fa-light fa-marker", "tooltip": "Daily limit exceeded"},
             VisitReviewStatus.disagree: {"icon": "fa-light fa-thumbs-down", "tooltip": "Disagreed by PM"},
             VisitReviewStatus.agree: {"icon": "fa-light fa-thumbs-up", "tooltip": "Agreed by PM"},
             # Review Status Pending (custom name, original choice clashes with Visit Pending)
             "pending_review": {"icon": "fa-light fa-timer", "tooltip": "Pending Review by PM"},
         }
 
+        icons_html = []
+
+        for status in statuses:
+            meta = status_meta.get(status)
+            icon_class = meta.get("icon")
+            if icon_class:
+                tooltip = meta.get("tooltip")
+                icon_html = format_html(
+                    '<i class="{} text-brand-deep-purple ml-4"></i>',
+                    icon_class
+                )
+                if tooltip:
+                    icon_html = header_with_tooltip(icon_html, tooltip)
+                icons_html.append(icon_html)
+
+        justify_class = "justify-end" if len(statuses) == 1 else "justify-between"
+        icons = "".join(icons_html)
+        return format_html(
+            '<div class="{} text-end text-brand-deep-purple text-lg">{}</div>',
+            justify_class,
+            mark_safe(icons)
+        )
+
+
+    def render_icons(self, record):
         if record.status in (VisitValidationStatus.pending, VisitValidationStatus.duplicate):
-            meta = status_meta.get(record.status)
-            icon_class = meta["icon"]
-            tooltip = meta.get("tooltip")
-
-            icon_html = f'<i class="{icon_class} text-brand-deep-purple ml-4"></i>'
-
-            if tooltip:
-                icon_html = header_with_tooltip(icon_html, tooltip)
-
-            return format_html(
-                '<div class=" {} text-end text-brand-deep-purple text-lg">{}</div>',
-                "justify-end",
-                mark_safe(icon_html),
-            )
+            return self.get_icons([record.status])
 
         status = []
         if record.opportunity.managed and record.review_status and record.review_created_on:
@@ -971,24 +983,7 @@ class UserVisitVerificationTable(tables.Table):
             else:
                 status.append(record.status)
 
-        icons_html = ""
-        for status in status:
-            meta = status_meta.get(status)
-            icon_class = icon_class = meta["icon"]
-            if icon_class:
-                tooltip = meta.get("tooltip")
-                icon_html = f'<i class="{icon_class} text-brand-deep-purple ml-4"></i>'
-                if tooltip:
-                    icon_html = header_with_tooltip(icon_html, tooltip)
-                icons_html += icon_html
-
-        justify_class = "justify-end" if len(status) == 1 else "justify-between"
-
-        return format_html(
-            '<div class=" {} text-end text-brand-deep-purple text-lg">{}</div>',
-            justify_class,
-            mark_safe(icons_html),
-        )
+        return self.get_icons(status)
 
 
 class UserInfoColumn(tables.Column):
