@@ -16,7 +16,7 @@
           }
           url.search = params.toString();
           window.history.pushState({}, '', url.toString());
-          this.$el.dispatchEvent(new CustomEvent('reload_table', { bubbles: true, detail: { reason: 'filters_changed' } }));
+          $dispatch('reload_table')
         }
       }"
       @change="updateUrlAndRequest()"
