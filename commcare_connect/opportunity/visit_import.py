@@ -1,19 +1,15 @@
 import codecs
 import datetime
-import json
 import textwrap
-import urllib
 from dataclasses import astuple, dataclass
 from decimal import Decimal, InvalidOperation
 
-from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
 from django.utils.timezone import now
 from tablib import Dataset
 
-from commcare_connect.cache import quickcache
 from commcare_connect.opportunity.models import (
     CatchmentArea,
     CompletedWork,
@@ -334,25 +330,6 @@ def _bulk_update_payments(opportunity: Opportunity, imported_data: Dataset) -> P
     missing_users = set(usernames) - seen_users
     send_payment_notification.delay(opportunity.id, payment_ids)
     return PaymentImportStatus(seen_users, missing_users)
-
-
-def _cache_key(date=None):
-    date_key = date or now().date()
-    return [date_key.toordinal()]
-
-
-@quickcache(vary_on=_cache_key, timeout=12 * 60 * 60)
-def fetch_exchange_rates(date=None):
-    base_url = "https://openexchangerates.org/api"
-
-    if date:
-        url = f"{base_url}/historical/{date.strftime('%Y-%m-%d')}.json"
-    else:
-        url = f"{base_url}/latest.json"
-
-    url = f"{url}?app_id={settings.OPEN_EXCHANGE_RATES_API_ID}"
-    rates = json.load(urllib.request.urlopen(url))
-    return rates["rates"]
 
 
 def get_exchange_rate(currency_code, date=None):
