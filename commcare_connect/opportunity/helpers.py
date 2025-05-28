@@ -117,7 +117,7 @@ def total_accrued_sq():
 
 
 def total_paid_sq():
-    Coalesce(Subquery(Payment.objects.filter(
+    return Coalesce(Subquery(Payment.objects.filter(
         opportunity_access__opportunity_id=OuterRef("pk")
     ).values("opportunity_access__opportunity_id").annotate(
         total=Sum("amount")
@@ -125,7 +125,7 @@ def total_paid_sq():
 
 
 def deliveries_from_yesterday_sq():
-    Coalesce(Subquery(UserVisit.objects.filter(
+    return Coalesce(Subquery(UserVisit.objects.filter(
         opportunity_id=OuterRef("pk"),
         visit_date__gte=now().date() - timedelta(1)
     ).values("opportunity_id").annotate(
