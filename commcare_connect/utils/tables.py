@@ -14,7 +14,7 @@ DATE_TIME_FORMAT  ="%d-%b-%Y %H:%M"
 DATE_FORMAT = "%d-%b-%Y"
 
 DEFAULT_PAGE_SIZE = 20
-PAGE_SIZE_OPTIONS = [20, 30, 50, 100]  # Must also be updated in base.tables.py if changed
+PAGE_SIZE_OPTIONS = [20, 30, 50, 100]
 
 def merge_attrs(*dicts):
     merged = {}
