@@ -7,6 +7,7 @@
         page: {{ request.GET.page|default:"1" }},
         updateUrlAndRequest() {
           // Update URL params before HTMX call so table headers can pick them up
+          // this is done specifically because sortable_header using referer to get the base url.
           const url = new URL(window.location);
           const formData = new FormData(this.$el);
           const params = new URLSearchParams();
