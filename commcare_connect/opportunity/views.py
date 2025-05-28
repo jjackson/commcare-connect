@@ -1899,8 +1899,8 @@ def worker_payments(request, org_slug=None, opp_id=None):
     query_set = query_set.annotate(
         last_active=Greatest(Max("uservisit__visit_date"), Max("completedmodule__date"), "date_learn_started"),
         last_paid=Max("payment__date_paid"),
-        total_paid_d =get_payment_subquery(),
-        confirmed_paid_d =get_payment_subquery(True),
+        total_paid_d=get_payment_subquery(),
+        confirmed_paid_d=get_payment_subquery(True),
     )
     table = WorkerPaymentsTable(query_set, org_slug=org_slug, opp_id=opp_id)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
