@@ -1,9 +1,7 @@
 from datetime import timedelta
-from decimal import Decimal
 from http import HTTPStatus
 
 import pytest
-from django.db.models import Sum
 from django.test import Client
 from django.urls import reverse
 from django.utils.timezone import now
@@ -14,8 +12,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     OpportunityClaimLimit,
     UserInviteStatus,
-    VisitValidationStatus, Payment, CompletedModule,
-)
+    VisitValidationStatus, )
 from commcare_connect.opportunity.tests.factories import (
     OpportunityAccessFactory,
     OpportunityClaimFactory,
@@ -23,8 +20,7 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentFactory,
     PaymentUnitFactory,
     UserInviteFactory,
-    UserVisitFactory, CompletedModuleFactory,
-)
+    UserVisitFactory, )
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
 from commcare_connect.users.models import User
@@ -177,7 +173,6 @@ def test_get_opportunity_list_data_all_annotations(opportunity):
     oa3 = OpportunityAccessFactory(opportunity=opportunity, accepted=True, payment_accrued=0,
                                    date_learn_started=now() - timedelta(4))
 
-
     # Payments
     PaymentFactory(opportunity_access=oa1, amount=100, confirmed=True)
     PaymentFactory(opportunity_access=oa2, amount=50, confirmed=True)
@@ -197,7 +192,6 @@ def test_get_opportunity_list_data_all_annotations(opportunity):
         opportunity=opportunity, opportunity_access=oa1, status=VisitValidationStatus.pending, visit_date=now()
     )
 
-
     UserVisitFactory(
         opportunity=opportunity,
         opportunity_access=oa2,
@@ -212,8 +206,7 @@ def test_get_opportunity_list_data_all_annotations(opportunity):
         visit_date=three_days_ago - timedelta(days=2),
     )
 
-
-    queryset = get_opportunity_list_data(opportunity.organization,)
+    queryset = get_opportunity_list_data(opportunity.organization, )
     opp = queryset[0]
     assert opp.pending_invites == 3
     assert opp.pending_approvals == 1
