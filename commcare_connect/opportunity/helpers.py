@@ -133,7 +133,7 @@ def total_paid_sq():
 def deliveries_from_yesterday_sq():
     return Coalesce(
         Subquery(
-            UserVisit.objects.filter(opportunity_id=OuterRef("pk"), visit_date__gte=now().date() - timedelta(1))
+            UserVisit.objects.filter(opportunity_id=OuterRef("pk"), visit_date__gte=now().date() - timedelta(days=1))
             .values("opportunity_id")
             .annotate(count=Count("id", distinct=True))
             .values("count"),
@@ -480,7 +480,10 @@ def get_opportunity_delivery_progress(opp_id):
     )
 
     most_recent_delivery_sq = Subquery(
-        UserVisit.objects.filter(opportunity_id=OuterRef("pk")).order_by("-visit_date").values("visit_date")[:1],
+        UserVisit.objects.filter(opportunity_id=OuterRef("pk"))
+        .values("opportunity_id")
+        .annotate(latest=Max("visit_date"))
+        .values("latest")[:1],
         output_field=DateTimeField(),
     )
 
@@ -544,8 +547,9 @@ def get_opportunity_delivery_progress(opp_id):
 
     recent_payment_sq = Subquery(
         Payment.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"))
-        .order_by("-date_paid")
-        .values("date_paid")[:1],
+        .values("opportunity_access__opportunity_id")
+        .annotate(latest=Max("date_paid"))
+        .values("latest")[:1],
         output_field=DateTimeField(),
     )
 
@@ -586,11 +590,15 @@ def get_opportunity_worker_progress(opp_id):
 
 
 def get_opportunity_funnel_progress(opp_id):
-    started_deliveries_sq = (
-        UserVisit.objects.filter(opportunity_id=OuterRef("pk"))
-        .values("opportunity_id")
-        .annotate(count=Count("user_id", distinct=True))
-        .values("count")
+    started_deliveries_sq = Coalesce(
+        Subquery(
+            UserVisit.objects.filter(opportunity_id=OuterRef("pk"))
+            .values("opportunity_id")
+            .annotate(count=Count("user_id", distinct=True))
+            .values("count"),
+            output_field=IntegerField(),
+        ),
+        Value(0),
     )
 
     return (
@@ -600,7 +608,7 @@ def get_opportunity_funnel_progress(opp_id):
             pending_invites=OpportunityAnnotations.pending_invites(),
             started_learning_count=OpportunityAnnotations.started_learning(),
             claimed_job=Count("opportunityaccess__opportunityclaim", distinct=True),
-            started_deliveries=Coalesce(Subquery(started_deliveries_sq, output_field=IntegerField()), 0),
+            started_deliveries=started_deliveries_sq,
             completed_assessments=Count(
                 "assessment__user",
                 filter=Q(assessment__passed=True),
