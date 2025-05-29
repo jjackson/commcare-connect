@@ -269,7 +269,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
         total_over_limit_for_user = completed_work_status_total_subquery(CompletedWorkStatus.over_limit)
 
         queryset = (
-            OpportunityAccess.objects.filter(opportunity=opportunity)
+            OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True)
             .annotate(
                 payment_unit_id=Value(payment_unit.pk),
                 payment_unit=Value(payment_unit.name, output_field=CharField()),
