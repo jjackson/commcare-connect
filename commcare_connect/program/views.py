@@ -22,7 +22,8 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.views import OpportunityInit
 from commcare_connect.organization.decorators import (
     org_admin_required,
-    org_program_manager_required, org_viewer_required,
+    org_program_manager_required,
+    org_viewer_required,
 )
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
