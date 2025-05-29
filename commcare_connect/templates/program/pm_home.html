@@ -13,13 +13,13 @@
               <p class="card_description w-full max-w-1/2">{{ program.description }}</p>
             </div>
             <div class="flex items-start justify-end gap-6">
-              <button {% if request.org_membership.is_viewer %} disabled {% endif %} class="button-icon"
+              <button class="button-icon"
                 hx-get="{% url "program:edit" request.org.slug program.id %}"
                 hx-target="#program-edit-form"
                 @htmx:after-request="showProgramEditModal = true">
                 <i class="fa-light fa-pen-line"></i>
               </button>
-              <button {% if request.org_membership.is_viewer %} disabled {% endif %}
+              <button
                       class="button button-sm outline-style" @click="showInviteModal = true">Invite</button>
               <div x-cloak x-show="showInviteModal" x-transition.opacity class="modal-backdrop" >
                 <div @click.away="showInviteModal = false" x-transition class="modal">
@@ -148,15 +148,13 @@
               <div class="flex items-center justify-end">
                 {% if application.status == 'applied' %}
                 <div class="flex gap-2">
-                  <button {% if request.org_membership.is_viewer %} disabled {% endif %}
-                          class="button button-md outline-style" value="reject"
+                  <button class="button button-md outline-style" value="reject"
                     hx-post="{% url 'program:manage_application' request.org.slug application.id 'reject' %}"
                     hx-swap="outerHTML"
                     hx-target="body">
                     Reject
                   </button>
-                  <button {% if request.org_membership.is_viewer %} disabled {% endif %}
-                          class="button button-md primary-dark" value="accept"
+                  <button class="button button-md primary-dark" value="accept"
                     hx-post="{% url 'program:manage_application' request.org.slug application.id 'accept' %}"
                     hx-swap="outerHTML"
                     hx-target="body">
