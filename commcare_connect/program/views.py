@@ -22,8 +22,8 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.views import OpportunityInit
 from commcare_connect.organization.decorators import (
     org_admin_required,
-    org_member_required,
     org_program_manager_required,
+    org_viewer_required,
 )
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
@@ -262,7 +262,7 @@ class DeliveryPerformanceTableView(ProgramManagerMixin, SingleTableView):
         return get_delivery_performance_report(program, start_date, end_date)
 
 
-@org_member_required
+@org_viewer_required
 def program_home(request, org_slug):
     org = Organization.objects.get(slug=org_slug)
     if is_program_manager(request):
