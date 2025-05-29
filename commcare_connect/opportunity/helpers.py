@@ -34,6 +34,7 @@ from commcare_connect.opportunity.models import (
     LearnModule,
     Opportunity,
     OpportunityAccess,
+    OpportunityClaimLimit,
     PaymentUnit,
     UserInvite,
     UserInviteStatus,
@@ -320,6 +321,14 @@ def get_opportunity_list_data(organization, program_manager=False):
     today = now().date()
     three_days_ago = now() - timedelta(days=3)
 
+    pending_approvals_sq = Subquery(
+        UserVisit.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"), status="pending")
+        .values("opportunity_access__opportunity_id")
+        .annotate(count=Count("id", distinct=True))
+        .values("count")[:1],
+        output_field=IntegerField(),
+    )
+
     base_filter = Q(organization=organization)
     if program_manager:
         base_filter |= Q(managedopportunity__program__organization=organization)
@@ -327,11 +336,7 @@ def get_opportunity_list_data(organization, program_manager=False):
     queryset = Opportunity.objects.filter(base_filter).annotate(
         program=F("managedopportunity__program__name"),
         pending_invites=OpportunityAnnotations.pending_invites(),
-        pending_approvals=Count(
-            "uservisit",
-            filter=Q(uservisit__status=VisitValidationStatus.pending),
-            distinct=True,
-        ),
+        pending_approvals=Coalesce(pending_approvals_sq, Value(0)),
         total_accrued=OpportunityAnnotations.total_accrued(),
         total_paid=OpportunityAnnotations.total_paid(),
         payments_due=ExpressionWrapper(
@@ -348,17 +353,28 @@ def get_opportunity_list_data(organization, program_manager=False):
     )
 
     if program_manager:
+        total_deliveries_sq = Subquery(
+            CompletedWork.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"))
+            .values("opportunity_access__opportunity_id")
+            .annotate(total=Sum("saved_completed_count", distinct=True))
+            .values("total")[:1],
+            output_field=IntegerField(),
+        )
+
+        verified_deliveries_sq = Subquery(
+            CompletedWork.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"))
+            .values("opportunity_access__opportunity_id")
+            .annotate(total=Sum("saved_approved_count", distinct=True))
+            .values("total")[:1],
+            output_field=IntegerField(),
+        )
+
         queryset = queryset.annotate(
             total_workers=Count("opportunityaccess", distinct=True),
             started_learning=OpportunityAnnotations.started_learning(),
+            total_deliveries=Coalesce(total_deliveries_sq, Value(0)),
+            verified_deliveries=Coalesce(verified_deliveries_sq, Value(0)),
             active_workers=F("started_learning") - F("inactive_workers"),
-            total_deliveries=Coalesce(
-                Sum("opportunityaccess__completedwork__saved_completed_count", distinct=True),
-                Value(0)
-            ),
-            verified_deliveries=Coalesce(
-                Sum("opportunityaccess__completedwork__saved_approved_count", distinct=True),
-                Value(0)),
         )
 
     return queryset
