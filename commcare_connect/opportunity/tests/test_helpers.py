@@ -6,20 +6,29 @@ from django.utils.timezone import now
 
 from commcare_connect.opportunity.helpers import (
     get_annotated_opportunity_access_deliver_status,
-    get_worker_learn_table_data,
-    get_worker_table_data, get_opportunity_delivery_progress, get_opportunity_worker_progress,
+    get_opportunity_delivery_progress,
     get_opportunity_funnel_progress,
+    get_opportunity_worker_progress,
+    get_worker_learn_table_data,
+    get_worker_table_data,
 )
-from commcare_connect.opportunity.models import Opportunity, VisitValidationStatus, CompletedWorkStatus, \
-    UserInviteStatus
+from commcare_connect.opportunity.models import (
+    CompletedWorkStatus,
+    Opportunity,
+    UserInviteStatus,
+    VisitValidationStatus,
+)
 from commcare_connect.opportunity.tests.factories import (
     AssessmentFactory,
     CompletedModuleFactory,
     CompletedWorkFactory,
     LearnModuleFactory,
     OpportunityAccessFactory,
+    OpportunityClaimFactory,
+    PaymentFactory,
     PaymentUnitFactory,
-    UserVisitFactory, PaymentFactory, UserInviteFactory, OpportunityClaimFactory,
+    UserInviteFactory,
+    UserVisitFactory,
 )
 from commcare_connect.users.tests.factories import MobileUserFactory
 
@@ -227,14 +236,18 @@ def test_opportunity_delivery_stats(opportunity):
 
     users = MobileUserFactory.create_batch(4)
 
-    oa1 = OpportunityAccessFactory(opportunity=opportunity, user=users[0], last_active=yesterday, accepted=True,
-                                   payment_accrued=100)
-    oa2 = OpportunityAccessFactory(opportunity=opportunity, user=users[1], last_active=yesterday, accepted=True,
-                                   payment_accrued=200)
-    oa3 = OpportunityAccessFactory(opportunity=opportunity, user=users[2], accepted=True, payment_accrued=300,
-                                   last_active=yesterday)
-    OpportunityAccessFactory.create_batch(3, opportunity=opportunity,
-                                                last_active=yesterday - timedelta(days=3))  # not active uses 3
+    oa1 = OpportunityAccessFactory(
+        opportunity=opportunity, user=users[0], last_active=yesterday, accepted=True, payment_accrued=100
+    )
+    oa2 = OpportunityAccessFactory(
+        opportunity=opportunity, user=users[1], last_active=yesterday, accepted=True, payment_accrued=200
+    )
+    oa3 = OpportunityAccessFactory(
+        opportunity=opportunity, user=users[2], accepted=True, payment_accrued=300, last_active=yesterday
+    )
+    OpportunityAccessFactory.create_batch(
+        3, opportunity=opportunity, last_active=yesterday - timedelta(days=3)
+    )  # not active uses 3
 
     # invited count 3 pending count = 1 not found should not be counted
     UserInviteFactory(opportunity=opportunity, opportunity_access=oa1, status=UserInviteStatus.accepted)
@@ -246,33 +259,61 @@ def test_opportunity_delivery_stats(opportunity):
     total_paid = 150
     payment_due = total_accrued - total_paid
 
-
     # total deliveries=4 deliveries_from_yesterday=3
     cw = CompletedWorkFactory(opportunity_access=oa1, status_modified_date=now(), status=CompletedWorkStatus.pending)
-    UserVisitFactory.create(opportunity=opportunity, opportunity_access=oa1, status=VisitValidationStatus.pending,
-                            completed_work=cw, visit_date=yesterday)
+    UserVisitFactory.create(
+        opportunity=opportunity,
+        opportunity_access=oa1,
+        status=VisitValidationStatus.pending,
+        completed_work=cw,
+        visit_date=yesterday,
+    )
 
     # accrued_since_yesterday=10
-    cw = CompletedWorkFactory(opportunity_access=oa2, status_modified_date=now(),
-                              status=CompletedWorkStatus.approved, saved_payment_accrued=10)
-    UserVisitFactory.create(opportunity=opportunity, opportunity_access=oa2, status=VisitValidationStatus.approved,
-                            completed_work=cw, visit_date=today)
+    cw = CompletedWorkFactory(
+        opportunity_access=oa2,
+        status_modified_date=now(),
+        status=CompletedWorkStatus.approved,
+        saved_payment_accrued=10,
+    )
+    UserVisitFactory.create(
+        opportunity=opportunity,
+        opportunity_access=oa2,
+        status=VisitValidationStatus.approved,
+        completed_work=cw,
+        visit_date=today,
+    )
 
-    UserVisitFactory.create(opportunity=opportunity, opportunity_access=oa1, status=VisitValidationStatus.approved,
-                            completed_work=cw)
-    UserVisitFactory.create(opportunity=opportunity, opportunity_access=oa2, status=VisitValidationStatus.pending,
-                            completed_work=cw, visit_date=today)
+    UserVisitFactory.create(
+        opportunity=opportunity, opportunity_access=oa1, status=VisitValidationStatus.approved, completed_work=cw
+    )
+    UserVisitFactory.create(
+        opportunity=opportunity,
+        opportunity_access=oa2,
+        status=VisitValidationStatus.pending,
+        completed_work=cw,
+        visit_date=today,
+    )
 
-    cw = CompletedWorkFactory(opportunity_access=oa1, status_modified_date=now(),
-                              status=CompletedWorkStatus.pending)
-    UserVisitFactory.create(opportunity=opportunity, opportunity_access=oa2, status=VisitValidationStatus.approved,
-                            completed_work=cw, visit_date=day_before_yesterday,
-                            review_created_on=now() - timedelta(days=2))
+    cw = CompletedWorkFactory(opportunity_access=oa1, status_modified_date=now(), status=CompletedWorkStatus.pending)
+    UserVisitFactory.create(
+        opportunity=opportunity,
+        opportunity_access=oa2,
+        status=VisitValidationStatus.approved,
+        completed_work=cw,
+        visit_date=day_before_yesterday,
+        review_created_on=now() - timedelta(days=2),
+    )
 
-    cw = CompletedWorkFactory(opportunity_access=oa2, status_modified_date=now(),
-                              status=CompletedWorkStatus.pending)
-    UserVisitFactory.create(opportunity=opportunity, opportunity_access=oa2, status=VisitValidationStatus.approved,
-                            completed_work=cw, visit_date=day_before_yesterday, review_created_on=now())
+    cw = CompletedWorkFactory(opportunity_access=oa2, status_modified_date=now(), status=CompletedWorkStatus.pending)
+    UserVisitFactory.create(
+        opportunity=opportunity,
+        opportunity_access=oa2,
+        status=VisitValidationStatus.approved,
+        completed_work=cw,
+        visit_date=day_before_yesterday,
+        review_created_on=now(),
+    )
 
     # recent date paid will be today total paid should be 150
     PaymentFactory(opportunity_access=oa1, date_paid=yesterday, amount=100)
@@ -322,10 +363,20 @@ def test_opportunity_worker_progress_stats(opportunity):
 
     # Visits since yesterday = 2
     cw = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
-    UserVisitFactory(opportunity=opportunity, opportunity_access=access, completed_work=cw,
-                     status=VisitValidationStatus.pending, visit_date=yesterday)
-    UserVisitFactory(opportunity=opportunity, opportunity_access=access, completed_work=cw,
-                     status=VisitValidationStatus.approved, visit_date=yesterday)
+    UserVisitFactory(
+        opportunity=opportunity,
+        opportunity_access=access,
+        completed_work=cw,
+        status=VisitValidationStatus.pending,
+        visit_date=yesterday,
+    )
+    UserVisitFactory(
+        opportunity=opportunity,
+        opportunity_access=access,
+        completed_work=cw,
+        status=VisitValidationStatus.approved,
+        visit_date=yesterday,
+    )
 
     result = get_opportunity_worker_progress(opportunity.id)
 
@@ -338,7 +389,6 @@ def test_opportunity_worker_progress_stats(opportunity):
     assert result.visits_since_yesterday == 2
 
 
-
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     "opportunity",
@@ -349,8 +399,9 @@ def test_opportunity_worker_progress_stats(opportunity):
 )
 def test_get_opportunity_funnel_progress(opportunity):
     today = now()
-    user1 = OpportunityAccessFactory(opportunity=opportunity, accepted=True, date_learn_started=today,
-                                     completed_learn_date=today)
+    user1 = OpportunityAccessFactory(
+        opportunity=opportunity, accepted=True, date_learn_started=today, completed_learn_date=today
+    )
     user2 = OpportunityAccessFactory(opportunity=opportunity, accepted=True, date_learn_started=today)
     user3 = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
 

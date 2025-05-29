@@ -14,7 +14,7 @@ from django.contrib.humanize.templatetags.humanize import intcomma
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage, storages
 from django.db.models import Count, Max, OuterRef, Q, Subquery, Sum, Value
-from django.db.models.functions import Coalesce, Greatest
+from django.db.models.functions import Coalesce
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
 from django.middleware.csrf import get_token
@@ -2042,10 +2042,14 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
     accepted = result.workers_invited - result.pending_invites
 
     funnel_progress = [
-        {"stage": "Invited",
-         "count": header_with_tooltip(result.workers_invited,
-                                      "Number of phone numbers to whom an SMS or push notification was sent and ConnectID exists"),
-         "icon": "envelope"},
+        {
+            "stage": "Invited",
+            "count": header_with_tooltip(
+                result.workers_invited,
+                "Number of phone numbers to whom an SMS or push notification was sent and ConnectID exists",
+            ),
+            "icon": "envelope",
+        },
         {
             "stage": "Accepted",
             "count": header_with_tooltip(
@@ -2053,23 +2057,38 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
             ),
             "icon": "circle-check",
         },
-        {"stage": "Started Learning",
-         "count": header_with_tooltip(result.started_learning_count,
-                                      "Started download of the Learn app"),
-         "icon": "book-open-cover"
-         },
-        {"stage": "Completed Learning", "count": header_with_tooltip(result.completed_learning,
-                                                                     "Workers that have completed all Learn modules but not assessment"),
-         "icon": "book-blank"},
-        {"stage": "Completed Assessment",
-         "count": header_with_tooltip(result.completed_assessments, "Workers that passed the assessment"),
-         "icon": "award-simple"},
-        {"stage": "Claimed Job", "count": header_with_tooltip(result.claimed_job,
-                                                              "Workers that have read the Opportunity terms and started download of the Deliver app"),
-         "icon": "user-check"},
-        {"stage": "Started Delivery", "count": header_with_tooltip(result.started_deliveries,
-                                                                   "Workers that have submitted at least 1 Learn form"),
-         "icon": "house-chimney-user"},
+        {
+            "stage": "Started Learning",
+            "count": header_with_tooltip(result.started_learning_count, "Started download of the Learn app"),
+            "icon": "book-open-cover",
+        },
+        {
+            "stage": "Completed Learning",
+            "count": header_with_tooltip(
+                result.completed_learning, "Workers that have completed all Learn modules but not assessment"
+            ),
+            "icon": "book-blank",
+        },
+        {
+            "stage": "Completed Assessment",
+            "count": header_with_tooltip(result.completed_assessments, "Workers that passed the assessment"),
+            "icon": "award-simple",
+        },
+        {
+            "stage": "Claimed Job",
+            "count": header_with_tooltip(
+                result.claimed_job,
+                "Workers that have read the Opportunity terms and started download of the Deliver app",
+            ),
+            "icon": "user-check",
+        },
+        {
+            "stage": "Started Delivery",
+            "count": header_with_tooltip(
+                result.started_deliveries, "Workers that have submitted at least 1 Learn form"
+            ),
+            "icon": "house-chimney-user",
+        },
     ]
 
     return render(
@@ -2086,22 +2105,10 @@ def opportunity_worker_progress(request, org_slug, opp_id):
     def safe_percent(numerator, denominator):
         return (numerator / denominator) * 100 if denominator else 0
 
-    verified_percentage = safe_percent(
-        result.approved_deliveries or 0,
-        result.total_deliveries or 0
-    )
-    rejected_percentage = safe_percent(
-        result.rejected_deliveries or 0,
-        result.total_deliveries or 0
-    )
-    earned_percentage = safe_percent(
-        result.total_accrued or 0,
-        result.total_budget or 0
-    )
-    paid_percentage = safe_percent(
-        result.total_paid or 0,
-        result.total_accrued or 0
-    )
+    verified_percentage = safe_percent(result.approved_deliveries or 0, result.total_deliveries or 0)
+    rejected_percentage = safe_percent(result.rejected_deliveries or 0, result.total_deliveries or 0)
+    earned_percentage = safe_percent(result.total_accrued or 0, result.total_budget or 0)
+    paid_percentage = safe_percent(result.total_paid or 0, result.total_accrued or 0)
 
     worker_progress = [
         {
@@ -2109,19 +2116,22 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             "progress": [
                 {
                     "title": "Approved",
-                    "total": header_with_tooltip(result.approved_deliveries,
-                                                 "Number of Service Deliveries Approved by both PM and NM or Auto-approved"),
-                    "value": header_with_tooltip(f"{verified_percentage:.2f}%",
-                                                 "Percentage Approved out of Delivered"),
+                    "total": header_with_tooltip(
+                        result.approved_deliveries,
+                        "Number of Service Deliveries Approved by both PM and NM or Auto-approved",
+                    ),
+                    "value": header_with_tooltip(
+                        f"{verified_percentage:.2f}%", "Percentage Approved out of Delivered"
+                    ),
                     "badge_type": True,
                     "percent": verified_percentage,
                 },
                 {
                     "title": "Rejected",
-                    "total": header_with_tooltip(result.rejected_deliveries,
-                                                 "Number of Service Deliveries Rejected"),
-                    "value": header_with_tooltip(f"{rejected_percentage:.2f}%",
-                                                 "Percentage Rejected out of Delivered"),
+                    "total": header_with_tooltip(result.rejected_deliveries, "Number of Service Deliveries Rejected"),
+                    "value": header_with_tooltip(
+                        f"{rejected_percentage:.2f}%", "Percentage Rejected out of Delivered"
+                    ),
                     "badge_type": True,
                     "percent": rejected_percentage,
                 },
@@ -2133,16 +2143,19 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                 {
                     "title": "Earned",
                     "total": header_with_tooltip(result.total_accrued, "Earned Amount"),
-                    "value": header_with_tooltip(f"{earned_percentage:.2f}%",
-                                                 "Percentage Earned by all workers out of Max Budget in the Opportunity"),
+                    "value": header_with_tooltip(
+                        f"{earned_percentage:.2f}%",
+                        "Percentage Earned by all workers out of Max Budget in the Opportunity",
+                    ),
                     "badge_type": True,
                     "percent": earned_percentage,
                 },
                 {
                     "title": "Paid",
                     "total": header_with_tooltip(result.total_paid, "Paid Amount to All Workers"),
-                    "value": header_with_tooltip(f"{paid_percentage:.2f}%",
-                                                 "Percentage Paid to all  workers out of Earned amount"),
+                    "value": header_with_tooltip(
+                        f"{paid_percentage:.2f}%", "Percentage Paid to all  workers out of Earned amount"
+                    ),
                     "badge_type": True,
                     "percent": paid_percentage,
                 },
@@ -2179,8 +2192,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "icon": "fa-clipboard-list-check",
             "name": "Services Delivered",
             "status": "Total",
-            "value": header_with_tooltip(stats.total_deliveries,
-                                         "Total delivered so far excluding duplicates"),
+            "value": header_with_tooltip(stats.total_deliveries, "Total delivered so far excluding duplicates"),
             "url": delivery_url,
             "incr": stats.deliveries_from_yesterday,
         },
@@ -2188,8 +2200,9 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "icon": "fa-clipboard-list-check",
             "name": "Services Delivered",
             "status": "Pending NM Review",
-            "value": header_with_tooltip(stats.flagged_deliveries_waiting_for_review,
-                                         "Flagged and pending review with NM"),
+            "value": header_with_tooltip(
+                stats.flagged_deliveries_waiting_for_review, "Flagged and pending review with NM"
+            ),
             "incr": stats.flagged_deliveries_waiting_for_review_since_yesterday,
         },
     ]
@@ -2200,8 +2213,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                 "icon": "fa-clipboard-list-check",
                 "name": "Services Delivered",
                 "status": "Pending PM Review",
-                "value": header_with_tooltip(stats.visits_pending_for_pm_review,
-                                             "Flagged and pending review with PM"),
+                "value": header_with_tooltip(stats.visits_pending_for_pm_review, "Flagged and pending review with PM"),
                 "incr": stats.visits_pending_for_pm_review_since_yesterday,
             }
         )
@@ -2212,8 +2224,13 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "sub_heading": "",
             "value": "",
             "panels": [
-                {"icon": "fa-user-group", "name": "Workers", "status": "Invited", "value": stats.workers_invited,
-                 "url": status_url, },
+                {
+                    "icon": "fa-user-group",
+                    "name": "Workers",
+                    "status": "Invited",
+                    "value": stats.workers_invited,
+                    "url": status_url,
+                },
                 {
                     "icon": "fa-user-check",
                     "name": "Workers",
@@ -2224,8 +2241,9 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "icon": "fa-clipboard-list",
                     "name": "Workers",
                     "status": "Inactive last 3 days",
-                    "value": header_with_tooltip(stats.inactive_workers,
-                                                 "Did not submit a Learn or Deliver form in the last 3 days"),
+                    "value": header_with_tooltip(
+                        stats.inactive_workers, "Did not submit a Learn or Deliver form in the last 3 days"
+                    ),
                     **panel_type_2,
                 },
             ],
@@ -2245,17 +2263,19 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "icon": "fa-hand-holding-dollar",
                     "name": "Payments",
                     "status": "Earned",
-                    "value": header_with_tooltip(intcomma(stats.total_accrued),
-                                                 "Worker payment accrued based on approved service deliveries"),
+                    "value": header_with_tooltip(
+                        intcomma(stats.total_accrued), "Worker payment accrued based on approved service deliveries"
+                    ),
                     "url": payment_url,
-                    "incr": stats.accrued_since_yesterday
+                    "incr": stats.accrued_since_yesterday,
                 },
                 {
                     "icon": "fa-hand-holding-droplet",
                     "name": "Payments",
                     "status": "Due",
-                    "value": header_with_tooltip(intcomma(stats.payments_due),
-                                                 "Worker payments earned but yet unpaid"),
+                    "value": header_with_tooltip(
+                        intcomma(stats.payments_due), "Worker payments earned but yet unpaid"
+                    ),
                 },
             ],
         },
