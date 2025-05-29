@@ -1445,7 +1445,7 @@ def sync_deliver_units(request, org_slug, opp_id):
     return HttpResponse(content=message, status=status)
 
 
-@org_member_required
+@org_viewer_required
 def user_visit_verification(request, org_slug, opp_id, pk):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
     opportunity_access = get_object_or_404(OpportunityAccess, opportunity=opportunity, pk=pk)
@@ -1782,7 +1782,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
     )
 
 
-@org_member_required
+@org_viewer_required
 def opportunity_worker(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     base_kwargs = {"org_slug": org_slug, "opp_id": opp_id}
@@ -1875,7 +1875,7 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
     )
 
 
-@org_member_required
+@org_viewer_required
 def worker_main(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
     data = get_worker_table_data(opportunity)
@@ -1884,7 +1884,7 @@ def worker_main(request, org_slug=None, opp_id=None):
     return render(request, "tailwind/components/tables/table.html", {"table": table})
 
 
-@org_member_required
+@org_viewer_required
 def worker_learn(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     data = get_worker_learn_table_data(opp)
@@ -1893,7 +1893,7 @@ def worker_learn(request, org_slug=None, opp_id=None):
     return render(request, "tailwind/components/tables/table.html", {"table": table})
 
 
-@org_member_required
+@org_viewer_required
 def worker_delivery(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
     data = get_annotated_opportunity_access_deliver_status(opportunity)
@@ -1902,7 +1902,7 @@ def worker_delivery(request, org_slug=None, opp_id=None):
     return render(request, "tailwind/components/tables/table.html", {"table": table})
 
 
-@org_member_required
+@org_viewer_required
 def worker_payments(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
 
@@ -1927,7 +1927,7 @@ def worker_payments(request, org_slug=None, opp_id=None):
     return render(request, "tailwind/components/tables/table.html", {"table": table})
 
 
-@org_member_required
+@org_viewer_required
 def worker_learn_status_view(request, org_slug, opp_id, access_id):
     access = get_object_or_404(OpportunityAccess, opportunity__id=opp_id, pk=access_id)
     completed_modules = CompletedModule.objects.filter(opportunity_access=access)
@@ -1993,7 +1993,7 @@ def worker_flag_counts(request, org_slug, opp_id):
     )
 
 
-@org_member_required
+@org_viewer_required
 def learn_module_table(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     data = LearnModule.objects.filter(app=opp.learn_app)
@@ -2001,7 +2001,7 @@ def learn_module_table(request, org_slug=None, opp_id=None):
     return render(request, "tables/single_table.html", {"table": table})
 
 
-@org_member_required
+@org_viewer_required
 def deliver_unit_table(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     unit = DeliverUnit.objects.filter(app=opp.deliver_app)
@@ -2030,13 +2030,15 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, OrgContextSingleTab
         kwargs = super().get_table_kwargs()
         kwargs["org_slug"] = self.request.org.slug
         program_manager = is_program_manager_of_opportunity(self.request, self.opportunity)
-        kwargs["can_edit"] = not self.opportunity.managed or program_manager
+        kwargs["can_edit"] = (
+            not self.opportunity.managed and self.request.org_membership and not self.request.org_membership.is_viewer
+        ) or program_manager
         if self.opportunity.managed:
             kwargs["org_pay_per_visit"] = self.opportunity.org_pay_per_visit
         return kwargs
 
 
-@org_member_required
+@org_viewer_required
 def opportunity_funnel_progress(request, org_slug, opp_id):
     aggregates = get_opportunity_funnel_progress(opp_id)
 
@@ -2099,7 +2101,7 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
     )
 
 
-@org_member_required
+@org_viewer_required
 def opportunity_worker_progress(request, org_slug, opp_id):
     aggregates = get_opportunity_worker_progress(opp_id)
 
@@ -2173,7 +2175,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
     )
 
 
-@org_member_required
+@org_viewer_required
 def opportunity_delivery_stats(request, org_slug, opp_id):
     panel_type_2 = {
         "body": "bg-brand-marigold/10 border border-brand-marigold",
