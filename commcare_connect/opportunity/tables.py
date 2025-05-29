@@ -1118,7 +1118,7 @@ class WorkerLearnTable(OrgContextTable):
                             {% include "tailwind/components/progressbar/simple-progressbar.html" with text=flag percentage=value|default:0 %}
                         """,
     )
-    completed_learning = DMYTColumn(accessor="completed_learn", verbose_name="Completed Learning")
+    completed_learning = DMYTColumn(accessor="completed_learn_date", verbose_name="Completed Learning")
     assessment = tables.Column(accessor="assessment_status_rank")
 
     attempts = tables.Column(accessor="assesment_count")
