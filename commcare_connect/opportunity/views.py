@@ -1944,7 +1944,7 @@ def worker_learn_status_view(request, org_slug, opp_id, access_id):
     )
 
 
-@org_member_required
+@org_viewer_required
 def worker_payment_history(request, org_slug, opp_id, access_id):
     access = get_object_or_404(OpportunityAccess, opportunity__id=opp_id, pk=access_id)
     queryset = Payment.objects.filter(opportunity_access=access).order_by("-date_paid")
@@ -1957,7 +1957,7 @@ def worker_payment_history(request, org_slug, opp_id, access_id):
     )
 
 
-@org_member_required
+@org_viewer_required
 def worker_flag_counts(request, org_slug, opp_id):
     access_id = request.GET.get("access_id", None)
     filters = {}
