@@ -2,7 +2,6 @@ from collections import namedtuple
 from datetime import timedelta
 
 from django.db.models import (
-    BooleanField,
     Case,
     CharField,
     Count,
@@ -23,7 +22,7 @@ from django.db.models import (
     Value,
     When,
 )
-from django.db.models.functions import Coalesce, Greatest, Round, TruncDate
+from django.db.models.functions import Coalesce, Greatest, Round
 from django.utils.timezone import now
 
 from commcare_connect.opportunity.models import (
@@ -57,9 +56,7 @@ class OpportunityAnnotations:
     @staticmethod
     def total_accrued():
         return Coalesce(
-            Sum("opportunityaccess__payment_accrued", distinct=True),
-            Value(0),
-            output_field=DecimalField()
+            Sum("opportunityaccess__payment_accrued", distinct=True), Value(0), output_field=DecimalField()
         )
 
     @staticmethod
@@ -70,7 +67,7 @@ class OpportunityAnnotations:
                 distinct=True,
             ),
             Value(0),
-            output_field=DecimalField()
+            output_field=DecimalField(),
         )
 
     @staticmethod
@@ -78,7 +75,7 @@ class OpportunityAnnotations:
         return Count(
             "userinvite",
             filter=~Q(userinvite__status=UserInviteStatus.not_found)
-                   & ~Q(userinvite__status=UserInviteStatus.accepted),
+            & ~Q(userinvite__status=UserInviteStatus.accepted),
             distinct=True,
         )
 
@@ -88,9 +85,7 @@ class OpportunityAnnotations:
 
     @staticmethod
     def started_learning():
-        return Count(
-            "opportunityaccess", filter=Q(opportunityaccess__date_learn_started__isnull=False), distinct=True
-        )
+        return Count("opportunityaccess", filter=Q(opportunityaccess__date_learn_started__isnull=False), distinct=True)
 
 
 def get_deliveries_count_subquery(status=None):
@@ -193,11 +188,12 @@ def get_annotated_opportunity_access(opportunity: Opportunity):
 def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
     access_objects = []
     for payment_unit in opportunity.paymentunit_set.all():
-
-        total_visits_sq = Subquery(OpportunityClaimLimit.objects.filter(
-            opportunity_claim__opportunity_access_id=OuterRef("pk"),
-            payment_unit=payment_unit
-        ).values("max_visits")[:1], output_field=IntegerField())
+        total_visits_sq = Subquery(
+            OpportunityClaimLimit.objects.filter(
+                opportunity_claim__opportunity_access_id=OuterRef("pk"), payment_unit=payment_unit
+            ).values("max_visits")[:1],
+            output_field=IntegerField(),
+        )
 
         last_visit_sq = Subquery(
             UserVisit.objects.filter(opportunity_access_id=OuterRef("pk"))
@@ -240,9 +236,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
 
         def completed_work_status_total_subquery(status_value):
             return Subquery(
-                CompletedWork.objects.filter(
-                    opportunity_access_id=OuterRef("pk"), status=status_value
-                )
+                CompletedWork.objects.filter(opportunity_access_id=OuterRef("pk"), status=status_value)
                 .values("opportunity_access_id")
                 .annotate(status_count=Count("id", distinct=True))
                 .values("status_count")[:1],
@@ -255,10 +249,10 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
         over_limit_count_sq = completed_work_status_subquery(CompletedWorkStatus.over_limit)
         incomplete_count_sq = completed_work_status_subquery(CompletedWorkStatus.incomplete)
 
-        total_pending_for_user =completed_work_status_total_subquery(CompletedWorkStatus.pending)
-        total_approved_for_user =completed_work_status_total_subquery(CompletedWorkStatus.approved)
-        total_rejected_for_user =completed_work_status_total_subquery(CompletedWorkStatus.rejected)
-        total_over_limit_for_user =completed_work_status_total_subquery(CompletedWorkStatus.over_limit)
+        total_pending_for_user = completed_work_status_total_subquery(CompletedWorkStatus.pending)
+        total_approved_for_user = completed_work_status_total_subquery(CompletedWorkStatus.approved)
+        total_rejected_for_user = completed_work_status_total_subquery(CompletedWorkStatus.rejected)
+        total_over_limit_for_user = completed_work_status_total_subquery(CompletedWorkStatus.over_limit)
 
         queryset = (
             OpportunityAccess.objects.filter(opportunity=opportunity)
@@ -286,8 +280,8 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity):
                 total_completed=(F('total_pending') + F('total_approved') + F('total_rejected') + F('total_over_limit'))
 
             )
-            .select_related('user')
-            .order_by('user__name')
+            .select_related("user")
+            .order_by("user__name")
         )
         access_objects += queryset
     access_objects.sort(key=lambda a: a.user.name)
@@ -427,10 +421,7 @@ def get_worker_learn_table_data(opportunity):
     learn_modules_count = opportunity.learn_app.learn_modules.count()
 
     def assessment_exists_subquery(passed: bool):
-        return Assessment.objects.filter(
-            opportunity_access_id=OuterRef('pk'),
-            passed=passed
-        )
+        return Assessment.objects.filter(opportunity_access_id=OuterRef("pk"), passed=passed)
 
     duration_subquery = (
         CompletedModule.objects.filter(opportunity_access=OuterRef("pk"))
@@ -450,7 +441,7 @@ def get_worker_learn_table_data(opportunity):
             When(Exists(assessment_exists_subquery(passed=False)), then=Value(1)),  # Failed
             default=Value(0),
             output_field=IntegerField(),
-        )
+        ),
     )
     return queryset
 

@@ -12,7 +12,8 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     OpportunityClaimLimit,
     UserInviteStatus,
-    VisitValidationStatus, )
+    VisitValidationStatus,
+)
 from commcare_connect.opportunity.tests.factories import (
     OpportunityAccessFactory,
     OpportunityClaimFactory,
@@ -20,7 +21,8 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentFactory,
     PaymentUnitFactory,
     UserInviteFactory,
-    UserVisitFactory, )
+    UserVisitFactory,
+)
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
 from commcare_connect.users.models import User
@@ -191,7 +193,9 @@ def test_get_opportunity_list_data_all_annotations(opportunity):
         visit_date=three_days_ago - timedelta(days=2),
     )
 
-    queryset = get_opportunity_list_data(opportunity.organization, )
+    queryset = get_opportunity_list_data(
+        opportunity.organization,
+    )
     opp = queryset[0]
     assert opp.pending_invites == 3
     assert opp.pending_approvals == 1
