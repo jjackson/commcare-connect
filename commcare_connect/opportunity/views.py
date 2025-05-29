@@ -1705,7 +1705,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
         return UserVisit.objects.filter(**filter_kwargs).order_by("visit_date")
 
 
-@org_member_required
+@org_viewer_required
 def user_visit_details(request, org_slug, opp_id, pk):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
     user_visit = get_object_or_404(UserVisit, pk=pk, opportunity=opportunity)
