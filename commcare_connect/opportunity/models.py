@@ -158,6 +158,8 @@ class Opportunity(BaseModel):
 
     @property
     def number_of_users(self):
+        if not self.total_budget:
+            return 0
         if not self.managed:
             return self.total_budget / self.budget_per_user
 
@@ -253,6 +255,8 @@ class OpportunityAccess(models.Model):
     suspension_date = models.DateTimeField(null=True, blank=True)
     suspension_reason = models.CharField(max_length=300, null=True, blank=True)
     invited_date = models.DateTimeField(auto_now_add=True, editable=False, null=True)
+    completed_learn_date = models.DateTimeField(null=True)
+    last_active = models.DateTimeField(null=True)
 
     class Meta:
         indexes = [models.Index(fields=["invite_id"])]
@@ -444,6 +448,7 @@ class PaymentInvoice(models.Model):
 
 
 class Payment(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
     amount = models.PositiveIntegerField()
     amount_usd = models.DecimalField(max_digits=10, decimal_places=2, null=True)
     date_paid = models.DateTimeField(default=datetime.datetime.utcnow)
