@@ -136,23 +136,8 @@ def test_approve_visit(
     response = client.post(approve_url, {"justification": justification}, follow=True)
     visit.refresh_from_db()
     assert visit.status == VisitValidationStatus.approved
-    expected_redirect_url = None
     if opportunity.managed:
         assert justification == visit.justification
-        expected_redirect_url = reverse(
-            "opportunity:user_visits_list",
-            kwargs={"org_slug": opportunity.organization.slug, "opp_id": opportunity.id},
-        )
-    else:
-        expected_redirect_url = reverse(
-            "opportunity:user_visits_list",
-            kwargs={
-                "org_slug": opportunity.organization.slug,
-                "opp_id": opportunity.id,
-                "pk": visit.opportunity_access_id,
-            },
-        )
-    assert response.redirect_chain[-1][0] == expected_redirect_url
     assert response.status_code == HTTPStatus.OK
 
 

@@ -158,6 +158,8 @@ class Opportunity(BaseModel):
 
     @property
     def number_of_users(self):
+        if not self.total_budget:
+            return 0
         if not self.managed:
             return self.total_budget / self.budget_per_user
 
