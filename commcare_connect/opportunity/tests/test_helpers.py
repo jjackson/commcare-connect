@@ -99,7 +99,7 @@ def test_get_worker_table_data_all_fields(opportunity):
     module1 = LearnModuleFactory(app=opportunity.learn_app)
     module2 = LearnModuleFactory(app=opportunity.learn_app)
 
-    access = OpportunityAccessFactory(opportunity=opportunity)
+    access = OpportunityAccessFactory(opportunity=opportunity, last_active=today)
 
     # Completed modules
     CompletedModuleFactory(
@@ -157,9 +157,9 @@ def test_get_worker_learn_table_data_all_fields(
 
     module1 = LearnModuleFactory(app=opportunity.learn_app)
     module2 = LearnModuleFactory(app=opportunity.learn_app)
-    module3 = LearnModuleFactory(app=opportunity.learn_app)
+    LearnModuleFactory(app=opportunity.learn_app)
 
-    access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
+    access = OpportunityAccessFactory(opportunity=opportunity, accepted=True, last_active=three_days_ago)
 
     # Completed 2 out of 3 modules
     CompletedModuleFactory(
@@ -202,12 +202,10 @@ def test_get_worker_learn_table_data_all_fields(
     )
 
     result = get_worker_learn_table_data(opportunity)
-    for r in result:
-        print(r.id)
     row = result.get(id=access.id)
 
     assert row.last_active.date() == three_days_ago
-    assert row.completed_learn == None
+    assert row.completed_learn_date is None
     assert row.assesment_count == 2
     assert row.learning_hours.total_seconds() == 10800
     assert row.completed_modules_count == 2

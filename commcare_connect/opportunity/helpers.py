@@ -425,12 +425,6 @@ def get_worker_table_data(opportunity):
 
 def get_worker_learn_table_data(opportunity):
     learn_modules_count = opportunity.learn_app.learn_modules.count()
-    min_dates_per_module = (
-        CompletedModule.objects.filter(opportunity_access=OuterRef("pk"))
-        .values("module")
-        .annotate(min_date=Min("date"))
-        .values("min_date")
-    )
 
     def assessment_exists_subquery(passed: bool):
         return Assessment.objects.filter(
@@ -446,13 +440,6 @@ def get_worker_learn_table_data(opportunity):
     )
     queryset = OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True).annotate(
         completed_modules_count=Count("completedmodule__module", distinct=True),
-        completed_learn=Case(
-            When(
-                Q(completed_modules_count=learn_modules_count),
-                then=Subquery(min_dates_per_module.order_by("-min_date")[:1]),
-            ),
-            default=None,
-        ),
         assesment_count=Count("assessment", distinct=True),
         learning_hours=Subquery(duration_subquery, output_field=DurationField()),
         modules_completed_percentage=Round(
