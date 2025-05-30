@@ -31,7 +31,6 @@ class ManagedOpportunityFactory(OpportunityFactory):
 class ProgramApplicationFactory(DjangoModelFactory):
     program = SubFactory(ProgramFactory)
     organization = SubFactory(OrganizationFactory)
-    date_created = Faker("date_this_decade", before_today=True, after_today=False)
 
     class Meta:
         model = ProgramApplication

@@ -20,11 +20,8 @@ class OrganizationChangeForm(forms.ModelForm):
 
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
-            layout.Field("name"),
-            layout.Div(
-                layout.Submit("submit", gettext("Update"), css_class="button button-md primary-dark"),
-                css_class="flex justify-end",
-            ),
+            layout.Row(layout.Field("name")),
+            layout.Submit("submit", gettext("Update")),
         )
 
 
@@ -48,12 +45,10 @@ class MembershipForm(forms.ModelForm):
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
             layout.Row(
+                layout.HTML("<h4>Add new member</h4>"),
                 layout.Field("email", wrapper_class="col-md-5"),
                 layout.Field("role", wrapper_class="col-md-5"),
-                layout.Div(
-                    layout.Submit("submit", gettext("Submit"), css_class="button button-md primary-dark float-end")
-                ),
-                css_class="flex flex-col",
+                layout.Div(layout.Submit("submit", gettext("Submit")), css_class="col-md-2"),
             ),
         )
 
@@ -87,14 +82,9 @@ class AddCredentialForm(forms.Form):
 
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
-            layout.Row(
-                layout.Field("credential"),
-                layout.Field("users"),
-                layout.Div(
-                    layout.Submit("submit", gettext("Submit"), css_class="button button-md primary-dark float-end")
-                ),
-                css_class="flex flex-col",
-            ),
+            layout.Row(layout.Field("credential")),
+            layout.Row(layout.Field("users")),
+            layout.Row(layout.Div(layout.Submit("submit", gettext("Submit")))),
         )
 
     def clean_users(self):
