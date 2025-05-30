@@ -1,8 +1,7 @@
 {% extends "opportunity/base.html" %}
 {% load static %}
 {% load crispy_forms_tags %}
-
-{% block title %}{{ request.org }} - {{ opportunity.name }}{% endblock %}
+{% load django_tables2 %}
 
 {% block breadcrumbs_inner %}
   {{ block.super }}
@@ -11,14 +10,14 @@
       {{ opportunity.name }}
     </a>
   </li>
-  <li class="breadcrumb-item active" aria-current="page">Edit Opportunity</li>
+  <li class="breadcrumb-item active" aria-current="page">User Visits</li>
 {% endblock %}
 
 {% block content %}
-  <h2 class="mb-2">Edit Opportunity</h2>
-  <hr>
-  <form method="post">
-    {% csrf_token %}
-    {% crispy form %}
+  <h2 class="mb-2">User Visits for {{ user_name }}</h2>
+  <hr/>
+  <form method="get" x-data="" x-ref="visitFilterForm">
+    {% crispy visit_filter.form %}
   </form>
+  {% render_table table %}
 {% endblock content %}

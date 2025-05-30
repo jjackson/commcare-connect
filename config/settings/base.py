@@ -70,13 +70,13 @@ DJANGO_APPS = [
     "django.contrib.messages",
     "whitenoise.runserver_nostatic",
     "django.contrib.staticfiles",
-    "django.contrib.humanize",  # Handy template tags
+    # "django.contrib.humanize", # Handy template tags
     "django.contrib.admin",
     "django.forms",
 ]
 THIRD_PARTY_APPS = [
     "crispy_forms",
-    "crispy_tailwind",
+    "crispy_bootstrap5",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
@@ -185,15 +185,14 @@ TEMPLATES = [
                 "django.template.context_processors.tz",
                 "django.contrib.messages.context_processors.messages",
                 "commcare_connect.users.context_processors.allauth_settings",
-                "commcare_connect.web.context_processors.page_settings",
             ],
         },
     }
 ]
 
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
-CRISPY_TEMPLATE_PACK = "tailwind"
-CRISPY_ALLOWED_TEMPLATE_PACKS = "tailwind"
+CRISPY_TEMPLATE_PACK = "bootstrap5"
+CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 
 # FIXTURES
 # ------------------------------------------------------------------------------
@@ -331,7 +330,7 @@ CACHES = {
     }
 }
 
-DJANGO_TABLES2_TEMPLATE = "tailwind/base_table.html"
+DJANGO_TABLES2_TEMPLATE = "tables/tabbed_table.html"
 DJANGO_TABLES2_TABLE_ATTRS = {
     "class": "table table-bordered mb-0",
     "thead": {
