@@ -44,42 +44,6 @@ from commcare_connect.opportunity.models import (
 )
 
 
-class OpportunityAnnotations:
-    @staticmethod
-    def total_accrued():
-        return Coalesce(
-            Sum("opportunityaccess__payment_accrued", distinct=True), Value(0), output_field=DecimalField()
-        )
-
-    @staticmethod
-    def total_paid():
-        return Coalesce(
-            Sum(
-                "opportunityaccess__payment__amount",
-                distinct=True,
-            ),
-            Value(0),
-            output_field=DecimalField(),
-        )
-
-    @staticmethod
-    def pending_invites():
-        return Count(
-            "userinvite",
-            filter=~Q(userinvite__status=UserInviteStatus.not_found)
-            & ~Q(userinvite__status=UserInviteStatus.accepted),
-            distinct=True,
-        )
-
-    @staticmethod
-    def workers_invited():
-        return Count("userinvite", distinct=True, filter=~Q(userinvite__status=UserInviteStatus.not_found))
-
-    @staticmethod
-    def started_learning():
-        return Count("opportunityaccess", filter=Q(opportunityaccess__date_learn_started__isnull=False), distinct=True)
-
-
 def inactive_workers_subquery(days_ago):
     subquery = (
         OpportunityAccess.objects.filter(
@@ -176,6 +140,19 @@ def pending_invites_subquery():
             output_field=IntegerField(),
         ),
         0,
+    )
+
+
+def started_learning_subquery():
+    return Coalesce(
+        Subquery(
+            OpportunityAccess.objects.filter(opportunity_id=OuterRef("pk"), date_learn_started__isnull=False)
+            .values("opportunity_id")
+            .annotate(count=Count("id", distinct=True))
+            .values("count"),
+            output_field=IntegerField(),
+        ),
+        Value(0),
     )
 
 
@@ -378,10 +355,10 @@ def get_opportunity_list_data(organization, program_manager=False):
 
     queryset = Opportunity.objects.filter(base_filter).annotate(
         program=F("managedopportunity__program__name"),
-        pending_invites=OpportunityAnnotations.pending_invites(),
+        pending_invites=pending_invites_subquery(),
         pending_approvals=Coalesce(pending_approvals_sq, Value(0)),
-        total_accrued=OpportunityAnnotations.total_accrued(),
-        total_paid=OpportunityAnnotations.total_paid(),
+        total_accrued=total_accrued_sq(),
+        total_paid=total_paid_sq(),
         payments_due=ExpressionWrapper(
             F("total_accrued") - F("total_paid"),
             output_field=DecimalField(),
@@ -399,7 +376,7 @@ def get_opportunity_list_data(organization, program_manager=False):
         total_deliveries_sq = Subquery(
             CompletedWork.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"))
             .values("opportunity_access__opportunity_id")
-            .annotate(total=Sum("saved_completed_count", distinct=True))
+            .annotate(total=Sum("saved_completed_count"))
             .values("total")[:1],
             output_field=IntegerField(),
         )
@@ -407,14 +384,14 @@ def get_opportunity_list_data(organization, program_manager=False):
         verified_deliveries_sq = Subquery(
             CompletedWork.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"))
             .values("opportunity_access__opportunity_id")
-            .annotate(total=Sum("saved_approved_count", distinct=True))
+            .annotate(total=Sum("saved_approved_count"))
             .values("total")[:1],
             output_field=IntegerField(),
         )
 
         queryset = queryset.annotate(
             total_workers=Count("opportunityaccess", distinct=True),
-            started_learning=OpportunityAnnotations.started_learning(),
+            started_learning=started_learning_subquery(),
             total_deliveries=Coalesce(total_deliveries_sq, Value(0)),
             verified_deliveries=Coalesce(verified_deliveries_sq, Value(0)),
             active_workers=F("started_learning") - F("inactive_workers"),
@@ -626,17 +603,6 @@ def get_opportunity_worker_progress(opp_id):
 
 
 def get_opportunity_funnel_progress(opp_id):
-    started_learning_subquery = Coalesce(
-        Subquery(
-            OpportunityAccess.objects.filter(opportunity_id=OuterRef("pk"), date_learn_started__isnull=False)
-            .values("opportunity_id")
-            .annotate(count=Count("id", distinct=True))
-            .values("count"),
-            output_field=IntegerField(),
-        ),
-        Value(0),
-    )
-
     claimed_job_subquery = Coalesce(
         Subquery(
             OpportunityClaim.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"))
@@ -686,7 +652,7 @@ def get_opportunity_funnel_progress(opp_id):
         .annotate(
             workers_invited=workers_invited_subquery(),
             pending_invites=pending_invites_subquery(),
-            started_learning_count=started_learning_subquery,
+            started_learning_count=started_learning_subquery(),
             claimed_job=claimed_job_subquery,
             started_deliveries=started_deliveries_subquery,
             completed_assessments=completed_assessments_subquery,
