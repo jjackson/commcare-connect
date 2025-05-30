@@ -46,7 +46,7 @@ class User(AbstractUser):
             str: URL for user detail.
 
         """
-        return reverse("account_email")
+        return reverse("users:detail", kwargs={"pk": self.id})
 
     class Meta:
         constraints = [UniqueConstraint(fields=["email"], name="unique_user_email", condition=Q(email__isnull=False))]

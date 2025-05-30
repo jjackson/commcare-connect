@@ -520,7 +520,7 @@ class RowData:
         error_message = "Active status must be 'yes' or 'no'"
         index = _get_header_index(self.headers, ACTIVE_COL)
         active = self.row[index]
-        if not active or not isinstance(active, str):
+        if not active:
             raise InvalidValueError(error_message)
         active = active.lower().strip()
         if active not in ["yes", "no"]:

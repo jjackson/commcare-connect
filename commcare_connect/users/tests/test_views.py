@@ -1,16 +1,20 @@
 from unittest import mock
 
 import pytest
+from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.messages.middleware import MessageMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponseRedirect
 from django.test import RequestFactory
+from django.urls import reverse
 
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.forms import UserAdminChangeForm
 from commcare_connect.users.models import ConnectIDUserLink, User
-from commcare_connect.users.views import UserRedirectView, UserUpdateView, create_user_link_view
+from commcare_connect.users.tests.factories import UserFactory
+from commcare_connect.users.views import UserRedirectView, UserUpdateView, create_user_link_view, user_detail_view
 
 pytestmark = pytest.mark.django_db
 
@@ -33,7 +37,7 @@ class TestUserUpdateView:
         request.user = user
 
         view.request = request
-        assert view.get_success_url() == "/accounts/email/"
+        assert view.get_success_url() == f"/users/{user.pk}/"
 
     def test_get_object(self, user: User, rf: RequestFactory):
         view = UserUpdateView()
@@ -73,7 +77,7 @@ class TestUserRedirectView:
         request.org = None
 
         view.request = request
-        assert view.get_redirect_url() == "/"
+        assert view.get_redirect_url() == "/register/organization/"
 
     def test_get_redirect_url_for_org_user(
         self, organization: Organization, org_user_member: User, rf: RequestFactory
@@ -85,6 +89,25 @@ class TestUserRedirectView:
 
         view.request = request
         assert view.get_redirect_url() == f"/a/{organization.slug}/opportunity/"
+
+
+class TestUserDetailView:
+    def test_authenticated(self, user: User, rf: RequestFactory):
+        request = rf.get("/fake-url/")
+        request.user = UserFactory()
+        response = user_detail_view(request, pk=user.pk)
+
+        assert response.status_code == 200
+
+    def test_not_authenticated(self, user: User, rf: RequestFactory):
+        request = rf.get("/fake-url/")
+        request.user = AnonymousUser()
+        response = user_detail_view(request, pk=user.pk)
+        login_url = reverse(settings.LOGIN_URL)
+
+        assert isinstance(response, HttpResponseRedirect)
+        assert response.status_code == 302
+        assert response.url == f"{login_url}?next=/fake-url/"
 
 
 class TestCreateUserLinkView:
