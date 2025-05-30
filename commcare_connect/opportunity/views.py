@@ -207,9 +207,13 @@ class OpportunityList(OrganizationUserMixin, SingleTableMixin, TemplateView):
         # the count is used for pagination
         def fast_count():
             if is_program_manager:
-                return Opportunity.objects.filter(
-                    Q(organization=org) | Q(managedopportunity__program__organization=org)
-                ).distinct().count()
+                return (
+                    Opportunity.objects.filter(
+                        Q(organization=org) | Q(managedopportunity__program__organization=org)
+                    )  # noqa: E501
+                    .distinct()
+                    .count()
+                )
             else:
                 return Opportunity.objects.filter(organization=org).count()
 
