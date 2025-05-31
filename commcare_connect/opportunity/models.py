@@ -113,6 +113,8 @@ class Opportunity(BaseModel):
 
     @property
     def remaining_budget(self) -> int:
+        if self.total_budget is None:
+            return 0
         return self.total_budget - self.claimed_budget
 
     @property
@@ -158,6 +160,8 @@ class Opportunity(BaseModel):
 
     @property
     def number_of_users(self):
+        if not self.total_budget:
+            return 0
         if not self.managed:
             return self.total_budget / self.budget_per_user
 
@@ -175,15 +179,16 @@ class Opportunity(BaseModel):
 
     @property
     def max_visits_per_user_new(self):
-        return self.paymentunit_set.aggregate(max_total=Sum("max_total")).get("max_total", 0)
+        # aggregates return None
+        return self.paymentunit_set.aggregate(max_total=Sum("max_total")).get("max_total", 0) or 0
 
     @property
     def daily_max_visits_per_user_new(self):
-        return self.paymentunit_set.aggregate(max_daily=Sum("max_daily")).get("max_daily", 0)
+        return self.paymentunit_set.aggregate(max_daily=Sum("max_daily")).get("max_daily", 0) or 0
 
     @property
     def budget_per_visit_new(self):
-        return self.paymentunit_set.aggregate(amount=Max("amount")).get("amount", 0)
+        return self.paymentunit_set.aggregate(amount=Max("amount")).get("amount", 0) or 0
 
     @property
     def budget_per_user(self):
@@ -196,6 +201,14 @@ class Opportunity(BaseModel):
     @property
     def is_active(self):
         return bool(self.active and self.end_date and self.end_date >= now().date())
+
+    @property
+    def program_name(self):
+        return self.managedopportunity.program.name if self.managed else None
+
+    @property
+    def has_ended(self):
+        return bool(self.end_date and self.end_date < now().date())
 
 
 class OpportunityVerificationFlags(models.Model):
@@ -331,7 +344,7 @@ class OpportunityAccess(models.Model):
         elif assessments.get("failed", 0) > 0:
             status = "Failed"
         else:
-            status = "Not completed"
+            status = None
         return status
 
     @property
@@ -649,6 +662,15 @@ class UserVisit(XFormBaseModel):
             except (TypeError, ValueError):
                 pass
         return duration
+
+    @property
+    def flags(self):
+        if self.flag_reason is not None:
+            from commcare_connect.utils.flags import FlagLabels
+
+            flags = [FlagLabels.get_label(flag) for flag, _ in self.flag_reason.get("flags", [])]
+            return flags
+        return []
 
     class Meta:
         constraints = [
