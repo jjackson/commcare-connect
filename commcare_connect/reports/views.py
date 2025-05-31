@@ -277,7 +277,7 @@ class DeliveryStatsReportView(tables.SingleTableMixin, SuperUserRequiredMixin, N
 
     def get_template_names(self):
         if self.request.htmx:
-            return ["reports/htmx_table.html"]
+            return ["tailwind/base_table.html"]
         return ["reports/report_table.html"]
 
     def get_context_data(self, **kwargs):
