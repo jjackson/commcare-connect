@@ -337,6 +337,24 @@ def get_payment_report_data(opportunity: Opportunity):
     return data, total_user_payment_accrued, total_nm_payment_accrued
 
 
+def get_opportunity_list_data_lite(org, program_manager=False):
+    today = now().date()
+    base_filter = Q(organization=org)
+    if program_manager:
+        base_filter |= Q(managedopportunity__program__organization=org)
+
+    queryset = Opportunity.objects.filter(base_filter).annotate(
+        program=F("managedopportunity__program__name"),
+        status=Case(
+            When(Q(active=True) & Q(end_date__gte=today), then=Value(0)),  # Active
+            When(Q(active=True) & Q(end_date__lt=today), then=Value(1)),  # Ended
+            default=Value(2),  # Inactive
+            output_field=IntegerField(),
+        ),
+    )
+    return queryset
+
+
 def get_opportunity_list_data(organization, program_manager=False):
     today = now().date()
     three_days_ago = now() - timedelta(days=3)
