@@ -27,8 +27,8 @@ from django.utils.timezone import now
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
-from django.views.generic import CreateView, DetailView, TemplateView, UpdateView
-from django_tables2 import RequestConfig, SingleTableMixin, SingleTableView
+from django.views.generic import CreateView, DetailView, UpdateView
+from django_tables2 import RequestConfig, SingleTableView
 from django_tables2.export import TableExport
 from geopy import distance
 
@@ -60,7 +60,7 @@ from commcare_connect.opportunity.helpers import (
     get_annotated_opportunity_access_deliver_status,
     get_opportunity_delivery_progress,
     get_opportunity_funnel_progress,
-    get_opportunity_list_data,
+    get_opportunity_list_data_lite,
     get_opportunity_worker_progress,
     get_payment_report_data,
     get_worker_learn_table_data,
@@ -91,17 +91,16 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
+    BaseOpportunityList,
     CompletedWorkTable,
     DeliverStatusTable,
     DeliverUnitTable,
     LearnModuleTable,
     LearnStatusTable,
     OpportunityPaymentTable,
-    OpportunityTable,
     PaymentInvoiceTable,
     PaymentReportTable,
     PaymentUnitTable,
-    ProgramManagerOpportunityTable,
     SuspendedUsersTable,
     UserStatusTable,
     UserVisitVerificationTable,
@@ -179,14 +178,11 @@ class OrgContextSingleTableView(SingleTableView):
         return kwargs
 
 
-class OpportunityList(OrganizationUserMixin, SingleTableMixin, TemplateView):
+class OpportunityList(OrganizationUserMixin, SingleTableView):
+    model = Opportunity
+    table_class = BaseOpportunityList
     template_name = "tailwind/pages/opportunities_list.html"
     paginate_by = 15
-
-    def get_table_class(self):
-        if self.request.org.program_manager:
-            return ProgramManagerOpportunityTable
-        return OpportunityTable
 
     def get_paginate_by(self, table):
         return get_validated_page_size(self.request)
@@ -199,26 +195,7 @@ class OpportunityList(OrganizationUserMixin, SingleTableMixin, TemplateView):
     def get_table_data(self):
         org = self.request.org
         is_program_manager = self.request.org.program_manager
-
-        queryset = get_opportunity_list_data(org, is_program_manager)
-        queryset = queryset.order_by("status", "start_date", "end_date")
-
-        # patch .count() to avoid slowness that comes from queryset
-        # the count is used for pagination
-        def fast_count():
-            if is_program_manager:
-                return (
-                    Opportunity.objects.filter(
-                        Q(organization=org) | Q(managedopportunity__program__organization=org)
-                    )  # noqa: E501
-                    .distinct()
-                    .count()
-                )
-            else:
-                return Opportunity.objects.filter(organization=org).count()
-
-        queryset.count = fast_count
-        return queryset
+        return get_opportunity_list_data_lite(org, is_program_manager)
 
 
 class OpportunityCreate(OrganizationUserMemberRoleMixin, CreateView):
