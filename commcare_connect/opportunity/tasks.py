@@ -4,6 +4,7 @@ import logging
 import httpx
 from allauth.utils import build_absolute_uri
 from django.conf import settings
+from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import transaction
@@ -12,7 +13,7 @@ from django.utils.timezone import now
 from django.utils.translation import gettext
 from tablib import Dataset
 
-from commcare_connect.connect_id_client import fetch_users, filter_users, send_message, send_message_bulk
+from commcare_connect.connect_id_client import fetch_users, send_message, send_message_bulk
 from commcare_connect.connect_id_client.models import ConnectIdUser, Message
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
 from commcare_connect.opportunity.export import (
@@ -21,6 +22,7 @@ from commcare_connect.opportunity.export import (
     export_empty_payment_table,
     export_user_status_table,
     export_user_visit_data,
+    export_user_visit_review_data,
     export_work_status_table,
 )
 from commcare_connect.opportunity.forms import DateRanges
@@ -36,10 +38,12 @@ from commcare_connect.opportunity.models import (
     UserInvite,
     UserInviteStatus,
     UserVisit,
+    VisitReviewStatus,
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.utils.completed_work import update_status
 from commcare_connect.users.models import User
+from commcare_connect.utils.celery import set_task_progress
 from commcare_connect.utils.datetime import is_date_before
 from commcare_connect.utils.sms import send_sms
 from config import celery_app
@@ -71,12 +75,8 @@ def create_learn_modules_and_deliver_units(opportunity_id):
 
 
 @celery_app.task()
-def add_connect_users(
-    user_list: list[str], opportunity_id: str, filter_country: str = "", filter_credential: list[str] = ""
-):
+def add_connect_users(user_list: list[str], opportunity_id: str):
     found_users = fetch_users(user_list)
-    if filter_country or filter_credential:
-        found_users += filter_users(country_code=filter_country, credential=filter_credential)
     not_found_users = set(user_list) - {user.phone_number for user in found_users}
     for u in not_found_users:
         UserInvite.objects.get_or_create(
@@ -146,6 +146,20 @@ def generate_visit_export(opportunity_id: int, date_range: str, status: list[str
         opportunity, DateRanges(date_range), [VisitValidationStatus(s) for s in status], flatten
     )
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_visit_export.{export_format}"
+    save_export(dataset, export_tmp_name, export_format)
+    return export_tmp_name
+
+
+@celery_app.task()
+def generate_review_visit_export(opportunity_id: int, date_range: str, status: list[str], export_format: str):
+    opportunity = Opportunity.objects.get(id=opportunity_id)
+    logger.info(
+        f"Export review visit for {opportunity.name} with date range {date_range} and status {','.join(status)}"
+    )
+    dataset = export_user_visit_review_data(
+        opportunity, DateRanges(date_range), [VisitReviewStatus(s) for s in status]
+    )
+    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_review_visit_export.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
 
@@ -330,9 +344,7 @@ def bulk_approve_completed_work():
         suspended=False,
     )
     for access in access_objects:
-        completed_works = access.completedwork_set.exclude(
-            status__in=[CompletedWorkStatus.rejected, CompletedWorkStatus.over_limit]
-        )
+        completed_works = access.completedwork_set.exclude(status=CompletedWorkStatus.rejected)
         update_status(completed_works, access, compute_payment=True)
 
 
@@ -343,3 +355,41 @@ def generate_catchment_area_export(opportunity_id: int, export_format: str):
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_catchment_area.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
+
+
+@celery_app.task(bind=True)
+def bulk_update_payments_task(self, opportunity_id: int, file_path: str, file_format: str):
+    from commcare_connect.opportunity.visit_import import ImportException, bulk_update_payments, get_imported_dataset
+
+    set_task_progress(self, "Payment Record Import is in progress.")
+    try:
+        with default_storage.open(file_path, "rb") as f:
+            dataset = get_imported_dataset(f, file_format)
+            headers = dataset.headers or []
+            rows = list(dataset)
+
+        status = bulk_update_payments(opportunity_id, headers, rows)
+        messages = [f"Payment status updated successfully for {len(status)} users."]
+        if status.missing_users:
+            messages.append(status.get_missing_message())
+
+    except ImportException as e:
+        messages = [f"Payment Import failed: {e}"] + getattr(e, "invalid_rows", [])
+    except Exception as e:
+        messages = [f"Unexpected error during payment import: {e}"]
+    finally:
+        default_storage.delete(file_path)
+
+    set_task_progress(self, "<br>".join(messages), is_complete=True)
+
+
+@celery_app.task()
+def bulk_update_payment_accrued(opportunity_id, user_ids: list):
+    """Updates payment accrued for completed and approved CompletedWork instances."""
+    access_objects = OpportunityAccess.objects.filter(opportunity=opportunity_id, user__in=user_ids, suspended=False)
+    for access in access_objects:
+        with cache.lock(f"update_payment_accrued_lock_{access.id}", timeout=900):
+            completed_works = access.completedwork_set.exclude(status=CompletedWorkStatus.rejected).select_related(
+                "payment_unit"
+            )
+            update_status(completed_works, access, compute_payment=True)

@@ -1,4 +1,3 @@
-import math
 from datetime import UTC, date, datetime, timedelta
 from unittest import mock
 
@@ -6,68 +5,20 @@ import pytest
 from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 from django.utils.timezone import now
-from factory.faker import Faker
 
 from commcare_connect.conftest import MobileUserFactory
-from commcare_connect.opportunity.models import CompletedWorkStatus, Opportunity, VisitValidationStatus
+from commcare_connect.connect_id_client.main import fetch_user_counts
+from commcare_connect.opportunity.models import CompletedWorkStatus, VisitValidationStatus
 from commcare_connect.opportunity.tests.factories import (
     CompletedWorkFactory,
-    DeliverUnitFactory,
     OpportunityAccessFactory,
     PaymentFactory,
     PaymentInvoiceFactory,
-    PaymentUnitFactory,
     UserVisitFactory,
 )
 from commcare_connect.reports.helpers import get_table_data_for_year_month
-from commcare_connect.reports.views import _results_to_geojson, get_table_data_for_quarter
+from commcare_connect.reports.views import _results_to_geojson
 from commcare_connect.utils.datetime import get_month_series
-
-
-@pytest.mark.django_db
-def test_delivery_stats(opportunity: Opportunity):
-    payment_units = PaymentUnitFactory.create_batch(2, opportunity=opportunity)
-    mobile_users = MobileUserFactory.create_batch(5)
-    for payment_unit in payment_units:
-        DeliverUnitFactory.create_batch(2, payment_unit=payment_unit, app=opportunity.deliver_app, optional=False)
-    access_objects = []
-    for mobile_user in mobile_users:
-        access = OpportunityAccessFactory(user=mobile_user, opportunity=opportunity, accepted=True)
-        access_objects.append(access)
-        for payment_unit in payment_units:
-            completed_work = CompletedWorkFactory(
-                opportunity_access=access,
-                payment_unit=payment_unit,
-                status=CompletedWorkStatus.approved.value,
-            )
-            for deliver_unit in payment_unit.deliver_units.all():
-                UserVisitFactory(
-                    opportunity=opportunity,
-                    user=mobile_user,
-                    deliver_unit=deliver_unit,
-                    status=VisitValidationStatus.approved.value,
-                    opportunity_access=access,
-                    completed_work=completed_work,
-                    visit_date=Faker("date_time_this_month", tzinfo=UTC),
-                )
-
-    quarter = math.ceil(datetime.utcnow().month / 12 * 4)
-
-    # delivery_type filter not applied
-    all_data = get_table_data_for_quarter((datetime.now().year, quarter), None)
-    assert all_data[0]["users"] == 5
-    assert all_data[0]["services"] == 10
-    assert all_data[0]["beneficiaries"] == 10
-
-    # test delivery_type filter
-    filtered_data = get_table_data_for_quarter((datetime.now().year, quarter), opportunity.delivery_type.slug)
-    assert filtered_data == all_data
-
-    # unknown delivery-type should have no data
-    unknown_delivery_type_data = get_table_data_for_quarter((datetime.now().year, quarter), "unknown")
-    assert unknown_delivery_type_data[0]["users"] == 0
-    assert unknown_delivery_type_data[0]["services"] == 0
-    assert unknown_delivery_type_data[0]["beneficiaries"] == 0
 
 
 def get_month_range_start_end(months=1):
@@ -89,14 +40,16 @@ def get_month_range_start_end(months=1):
         (get_month_range_start_end(13)),
     ],
 )
-def test_get_table_data_for_year_month(from_date, to_date):
+def test_get_table_data_for_year_month(from_date, to_date, httpx_mock):
     users = MobileUserFactory.create_batch(10)
     months = get_month_series(
         from_date or datetime(now().year, now().month, 1).date(),
         to_date or datetime(now().year, now().month, 1).date(),
     )
-    for month in months:
+    connectid_user_counts = {}
+    for i, month in enumerate(months):
         today = datetime.combine(month, datetime.min.time(), tzinfo=UTC)
+        connectid_user_counts[today.strftime("%Y-%m")] = i
         with mock.patch.object(timezone, "now", return_value=today):
             for i, user in enumerate(users):
                 access = OpportunityAccessFactory(
@@ -124,18 +77,28 @@ def test_get_table_data_for_year_month(from_date, to_date):
                 PaymentFactory(invoice=inv, date_paid=today, amount_usd=100)
                 other_inv = PaymentInvoiceFactory(opportunity=access.opportunity, amount=100, service_delivery=False)
                 PaymentFactory(invoice=other_inv, date_paid=today, amount_usd=100)
+
+    fetch_user_counts.clear()
+    httpx_mock.add_response(
+        method="GET",
+        json=connectid_user_counts,
+    )
     data = get_table_data_for_year_month(from_date=from_date, to_date=to_date)
 
     assert len(data)
-    for row in data:
+    total_connectid_user_count = 0
+    for i, row in enumerate(data):
         assert date(row["month_group"].year, row["month_group"].month, 1) in months
-        assert row["users"] == 9
-        assert row["services"] == 9
+        total_connectid_user_count += connectid_user_counts.get(row["month_group"].strftime("%Y-%m"))
+        assert row["connectid_users"] == total_connectid_user_count
+        assert row["total_eligible_users"] == (i + 1) * 10
+        assert row["users"] == 10
+        assert row["services"] == 10
         assert row["avg_time_to_payment"] == 50
         assert 0 <= row["max_time_to_payment"] <= 90
         assert row["flw_amount_earned"] == 4500
         assert row["flw_amount_paid"] == 4500
-        assert row["nm_amount_earned"] == 5400
+        assert row["nm_amount_earned"] == 5500
         assert row["nm_amount_paid"] == 1000
         assert row["nm_other_amount_paid"] == 1000
         assert row["avg_top_paid_flws"] == 900
@@ -146,7 +109,7 @@ def test_get_table_data_for_year_month(from_date, to_date):
     "delivery_type",
     [(None), ("delivery_1"), ("delivery_2")],
 )
-def test_get_table_data_for_year_month_by_delivery_type(delivery_type):
+def test_get_table_data_for_year_month_by_delivery_type(delivery_type, httpx_mock):
     now = datetime.now(UTC)
     delivery_type_slugs = ["delivery_1", "delivery_2"]
     for slug in delivery_type_slugs:
@@ -176,27 +139,36 @@ def test_get_table_data_for_year_month_by_delivery_type(delivery_type):
             PaymentFactory(opportunity_access=access, date_paid=now, amount_usd=i * 100, confirmed=True)
             inv = PaymentInvoiceFactory(opportunity=access.opportunity, amount=100)
             PaymentFactory(invoice=inv, date_paid=now, amount_usd=100)
-    data = get_table_data_for_year_month(delivery_type=delivery_type, group_by_delivery_type=True)
+    fetch_user_counts.clear()
+    httpx_mock.add_response(
+        method="GET",
+        json={},
+    )
+    data = get_table_data_for_year_month(delivery_type=delivery_type)
 
     assert len(data)
     for row in data:
-        if row["month_group"].month != now.month or row["month_group"].year != now.year:
+        if (
+            row["month_group"].month != now.month
+            or row["month_group"].year != now.year
+            or row["delivery_type_name"] == "All"
+        ):
             continue
         assert row["delivery_type_name"] in delivery_type_slugs
-        assert row["users"] == 4
-        assert row["services"] == 4
+        assert row["users"] == 5
+        assert row["services"] == 5
         assert row["avg_time_to_payment"] == 25
         assert row["max_time_to_payment"] == 40
         assert row["flw_amount_earned"] == 1000
         assert row["flw_amount_paid"] == 1000
-        assert row["nm_amount_earned"] == 1400
+        assert row["nm_amount_earned"] == 1500
         assert row["nm_amount_paid"] == 500
         assert row["avg_top_paid_flws"] == 400
 
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("opp_currency, filter_currency", [("ETB", "KES"), ("ETB", "ETB")])
-def test_get_table_data_for_year_month_by_country_currency(opp_currency, filter_currency):
+def test_get_table_data_for_year_month_by_country_currency(opp_currency, filter_currency, httpx_mock):
     now = datetime.now(UTC)
     users = MobileUserFactory.create_batch(10)
     for i, user in enumerate(users):
@@ -226,21 +198,25 @@ def test_get_table_data_for_year_month_by_country_currency(opp_currency, filter_
         PaymentFactory(invoice=inv, date_paid=now, amount_usd=100)
         other_inv = PaymentInvoiceFactory(opportunity=access.opportunity, amount=100, service_delivery=False)
         PaymentFactory(invoice=other_inv, date_paid=now, amount_usd=100)
+    fetch_user_counts.clear()
+    httpx_mock.add_response(
+        method="GET",
+        json={},
+    )
     data = get_table_data_for_year_month(country_currency=filter_currency)
-
     if opp_currency == filter_currency:
         assert len(data)
         for row in data:
             if row["month_group"].month != now.month or row["month_group"].year != now.year:
                 continue
 
-            assert row["users"] == 9
-            assert row["services"] == 9
+            assert row["users"] == 10
+            assert row["services"] == 10
             assert row["avg_time_to_payment"] == 50
             assert 0 <= row["max_time_to_payment"] <= 90
             assert row["flw_amount_earned"] == 4500
             assert row["flw_amount_paid"] == 4500
-            assert row["nm_amount_earned"] == 5400
+            assert row["nm_amount_earned"] == 5500
             assert row["nm_amount_paid"] == 1000
             assert row["nm_other_amount_paid"] == 1000
             assert row["avg_top_paid_flws"] == 900
