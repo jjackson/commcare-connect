@@ -6,6 +6,7 @@ from decimal import Decimal
 from itertools import chain
 
 import pytest
+from django.db import transaction
 from django.utils import timezone
 from django.utils.timezone import now
 from tablib import Dataset
@@ -35,16 +36,23 @@ from commcare_connect.opportunity.tests.factories import (
 from commcare_connect.opportunity.tests.helpers import validate_saved_fields
 from commcare_connect.opportunity.utils.completed_work import update_work_payment_date
 from commcare_connect.opportunity.visit_import import (
+    REVIEW_STATUS_COL,
+    VISIT_ID_COL,
     ImportException,
+    ReviewVisitRowData,
     VisitData,
     _bulk_update_catchments,
     _bulk_update_completed_work_status,
-    _bulk_update_payments,
+    _bulk_update_visit_review_status,
     _bulk_update_visit_status,
+    bulk_update_payments,
     get_data_by_visit_id,
+    get_missing_justification_message,
     update_payment_accrued,
 )
+from commcare_connect.program.tests.factories import ManagedOpportunityFactory
 from commcare_connect.users.models import User
+from commcare_connect.users.tests.factories import OrganizationFactory
 
 
 @pytest.mark.django_db
@@ -297,10 +305,10 @@ def test_bulk_update_payments(opportunity: Opportunity):
             "Username",
             "Phone Number",
             "Name",
-            "Payment Accrued",
-            "Payment Completed",
             "Payment Amount",
             "Payment Date (YYYY-MM-DD)",
+            "Payment Method",
+            "Payment Operator",
         ]
     )
 
@@ -311,14 +319,14 @@ def test_bulk_update_payments(opportunity: Opportunity):
                 mobile_user.username,
                 mobile_user.phone_number,
                 mobile_user.name,
-                100,  # Payment Accrued
-                0,  # Payment Completed
                 50,  # Payment Amount
                 payment_date if index != 4 else None,
+                f"method-{index}",
+                f"operator-{index}",
             )
         )
 
-    payment_import_status = _bulk_update_payments(opportunity, dataset)
+    payment_import_status = bulk_update_payments(opportunity.pk, dataset.headers, list(dataset))
 
     assert payment_import_status.seen_users == {user.username for user in mobile_user_seen}
     assert payment_import_status.missing_users == {user.username for user in mobile_user_missing}
@@ -332,6 +340,8 @@ def test_bulk_update_payments(opportunity: Opportunity):
             assert payment.date_paid.date() == datetime.date.today()
         else:
             assert payment.date_paid.strftime("%Y-%m-%d") == payment_date
+        assert payment.payment_method == f"method-{index}"
+        assert payment.payment_operator == f"operator-{index}"
 
 
 @pytest.fixture
@@ -447,6 +457,7 @@ def prepare_opportunity_payment_test_data(opportunity):
             payment_unit=payment_unit,
             status=CompletedWorkStatus.approved.value,
             payment_date=None,
+            status_modified_date=now(),
         )
         completed_works.append(completed_work)
         for deliver_unit in payment_unit.deliver_units.all():
@@ -457,6 +468,7 @@ def prepare_opportunity_payment_test_data(opportunity):
                 status=VisitValidationStatus.approved.value,
                 opportunity_access=access,
                 completed_work=completed_work,
+                status_modified_date=now(),
             )
     return user, access, payment_units, completed_works
 
@@ -505,6 +517,7 @@ def test_update_work_payment_date_fully(opportunity):
 def test_update_work_payment_date_with_precise_dates(opportunity):
     user = MobileUserFactory()
     access = OpportunityAccessFactory(opportunity=opportunity, user=user, accepted=True)
+    now = timezone.now()
 
     payment_units = [
         PaymentUnitFactory(opportunity=opportunity, amount=5),
@@ -519,6 +532,7 @@ def test_update_work_payment_date_with_precise_dates(opportunity):
         payment_unit=payment_units[0],
         status=CompletedWorkStatus.approved.value,
         payment_date=None,
+        status_modified_date=now - timedelta(4),
     )
 
     completed_work_2 = CompletedWorkFactory(
@@ -526,12 +540,11 @@ def test_update_work_payment_date_with_precise_dates(opportunity):
         payment_unit=payment_units[1],
         status=CompletedWorkStatus.approved.value,
         payment_date=None,
+        status_modified_date=now - timedelta(2),
     )
 
     create_user_visits_for_completed_work(opportunity, user, access, payment_units[0], completed_work_1)
     create_user_visits_for_completed_work(opportunity, user, access, payment_units[1], completed_work_2)
-
-    now = timezone.now()
 
     payment_1 = PaymentFactory(opportunity_access=access, amount=7)
     payment_2 = PaymentFactory(opportunity_access=access, amount=3)
@@ -584,7 +597,12 @@ def test_network_manager_flagged_visit_review_status(mobile_user: User, opportun
     assert opportunity.managed
     access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
     visits = UserVisitFactory.create_batch(
-        5, opportunity=opportunity, status=VisitValidationStatus.pending, user=mobile_user, opportunity_access=access
+        5,
+        opportunity=opportunity,
+        status=VisitValidationStatus.pending,
+        user=mobile_user,
+        opportunity_access=access,
+        flagged=True,
     )
     dataset = Dataset(headers=["visit id", "status", "rejected reason", "justification"])
     dataset.extend([[visit.xform_id, visit_status.value, "", "justification"] for visit in visits])
@@ -601,6 +619,25 @@ def test_network_manager_flagged_visit_review_status(mobile_user: User, opportun
             assert before_update <= visit.review_created_on <= after_update
             assert visit.review_status == VisitReviewStatus.pending
             assert visit.justification == "justification"
+
+
+@pytest.mark.parametrize("opportunity", [{"opp_options": {"managed": True}}], indirect=True)
+def test_nm_flagged_visit_review_status_without_justification(mobile_user: User, opportunity: Opportunity):
+    assert opportunity.managed
+    access = OpportunityAccess.objects.get(user=mobile_user, opportunity=opportunity)
+    visits = UserVisitFactory.create_batch(
+        5,
+        opportunity=opportunity,
+        status=VisitValidationStatus.pending,
+        user=mobile_user,
+        opportunity_access=access,
+        flagged=True,
+    )
+    dataset = Dataset(headers=["visit id", "status", "rejected reason", "justification"])
+    dataset.extend([[visit.xform_id, VisitValidationStatus.approved, "", ""] for visit in visits])
+    msg = get_missing_justification_message([visit.xform_id for visit in visits])
+    with pytest.raises(ImportException, match=msg):
+        _bulk_update_visit_status(opportunity, dataset)
 
 
 @pytest.mark.parametrize("opportunity", [{"opp_options": {"managed": True}}], indirect=True)
@@ -644,3 +681,176 @@ def test_review_completed_work_status(
 def _validate_saved_fields(opportunity_access: OpportunityAccess):
     for completed_work in opportunity_access.completedwork_set.all():
         validate_saved_fields(completed_work)
+
+
+@pytest.mark.django_db
+class TestBulkReviewVisitImport:
+    def setup_method(self):
+        self.organization = OrganizationFactory.create()
+        self.opp = ManagedOpportunityFactory.create(organization=self.organization)
+        self.now_time = now()
+
+    def _prepare_dataset(self, visits, status):
+        dataset = Dataset()
+        dataset.headers = [VISIT_ID_COL, REVIEW_STATUS_COL]
+        for visit in visits:
+            dataset.append([visit.xform_id, status])
+        return dataset
+
+    @pytest.mark.parametrize(
+        "num_agree, num_disagree",
+        [
+            (10, 5),  # Standard update: 10 agree, 5 disagree
+            (0, 5),  # Only disagrees
+            (10, 0),  # Only agrees
+            (0, 0),  # Empty dataset
+        ],
+    )
+    def test_bulk_review_update(self, num_agree, num_disagree):
+        agree_visits = UserVisitFactory.create_batch(
+            num_agree,
+            opportunity=self.opp,
+            review_created_on=self.now_time - timedelta(days=3),
+            status=VisitReviewStatus.pending,
+        )
+        disagree_visits = UserVisitFactory.create_batch(
+            num_disagree,
+            opportunity=self.opp,
+            review_created_on=self.now_time - timedelta(days=3),
+            status=VisitReviewStatus.pending,
+        )
+
+        expected_agreed_visits = {visit.xform_id for visit in agree_visits}
+        expected_disagreed_visits = {visit.xform_id for visit in disagree_visits}
+
+        dataset = self._prepare_dataset(agree_visits, "agree")
+        dataset.extend(self._prepare_dataset(disagree_visits, "disagree"))
+
+        status = _bulk_update_visit_review_status(self.opp, dataset)
+
+        assert status.seen_visits == expected_agreed_visits | expected_disagreed_visits
+        assert (
+            UserVisit.objects.filter(
+                xform_id__in=expected_agreed_visits, review_status=VisitReviewStatus.agree
+            ).count()
+            == num_agree
+        )
+        assert (
+            UserVisit.objects.filter(
+                xform_id__in=expected_disagreed_visits, review_status=VisitReviewStatus.disagree
+            ).count()
+            == num_disagree
+        )
+
+    @pytest.mark.parametrize(
+        "dataset_data, expected_seen, expected_missing",
+        [
+            # Empty dataset
+            ([], set(), set()),
+            # Nonexistent visits
+            (
+                [["nonexistent_visit_id_1", "agree"], ["nonexistent_visit_id_2", "disagree"]],
+                set(),
+                {"nonexistent_visit_id_1", "nonexistent_visit_id_2"},
+            ),
+        ],
+    )
+    def test_edge_cases(self, dataset_data, expected_seen, expected_missing):
+        dataset = Dataset()
+        dataset.headers = [VISIT_ID_COL, REVIEW_STATUS_COL]
+        for row in dataset_data:
+            dataset.append(row)
+
+        status = _bulk_update_visit_review_status(self.opp, dataset)
+
+        assert status.seen_visits == expected_seen
+        assert status.missing_visits == expected_missing
+
+    @pytest.mark.parametrize(
+        "initial_status, new_status",
+        [
+            (VisitReviewStatus.agree, "agree"),
+            (VisitReviewStatus.disagree, "disagree"),
+        ],
+    )
+    def test_does_not_update_unchanged_statuses(self, initial_status, new_status):
+        visits = UserVisitFactory.create_batch(
+            5,
+            opportunity=self.opp,
+            review_created_on=self.now_time - timedelta(days=3),
+            status=initial_status,
+        )
+
+        dataset = self._prepare_dataset(visits, new_status)
+
+        with transaction.atomic():
+            status = _bulk_update_visit_review_status(self.opp, dataset)
+
+        assert status.seen_visits == {visit.xform_id for visit in visits}
+        assert (
+            UserVisit.objects.filter(xform_id__in=[v.xform_id for v in visits], review_status=initial_status).count()
+            == 5
+        )
+
+    def test_handles_duplicate_entries(self):
+        """Ensures that duplicate entries do not cause unintended behavior."""
+        visits = UserVisitFactory.create_batch(
+            3,
+            opportunity=self.opp,
+            review_created_on=self.now_time - timedelta(days=3),
+            status=VisitReviewStatus.pending,
+        )
+
+        dataset = Dataset()
+        dataset.headers = [VISIT_ID_COL, REVIEW_STATUS_COL]
+        for visit in visits:
+            dataset.append([visit.xform_id, "agree"])
+            dataset.append([visit.xform_id, "agree"])
+
+        status = _bulk_update_visit_review_status(self.opp, dataset)
+
+        assert status.seen_visits == {visit.xform_id for visit in visits}
+        assert (
+            UserVisit.objects.filter(
+                xform_id__in=[v.xform_id for v in visits], review_status=VisitReviewStatus.agree
+            ).count()
+            == 3
+        )
+
+    @pytest.mark.parametrize(
+        "headers, row, expected_exception, expected_message",
+        [
+            # Missing required column
+            ([VISIT_ID_COL], ["visit_1"], ImportException, "Missing required column(s): 'program manager review'"),
+            ([REVIEW_STATUS_COL], ["agree"], ImportException, "Missing required column(s): 'visit id'"),
+            # Missing visit ID
+            (
+                [VISIT_ID_COL, REVIEW_STATUS_COL],
+                ["", "agree"],
+                ImportException,
+                "Missing visit ID in the dataset at row 2.",
+            ),
+            # Missing review status
+            (
+                [VISIT_ID_COL, REVIEW_STATUS_COL],
+                ["visit_1", ""],
+                ImportException,
+                "Missing review status in the dataset at row 2.",
+            ),
+            # Invalid review status
+            (
+                [VISIT_ID_COL, REVIEW_STATUS_COL],
+                ["visit_1", "not_a_valid_status"],
+                ImportException,
+                f"Invalid review status 'not_a_valid_status' at row 2. Allowed values: {VisitReviewStatus.values}",
+            ),
+        ],
+    )
+    def test_import_exceptions(self, headers, row, expected_exception, expected_message):
+        dataset = Dataset()
+        dataset.headers = headers
+        dataset.append(row)
+
+        with pytest.raises(expected_exception, match=re.escape(expected_message)):
+            for row_number, row in enumerate(dataset, start=2):
+                ReviewVisitRowData(row_number, row, dataset.headers)
