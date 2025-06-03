@@ -2100,7 +2100,8 @@ def opportunity_worker_progress(request, org_slug, opp_id):
     result = get_opportunity_worker_progress(opp_id)
 
     def safe_percent(numerator, denominator):
-        return (numerator / denominator) * 100 if denominator else 0
+        percent = (numerator / denominator) * 100 if denominator else 0
+        return 100 if percent > 100 else percent
 
     verified_percentage = safe_percent(result.approved_deliveries or 0, result.total_deliveries or 0)
     rejected_percentage = safe_percent(result.rejected_deliveries or 0, result.total_deliveries or 0)
