@@ -2108,6 +2108,13 @@ def opportunity_worker_progress(request, org_slug, opp_id):
     earned_percentage = safe_percent(result.total_accrued or 0, result.total_budget or 0)
     paid_percentage = safe_percent(result.total_paid or 0, result.total_accrued or 0)
 
+    def amount_with_currency(amount):
+        currency = ""
+        if result.currency:
+            currency = result.currency + " "  # adding space between
+        final_amount = intcomma(amount or 0)
+        return f"{currency}{final_amount}"
+
     worker_progress = [
         {
             "title": "Verification",
@@ -2136,11 +2143,11 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             ],
         },
         {
-            "title": f"Payments to Workers ({result.currency})",
+            "title": "Payments to Workers",
             "progress": [
                 {
                     "title": "Earned",
-                    "total": header_with_tooltip(result.total_accrued, "Earned Amount"),
+                    "total": header_with_tooltip(amount_with_currency(result.total_accrued), "Earned Amount"),
                     "value": header_with_tooltip(
                         f"{earned_percentage:.2f}%",
                         "Percentage Earned by all workers out of Max Budget in the Opportunity",
@@ -2150,7 +2157,9 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                 },
                 {
                     "title": "Paid",
-                    "total": header_with_tooltip(result.total_paid, "Paid Amount to All Workers"),
+                    "total": header_with_tooltip(
+                        amount_with_currency(result.total_paid), "Paid Amount to All Workers"
+                    ),
                     "value": header_with_tooltip(
                         f"{paid_percentage:.2f}%", "Percentage Paid to all  workers out of Earned amount"
                     ),
