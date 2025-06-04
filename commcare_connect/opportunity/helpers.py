@@ -96,7 +96,7 @@ def total_paid_sq():
             .values("opportunity_access__opportunity_id")
             .annotate(total=Sum("amount"))
             .values("total"),
-            output_field=IntegerField(),
+            output_field=DecimalField(),
         ),
         0,
     )
