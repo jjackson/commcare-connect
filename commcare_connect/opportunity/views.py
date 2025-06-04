@@ -13,8 +13,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage, storages
-from django.db.models import Count, Max, OuterRef, Q, Subquery, Sum, Value
-from django.db.models.functions import Coalesce
+from django.db.models import Count, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
+from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
 from django.middleware.csrf import get_token
@@ -1713,43 +1713,71 @@ def user_visit_details(request, org_slug, opp_id, pk):
     serializer.is_valid()
     xform = serializer.save()
 
-    visit_data = {}
-    user_forms = []
-    other_forms = []
-    lat = None
-    lon = None
-    precision = None
     visit_data = {
         "entity_name": user_visit.entity_name,
         "user__name": user_visit.user.name,
         "status": user_visit.get_status_display(),
         "visit_date": user_visit.visit_date,
     }
+
+    user_forms = []
+    other_forms = []
     closest_distance = sys.maxsize
+
     if user_visit.location:
-        locations = UserVisit.objects.filter(opportunity=user_visit.opportunity).exclude(pk=pk).select_related("user")
         lat, lon, _, precision = user_visit.location.split(" ")
-        for loc in locations:
-            if loc.location is None:
+        lat = float(lat)
+        lon = float(lon)
+
+        # Bounding box delta for 250m
+        lat_delta = 0.00225
+        lon_delta = 0.00225
+
+        class SplitPart(Func):
+            function = "SPLIT_PART"
+            arity = 3
+
+        # Fetch only points within 250m
+        qs = (
+            UserVisit.objects.filter(opportunity=opportunity)
+            .exclude(pk=user_visit.pk)
+            .annotate(
+                lat_val=Cast(SplitPart("location", Value(" "), Value(1)), FloatField()),
+                lon_val=Cast(SplitPart("location", Value(" "), Value(2)), FloatField()),
+            )
+            .filter(
+                lat_val__range=(lat - lat_delta, lat + lat_delta),
+                lon_val__range=(lon - lon_delta, lon + lon_delta),
+            )
+            .select_related("user")
+        )
+
+        for loc in qs:
+            if not loc.location:
                 continue
-            other_lat, other_lon, _, other_precision = loc.location.split(" ")
-            dist = distance.distance((lat, lon), (other_lat, other_lon))
-            closest_distance = int(min(closest_distance, dist.m))
-            if dist.m <= 250:
-                visit_data = {
-                    "entity_name": loc.entity_name,
-                    "user__name": loc.user.name,
-                    "status": loc.get_status_display(),
-                    "visit_date": loc.visit_date,
-                    "url": reverse(
-                        "opportunity:user_visit_details",
-                        kwargs={"org_slug": request.org.slug, "opp_id": loc.opportunity_id, "pk": loc.pk},
-                    ),
-                }
-                if user_visit.user_id == loc.user_id:
-                    user_forms.append((visit_data, dist.m, other_lat, other_lon, other_precision))
-                else:
-                    other_forms.append((visit_data, dist.m, other_lat, other_lon, other_precision))
+            try:
+                other_lat, other_lon, *_ = loc.location.split()
+                dist = distance.distance((lat, lon), (float(other_lat), float(other_lon))).m
+                closest_distance = int(min(closest_distance, dist))
+                if dist <= 250:
+                    visit_info = {
+                        "entity_name": loc.entity_name,
+                        "user__name": loc.user.name,
+                        "status": loc.get_status_display(),
+                        "visit_date": loc.visit_date,
+                        "url": reverse(
+                            "opportunity:user_visit_details",
+                            kwargs={"org_slug": request.org.slug, "opp_id": loc.opportunity_id, "pk": loc.pk},
+                        ),
+                    }
+                    form = (visit_info, dist, other_lat, other_lon, precision)
+                    if user_visit.user_id == loc.user_id:
+                        user_forms.append(form)
+                    else:
+                        other_forms.append(form)
+            except Exception:
+                continue
+
         user_forms.sort(key=lambda x: x[1])
         other_forms.sort(key=lambda x: x[1])
         visit_data.update({"lat": lat, "lon": lon, "precision": precision})
@@ -1759,6 +1787,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
         flags = [
             (FlagLabels.get_label(flag), description) for flag, description in user_visit.flag_reason.get("flags", [])
         ]
+
     return render(
         request,
         "opportunity/user_visit_details.html",
