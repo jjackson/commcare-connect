@@ -3,6 +3,7 @@ from collections import Counter, defaultdict
 from uuid import uuid4
 
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Count, F, Max, Q, Sum
 from django.utils.dateparse import parse_datetime
@@ -440,7 +441,7 @@ class VisitValidationStatus(models.TextChoices):
 
 class PaymentInvoice(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
-    amount = models.PositiveIntegerField()
+    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     date = models.DateField()
     invoice_number = models.CharField(max_length=50)
     service_delivery = models.BooleanField(default=True)
@@ -451,7 +452,7 @@ class PaymentInvoice(models.Model):
 
 class Payment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
-    amount = models.PositiveIntegerField()
+    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     amount_usd = models.DecimalField(max_digits=10, decimal_places=2, null=True)
     date_paid = models.DateTimeField(default=datetime.datetime.utcnow)
     # This is used to indicate payments made to Opportunity Users
