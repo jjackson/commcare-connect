@@ -1,3 +1,4 @@
+from datetime import timedelta
 from http import HTTPStatus
 
 import pytest
@@ -5,19 +6,21 @@ from django.test import Client
 from django.urls import reverse
 from django.utils.timezone import now
 
+from commcare_connect.opportunity.helpers import get_opportunity_list_data
 from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     OpportunityClaimLimit,
-    UserVisit,
-    VisitReviewStatus,
+    UserInviteStatus,
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tests.factories import (
     OpportunityAccessFactory,
     OpportunityClaimFactory,
     OpportunityClaimLimitFactory,
+    PaymentFactory,
     PaymentUnitFactory,
+    UserInviteFactory,
     UserVisitFactory,
 )
 from commcare_connect.organization.models import Organization
@@ -52,68 +55,6 @@ def test_add_budget_existing_users(
     assert opportunity.total_budget == 205
     assert opportunity.claimed_budget == 15
     assert OpportunityClaimLimit.objects.get(pk=ocl.pk).max_visits == 15
-
-
-class TestUserVisitReviewView:
-    @pytest.fixture(autouse=True)
-    def setup(
-        self,
-        client: Client,
-        program_manager_org: Organization,
-        program_manager_org_user_admin: User,
-        organization: Organization,
-        org_user_admin: User,
-    ):
-        self.client = client
-        self.pm_org = program_manager_org
-        self.pm_user = program_manager_org_user_admin
-        self.nm_org = organization
-        self.nm_user = org_user_admin
-        self.program = ProgramFactory(organization=self.pm_org)
-        self.opportunity = ManagedOpportunityFactory(program=self.program, organization=self.nm_org)
-        access = OpportunityAccessFactory(opportunity=self.opportunity, accepted=True)
-        self.visits = UserVisitFactory.create_batch(
-            10,
-            opportunity=self.opportunity,
-            status=VisitValidationStatus.approved,
-            review_created_on=now(),
-            review_status=VisitReviewStatus.pending,
-            opportunity_access=access,
-        )
-
-    def test_user_visit_review_program_manager_table(self):
-        self.url = reverse("opportunity:user_visit_review", args=(self.pm_org.slug, self.opportunity.id))
-        self.client.force_login(self.pm_user)
-        response = self.client.get(self.url)
-        assert response.status_code == 200
-        table = response.context["table"]
-        assert len(table.rows) == 10
-        assert "pk" in table.columns.names()
-
-    @pytest.mark.parametrize("review_status", [(VisitReviewStatus.agree), (VisitReviewStatus.disagree)])
-    def test_user_visit_review_program_manager_approval(self, review_status):
-        self.url = reverse("opportunity:user_visit_review", args=(self.pm_org.slug, self.opportunity.id))
-        self.client.force_login(self.pm_user)
-        response = self.client.post(self.url, {"pk": [], "review_status": review_status.value})
-        assert response.status_code == 200
-        visits = UserVisit.objects.filter(id__in=[visit.id for visit in self.visits])
-        for visit in visits:
-            assert visit.review_status == VisitReviewStatus.pending
-
-        visit_ids = [visit.id for visit in self.visits][:5]
-        response = self.client.post(self.url, {"pk": visit_ids, "review_status": review_status.value})
-        assert response.status_code == 200
-        visits = UserVisit.objects.filter(id__in=visit_ids)
-        for visit in visits:
-            assert visit.review_status == review_status
-
-    def test_user_visit_review_network_manager_table(self):
-        self.url = reverse("opportunity:user_visit_review", args=(self.nm_org.slug, self.opportunity.id))
-        self.client.force_login(self.nm_user)
-        response = self.client.get(self.url)
-        table = response.context["table"]
-        assert len(table.rows) == 10
-        assert "pk" not in table.columns.names()
 
 
 def test_add_budget_existing_users_for_managed_opportunity(
@@ -197,21 +138,70 @@ def test_approve_visit(
     response = client.post(approve_url, {"justification": justification}, follow=True)
     visit.refresh_from_db()
     assert visit.status == VisitValidationStatus.approved
-    expected_redirect_url = None
     if opportunity.managed:
         assert justification == visit.justification
-        expected_redirect_url = reverse(
-            "opportunity:user_visit_review",
-            kwargs={"org_slug": opportunity.organization.slug, "opp_id": opportunity.id},
-        )
-    else:
-        expected_redirect_url = reverse(
-            "opportunity:user_visits_list",
-            kwargs={
-                "org_slug": opportunity.organization.slug,
-                "opp_id": opportunity.id,
-                "pk": visit.opportunity_access_id,
-            },
-        )
-    assert response.redirect_chain[-1][0] == expected_redirect_url
     assert response.status_code == HTTPStatus.OK
+
+
+@pytest.mark.django_db
+def test_get_opportunity_list_data_all_annotations(opportunity):
+    today = now().date()
+    three_days_ago = now() - timedelta(days=3)
+
+    opportunity.end_date = today + timedelta(days=1)
+    opportunity.active = True
+    opportunity.save()
+
+    # Create OpportunityAccesses
+    oa1 = OpportunityAccessFactory(opportunity=opportunity, accepted=True, payment_accrued=1000, last_active=now())
+    oa2 = OpportunityAccessFactory(
+        opportunity=opportunity, accepted=True, payment_accrued=200, last_active=now() - timedelta(4)
+    )
+    oa3 = OpportunityAccessFactory(
+        opportunity=opportunity, accepted=True, payment_accrued=0, last_active=now() - timedelta(4)
+    )
+
+    # Payments
+    PaymentFactory(opportunity_access=oa1, amount=100, confirmed=True)
+    PaymentFactory(opportunity_access=oa2, amount=50, confirmed=True)
+    PaymentFactory(opportunity_access=oa1, amount=999, confirmed=False)
+    PaymentFactory(opportunity_access=oa3, amount=0, confirmed=True)
+
+    total_paid = 1149
+    total_accrued = 1200
+
+    # Invites
+    for _ in range(3):
+        UserInviteFactory(opportunity=opportunity, status=UserInviteStatus.invited)
+    UserInviteFactory(opportunity=opportunity, status=UserInviteStatus.accepted)
+
+    # Visits
+    UserVisitFactory(
+        opportunity=opportunity, opportunity_access=oa1, status=VisitValidationStatus.pending, visit_date=now()
+    )
+
+    UserVisitFactory(
+        opportunity=opportunity,
+        opportunity_access=oa2,
+        status=VisitValidationStatus.approved,
+        visit_date=three_days_ago - timedelta(days=2),
+    )
+
+    UserVisitFactory(
+        opportunity=opportunity,
+        opportunity_access=oa3,
+        status=VisitValidationStatus.rejected,
+        visit_date=three_days_ago - timedelta(days=2),
+    )
+
+    queryset = get_opportunity_list_data(
+        opportunity.organization,
+    )
+    opp = queryset[0]
+    assert opp.pending_invites == 3
+    assert opp.pending_approvals == 1
+    assert opp.total_accrued == total_accrued
+    assert opp.total_paid == total_paid
+    assert opp.payments_due == total_accrued - total_paid
+    assert opp.inactive_workers == 2
+    assert opp.status == 0
