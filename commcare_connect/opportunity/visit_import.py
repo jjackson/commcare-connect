@@ -1,7 +1,6 @@
 import codecs
 import datetime
 import textwrap
-
 from collections import defaultdict
 from dataclasses import astuple, dataclass
 from decimal import Decimal, InvalidOperation
@@ -278,9 +277,9 @@ def bulk_update_payments(opportunity_id: int, headers: list[str], rows: list[lis
             continue
 
         try:
-            amount = int(amount_raw)
-        except ValueError:
-            invalid_rows.append((row, "amount must be an integer"))
+            amount = Decimal(amount_raw)
+        except InvalidOperation:
+            invalid_rows.append((row, "amount must be a number"))
             continue
 
         try:
@@ -493,7 +492,7 @@ class RowData:
         error_message = "Active status must be 'yes' or 'no'"
         index = _get_header_index(self.headers, ACTIVE_COL)
         active = self.row[index]
-        if not active:
+        if not active or not isinstance(active, str):
             raise InvalidValueError(error_message)
         active = active.lower().strip()
         if active not in ["yes", "no"]:
