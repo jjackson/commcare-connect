@@ -2,6 +2,7 @@ import datetime
 import json
 import sys
 from collections import Counter, defaultdict
+from decimal import Decimal, InvalidOperation
 from functools import reduce
 from http import HTTPStatus
 
@@ -74,6 +75,7 @@ from commcare_connect.opportunity.models import (
     CompletedWorkStatus,
     DeliverUnit,
     DeliverUnitFlagRules,
+    ExchangeRate,
     FormJsonValidationRules,
     LearnModule,
     Opportunity,
@@ -1338,7 +1340,7 @@ def invoice_list(request, org_slug, pk):
         csrf_token=csrf_token,
     )
 
-    form = PaymentInvoiceForm(opportunity=opportunity)
+    form = PaymentInvoiceForm(opportunity=opportunity, org_slug=org_slug)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
     return render(
         request,
@@ -1363,10 +1365,10 @@ def invoice_create(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(pk, org_slug)
     if not opportunity.managed or is_program_manager_of_opportunity(request, opportunity):
         return redirect("opportunity:detail", org_slug, pk)
-    form = PaymentInvoiceForm(data=request.POST or None, opportunity=opportunity)
+    form = PaymentInvoiceForm(data=request.POST or None, opportunity=opportunity, org_slug=org_slug)
     if request.POST and form.is_valid():
         form.save()
-        form = PaymentInvoiceForm(opportunity=opportunity)
+        form = PaymentInvoiceForm(opportunity=opportunity, org_slug=org_slug)
         redirect_url = reverse("opportunity:invoice_list", args=[org_slug, pk])
         response = HttpResponse(status=200)
         response["HX-Redirect"] = redirect_url
@@ -2312,3 +2314,65 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
     return render(
         request, "tailwind/pages/opportunity_dashboard/opportunity_delivery_stat.html", {"opp_stats": opp_stats}
     )
+
+
+@require_POST
+def exchange_rate_preview(request, org_slug, opp_id):
+    opp = get_opportunity_or_404(opp_id, org_slug)
+    rate_date = request.POST.get("date")
+    usd_currency = request.POST.get("usd_currency", False) == "true"
+    replace_amount = request.POST.get("should_replace_amount", False) == "true"
+    amount = None
+
+    try:
+        amount = Decimal(request.POST.get("amount") or 0)
+    except InvalidOperation:
+        amount = Decimal(0)
+
+    final_amount = amount
+
+    if not rate_date:
+        exchange_info = "Please select a date for exchange rate."
+        converted_amount_display = ""
+    else:
+        exchange_rate = ExchangeRate.latest_exchange_rate(opp.currency, rate_date)
+        if exchange_rate:
+            exchange_info = format_html(
+                "Exchange Rate on {}: <strong>{}</strong>",
+                rate_date,
+                round(exchange_rate.rate, 4),
+            )
+            amount_after_exchange = None
+            currency = opp.currency
+
+            print(final_amount)
+
+            if usd_currency:
+                # Convert local ➝ USD
+                if replace_amount:
+                    final_amount = round(amount / exchange_rate.rate, 2)
+                amount_after_exchange = round(final_amount * exchange_rate.rate, 2)
+            else:
+                if replace_amount:
+                    final_amount = round(amount * exchange_rate.rate, 2)
+                amount_after_exchange = round(final_amount / exchange_rate.rate, 2)
+                currency = "USD"
+
+            converted_amount_display = format_html(
+                "Amount in {}: <strong>{}</strong>", currency, amount_after_exchange
+            )
+        else:
+            exchange_info = "Exchange rate not available for selected date."
+            converted_amount_display = ""
+
+    html = format_html(
+        """
+            <div id="exchange-rate-display" data-converted-amount="{converted_amount}">{exchange_info}</div>
+            <div id="converted-amount">{converted_amount_display}</div>
+        """,
+        exchange_info=exchange_info,
+        converted_amount_display=converted_amount_display,
+        converted_amount=str(final_amount),
+    )
+
+    return HttpResponse(html)
