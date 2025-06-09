@@ -465,6 +465,7 @@ class UserVisitReviewTable(OrgContextTable):
             "review_status",
             "created_on",
             "user_visit",
+            "flag_reason",
         )
         empty_text = "No visits submitted for review."
         template_name = "django_tables2/bootstrap5.html"
