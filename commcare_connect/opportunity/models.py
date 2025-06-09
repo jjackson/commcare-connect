@@ -817,4 +817,4 @@ class ExchangeRate(models.Model):
 
     @classmethod
     def latest_exchange_rate(cls, currency_code, date):
-        cls.objects.filter(currency_code=currency_code, rate_date__gte=date).order_by("-rate_date").first()
+        return cls.objects.filter(currency_code=currency_code, rate_date__gte=date).order_by("-rate_date").first()

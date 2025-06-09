@@ -1067,21 +1067,112 @@ class FormJsonValidationRulesForm(forms.ModelForm):
 
 
 class PaymentInvoiceForm(forms.ModelForm):
+    usd_currency = forms.BooleanField(
+        required=False,
+        initial=False,
+        label="USD Currency",
+        widget=forms.CheckboxInput(),
+    )
+
     class Meta:
         model = PaymentInvoice
         fields = ("amount", "date", "invoice_number", "service_delivery")
-        widgets = {"date": forms.DateInput(attrs={"type": "date"})}
+        widgets = {
+            "date": forms.DateInput(attrs={"type": "date"}),
+            "amount": forms.NumberInput(attrs={"min": "0"}),
+        }
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
+        self.org_slug = kwargs.pop("org_slug")
+        self.exchange_url = reverse("opportunity:exchange_rate", args=(self.org_slug, self.opportunity.id))
         super().__init__(*args, **kwargs)
+
+        self.fields["usd_currency"].widget.attrs.update(
+            {
+                "x-ref": "currencyToggle",
+                "x-on:change": "toggleCurrency($event)",
+            }
+        )
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
+            HTML(
+                f"""
+            <div
+              x-data="{{
+                currency: false,
+                get postUrl() {{
+                  return '{self.exchange_url}';
+                }},
+                get valuesPresent() {{
+                  return $refs.amount?.value && $refs.date?.value;
+                }},
+                convertCurrency(shouldReplaceAmount = false) {{
+                    shouldReplaceAmount = shouldReplaceAmount || false
+                    if (!this.valuesPresent) return;
+                      htmx.ajax('POST', this.postUrl, {{
+                        target: '#converted-amount-wrapper',
+                        swap: 'innerHTML',
+                        values: {{
+                          amount: $refs.amount.value,
+                          date: $refs.date.value,
+                          usd_currency: this.currency,
+                          should_replace_amount: shouldReplaceAmount
+                        }}
+                      }}).then(() => {{
+                        // This runs after the HTMX request completes
+                        if (shouldReplaceAmount) {{
+                            const wrapper = document.querySelector('#exchange-rate-display');
+                            const newAmount = wrapper?.dataset?.convertedAmount;
+                            if (newAmount) {{
+                              $refs.amount.value = newAmount;
+                            }}
+                        }}
+                      }});
+                }},
+                toggleCurrency(event) {{
+                  this.currency = event.target.checked;
+                  this.convertCurrency(true);
+                }}
+              }}"
+              x-init="
+                $nextTick(() => {{
+                  currency = $refs.currencyToggle?.checked || false;
+                }});
+              "
+            >
+            """
+            ),
             Row(
-                Field("amount", min=0),
-                Field("date"),
+                Field(
+                    "amount",
+                    **{
+                        "x-ref": "amount",
+                        "x-on:input.debounce.300ms": "convertCurrency()",
+                    },
+                ),
+                Field(
+                    "date",
+                    **{
+                        "x-ref": "date",
+                        "x-on:change": "convertCurrency()",
+                    },
+                ),
+                HTML(
+                    """
+                    <div id="converted-amount-wrapper" class="space-y-1 text-sm text-gray-500 mt-1">
+                        <div id="converted-amount"></div>
+                        <div id="exchange-rate-display"></div>
+                    </div>
+                    """
+                ),
                 Field("invoice_number"),
+                Field(
+                    "usd_currency",
+                    css_class=CHECKBOX_CLASS,
+                    wrapper_class="flex p-4 justify-between rounded-lg bg-gray-100",
+                ),
                 Field(
                     "service_delivery",
                     css_class=CHECKBOX_CLASS,
@@ -1089,6 +1180,7 @@ class PaymentInvoiceForm(forms.ModelForm):
                 ),
                 css_class="flex flex-col",
             ),
+            HTML("</div>"),
         )
         self.helper.form_tag = False
 
