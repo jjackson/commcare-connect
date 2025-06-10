@@ -477,6 +477,10 @@ class UserVisitReviewTable(OrgContextTable):
         )
         return mark_safe(f'<a href="{url}">View</a>')
 
+    def render_flag_reason(self, value):
+        short = [flag[1] for flag in value.get("flags")]
+        return ", ".join(short)
+
 
 class PaymentReportTable(tables.Table):
     payment_unit = columns.Column(verbose_name="Payment Unit")
