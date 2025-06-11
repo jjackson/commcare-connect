@@ -31,76 +31,85 @@ from commcare_connect.opportunity.tables import (
 )
 
 
-def get_user_visit_table_metadata(opportunity: Opportunity, flatten: bool):
-    uvs = []
-    for deliver_unit in opportunity.deliver_app.deliver_units.all():
-        uv = UserVisit.objects.filter(opportunity=opportunity, deliver_unit=deliver_unit).first()
-        if uv is not None:
-            uvs.append(uv)
+class UserVisitExporter:
+    def __init__(self, opportunity: Opportunity, flatten: bool):
+        self.opportunity = opportunity
+        self.flatten = flatten
+        self.headers = []
+        self.columns = []
+        self.form_json_schema = []
 
-    table = UserVisitTable(uvs)
-    exclude_columns = {"visit_date", "form_json", "details", "justification", "review_status"}
-    if opportunity.managed:
-        exclude_columns.remove("justification")
-    columns = [
-        column
-        for column in table.columns.iterall()
-        if not (column.column.exclude_from_export or column.name in exclude_columns)
-    ]
-    base_headers = [force_str(column.header, strings_only=True) for column in columns]
-    form_json_schema = set()
-    base_data = [
-        # form_json must be the last column in the row
-        [row.get_cell_value(column.name) for column in columns] + [row.get_cell_value("form_json")]
-        for row in table.rows
-    ]
-    if flatten:
-        for row in base_data:
-            form_json = row.pop()
-            form_json.pop("attachments", None)
-            flat_json = flatten_json(form_json, reducer="dot", enumerate_types=(list,))
-            form_json_schema.update(flat_json.keys())
+    def _get_table_metadata(self):
+        uvs = []
+        for deliver_unit in self.opportunity.deliver_app.deliver_units.all():
+            uv = UserVisit.objects.filter(opportunity=self.opportunity, deliver_unit=deliver_unit).first()
+            if uv is not None:
+                uvs.append(uv)
 
-        form_json_schema = sorted(form_json_schema, key=_schema_sort)
-        base_headers += form_json_schema
-    else:
-        base_headers.append("form_json")
-    return columns, base_headers, form_json_schema
-
-
-def export_user_visit_data(
-    opportunity: Opportunity, date_range: DateRanges, status: list[VisitValidationStatus], flatten: bool
-) -> Dataset:
-    """Export all user visits for an opportunity."""
-    user_visits = UserVisit.objects.filter(opportunity=opportunity)
-    if date_range.get_cutoff_date():
-        user_visits = user_visits.filter(visit_date__gte=date_range.get_cutoff_date())
-    if status and "all" not in status:
-        user_visits = user_visits.filter(status__in=status)
-    user_visits = user_visits.order_by("visit_date")
-    user_visits_batched = Paginator(user_visits, per_page=500)
-
-    columns, base_headers, form_json_schema = get_user_visit_table_metadata(opportunity, flatten)
-    dataset = Dataset(title="Export User Visits", headers=base_headers)
-
-    for page in user_visits_batched:
-        table = UserVisitTable(page.object_list)
+        table = UserVisitTable(uvs)
+        exclude_columns = {"visit_date", "form_json", "details", "justification", "review_status"}
+        if self.opportunity.managed:
+            exclude_columns.remove("justification")
+        columns = [
+            column
+            for column in table.columns.iterall()
+            if not (column.column.exclude_from_export or column.name in exclude_columns)
+        ]
+        headers = [force_str(column.header, strings_only=True) for column in columns]
+        form_json_schema = set()
         base_data = [
             # form_json must be the last column in the row
             [row.get_cell_value(column.name) for column in columns] + [row.get_cell_value("form_json")]
             for row in table.rows
         ]
-        for row in base_data:
-            form_json = row.pop()
-            form_json.pop("attachments", None)
-            if flatten:
+        if self.flatten:
+            for row in base_data:
+                form_json = row.pop()
+                form_json.pop("attachments", None)
                 flat_json = flatten_json(form_json, reducer="dot", enumerate_types=(list,))
-                row.extend(flat_json.get(key, "") for key in form_json_schema)
-            else:
-                row.append(json.dumps(form_json))
-            dataset.append([force_str(col, strings_only=True) for col in row])
+                form_json_schema.update(flat_json.keys())
 
-    return dataset
+            form_json_schema = sorted(form_json_schema, key=_schema_sort)
+            headers += form_json_schema
+        else:
+            headers.append("form_json")
+
+        self.columns = columns
+        self.headers = headers
+        self.form_json_schema = form_json_schema
+
+    def _process_row(self, row):
+        form_json = row.pop()
+        form_json.pop("attachments", None)
+        if self.flatten:
+            flat_json = flatten_json(form_json, reducer="dot", enumerate_types=(list,))
+            row.extend(flat_json.get(key, "") for key in self.form_json_schema)
+        else:
+            row.append(json.dumps(form_json))
+        return row
+
+    def get_dataset(self, date_range: DateRanges, status: list[VisitValidationStatus]) -> Dataset:
+        """Get dataset of all user visits for an opportunity."""
+        user_visits = UserVisit.objects.filter(opportunity=self.opportunity)
+        if date_range.get_cutoff_date():
+            user_visits = user_visits.filter(visit_date__gte=date_range.get_cutoff_date())
+        if status and "all" not in status:
+            user_visits = user_visits.filter(status__in=status)
+        user_visits = user_visits.order_by("visit_date")
+        self._get_table_metadata()
+
+        dataset = Dataset(title="Export User Visits", headers=self.headers)
+        for page in Paginator(user_visits, per_page=500):
+            table = UserVisitTable(page.object_list)
+            base_data = [
+                # form_json must be the last column in the row
+                [row.get_cell_value(column.name) for column in self.columns] + [row.get_cell_value("form_json")]
+                for row in table.rows
+            ]
+            for row in base_data:
+                row = self._process_row(row)
+                dataset.append([force_str(col, strings_only=True) for col in row])
+        return dataset
 
 
 def export_user_visit_review_data(
