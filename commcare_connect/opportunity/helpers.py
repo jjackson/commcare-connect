@@ -319,31 +319,39 @@ def get_payment_report_data(opportunity: Opportunity):
     )
 
     report_data_qs = (
-        CompletedWork.objects.filter(opportunity_access__opportunity=opportunity, status=CompletedWorkStatus.approved)
-        .values("payment_unit__name", amount=F("payment_unit__amount"))
+        CompletedWork.objects.filter(
+            opportunity_access__opportunity=opportunity,
+            status=CompletedWorkStatus.approved,
+        )
+        .values("payment_unit__name")
         .annotate(
-            completed_work_count=Count("id"),
-            total_saved_approved=Sum("saved_approved_count"),
+            approved=Count("id"),
+            user_payment_accrued=Sum("saved_payment_accrued"),
+            nm_payment_accrued=Sum("saved_org_payment_accrued"),
         )
         .order_by("payment_unit__name")
     )
+
     data = []
     total_user_payment_accrued = 0
     total_nm_payment_accrued = 0
-    org_pay_per_visit = opportunity.managedopportunity.org_pay_per_visit
+
     for group in report_data_qs:
-        user_payment_accrued = group["total_saved_approved"] * group["amount"]
-        nm_payment_accrued = group["completed_work_count"] * org_pay_per_visit
+        user_payment = group["user_payment_accrued"] or 0
+        nm_payment = group["nm_payment_accrued"] or 0
+
+        total_user_payment_accrued += user_payment
+        total_nm_payment_accrued += nm_payment
+
         data.append(
             PaymentReportData(
                 group["payment_unit__name"],
-                group["completed_work_count"],
-                user_payment_accrued,
-                nm_payment_accrued,
+                group["approved"],
+                user_payment,
+                nm_payment,
             )
         )
-        total_user_payment_accrued += user_payment_accrued
-        total_nm_payment_accrued += nm_payment_accrued
+
     return data, total_user_payment_accrued, total_nm_payment_accrued
 
 
