@@ -157,7 +157,7 @@ def get_table_data_for_year_month(
     payment_query = Payment.objects.filter(date_paid__range=(start_date, end_date))
     nm_amount_paid_data = (
         payment_query.filter(**filter_kwargs_nm)
-        .annotate(month_group=TruncMonth("date_paid"))
+        .annotate(month_group=TruncMonth("created_at"))
         .values("month_group")
         .annotate(
             nm_amount_paid=models.Sum("amount_usd", default=0, filter=models.Q(invoice__service_delivery=True)),
@@ -170,8 +170,8 @@ def get_table_data_for_year_month(
         visit_data_dict[group_key].update(item)
 
     avg_top_flw_amount_paid = (
-        payment_query.filter(**filter_kwargs, confirmed=True)
-        .annotate(month_group=TruncMonth("date_paid"))
+        payment_query.filter(**filter_kwargs)
+        .annotate(month_group=TruncMonth("created_at"))
         .values("month_group", "opportunity_access__user_id")
         .annotate(approved_sum=models.Sum("amount_usd", default=0))
         .order_by("month_group")
