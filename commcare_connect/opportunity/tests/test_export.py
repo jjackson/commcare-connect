@@ -6,9 +6,9 @@ from django.utils.timezone import now
 from tablib import Dataset
 
 from commcare_connect.opportunity.export import (
+    UserVisitExporter,
     export_catchment_area_table,
     export_user_status_table,
-    export_user_visit_data,
     export_user_visit_review_data,
     get_flattened_dataset,
 )
@@ -55,11 +55,12 @@ def test_export_user_visit_data(mobile_user_with_connect_link):
             ),
         ]
     )
-    exporter = export_user_visit_data(opportunity, DateRanges.LAST_30_DAYS, [], True)
+    exporter = UserVisitExporter(opportunity, True)
+    dataset = exporter.get_dataset(DateRanges.LAST_30_DAYS, [])
     username = mobile_user_with_connect_link.username
     name = mobile_user_with_connect_link.name
 
-    assert exporter.export("csv") == (
+    assert dataset.export("csv") == (
         "Visit ID,Visit date,Status,Username,Name of User,Unit Name,Rejected Reason,"
         "Duration,Entity ID,Entity Name,Flags,form.name,form.group.q\r\n"
         f",{date1.isoformat()},Pending,{username},{name},{deliver_units[0].name},,,,,,test_form1,\r\n"

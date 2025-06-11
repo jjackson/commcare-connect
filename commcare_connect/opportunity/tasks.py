@@ -17,11 +17,11 @@ from commcare_connect.connect_id_client import fetch_users, send_message, send_m
 from commcare_connect.connect_id_client.models import ConnectIdUser, Message
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
 from commcare_connect.opportunity.export import (
+    UserVisitExporter,
     export_catchment_area_table,
     export_deliver_status_table,
     export_empty_payment_table,
     export_user_status_table,
-    export_user_visit_data,
     export_user_visit_review_data,
     export_work_status_table,
 )
@@ -142,9 +142,8 @@ def invite_user(user_id, opportunity_access_id):
 def generate_visit_export(opportunity_id: int, date_range: str, status: list[str], export_format: str, flatten: bool):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     logger.info(f"Export for {opportunity.name} with date range {date_range} and status {','.join(status)}")
-    dataset = export_user_visit_data(
-        opportunity, DateRanges(date_range), [VisitValidationStatus(s) for s in status], flatten
-    )
+    exporter = UserVisitExporter(opportunity, flatten)
+    dataset = exporter.get_dataset(DateRanges(date_range), [VisitValidationStatus(s) for s in status])
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_visit_export.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
