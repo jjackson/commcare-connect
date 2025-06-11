@@ -20,9 +20,12 @@ class CompletedWorkUpdater:
         self.opportunity = opportunity_access.opportunity
         self.compute_payment = compute_payment
         self.completed_works = completed_works
-        self.counts = defaultdict(lambda: {"completed": 0, "approved": 0})
 
-    def get_completed_work_completed_approved_count(self):
+        self.counts = defaultdict(lambda: {"completed": 0, "approved": 0})
+        self.parent_child_payment_unit_map = defaultdict(list)
+        self.deliver_unit_map = defaultdict(list)
+
+    def _prepare_deliver_payment_unit_maps(self):
         payment_units = PaymentUnit.objects.filter(
             id__in=self.completed_works.values_list("payment_unit_id", flat=True)
         ).values("id", "parent_payment_unit")
@@ -30,17 +33,18 @@ class CompletedWorkUpdater:
             payment_unit__in=self.completed_works.values_list("payment_unit_id", flat=True)
         ).values("id", "optional", "payment_unit_id")
 
-        parent_child_payment_unit_map = defaultdict(list)
         for payment_unit in payment_units:
             parent_id = payment_unit["parent_payment_unit"]
-            parent_child_payment_unit_map[parent_id].append(payment_unit["id"])
+            self.parent_child_payment_unit_map[parent_id].append(payment_unit["id"])
 
-        deliver_unit_map = defaultdict(list)
         for deliver_unit in deliver_units:
             pu_id = deliver_unit["payment_unit_id"]
             du_id = deliver_unit["id"]
             optional = deliver_unit.get("optional", False)
-            deliver_unit_map[pu_id].append((du_id, optional))
+            self.deliver_unit_map[pu_id].append((du_id, optional))
+
+    def _get_completed_work_counts(self):
+        self._prepare_deliver_payment_unit_maps()
 
         for completed_work in self.completed_works:
             if completed_work.id in self.counts:
@@ -48,19 +52,15 @@ class CompletedWorkUpdater:
 
             unit_counts = defaultdict(int)
             approved_unit_counts = defaultdict(int)
-
             for user_visit in completed_work.uservisit_set.all():
                 unit_counts[user_visit.deliver_unit_id] += 1
                 if user_visit.status == VisitValidationStatus.approved.value:
                     approved_unit_counts[user_visit.deliver_unit_id] += 1
 
-            required_deliver_units = [
-                du_id for du_id, optional in deliver_unit_map[completed_work.payment_unit_id] if not optional
-            ]
-            optional_deliver_units = [
-                du_id for du_id, optional in deliver_unit_map[completed_work.payment_unit_id] if optional
-            ]
-
+            payment_unit_id = completed_work.payment_unit_id
+            deliver_units = self.deliver_unit_map[payment_unit_id]
+            required_deliver_units = [du_id for du_id, optional in deliver_units if not optional]
+            optional_deliver_units = [du_id for du_id, optional in deliver_units if optional]
             number_completed = min([unit_counts[deliver_id] for deliver_id in required_deliver_units], default=0)
             number_approved = min(
                 [approved_unit_counts[deliver_id] for deliver_id in required_deliver_units], default=0
@@ -73,7 +73,7 @@ class CompletedWorkUpdater:
                 optional_approved = sum(approved_unit_counts[deliver_id] for deliver_id in optional_deliver_units)
                 number_approved = min(number_approved, optional_approved)
 
-            child_payment_units = parent_child_payment_unit_map[completed_work.payment_unit_id]
+            child_payment_units = self.parent_child_payment_unit_map[payment_unit_id]
             if child_payment_units:
                 child_completed_works = CompletedWork.objects.filter(
                     opportunity_access=completed_work.opportunity_access,
@@ -93,32 +93,29 @@ class CompletedWorkUpdater:
             self.counts[completed_work.id]["approved"] = number_approved
             self.counts[completed_work.id]["completed"] = number_completed
 
-    def update_status_and_set_saved_fields(self):
-        to_update = []
-        self.get_completed_work_completed_approved_count()
+    def _update_status(self, completed_work):
+        updated = False
+        if self.opportunity.auto_approve_payments:
+            visits = completed_work.uservisit_set.values_list("status", "reason", "review_status")
+            if any(status == VisitValidationStatus.rejected for status, *_ in visits):
+                completed_work.status = CompletedWorkStatus.rejected
+                completed_work.reason = "\n".join(reason for _, reason, _ in visits if reason)
+            elif all(status == VisitValidationStatus.approved for status, *_ in visits):
+                completed_work.status = CompletedWorkStatus.approved
 
-        for completed_work in self.completed_works:
+            if (
+                self.opportunity.managed
+                and not all(review_status == VisitReviewStatus.agree for *_, review_status in visits)
+                and completed_work.status == CompletedWorkStatus.approved
+            ):
+                completed_work.status = CompletedWorkStatus.pending
+            updated = True
+        return updated
+
+    def _update_payment(self, completed_work):
+        updated = False
+        if self.compute_payment:
             completed_count = self.counts[completed_work.id]["completed"]
-            if completed_count < 1:
-                continue
-
-            updated = False
-            if self.opportunity.auto_approve_payments:
-                visits = completed_work.uservisit_set.values_list("status", "reason", "review_status")
-                if any(status == VisitValidationStatus.rejected for status, *_ in visits):
-                    completed_work.status = CompletedWorkStatus.rejected
-                    completed_work.reason = "\n".join(reason for _, reason, _ in visits if reason)
-                elif all(status == VisitValidationStatus.approved for status, *_ in visits):
-                    completed_work.status = CompletedWorkStatus.approved
-
-                if (
-                    self.opportunity.managed
-                    and not all(review_status == VisitReviewStatus.agree for *_, review_status in visits)
-                    and completed_work.status == CompletedWorkStatus.approved
-                ):
-                    completed_work.status = CompletedWorkStatus.pending
-                updated = True
-
             approved_count = self.counts[completed_work.id]["approved"]
             amount_accrued = amount_accrued_usd = org_amount_accrued = org_amount_accrued_usd = 0
             if approved_count > 0 and completed_work.status == CompletedWorkStatus.approved:
@@ -139,8 +136,20 @@ class CompletedWorkUpdater:
             completed_work.saved_org_payment_accrued = org_amount_accrued
             completed_work.saved_org_payment_accrued_usd = org_amount_accrued_usd
             updated = True
+        return updated
 
-            if updated:
+    def update_status_and_set_saved_fields(self):
+        self._get_completed_work_counts()
+
+        to_update = []
+        for completed_work in self.completed_works:
+            completed_count = self.counts[completed_work.id]["completed"]
+            if completed_count < 1:
+                continue
+
+            status_updated = self._update_status(completed_work)
+            payment_updated = self._update_payment(completed_work)
+            if status_updated or payment_updated:
                 to_update.append(completed_work)
 
         CompletedWork.objects.bulk_update(
