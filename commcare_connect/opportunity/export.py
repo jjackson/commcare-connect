@@ -40,6 +40,9 @@ class UserVisitExporter:
         self.form_json_schema = []
 
     def _get_table_metadata(self):
+        def _schema_sort(item):
+            return len(item.split(".")), item
+
         uvs = []
         for deliver_unit in self.opportunity.deliver_app.deliver_units.all():
             uv = UserVisit.objects.filter(opportunity=self.opportunity, deliver_unit=deliver_unit).first()
@@ -133,37 +136,6 @@ def export_user_visit_review_data(
 
     dataset = append_row_data(Dataset(title="Export Review User Visit", headers=headers), table=table, columns=columns)
     return dataset
-
-
-def get_flattened_dataset(headers: list[str], data: list[list]) -> Dataset:
-    """Flatten the form json and add it to the dataset.
-
-    :param headers: The headers for the dataset.
-    :param data: The data for the dataset. It is expected that the last column in each row
-        is the form JSON data.
-    """
-    schema = set()
-    flat_data = []
-    for row in data:
-        form_json = row.pop()
-        form_json.pop("attachments", None)
-        flat_json = flatten_json(form_json, reducer="dot", enumerate_types=(list,))
-        flat_data.append(flat_json)
-        schema.update(flat_json.keys())
-
-    schema = sorted(schema, key=_schema_sort)
-    headers = headers + schema
-    dataset = Dataset(title="Export", headers=headers)
-
-    for row, flat_json in zip(data, flat_data):
-        row.extend(flat_json.get(key, "") for key in schema)
-        dataset.append([force_str(col, strings_only=True) for col in row])
-
-    return dataset
-
-
-def _schema_sort(item):
-    return len(item.split(".")), item
 
 
 def export_empty_payment_table(opportunity: Opportunity) -> Dataset:

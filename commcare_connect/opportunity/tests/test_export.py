@@ -10,7 +10,6 @@ from commcare_connect.opportunity.export import (
     export_catchment_area_table,
     export_user_status_table,
     export_user_visit_review_data,
-    get_flattened_dataset,
 )
 from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import Opportunity, UserInviteStatus, UserVisit, VisitReviewStatus
@@ -66,31 +65,6 @@ def test_export_user_visit_data(mobile_user_with_connect_link):
         f",{date1.isoformat()},Pending,{username},{name},{deliver_units[0].name},,,,,,test_form1,\r\n"
         f",{date2.isoformat()},Pending,{username},{name},{deliver_units[1].name},,,abc,A B C,,test_form2,b\r\n"
     )
-
-
-@pytest.mark.parametrize(
-    "data, expected",
-    [
-        (
-            {"form": {"name": "form1"}},
-            [
-                (
-                    "form.name",
-                    "form1",
-                )
-            ],
-        ),
-        ({"form": [{"name": "form1"}, {"name": "form2"}]}, [("form.0.name", "form1"), ("form.1.name", "form2")]),
-    ],
-)
-def test_get_flattened_dataset(data, expected):
-    headers = ["header1", "header2"]
-    data = [
-        ["value1", "value2", data],
-    ]
-    dataset = get_flattened_dataset(headers, data)
-    assert dataset.headers == ["header1", "header2"] + [x[0] for x in expected]
-    assert dataset[0] == ("value1", "value2") + tuple(x[1] for x in expected)
 
 
 def _get_prepared_dataset_for_user_status_test(data):
