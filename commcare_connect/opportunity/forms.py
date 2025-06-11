@@ -14,6 +14,7 @@ from commcare_connect.opportunity.models import (
     CommCareApp,
     DeliverUnit,
     DeliverUnitFlagRules,
+    ExchangeRate,
     FormJsonValidationRules,
     HQApiKey,
     Opportunity,
@@ -1091,82 +1092,29 @@ class PaymentInvoiceForm(forms.ModelForm):
         self.fields["usd_currency"].widget.attrs.update(
             {
                 "x-ref": "currencyToggle",
-                "x-on:change": "toggleCurrency($event)",
+                "x-on:change": "currency = $event.target.checked; convert(true)",
             }
         )
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            HTML(
-                f"""
-            <div
-              x-data="{{
-                currency: false,
-                get postUrl() {{
-                  return '{self.exchange_url}';
-                }},
-                get valuesPresent() {{
-                  return $refs.amount?.value && $refs.date?.value;
-                }},
-                convertCurrency(shouldReplaceAmount = false) {{
-                    shouldReplaceAmount = shouldReplaceAmount || false
-                    if (!this.valuesPresent) return;
-                      htmx.ajax('POST', this.postUrl, {{
-                        target: '#converted-amount-wrapper',
-                        swap: 'innerHTML',
-                        values: {{
-                          amount: $refs.amount.value,
-                          date: $refs.date.value,
-                          usd_currency: this.currency,
-                          should_replace_amount: shouldReplaceAmount
-                        }}
-                      }}).then(() => {{
-                        // This runs after the HTMX request completes
-                        if (shouldReplaceAmount) {{
-                            const wrapper = document.querySelector('#exchange-rate-display');
-                            const newAmount = wrapper?.dataset?.convertedAmount;
-                            if (newAmount) {{
-                              $refs.amount.value = newAmount;
-                            }}
-                        }}
-                      }});
-                }},
-                toggleCurrency(event) {{
-                  this.currency = event.target.checked;
-                  this.convertCurrency(true);
-                }}
-              }}"
-              x-init="
-                $nextTick(() => {{
-                  currency = $refs.currencyToggle?.checked || false;
-                }});
-              "
-            >
-            """
-            ),
             Row(
-                Field(
-                    "amount",
-                    **{
-                        "x-ref": "amount",
-                        "x-on:input.debounce.300ms": "convertCurrency()",
-                    },
-                ),
                 Field(
                     "date",
                     **{
                         "x-ref": "date",
-                        "x-on:change": "convertCurrency()",
+                        "x-on:change": "convert()",
                     },
                 ),
-                HTML(
-                    """
-                    <div id="converted-amount-wrapper" class="space-y-1 text-sm text-gray-500 mt-1">
-                        <div id="converted-amount"></div>
-                        <div id="exchange-rate-display"></div>
-                    </div>
-                    """
+                Field(
+                    "amount",
+                    label=f"Amount ({self.opportunity.currency})",
+                    **{
+                        "x-ref": "amount",
+                        "x-on:input.debounce.300ms": "convert()",
+                    },
                 ),
+                Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
                 Field("invoice_number"),
                 Field(
                     "usd_currency",
@@ -1180,7 +1128,6 @@ class PaymentInvoiceForm(forms.ModelForm):
                 ),
                 css_class="flex flex-col",
             ),
-            HTML("</div>"),
         )
         self.helper.form_tag = False
 
@@ -1193,9 +1140,34 @@ class PaymentInvoiceForm(forms.ModelForm):
             )
         return invoice_number
 
+    def clean(self):
+        cleaned_data = super().clean()
+        amount = cleaned_data.get("amount")
+        usd_currency = cleaned_data.get("usd_currency")
+        date = cleaned_data.get("date")
+
+        if amount is None or date is None:
+            return cleaned_data  # Let individual field errors handle missing values
+
+        exchange_rate = ExchangeRate.latest_exchange_rate(self.opportunity.currency, date)
+        if not exchange_rate:
+            raise ValidationError("Exchange rate not available for selected date.")
+
+        if usd_currency:
+            cleaned_data["amount_usd"] = amount
+            cleaned_data["amount"] = round(amount * exchange_rate.rate, 2)
+        else:
+            cleaned_data["amount"] = amount
+            cleaned_data["amount_usd"] = round(amount / exchange_rate.rate, 2)
+
+        return cleaned_data
+
     def save(self, commit=True):
         instance = super().save(commit=False)
         instance.opportunity = self.opportunity
+        if hasattr(self, "cleaned_data") and "amount_usd" in self.cleaned_data:
+            instance.amount_usd = self.cleaned_data["amount_usd"]
+
         if commit:
             instance.save()
         return instance

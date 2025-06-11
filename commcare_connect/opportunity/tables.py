@@ -488,9 +488,12 @@ class PaymentReportTable(tables.Table):
 
 
 class PaymentInvoiceTable(OpportunityContextTable):
+    amount = tables.Column(verbose_name="Amount")
     payment_status = columns.Column(verbose_name="Payment Status", accessor="payment", empty_values=())
     payment_date = columns.Column(verbose_name="Payment Date", accessor="payment", empty_values=(None))
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="Pay")
+    rate = tables.Column(orderable=False, verbose_name="Exchange rate", empty_values=())
+    amount_usd = tables.Column(verbose_name="Amount (USD)")
 
     class Meta:
         model = PaymentInvoice
@@ -498,6 +501,8 @@ class PaymentInvoiceTable(OpportunityContextTable):
         fields = ("amount", "date", "invoice_number", "service_delivery")
         sequence = (
             "amount",
+            "amount_usd",
+            "rate",
             "date",
             "invoice_number",
             "payment_status",
@@ -509,7 +514,15 @@ class PaymentInvoiceTable(OpportunityContextTable):
 
     def __init__(self, *args, **kwargs):
         self.csrf_token = kwargs.pop("csrf_token")
+        self.opportunity = kwargs.pop("opportunity")
         super().__init__(*args, **kwargs)
+        self.base_columns["amount"].verbose_name = f"Amount ({self.opportunity.currency})"
+
+    def render_rate(self, record):
+        try:
+            return round(record.amount / record.amount_usd, 2)
+        except (ZeroDivisionError, TypeError):
+            return "—"
 
     def render_payment_status(self, value):
         if value is not None:
@@ -522,7 +535,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
         return
 
     def render_actions(self, record):
-        invoice_approve_url = reverse("opportunity:invoice_approve", args=[self.org_slug, self.opp_id])
+        invoice_approve_url = reverse("opportunity:invoice_approve", args=[self.org_slug, self.opportunity.id])
         disabled = "disabled" if getattr(record, "payment", None) else ""
         template_string = f"""
             <form method="POST" action="{ invoice_approve_url  }">
