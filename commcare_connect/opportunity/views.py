@@ -2,6 +2,7 @@ import datetime
 import json
 import sys
 from collections import Counter, defaultdict
+from decimal import Decimal
 from functools import reduce
 from http import HTTPStatus
 
@@ -13,7 +14,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage, storages
-from django.db.models import Count, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
+from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
@@ -1261,18 +1262,12 @@ def payment_report(request, org_slug, pk):
     opportunity = get_opportunity_or_404(pk, org_slug)
     if not opportunity.managed:
         return redirect("opportunity:detail", org_slug, pk)
-    total_paid_users = (
-        Payment.objects.filter(opportunity_access__opportunity=opportunity, organization__isnull=True).aggregate(
-            total=Sum("amount")
-        )["total"]
-        or 0
-    )
-    total_paid_nm = (
-        Payment.objects.filter(organization=opportunity.organization, invoice__opportunity=opportunity).aggregate(
-            total=Sum("amount")
-        )["total"]
-        or 0
-    )
+    total_paid_users = Payment.objects.filter(
+        opportunity_access__opportunity=opportunity, organization__isnull=True
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    total_paid_nm = Payment.objects.filter(
+        organization=opportunity.organization, invoice__opportunity=opportunity
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
     data, total_user_payment_accrued, total_nm_payment_accrued = get_payment_report_data(opportunity)
     table = PaymentReportTable(data)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
@@ -1935,7 +1930,7 @@ def worker_payments(request, org_slug=None, opp_id=None):
         if confirmed:
             qs = qs.filter(confirmed=True)
         subquery = qs.values("opportunity_access").annotate(total=Sum("amount")).values("total")[:1]
-        return Coalesce(Subquery(subquery), Value(0))
+        return Coalesce(Subquery(subquery), Value(0), output_field=DecimalField())
 
     query_set = OpportunityAccess.objects.filter(
         opportunity=opportunity, payment_accrued__gte=0, accepted=True
