@@ -30,6 +30,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     OpportunityClaimLimit,
     OpportunityVerificationFlags,
+    PaymentUnit,
     UserVisit,
     VisitReviewStatus,
     VisitValidationStatus,
@@ -671,6 +672,28 @@ def test_receiver_visit_review_status(
         assert visit.flagged
     assert visit.status == visit_status
     assert visit.review_status == review_status
+
+
+@pytest.mark.parametrize("opportunity", [{"opp_options": {"managed": True, "org_pay_per_visit": 2}}], indirect=True)
+def test_receiver_duplicate_managed_opportunity(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    make_request(api_client, form_json, user_with_connectid_link)
+    access = OpportunityAccess.objects.get(opportunity=opportunity, user=user_with_connectid_link)
+    payment_unit = PaymentUnit.objects.get(opportunity=opportunity)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.status == VisitValidationStatus.approved
+    assert access.payment_accrued == payment_unit.amount
+
+    duplicate_json = deepcopy(form_json)
+    duplicate_json["id"] = str(uuid4())
+    make_request(api_client, duplicate_json, user_with_connectid_link)
+    visit = UserVisit.objects.get(xform_id=duplicate_json["id"])
+    access.refresh_from_db()
+    assert visit.status == VisitValidationStatus.duplicate
+    assert access.payment_accrued == payment_unit.amount
+    assert ["duplicate", "A beneficiary with the same identifier already exists"] in visit.flag_reason.get("flags", [])
 
 
 @pytest.mark.parametrize(
