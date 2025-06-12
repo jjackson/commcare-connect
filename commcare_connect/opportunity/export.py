@@ -38,25 +38,28 @@ class UserVisitExporter:
         self.headers = []
         self.columns = []
         self.form_json_schema = []
+        self.exclude_columns = {"visit_date", "form_json", "details", "justification", "review_status"}
+        if self.opportunity.managed:
+            self.exclude_columns.remove("justification")
 
     def _get_table_metadata(self):
         def _schema_sort(item):
             return len(item.split(".")), item
 
         uvs = []
-        for deliver_unit in self.opportunity.deliver_app.deliver_units.all():
-            uv = UserVisit.objects.filter(opportunity=self.opportunity, deliver_unit=deliver_unit).first()
-            if uv is not None:
-                uvs.append(uv)
+        if self.flatten:
+            for deliver_unit in self.opportunity.deliver_app.deliver_units.all():
+                uv = UserVisit.objects.filter(opportunity=self.opportunity, deliver_unit=deliver_unit).first()
+                if uv is not None:
+                    uvs.append(uv)
+        else:
+            uvs.append(UserVisit.objects.filter(opportunity=self.opportunity).first())
 
         table = UserVisitTable(uvs)
-        exclude_columns = {"visit_date", "form_json", "details", "justification", "review_status"}
-        if self.opportunity.managed:
-            exclude_columns.remove("justification")
         columns = [
             column
             for column in table.columns.iterall()
-            if not (column.column.exclude_from_export or column.name in exclude_columns)
+            if not (column.column.exclude_from_export or column.name in self.exclude_columns)
         ]
         headers = [force_str(column.header, strings_only=True) for column in columns]
         form_json_schema = set()
