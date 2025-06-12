@@ -95,9 +95,9 @@ def total_paid_sq():
             .values("opportunity_access__opportunity_id")
             .annotate(total=Sum("amount"))
             .values("total"),
-            output_field=IntegerField(),
+            output_field=DecimalField(),
         ),
-        0,
+        Value(0, output_field=DecimalField()),
     )
 
 
@@ -617,7 +617,7 @@ def get_opportunity_delivery_progress(opp_id):
         pending_invites=pending_invites_subquery(),
         total_accrued=total_accrued_sq(),
         total_paid=total_paid_sq(),
-        payments_due=ExpressionWrapper(F("total_accrued") - F("total_paid"), output_field=IntegerField()),
+        payments_due=ExpressionWrapper(F("total_accrued") - F("total_paid"), output_field=DecimalField()),
     )
 
     return annotated_opportunity.first()
