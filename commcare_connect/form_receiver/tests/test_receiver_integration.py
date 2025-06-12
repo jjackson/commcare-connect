@@ -38,6 +38,7 @@ from commcare_connect.opportunity.tasks import bulk_approve_completed_work
 from commcare_connect.opportunity.tests.factories import (
     CatchmentAreaFactory,
     CompletedModuleFactory,
+    CompletedWorkFactory,
     DeliverUnitFactory,
     DeliverUnitFlagRulesFactory,
     FormJsonValidationRulesFactory,
@@ -611,6 +612,42 @@ def test_receiver_verification_flags_catchment_areas(
     visit = UserVisit.objects.get(user=user_with_connectid_link)
     assert visit.flagged
     assert ["catchment", "Visit outside worker catchment areas"] in visit.flag_reason.get("flags", [])
+
+
+@pytest.mark.parametrize("opportunity", [{"opp_options": {"managed": True, "org_pay_per_visit": 2}}], indirect=True)
+def test_approve_rejected_visit(mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity):
+    assert opportunity.managed
+    access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user_with_connect_link)
+    payment_unit = PaymentUnitFactory(opportunity=opportunity)
+    deliver_unit = DeliverUnitFactory(app=payment_unit.opportunity.deliver_app, payment_unit=payment_unit)
+    completed_work = CompletedWorkFactory(
+        opportunity_access=access, status=CompletedWorkStatus.pending, payment_unit=payment_unit
+    )
+    visit = UserVisitFactory(
+        user=mobile_user_with_connect_link,
+        opportunity_access=access,
+        opportunity=opportunity,
+        completed_work=completed_work,
+        status=VisitValidationStatus.rejected,
+        review_status=VisitReviewStatus.pending,
+        deliver_unit=deliver_unit,
+    )
+
+    update_payment_accrued(opportunity, [mobile_user_with_connect_link.id])
+    completed_work = CompletedWork.objects.get(id=visit.completed_work_id)
+
+    assert visit.status == VisitValidationStatus.rejected
+    assert completed_work.status == CompletedWorkStatus.rejected
+
+    visit.status = VisitValidationStatus.approved
+    visit.review_status = VisitReviewStatus.agree
+    visit.save()
+
+    update_payment_accrued(opportunity, [mobile_user_with_connect_link.id])
+    completed_work.refresh_from_db()
+
+    assert visit.status == VisitValidationStatus.approved
+    assert completed_work.status == CompletedWorkStatus.approved
 
 
 @pytest.mark.parametrize("opportunity", [{"opp_options": {"managed": True, "org_pay_per_visit": 2}}], indirect=True)
