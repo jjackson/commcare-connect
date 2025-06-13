@@ -2109,11 +2109,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
     paid_percentage = safe_percent(result.total_paid or 0, result.total_accrued or 0)
 
     def amount_with_currency(amount):
-        currency = ""
-        if result.currency:
-            currency = result.currency + " "  # adding space between
-        final_amount = intcomma(amount or 0)
-        return f"{currency}{final_amount}"
+        return f"{result.currency + ' ' if result.currency else ''}{intcomma(amount or 0)}"
 
     worker_progress = [
         {
