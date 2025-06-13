@@ -2350,7 +2350,7 @@ def exchange_rate_preview(request, org_slug, opp_id):
             exchange_info = format_html(
                 "Exchange Rate on {}: <b>{}</b>",
                 rate_date.strftime("%d-%m-%Y"),
-                round(exchange_rate.rate, 2),
+                exchange_rate.rate,
             )
             other_currency_amount = None
             currency = opp.currency

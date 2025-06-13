@@ -1153,6 +1153,8 @@ class PaymentInvoiceForm(forms.ModelForm):
         if not exchange_rate:
             raise ValidationError("Exchange rate not available for selected date.")
 
+        cleaned_data["exchange_rate"] = exchange_rate
+
         if usd_currency:
             cleaned_data["amount_usd"] = amount
             cleaned_data["amount"] = round(amount * exchange_rate.rate, 2)
@@ -1165,8 +1167,8 @@ class PaymentInvoiceForm(forms.ModelForm):
     def save(self, commit=True):
         instance = super().save(commit=False)
         instance.opportunity = self.opportunity
-        if hasattr(self, "cleaned_data") and "amount_usd" in self.cleaned_data:
-            instance.amount_usd = self.cleaned_data["amount_usd"]
+        instance.amount_usd = self.cleaned_data["amount_usd"]
+        instance.exchange_rate = self.cleaned_data["exchange_rate"]
 
         if commit:
             instance.save()
