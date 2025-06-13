@@ -60,7 +60,7 @@
             {{ panel.value }}
           </h3>
           <div class="w-17">
-            {% if panel.incr %}
+            {% if panel.incr is not None %}
             <span x-data x-tooltip.raw="Increment in last 24 hours" class="badge badge-md positive-dark">{{ panel.incr }} ↑</span>
             {% else %}
             <span class="inline-block h-6">&nbsp;</span>
