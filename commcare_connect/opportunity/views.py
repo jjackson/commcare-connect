@@ -1277,7 +1277,7 @@ def payment_report(request, org_slug, pk):
     total_paid_nm = Payment.objects.filter(
         organization=opportunity.organization, invoice__opportunity=opportunity
     ).aggregate(total=Sum(amount_field))["total"] or Decimal("0.00")
-    data, total_user_payment_accrued, total_nm_payment_accrued = get_payment_report_data(opportunity)
+    data, total_user_payment_accrued, total_nm_payment_accrued = get_payment_report_data(opportunity, usd)
     table = PaymentReportTable(data)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
 
