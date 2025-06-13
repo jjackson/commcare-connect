@@ -492,7 +492,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
     payment_status = columns.Column(verbose_name="Payment Status", accessor="payment", empty_values=())
     payment_date = columns.Column(verbose_name="Payment Date", accessor="payment", empty_values=(None))
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="Pay")
-    rate = tables.Column(orderable=False, verbose_name="Exchange rate", empty_values=())
+    exchange_rate = tables.Column(orderable=False, empty_values=(None,), accessor="exchange_rate__rate")
     amount_usd = tables.Column(verbose_name="Amount (USD)")
 
     class Meta:
@@ -502,7 +502,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
         sequence = (
             "amount",
             "amount_usd",
-            "rate",
+            "exchange_rate",
             "date",
             "invoice_number",
             "payment_status",
@@ -517,12 +517,6 @@ class PaymentInvoiceTable(OpportunityContextTable):
         self.opportunity = kwargs.pop("opportunity")
         super().__init__(*args, **kwargs)
         self.base_columns["amount"].verbose_name = f"Amount ({self.opportunity.currency})"
-
-    def render_rate(self, record):
-        try:
-            return round(record.amount / record.amount_usd, 2)
-        except (ZeroDivisionError, TypeError):
-            return "—"
 
     def render_payment_status(self, value):
         if value is not None:
