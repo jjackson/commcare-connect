@@ -1085,8 +1085,6 @@ class PaymentInvoiceForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
-        self.org_slug = kwargs.pop("org_slug")
-        self.exchange_url = reverse("opportunity:exchange_rate", args=(self.org_slug, self.opportunity.id))
         super().__init__(*args, **kwargs)
 
         self.fields["usd_currency"].widget.attrs.update(
