@@ -14,7 +14,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage, storages
-from django.db.models import Count, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
+from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse
@@ -1271,19 +1271,13 @@ def payment_report(request, org_slug, pk):
         amount_field = "amount_usd"
         currency = "USD"
 
-    total_paid_users = (
-        Payment.objects.filter(opportunity_access__opportunity=opportunity, organization__isnull=True).aggregate(
-            total=Sum(amount_field)
-        )["total"]
-        or 0
-    )
-    total_paid_nm = (
-        Payment.objects.filter(organization=opportunity.organization, invoice__opportunity=opportunity).aggregate(
-            total=Sum(amount_field)
-        )["total"]
-        or 0
-    )
-    data, total_user_payment_accrued, total_nm_payment_accrued = get_payment_report_data(opportunity, usd)
+    total_paid_users = Payment.objects.filter(
+        opportunity_access__opportunity=opportunity, organization__isnull=True
+    ).aggregate(total=Sum(amount_field))["total"] or Decimal("0.00")
+    total_paid_nm = Payment.objects.filter(
+        organization=opportunity.organization, invoice__opportunity=opportunity
+    ).aggregate(total=Sum(amount_field))["total"] or Decimal("0.00")
+    data, total_user_payment_accrued, total_nm_payment_accrued = get_payment_report_data(opportunity)
     table = PaymentReportTable(data)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
 
@@ -1947,7 +1941,7 @@ def worker_payments(request, org_slug=None, opp_id=None):
         if confirmed:
             qs = qs.filter(confirmed=True)
         subquery = qs.values("opportunity_access").annotate(total=Sum("amount")).values("total")[:1]
-        return Coalesce(Subquery(subquery), Value(0))
+        return Coalesce(Subquery(subquery), Value(0), output_field=DecimalField())
 
     query_set = OpportunityAccess.objects.filter(
         opportunity=opportunity, payment_accrued__gte=0, accepted=True
@@ -2141,12 +2135,16 @@ def opportunity_worker_progress(request, org_slug, opp_id):
     result = get_opportunity_worker_progress(opp_id)
 
     def safe_percent(numerator, denominator):
-        return (numerator / denominator) * 100 if denominator else 0
+        percent = (numerator / denominator) * 100 if denominator else 0
+        return 100 if percent > 100 else percent
 
     verified_percentage = safe_percent(result.approved_deliveries or 0, result.total_deliveries or 0)
     rejected_percentage = safe_percent(result.rejected_deliveries or 0, result.total_deliveries or 0)
     earned_percentage = safe_percent(result.total_accrued or 0, result.total_budget or 0)
     paid_percentage = safe_percent(result.total_paid or 0, result.total_accrued or 0)
+
+    def amount_with_currency(amount):
+        return f"{result.currency + ' ' if result.currency else ''}{intcomma(amount or 0)}"
 
     worker_progress = [
         {
@@ -2176,11 +2174,11 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             ],
         },
         {
-            "title": f"Payments to Workers ({result.currency})",
+            "title": "Payments to Workers",
             "progress": [
                 {
                     "title": "Earned",
-                    "total": header_with_tooltip(result.total_accrued, "Earned Amount"),
+                    "total": header_with_tooltip(amount_with_currency(result.total_accrued), "Earned Amount"),
                     "value": header_with_tooltip(
                         f"{earned_percentage:.2f}%",
                         "Percentage Earned by all workers out of Max Budget in the Opportunity",
@@ -2190,7 +2188,9 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                 },
                 {
                     "title": "Paid",
-                    "total": header_with_tooltip(result.total_paid, "Paid Amount to All Workers"),
+                    "total": header_with_tooltip(
+                        amount_with_currency(result.total_paid), "Paid Amount to All Workers"
+                    ),
                     "value": header_with_tooltip(
                         f"{paid_percentage:.2f}%", "Percentage Paid to all  workers out of Earned amount"
                     ),
