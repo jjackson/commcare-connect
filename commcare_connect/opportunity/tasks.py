@@ -3,7 +3,6 @@ import logging
 
 import httpx
 from allauth.utils import build_absolute_uri
-from django.conf import settings
 from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -309,7 +308,7 @@ def download_user_visit_attachments(user_visit_id: id):
     for name, blob in blobs.items():
         if name == "form.xml":
             continue
-        url = f"{settings.COMMCARE_HQ_URL}/a/{domain}/api/form/attachment/{user_visit.xform_id}/{name}"
+        url = f"{api_key.hq_server.url}/a/{domain}/api/form/attachment/{user_visit.xform_id}/{name}"
 
         with transaction.atomic():
             blob_meta, created = BlobMeta.objects.get_or_create(
