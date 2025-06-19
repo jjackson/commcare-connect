@@ -76,6 +76,7 @@ from commcare_connect.opportunity.models import (
     DeliverUnit,
     DeliverUnitFlagRules,
     FormJsonValidationRules,
+    HQApiKey,
     LearnModule,
     Opportunity,
     OpportunityAccess,
@@ -228,7 +229,6 @@ class OpportunityInit(OrganizationUserMemberRoleMixin, CreateView):
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["domains"] = get_domains_for_user(self.request.user)
         kwargs["user"] = self.request.user
         kwargs["org_slug"] = self.request.org.slug
         return kwargs
@@ -967,11 +967,45 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
     )
 
 
+# used for loading api key dropdown
+@org_member_required
+def get_api_keys(request, org_slug=None):
+    hq_server = request.GET.get("hq_server")
+    api_keys = HQApiKey.objects.filter(hq_server=hq_server, user=request.user).order_by("-date_created")
+    if not api_keys:
+        return HttpResponse(headers={"HX-Trigger": "no-api-keys-found"})
+    options = []
+    for api_key in api_keys:
+        api_key_hidden = f"{api_key.api_key[:4]}...{api_key.api_key[-4:]}"
+        options.append(
+            format_html(
+                "<option value='{}'>{}</option>",
+                api_key.id,
+                api_key_hidden,
+            )
+        )
+    return HttpResponse("\n".join(options))
+
+
+# used for loading domain dropdown
+@org_member_required
+def get_domains(request, org_slug=None):
+    hq_server = request.GET.get("hq_server")
+    api_key = HQApiKey.objects.filter(hq_server=hq_server, user=request.user).order_by("-date_created").first()
+    domains = get_domains_for_user(api_key)
+    options = []
+    for domain in domains:
+        options.append(format_html("<option value='{}'>{}</option>", domain, domain))
+    return HttpResponse("\n".join(options))
+
+
 # used for loading learn_app and deliver_app dropdowns
 @org_member_required
 def get_application(request, org_slug=None):
+    hq_server = request.GET.get("hq_server")
+    api_key = HQApiKey.objects.filter(hq_server=hq_server, user=request.user).order_by("-date_created").first()
     domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
-    applications = get_applications_for_user_by_domain(request.user, domain)
+    applications = get_applications_for_user_by_domain(api_key, domain)
     active_opps = Opportunity.objects.filter(
         Q(learn_app__cc_domain=domain) | Q(deliver_app__cc_domain=domain),
         active=True,
