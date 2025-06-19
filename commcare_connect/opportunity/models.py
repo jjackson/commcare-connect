@@ -3,7 +3,6 @@ from collections import Counter, defaultdict
 from decimal import Decimal
 from uuid import uuid4
 
-from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Count, F, Max, Q, Sum
@@ -43,7 +42,7 @@ class CommCareApp(BaseModel):
 
     @property
     def url(self):
-        return f"{settings.COMMCARE_HQ_URL}/a/{self.cc_domain}/apps/view/{self.cc_app_id}"
+        return f"{self.hq_server.url}/a/{self.cc_domain}/apps/view/{self.cc_app_id}"
 
 
 class HQApiKey(models.Model):
