@@ -165,6 +165,7 @@ class OpportunityInitForm(forms.ModelForm):
             "description",
             "short_description",
             "currency",
+            "hq_server",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -189,6 +190,7 @@ class OpportunityInitForm(forms.ModelForm):
                 ),
                 Column(
                     Field("currency"),
+                    Field("hq_server"),
                     Field("api_key"),
                 ),
                 css_class="grid grid-cols-2 gap-4 card_bg",
@@ -217,41 +219,60 @@ class OpportunityInitForm(forms.ModelForm):
             Row(Submit("submit", "Submit", css_class="button button-md primary-dark"), css_class="flex justify-end"),
         )
 
-        domain_choices = [(domain, domain) for domain in self.domains]
         self.fields["description"] = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
+
+        def get_htmx_swap_attrs(url_query: str, include: str, trigger: str):
+            return {
+                "hx-get": reverse(url_query, args=(self.org_slug,)),
+                "hx-include": include,
+                "hx-trigger": trigger,
+                "hx-target": "this",
+                "data-loading-disable": True,
+            }
+
+        def get_domain_select_attrs():
+            return get_htmx_swap_attrs(
+                "opportunity:get_domains",
+                "#id_hq_server",
+                "change from:#id_api_key, htmx:afterSwap from:#id_api_key",
+            )
+
+        def get_app_select_attrs(app_type: str):
+            app_select_id = f"#id_{app_type}_app_domain"
+            return get_htmx_swap_attrs(
+                "opportunity:get_applications_by_domain",
+                f"#id_hq_server, {app_select_id}",
+                f"change from:{app_select_id}, htmx:afterSwap from:{app_select_id}",
+            )
+
         self.fields["learn_app_domain"] = forms.ChoiceField(
-            choices=domain_choices,
-            widget=forms.Select(
-                attrs={
-                    "hx-get": reverse("opportunity:get_applications_by_domain", args=(self.org_slug,)),
-                    "hx-include": "#id_learn_app_domain",
-                    "hx-trigger": "load delay:0.3s, change",
-                    "hx-target": "#id_learn_app",
-                    "data-loading-disable": True,
-                }
-            ),
+            choices=[(None, "Select an API key to load domains.")],
+            widget=forms.Select(attrs=get_domain_select_attrs()),
         )
         self.fields["learn_app"] = forms.Field(
-            widget=forms.Select(choices=[(None, "Loading...")], attrs={"data-loading-disable": True})
+            widget=forms.Select(choices=[(None, "Loading...")], attrs=get_app_select_attrs("learn"))
         )
         self.fields["learn_app_description"] = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
         self.fields["learn_app_passing_score"] = forms.IntegerField(max_value=100, min_value=0)
+
         self.fields["deliver_app_domain"] = forms.ChoiceField(
-            choices=domain_choices,
-            widget=forms.Select(
-                attrs={
-                    "hx-get": reverse("opportunity:get_applications_by_domain", args=(self.org_slug,)),
-                    "hx-include": "#id_deliver_app_domain",
-                    "hx-trigger": "load delay:0.3s, change",
-                    "hx-target": "#id_deliver_app",
-                    "data-loading-disable": True,
-                }
-            ),
+            choices=[(None, "Select an API key to load domains.")],
+            widget=forms.Select(attrs=get_domain_select_attrs()),
         )
         self.fields["deliver_app"] = forms.Field(
-            widget=forms.Select(choices=[(None, "Loading...")], attrs={"data-loading-disable": True})
+            widget=forms.Select(choices=[(None, "Loading...")], attrs=get_app_select_attrs("deliver"))
         )
-        self.fields["api_key"] = forms.CharField(max_length=50)
+
+        self.fields["api_key"] = forms.ChoiceField(
+            choices=[(None, "Select a HQ Server to load API Keys.")],
+            widget=forms.Select(
+                attrs=get_htmx_swap_attrs(
+                    "opportunity:get_api_keys",
+                    "#id_hq_server",
+                    "change from:#id_hq_server",
+                )
+            ),
+        )
 
     def clean(self):
         cleaned_data = super().clean()
