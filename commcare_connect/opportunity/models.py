@@ -12,7 +12,6 @@ from django.utils.functional import cached_property
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
-from commcare_connect.opportunity.tasks import fetch_exchange_rates
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
 from commcare_connect.utils.db import BaseModel, slugify_uniquely
@@ -453,6 +452,8 @@ class ExchangeRate(models.Model):
 
     @classmethod
     def latest_exchange_rate(cls, currency_code, date):
+        from commcare_connect.opportunity.tasks import fetch_exchange_rates
+
         latest_rates = cls.objects.filter(currency_code=currency_code, rate_date__lte=date).order_by("-rate_date")
         if latest_rates:
             return latest_rates.first()
