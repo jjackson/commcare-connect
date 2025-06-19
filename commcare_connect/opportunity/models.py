@@ -17,6 +17,13 @@ from commcare_connect.users.models import User
 from commcare_connect.utils.db import BaseModel, slugify_uniquely
 
 
+class HQServer(models.Model):
+    name = models.CharField(max_length=255)
+    url = models.URLField(unique=True)
+    date_created = models.DateTimeField(auto_now_add=True)
+    date_modified = models.DateTimeField(auto_now=True)
+
+
 class CommCareApp(BaseModel):
     organization = models.ForeignKey(
         Organization,
@@ -29,6 +36,7 @@ class CommCareApp(BaseModel):
     name = models.CharField(max_length=255)
     description = models.TextField()
     passing_score = models.IntegerField(null=True)
+    hq_server = models.ForeignKey(HQServer, on_delete=models.DO_NOTHING, null=True)
 
     def __str__(self):
         return self.name
@@ -44,6 +52,8 @@ class HQApiKey(models.Model):
         User,
         on_delete=models.CASCADE,
     )
+    hq_server = models.ForeignKey(HQServer, on_delete=models.DO_NOTHING, null=True)
+    date_created = models.DateTimeField(auto_now_add=True)
 
 
 class DeliveryType(models.Model):
@@ -92,6 +102,7 @@ class Opportunity(BaseModel):
     is_test = models.BooleanField(default=True)
     delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
     managed = models.BooleanField(default=False)
+    hq_server = models.ForeignKey(HQServer, on_delete=models.DO_NOTHING, null=True)
 
     def __str__(self):
         return self.name
