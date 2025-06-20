@@ -999,7 +999,8 @@ def get_api_keys(request, org_slug=None):
 @org_member_required
 def get_domains(request, org_slug=None):
     hq_server = request.GET.get("hq_server")
-    api_key = HQApiKey.objects.filter(hq_server=hq_server, user=request.user).order_by("-date_created").first()
+    api_key_id = request.GET.get("api_key")
+    api_key = HQApiKey.objects.get(id=api_key_id, hq_server=hq_server, user=request.user)
     domains = get_domains_for_user(api_key)
     options = []
     options.append(format_html("<option value='{}'>{}</option>", None, "Select a Domain"))
@@ -1012,7 +1013,8 @@ def get_domains(request, org_slug=None):
 @org_member_required
 def get_application(request, org_slug=None):
     hq_server = request.GET.get("hq_server")
-    api_key = HQApiKey.objects.filter(hq_server=hq_server, user=request.user).order_by("-date_created").first()
+    api_key_id = request.GET.get("api_key")
+    api_key = HQApiKey.objects.get(id=api_key_id, hq_server=hq_server, user=request.user)
     domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
     applications = get_applications_for_user_by_domain(api_key, domain)
     active_opps = Opportunity.objects.filter(
