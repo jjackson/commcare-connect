@@ -46,7 +46,6 @@ from commcare_connect.opportunity.forms import (
     FormJsonValidationRulesForm,
     HQApiKeyCreateForm,
     OpportunityChangeForm,
-    OpportunityCreationForm,
     OpportunityFinalizeForm,
     OpportunityInitForm,
     OpportunityUserInviteForm,
@@ -200,26 +199,6 @@ class OpportunityList(OrganizationUserMixin, SingleTableView):
         org = self.request.org
         is_program_manager = self.request.org.program_manager
         return get_opportunity_list_data_lite(org, is_program_manager)
-
-
-class OpportunityCreate(OrganizationUserMemberRoleMixin, CreateView):
-    template_name = "opportunity/opportunity_create.html"
-    form_class = OpportunityCreationForm
-
-    def get_success_url(self):
-        return reverse("opportunity:list", args=(self.request.org.slug,))
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["domains"] = get_domains_for_user(self.request.user)
-        kwargs["user"] = self.request.user
-        kwargs["org_slug"] = self.request.org.slug
-        return kwargs
-
-    def form_valid(self, form: OpportunityCreationForm) -> HttpResponse:
-        response = super().form_valid(form)
-        create_learn_modules_and_deliver_units.delay(self.object.id)
-        return response
 
 
 class OpportunityInit(OrganizationUserMemberRoleMixin, CreateView):
