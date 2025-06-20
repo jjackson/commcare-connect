@@ -11,6 +11,7 @@ from commcare_connect.opportunity.models import (
     DeliveryType,
     FormJsonValidationRules,
     HQApiKey,
+    HQServer,
     LearnModule,
     Opportunity,
     OpportunityAccess,
@@ -171,3 +172,9 @@ class PaymentUnitAdmin(admin.ModelAdmin):
     @admin.display(description="Opportunity Name")
     def get_opp_name(self, obj):
         return obj.opportunity.name
+
+
+@admin.register(HQServer)
+class HQServerAdmin(admin.ModelAdmin):
+    list_display = ["name", "url"]
+    search_fields = ["name", "url"]
