@@ -35,6 +35,22 @@ FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Afri
 CHECKBOX_CLASS = "simple-toggle"
 
 
+class HQApiKeyCreateForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Field("hq_server"),
+            Field("api_key"),
+            Submit("submit", "Save", css_class="button button-md primary-dark float-end"),
+        )
+
+    class Meta:
+        model = HQApiKey
+        fields = ("hq_server", "api_key")
+
+
 class OpportunityUserInviteForm(forms.Form):
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity", None)
@@ -191,7 +207,16 @@ class OpportunityInitForm(forms.ModelForm):
                 Column(
                     Field("currency"),
                     Field("hq_server"),
-                    Field("api_key"),
+                    Column(
+                        Field("api_key", wrapper_class="flex-1"),
+                        HTML(
+                            "<button class='button-icon primary-dark'"
+                            "type='button' @click='showAddApiKeyModal = true'>"
+                            "<i class='fa-regular fa-plus'></i>"
+                            "</button>"
+                        ),
+                        css_class="flex items-center gap-1",
+                    ),
                 ),
                 css_class="grid grid-cols-2 gap-4 card_bg",
             ),
@@ -234,7 +259,7 @@ class OpportunityInitForm(forms.ModelForm):
             return get_htmx_swap_attrs(
                 "opportunity:get_domains",
                 "#id_hq_server",
-                "change from:#id_api_key, htmx:afterSwap from:#id_api_key",
+                "change from:#id_api_key",
             )
 
         def get_app_select_attrs(app_type: str):
@@ -242,7 +267,7 @@ class OpportunityInitForm(forms.ModelForm):
             return get_htmx_swap_attrs(
                 "opportunity:get_applications_by_domain",
                 f"#id_hq_server, {app_select_id}",
-                f"change from:{app_select_id}, htmx:afterSwap from:{app_select_id}",
+                f"change from:{app_select_id}",
             )
 
         self.fields["learn_app_domain"] = forms.ChoiceField(
@@ -269,7 +294,7 @@ class OpportunityInitForm(forms.ModelForm):
                 attrs=get_htmx_swap_attrs(
                     "opportunity:get_api_keys",
                     "#id_hq_server",
-                    "change from:#id_hq_server",
+                    "change from:#id_hq_server, reload_api_keys from:body",
                 )
             ),
         )
