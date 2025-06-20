@@ -186,7 +186,6 @@ class OpportunityInitForm(forms.ModelForm):
         ]
 
     def __init__(self, *args, **kwargs):
-        self.domains = kwargs.pop("domains", [])
         self.user = kwargs.pop("user", {})
         self.org_slug = kwargs.pop("org_slug", "")
         super().__init__(*args, **kwargs)
@@ -271,9 +270,11 @@ class OpportunityInitForm(forms.ModelForm):
                 f"change from:{domain_select_id}",
             )
 
-        self.fields["learn_app_domain"] = forms.ChoiceField(
-            choices=[(None, "Select an API key to load domains.")],
-            widget=forms.Select(attrs=get_domain_select_attrs()),
+        self.fields["learn_app_domain"] = forms.Field(
+            widget=forms.Select(
+                choices=[(None, "Select an API key to load domains.")],
+                attrs=get_domain_select_attrs(),
+            ),
         )
         self.fields["learn_app"] = forms.Field(
             widget=forms.Select(choices=[(None, "Loading...")], attrs=get_app_select_attrs("learn"))
@@ -281,22 +282,24 @@ class OpportunityInitForm(forms.ModelForm):
         self.fields["learn_app_description"] = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
         self.fields["learn_app_passing_score"] = forms.IntegerField(max_value=100, min_value=0)
 
-        self.fields["deliver_app_domain"] = forms.ChoiceField(
-            choices=[(None, "Select an API key to load domains.")],
-            widget=forms.Select(attrs=get_domain_select_attrs()),
+        self.fields["deliver_app_domain"] = forms.Field(
+            widget=forms.Select(
+                choices=[(None, "Select an API key to load domains.")],
+                attrs=get_domain_select_attrs(),
+            ),
         )
         self.fields["deliver_app"] = forms.Field(
             widget=forms.Select(choices=[(None, "Loading...")], attrs=get_app_select_attrs("deliver"))
         )
 
-        self.fields["api_key"] = forms.ChoiceField(
-            choices=[(None, "Select a HQ Server to load API Keys.")],
+        self.fields["api_key"] = forms.Field(
             widget=forms.Select(
+                choices=[(None, "Select a HQ Server to load API Keys.")],
                 attrs=get_htmx_swap_attrs(
                     "opportunity:get_api_keys",
                     "#id_hq_server",
                     "change from:#id_hq_server, reload_api_keys from:body",
-                )
+                ),
             ),
         )
 
