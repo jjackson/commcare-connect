@@ -10,6 +10,7 @@ from celery.result import AsyncResult
 from crispy_forms.utils import render_crispy_form
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.core.files.base import ContentFile
@@ -43,6 +44,7 @@ from commcare_connect.opportunity.forms import (
     DateRanges,
     DeliverUnitFlagsForm,
     FormJsonValidationRulesForm,
+    HQApiKeyCreateForm,
     OpportunityChangeForm,
     OpportunityCreationForm,
     OpportunityFinalizeForm,
@@ -232,6 +234,11 @@ class OpportunityInit(OrganizationUserMemberRoleMixin, CreateView):
         kwargs["user"] = self.request.user
         kwargs["org_slug"] = self.request.org.slug
         return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["api_key_form"] = HQApiKeyCreateForm(auto_id="api_key_form_id_for_%s")
+        return context
 
     def form_valid(self, form: OpportunityInitForm):
         response = super().form_valid(form)
@@ -975,6 +982,7 @@ def get_api_keys(request, org_slug=None):
     if not api_keys:
         return HttpResponse(headers={"HX-Trigger": "no-api-keys-found"})
     options = []
+    options.append(format_html("<option value='{}'>{}</option>", None, "Select an API key"))
     for api_key in api_keys:
         api_key_hidden = f"{api_key.api_key[:4]}...{api_key.api_key[-4:]}"
         options.append(
@@ -994,6 +1002,7 @@ def get_domains(request, org_slug=None):
     api_key = HQApiKey.objects.filter(hq_server=hq_server, user=request.user).order_by("-date_created").first()
     domains = get_domains_for_user(api_key)
     options = []
+    options.append(format_html("<option value='{}'>{}</option>", None, "Select a Domain"))
     for domain in domains:
         options.append(format_html("<option value='{}'>{}</option>", domain, domain))
     return HttpResponse("\n".join(options))
@@ -1018,6 +1027,7 @@ def get_application(request, org_slug=None):
         if opp.deliver_app.cc_domain == domain:
             existing_apps.add(opp.deliver_app.cc_app_id)
     options = []
+    options.append(format_html("<option value='{}'>{}</option>", None, "Select an Application"))
     for app in applications:
         if app["id"] not in existing_apps:
             value = json.dumps(app)
@@ -2345,3 +2355,16 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
     return render(
         request, "tailwind/pages/opportunity_dashboard/opportunity_delivery_stat.html", {"opp_stats": opp_stats}
     )
+
+
+@login_required
+@require_POST
+def add_api_key(request, org_slug):
+    form = HQApiKeyCreateForm(data=request.POST, auto_id="api_key_form_id_for_%s")
+
+    if form.is_valid():
+        api_key = form.save(commit=False)
+        api_key.user = request.user
+        api_key.save()
+
+    return HttpResponse()

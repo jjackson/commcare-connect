@@ -162,4 +162,5 @@ urlpatterns = [
         name="worker_payment_history",
     ),
     path("<int:opp_id>/worker_flag_counts/", views.worker_flag_counts, name="worker_flag_counts"),
+    path("add_api_key/", views.add_api_key, name="add_api_key"),
 ]
