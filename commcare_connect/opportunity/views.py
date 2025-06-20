@@ -978,9 +978,15 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
 @org_member_required
 def get_api_keys(request, org_slug=None):
     hq_server = request.GET.get("hq_server")
+    if not hq_server:
+        return HttpResponse(
+            format_html("<option value='{}'>{}</option>", None, "Select a HQ Server to load API Keys.")
+        )
+
     api_keys = HQApiKey.objects.filter(hq_server=hq_server, user=request.user).order_by("-date_created")
     if not api_keys:
         return HttpResponse(headers={"HX-Trigger": "no-api-keys-found"})
+
     options = []
     options.append(format_html("<option value='{}'>{}</option>", None, "Select an API key"))
     for api_key in api_keys:
@@ -1000,10 +1006,13 @@ def get_api_keys(request, org_slug=None):
 def get_domains(request, org_slug=None):
     hq_server = request.GET.get("hq_server")
     api_key_id = request.GET.get("api_key")
+    if not hq_server or not api_key_id:
+        return HttpResponse(format_html("<option value='{}'>{}</option>", None, "Select an API Key to load domains."))
+
+    options = []
     api_key = HQApiKey.objects.get(id=api_key_id, hq_server=hq_server, user=request.user)
     domains = get_domains_for_user(api_key)
-    options = []
-    options.append(format_html("<option value='{}'>{}</option>", None, "Select a Domain"))
+    options.append(format_html("<option value='{}'>{}</option>", None, "Select a Domain."))
     for domain in domains:
         options.append(format_html("<option value='{}'>{}</option>", domain, domain))
     return HttpResponse("\n".join(options))
@@ -1014,8 +1023,12 @@ def get_domains(request, org_slug=None):
 def get_application(request, org_slug=None):
     hq_server = request.GET.get("hq_server")
     api_key_id = request.GET.get("api_key")
-    api_key = HQApiKey.objects.get(id=api_key_id, hq_server=hq_server, user=request.user)
     domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
+    if not hq_server or not api_key_id or not domain:
+        return HttpResponse(
+            format_html("<option value='{}'>{}</option>", None, "Select a Domain to load applications.")
+        )
+    api_key = HQApiKey.objects.get(id=api_key_id, hq_server=hq_server, user=request.user)
     applications = get_applications_for_user_by_domain(api_key, domain)
     active_opps = Opportunity.objects.filter(
         Q(learn_app__cc_domain=domain) | Q(deliver_app__cc_domain=domain),
