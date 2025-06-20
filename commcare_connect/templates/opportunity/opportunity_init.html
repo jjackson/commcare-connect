@@ -22,9 +22,7 @@
         </button>
       </div>
       <form hx-post="{% url "opportunity:add_api_key" request.org.slug %}"
-        hx-swap="none"
-        @htmx:after-request="showAddApiKeyModal = false">
-        {% csrf_token %}
+        @htmx:after-request="showAddApiKeyModal = !$event.detail.successful; $dispatch('reload_api_keys')">
         {% crispy api_key_form %}
       </form>
     </div>
