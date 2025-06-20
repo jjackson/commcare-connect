@@ -259,16 +259,16 @@ class OpportunityInitForm(forms.ModelForm):
         def get_domain_select_attrs():
             return get_htmx_swap_attrs(
                 "opportunity:get_domains",
-                "#id_hq_server",
+                "#id_hq_server, #id_api_key",
                 "change from:#id_api_key",
             )
 
         def get_app_select_attrs(app_type: str):
-            app_select_id = f"#id_{app_type}_app_domain"
+            domain_select_id = f"#id_{app_type}_app_domain"
             return get_htmx_swap_attrs(
                 "opportunity:get_applications_by_domain",
-                f"#id_hq_server, {app_select_id}",
-                f"change from:{app_select_id}",
+                f"#id_hq_server, {domain_select_id}, #id_api_key",
+                f"change from:{domain_select_id}",
             )
 
         self.fields["learn_app_domain"] = forms.ChoiceField(
