@@ -45,6 +45,7 @@ class HQApiKeyCreateForm(forms.ModelForm):
             Field("api_key"),
             Submit("submit", "Save", css_class="button button-md primary-dark float-end"),
         )
+        self.helper.form_tag = False
 
     class Meta:
         model = HQApiKey
