@@ -2366,5 +2366,5 @@ def add_api_key(request, org_slug):
         api_key = form.save(commit=False)
         api_key.user = request.user
         api_key.save()
-
-    return HttpResponse()
+        form = HQApiKeyCreateForm(auto_id="api_key_form_id_for_%s")
+    return HttpResponse(render_crispy_form(form))
