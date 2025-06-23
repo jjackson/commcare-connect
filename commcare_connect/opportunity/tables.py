@@ -465,6 +465,7 @@ class UserVisitReviewTable(OrgContextTable):
             "review_status",
             "created_on",
             "user_visit",
+            "flag_reason",
         )
         empty_text = "No visits submitted for review."
         template_name = "django_tables2/bootstrap5.html"
@@ -475,6 +476,10 @@ class UserVisitReviewTable(OrgContextTable):
             kwargs={"org_slug": self.org_slug, "pk": record.pk},
         )
         return mark_safe(f'<a href="{url}">View</a>')
+
+    def render_flag_reason(self, value):
+        short = [flag[1] for flag in value.get("flags")]
+        return ", ".join(short)
 
 
 class PaymentReportTable(tables.Table):
@@ -972,12 +977,9 @@ class UserVisitVerificationTable(tables.Table):
                 status.append("pending_review")
             else:
                 status.append(record.review_status)
+
         if record.status in VisitValidationStatus:
-            if (
-                record.review_status != VisitReviewStatus.agree.value
-                and record.review_created_on
-                and record.status == VisitValidationStatus.approved
-            ):
+            if record.review_created_on and record.status == VisitValidationStatus.approved:
                 status.append("approved_pending_review")
             else:
                 status.append(record.status)
