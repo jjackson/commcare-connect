@@ -193,7 +193,7 @@ def update_payment_accrued(opportunity: Opportunity, users: list, incremental=Fa
 
     access_objects = OpportunityAccess.objects.filter(user__in=users, opportunity=opportunity, suspended=False)
     filter_kwargs = {}
-    exclude_status = [CompletedWorkStatus.rejected]
+    exclude_status = []
     if incremental:
         exclude_status.append(CompletedWorkStatus.approved)
         filter_kwargs["saved_approved_count"] = 0
@@ -205,7 +205,6 @@ def update_payment_accrued(opportunity: Opportunity, users: list, incremental=Fa
                 .exclude(status__in=exclude_status)
                 .select_related("payment_unit")
             )
-
             update_status(completed_works, access, compute_payment=True)
 
 
