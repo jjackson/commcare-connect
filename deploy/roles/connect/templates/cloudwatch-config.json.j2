@@ -4,7 +4,7 @@
         "run_as_user": "cwagent"
     },
     "metrics": {
-        "namespace": "PersonalID",
+        "namespace": "PersonalID/{{ deploy_environment }}",
         "metrics_collected": {
             "cpu": {
                 "measurement": [
