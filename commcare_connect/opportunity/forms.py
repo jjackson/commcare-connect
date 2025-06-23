@@ -355,7 +355,7 @@ class OpportunityInitForm(forms.ModelForm):
         else:
             self.instance.organization = organization
 
-        api_key, _ = HQApiKey.objects.get_or_create(user=self.user, api_key=self.cleaned_data["api_key"])
+        api_key, _ = HQApiKey.objects.get_or_create(user=self.user, id=self.cleaned_data["api_key"])
         self.instance.api_key = api_key
         super().save(commit=commit)
 
