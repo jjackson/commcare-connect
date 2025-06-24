@@ -3,6 +3,7 @@
 
 from django.conf import settings
 from django.db import migrations
+from oauth2_provider.models import Application
 
 
 def create_prod_hq_server_and_update_objects(apps, schema_editor):
@@ -11,12 +12,16 @@ def create_prod_hq_server_and_update_objects(apps, schema_editor):
     HQApiKey = apps.get_model("opportunity", "HQApiKey")
     CommCareApp = apps.get_model("opportunity", "CommCareApp")
 
-    hq_server, _ = HQServer.objects.update_or_create(
-        name="CommCareHQ", url=settings.COMMCARE_HQ_URL, oauth_application_id=1
-    )
-    Opportunity.objects.update(hq_server=hq_server)
-    CommCareApp.objects.update(hq_server=hq_server)
-    HQApiKey.objects.update(hq_server=hq_server)
+    oauth_application = Application.objects.first()
+    if oauth_application:
+        hq_server, _ = HQServer.objects.update_or_create(
+            name="CommCareHQ",
+            url=settings.COMMCARE_HQ_URL,
+            oauth_application_id=oauth_application.id,
+        )
+        Opportunity.objects.update(hq_server=hq_server)
+        CommCareApp.objects.update(hq_server=hq_server)
+        HQApiKey.objects.update(hq_server=hq_server)
 
 
 class Migration(migrations.Migration):
