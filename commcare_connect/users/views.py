@@ -12,7 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
 from django.views.generic import RedirectView, UpdateView, View
-from oauth2_provider.contrib.rest_framework import OAuth2Authentication, TokenHasReadWriteScope
+from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from oauth2_provider.views.mixins import ClientProtectedResourceMixin
 from rest_framework.decorators import api_view, authentication_classes
 from rest_framework.permissions import AllowAny
@@ -164,10 +164,8 @@ class SMSStatusCallbackView(APIView):
         return Response(status=200)
 
 
-class CheckInvitedUserView(APIView):
-    authentication_classes = [OAuth2Authentication]
-    permission_classes = [TokenHasReadWriteScope]
-
+@method_decorator(csrf_exempt, name="dispatch")
+class CheckInvitedUserView(ClientProtectedResourceMixin, View):
     def get(self, request, *args, **kwargs):
         phone_number = request.data.get("phone_number")
         invited = False
@@ -176,10 +174,8 @@ class CheckInvitedUserView(APIView):
         return JsonResponse({"invited": invited})
 
 
-class ResendInvitesView(APIView):
-    authentication_classes = [OAuth2Authentication]
-    permission_classes = [TokenHasReadWriteScope]
-
+@method_decorator(csrf_exempt, name="dispatch")
+class ResendInvitesView(ClientProtectedResourceMixin, View):
     def post(request, *args, **kwargs):
         user = ConnectIdUser(request.data)
         opps = UserInvite.objects.filter(
