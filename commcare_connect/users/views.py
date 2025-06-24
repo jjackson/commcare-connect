@@ -12,7 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
 from django.views.generic import RedirectView, UpdateView, View
-from oauth2_provider.contrib.rest_framework import OAuth2Authentication, TokenHasReadWriteScope
+from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from oauth2_provider.views.mixins import ClientProtectedResourceMixin
 from rest_framework.decorators import api_view, authentication_classes
 from rest_framework.permissions import AllowAny
@@ -164,27 +164,26 @@ class SMSStatusCallbackView(APIView):
         return Response(status=200)
 
 
-class CheckInvitedUserView(APIView):
-    authentication_classes = [OAuth2Authentication]
-    permission_classes = [TokenHasReadWriteScope]
-
+@method_decorator(csrf_exempt, name="dispatch")
+class CheckInvitedUserView(ClientProtectedResourceMixin, View):
     def get(self, request, *args, **kwargs):
-        phone_number = request.data.get("phone_number")
+        phone_number = request.POST.get("phone_number")
         invited = False
         if phone_number:
             invited = UserInvite.objects.filter(phone_number=phone_number).exists()
         return JsonResponse({"invited": invited})
 
 
-class ResendInvitesView(APIView):
-    authentication_classes = [OAuth2Authentication]
-    permission_classes = [TokenHasReadWriteScope]
-
+@method_decorator(csrf_exempt, name="dispatch")
+class ResendInvitesView(ClientProtectedResourceMixin, View):
     def post(request, *args, **kwargs):
-        user = ConnectIdUser(request.data)
+        username = request.POST.get("username")
+        name = request.POST.get("name")
+        phone_number = request.POST.get("phone_number")
+        user = ConnectIdUser(username=username, name=name, phone_number=phone_number)
         opps = UserInvite.objects.filter(
             phone_number=user.phone_number, status=UserInviteStatus.not_found
         ).values_list("opportunity_id", flat=True)
         for opp_id in opps:
             update_user_and_send_invite(user, opp_id)
-        return Response(status=200)
+        return HttpResponse(status=200)
