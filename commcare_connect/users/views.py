@@ -182,7 +182,9 @@ class ResendInvitesView(APIView):
 
     def post(request, *args, **kwargs):
         user = ConnectIdUser(request.data)
-        opps = UserInvite.objects.filter(phone_number=user.phone_number).values_list("opportunity_id", flat=True)
+        opps = UserInvite.objects.filter(
+            phone_number=user.phone_number, status=UserInviteStatus.not_found
+        ).values_list("opportunity_id", flat=True)
         for opp_id in opps:
             update_user_and_send_invite(user, opp_id)
         return Response(status=200)
