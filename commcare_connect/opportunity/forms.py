@@ -328,6 +328,7 @@ class OpportunityInitForm(forms.ModelForm):
             cc_app_id=learn_app["id"],
             cc_domain=learn_app_domain,
             organization=organization,
+            hq_server=self.instance.hq_server,
             defaults={
                 "name": learn_app["name"],
                 "created_by": self.user.email,
@@ -340,6 +341,7 @@ class OpportunityInitForm(forms.ModelForm):
             cc_app_id=deliver_app["id"],
             cc_domain=deliver_app_domain,
             organization=organization,
+            hq_server=self.instance.hq_server,
             defaults={
                 "name": deliver_app["name"],
                 "created_by": self.user.email,
