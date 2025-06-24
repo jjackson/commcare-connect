@@ -167,7 +167,7 @@ class SMSStatusCallbackView(APIView):
 @method_decorator(csrf_exempt, name="dispatch")
 class CheckInvitedUserView(ClientProtectedResourceMixin, View):
     def get(self, request, *args, **kwargs):
-        phone_number = request.data.get("phone_number")
+        phone_number = request.POST.get("phone_number")
         invited = False
         if phone_number:
             invited = UserInvite.objects.filter(phone_number=phone_number).exists()
@@ -177,10 +177,13 @@ class CheckInvitedUserView(ClientProtectedResourceMixin, View):
 @method_decorator(csrf_exempt, name="dispatch")
 class ResendInvitesView(ClientProtectedResourceMixin, View):
     def post(request, *args, **kwargs):
-        user = ConnectIdUser(request.data)
+        username = request.POST.get("username")
+        name = request.POST.get("name")
+        phone_number = request.POST.get("phone_number")
+        user = ConnectIdUser(username=username, name=name, phone_number=phone_number)
         opps = UserInvite.objects.filter(
             phone_number=user.phone_number, status=UserInviteStatus.not_found
         ).values_list("opportunity_id", flat=True)
         for opp_id in opps:
             update_user_and_send_invite(user, opp_id)
-        return Response(status=200)
+        return HttpResponse(status=200)
