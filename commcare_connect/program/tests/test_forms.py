@@ -10,6 +10,7 @@ from commcare_connect.opportunity.models import Opportunity
 from commcare_connect.opportunity.tests.factories import (
     ApplicationFactory,
     DeliveryTypeFactory,
+    HQApiKeyFactory,
     HQServerFactory,
     PaymentUnitFactory,
 )
@@ -98,9 +99,10 @@ class TestManagedOpportunityInitForm:
         self.program_application = ProgramApplicationFactory.create(
             program=self.program, organization=self.invited_org, status=ProgramApplicationStatus.ACCEPTED
         )
+        self.hq_server = HQServerFactory()
+        self.api_key = HQApiKeyFactory(hq_server=self.hq_server)
         self.learn_app = ApplicationFactory()
         self.deliver_app = ApplicationFactory()
-        self.hq_server = HQServerFactory()
 
         self.form_data = {
             "name": "Test managed opportunity",
@@ -113,7 +115,7 @@ class TestManagedOpportunityInitForm:
             "learn_app_passing_score": random.randint(30, 100),
             "deliver_app_domain": "test_domain2",
             "deliver_app": json.dumps(self.deliver_app),
-            "api_key": FuzzyText(length=36).fuzz(),
+            "api_key": self.api_key.id,
             "hq_server": self.hq_server.id,
         }
 
