@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -12,7 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
 from django.views.generic import RedirectView, UpdateView, View
-from oauth2_provider.contrib.rest_framework import OAuth2Authentication
+from oauth2_provider.contrib.rest_framework import OAuth2Authentication, TokenHasReadWriteScope
 from oauth2_provider.views.mixins import ClientProtectedResourceMixin
 from rest_framework.decorators import api_view, authentication_classes
 from rest_framework.permissions import AllowAny
@@ -20,7 +20,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from commcare_connect.connect_id_client.main import fetch_demo_user_tokens
+from commcare_connect.connect_id_client.models import ConnectIdUser
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, UserInvite, UserInviteStatus
+from commcare_connect.opportunity.tasks import update_user_and_send_invite
 
 from .helpers import create_hq_user
 from .models import ConnectIDUserLink
@@ -159,4 +161,28 @@ class SMSStatusCallbackView(APIView):
             if message_status == "undelivered":
                 user_invite.status = UserInviteStatus.sms_not_delivered
             user_invite.save()
+        return Response(status=200)
+
+
+class CheckInvitedUserView(APIView):
+    authentication_classes = [OAuth2Authentication]
+    permission_classes = [TokenHasReadWriteScope]
+
+    def get(self, request, *args, **kwargs):
+        phone_number = request.data.get("phone_number")
+        invited = False
+        if phone_number:
+            invited = UserInvite.objects.filter(phone_number=phone_number).exists()
+        return JsonResponse({"invited": invited})
+
+
+class ResendInvitesView(APIView):
+    authentication_classes = [OAuth2Authentication]
+    permission_classes = [TokenHasReadWriteScope]
+
+    def post(request, *args, **kwargs):
+        user = ConnectIdUser(request.data)
+        opps = UserInvite.objects.filter(phone_number=user.phone_number).values_list("opportunity_id", flat=True)
+        for opp_id in opps:
+            update_user_and_send_invite(user, opp_id)
         return Response(status=200)
