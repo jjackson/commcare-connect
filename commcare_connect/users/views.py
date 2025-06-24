@@ -167,7 +167,7 @@ class SMSStatusCallbackView(APIView):
 @method_decorator(csrf_exempt, name="dispatch")
 class CheckInvitedUserView(ClientProtectedResourceMixin, View):
     def get(self, request, *args, **kwargs):
-        phone_number = request.POST.get("phone_number")
+        phone_number = request.GET.get("phone_number")
         invited = False
         if phone_number:
             invited = UserInvite.objects.filter(phone_number=phone_number).exists()
