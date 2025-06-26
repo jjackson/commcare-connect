@@ -176,7 +176,7 @@ class CheckInvitedUserView(ClientProtectedResourceMixin, View):
 
 @method_decorator(csrf_exempt, name="dispatch")
 class ResendInvitesView(ClientProtectedResourceMixin, View):
-    def post(request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         username = request.POST.get("username")
         name = request.POST.get("name")
         phone_number = request.POST.get("phone_number")
