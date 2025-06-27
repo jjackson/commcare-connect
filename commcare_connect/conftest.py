@@ -85,7 +85,11 @@ def mobile_user(db, opportunity) -> User:
 @pytest.fixture
 def user_with_connectid_link(db, opportunity):
     user = MobileUserFactory()
-    ConnectIdUserLinkFactory(user=user, commcare_username=f"test@{opportunity.learn_app.cc_domain}.commcarehq.org")
+    ConnectIdUserLinkFactory(
+        user=user,
+        commcare_username=f"test@{opportunity.learn_app.cc_domain}.commcarehq.org",
+        hq_server=opportunity.hq_server,
+    )
     if opportunity.learn_app.cc_domain != opportunity.deliver_app.cc_domain:
         ConnectIdUserLinkFactory(
             user=user, commcare_username=f"test@{opportunity.deliver_app.cc_domain}.commcarehq.org"

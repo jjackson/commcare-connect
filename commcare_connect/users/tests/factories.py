@@ -21,7 +21,7 @@ class HQServerFactory(DjangoModelFactory):
     oauth_application = SubFactory(OauthApplicationFactory)
 
     class Meta:
-        model = "opportunity.HQServer"
+        model = "users.HQServer"
         django_get_or_create = ["url"]
 
 
