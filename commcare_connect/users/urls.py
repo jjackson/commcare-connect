@@ -1,5 +1,6 @@
 from django.urls import path
 
+from commcare_connect.users import views
 from commcare_connect.users.views import (
     SMSStatusCallbackView,
     accept_invite,
@@ -19,4 +20,7 @@ urlpatterns = [
     path("accept_invite/<slug:invite_id>/", view=accept_invite, name="accept_invite"),
     path("demo_users/", view=demo_user_tokens, name="demo_users"),
     path("sms_status_callback/", SMSStatusCallbackView.as_view(), name="sms_status_callback"),
+    path("api_keys/", views.get_api_keys, name="get_api_keys"),
+    path("domains/", views.get_domains, name="get_domains"),
+    path("applications/", views.get_application, name="get_applications_by_domain"),
 ]
