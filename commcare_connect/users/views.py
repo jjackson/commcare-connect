@@ -22,7 +22,7 @@ from rest_framework.views import APIView
 from commcare_connect.connect_id_client.main import fetch_demo_user_tokens
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, UserInvite, UserInviteStatus
 
-from .helpers import create_hq_user
+from .helpers import create_hq_user_and_link
 from .models import ConnectIDUserLink
 
 User = get_user_model()
@@ -89,17 +89,11 @@ def start_learn_app(request):
     if opportunity_id is None:
         return HttpResponse("opportunity required", status=400)
     opportunity = Opportunity.objects.get(pk=opportunity_id)
-    api_key = opportunity.api_key
-    if api_key is None:
-        return HttpResponse("Opportunity requires API Key", status=400)
     app = opportunity.learn_app
     domain = app.cc_domain
-    if not ConnectIDUserLink.objects.filter(user=request.user, domain=domain).exists():
-        user_created = create_hq_user(request.user, domain, api_key)
-        if not user_created:
-            return HttpResponse("Failed to create user", status=400)
-        cc_username = f"{request.user.username.lower()}@{domain}.commcarehq.org"
-        ConnectIDUserLink.objects.create(commcare_username=cc_username, user=request.user, domain=domain)
+    user_created = create_hq_user_and_link(request.user, domain, opportunity)
+    if not user_created:
+        return HttpResponse("Failed to create user", status=400)
     try:
         access_object = OpportunityAccess.objects.get(user=request.user, opportunity=opportunity)
     except OpportunityAccess.DoesNotExist:
