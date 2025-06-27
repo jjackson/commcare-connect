@@ -5,7 +5,6 @@ from commcare_connect.opportunity.models import OpportunityClaimLimit
 from commcare_connect.opportunity.tests.factories import (
     CommCareAppFactory,
     HQApiKeyFactory,
-    HQServerFactory,
     OpportunityAccessFactory,
     OpportunityClaimFactory,
     OpportunityFactory,
@@ -17,6 +16,7 @@ from commcare_connect.program.tests.factories import ManagedOpportunityFactory
 from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import (
     ConnectIdUserLinkFactory,
+    HQServerFactory,
     MobileUserFactory,
     OrgWithUsersFactory,
     ProgramManagerOrgWithUsersFactory,
