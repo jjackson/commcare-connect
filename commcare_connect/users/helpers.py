@@ -22,7 +22,7 @@ def get_organization_for_request(request, view_kwargs):
 
 def create_hq_user_and_link(user, domain, opportunity):
     hq_server = opportunity.hq_server
-    api_key = opportunity.hq_server
+    api_key = opportunity.api_key
     if not ConnectIDUserLink.objects.filter(user=user, domain=domain, hq_server=hq_server).exists():
         user_created = _create_hq_user(user, domain, api_key)
         if not user_created:
