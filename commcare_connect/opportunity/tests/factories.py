@@ -234,8 +234,18 @@ class DeliveryTypeFactory(DjangoModelFactory):
 
 class PaymentFactory(DjangoModelFactory):
     opportunity_access = SubFactory(OpportunityAccessFactory)
-    amount = Faker("pyint", min_value=1, max_value=10000)
+    amount = Faker("pydecimal", min_value=1, max_value=10000)
     date_paid = Faker("date_time", tzinfo=timezone.utc)
 
     class Meta:
         model = "opportunity.Payment"
+
+
+class PaymentInvoiceFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+    amount = Faker("pydecimal", min_value=0, max_value=1000)
+    date = Faker("date_time", tzinfo=timezone.utc)
+    invoice_number = Faker("pystr")
+
+    class Meta:
+        model = "opportunity.PaymentInvoice"

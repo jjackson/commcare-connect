@@ -1,7 +1,8 @@
 import datetime
+from functools import partial
 
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Min, Q
 from django.utils.timezone import now
 from geopy.distance import distance
 from jsonpath_ng import JSONPathError
@@ -87,25 +88,47 @@ def process_learn_modules(user: User, xform: XForm, app: CommCareApp, opportunit
     :param app: The CommCare app the form belongs to.
     :param opportunity: The opportunity the app belongs to.
     :param blocks: A list of learn module form blocks."""
-    access = OpportunityAccess.objects.get(user=user, opportunity=opportunity)
-    for module_data in blocks:
-        module = get_or_create_learn_module(app, module_data)
-        completed_module, created = CompletedModule.objects.get_or_create(
-            user=user,
-            module=module,
-            opportunity=opportunity,
-            opportunity_access=access,
-            defaults={
-                "xform_id": xform.id,
-                "date": xform.received_on,
-                "duration": xform.metadata.duration,
-                "app_build_id": xform.build_id,
-                "app_build_version": xform.metadata.app_build_version,
-            },
-        )
+    with transaction.atomic():
+        access = OpportunityAccess.objects.get(user=user, opportunity=opportunity)
+        completed_modules = []
+        save_access = False
+        for module_data in blocks:
+            module = get_or_create_learn_module(app, module_data)
+            completed_module = CompletedModule(
+                user=user,
+                module=module,
+                opportunity=opportunity,
+                opportunity_access=access,
+                xform_id=xform.id,
+                date=xform.received_on,
+                duration=xform.metadata.duration,
+                app_build_id=xform.build_id,
+                app_build_version=xform.metadata.app_build_version,
+            )
+            completed_modules.append(completed_module)
+            if not access.last_active or access.last_active < completed_module.date:
+                access.last_active = completed_module.date
+                save_access = True
 
-        if not created:
-            raise ProcessingError("Learn Module is already completed")
+        if completed_modules:
+            CompletedModule.objects.bulk_create(completed_modules)
+            update_completed_learn_date(access, save_access)
+
+
+def update_completed_learn_date(access, save_access=False):
+    if not access.completed_learn_date and access.learn_progress == 100.0:
+        # Get the earliest completion date for each unique module
+        earliest_dates = (
+            CompletedModule.objects.filter(opportunity_access=access)
+            .values("module")
+            .annotate(earliest_date=Min("date"))
+        )
+        completed_learn_date = max(entry["earliest_date"] for entry in earliest_dates)
+        access.completed_learn_date = completed_learn_date
+        save_access = True
+
+    if save_access:
+        access.save()
 
 
 def process_assessments(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, blocks: list[dict]):
@@ -235,6 +258,12 @@ def clean_form_submission(access: OpportunityAccess, user_visit: UserVisit, xfor
 def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, deliver_unit_block: dict):
     deliver_unit = get_or_create_deliver_unit(app, deliver_unit_block)
     access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
+    payment_unit = deliver_unit.payment_unit
+    if not payment_unit:
+        raise ProcessingError(
+            f"Payment unit is not configured for the deliver unit: "
+            f"{deliver_unit.name} in opportunity: {opportunity.name}"
+        )
 
     counts = (
         UserVisit.objects.filter(opportunity_access=access, deliver_unit=deliver_unit)
@@ -245,7 +274,6 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             entity=Count("pk", filter=Q(entity_id=deliver_unit_block.get("entity_id"), deliver_unit=deliver_unit)),
         )
     )
-    payment_unit = deliver_unit.payment_unit
     claim = OpportunityClaim.objects.get(opportunity_access=access)
     claim_limit = OpportunityClaimLimit.objects.get(opportunity_claim=claim, payment_unit=payment_unit)
     entity_id = deliver_unit_block.get("entity_id")
@@ -309,6 +337,10 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
 
         user_visit.save()
 
+        if not access.last_active or access.last_active < user_visit.visit_date:
+            access.last_active = user_visit.visit_date
+            access.save()
+
         if completed_work is not None:
             if completed_work.completed_count > 0 and completed_work.status == CompletedWorkStatus.incomplete:
                 completed_work.status = CompletedWorkStatus.pending
@@ -317,7 +349,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
                 completed_work.save()
 
     update_payment_accrued(opportunity, [user.id])
-    download_user_visit_attachments.delay(user_visit.id)
+    transaction.on_commit(partial(download_user_visit_attachments.delay, user_visit.id))
 
 
 def get_or_create_deliver_unit(app, unit_data):
