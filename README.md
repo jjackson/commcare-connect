@@ -149,12 +149,10 @@ The project has a staging environment at [https://connect-staging.dimagi.com/](h
 which is connected to the staging environment of CommCare HQ at
 [https://staging.commcarehq.org/](https://staging.commcarehq.org/).
 
-By convention, the `pkv/staging` branch is used for changes that are on the staging environment.
-To put your own changes on the staging environment, you can create merge your own branch into
-`pkv/staging` and then push it to GitHub.
-
-After that, you can deploy to the staging environment by manually running the `deploy`
-[workflow from here](https://github.com/dimagi/commcare-connect/actions/workflows/deploy.yml).
+- Update [commcare-connect-staging.yml](https://github.com/dimagi/staging-branches/blob/main/commcare-connect-staging.yml) with the branches you need to include.
+- Run `.deploy/rebuildstaging` to build the `autostaging` branch
+- After this, you can deploy to the staging environment by manually running the `deploy`
+  [workflow from here](https://github.com/dimagi/commcare-connect/actions/workflows/deploy.yml).
 
 ### Custom Bootstrap Compilation
 
@@ -164,3 +162,22 @@ Bootstrap v5 is installed using npm and customised by tweaking your variables in
 You can find a list of available variables [in the bootstrap source](https://github.com/twbs/bootstrap/blob/v5.1.3/scss/_variables.scss), or get explanations on them in the [Bootstrap docs](https://getbootstrap.com/docs/5.1/customize/sass/).
 
 Bootstrap's javascript as well as its dependencies are concatenated into a single file: `static/js/vendors.js`.
+
+### Setting up logical replication
+
+- Create another postgres database (in a seperate cluster)
+- Add `SECONDARY_DATABASE_URL` to the `.env` file
+- Enable replication on the default database (requires restart)
+  ```
+        - "wal_level=logical"
+        - "max_replication_slots=5"
+        - "max_wal_senders=5"
+  ```
+- Create table schemas in the secondary database
+  ```
+  ./manage.py migrate_multi
+  ```
+- Initialize replication
+  ```
+  ./manage.py setup_logical_replication
+  ```

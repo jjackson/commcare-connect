@@ -4,10 +4,12 @@ import pytest
 from rest_framework.test import APIClient
 
 from commcare_connect.opportunity.api.serializers import (
+    CommCareAppSerializer,
+    CompletedWorkSerializer,
     DeliveryProgressSerializer,
+    OpportunityClaimSerializer,
     OpportunitySerializer,
     PaymentSerializer,
-    UserVisitSerializer,
 )
 from commcare_connect.opportunity.models import (
     CompletedWorkStatus,
@@ -168,8 +170,8 @@ def test_learn_progress_endpoint(mobile_user: User, api_client: APIClient):
     assert len(response.data["completed_modules"]) == 1
     assert "assessments" in response.data
     assert len(response.data["assessments"]) == 1
-    assert list(response.data["completed_modules"][0].keys()) == ["module", "date", "duration"]
-    assert list(response.data["assessments"][0].keys()) == ["date", "score", "passing_score", "passed"]
+    assert list(response.data["completed_modules"][0].keys()) == ["module", "date", "duration", "id"]
+    assert list(response.data["assessments"][0].keys()) == ["date", "score", "passing_score", "passed", "id"]
 
 
 @pytest.mark.parametrize(
@@ -194,6 +196,9 @@ def test_opportunity_list_endpoint(
     assert response.status_code == 200
     assert len(response.data) == 1
     assert response.data[0].keys() == OpportunitySerializer().get_fields().keys()
+    assert response.data[0]["deliver_app"].keys() == CommCareAppSerializer().get_fields().keys()
+    assert response.data[0]["learn_app"].keys() == CommCareAppSerializer().get_fields().keys()
+    assert response.data[0]["claim"].keys() == OpportunityClaimSerializer().get_fields().keys()
     payment_units = opportunity.paymentunit_set.all()
     assert response.data[0]["max_visits_per_user"] == sum([pu.max_total for pu in payment_units])
     assert response.data[0]["daily_max_visits_per_user"] == sum([pu.max_daily for pu in payment_units])
@@ -205,6 +210,10 @@ def test_opportunity_list_endpoint(
         verification_flags.form_submission_start
     )
     assert response.data[0]["verification_flags"]["form_submission_end"] == str(verification_flags.form_submission_end)
+    payment_units = response.data[0]["payment_units"]
+
+    payment_unit_fields = ["id", "name", "max_total", "max_daily", "amount", "end_date"]
+    assert all(all(field in unit for field in payment_unit_fields) for unit in payment_units)
 
 
 def test_delivery_progress_endpoint(
@@ -218,6 +227,12 @@ def test_delivery_progress_endpoint(
         status=VisitValidationStatus.pending,
         opportunity_access=access,
         completed_work=completed_work,
+        flag_reason={
+            "flags": [
+                ["duration", "The form was completed too quickly."],
+                ["attachment_missing", "Form was submitted without attachments."],
+            ]
+        },
     )
     api_client.force_authenticate(mobile_user_with_connect_link)
     response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
@@ -226,8 +241,12 @@ def test_delivery_progress_endpoint(
     assert response.data.keys() == DeliveryProgressSerializer().get_fields().keys()
     assert len(response.data["deliveries"]) == 1
     assert len(response.data["payments"]) == 0
-    assert response.data["deliveries"][0].keys() == UserVisitSerializer().get_fields().keys()
+    assert response.data["deliveries"][0].keys() == CompletedWorkSerializer().get_fields().keys()
 
+    assert response.data["deliveries"][0]["flags"] == {
+        "duration": "The form was completed too quickly.",
+        "attachment_missing": "Form was submitted without attachments.",
+    }
     Payment.objects.create(amount=10, date_paid=datetime.date.today(), opportunity_access=access)
     response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
     assert response.status_code == 200

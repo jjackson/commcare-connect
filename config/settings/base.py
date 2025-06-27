@@ -30,8 +30,30 @@ DATABASES = {
         default="postgres:///commcare_connect",
     ),
 }
+
+# DATABASES staging/production
+# ------------------------------------------------------------------------------
+if env("RDS_HOSTNAME", default=None):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": env("RDS_DB_NAME"),
+            "USER": env("RDS_USERNAME"),
+            "PASSWORD": env("RDS_PASSWORD"),
+            "HOST": env("RDS_HOSTNAME"),
+            "PORT": env("RDS_PORT"),
+        }
+    }
+
+SECONDARY_DB_ALIAS = None
+if env("SECONDARY_DATABASE_URL", default=None):
+    SECONDARY_DB_ALIAS = "secondary"
+    DATABASES[SECONDARY_DB_ALIAS] = env.db("SECONDARY_DATABASE_URL")
+    DATABASE_ROUTERS = ["commcare_connect.multidb.db_router.ConnectDatabaseRouter"]
+
 DATABASES["default"]["ATOMIC_REQUESTS"] = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
 
 # URLS
 # ------------------------------------------------------------------------------
@@ -48,13 +70,13 @@ DJANGO_APPS = [
     "django.contrib.messages",
     "whitenoise.runserver_nostatic",
     "django.contrib.staticfiles",
-    # "django.contrib.humanize", # Handy template tags
+    "django.contrib.humanize",  # Handy template tags
     "django.contrib.admin",
     "django.forms",
 ]
 THIRD_PARTY_APPS = [
     "crispy_forms",
-    "crispy_bootstrap5",
+    "crispy_tailwind",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
@@ -70,6 +92,7 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     "commcare_connect.commcarehq_provider",
     "commcare_connect.form_receiver",
+    "commcare_connect.multidb",
     "commcare_connect.opportunity",
     "commcare_connect.organization",
     "commcare_connect.program",
@@ -162,14 +185,15 @@ TEMPLATES = [
                 "django.template.context_processors.tz",
                 "django.contrib.messages.context_processors.messages",
                 "commcare_connect.users.context_processors.allauth_settings",
+                "commcare_connect.web.context_processors.page_settings",
             ],
         },
     }
 ]
 
 FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
-CRISPY_TEMPLATE_PACK = "bootstrap5"
-CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
+CRISPY_TEMPLATE_PACK = "tailwind"
+CRISPY_ALLOWED_TEMPLATE_PACKS = "tailwind"
 
 # FIXTURES
 # ------------------------------------------------------------------------------
@@ -307,7 +331,7 @@ CACHES = {
     }
 }
 
-DJANGO_TABLES2_TEMPLATE = "tables/tabbed_table.html"
+DJANGO_TABLES2_TEMPLATE = "tailwind/base_table.html"
 DJANGO_TABLES2_TABLE_ATTRS = {
     "class": "table table-bordered mb-0",
     "thead": {

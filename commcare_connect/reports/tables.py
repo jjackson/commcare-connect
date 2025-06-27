@@ -1,38 +1,34 @@
-from django.urls import reverse
-from django.utils.html import format_html
 from django_tables2 import columns, tables
+
+from commcare_connect.opportunity.tables import SumColumn
 
 
 class AdminReportTable(tables.Table):
-    quarter = columns.Column(verbose_name="Quarter")
-    delivery_type = columns.Column(verbose_name="Delivery Type")
-    users = columns.Column(verbose_name="Active Users")
-    services = columns.Column(verbose_name="Verified Services")
-    approved_payments = columns.Column(verbose_name="Acknowledged Payments")
-    total_payments = columns.Column(verbose_name="Total Payments")
-    beneficiaries = columns.Column(verbose_name="Beneficiaries Served")
+    month = columns.Column(verbose_name="Month", footer="Total", empty_values=())
+    delivery_type_name = columns.Column(verbose_name="Delivery Type", empty_values=("All"))
+    connectid_users = columns.Column(verbose_name="ConnectID Accounts")
+    total_eligible_users = columns.Column(verbose_name="Total Eligible Users")
+    users = SumColumn(verbose_name="Eligible Users")
+    avg_time_to_payment = columns.Column(verbose_name="Average Time to Payment")
+    max_time_to_payment = columns.Column(verbose_name="Max Time to Payment")
+    flw_amount_earned = SumColumn(verbose_name="FLW Amount Earned")
+    flw_amount_paid = SumColumn(verbose_name="FLW Amount Paid")
+    nm_amount_earned = SumColumn(verbose_name="NM Amount Earned")
+    nm_amount_paid = SumColumn(verbose_name="NM Amount Paid")
+    nm_other_amount_paid = SumColumn(verbose_name="NM Other Amount Paid")
+    services = SumColumn(verbose_name="Verified Services")
+    avg_top_paid_flws = SumColumn(verbose_name="Average paid to Top FLWs")
 
     class Meta:
-        empty_text = "No data for this quarter."
+        empty_text = "No data for this month."
         orderable = False
-        row_attrs = {"id": lambda record: f"row{record['quarter'][0]}-{record['quarter'][1]}"}
+        row_attrs = {"id": lambda record: f"row{record['month_group'].strftime('%Y-%m')}"}
 
-    def render_quarter(self, value):
-        return f"{value[0]} Q{value[1]}"
+    def render_month(self, record):
+        return record["month_group"].strftime("%B %Y")
 
-    def render_delivery_type(self, record):
-        if record["delivery_type"] != "All":
-            return record["delivery_type"]
-        url = reverse("reports:delivery_stats_report")
-        return format_html(
-            """<button type="button" class="btn btn-primary btn-sm"
-                 hx-get='{url}?year={year}&quarter={quarter}&by_delivery_type=on&drilldown'
-                 hx-target='#row{year}-{quarter}'
-                 hx-swap="outerHTML"
-                 hx-select="tbody tr">
-                 View all types
-               </button>""",
-            url=url,
-            year=record["quarter"][0],
-            quarter=record["quarter"][1],
-        )
+    def render_avg_time_to_payment(self, record, value):
+        return f"{value:.2f} days"
+
+    def render_max_time_to_payment(self, record, value):
+        return f"{value} days"
