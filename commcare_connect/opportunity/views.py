@@ -135,7 +135,6 @@ from commcare_connect.opportunity.visit_import import (
     bulk_update_completed_work_status,
     bulk_update_visit_review_status,
     get_exchange_rate,
-    get_imported_dataset,
     update_payment_accrued,
 )
 from commcare_connect.organization.decorators import org_admin_required, org_member_required, org_viewer_required
@@ -504,17 +503,17 @@ def download_export(request, org_slug, task_id):
 def update_visit_status_import(request, org_slug=None, pk=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=pk)
     file = request.FILES.get("visits")
-    redirect_url = reverse("opportunity:worker_list", args=(org_slug, pk)) + "?active_tab=delivery"
+    redirect_url = reverse("opportunity:worker_list", args=(org_slug, pk))
 
     file_format = get_file_extension(file)
     if file_format not in ("csv", "xlsx"):
         messages.error(request, f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
-        return redirect(redirect_url)
+        return redirect(redirect_url + "?active_tab=delivery")
     else:
-        imported_data = get_imported_dataset(file, file_format)
-        rows = list(imported_data)
-        result = bulk_update_visit_status_task.delay(opportunity.pk, imported_data.headers or [], rows)
-        return redirect(f"{redirect_url}?export_task_id={result.id}")
+        file_path = f"{opportunity.pk}_{datetime.datetime.now().isoformat}_visit_import"
+        saved_path = default_storage.save(file_path, ContentFile(file.read()))
+        result = bulk_update_visit_status_task.delay(opportunity.pk, saved_path, file_format)
+        return redirect(f"{redirect_url}?active_tab=delivery&export_task_id={result.id}")
 
 
 def review_visit_import(request, org_slug=None, pk=None):
