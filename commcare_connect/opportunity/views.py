@@ -313,6 +313,11 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
     model = Opportunity
     template_name = "tailwind/pages/opportunity_dashboard/dashboard.html"
 
+    def get_object(self, queryset=None):
+        opp_id = self.kwargs.get("pk")
+        org_slug = self.kwargs.get("org_slug")
+        return get_opportunity_or_404(opp_id, org_slug)
+
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
         if not self.object.is_setup_complete:
