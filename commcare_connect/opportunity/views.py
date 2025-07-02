@@ -424,13 +424,6 @@ class OpportunityPaymentTableView(OrganizationUserMixin, OrgContextSingleTableVi
         )
 
 
-class OpportunityUserLearnProgress(OrganizationUserMixin, DetailView):
-    template_name = "opportunity/user_learn_progress.html"
-
-    def get_queryset(self):
-        return OpportunityAccess.objects.filter(opportunity_id=self.kwargs.get("opp_id"))
-
-
 @org_member_required
 def export_user_visits(request, org_slug, pk):
     get_opportunity_or_404(org_slug=request.org.slug, pk=pk)
