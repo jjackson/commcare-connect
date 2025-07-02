@@ -182,7 +182,7 @@ class OrgContextSingleTableView(SingleTableView):
 class OpportunityList(OrganizationUserMixin, SingleTableView):
     model = Opportunity
     table_class = BaseOpportunityList
-    template_name = "tailwind/pages/opportunities_list.html"
+    template_name = "opportunity/opportunities_list.html"
     paginate_by = 15
 
     def get_paginate_by(self, table):
@@ -311,7 +311,7 @@ class OpportunityFinalize(OrganizationUserMemberRoleMixin, UpdateView):
 
 class OpportunityDashboard(OrganizationUserMixin, DetailView):
     model = Opportunity
-    template_name = "tailwind/pages/opportunity_dashboard/dashboard.html"
+    template_name = "opportunity/dashboard.html"
 
     def get_object(self, queryset=None):
         opp_id = self.kwargs.get("pk")
@@ -477,7 +477,7 @@ def export_status(request, org_slug, task_id):
         progress["error"] = task_meta.get("result")
     return render(
         request,
-        "tailwind/components/upload_progress_bar.html",
+        "components/upload_progress_bar.html",
         {
             "task_id": task_id,
             "current_time": now().microsecond,
@@ -1306,7 +1306,7 @@ def payment_report(request, org_slug, pk):
 
     return render(
         request,
-        "tailwind/pages/invoice_payment_report.html",
+        "opportunity/invoice_payment_report.html",
         context=dict(
             table=table,
             opportunity=opportunity,
@@ -1340,7 +1340,7 @@ def invoice_list(request, org_slug, pk):
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
     return render(
         request,
-        "tailwind/pages/invoice_list.html",
+        "opportunity/invoice_list.html",
         {
             "header_title": "Invoices",
             "opportunity": opportunity,
@@ -1888,7 +1888,7 @@ def opportunity_worker(request, org_slug=None, opp_id=None):
 
     return render(
         request,
-        "tailwind/pages/opportunity_worker.html",
+        "opportunity/opportunity_worker.html",
         {
             "opportunity": opp,
             "tabs": tabs,
@@ -1911,7 +1911,7 @@ def worker_main(request, org_slug=None, opp_id=None):
     data = get_worker_table_data(opportunity)
     table = WorkerStatusTable(data)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
-    return render(request, "tailwind/components/tables/table.html", {"table": table})
+    return render(request, "components/tables/table.html", {"table": table})
 
 
 @org_viewer_required
@@ -1920,7 +1920,7 @@ def worker_learn(request, org_slug=None, opp_id=None):
     data = get_worker_learn_table_data(opp)
     table = WorkerLearnTable(data, org_slug=org_slug, opp_id=opp_id)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
-    return render(request, "tailwind/components/tables/table.html", {"table": table})
+    return render(request, "components/tables/table.html", {"table": table})
 
 
 @org_viewer_required
@@ -1929,7 +1929,7 @@ def worker_delivery(request, org_slug=None, opp_id=None):
     data = get_annotated_opportunity_access_deliver_status(opportunity)
     table = WorkerDeliveryTable(data, org_slug=org_slug, opp_id=opp_id)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
-    return render(request, "tailwind/components/tables/table.html", {"table": table})
+    return render(request, "components/tables/table.html", {"table": table})
 
 
 @org_viewer_required
@@ -1953,7 +1953,7 @@ def worker_payments(request, org_slug=None, opp_id=None):
     )
     table = WorkerPaymentsTable(query_set, org_slug=org_slug, opp_id=opp_id)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
-    return render(request, "tailwind/components/tables/table.html", {"table": table})
+    return render(request, "components/tables/table.html", {"table": table})
 
 
 @org_viewer_required
@@ -1969,7 +1969,7 @@ def worker_learn_status_view(request, org_slug, opp_id, access_id):
 
     return render(
         request,
-        "tailwind/pages/opportunity_worker_learn.html",
+        "opportunity/opportunity_worker_learn.html",
         {"header_title": "Worker", "total_learn_duration": total_duration, "table": table, "access": access},
     )
 
@@ -1982,7 +1982,7 @@ def worker_payment_history(request, org_slug, opp_id, access_id):
 
     return render(
         request,
-        "tailwind/components/worker_page/payment_history.html",
+        "components/worker_page/payment_history.html",
         context=dict(access=access, payments=payments, latest_payment=queryset.first()),
     )
 
@@ -2015,7 +2015,7 @@ def worker_flag_counts(request, org_slug, opp_id):
 
     return render(
         request,
-        "tailwind/components/worker_page/flag_counts.html",
+        "components/worker_page/flag_counts.html",
         context=dict(
             flag_counts=counts.items(),
         ),
@@ -2125,7 +2125,7 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
 
     return render(
         request,
-        "tailwind/pages/opportunity_dashboard/opportunity_funnel_progress.html",
+        "opportunity/opportunity_funnel_progress.html",
         {"funnel_progress": funnel_progress},
     )
 
@@ -2203,7 +2203,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
 
     return render(
         request,
-        "tailwind/pages/opportunity_dashboard/opportunity_worker_progress.html",
+        "opportunity/opportunity_worker_progress.html",
         {"worker_progress": worker_progress},
     )
 
@@ -2319,6 +2319,4 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
         },
     ]
 
-    return render(
-        request, "tailwind/pages/opportunity_dashboard/opportunity_delivery_stat.html", {"opp_stats": opp_stats}
-    )
+    return render(request, "opportunity/opportunity_delivery_stat.html", {"opp_stats": opp_stats})
