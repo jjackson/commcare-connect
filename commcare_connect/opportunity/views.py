@@ -295,6 +295,11 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
     model = Opportunity
     template_name = "tailwind/pages/opportunity_dashboard/dashboard.html"
 
+    def get_object(self, queryset=None):
+        opp_id = self.kwargs.get("pk")
+        org_slug = self.kwargs.get("org_slug")
+        return get_opportunity_or_404(opp_id, org_slug)
+
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
         if not self.object.is_setup_complete:
@@ -880,7 +885,7 @@ def user_profile(request, org_slug=None, opp_id=None, pk=None):
         [
             cw
             for cw in CompletedWork.objects.filter(opportunity_access=access, status=CompletedWorkStatus.pending)
-            if cw.approved_count
+            if cw.saved_approved_count
         ]
     )
     user_catchment_data = [
@@ -967,7 +972,7 @@ def approve_visit(request, org_slug=None, pk=None):
                 user_visit.justification = justification
 
         user_visit.save()
-        update_payment_accrued(opportunity=user_visit.opportunity, users=[user_visit.user])
+        update_payment_accrued(opportunity=user_visit.opportunity, users=[user_visit.user], incremental=True)
 
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
@@ -1405,11 +1410,17 @@ def user_visit_verification(request, org_slug, opp_id, pk):
         for flag, _description in visit.flag_reason.get("flags", []):
             flag_label = FlagLabels.get_label(flag)
             if visit.status == VisitValidationStatus.approved:
-                flagged_info[flag_label]["approved"] += 1
-            if visit.status == VisitValidationStatus.rejected:
-                flagged_info[flag_label]["rejected"] += 1
+                if opportunity.managed and visit.review_created_on is not None:
+                    if visit.review_status == VisitReviewStatus.agree:
+                        flagged_info[flag_label]["approved"] += 1
+                    else:
+                        flagged_info[flag_label]["pending"] += 1
+                else:
+                    flagged_info[flag_label]["approved"] += 1
             if visit.status in (VisitValidationStatus.pending, VisitValidationStatus.duplicate):
                 flagged_info[flag_label]["pending"] += 1
+            if visit.status == VisitValidationStatus.rejected:
+                flagged_info[flag_label]["rejected"] += 1
             flagged_info[flag_label]["name"] = flag_label
     flagged_info = flagged_info.values()
     last_payment_details = Payment.objects.filter(opportunity_access=opportunity_access).order_by("-date_paid").first()
