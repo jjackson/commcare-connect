@@ -26,7 +26,6 @@ from rest_framework.views import APIView
 
 from commcare_connect.connect_id_client.main import fetch_demo_user_tokens
 from commcare_connect.opportunity.models import HQApiKey, Opportunity, OpportunityAccess, UserInvite, UserInviteStatus
-from commcare_connect.organization.decorators import org_member_required
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 
 from .helpers import create_hq_user_and_link
@@ -164,8 +163,8 @@ class SMSStatusCallbackView(APIView):
 
 
 # used for loading api key dropdown
-@org_member_required
-def get_api_keys(request, org_slug=None):
+@login_required
+def get_api_keys(request):
     hq_server = request.GET.get("hq_server")
     if not hq_server:
         return HttpResponse(
@@ -191,8 +190,8 @@ def get_api_keys(request, org_slug=None):
 
 
 # used for loading domain dropdown
-@org_member_required
-def get_domains(request, org_slug=None):
+@login_required
+def get_domains(request):
     hq_server = request.GET.get("hq_server")
     api_key_id = request.GET.get("api_key")
     if not hq_server or not api_key_id:
@@ -208,8 +207,8 @@ def get_domains(request, org_slug=None):
 
 
 # used for loading learn_app and deliver_app dropdowns
-@org_member_required
-def get_application(request, org_slug=None):
+@login_required
+def get_application(request):
     hq_server = request.GET.get("hq_server")
     api_key_id = request.GET.get("api_key")
     domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
