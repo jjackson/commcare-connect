@@ -631,7 +631,7 @@ class BaseOpportunityList(OrgContextTable):
             "start_date",
             "end_date",
         )
-        order_by = ("status", "start_date", "end_date")
+        order_by = ("status", "-start_date", "end_date")
 
     def render_status(self, value):
         if value == 0:
