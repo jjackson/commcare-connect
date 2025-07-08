@@ -695,7 +695,7 @@ def payment_import(request, org_slug=None, opp_id=None):
 @org_member_required
 def add_payment_units(request, org_slug=None, opp_id=None):
     if request.POST:
-        return add_payment_unit(request, org_slug=org_slug, pk=opp_id)
+        return add_payment_unit(request, org_slug=org_slug, opp_id=opp_id)
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opp_id)
     paymentunit_count = PaymentUnit.objects.filter(opportunity=opportunity).count()
     return render(
