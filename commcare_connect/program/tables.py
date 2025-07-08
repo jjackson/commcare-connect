@@ -7,12 +7,6 @@ from django.utils.translation import gettext_lazy as _
 
 from .models import ManagedOpportunity, Program, ProgramApplication, ProgramApplicationStatus
 
-TABLE_TEMPLATE = "django_tables2/bootstrap5.html"
-RESPONSIVE_TABLE_AND_LIGHT_HEADER = {
-    "class": "table border table-responsive",
-    "thead": {"class": "table-light"},
-}
-
 
 class ProgramInvitationTable(tables.Table):
     program = tables.Column(accessor="program__name", verbose_name=_("Program"))
@@ -75,8 +69,6 @@ class ProgramInvitationTable(tables.Table):
         model = ProgramApplication
         fields = ("program", "start_date", "end_date", "budget", "manage")
         order_by_field = "invite_sort"
-        attrs = RESPONSIVE_TABLE_AND_LIGHT_HEADER
-        template_name = TABLE_TEMPLATE
         orderable = False
 
 
@@ -131,8 +123,6 @@ class ProgramApplicationTable(tables.Table):
     class Meta:
         model = ProgramApplication
         fields = ("organization", "created_by", "date_modified", "status", "manage")
-        attrs = RESPONSIVE_TABLE_AND_LIGHT_HEADER
-        template_name = TABLE_TEMPLATE
         empty_text = "No applications yet."
         orderable = False
 
@@ -218,8 +208,6 @@ class ProgramTable(tables.Table):
             "budget",
             "manage",
         )
-        template_name = TABLE_TEMPLATE
-        attrs = RESPONSIVE_TABLE_AND_LIGHT_HEADER
         empty_text = "No programs yet."
         orderable = False
 
