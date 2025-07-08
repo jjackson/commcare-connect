@@ -1,5 +1,3 @@
-import '@popperjs/core';
-import Alpine from 'alpinejs';
 import './htmx';
 import 'htmx.org/dist/ext/loading-states';
 
@@ -13,5 +11,9 @@ window.monthPickr = (id, flatPickrConfig = {}, monthPluginConfig = {}) =>
     ...flatPickrConfig,
   });
 
+import Alpine from 'alpinejs';
+import Tooltip from '@ryangjchandler/alpine-tooltip';
+Alpine.plugin(Tooltip);
 window.Alpine = Alpine;
-Alpine.start();
+window.Alpine.start();
+import 'tippy.js/dist/tippy.css';
