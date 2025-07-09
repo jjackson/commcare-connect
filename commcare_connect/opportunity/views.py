@@ -1382,10 +1382,10 @@ def invoice_create(request, org_slug=None, opp_id=None):
 
 @org_member_required
 @require_POST
-def invoice_approve(request, org_slug, pk):
-    opportunity = get_opportunity_or_404(pk, org_slug)
+def invoice_approve(request, org_slug, opp_id):
+    opportunity = get_opportunity_or_404(opp_id, org_slug)
     if not opportunity.managed or not (request.org_membership and request.org_membership.is_program_manager):
-        return redirect("opportunity:detail", org_slug, pk)
+        return redirect("opportunity:detail", org_slug, opp_id)
     invoice_ids = request.POST.getlist("pk")
     invoices = PaymentInvoice.objects.filter(opportunity=opportunity, pk__in=invoice_ids, payment__isnull=True)
 
@@ -1397,7 +1397,7 @@ def invoice_approve(request, org_slug, pk):
             invoice=invoice,
         )
         payment.save()
-    return redirect("opportunity:invoice_list", org_slug, pk)
+    return redirect("opportunity:invoice_list", org_slug, opp_id)
 
 
 @org_member_required
