@@ -91,6 +91,7 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     "commcare_connect.commcarehq_provider",
+    "commcare_connect.commcarehq",
     "commcare_connect.form_receiver",
     "commcare_connect.multidb",
     "commcare_connect.opportunity",
@@ -367,3 +368,5 @@ TWILIO_MESSAGING_SERVICE = env("TWILIO_MESSAGING_SERVICE", default=None)
 MAPBOX_TOKEN = env("MAPBOX_TOKEN", default=None)
 
 OPEN_EXCHANGE_RATES_API_ID = env("OPEN_EXCHANGE_RATES_API_ID", default=None)
+
+OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth2_provider.Application"
