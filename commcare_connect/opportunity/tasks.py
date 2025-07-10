@@ -57,8 +57,8 @@ def create_learn_modules_and_deliver_units(opportunity_id):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     learn_app = opportunity.learn_app
     deliver_app = opportunity.deliver_app
-    learn_app_connect_blocks = get_connect_blocks_for_app(learn_app.cc_domain, learn_app.cc_app_id)
-    deliver_app_connect_blocks = get_deliver_units_for_app(deliver_app.cc_domain, deliver_app.cc_app_id)
+    learn_app_connect_blocks = get_connect_blocks_for_app(learn_app)
+    deliver_app_connect_blocks = get_deliver_units_for_app(deliver_app)
 
     for block in learn_app_connect_blocks:
         LearnModule.objects.update_or_create(
@@ -310,7 +310,7 @@ def download_user_visit_attachments(user_visit_id: id):
     for name, blob in blobs.items():
         if name == "form.xml":
             continue
-        url = f"{settings.COMMCARE_HQ_URL}/a/{domain}/api/form/attachment/{user_visit.xform_id}/{name}"
+        url = f"{api_key.hq_server.url}/a/{domain}/api/form/attachment/{user_visit.xform_id}/{name}"
 
         with transaction.atomic():
             blob_meta, created = BlobMeta.objects.get_or_create(
