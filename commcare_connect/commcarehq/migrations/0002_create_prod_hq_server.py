@@ -30,7 +30,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("commcarehq", "0001_initial"),
         ("users", "0012_connectiduserlink_hq_server"),
-        ("opportunity", "0077_commcareapp_hq_server_hqapikey_date_created_and_more"),
+        ("opportunity", "0079_commcareapp_hq_server_hqapikey_date_created_and_more"),
     ]
 
     operations = [
