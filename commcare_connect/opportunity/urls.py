@@ -12,7 +12,6 @@ from commcare_connect.opportunity.views import (
     OpportunityList,
     OpportunityPaymentTableView,
     OpportunityPaymentUnitTableView,
-    OpportunityUserLearnProgress,
     OpportunityUserStatusTableView,
     add_budget_existing_users,
     add_budget_new_users,
@@ -66,11 +65,6 @@ urlpatterns = [
     path("export_status/<slug:task_id>", view=export_status, name="export_status"),
     path("download_export/<slug:task_id>", view=download_export, name="download_export"),
     path("<int:pk>/visit_import/", view=update_visit_status_import, name="visit_import"),
-    path(
-        "<int:opp_id>/learn_progress/<int:pk>",
-        view=OpportunityUserLearnProgress.as_view(),
-        name="user_learn_progress",
-    ),
     path(
         "<int:pk>/add_budget_existing_users",
         view=add_budget_existing_users,
@@ -158,4 +152,5 @@ urlpatterns = [
     ),
     path("<int:opp_id>/worker_flag_counts/", views.worker_flag_counts, name="worker_flag_counts"),
     path("add_api_key/", views.add_api_key, name="add_api_key"),
+    path("<int:opp_id>/exchange_rate/", views.exchange_rate_preview, name="exchange_rate"),
 ]
