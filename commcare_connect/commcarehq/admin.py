@@ -1,3 +1,9 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import HQServer
+
+
+@admin.register(HQServer)
+class HQServerAdmin(admin.ModelAdmin):
+    list_display = ["name", "url"]
+    search_fields = ["name", "url"]
