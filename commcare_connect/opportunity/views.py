@@ -2184,7 +2184,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
 
     worker_list_url = reverse("opportunity:worker_list", args=(org_slug, opp_id))
     status_url = worker_list_url + "?active_tab=workers&sort=-last_active"
-    delivery_url = worker_list_url + "?active_tab=delivery&sort=-pending"
+    delivery_url = worker_list_url + "?active_tab=delivery&sort=-last_active"
     payment_url = worker_list_url + "?active_tab=payments"
 
     deliveries_panels = [
