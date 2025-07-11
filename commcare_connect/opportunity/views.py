@@ -1,8 +1,7 @@
 import datetime
-import json
 import sys
 from collections import Counter, defaultdict
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from functools import reduce
 from http import HTTPStatus
 
@@ -10,6 +9,7 @@ from celery.result import AsyncResult
 from crispy_forms.utils import render_crispy_form
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.core.files.base import ContentFile
@@ -43,8 +43,8 @@ from commcare_connect.opportunity.forms import (
     DateRanges,
     DeliverUnitFlagsForm,
     FormJsonValidationRulesForm,
+    HQApiKeyCreateForm,
     OpportunityChangeForm,
-    OpportunityCreationForm,
     OpportunityFinalizeForm,
     OpportunityInitForm,
     OpportunityUserInviteForm,
@@ -75,6 +75,7 @@ from commcare_connect.opportunity.models import (
     CompletedWorkStatus,
     DeliverUnit,
     DeliverUnitFlagRules,
+    ExchangeRate,
     FormJsonValidationRules,
     LearnModule,
     Opportunity,
@@ -134,7 +135,6 @@ from commcare_connect.opportunity.visit_import import (
     bulk_update_completed_work_status,
     bulk_update_visit_review_status,
     bulk_update_visit_status,
-    get_exchange_rate,
     update_payment_accrued,
 )
 from commcare_connect.organization.decorators import org_admin_required, org_member_required, org_viewer_required
@@ -142,7 +142,6 @@ from commcare_connect.program.models import ManagedOpportunity
 from commcare_connect.program.utils import is_program_manager, is_program_manager_of_opportunity
 from commcare_connect.users.models import User
 from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
-from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.flags import FlagLabels
 from commcare_connect.utils.tables import get_duration_min, get_validated_page_size
@@ -199,26 +198,6 @@ class OpportunityList(OrganizationUserMixin, SingleTableView):
         return get_opportunity_list_data_lite(org, is_program_manager)
 
 
-class OpportunityCreate(OrganizationUserMemberRoleMixin, CreateView):
-    template_name = "opportunity/opportunity_create.html"
-    form_class = OpportunityCreationForm
-
-    def get_success_url(self):
-        return reverse("opportunity:list", args=(self.request.org.slug,))
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["domains"] = get_domains_for_user(self.request.user)
-        kwargs["user"] = self.request.user
-        kwargs["org_slug"] = self.request.org.slug
-        return kwargs
-
-    def form_valid(self, form: OpportunityCreationForm) -> HttpResponse:
-        response = super().form_valid(form)
-        create_learn_modules_and_deliver_units.delay(self.object.id)
-        return response
-
-
 class OpportunityInit(OrganizationUserMemberRoleMixin, CreateView):
     template_name = "opportunity/opportunity_init.html"
     form_class = OpportunityInitForm
@@ -228,10 +207,14 @@ class OpportunityInit(OrganizationUserMemberRoleMixin, CreateView):
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["domains"] = get_domains_for_user(self.request.user)
         kwargs["user"] = self.request.user
         kwargs["org_slug"] = self.request.org.slug
         return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["api_key_form"] = HQApiKeyCreateForm(auto_id="api_key_form_id_for_%s")
+        return context
 
     def form_valid(self, form: OpportunityInitForm):
         response = super().form_valid(form)
@@ -965,31 +948,6 @@ def send_message_mobile_users(request, org_slug=None, pk=None):
     )
 
 
-# used for loading learn_app and deliver_app dropdowns
-@org_member_required
-def get_application(request, org_slug=None):
-    domain = request.GET.get("learn_app_domain") or request.GET.get("deliver_app_domain")
-    applications = get_applications_for_user_by_domain(request.user, domain)
-    active_opps = Opportunity.objects.filter(
-        Q(learn_app__cc_domain=domain) | Q(deliver_app__cc_domain=domain),
-        active=True,
-        end_date__lt=datetime.date.today(),
-    ).select_related("learn_app", "deliver_app")
-    existing_apps = set()
-    for opp in active_opps:
-        if opp.learn_app.cc_domain == domain:
-            existing_apps.add(opp.learn_app.cc_app_id)
-        if opp.deliver_app.cc_domain == domain:
-            existing_apps.add(opp.deliver_app.cc_app_id)
-    options = []
-    for app in applications:
-        if app["id"] not in existing_apps:
-            value = json.dumps(app)
-            name = app["name"]
-            options.append(format_html("<option value='{}'>{}</option>", value, name))
-    return HttpResponse("\n".join(options))
-
-
 @org_member_required
 @require_POST
 def approve_visit(request, org_slug=None, pk=None):
@@ -1271,39 +1229,51 @@ def user_visit_review(request, org_slug, opp_id):
 @org_member_required
 def payment_report(request, org_slug, pk):
     opportunity = get_opportunity_or_404(pk, org_slug)
+    usd = request.GET.get("usd", False)
+
     if not opportunity.managed:
         return redirect("opportunity:detail", org_slug, pk)
+
+    amount_field = "amount"
+    currency = opportunity.currency
+    if usd:
+        amount_field = "amount_usd"
+        currency = "USD"
+
     total_paid_users = Payment.objects.filter(
         opportunity_access__opportunity=opportunity, organization__isnull=True
-    ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    ).aggregate(total=Sum(amount_field))["total"] or Decimal("0.00")
     total_paid_nm = Payment.objects.filter(
         organization=opportunity.organization, invoice__opportunity=opportunity
-    ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
-    data, total_user_payment_accrued, total_nm_payment_accrued = get_payment_report_data(opportunity)
+    ).aggregate(total=Sum(amount_field))["total"] or Decimal("0.00")
+    data, total_user_payment_accrued, total_nm_payment_accrued = get_payment_report_data(opportunity, usd)
     table = PaymentReportTable(data)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
 
+    def render_amount(amount):
+        return f"{currency} {intcomma(amount or 0)}"
+
     cards = [
         {
-            "amount": f"{opportunity.currency} {total_user_payment_accrued}",
+            "amount": render_amount(total_user_payment_accrued),
             "icon": "fa-user-friends",
             "label": "Worker",
             "subtext": "Total Accrued",
         },
         {
-            "amount": f"{opportunity.currency} {total_paid_users}",
+            "amount": render_amount(total_paid_users),
             "icon": "fa-user-friends",
             "label": "Worker",
             "subtext": "Total Paid",
         },
         {
-            "amount": f"{opportunity.currency} {total_nm_payment_accrued}",
+            "amount": render_amount(total_nm_payment_accrued),
             "icon": "fa-building",
             "label": "Organization",
             "subtext": "Total Accrued",
         },
         {
-            "amount": f"{opportunity.currency} {total_paid_nm}",
+            "amount": render_amount(total_paid_nm),
             "icon": "fa-building",
             "label": "Organization",
             "subtext": "Total Paid",
@@ -1337,7 +1307,7 @@ def invoice_list(request, org_slug, pk):
     table = PaymentInvoiceTable(
         queryset,
         org_slug=org_slug,
-        opp_id=pk,
+        opportunity=opportunity,
         exclude=("actions",) if not program_manager else tuple(),
         csrf_token=csrf_token,
     )
@@ -1386,13 +1356,12 @@ def invoice_approve(request, org_slug, pk):
         return redirect("opportunity:detail", org_slug, pk)
     invoice_ids = request.POST.getlist("pk")
     invoices = PaymentInvoice.objects.filter(opportunity=opportunity, pk__in=invoice_ids, payment__isnull=True)
-    rate = get_exchange_rate(opportunity.currency)
+
     for invoice in invoices:
-        amount_in_usd = invoice.amount / rate
         payment = Payment(
             amount=invoice.amount,
             organization=opportunity.organization,
-            amount_usd=amount_in_usd,
+            amount_usd=invoice.amount_usd,
             invoice=invoice,
         )
         payment.save()
@@ -2228,7 +2197,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
 
     worker_list_url = reverse("opportunity:worker_list", args=(org_slug, opp_id))
     status_url = worker_list_url + "?active_tab=workers&sort=-last_active"
-    delivery_url = worker_list_url + "?active_tab=delivery&sort=-pending"
+    delivery_url = worker_list_url + "?active_tab=delivery&sort=-last_active"
     payment_url = worker_list_url + "?active_tab=payments"
 
     deliveries_panels = [
@@ -2326,3 +2295,77 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
     ]
 
     return render(request, "opportunity/opportunity_delivery_stat.html", {"opp_stats": opp_stats})
+
+
+@require_POST
+def exchange_rate_preview(request, org_slug, opp_id):
+    opp = get_opportunity_or_404(opp_id, org_slug)
+
+    rate_date = request.POST.get("date")
+    usd_currency = request.POST.get("usd_currency", False) == "true"
+    replace_amount = request.POST.get("should_replace_amount", False) == "true"  # condition when user toggles
+    amount = None
+
+    rate_date = datetime.datetime.strptime(rate_date, "%Y-%m-%d").date()
+    try:
+        amount = Decimal(request.POST.get("amount") or 0)
+    except InvalidOperation:
+        amount = Decimal(0)
+
+    converted_amount = amount
+
+    if not rate_date:
+        exchange_info = "Please select a date for exchange rate."
+        converted_amount_display = ""
+    else:
+        exchange_rate = ExchangeRate.latest_exchange_rate(opp.currency, rate_date)
+        if exchange_rate:
+            exchange_info = format_html(
+                "Exchange Rate on {}: <b>{}</b>",
+                rate_date.strftime("%d-%m-%Y"),
+                exchange_rate.rate,
+            )
+            other_currency_amount = None
+            currency = opp.currency
+
+            if usd_currency:
+                if replace_amount:
+                    converted_amount = amount / exchange_rate.rate
+                other_currency_amount = converted_amount * exchange_rate.rate
+            else:
+                if replace_amount:
+                    converted_amount = amount * exchange_rate.rate
+                other_currency_amount = converted_amount / exchange_rate.rate
+                currency = "USD"
+
+            converted_amount = round(converted_amount, 2)
+            other_currency_amount = round(other_currency_amount, 2)
+
+            converted_amount_display = format_html("Amount in {}: <b>{}</b>", currency, other_currency_amount)
+        else:
+            exchange_info = "Exchange rate not available for selected date."
+            converted_amount_display = ""
+
+    html = format_html(
+        """
+            <div id="exchange-rate-display" data-converted-amount="{converted_amount}">{exchange_info}</div>
+            <div id="converted-amount">{converted_amount_display}</div>
+        """,
+        exchange_info=exchange_info,
+        converted_amount_display=converted_amount_display,
+        converted_amount=converted_amount,
+    )
+    return HttpResponse(html)
+
+
+@login_required
+@require_POST
+def add_api_key(request, org_slug):
+    form = HQApiKeyCreateForm(data=request.POST, auto_id="api_key_form_id_for_%s")
+
+    if form.is_valid():
+        api_key = form.save(commit=False)
+        api_key.user = request.user
+        api_key.save()
+        form = HQApiKeyCreateForm(auto_id="api_key_form_id_for_%s")
+    return HttpResponse(render_crispy_form(form))
