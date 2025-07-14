@@ -80,13 +80,8 @@ class Opportunity(BaseModel):
         on_delete=models.CASCADE,
         null=True,
     )
-    # to be removed
-    max_visits_per_user = models.IntegerField(null=True)
-    daily_max_visits_per_user = models.IntegerField(null=True)
     start_date = models.DateField(default=datetime.date.today)
     end_date = models.DateField(null=True)
-    # to be removed
-    budget_per_visit = models.IntegerField(null=True)
     total_budget = models.PositiveBigIntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
     currency = models.CharField(max_length=3, null=True)
