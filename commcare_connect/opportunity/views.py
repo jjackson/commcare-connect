@@ -577,7 +577,7 @@ def add_budget_existing_users(request, org_slug=None, pk=None):
             "tabs": tabs,
             "path": path,
             "opportunity_claims": opportunity_claims,
-            "budget_per_visit": opportunity.budget_per_visit_new,
+            "budget_per_visit": opportunity.budget_per_visit,
             "opportunity": opportunity,
         },
     )
