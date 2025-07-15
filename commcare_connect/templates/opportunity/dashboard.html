@@ -34,11 +34,11 @@
               <span class="badge badge-md primary-light">Test</span>
               {% endif %}
               {% if request.org_membership.is_viewer %}
-               <i class="fa-light opacity-50"
+               <i class="fa opacity-50"
                  :class="[isTest ? 'text-gray-800' : 'text-white', isOpen ? 'fa-xmark-large' : 'fa-bars']"
                  ></i>
               {% else %}
-                <i class="fa-light cursor-pointer"
+                <i class="fa cursor-pointer"
                  :class="[isTest ? 'text-gray-800' : 'text-white', isOpen ? 'fa-xmark-large' : 'fa-bars']"
                  @click="isOpen = !isOpen"></i>
               {% endif %}
@@ -71,7 +71,7 @@
                       <div class="min-w-48 flex flex-row items-center justify-between px-4 h-10 bg-brand-indigo rounded cursor-pointer"
                            @click="showModal = !showModal; ; selectedTab = '{{app.name}}'; selectedOption = '{{app.name}}'">
                           <div class="flex items-center">
-                              <i class="fa-light {{app.icon}} text-white text-sm"></i>
+                              <i class="fa {{app.icon}} text-white text-sm"></i>
                               <h3 class="text-sm font-normal text-white flex-1 pl-2 whitespace-nowrap">{{app.name}}</h3>
                           </div>
                           <h3 class="text-sm font-medium text-white">{{app.count}}</h3>
@@ -89,7 +89,7 @@
                   {% for data in basic_details %}
                   <div class="flex gap-2 items-start">
                     <div :class="isTest? 'infocard-dark' : 'infocard-light'">
-                          <i class="fa-light {{data.icon}}"
+                          <i class="fa {{data.icon}}"
                              :class="{'!text-brand-cornflower-blue': isTest}"
                           ></i>
                           <div>
