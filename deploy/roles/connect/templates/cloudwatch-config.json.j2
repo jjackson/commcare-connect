@@ -20,9 +20,7 @@
     "metrics": {
         "namespace": "CommCareConnect/{{ deploy_environment }}",
         "append_dimensions": {
-            "InstanceId": "${aws:InstanceId}",
-            "Environment": "{{ deploy_environment }}",
-            "Role": "web/celery"
+            "InstanceId": "${aws:InstanceId}"
         },
         "metrics_collected": {
             "cpu": {
