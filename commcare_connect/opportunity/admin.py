@@ -195,4 +195,4 @@ class CommCareAppAdmin(admin.ModelAdmin):
 @admin.register(UserInvite)
 class UserInviteAdmin(admin.ModelAdmin):
     list_display = ["phone_number", "opportunity"]
-    search_fields = ["phone_number", "opportunity"]
+    search_fields = ["phone_number", "opportunity__name"]
