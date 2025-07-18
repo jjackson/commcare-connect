@@ -603,7 +603,7 @@ class BaseOpportunityList(OrgContextTable):
                      }">
                     {% if record.is_test %}
                         <div class="relative">
-                            <i class="fa-solid a-file-invoice"
+                            <i class="fa-solid fa-file-half-dashed"
                                @mouseenter="showTooltip = true; positionTooltip($el)"
                                @mouseleave="showTooltip = false
                                "></i>
@@ -615,7 +615,7 @@ class BaseOpportunityList(OrgContextTable):
                         </div>
                     {% else %}
                         <span class="relative">
-                            <i class="invisible fa-solid a-file-invoice"></i>
+                            <i class="invisible fa-solid fa-file-half-dashed"></i>
                         </span>
                     {% endif %}
                 </div>
