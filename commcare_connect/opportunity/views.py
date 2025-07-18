@@ -329,7 +329,7 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
         ]
 
         context["resources"] = [
-            {"name": "Learn App", "count": learn_module_count, "icon": "fa-book-open-cover"},
+            {"name": "Learn App", "count": learn_module_count, "icon": "fa-book-open"},
             {"name": "Deliver App", "count": deliver_unit_count, "icon": "fa-clipboard-check"},
             {"name": "Payments Units", "count": payment_unit_count, "icon": "fa-hand-holding-dollar"},
         ]
@@ -338,12 +338,12 @@ class OpportunityDashboard(OrganizationUserMixin, DetailView):
             {
                 "name": "Delivery Type",
                 "count": safe_display(object.delivery_type and object.delivery_type.name),
-                "icon": "fa-file-check",
+                "icon": "fa-file-circle-check",
             },
             {
                 "name": "Start Date",
                 "count": safe_display(object.start_date),
-                "icon": "fa-calendar-range",
+                "icon": "fa-calendar-days",
             },
             {
                 "name": "End Date",
@@ -2054,19 +2054,19 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
         {
             "stage": "Started Learning",
             "count": header_with_tooltip(result.started_learning_count, "Started download of the Learn app"),
-            "icon": "book-open-cover",
+            "icon": "book-open",
         },
         {
             "stage": "Completed Learning",
             "count": header_with_tooltip(
                 result.completed_learning, "Workers that have completed all Learn modules but not assessment"
             ),
-            "icon": "book-blank",
+            "icon": "book",
         },
         {
             "stage": "Completed Assessment",
             "count": header_with_tooltip(result.completed_assessments, "Workers that passed the assessment"),
-            "icon": "award-simple",
+            "icon": "award",
         },
         {
             "stage": "Claimed Job",
@@ -2189,7 +2189,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
 
     deliveries_panels = [
         {
-            "icon": "fa-clipboard-list-check",
+            "icon": "fa-clipboard-list",
             "name": "Services Delivered",
             "status": "Total",
             "value": header_with_tooltip(stats.total_deliveries, "Total delivered so far excluding duplicates"),
@@ -2197,7 +2197,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "incr": stats.deliveries_from_yesterday,
         },
         {
-            "icon": "fa-clipboard-list-check",
+            "icon": "fa-clipboard-list",
             "name": "Services Delivered",
             "status": "Pending NM Review",
             "value": header_with_tooltip(
@@ -2210,7 +2210,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
     if opportunity.managed:
         deliveries_panels.append(
             {
-                "icon": "fa-clipboard-list-check",
+                "icon": "fa-clipboard-list",
                 "name": "Services Delivered",
                 "status": "Pending PM Review",
                 "value": header_with_tooltip(stats.visits_pending_for_pm_review, "Flagged and pending review with PM"),
