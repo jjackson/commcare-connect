@@ -1,3 +1,6 @@
+import getpass
+
+import psycopg2
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import DEFAULT_DB_ALIAS, connections
@@ -60,8 +63,24 @@ class Command(BaseCommand):
                 cursor.execute(f"CREATE PUBLICATION {PUBLICATION_NAME} FOR TABLE {tables};")
                 self.stdout.write(self.style.SUCCESS(f"Publication '{PUBLICATION_NAME}' created successfully."))
 
-        secondary_conn = connections[secondary_db_alias]
         self.stdout.write("Setting up subscription in the secondary database...")
+
+        secondary_db_settings = connections[secondary_db_alias].settings_dict
+        self.stdout.write(self.style.SUCCESS("Enter superuser credentials for the secondary (subscriber) database:"))
+        secondary_user = input("Enter username: ")
+        secondary_password = getpass.getpass("Enter password: ")
+
+        try:
+            secondary_conn = psycopg2.connect(
+                host=secondary_db_settings["HOST"],
+                port=secondary_db_settings["PORT"],
+                dbname=secondary_db_settings["NAME"],
+                user=secondary_user,
+                password=secondary_password,
+            )
+            secondary_conn.autocommit = True
+        except Exception as e:
+            raise CommandError(f"Could not connect to the secondary database: {e}")
 
         with secondary_conn.cursor() as cursor:
             cursor.execute("SELECT subname FROM pg_subscription WHERE subname = %s;", [SUBSCRIPTION_NAME])
@@ -76,7 +95,7 @@ class Command(BaseCommand):
                 default_db_settings = default_conn.settings_dict
                 self.stdout.write("Provide user credentials on primary with only replication privilege")
                 username = input("Enter username: ")
-                password = input("Enter password: ")
+                password = getpass.getpass("Enter password: ")
                 primary_conn_info = (
                     f"host={default_db_settings['HOST']} "
                     f"port={default_db_settings['PORT']} "
@@ -92,3 +111,6 @@ class Command(BaseCommand):
                     """
                 )
                 self.stdout.write(self.style.SUCCESS(f"Subscription '{SUBSCRIPTION_NAME}' created successfully."))
+
+        # Close the manually created connection
+        secondary_conn.close()
