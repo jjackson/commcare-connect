@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from decimal import Decimal, InvalidOperation
 from functools import reduce
 from http import HTTPStatus
+from urllib.parse import urlencode
 
 from celery.result import AsyncResult
 from crispy_forms.utils import render_crispy_form
@@ -490,17 +491,18 @@ def download_export(request, org_slug, task_id):
 def update_visit_status_import(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opp_id)
     file = request.FILES.get("visits")
+    file_format = get_file_extension(file)
     redirect_url = reverse("opportunity:worker_list", args=(org_slug, opp_id))
 
-    file_format = get_file_extension(file)
     if file_format not in ("csv", "xlsx"):
         messages.error(request, f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
-        return redirect(redirect_url + "?active_tab=delivery")
+        query_params = {"active_tab", "delivery"}
     else:
         file_path = f"{opportunity.pk}_{datetime.datetime.now().isoformat}_visit_import"
         saved_path = default_storage.save(file_path, file)
         result = bulk_update_visit_status_task.delay(opportunity.pk, saved_path, file_format)
-        return redirect(f"{redirect_url}?active_tab=delivery&export_task_id={result.id}")
+        query_params = {"active_tab": "delivery", "export_task_id": result.id}
+    return redirect(f"{redirect_url}?{urlencode(query_params)}")
 
 
 def review_visit_import(request, org_slug=None, opp_id=None):
