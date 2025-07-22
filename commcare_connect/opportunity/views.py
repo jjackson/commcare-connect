@@ -12,7 +12,6 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.humanize.templatetags.humanize import intcomma
-from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage, storages
 from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce
@@ -499,7 +498,7 @@ def update_visit_status_import(request, org_slug=None, opp_id=None):
         return redirect(redirect_url + "?active_tab=delivery")
     else:
         file_path = f"{opportunity.pk}_{datetime.datetime.now().isoformat}_visit_import"
-        saved_path = default_storage.save(file_path, ContentFile(file.read()))
+        saved_path = default_storage.save(file_path, file)
         result = bulk_update_visit_status_task.delay(opportunity.pk, saved_path, file_format)
         return redirect(f"{redirect_url}?active_tab=delivery&export_task_id={result.id}")
 
@@ -667,7 +666,7 @@ def payment_import(request, org_slug=None, opp_id=None):
         raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
 
     file_path = f"{opportunity.pk}_{datetime.datetime.now().isoformat}_payment_import"
-    saved_path = default_storage.save(file_path, ContentFile(file.read()))
+    saved_path = default_storage.save(file_path, file)
     result = bulk_update_payments_task.delay(opportunity.pk, saved_path, file_format)
 
     return redirect(
