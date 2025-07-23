@@ -62,7 +62,6 @@ from commcare_connect.opportunity.helpers import (
     get_opportunity_delivery_progress,
     get_opportunity_funnel_progress,
     get_opportunity_list_data,
-    get_opportunity_list_data_lite,
     get_opportunity_list_id_qs,
     get_opportunity_worker_progress,
     get_payment_report_data,
@@ -101,6 +100,7 @@ from commcare_connect.opportunity.tables import (
     LearnModuleTable,
     LearnStatusTable,
     OpportunityPaymentTable,
+    OpportunityTable,
     PaymentInvoiceTable,
     PaymentReportTable,
     PaymentUnitTable,
@@ -219,6 +219,11 @@ class OpportunityList(OrganizationUserMixin, SingleTableView):
     table_class = ProgramManagerOpportunityTable
     template_name = "opportunity/opportunities_list.html"
     paginate_by = 2
+
+    def get_table_class(self):
+        if self.request.org.program_manager:
+            return ProgramManagerOpportunityTable
+        return OpportunityTable
 
     def get_paginate_by(self, table):
         return get_validated_page_size(self.request)

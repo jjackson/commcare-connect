@@ -357,24 +357,6 @@ def get_payment_report_data(opportunity: Opportunity, usd=False):
     return data, total_user_payment_accrued, total_nm_payment_accrued
 
 
-def get_opportunity_list_data_lite(org, program_manager=False):
-    today = now().date()
-    base_filter = Q(organization=org)
-    if program_manager:
-        base_filter |= Q(managedopportunity__program__organization=org)
-
-    queryset = Opportunity.objects.filter(base_filter).annotate(
-        program=F("managedopportunity__program__name"),
-        status=Case(
-            When(Q(active=True) & Q(end_date__gte=today), then=Value(0)),  # Active
-            When(Q(active=True) & Q(end_date__lt=today), then=Value(1)),  # Ended
-            default=Value(2),  # Inactive
-            output_field=IntegerField(),
-        ),
-    )
-    return queryset
-
-
 def get_opportunity_list_id_qs(organization, program_manager=False):
     today = now().date()
     base_filter = Q(organization=organization)
@@ -392,12 +374,13 @@ def get_opportunity_list_id_qs(organization, program_manager=False):
 
 
 def get_opportunity_list_data(opp_ids, program_manager=False):
+    # Meant to be used with a small page of opp_ids (10/20)
     today = now().date()
     three_days_ago = now() - timedelta(days=3)
 
     pending_approvals_sq = Subquery(
-        UserVisit.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"), status="pending")
-        .values("opportunity_access__opportunity_id")
+        UserVisit.objects.filter(opportunity_id=OuterRef("pk"), status="pending")
+        .values("opportunity_id")
         .annotate(count=Count("id", distinct=True))
         .values("count")[:1],
         output_field=IntegerField(),
@@ -423,29 +406,46 @@ def get_opportunity_list_data(opp_ids, program_manager=False):
     )
 
     if program_manager:
-        total_deliveries_sq = Subquery(
-            CompletedWork.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"))
+        deliveries_agg = (
+            CompletedWork.objects.filter(opportunity_access__opportunity_id__in=opp_ids)
             .values("opportunity_access__opportunity_id")
-            .annotate(total=Sum("saved_completed_count"))
-            .values("total")[:1],
-            output_field=IntegerField(),
+            .annotate(
+                total_deliveries=Sum("saved_completed_count"),
+                verified_deliveries=Sum("saved_approved_count"),
+            )
         )
+        deliveries_by_opp = {
+            item["opportunity_access__opportunity_id"]: {
+                "total_deliveries": item["total_deliveries"],
+                "verified_deliveries": item["verified_deliveries"],
+            }
+            for item in deliveries_agg
+        }
 
-        verified_deliveries_sq = Subquery(
-            CompletedWork.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"))
-            .values("opportunity_access__opportunity_id")
-            .annotate(total=Sum("saved_approved_count"))
-            .values("total")[:1],
-            output_field=IntegerField(),
+        workers_agg = (
+            OpportunityAccess.objects.filter(opportunity_id__in=opp_ids)
+            .values("opportunity_id")
+            .annotate(
+                total_workers=Count("id", distinct=True),
+                started_learning=Count("id", filter=Q(date_learn_started__isnull=False), distinct=True),
+            )
         )
+        workers_by_opp = {
+            item["opportunity_id"]: {
+                "total_workers": item["total_workers"],
+                "started_learning": item["started_learning"],
+            }
+            for item in workers_agg
+        }
 
-        queryset = queryset.annotate(
-            total_workers=Count("opportunityaccess", distinct=True),
-            started_learning=started_learning_subquery(),
-            total_deliveries=Coalesce(total_deliveries_sq, Value(0)),
-            verified_deliveries=Coalesce(verified_deliveries_sq, Value(0)),
-            active_workers=F("started_learning") - F("inactive_workers"),
-        )
+        for opp in queryset:
+            delivery_stats = deliveries_by_opp.get(opp.id, {})
+            worker_stats = workers_by_opp.get(opp.id, {})
+            opp.total_deliveries = delivery_stats.get("total_deliveries", 0)
+            opp.verified_deliveries = delivery_stats.get("verified_deliveries", 0)
+            opp.total_workers = worker_stats.get("total_workers", 0)
+            opp.started_learning = worker_stats.get("started_learning", 0)
+            opp.active_workers = opp.started_learning - opp.inactive_workers
 
     return queryset
 
