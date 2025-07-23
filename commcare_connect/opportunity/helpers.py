@@ -375,7 +375,23 @@ def get_opportunity_list_data_lite(org, program_manager=False):
     return queryset
 
 
-def get_opportunity_list_data(organization, program_manager=False):
+def get_opportunity_list_id_qs(organization, program_manager=False):
+    today = now().date()
+    base_filter = Q(organization=organization)
+    if program_manager:
+        base_filter |= Q(managedopportunity__program__organization=organization)
+    return Opportunity.objects.filter(base_filter).annotate(
+        program=F("managedopportunity__program__name"),
+        status=Case(
+            When(Q(active=True) & Q(end_date__gte=today), then=Value(0)),  # Active
+            When(Q(active=True) & Q(end_date__lt=today), then=Value(1)),  # Ended
+            default=Value(2),  # Inactive
+            output_field=IntegerField(),
+        ),
+    )
+
+
+def get_opportunity_list_data(opp_ids, program_manager=False):
     today = now().date()
     three_days_ago = now() - timedelta(days=3)
 
@@ -387,11 +403,7 @@ def get_opportunity_list_data(organization, program_manager=False):
         output_field=IntegerField(),
     )
 
-    base_filter = Q(organization=organization)
-    if program_manager:
-        base_filter |= Q(managedopportunity__program__organization=organization)
-
-    queryset = Opportunity.objects.filter(base_filter).annotate(
+    queryset = Opportunity.objects.filter(id__in=opp_ids).annotate(
         program=F("managedopportunity__program__name"),
         pending_invites=pending_invites_subquery(),
         pending_approvals=Coalesce(pending_approvals_sq, Value(0)),
