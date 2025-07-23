@@ -701,7 +701,7 @@ class UserVisit(XFormBaseModel):
     def hq_link(self):
         hq_url = self.deliver_unit.app.hq_server.url
         domain = self.opportunity.deliver_app.cc_domain
-        return f"https://{hq_url}/a/{domain}/reports/form_data/{self.xform_id}/"
+        return f"{hq_url}/a/{domain}/reports/form_data/{self.xform_id}/"
 
     class Meta:
         constraints = [
