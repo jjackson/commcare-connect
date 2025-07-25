@@ -230,6 +230,15 @@
   </div>
   {% endif %}
 
+  {% if request.user.is_superuser %}
+  <hr class="h-px bg-gray-200 border-0">
+
+  <p class="text-sm font-medium text-brand-deep-purple">Further Information</p>
+  <div class="flex">
+    <a class="button button-md button-outline-rounded" href="{{ user_visit.hq_link }}">View Form in CommCareHQ <i class="fa-solid fa-arrow-right"></i></a>
+  </div>
+  {% endif %}
+
   <!-- Popup Modal -->
   <div x-cloak
        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
