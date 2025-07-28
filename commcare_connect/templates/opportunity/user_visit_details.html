@@ -230,6 +230,15 @@
   </div>
   {% endif %}
 
+  {% if request.user.is_superuser %}
+  <hr class="h-px bg-gray-200 border-0">
+
+  <p class="text-sm font-medium text-brand-deep-purple">Further Information</p>
+  <div class="flex">
+    <a class="button button-md button-outline-rounded" href="{{ user_visit.hq_link }}">View Form in CommCareHQ <i class="fa-solid fa-arrow-right"></i></a>
+  </div>
+  {% endif %}
+
   <!-- Popup Modal -->
   <div x-cloak
        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
@@ -300,7 +309,7 @@
   x-data="{showRejectModal: false, showApproveModal: false}"
   id="visit-actions"
   hx-swap-oob="true">
-{% if is_program_manager %}
+{% if request.is_opportunity_pm %}
   {% if user_visit.review_created_on %}
   <div class="flex gap-4">
     <form hx-post="{% url "opportunity:user_visit_review" request.org.slug user_visit.opportunity_id %}"
