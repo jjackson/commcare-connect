@@ -140,7 +140,7 @@
 - name: Configure CloudWatch agent
   template:
     src: cloudwatch-config.json.j2
-    dest: /opt/aws/amazon-cloudwatch-agent/etc/config.json
+    dest: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
     mode: 0644
   notify: restart cloudwatch agent
   tags:
