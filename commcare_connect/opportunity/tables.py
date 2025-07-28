@@ -2,14 +2,11 @@ import itertools
 from urllib.parse import urlencode
 
 import django_tables2 as tables
-from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Column, Layout, Row
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
-from django_filters import ChoiceFilter, DateRangeFilter, FilterSet, ModelChoiceFilter
 from django_tables2 import columns, utils
 
 from commcare_connect.opportunity.models import (
@@ -27,7 +24,6 @@ from commcare_connect.opportunity.models import (
     VisitReviewStatus,
     VisitValidationStatus,
 )
-from commcare_connect.users.models import User
 from commcare_connect.utils.tables import (
     STOP_CLICK_PROPAGATION_ATTR,
     TEXT_CENTER_ATTR,
@@ -45,79 +41,11 @@ class OpportunityContextTable(OrgContextTable):
         super().__init__(*args, **kwargs)
 
 
-class LearnStatusTable(OrgContextTable):
-    display_name = columns.Column(verbose_name="Name")
-    learn_progress = columns.Column(verbose_name="Modules Completed")
-    assessment_count = columns.Column(verbose_name="Number of Attempts")
-    assessment_status = columns.Column(verbose_name="Assessment Status")
-    details = columns.Column(verbose_name="", empty_values=())
-
-    class Meta:
-        model = OpportunityAccess
-        fields = ("display_name", "learn_progress", "assessment_status", "assessment_count")
-        sequence = ("display_name", "learn_progress")
-        orderable = False
-        empty_text = "No learn progress for users."
-
-    def render_details(self, record):
-        url = reverse(
-            "opportunity:user_learn_progress",
-            kwargs={"org_slug": self.org_slug, "opp_id": record.opportunity.id, "pk": record.pk},
-        )
-        return mark_safe(f'<a href="{url}">View Details</a>')
-
-
 def show_warning(record):
     if record.status not in (VisitValidationStatus.approved, VisitValidationStatus.rejected):
         if record.flagged:
             return "table-warning"
     return ""
-
-
-class UserVisitReviewFilter(FilterSet):
-    review_status = ChoiceFilter(choices=VisitReviewStatus.choices, empty_label="All Reviews")
-    user = ModelChoiceFilter(queryset=User.objects.none(), empty_label="All Users", to_field_name="username")
-    visit_date = DateRangeFilter()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.filters["user"].queryset = User.objects.filter(id__in=self.queryset.values_list("user_id", flat=True))
-        self.filters["user"].field.label_from_instance = lambda obj: obj.name
-
-        self.form.helper = FormHelper()
-        self.form.helper.disable_csrf = True
-        self.form.helper.form_class = "form-inline"
-        self.form.helper.layout = Layout(
-            Row(
-                Column("review_status", css_class="col-md-3"),
-                Column("user", css_class="col-md-3"),
-                Column("visit_date", css_class="col-md-3"),
-            )
-        )
-        for field_name in self.form.fields.keys():
-            self.form.fields[field_name].widget.attrs.update({"@change": "$refs.reviewFilterForm.submit()"})
-
-    class Meta:
-        model = UserVisit
-        fields = ["review_status", "user", "visit_date"]
-
-
-class UserVisitFilter(UserVisitReviewFilter):
-    status = ChoiceFilter(choices=VisitValidationStatus.choices, empty_label="All Visits")
-
-    def __init__(self, *args, **kwargs):
-        managed_opportunity = kwargs.pop("managed_opportunity", False)
-        super().__init__(*args, **kwargs)
-        fields = ["status"]
-        if managed_opportunity:
-            fields.append("review_status")
-        self.form.helper.layout = Layout(Row(*[Column(field, css_class="col-md-3") for field in fields]))
-        for field in fields:
-            self.form.fields[field].widget.attrs.update({"@change": "$refs.visitFilterForm.submit()"})
-
-    class Meta:
-        model = UserVisit
-        fields = ["status", "review_status"]
 
 
 class UserVisitTable(OrgContextTable):
@@ -165,26 +93,6 @@ class UserVisitTable(OrgContextTable):
         empty_text = "No forms."
         orderable = False
         row_attrs = {"class": show_warning}
-        template_name = "django_tables2/bootstrap5.html"
-
-
-class OpportunityPaymentTable(OrgContextTable):
-    display_name = columns.Column(verbose_name="Name")
-    username = columns.Column(accessor="user__username", visible=False)
-    view_payments = columns.Column(verbose_name="", empty_values=())
-
-    def render_view_payments(self, record):
-        url = reverse(
-            "opportunity:worker_list",
-            kwargs={"org_slug": self.org_slug, "opp_id": record.opportunity.id},
-        )
-        return mark_safe(f'<a href="{url}?active_tab=payments">View Details</a>')
-
-    class Meta:
-        model = OpportunityAccess
-        fields = ("display_name", "username", "payment_accrued", "total_paid", "total_confirmed_paid")
-        orderable = False
-        empty_text = "No user have payments accrued yet."
 
 
 class AggregateColumn(columns.Column):
@@ -238,37 +146,6 @@ class UserStatusTable(OrgContextTable):
         if not getattr(record.opportunity_access, "accepted", False):
             return "---"
         return record.opportunity_access.display_name
-
-    def render_view_profile(self, record):
-        if not getattr(record.opportunity_access, "accepted", False):
-            resend_invite_url = reverse(
-                "opportunity:resend_user_invite", args=(self.org_slug, record.opportunity.id, record.id)
-            )
-            urls = [resend_invite_url]
-            buttons = [
-                """<button title="Resend invitation"
-                hx-post="{}" hx-target="#modalBodyContent" hx-trigger="click"
-                hx-on::after-request="handleResendInviteResponse(event)"
-                class="btn btn-sm btn-success">Resend</button>"""
-            ]
-            if record.status == UserInviteStatus.not_found:
-                invite_delete_url = reverse(
-                    "opportunity:user_invite_delete", args=(self.org_slug, record.opportunity.id, record.id)
-                )
-                urls.append(invite_delete_url)
-                buttons.append(
-                    """<button title="Delete invitation"
-                            hx-post="{}" hx-swap="none"
-                            hx-confirm="Please confirm to delete the User Invite."
-                            class="btn btn-sm btn-danger" type="button"><i class="bi bi-trash"></i></button>"""
-                )
-            button_html = f"""<div class="d-flex gap-1">{"".join(buttons)}</div>"""
-            return format_html(button_html, *urls)
-        url = reverse(
-            "opportunity:user_profile",
-            kwargs={"org_slug": self.org_slug, "opp_id": record.opportunity.id, "pk": record.opportunity_access_id},
-        )
-        return format_html('<a class="btn btn-primary btn-sm" href="{}">View Profile</a>', url)
 
     def render_started_learning(self, record, value):
         return date_with_time_popup(self, value)
@@ -468,7 +345,6 @@ class UserVisitReviewTable(OrgContextTable):
             "flag_reason",
         )
         empty_text = "No visits submitted for review."
-        template_name = "django_tables2/bootstrap5.html"
 
     def render_user_visit(self, record):
         url = reverse(
