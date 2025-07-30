@@ -31,6 +31,7 @@ from commcare_connect.utils.tables import (
     DurationColumn,
     IndexColumn,
     OrgContextTable,
+    SelectableColumnTable,
     merge_attrs,
 )
 
@@ -742,7 +743,7 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
         return mark_safe(html)
 
 
-class UserVisitVerificationTable(tables.Table):
+class UserVisitVerificationTable(SelectableColumnTable):
     date_time = columns.DateTimeColumn(verbose_name="Date", accessor="visit_date", format="d M, Y H:i")
     entity_name = columns.Column(verbose_name="Entity Name")
     deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
@@ -795,7 +796,8 @@ class UserVisitVerificationTable(tables.Table):
         organization = kwargs.pop("organization", None)
         super().__init__(*args, **kwargs)
         self.use_view_url = True
-        self.attrs = {"x-data": "{selectedRow: null}"}
+        super().inject_props_into_attr("x-data", "selectedRow: null")
+
         self.row_attrs = {
             "hx-get": lambda record: reverse(
                 "opportunity:user_visit_details",
