@@ -141,7 +141,6 @@ class SelectableColumnTable(tables.Table):
             "class": "min-w-full divide-y divide-gray-200",
             "x-data": """{
                 selectAll: false,
-                selected: [],
                 toggleSelectAll() {
                     this.selectAll = !this.selectAll;
                     if (this.selectAll) {
