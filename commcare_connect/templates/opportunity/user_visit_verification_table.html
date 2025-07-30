@@ -21,7 +21,7 @@
           $dispatch('reload_table')
         }
       }"
-      @change="updateUrlAndRequest()"
+      @change="!$event.target.matches('input[name=row_select], input[name=select_all]') ? updateUrlAndRequest() : null"
       hx-get="{% url 'opportunity:user_visit_verification_table' request.org.slug opportunity_access.opportunity.id opportunity_access.id %}"
       hx-trigger="reload_table from:body"
       hx-swap="outerHTML"
