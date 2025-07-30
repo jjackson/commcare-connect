@@ -5,6 +5,7 @@
       x-data="{
         activeTab: '{{ request.GET.filter_status|default:"all" }}',
         page: {{ request.GET.page|default:"1" }},
+        selected:[],
         updateUrlAndRequest() {
           // Update URL params before HTMX call so table headers can pick them up
           // this is done specifically because sortable_header using referer to get the base url.
@@ -26,7 +27,7 @@
       hx-trigger="reload_table from:body"
       hx-swap="outerHTML"
 >
-  <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14 better-tabs">
+  <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14 better-tabs overflow-x-auto">
     <div class="tabs">
       {% for tab in tabs %}
         <label class="tab" :class="{ 'tab-active': activeTab == '{{ tab.name }}'}">
@@ -53,6 +54,10 @@
         <i class="fa-solid fa-xmark text-brand-deep-purple cursor-pointer me-2" x-cloak x-show="selectedDate != ''" @click="clear()"></i>
         <i class="fa-solid fa-chevron-right text-brand-deep-purple cursor-pointer" @click="navigateDate(1)"></i>
       </div>
+    </div>
+    <div x-show="selected?.length" class="flex gap-2">
+      <button class="button button-md positive-light">Approve</button>
+      <button class="button button-md negative-light">Reject</button>
     </div>
 
   </div>
