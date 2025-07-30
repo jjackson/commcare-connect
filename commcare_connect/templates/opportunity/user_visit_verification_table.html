@@ -6,6 +6,8 @@
         activeTab: '{{ request.GET.filter_status|default:"all" }}',
         page: {{ request.GET.page|default:"1" }},
         selected:[],
+        showApproveModal: false,
+        showRejectModal: false,
         updateUrlAndRequest() {
           // Update URL params before HTMX call so table headers can pick them up
           // this is done specifically because sortable_header using referer to get the base url.
@@ -56,8 +58,8 @@
       </div>
     </div>
     <div x-show="selected?.length" class="flex gap-2">
-      <button class="button button-md positive-light">Approve</button>
-      <button class="button button-md negative-light">Reject</button>
+      <button type="button" @click="showApproveModal = true;" class="button button-md positive-light">Approve</button>
+      <button type="button" @click="showRejectModal = true;" class="button button-md negative-light">Reject</button>
     </div>
 
   </div>
@@ -76,3 +78,59 @@
   <input type="hidden" name="page" value="{{ request.GET.page|default:1 }}" x-model="page" />
   <input type="hidden" name="sort" value="{{ request.GET.sort|default:'' }}" />
 </form>
+
+
+<!-- Approve Modal -->
+<div x-cloak x-show="showApproveModal" x-transition.opacity class="modal-backdrop">
+    <div @click.away="showApproveModal = false" x-transition class="modal">
+      <div class="header flex justify-between items-center">
+        <h2 class="title">Justification for Approval</h2>
+        <button @click="showApproveModal = false" class="button-icon" aria-label="Close">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <form hx-post="{% url "opportunity:approve_visit" org_slug=request.org.slug pk=user_visit.id %}"
+        hx-swap="none"
+        @submit="showApproveModal = false">
+        {% csrf_token %}
+        <div class="py-4">
+          <textarea required class="base-textarea" id="justification" rows="3" name="justification"
+            placeholder="Please provide a reason for approving flagged visits.">{{ justification }}</textarea>
+        </div>
+        <div class="footer flex justify-end">
+          <button @click="showApproveModal = false" type="button" class="button button-md outline-style">
+            Close
+          </button>
+          <button type="submit" class="button button-md positive-dark">Approve</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<!-- Rejection Modal -->
+   <div x-cloak x-show="showRejectModal" x-transition.opacity class="modal-backdrop">
+    <div @click.away="showRejectModal = false" x-transition class="modal">
+      <div class="header flex justify-between items-center">
+        <h2 class="title">Reason for Rejection</h2>
+        <button @click="showRejectModal = false" class="button-icon" aria-label="Close">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <form
+        hx-swap="none"
+        @submit="showRejectModal = false">
+        {% csrf_token %}
+        <div class="py-4">
+          <textarea class="base-textarea" id="rejection-reason" rows="3" name="reason" id="reason"
+            placeholder="Please provide a reason for rejecting visit.">{{ reason }}</textarea>
+        </div>
+        <div class="footer flex justify-end">
+          <button @click="showRejectModal = false" type="button" class="button button-md outline-style">
+            Close
+          </button>
+          <button type="submit" class="button button-md negative-dark">
+            Reject
+          </button>
+        </div>
+      </form>
+    </div>

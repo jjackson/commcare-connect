@@ -836,37 +836,55 @@ def send_message_mobile_users(request, org_slug=None, opp_id=None):
 
 @org_member_required
 @require_POST
-def approve_visit(request, org_slug=None, pk=None):
-    user_visit = UserVisit.objects.get(pk=pk)
-    if user_visit.status != VisitValidationStatus.approved or user_visit.review_status == VisitReviewStatus.disagree:
-        user_visit.status = VisitValidationStatus.approved
-        if user_visit.opportunity.managed:
-            user_visit.review_created_on = now()
-            if user_visit.review_status == VisitReviewStatus.disagree:
-                user_visit.review_status = VisitReviewStatus.pending
+def approve_visits(request, org_slug, opp_id):
+    visit_ids = request.POST.get("visit_ids")
+    visits = UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id).filter(
+        ~Q(status=VisitValidationStatus.approved) | Q(review_status=VisitReviewStatus.disagree)
+    )
 
-            if user_visit.flagged:
+    today = now()
+    user_ids = set()
+    for visit in visits:
+        user_ids.add(visit.user_id)
+        visit.status = VisitValidationStatus.approved
+
+        if visit.opportunity.managed:
+            visit.review_created_on = today
+
+            if visit.review_status == VisitReviewStatus.disagree:
+                visit.review_status = VisitReviewStatus.pending
+
+            if visit.flagged:
                 justification = request.POST.get("justification")
                 if not justification:
-                    messages.error(request, "Justification is mandatory for flagged visits.")
-                user_visit.justification = justification
+                    return HttpResponse(
+                        "Justification is mandatory for flagged visits.",
+                        status=400,
+                        headers={"HX-Trigger": "form_error"},
+                    )
+                visit.justification = justification
 
-        user_visit.save()
-        update_payment_accrued(opportunity=user_visit.opportunity, users=[user_visit.user], incremental=True)
+    UserVisit.objects.bulk_update(visits, ["status", "review_created_on", "review_status", "justification"])
+    update_payment_accrued(opportunity=visits[0].opportunity, users=list(user_ids), incremental=True)
 
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
 
 @org_member_required
 @require_POST
-def reject_visit(request, org_slug=None, pk=None):
-    user_visit = UserVisit.objects.get(pk=pk)
-    reason = request.POST.get("reason")
-    user_visit.status = VisitValidationStatus.rejected
-    user_visit.reason = reason
-    user_visit.save()
-    access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=user_visit.opportunity_id)
-    update_payment_accrued(opportunity=access.opportunity, users=[access.user])
+def reject_visits(request, org_slug=None, opp_id=None):
+    opp = get_opportunity_or_404(opp_id, org_slug)
+    visit_ids = request.POST.get("visit_ids", [])
+    reason = request.POST.get("reason", "").strip()
+
+    UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id).update(
+        status=VisitValidationStatus.rejected, reason=reason
+    )
+    user_ids = list(
+        UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id).values_list("user_id", flat=True).distinct()
+    )
+
+    update_payment_accrued(opportunity=opp, users=user_ids)
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
 
