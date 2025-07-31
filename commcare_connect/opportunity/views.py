@@ -879,9 +879,9 @@ def reject_visits(request, org_slug=None, opp_id=None):
     visit_ids = [int(vid) for vid in visit_ids if vid.isdigit()]
     reason = request.POST.get("reason", "").strip()
 
-    UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id).update(
-        status=VisitValidationStatus.rejected, reason=reason
-    )
+    UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id).exclude(
+        status=VisitValidationStatus.rejected
+    ).update(status=VisitValidationStatus.rejected, reason=reason)
     if visit_ids:
         visit = UserVisit.objects.get(id=visit_ids[0])
         update_payment_accrued(opportunity=opp, users=[visit.user])
