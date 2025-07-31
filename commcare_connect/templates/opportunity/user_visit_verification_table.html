@@ -89,13 +89,19 @@
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
-      <form hx-post="{% url "opportunity:approve_visit" org_slug=request.org.slug pk=user_visit.id %}"
+      <form hx-post="{% url "opportunity:approve_visits" org_slug=request.org.slug opp_id=opportunity_access.opportunity.id %}"
         hx-swap="none"
         @submit="showApproveModal = false">
         {% csrf_token %}
+        <template x-for="id in selected" :key="id">
+            <input type="hidden" name="visit_ids[]" :value="id">
+        </template>
+
         <div class="py-4">
           <textarea required class="base-textarea" id="justification" rows="3" name="justification"
             placeholder="Please provide a reason for approving flagged visits.">{{ justification }}</textarea>
+             <p x-show="selected.length > 0" class="text-sm text-gray-700 mb-2">You have selected
+              <b><span x-text="selected.length"></span> visit<span x-show="selected.length !== 1">s</span></b> for approval.</p>
         </div>
         <div class="footer flex justify-end">
           <button @click="showApproveModal = false" type="button" class="button button-md outline-style">
@@ -116,14 +122,19 @@
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
-      <form
+       <form hx-post="{% url "opportunity:reject_visits" org_slug=request.org.slug opp_id=opportunity_access.opportunity.id %}"
         hx-swap="none"
         @submit="showRejectModal = false">
         {% csrf_token %}
         <div class="py-4">
           <textarea class="base-textarea" id="rejection-reason" rows="3" name="reason" id="reason"
             placeholder="Please provide a reason for rejecting visit.">{{ reason }}</textarea>
+            <p x-show="selected.length > 0" class="text-sm text-gray-700 mb-2">You have selected
+              <b><span x-text="selected.length"></span> visit<span x-show="selected.length !== 1">s</span></b> for rejection.</p>
         </div>
+         <template x-for="id in selected" :key="id">
+            <input type="hidden" name="visit_ids[]" :value="id">
+        </template>
         <div class="footer flex justify-end">
           <button @click="showRejectModal = false" type="button" class="button button-md outline-style">
             Close

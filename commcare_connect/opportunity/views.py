@@ -837,15 +837,15 @@ def send_message_mobile_users(request, org_slug=None, opp_id=None):
 @org_member_required
 @require_POST
 def approve_visits(request, org_slug, opp_id):
-    visit_ids = request.POST.get("visit_ids")
+    visit_ids = request.POST.getlist("visit_ids[]")
+    visit_ids = [int(vid) for vid in visit_ids if vid.isdigit()]
+
     visits = UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id).filter(
         ~Q(status=VisitValidationStatus.approved) | Q(review_status=VisitReviewStatus.disagree)
     )
 
     today = now()
-    user_ids = set()
     for visit in visits:
-        user_ids.add(visit.user_id)
         visit.status = VisitValidationStatus.approved
 
         if visit.opportunity.managed:
@@ -865,7 +865,8 @@ def approve_visits(request, org_slug, opp_id):
                 visit.justification = justification
 
     UserVisit.objects.bulk_update(visits, ["status", "review_created_on", "review_status", "justification"])
-    update_payment_accrued(opportunity=visits[0].opportunity, users=list(user_ids), incremental=True)
+    if visits:
+        update_payment_accrued(opportunity=visits[0].opportunity, users=[visits[0].user], incremental=True)
 
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
@@ -874,17 +875,16 @@ def approve_visits(request, org_slug, opp_id):
 @require_POST
 def reject_visits(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
-    visit_ids = request.POST.get("visit_ids", [])
+    visit_ids = request.POST.getlist("visit_ids[]")
+    visit_ids = [int(vid) for vid in visit_ids if vid.isdigit()]
     reason = request.POST.get("reason", "").strip()
 
     UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id).update(
         status=VisitValidationStatus.rejected, reason=reason
     )
-    user_ids = list(
-        UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id).values_list("user_id", flat=True).distinct()
-    )
-
-    update_payment_accrued(opportunity=opp, users=user_ids)
+    if visit_ids:
+        visit = UserVisit.objects.get(id=visit_ids[0])
+        update_payment_accrued(opportunity=opp, users=[visit.user])
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
 
