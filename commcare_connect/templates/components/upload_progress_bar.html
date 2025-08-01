@@ -35,7 +35,7 @@
       <div>
         <a class="button button-sm text-brand-deep-purple"
            href="{% url 'opportunity:download_export' request.org.slug task_id %}">
-          <i class="fa-regular fa-circle-down"></i> Download Export
+          <i class="fa-solid fa-circle-down"></i> Download Export
         </a>
       </div>
     {% else %}
@@ -70,7 +70,7 @@
               <div class="modal-content p-4 flex items-center justify-between">
                 <h5 class="text-lg font-medium" id="exportStatusLabel">Status</h5>
                 <button @click="closeModal()" class="button-icon" aria-label="Close" id="exportStatusClose">
-                  <i class="fa-light fa-xmark"></i>
+                  <i class="fa-solid fa-xmark"></i>
                 </button>
               </div>
               <div class="flex items-center justify-between p-4 mb-4 rounded-lg">
