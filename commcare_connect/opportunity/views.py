@@ -1454,6 +1454,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["organization"] = self.request.org
+        kwargs["is_opportunity_pm"] = self.request.is_opportunity_pm
         return kwargs
 
     def get_context_data(self, **kwargs):

@@ -31,7 +31,6 @@ from commcare_connect.utils.tables import (
     DurationColumn,
     IndexColumn,
     OrgContextTable,
-    SelectableColumnTable,
     merge_attrs,
 )
 
@@ -743,7 +742,27 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
         return mark_safe(html)
 
 
-class UserVisitVerificationTable(SelectableColumnTable):
+class UserVisitVerificationTable(tables.Table):
+    select = tables.CheckBoxColumn(
+        accessor="pk",
+        attrs={
+            "th__input": {
+                "@click": "toggleSelectAll()",
+                "x-model": "selectAll",
+                "name": "select_all",
+                "type": "checkbox",
+                "class": "checkbox",
+            },
+            "td__input": {
+                "x-model": "selected",
+                "@click.stop": "",
+                "name": "row_select",
+                "type": "checkbox",
+                "class": "checkbox",
+                ":value": "id",
+            },
+        },
+    )
     date_time = columns.DateTimeColumn(verbose_name="Date", accessor="visit_date", format="d M, Y H:i")
     entity_name = columns.Column(verbose_name="Entity Name")
     deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
@@ -781,6 +800,7 @@ class UserVisitVerificationTable(SelectableColumnTable):
     class Meta:
         model = UserVisit
         sequence = (
+            "select",
             "date_time",
             "entity_name",
             "deliver_unit",
@@ -794,9 +814,29 @@ class UserVisitVerificationTable(SelectableColumnTable):
 
     def __init__(self, *args, **kwargs):
         organization = kwargs.pop("organization", None)
+        self.is_opportunity_pm = kwargs.pop("is_opportunity_pm", False)
         super().__init__(*args, **kwargs)
         self.use_view_url = True
-        super().inject_props_into_attr("x-data", "selectedRow: null")
+        self.attrs = {
+            "x-data": """{
+                      selectedRow: null,
+                      selectAll: false,
+                      toggleSelectAll() {
+                            this.selectAll = !this.selectAll;
+                            if (this.selectAll) {
+                                this.selected =
+                                Array.from(document.querySelectorAll('input[type=checkbox][x-model=selected]'))
+                                    .map(cb => cb.value);
+                            } else {
+                                this.selected = [];
+                            }
+                        },
+                       updateSelectAll() {
+                            const checkboxes = document.querySelectorAll('input[type=checkbox][x-model=selected]');
+                            this.selectAll = checkboxes.length > 0 && this.selected.length === checkboxes.length;
+                }}""",
+            "@change": "updateSelectAll()",
+        }
 
         self.row_attrs = {
             "hx-get": lambda record: reverse(
