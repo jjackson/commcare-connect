@@ -755,11 +755,11 @@ class UserVisitVerificationTable(tables.Table):
             },
             "td__input": {
                 "x-model": "selected",
-                "@click.stop": "",
+                "@click.stop": "",  # used to stop click propagation
                 "name": "row_select",
                 "type": "checkbox",
                 "class": "checkbox",
-                ":value": "id",
+                "value": lambda record: record.pk,
             },
         },
     )
@@ -811,37 +811,30 @@ class UserVisitVerificationTable(tables.Table):
         )
         fields = []
         empty_text = "No Visits for this filter."
-
-    def __init__(self, *args, **kwargs):
-        organization = kwargs.pop("organization", None)
-        self.is_opportunity_pm = kwargs.pop("is_opportunity_pm", False)
-        super().__init__(*args, **kwargs)
-        self.use_view_url = True
-        self.attrs = {
+        attrs = {
             "x-data": """{
-                      selectedRow: null,
-                      selectAll: false,
-                      toggleSelectAll() {
-                            this.selectAll = !this.selectAll;
-                            if (this.selectAll) {
-                                this.selected =
-                                Array.from(document.querySelectorAll('input[type=checkbox][x-model=selected]'))
-                                    .map(cb => cb.value);
-                            } else {
-                                this.selected = [];
-                            }
-                        },
-                       updateSelectAll() {
-                            const checkboxes = document.querySelectorAll('input[type=checkbox][x-model=selected]');
-                            this.selectAll = checkboxes.length > 0 && this.selected.length === checkboxes.length;
+                selectedRow: null,
+                selectAll: false,
+                toggleSelectAll() {
+                    this.selectAll = !this.selectAll;
+                    if (this.selectAll) {
+                        this.selected =
+                        Array.from(document.querySelectorAll('input[type=checkbox][x-model=selected]'))
+                            .map(cb => cb.value);
+                    } else {
+                        this.selected = [];
+                    }
+                },
+                updateSelectAll() {
+                    const checkboxes = document.querySelectorAll('input[type=checkbox][x-model=selected]');
+                    this.selectAll = checkboxes.length > 0 && this.selected.length === checkboxes.length;
                 }}""",
             "@change": "updateSelectAll()",
         }
-
-        self.row_attrs = {
-            "hx-get": lambda record: reverse(
+        row_attrs = {
+            "hx-get": lambda record, table: reverse(
                 "opportunity:user_visit_details",
-                args=[organization.slug, record.opportunity_id, record.pk],
+                args=[table.organization.slug, record.opportunity_id, record.pk],
             ),
             "hx-trigger": "click",
             "hx-indicator": "#visit-loading-indicator",
@@ -851,6 +844,12 @@ class UserVisitVerificationTable(tables.Table):
             "@click": lambda record: f"selectedRow = {record.id}",
             ":class": lambda record: f"selectedRow == {record.id} && 'active'",
         }
+
+    def __init__(self, *args, **kwargs):
+        self.organization = kwargs.pop("organization", None)
+        self.is_opportunity_pm = kwargs.pop("is_opportunity_pm", False)
+        super().__init__(*args, **kwargs)
+        self.use_view_url = True
 
     def get_icons(self, statuses):
         status_meta = {

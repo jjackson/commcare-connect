@@ -1,18 +1,17 @@
 {% load django_tables2 %}
 
-<form class="flex flex-col w-full gap-2"
-      x-cloak
-      x-data="{
+<div x-cloak
+     x-data="{
         activeTab: '{{ request.GET.filter_status|default:"all" }}',
         page: {{ request.GET.page|default:"1" }},
-        selected:[],
+        selected: [],
         showApproveModal: false,
         showRejectModal: false,
         updateUrlAndRequest() {
-          // Update URL params before HTMX call so table headers can pick them up
+           // Update URL params before HTMX call so table headers can pick them up
           // this is done specifically because sortable_header using referer to get the base url.
           const url = new URL(window.location);
-          const formData = new FormData(this.$el);
+          const formData = new FormData(this.$refs.visitForm);
           const params = new URLSearchParams();
           for (let [key, value] of formData.entries()) {
             if (value && String(value).trim() !== '') {
@@ -23,12 +22,16 @@
           window.history.pushState({}, '', url.toString());
           $dispatch('reload_table')
         }
-      }"
-      @change="!$event.target.matches('input[name=row_select], input[name=select_all]') ? updateUrlAndRequest() : null"
+     }"
+     @change="!$event.target.matches('input[name=row_select], input[name=select_all]') ? updateUrlAndRequest() : null"
+>
+ <form
+      x-ref="visitForm"
+      class="flex flex-col w-full gap-2"
       hx-get="{% url 'opportunity:user_visit_verification_table' request.org.slug opportunity_access.opportunity.id opportunity_access.id %}"
       hx-trigger="reload_table from:body"
       hx-swap="outerHTML"
->
+  >
   <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14 better-tabs overflow-x-auto">
     <div class="tabs">
       {% for tab in tabs %}
@@ -57,12 +60,12 @@
         <i class="fa-solid fa-chevron-right text-brand-deep-purple cursor-pointer" @click="navigateDate(1)"></i>
       </div>
     </div>
-    {% if not request.is_opportunity_pm and request.org_membership and not request.org_membership.is_viewer %}
+    {% comment %} {% if not request.is_opportunity_pm and request.org_membership and not request.org_membership.is_viewer %} {% endcomment %}
       <div x-show="selected?.length" class="flex gap-2">
         <button type="button" @click="showRejectModal = true;" class="button button-md outline-style">Reject All</button>
         <button type="button" @click="showApproveModal = true;" class="button button-md primary-dark">Approve All</button>
       </div>
-    {% endif %}
+    {% comment %} {% endif %} {% endcomment %}
 
   </div>
 
@@ -102,8 +105,8 @@
         <div class="py-4">
           <textarea required class="base-textarea" id="justification" rows="3" name="justification"
             placeholder="Please provide a reason for approving flagged visits.">{{ justification }}</textarea>
-             <p x-show="selected.length > 0" class="text-sm text-gray-700 mb-2">You have selected
-              <b><span x-text="selected.length"></span> visit<span x-show="selected.length !== 1">s</span></b> for approval.</p>
+             <p x-show="selected?.length > 0" class="text-sm text-gray-700 mb-2">You have selected
+              <b><span x-text="selected?.length"></span> visit<span x-show="selected?.length !== 1">s</span></b> for approval.</p>
         </div>
         <div class="footer flex justify-end">
           <button @click="showApproveModal = false" type="button" class="button button-md outline-style">
@@ -131,8 +134,8 @@
         <div class="py-4">
           <textarea class="base-textarea" id="rejection-reason" rows="3" name="reason" id="reason"
             placeholder="Please provide a reason for rejecting visit.">{{ reason }}</textarea>
-            <p x-show="selected.length > 0" class="text-sm text-gray-700 mb-2">You have selected
-              <b><span x-text="selected.length"></span> visit<span x-show="selected.length !== 1">s</span></b> for rejection.</p>
+            <p x-show="selected?.length > 0" class="text-sm text-gray-700 mb-2">You have selected
+              <b><span x-text="selected?.length"></span> visit<span x-show="selected?.length !== 1">s</span></b> for rejection.</p>
         </div>
          <template x-for="id in selected" :key="id">
             <input type="hidden" name="visit_ids[]" :value="id">
@@ -147,3 +150,4 @@
         </div>
       </form>
     </div>
+</div>
