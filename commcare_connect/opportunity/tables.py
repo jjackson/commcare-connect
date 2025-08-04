@@ -833,6 +833,7 @@ class UserVisitVerificationTable(tables.Table):
         self.organization = kwargs.pop("organization", None)
         self.is_opportunity_pm = kwargs.pop("is_opportunity_pm", False)
         super().__init__(*args, **kwargs)
+        self.columns["select"].column.visible = not self.is_opportunity_pm
         self.use_view_url = True
 
     def get_icons(self, statuses):
