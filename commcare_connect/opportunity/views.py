@@ -840,20 +840,20 @@ def approve_visits(request, org_slug, opp_id):
     visit_ids = request.POST.getlist("visit_ids[]")
     visit_ids = [int(vid) for vid in visit_ids if vid.isdigit()]
 
-    visits = UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id).filter(
-        ~Q(status=VisitValidationStatus.approved) | Q(review_status=VisitReviewStatus.disagree)
+    visits = (
+        UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id)
+        .filter(~Q(status=VisitValidationStatus.approved) | Q(review_status=VisitReviewStatus.disagree))
+        .prefetch_related("opportunity")
+        .only("status", "review_status", "flagged", "justification", "review_created_on")
     )
 
     today = now()
     for visit in visits:
         visit.status = VisitValidationStatus.approved
-
         if visit.opportunity.managed:
             visit.review_created_on = today
-
             if visit.review_status == VisitReviewStatus.disagree:
                 visit.review_status = VisitReviewStatus.pending
-
             if visit.flagged:
                 justification = request.POST.get("justification")
                 if not justification:
