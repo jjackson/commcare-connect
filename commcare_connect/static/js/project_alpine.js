@@ -14,6 +14,7 @@ document.addEventListener('alpine:init', () => {
     selected: [],
     showApproveModal: false,
     showRejectModal: false,
+    selectAll: false,
 
     updateUrlAndRequest() {
       const url = new URL(window.location);
@@ -30,11 +31,7 @@ document.addEventListener('alpine:init', () => {
       window.history.pushState({}, '', url.toString());
       this.$dispatch('reload_table');
     },
-  }));
 
-  Alpine.data('visitVerificationTable', () => ({
-    selectedRow: null,
-    selectAll: false,
     toggleSelectAll() {
       this.selectAll = !this.selectAll;
       if (this.selectAll) {
@@ -45,6 +42,7 @@ document.addEventListener('alpine:init', () => {
         this.selected = [];
       }
     },
+
     updateSelectAll() {
       const checkboxes = document.querySelectorAll(
         'input[type=checkbox][x-model=selected]',
