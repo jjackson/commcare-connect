@@ -1,28 +1,7 @@
 {% load django_tables2 %}
 
 <div x-cloak
-     x-data="{
-        activeTab: '{{ request.GET.filter_status|default:"all" }}',
-        page: {{ request.GET.page|default:"1" }},
-        selected: [],
-        showApproveModal: false,
-        showRejectModal: false,
-        updateUrlAndRequest() {
-           // Update URL params before HTMX call so table headers can pick them up
-          // this is done specifically because sortable_header using referer to get the base url.
-          const url = new URL(window.location);
-          const formData = new FormData(this.$refs.visitForm);
-          const params = new URLSearchParams();
-          for (let [key, value] of formData.entries()) {
-            if (value && String(value).trim() !== '') {
-              params.set(key, value);
-            }
-          }
-          url.search = params.toString();
-          window.history.pushState({}, '', url.toString());
-          $dispatch('reload_table')
-        }
-     }"
+     x-data="visitVerification('{{ request.GET.filter_status|default:"all" }}', {{ request.GET.page|default:"1" }})"
      @change="!$event.target.matches('input[name=row_select], input[name=select_all]') ? updateUrlAndRequest() : null"
 >
  <form
