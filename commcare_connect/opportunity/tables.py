@@ -812,7 +812,7 @@ class UserVisitVerificationTable(tables.Table):
         fields = []
         empty_text = "No Visits for this filter."
         attrs = {
-            "x-data": "visitVerificationTable()",
+            "x-data": "{selectedRow: null}",
             "@change": "updateSelectAll()",
         }
         row_attrs = {
