@@ -31,4 +31,26 @@ document.addEventListener('alpine:init', () => {
       this.$dispatch('reload_table');
     },
   }));
+
+  Alpine.data('visitVerificationTable', () => ({
+    selectedRow: null,
+    selectAll: false,
+    toggleSelectAll() {
+      this.selectAll = !this.selectAll;
+      if (this.selectAll) {
+        this.selected = Array.from(
+          document.querySelectorAll('input[type=checkbox][x-model=selected]'),
+        ).map((cb) => cb.value);
+      } else {
+        this.selected = [];
+      }
+    },
+    updateSelectAll() {
+      const checkboxes = document.querySelectorAll(
+        'input[type=checkbox][x-model=selected]',
+      );
+      this.selectAll =
+        checkboxes.length > 0 && this.selected.length === checkboxes.length;
+    },
+  }));
 });
