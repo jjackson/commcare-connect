@@ -827,6 +827,8 @@ class UserVisitVerificationTable(tables.Table):
             "hx-swap": "innerHTML",
             "@click": lambda record: f"selectedRow = {record.id}",
             ":class": lambda record: f"selectedRow == {record.id} && 'active'",
+            "data-visit-id": lambda record: record.pk,
+            "data-visit-status": lambda record: record.status,
         }
 
     def __init__(self, *args, **kwargs):

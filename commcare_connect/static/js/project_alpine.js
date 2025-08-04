@@ -16,6 +16,42 @@ document.addEventListener('alpine:init', () => {
     showRejectModal: false,
     selectAll: false,
 
+    init() {
+      this.updateVisitStatusMap();
+    },
+
+    updateVisitStatusMap() {
+      const tableRows = document.querySelectorAll(
+        'tbody tr[data-visit-status]',
+      );
+      this.visitStatusMap = {};
+      tableRows.forEach((row) => {
+        const visitId = row.getAttribute('data-visit-id');
+        const status = row.getAttribute('data-visit-status');
+        if (visitId && status) {
+          this.visitStatusMap[visitId] = status;
+        }
+      });
+    },
+
+    get selectedStatusCounts() {
+      const counts = {
+        pending: 0,
+        approved: 0,
+        rejected: 0,
+        total: this.selected.length,
+      };
+
+      this.selected.forEach((visitId) => {
+        const status = this.visitStatusMap[visitId];
+        if (status === 'pending') counts.pending++;
+        else if (status === 'approved') counts.approved++;
+        else if (status === 'rejected') counts.rejected++;
+      });
+
+      return counts;
+    },
+
     updateUrlAndRequest() {
       const url = new URL(window.location);
       const formData = new FormData(this.$refs.visitForm);
@@ -30,6 +66,10 @@ document.addEventListener('alpine:init', () => {
       url.search = params.toString();
       window.history.pushState({}, '', url.toString());
       this.$dispatch('reload_table');
+
+      this.$nextTick(() => {
+        this.updateVisitStatusMap();
+      });
     },
 
     toggleSelectAll() {
