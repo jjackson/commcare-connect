@@ -2,6 +2,7 @@ import datetime
 import logging
 
 import httpx
+import sentry_sdk
 from allauth.utils import build_absolute_uri
 from django.conf import settings
 from django.core.cache import cache
@@ -441,8 +442,12 @@ def fetch_exchange_rates(date=None, currency=None):
 
     if currency is None:
         currencies = Opportunity.objects.values_list("currency", flat=True).distinct()
-        for currencies in currency:
-            rate = rates[currency]
+        for currency in currencies:
+            rate = rates.get(currency)
+            if rate is None:
+                message = f"Invalid currency for opportunity: {currency}"
+                sentry_sdk.capture_message(message=message, level="error")
+                continue
             ExchangeRate.objects.create(currency_code=currency, rate=rate, rate_date=date)
     else:
         rate = rates[currency]
