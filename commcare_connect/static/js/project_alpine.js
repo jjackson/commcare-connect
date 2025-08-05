@@ -12,8 +12,8 @@ document.addEventListener('alpine:init', () => {
     activeTab: initialTab,
     page: defaultPage,
     selected: [],
-    showApproveModal: false,
-    showRejectModal: false,
+    showBulkApproveModal: false,
+    showBulkRejectModal: false,
     selectAll: false,
 
     init() {

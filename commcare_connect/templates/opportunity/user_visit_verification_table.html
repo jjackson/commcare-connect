@@ -41,8 +41,8 @@
     </div>
     {% if not request.is_opportunity_pm and request.org_membership and not request.org_membership.is_viewer %}
       <div x-show="selected?.length" class="flex gap-2">
-        <button type="button" @click="showRejectModal = true;" class="button button-md outline-style">Reject All</button>
-        <button type="button" @click="showApproveModal = true;" class="button button-md primary-dark">Approve All</button>
+        <button type="button" @click="showBulkRejectModal = true;" class="button button-md outline-style">Reject All</button>
+        <button type="button" @click="showBulkApproveModal = true;" class="button button-md primary-dark">Approve All</button>
       </div>
     {% endif %}
 
@@ -67,17 +67,17 @@
 
 
 <!--Bulk Approve Modal -->
-<div x-cloak x-show="showApproveModal" x-transition.opacity class="modal-backdrop">
-    <div @click.away="showApproveModal = false" x-transition class="modal">
+<div x-cloak x-show="showBulkApproveModal" x-transition.opacity class="modal-backdrop">
+    <div @click.away="showBulkApproveModal = false" x-transition class="modal">
       <div class="header flex justify-between items-center">
         <h2 class="title">Justification for Approval</h2>
-        <button type="button" @click="showApproveModal = false" class="button-icon" aria-label="Close">
+        <button type="button" @click="showBulkApproveModal = false" class="button-icon" aria-label="Close">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
       <form hx-post="{% url "opportunity:approve_visits" org_slug=request.org.slug opp_id=opportunity_access.opportunity.id %}"
         hx-swap="none"
-        @submit="showApproveModal = false">
+        @submit="showBulkApproveModal = false">
         {% csrf_token %}
         <template x-for="id in selected" :key="id">
             <input type="hidden" name="visit_ids[]" :value="id">
@@ -106,7 +106,7 @@
             </div>
         </div>
         <div class="footer flex justify-end">
-          <button @click="showApproveModal = false" type="button" class="button button-md outline-style">
+          <button @click="showBulkApproveModal = false" type="button" class="button button-md outline-style">
             Close
           </button>
           <button type="submit" class="button button-md positive-dark">Approve</button>
@@ -116,17 +116,17 @@
   </div>
 
 <!--Bulk Rejection Modal -->
-   <div x-cloak x-show="showRejectModal" x-transition.opacity class="modal-backdrop">
-    <div @click.away="showRejectModal = false" x-transition class="modal">
+   <div x-cloak x-show="showBulkRejectModal" x-transition.opacity class="modal-backdrop">
+    <div @click.away="showBulkRejectModal = false" x-transition class="modal">
       <div class="header flex justify-between items-center">
         <h2 class="title">Reason for Rejection</h2>
-        <button type="button" @click="showRejectModal = false" class="button-icon" aria-label="Close">
+        <button type="button" @click="showBulkRejectModal = false" class="button-icon" aria-label="Close">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
        <form hx-post="{% url "opportunity:reject_visits" org_slug=request.org.slug opp_id=opportunity_access.opportunity.id %}"
         hx-swap="none"
-        @submit="showRejectModal = false">
+        @submit="showBulkRejectModal = false">
         {% csrf_token %}
         <div class="py-4">
           <textarea class="base-textarea" id="rejection-reason" rows="3" name="reason" id="reason"
@@ -154,7 +154,7 @@
             <input type="hidden" name="visit_ids[]" :value="id">
         </template>
         <div class="footer flex justify-end">
-          <button @click="showRejectModal = false" type="button" class="button button-md outline-style">
+          <button @click="showBulkRejectModal = false" type="button" class="button button-md outline-style">
             Close
           </button>
           <button type="submit" class="button button-md negative-dark">
