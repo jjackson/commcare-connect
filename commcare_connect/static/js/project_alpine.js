@@ -39,6 +39,8 @@ document.addEventListener('alpine:init', () => {
         pending: 0,
         approved: 0,
         rejected: 0,
+        duplicate: 0,
+        overLimit: 0,
         total: this.selected.length,
       };
 
@@ -47,6 +49,8 @@ document.addEventListener('alpine:init', () => {
         if (status === 'pending') counts.pending++;
         else if (status === 'approved') counts.approved++;
         else if (status === 'rejected') counts.rejected++;
+        else if (status === 'duplicate') counts.duplicate++;
+        else if (status === 'over_limit') counts.overLimit++;
       });
 
       return counts;
