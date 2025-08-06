@@ -109,6 +109,12 @@
                   <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
                     <span x-text="selectedStatusCounts.pending"></span> pending
                   </span>
+                  <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                    <span x-text="selectedStatusCounts.duplicate"></span> duplicate
+                  </span>
+                  <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-800">
+                    <span x-text="selectedStatusCounts.overLimit"></span> overlimit
+                  </span>
                 </p>
                 <p x-show="selectedStatusCounts.approved > 0 || selectedStatusCounts.rejected > 0" class="text-xs text-gray-600 mt-1">
                   <em>Note: Visits that are already approved will not be affected by this action.</em>
@@ -153,6 +159,12 @@
                   </span>
                   <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
                     <span x-text="selectedStatusCounts.pending"></span> pending
+                  </span>
+                  <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                    <span x-text="selectedStatusCounts.duplicate"></span> duplicate
+                  </span>
+                  <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-800">
+                    <span x-text="selectedStatusCounts.overLimit"></span> overlimit
                   </span>
                 </p>
                 <p x-show="selectedStatusCounts.approved > 0 || selectedStatusCounts.rejected > 0" class="text-xs text-gray-600 mt-1">
