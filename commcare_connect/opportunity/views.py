@@ -1557,6 +1557,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
             filter_kwargs.update(
                 {
                     "review_status": VisitReviewStatus.pending,
+                    "status": VisitValidationStatus.approved,
                     "review_created_on__isnull": False,
                 }
             )
