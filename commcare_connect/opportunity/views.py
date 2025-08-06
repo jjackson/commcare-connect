@@ -1392,6 +1392,7 @@ def get_user_visit_counts(opportunity_access_id: int, date=None):
                 "id",
                 filter=Q(
                     review_status=VisitReviewStatus.pending,
+                    status=VisitValidationStatus.approved,
                     review_created_on__isnull=False,
                 ),
             ),
