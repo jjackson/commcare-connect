@@ -838,7 +838,6 @@ def send_message_mobile_users(request, org_slug=None, opp_id=None):
 @require_POST
 def approve_visits(request, org_slug, opp_id):
     visit_ids = request.POST.getlist("visit_ids[]")
-    visit_ids = [int(vid) for vid in visit_ids if vid.isdigit()]
 
     visits = (
         UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id)
@@ -876,7 +875,6 @@ def approve_visits(request, org_slug, opp_id):
 def reject_visits(request, org_slug=None, opp_id=None):
     opp = get_opportunity_or_404(opp_id, org_slug)
     visit_ids = request.POST.getlist("visit_ids[]")
-    visit_ids = [int(vid) for vid in visit_ids if vid.isdigit()]
     reason = request.POST.get("reason", "").strip()
 
     UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id).exclude(
@@ -1577,7 +1575,6 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                     "review_created_on__isnull": False,
                 }
             )
-
         return UserVisit.objects.filter(**filter_kwargs).order_by("visit_date")
 
 
