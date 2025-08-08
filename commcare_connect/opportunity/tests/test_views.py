@@ -6,7 +6,7 @@ from django.test import Client
 from django.urls import reverse
 from django.utils.timezone import now
 
-from commcare_connect.opportunity.helpers import OpportunityData
+from commcare_connect.opportunity.helpers import OpportunityData, TieredQueryset
 from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
@@ -203,3 +203,38 @@ def test_get_opportunity_list_data_all_annotations(opportunity):
     assert opp.payments_due == total_accrued - total_paid
     assert opp.inactive_workers == 2
     assert opp.status == 0
+
+
+@pytest.mark.django_db
+def test_tiered_queryset_basic():
+    users = [User.objects.create(username=f"user{i}") for i in range(5)]
+    base_qs = User.objects.all()
+
+    def data_qs_fn(ids):
+        qs = User.objects.filter(id__in=ids)
+        return sorted(qs, key=lambda u: ids.index(u.id))
+
+    tq = TieredQueryset(base_qs, data_qs_fn)
+
+    assert tq.count() == 5
+
+    # Single item access
+    first_user = tq[0]
+    assert first_user.username == users[0].username
+
+    # Slice access
+    sliced = tq[1:3]
+    assert [u.username for u in sliced] == [users[1].username, users[2].username]
+
+    # Iteration returns all
+    all_users = list(tq)
+    assert [u.username for u in all_users] == [u.username for u in users]
+
+    # Order_by works
+    tq.order_by("-id")
+    desc_users = list(tq[:2])
+    expected = list(User.objects.order_by("-id")[:2])
+    assert [u.id for u in desc_users] == [u.id for u in expected]
+
+    # Empty slice works
+    assert tq[100:105] == []
