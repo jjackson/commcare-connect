@@ -380,8 +380,6 @@ class TieredQueryset:
         else:
             obj = self._ordered_qs[key]
             result = list(self.data_qs_fn([obj.id]))
-            if not result:
-                raise IndexError("Index out of range.")
             return result[0]
 
     def __iter__(self):
@@ -398,15 +396,15 @@ class OpportunityData:
         self.is_program_manager = is_program_manager
 
     def get_data(self):
-        base_qs = self.get_opportunity_list_id_qs(self.org, self.is_program_manager)
+        base_qs = self.get_base_qs(self.org, self.is_program_manager)
 
         def data_qs(ids):
-            return self.get_opportunity_list_data(ids, self.is_program_manager)
+            return self.get_data_qs(ids, self.is_program_manager)
 
         return TieredQueryset(base_qs, data_qs)
 
     @staticmethod
-    def get_opportunity_list_id_qs(organization, program_manager=False):
+    def get_base_qs(organization, program_manager=False):
         today = now().date()
         base_filter = Q(organization=organization)
         if program_manager:
@@ -422,7 +420,7 @@ class OpportunityData:
         )
 
     @staticmethod
-    def get_opportunity_list_data(opp_ids, program_manager=False):
+    def get_data_qs(opp_ids, program_manager=False):
         # Meant to be used with a small page of opp_ids (10/20)
         today = now().date()
         three_days_ago = now() - timedelta(days=3)

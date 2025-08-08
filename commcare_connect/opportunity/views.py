@@ -195,7 +195,7 @@ class OpportunityList(OrganizationUserMixin, SingleTableView):
     model = Opportunity
     table_class = ProgramManagerOpportunityTable
     template_name = "opportunity/opportunities_list.html"
-    paginate_by = 2
+    paginate_by = 15
 
     def get_table_class(self):
         if self.request.org.program_manager:
