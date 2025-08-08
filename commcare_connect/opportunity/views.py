@@ -2,8 +2,8 @@ import datetime
 import sys
 from collections import Counter, defaultdict
 from decimal import Decimal, InvalidOperation
-from functools import reduce
 from http import HTTPStatus
+from urllib.parse import urlencode
 
 from celery.result import AsyncResult
 from crispy_forms.utils import render_crispy_form
@@ -12,7 +12,6 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.humanize.templatetags.humanize import intcomma
-from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage, storages
 from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce
@@ -58,7 +57,6 @@ from commcare_connect.opportunity.forms import (
 )
 from commcare_connect.opportunity.helpers import (
     OpportunityData,
-    get_annotated_opportunity_access,
     get_annotated_opportunity_access_deliver_status,
     get_opportunity_delivery_progress,
     get_opportunity_funnel_progress,
@@ -69,7 +67,6 @@ from commcare_connect.opportunity.helpers import (
 )
 from commcare_connect.opportunity.models import (
     BlobMeta,
-    CatchmentArea,
     CompletedModule,
     CompletedWork,
     CompletedWorkStatus,
@@ -94,18 +91,14 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.opportunity.tables import (
     CompletedWorkTable,
-    DeliverStatusTable,
     DeliverUnitTable,
     LearnModuleTable,
-    LearnStatusTable,
-    OpportunityPaymentTable,
     OpportunityTable,
     PaymentInvoiceTable,
     PaymentReportTable,
     PaymentUnitTable,
     ProgramManagerOpportunityTable,
     SuspendedUsersTable,
-    UserStatusTable,
     UserVisitVerificationTable,
     WorkerDeliveryTable,
     WorkerLearnStatusTable,
@@ -117,6 +110,7 @@ from commcare_connect.opportunity.tables import (
 from commcare_connect.opportunity.tasks import (
     add_connect_users,
     bulk_update_payments_task,
+    bulk_update_visit_status_task,
     create_learn_modules_and_deliver_units,
     generate_catchment_area_export,
     generate_deliver_status_export,
@@ -135,7 +129,6 @@ from commcare_connect.opportunity.visit_import import (
     bulk_update_catchments,
     bulk_update_completed_work_status,
     bulk_update_visit_review_status,
-    bulk_update_visit_status,
     update_payment_accrued,
 )
 from commcare_connect.organization.decorators import org_admin_required, org_member_required, org_viewer_required
@@ -343,7 +336,7 @@ class OpportunityDashboard(OpportunityObjectMixin, OrganizationUserMixin, Detail
         ]
 
         context["resources"] = [
-            {"name": "Learn App", "count": learn_module_count, "icon": "fa-book-open-cover"},
+            {"name": "Learn App", "count": learn_module_count, "icon": "fa-book-open"},
             {"name": "Deliver App", "count": deliver_unit_count, "icon": "fa-clipboard-check"},
             {"name": "Payments Units", "count": payment_unit_count, "icon": "fa-hand-holding-dollar"},
         ]
@@ -352,12 +345,12 @@ class OpportunityDashboard(OpportunityObjectMixin, OrganizationUserMixin, Detail
             {
                 "name": "Delivery Type",
                 "count": safe_display(object.delivery_type and object.delivery_type.name),
-                "icon": "fa-file-check",
+                "icon": "fa-file-circle-check",
             },
             {
                 "name": "Start Date",
                 "count": safe_display(object.start_date),
-                "icon": "fa-calendar-range",
+                "icon": "fa-calendar-days",
             },
             {
                 "name": "End Date",
@@ -391,33 +384,6 @@ class OpportunityDashboard(OpportunityObjectMixin, OrganizationUserMixin, Detail
         context["export_form"] = PaymentExportForm()
         context["export_task_id"] = request.GET.get("export_task_id")
         return context
-
-
-class OpportunityLearnStatusTableView(OrganizationUserMixin, OrgContextSingleTableView):
-    model = OpportunityAccess
-    paginate_by = 25
-    table_class = LearnStatusTable
-    template_name = "tables/single_table.html"
-
-    def get_queryset(self):
-        opportunity_id = self.kwargs["opp_id"]
-        opportunity = get_opportunity_or_404(org_slug=self.request.org.slug, pk=opportunity_id)
-        return OpportunityAccess.objects.filter(opportunity=opportunity).order_by("user__name")
-
-
-class OpportunityPaymentTableView(OrganizationUserMixin, OrgContextSingleTableView):
-    model = OpportunityAccess
-    paginate_by = 25
-    table_class = OpportunityPaymentTable
-    template_name = "tables/single_table.html"
-
-    def get_queryset(self):
-        opportunity_id = self.kwargs["opp_id"]
-        org_slug = self.kwargs["org_slug"]
-        opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
-        return OpportunityAccess.objects.filter(opportunity=opportunity, payment_accrued__gte=0).order_by(
-            "-payment_accrued"
-        )
 
 
 @org_member_required
@@ -497,17 +463,18 @@ def download_export(request, org_slug, task_id):
 def update_visit_status_import(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opp_id)
     file = request.FILES.get("visits")
-    try:
-        status = bulk_update_visit_status(opportunity, file)
-    except ImportException as e:
-        messages.error(request, e.message)
+    file_format = get_file_extension(file)
+    redirect_url = reverse("opportunity:worker_list", args=(org_slug, opp_id))
+
+    if file_format not in ("csv", "xlsx"):
+        messages.error(request, f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
+        query_params = {"active_tab", "delivery"}
     else:
-        message = f"Visit status updated successfully for {len(status)} visits."
-        if status.missing_visits:
-            message += status.get_missing_message()
-        messages.success(request, mark_safe(message))
-    url = reverse("opportunity:worker_list", args=(org_slug, opp_id)) + "?active_tab=delivery"
-    return redirect(url)
+        file_path = f"{opportunity.pk}_{datetime.datetime.now().isoformat}_visit_import"
+        saved_path = default_storage.save(file_path, file)
+        result = bulk_update_visit_status_task.delay(opportunity.pk, saved_path, file_format)
+        query_params = {"active_tab": "delivery", "export_task_id": result.id}
+    return redirect(f"{redirect_url}?{urlencode(query_params)}")
 
 
 def review_visit_import(request, org_slug=None, opp_id=None):
@@ -635,20 +602,6 @@ def add_budget_new_users(request, org_slug=None, opp_id=None):
     return HttpResponse(mark_safe(form_html))
 
 
-class OpportunityUserStatusTableView(OrganizationUserMixin, OrgContextSingleTableView):
-    model = OpportunityAccess
-    paginate_by = 25
-    table_class = UserStatusTable
-    template_name = "tables/single_table.html"
-
-    def get_queryset(self):
-        opportunity_id = self.kwargs["opp_id"]
-        org_slug = self.kwargs["org_slug"]
-        opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
-        access_objects = get_annotated_opportunity_access(opportunity)
-        return access_objects
-
-
 @org_member_required
 def export_users_for_payment(request, org_slug, opp_id):
     get_opportunity_or_404(org_slug=request.org.slug, pk=opp_id)
@@ -673,7 +626,7 @@ def payment_import(request, org_slug=None, opp_id=None):
         raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
 
     file_path = f"{opportunity.pk}_{datetime.datetime.now().isoformat}_payment_import"
-    saved_path = default_storage.save(file_path, ContentFile(file.read()))
+    saved_path = default_storage.save(file_path, file)
     result = bulk_update_payments_task.delay(opportunity.pk, saved_path, file_format)
 
     return redirect(
@@ -823,20 +776,6 @@ def export_user_status(request, org_slug, opp_id):
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 
 
-class OpportunityDeliverStatusTable(OrganizationUserMixin, OrgContextSingleTableView):
-    model = OpportunityAccess
-    paginate_by = 25
-    table_class = DeliverStatusTable
-    template_name = "tables/single_table.html"
-
-    def get_queryset(self):
-        opportunity_id = self.kwargs["opp_id"]
-        org_slug = self.kwargs["org_slug"]
-        opportunity = get_opportunity_or_404(pk=opportunity_id, org_slug=org_slug)
-        access_objects = get_annotated_opportunity_access_deliver_status(opportunity)
-        return access_objects
-
-
 @org_member_required
 def export_deliver_status(request, org_slug, opp_id):
     get_opportunity_or_404(pk=opp_id, org_slug=request.org.slug)
@@ -860,66 +799,6 @@ def payment_delete(request, org_slug=None, opp_id=None, access_id=None, pk=None)
     payment.delete()
     redirect_url = reverse("opportunity:worker_list", args=(org_slug, opp_id))
     return redirect(f"{redirect_url}?active_tab=payments")
-
-
-@org_viewer_required
-def user_profile(request, org_slug=None, opp_id=None, pk=None):
-    access = get_object_or_404(OpportunityAccess, pk=pk, accepted=True)
-    user_visits = UserVisit.objects.filter(opportunity_access=access)
-    user_catchments = CatchmentArea.objects.filter(opportunity_access=access)
-    user_visit_data = []
-    for user_visit in user_visits:
-        if not user_visit.location:
-            continue
-        lat, lng, elevation, precision = list(map(float, user_visit.location.split(" ")))
-        user_visit_data.append(
-            dict(
-                entity_name=user_visit.entity_name,
-                visit_date=user_visit.visit_date.date(),
-                lat=lat,
-                lng=lng,
-                precision=precision,
-            )
-        )
-    # user for centering the User visits map
-    lat_avg = 0.0
-    lng_avg = 0.0
-    if user_visit_data:
-        lat_avg = reduce(lambda x, y: x + float(y["lat"]), user_visit_data, 0.0) / len(user_visit_data)
-        lng_avg = reduce(lambda x, y: x + float(y["lng"]), user_visit_data, 0.0) / len(user_visit_data)
-
-    pending_completed_work_count = len(
-        [
-            cw
-            for cw in CompletedWork.objects.filter(opportunity_access=access, status=CompletedWorkStatus.pending)
-            if cw.saved_approved_count
-        ]
-    )
-    user_catchment_data = [
-        {
-            "name": catchment.name,
-            "lat": float(catchment.latitude),
-            "lng": float(catchment.longitude),
-            "radius": catchment.radius,
-            "active": catchment.active,
-        }
-        for catchment in user_catchments
-    ]
-    pending_payment = max(access.payment_accrued - access.total_paid, 0)
-    return render(
-        request,
-        "opportunity/user_profile.html",
-        context=dict(
-            access=access,
-            user_visits=user_visit_data,
-            lat_avg=lat_avg,
-            lng_avg=lng_avg,
-            MAPBOX_TOKEN=settings.MAPBOX_TOKEN,
-            pending_completed_work_count=pending_completed_work_count,
-            pending_payment=pending_payment,
-            user_catchments=user_catchment_data,
-        ),
-    )
 
 
 @org_admin_required
@@ -1163,7 +1042,20 @@ def suspended_users_list(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opp_id)
     access_objects = OpportunityAccess.objects.filter(opportunity=opportunity, suspended=True)
     table = SuspendedUsersTable(access_objects)
-    return render(request, "opportunity/suspended_users.html", dict(table=table, opportunity=opportunity))
+    path = []
+    if opportunity.managed:
+        path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
+        path.append(
+            {"title": opportunity.managedopportunity.program.name, "url": reverse("program:home", args=(org_slug,))}
+        )
+    path.extend(
+        [
+            {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
+            {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opp_id))},
+            {"title": "Suspended Users", "url": request.path},
+        ]
+    )
+    return render(request, "opportunity/suspended_users.html", dict(table=table, opportunity=opportunity, path=path))
 
 
 @org_member_required
@@ -2059,19 +1951,19 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
         {
             "stage": "Started Learning",
             "count": header_with_tooltip(result.started_learning_count, "Started download of the Learn app"),
-            "icon": "book-open-cover",
+            "icon": "book-open",
         },
         {
             "stage": "Completed Learning",
             "count": header_with_tooltip(
                 result.completed_learning, "Workers that have completed all Learn modules but not assessment"
             ),
-            "icon": "book-blank",
+            "icon": "book",
         },
         {
             "stage": "Completed Assessment",
             "count": header_with_tooltip(result.completed_assessments, "Workers that passed the assessment"),
-            "icon": "award-simple",
+            "icon": "award",
         },
         {
             "stage": "Claimed Job",
@@ -2194,7 +2086,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
 
     deliveries_panels = [
         {
-            "icon": "fa-clipboard-list-check",
+            "icon": "fa-clipboard-list",
             "name": "Services Delivered",
             "status": "Total",
             "value": header_with_tooltip(stats.total_deliveries, "Total delivered so far excluding duplicates"),
@@ -2202,7 +2094,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "incr": stats.deliveries_from_yesterday,
         },
         {
-            "icon": "fa-clipboard-list-check",
+            "icon": "fa-clipboard-list",
             "name": "Services Delivered",
             "status": "Pending NM Review",
             "value": header_with_tooltip(
@@ -2215,7 +2107,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
     if opportunity.managed:
         deliveries_panels.append(
             {
-                "icon": "fa-clipboard-list-check",
+                "icon": "fa-clipboard-list",
                 "name": "Services Delivered",
                 "status": "Pending PM Review",
                 "value": header_with_tooltip(stats.visits_pending_for_pm_review, "Flagged and pending review with PM"),
