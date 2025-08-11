@@ -233,17 +233,34 @@
           this.flatpickrInstance.clear();
         }
       }));
+
       Alpine.data('visitVerification', (initialTab, defaultPage) => ({
       activeTab: initialTab,
       page: defaultPage,
-      selected: [],
       showBulkApproveModal: false,
       showBulkRejectModal: false,
-      selectAll: false,
 
-      init() {
-        this.updateVisitStatusMap();
+
+      updateUrlAndRequest() {
+        const url = new URL(window.location);
+        const formData = new FormData(this.$refs.visitForm);
+        const params = new URLSearchParams();
+
+        for (let [key, value] of formData.entries()) {
+          if (value && String(value).trim() !== '') {
+            params.set(key, value);
+          }
+        }
+
+        url.search = params.toString();
+        window.history.pushState({}, '', url.toString());
+        this.$dispatch('reload_table');
       },
+    }));
+
+    Alpine.data('selectionManager', (initialTab, defaultPage) => ({
+      selectAll: false,
+      selected: [],
 
       updateVisitStatusMap() {
         const tableRows = document.querySelectorAll(
@@ -259,7 +276,11 @@
         });
       },
 
-      get selectedStatusCounts() {
+      init() {
+        this.updateVisitStatusMap();
+      },
+
+       get selectedStatusCounts() {
         const counts = {
           pending: 0,
           approved: 0,
@@ -281,26 +302,6 @@
         return counts;
       },
 
-      updateUrlAndRequest() {
-        const url = new URL(window.location);
-        const formData = new FormData(this.$refs.visitForm);
-        const params = new URLSearchParams();
-
-        for (let [key, value] of formData.entries()) {
-          if (value && String(value).trim() !== '') {
-            params.set(key, value);
-          }
-        }
-
-        url.search = params.toString();
-        window.history.pushState({}, '', url.toString());
-        this.$dispatch('reload_table');
-
-        this.$nextTick(() => {
-          this.updateVisitStatusMap();
-        });
-      },
-
       toggleSelectAll() {
         this.selectAll = !this.selectAll;
         if (this.selectAll) {
@@ -319,7 +320,7 @@
         this.selectAll =
           checkboxes.length > 0 && this.selected.length === checkboxes.length;
       },
-    }));
+    }))
     });
 
 
