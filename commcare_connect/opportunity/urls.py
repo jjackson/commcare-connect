@@ -83,7 +83,7 @@ urlpatterns = [
     path("<int:opp_id>/user_visit_details/<int:pk>/", view=views.user_visit_details, name="user_visit_details"),
     path("<int:opp_id>/payment/<int:access_id>/delete/<int:pk>/", view=payment_delete, name="payment_delete"),
     path("<int:opp_id>/send_message", view=send_message_mobile_users, name="send_message_mobile_users"),
-    path("<int:opp_id>approve_visits", view=approve_visits, name="approve_visits"),
+    path("<int:opp_id>/approve_visits", view=approve_visits, name="approve_visits"),
     path("<int:opp_id>/reject_visits", view=reject_visits, name="reject_visits"),
     path("fetch_attachment/<blob_id>", view=fetch_attachment, name="fetch_attachment"),
     path(
