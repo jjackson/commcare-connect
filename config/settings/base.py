@@ -370,3 +370,5 @@ MAPBOX_TOKEN = env("MAPBOX_TOKEN", default=None)
 OPEN_EXCHANGE_RATES_API_ID = env("OPEN_EXCHANGE_RATES_API_ID", default=None)
 
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth2_provider.Application"
+
+GTM_ID = env("GTM_ID", default="")
