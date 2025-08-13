@@ -61,6 +61,7 @@ class ManualUserOTPForm(forms.Form):
         max_length=15,
         label="Phone Number",
         help_text="Enter the phone number of the user you which to retreive the OTP for.",
+        widget=forms.TextInput(attrs={"placeholder": "e.g. +1234567890"}),
     )
 
     def __init__(self, *args, **kwargs):
