@@ -1,9 +1,10 @@
 from allauth.account.models import transaction
+from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -12,7 +13,7 @@ from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
-from django.views.generic import RedirectView, UpdateView, View
+from django.views.generic import RedirectView, TemplateView, UpdateView, View
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from oauth2_provider.views.mixins import ClientProtectedResourceMixin
 from rest_framework.decorators import api_view, authentication_classes
@@ -24,6 +25,7 @@ from commcare_connect.connect_id_client.main import fetch_demo_user_tokens
 from commcare_connect.connect_id_client.models import ConnectIdUser
 from commcare_connect.opportunity.models import HQApiKey, Opportunity, OpportunityAccess, UserInvite, UserInviteStatus
 from commcare_connect.opportunity.tasks import update_user_and_send_invite
+from commcare_connect.users.forms import ManualUserOTPForm
 
 from .helpers import create_hq_user_and_link
 from .models import ConnectIDUserLink
@@ -209,3 +211,27 @@ class ResendInvitesView(ClientProtectedResourceMixin, View):
         for opp_id in opps:
             update_user_and_send_invite(user, opp_id)
         return HttpResponse(status=200)
+
+
+class RetrieveUserOTPView(TemplateView):
+    template_name = "pages/connect_user_otp.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if self.request.user.is_authenticated and self.request.user.is_staff:
+            return super().dispatch(request, *args, **kwargs)
+        return HttpResponseForbidden()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["form"] = ManualUserOTPForm()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        form = ManualUserOTPForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, "Something went wrong.")
+            return self.get(request, *args, **kwargs)
+
+        otp = "12345"
+        messages.success(request, f"The user's OTP is: {otp}")
+        return self.get(request, *args, **kwargs)
