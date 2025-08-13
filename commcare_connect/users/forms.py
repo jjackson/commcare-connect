@@ -1,5 +1,7 @@
 from allauth.account.forms import SignupForm
 from allauth.socialaccount.forms import SignupForm as SocialSignupForm
+from crispy_forms.helper import FormHelper
+from crispy_forms.layout import Field, Layout, Submit
 from django import forms
 from django.contrib.auth import forms as admin_forms
 from django.contrib.auth import get_user_model
@@ -52,3 +54,24 @@ class OrganizationCreationForm(forms.ModelForm):
     class Meta:
         model = Organization
         fields = ["name", "program_manager"]
+
+
+class ManualUserOTPForm(forms.Form):
+    phone_number = forms.CharField(
+        max_length=15,
+        label="Phone Number",
+        help_text="Enter the phone number of the user you which to retreive the OTP for.",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(
+            Field("phone_number"),
+            Submit(
+                name="submit",
+                value="Retrieve OTP",
+                css_class="button button-md primary-dark !inline-flex items-center",
+            ),
+        )
