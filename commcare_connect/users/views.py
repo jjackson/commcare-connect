@@ -21,7 +21,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from commcare_connect.connect_id_client.main import fetch_demo_user_tokens
+from commcare_connect.connect_id_client.main import fetch_demo_user_tokens, fetch_otp
 from commcare_connect.connect_id_client.models import ConnectIdUser
 from commcare_connect.opportunity.models import HQApiKey, Opportunity, OpportunityAccess, UserInvite, UserInviteStatus
 from commcare_connect.opportunity.tasks import update_user_and_send_invite
@@ -232,6 +232,14 @@ class RetrieveUserOTPView(TemplateView):
             messages.error(request, "Something went wrong.")
             return self.get(request, *args, **kwargs)
 
-        otp = "12345"
+        otp = fetch_otp(form.cleaned_data["phone_number"])
+        if otp is None:
+            messages.error(
+                request,
+                "Failed to fetch OTP. Please make sure the number is correct and"
+                " that the user has started their device seating process.",
+            )
+            return self.get(request, *args, **kwargs)
+
         messages.success(request, f"The user's OTP is: {otp}")
         return self.get(request, *args, **kwargs)
