@@ -40,7 +40,11 @@ def get_connectid_user_counts_cumulative():
 
 def get_eligible_user_counts_cumulative():
     visit_data = (
-        CompletedWork.objects.filter(status=CompletedWorkStatus.approved, saved_approved_count__gt=0)
+        CompletedWork.objects.filter(
+            status=CompletedWorkStatus.approved,
+            saved_approved_count__gt=0,
+            opportunity_access__opportunity__is_test=False,
+        )
         .annotate(month_group=TruncMonth(Coalesce("status_modified_date", "date_created")))
         .values("month_group")
         .annotate(users=ArrayAgg("opportunity_access__user_id", distinct=True))
