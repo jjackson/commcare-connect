@@ -37,6 +37,7 @@ from commcare_connect.connect_id_client import fetch_users
 from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.api.serializers import remove_opportunity_access_cache
 from commcare_connect.opportunity.app_xml import AppNoBuildException
+from commcare_connect.opportunity.filters import DeliverFilterSet, FilterMixin
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     AddBudgetNewUsersForm,
@@ -1801,12 +1802,14 @@ class WorkerLearnView(BaseWorkerListView):
         return table
 
 
-class WorkerDeliverView(BaseWorkerListView):
+class WorkerDeliverView(BaseWorkerListView, FilterMixin):
     hx_template_name = "opportunity/deliver.html"
     active_tab = "deliver"
+    filter_class = DeliverFilterSet
 
     def get_extra_context(self, opportunity, org_slug):
         return {
+            "filter_form": self.get_filter_form(self.request.GET),
             "visit_export_form": VisitExportForm(),
             "review_visit_export_form": ReviewVisitExportForm(),
             "import_export_delivery_urls": {
@@ -1836,7 +1839,7 @@ class WorkerDeliverView(BaseWorkerListView):
         }
 
     def get_table(self, opportunity, org_slug):
-        data = get_annotated_opportunity_access_deliver_status(opportunity)
+        data = get_annotated_opportunity_access_deliver_status(opportunity, self.get_filter_values(self.request.GET))
         table = WorkerDeliveryTable(data, org_slug=org_slug, opp_id=opportunity.id)
         RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
         return table
