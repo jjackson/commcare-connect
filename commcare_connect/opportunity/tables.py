@@ -760,6 +760,7 @@ class UserVisitVerificationTable(tables.Table):
                 "type": "checkbox",
                 "class": "checkbox",
                 "value": lambda record: record.pk,
+                "id": lambda record: f"row_checkbox_{record.pk}",
             },
         },
     )

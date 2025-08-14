@@ -306,7 +306,7 @@
         this.selectAll = !this.selectAll;
         if (this.selectAll) {
           this.selected = Array.from(
-            document.querySelectorAll('input[type=checkbox][x-model=selected]'),
+            document.querySelectorAll('[id^="row_checkbox_"]'),
           ).map((cb) => cb.value);
         } else {
           this.selected = [];
@@ -314,9 +314,7 @@
       },
 
       updateSelectAll() {
-        const checkboxes = document.querySelectorAll(
-          'input[type=checkbox][x-model=selected]',
-        );
+        const checkboxes = document.querySelectorAll('[id^="row_checkbox_"]');
         this.selectAll =
           checkboxes.length > 0 && this.selected.length === checkboxes.length;
       },
