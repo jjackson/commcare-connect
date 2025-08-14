@@ -1,4 +1,5 @@
 from unittest import mock
+from unittest.mock import patch
 
 import pytest
 from django.contrib import messages
@@ -6,6 +7,7 @@ from django.contrib.messages.middleware import MessageMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpRequest
 from django.test import RequestFactory
+from django.urls import reverse
 
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.forms import UserAdminChangeForm
@@ -99,3 +101,46 @@ class TestCreateUserLinkView:
         user_link = ConnectIDUserLink.objects.get(user=mobile_user)
         assert response.status_code == 201
         assert user_link.commcare_username == "abc"
+
+
+class TestRetrieveUserOTPView:
+    @property
+    def url(self):
+        return reverse("users:connect_user_otp")
+
+    def test_non_superuser_cannot_access_page(self, user, client):
+        assert not user.is_superuser
+
+        client.force_login(user)
+        response = client.get(self.url)
+
+        assert response.status_code == 403
+
+    @patch("commcare_connect.users.views.generate_and_fetch_otp")
+    def test_superuser_can_generate_and_fetch_otp(self, generate_and_fetch_otp_mock, user, client):
+        generate_and_fetch_otp_mock.return_value = "1234"
+        user.is_superuser = True
+        user.save()
+
+        client.force_login(user)
+        response = client.post(self.url, data={"phone_number": "+1234567890"})
+
+        messages = list(response.context["messages"])
+        assert str(messages[0]) == "The user's OTP is: 1234"
+
+    @patch("commcare_connect.users.views.generate_and_fetch_otp")
+    def test_otp_not_retrieved(self, generate_and_fetch_otp_mock, user, client):
+        generate_and_fetch_otp_mock.return_value = None
+        user.is_superuser = True
+        user.save()
+
+        client.force_login(user)
+        response = client.post(self.url, data={"phone_number": "+1234567890"})
+
+        expected_failure_message = (
+            "Failed to fetch OTP. Please make sure the number is "
+            "correct and that the user has started their device seating process."
+        )
+
+        messages = list(response.context["messages"])
+        assert str(messages[0]) == expected_failure_message
