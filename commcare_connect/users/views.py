@@ -21,7 +21,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from commcare_connect.connect_id_client.main import fetch_demo_user_tokens, fetch_otp
+from commcare_connect.connect_id_client.main import fetch_demo_user_tokens, generate_and_fetch_otp
 from commcare_connect.connect_id_client.models import ConnectIdUser
 from commcare_connect.opportunity.models import HQApiKey, Opportunity, OpportunityAccess, UserInvite, UserInviteStatus
 from commcare_connect.opportunity.tasks import update_user_and_send_invite
@@ -231,7 +231,7 @@ class RetrieveUserOTPView(UserPassesTestMixin, TemplateView):
             messages.error(request, f"{errors}")
             return self.get(request, *args, **kwargs)
 
-        otp = fetch_otp(form.cleaned_data["phone_number"])
+        otp = generate_and_fetch_otp(form.cleaned_data["phone_number"])
         if otp is None:
             messages.error(
                 request,
