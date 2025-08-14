@@ -229,7 +229,8 @@ class RetrieveUserOTPView(TemplateView):
     def post(self, request, *args, **kwargs):
         form = ManualUserOTPForm(request.POST)
         if not form.is_valid():
-            messages.error(request, "Something went wrong.")
+            errors = ", ".join(form.errors["phone_number"])
+            messages.error(request, f"{errors}")
             return self.get(request, *args, **kwargs)
 
         otp = fetch_otp(form.cleaned_data["phone_number"])

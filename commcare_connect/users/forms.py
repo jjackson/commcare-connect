@@ -58,7 +58,7 @@ class OrganizationCreationForm(forms.ModelForm):
 
 class ManualUserOTPForm(forms.Form):
     phone_number = forms.CharField(
-        max_length=15,
+        max_length=16,
         label="Phone Number",
         help_text="Enter the phone number of the user you which to retreive the OTP for.",
         widget=forms.TextInput(attrs={"placeholder": "e.g. +1234567890"}),
@@ -76,3 +76,16 @@ class ManualUserOTPForm(forms.Form):
                 css_class="button button-md primary-dark !inline-flex items-center",
             ),
         )
+
+    def clean_phone_number(self):
+        phone_number = self.cleaned_data.get("phone_number")
+        phone_number = phone_number.strip().replace(" ", "")
+
+        if not phone_number.startswith("+"):
+            raise forms.ValidationError("Phone number must start with a '+'.")
+        try:
+            int(phone_number[1:])
+        except ValueError:
+            raise forms.ValidationError("Phone number must be numeric.")
+
+        return phone_number
