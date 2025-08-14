@@ -2,9 +2,9 @@ from allauth.account.models import transaction
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.messages.views import SuccessMessageMixin
-from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -213,13 +213,11 @@ class ResendInvitesView(ClientProtectedResourceMixin, View):
         return HttpResponse(status=200)
 
 
-class RetrieveUserOTPView(TemplateView):
+class RetrieveUserOTPView(UserPassesTestMixin, TemplateView):
     template_name = "pages/connect_user_otp.html"
 
-    def dispatch(self, request, *args, **kwargs):
-        if self.request.user.is_authenticated and self.request.user.is_staff:
-            return super().dispatch(request, *args, **kwargs)
-        return HttpResponseForbidden()
+    def test_func(self):
+        return self.request.user.is_superuser
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
