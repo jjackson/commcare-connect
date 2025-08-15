@@ -6,6 +6,11 @@
   // === INIT DATA LAYER ===
   window.dataLayer = window.dataLayer || [];
 
+  window.dataLayer.push({
+    'gtm.start': new Date().getTime(),
+    event: 'gtm.js',
+  });
+
   const setAllowedTagTypes = () => {
     window.dataLayer.push({
       'gtm.allowlist': ALLOWED_TAG_TYPES,
