@@ -119,11 +119,7 @@ class TestRetrieveUserOTPView:
     @patch("commcare_connect.users.views.generate_and_fetch_otp")
     def test_superuser_can_generate_and_fetch_otp(self, generate_and_fetch_otp_mock, user, client):
         generate_and_fetch_otp_mock.return_value = "1234"
-        user.is_superuser = True
-        user.save()
-
-        client.force_login(user)
-        response = client.post(self.url, data={"phone_number": "+1234567890"})
+        response = self._get_superuser_response(client, user)
 
         messages = list(response.context["messages"])
         assert str(messages[0]) == "The user's OTP is: 1234"
@@ -131,11 +127,7 @@ class TestRetrieveUserOTPView:
     @patch("commcare_connect.users.views.generate_and_fetch_otp")
     def test_otp_not_retrieved(self, generate_and_fetch_otp_mock, user, client):
         generate_and_fetch_otp_mock.return_value = None
-        user.is_superuser = True
-        user.save()
-
-        client.force_login(user)
-        response = client.post(self.url, data={"phone_number": "+1234567890"})
+        response = self._get_superuser_response(client, user)
 
         expected_failure_message = (
             "Failed to fetch OTP. Please make sure the number is "
@@ -144,3 +136,9 @@ class TestRetrieveUserOTPView:
 
         messages = list(response.context["messages"])
         assert str(messages[0]) == expected_failure_message
+
+    def _get_superuser_response(self, client, user):
+        user.is_superuser = True
+        user.save()
+        client.force_login(user)
+        return client.post(self.url, data={"phone_number": "+1234567890"})
