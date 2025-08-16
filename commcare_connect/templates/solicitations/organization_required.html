@@ -23,12 +23,12 @@
             <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-yellow-100 mb-6">
                 <i class="fa-solid fa-building text-2xl text-yellow-600"></i>
             </div>
-            
+
             <!-- Title -->
             <h1 class="text-2xl font-bold text-gray-900 mb-4">
                 Organization Membership Required
             </h1>
-            
+
             <!-- Description -->
             <div class="text-gray-600 mb-8 space-y-4">
                 <p class="text-lg">
@@ -64,7 +64,7 @@
                     <p class="text-gray-600 text-sm mb-4">
                         Create a new organization if you're responding on behalf of a new entity.
                     </p>
-                    <a href="{% url 'organization_create' %}" 
+                    <a href="{% url 'organization_create' %}"
                        class="inline-flex items-center px-4 py-2 bg-brand-indigo text-white text-sm font-medium rounded-md hover:bg-brand-indigo-dark transition-colors">
                         <i class="fa-solid fa-plus mr-2"></i>
                         Create Organization
@@ -74,7 +74,7 @@
 
             <!-- Back Button -->
             <div class="mt-8">
-                <a href="{% url 'solicitations:detail' solicitation.pk %}" 
+                <a href="{% url 'solicitations:detail' solicitation.pk %}"
                    class="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors">
                     <i class="fa-solid fa-arrow-left mr-2"></i>
                     Back to Solicitation

@@ -47,7 +47,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="bg-white rounded-xl shadow-sm p-6">
             <div class="flex items-center">
                 <div class="p-3 bg-green-100 rounded-lg mr-4">
@@ -61,7 +61,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="bg-white rounded-xl shadow-sm p-6">
             <div class="flex items-center">
                 <div class="p-3 bg-orange-100 rounded-lg mr-4">
@@ -75,7 +75,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="bg-white rounded-xl shadow-sm p-6">
             <div class="flex items-center">
                 <div class="p-3 bg-purple-100 rounded-lg mr-4">
@@ -96,7 +96,7 @@
         <div class="p-6 border-b border-gray-200">
             <h2 class="text-xl font-semibold text-gray-900">Your Solicitations</h2>
         </div>
-        
+
         {% if solicitations %}
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
@@ -159,12 +159,12 @@
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <div class="flex items-center space-x-3">
-                                        <a href="{% url 'program:response_list' org_slug=request.org.slug pk=program.pk solicitation_pk=solicitation.pk %}" 
+                                        <a href="{% url 'program:response_list' org_slug=request.org.slug pk=program.pk solicitation_pk=solicitation.pk %}"
                                            class="text-brand-indigo hover:text-brand-deep-purple">
                                             <i class="fa-solid fa-inbox mr-1"></i>
                                             View Responses
                                         </a>
-                                        <a href="{% url 'solicitations:detail' pk=solicitation.pk %}" 
+                                        <a href="{% url 'solicitations:detail' pk=solicitation.pk %}"
                                            class="text-gray-600 hover:text-gray-900"
                                            target="_blank">
                                             <i class="fa-solid fa-external-link-alt mr-1"></i>
@@ -209,7 +209,7 @@
                         Previous
                     </a>
                 {% endif %}
-                
+
                 {% if page_obj.has_next %}
                     <a href="?page={{ page_obj.next_page_number }}" class="button button-sm outline-style">
                         Next
