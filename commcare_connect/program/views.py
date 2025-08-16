@@ -27,6 +27,14 @@ from commcare_connect.organization.decorators import (
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
 from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplication, ProgramApplicationStatus
+from commcare_connect.solicitations.models import (
+    Solicitation, 
+    SolicitationResponse, 
+    SolicitationQuestion, 
+    SolicitationReview,
+    ReviewRecommendation,
+    ResponseStatus
+)
 
 from .utils import is_program_manager
 
@@ -363,3 +371,177 @@ def _make_recent_activity_data(
         }
         for row in data
     ]
+
+
+# =============================================================================
+# Phase 3: Solicitation Management Views
+# =============================================================================
+
+class ProgramSolicitationDashboard(ProgramManagerMixin, ListView):
+    """
+    Dashboard view for program managers to see all their solicitations and responses
+    """
+    template_name = "program/solicitation_dashboard.html"
+    context_object_name = "solicitations"
+    paginate_by = 20
+    
+    def get_queryset(self):
+        program_pk = self.kwargs.get('pk')
+        program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+        
+        return Solicitation.objects.filter(
+            program=program
+        ).select_related(
+            'program'
+        ).prefetch_related(
+            'responses'
+        ).annotate(
+            submitted_response_count=Count(
+                'responses', 
+                filter=~Q(responses__status='draft')
+            )
+        ).order_by('-date_created')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        program_pk = self.kwargs.get('pk')
+        context['program'] = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+        return context
+
+
+class SolicitationResponseList(ProgramManagerMixin, ListView):
+    """
+    List view for all responses to a specific solicitation
+    """
+    template_name = "program/response_list.html"
+    context_object_name = "responses"
+    paginate_by = 20
+    
+    def get_queryset(self):
+        program_pk = self.kwargs.get('pk')
+        solicitation_pk = self.kwargs.get('solicitation_pk')
+        
+        # Verify program ownership
+        program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+        solicitation = get_object_or_404(Solicitation, pk=solicitation_pk, program=program)
+        
+        return SolicitationResponse.objects.filter(
+            solicitation=solicitation
+        ).exclude(
+            status='draft'  # Don't show drafts to program managers
+        ).select_related(
+            'organization', 'submitted_by', 'solicitation'
+        ).prefetch_related(
+            'reviews', 'file_attachments'
+        ).order_by('-submission_date')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        program_pk = self.kwargs.get('pk')
+        solicitation_pk = self.kwargs.get('solicitation_pk')
+        
+        program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+        solicitation = get_object_or_404(Solicitation, pk=solicitation_pk, program=program)
+        
+        context['program'] = program
+        context['solicitation'] = solicitation
+        return context
+
+
+class SolicitationResponseReview(ProgramManagerMixin, UpdateView):
+    """
+    Individual response review view for program managers
+    """
+    template_name = "program/response_review.html"
+    fields = []  # We'll handle the form manually
+    
+    def get_object(self):
+        program_pk = self.kwargs.get('pk')
+        response_pk = self.kwargs.get('response_pk')
+        
+        # Verify program ownership through the response's solicitation
+        program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+        response = get_object_or_404(
+            SolicitationResponse.objects.select_related(
+                'solicitation__program', 'organization', 'submitted_by'
+            ).prefetch_related(
+                'file_attachments', 'reviews'
+            ),
+            pk=response_pk,
+            solicitation__program=program
+        )
+        
+        return response
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        response = self.get_object()
+        program = response.solicitation.program
+        
+        # Get questions for this solicitation
+        questions = SolicitationQuestion.objects.filter(
+            solicitation=response.solicitation
+        ).order_by('order')
+        
+        # Get existing review by current user (if any)
+        existing_review = SolicitationReview.objects.filter(
+            response=response,
+            reviewer=self.request.user
+        ).first()
+        
+        context.update({
+            'program': program,
+            'solicitation': response.solicitation,
+            'response': response,
+            'questions': questions,
+            'existing_review': existing_review,
+        })
+        
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        """Handle review form submission"""
+        response = self.get_object()
+        
+        # Get or create review
+        review, created = SolicitationReview.objects.get_or_create(
+            response=response,
+            reviewer=request.user,
+            defaults={
+                'score': None,
+                'notes': '',
+                'recommendation': None,
+                'tags': ''
+            }
+        )
+        
+        # Update review with form data
+        score = request.POST.get('score')
+        if score:
+            try:
+                review.score = int(score)
+            except (ValueError, TypeError):
+                review.score = None
+        
+        review.notes = request.POST.get('notes', '')
+        review.tags = request.POST.get('tags', '')
+        recommendation = request.POST.get('recommendation')
+        if recommendation in [choice[0] for choice in ReviewRecommendation.choices]:
+            review.recommendation = recommendation
+        
+        review.save()
+        
+        # Handle status changes based on recommendation
+        if recommendation == ReviewRecommendation.ACCEPT:
+            response.status = ResponseStatus.ACCEPTED
+            response.save(update_fields=['status'])
+            messages.success(request, f"Response from {response.organization.name} has been accepted.")
+        elif recommendation == ReviewRecommendation.REJECT:
+            response.status = ResponseStatus.REJECTED
+            response.save(update_fields=['status'])
+            messages.success(request, f"Response from {response.organization.name} has been rejected.")
+        else:
+            messages.success(request, "Review saved successfully.")
+        
+        # Redirect back to response list
+        return redirect('program:response_list', pk=response.solicitation.program.pk, solicitation_pk=response.solicitation.pk)

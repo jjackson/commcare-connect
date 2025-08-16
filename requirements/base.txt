@@ -96,7 +96,6 @@ django==4.2.5
     #   django-redis
     #   django-tables2
     #   django-timezone-field
-    #   django-waffle
     #   djangorestframework
     #   drf-spectacular
 django-allauth==0.54.0
@@ -127,8 +126,6 @@ django-tables2==2.6.0
     # via -r requirements/base.in
 django-timezone-field==5.1
     # via django-celery-beat
-django-waffle==5.0.0
-    # via -r requirements/base.in
 djangorestframework==3.14.0
     # via
     #   -r requirements/base.in
@@ -203,7 +200,7 @@ ply==3.11
     # via jsonpath-ng
 prompt-toolkit==3.0.39
     # via click-repl
-pycparser==2.21
+pycparser==2.22
     # via cffi
 pyjwt[crypto]==2.8.0
     # via
@@ -250,8 +247,6 @@ rpds-py==0.9.2
     # via
     #   jsonschema
     #   referencing
-sentry-sdk==1.29.2
-    # via -r requirements/base.in
 six==1.16.0
     # via
     #   flatten-dict
@@ -283,7 +278,6 @@ urllib3==1.26.16
     # via
     #   -r requirements/base.in
     #   requests
-    #   sentry-sdk
 vine==5.0.0
     # via
     #   amqp

@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block page_title %}Solicitation Dashboard - {{ program.name }}{% endblock %}
+
+{% block content %}
+    <!-- Breadcrumb Navigation -->
+    <ul class="breadcrumb mb-8">
+        <li>
+            <a href="{% url 'program:home' org_slug=request.org.slug %}">Programs</a>
+            <i class="fa-solid fa-chevron-right"></i>
+        </li>
+        <li>
+            <a href="{% url 'program:opportunity_list' org_slug=request.org.slug pk=program.pk %}">{{ program.name }}</a>
+            <i class="fa-solid fa-chevron-right"></i>
+        </li>
+        <li>
+            <a href="#">Solicitations</a>
+            <i class="fa-solid fa-chevron-right"></i>
+        </li>
+    </ul>
+
+    <!-- Header Section -->
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-brand-deep-purple mb-2">Solicitation Dashboard</h1>
+            <p class="text-gray-600">Manage EOIs and RFPs for {{ program.name }}</p>
+        </div>
+        <div class="flex items-center space-x-3">
+            <a href="#" class="button button-md primary-dark">
+                <i class="fa-solid fa-plus mr-2"></i>
+                Create New Solicitation
+            </a>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-blue-100 rounded-lg mr-4">
+                    <i class="fa-solid fa-file-lines text-blue-600 text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Total Solicitations</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ solicitations|length }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-green-100 rounded-lg mr-4">
+                    <i class="fa-solid fa-eye text-green-600 text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Active EOIs</p>
+                    <p class="text-2xl font-bold text-gray-900">
+                        {% for s in solicitations %}{% if s.solicitation_type == 'eoi' and s.status == 'active' %}{{ forloop.counter0|add:1 }}{% endif %}{% empty %}0{% endfor %}
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-orange-100 rounded-lg mr-4">
+                    <i class="fa-solid fa-file-contract text-orange-600 text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Active RFPs</p>
+                    <p class="text-2xl font-bold text-gray-900">
+                        {% for s in solicitations %}{% if s.solicitation_type == 'rfp' and s.status == 'active' %}{{ forloop.counter0|add:1 }}{% endif %}{% empty %}0{% endfor %}
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-purple-100 rounded-lg mr-4">
+                    <i class="fa-solid fa-inbox text-purple-600 text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600">Total Responses</p>
+                    <p class="text-2xl font-bold text-gray-900">
+                        {% for s in solicitations %}{{ s.submitted_response_count|add:forloop.counter0 }}{% empty %}0{% endfor %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Solicitations List -->
+    <div class="bg-white rounded-xl shadow-sm">
+        <div class="p-6 border-b border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-900">Your Solicitations</h2>
+        </div>
+        
+        {% if solicitations %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Solicitation
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Type
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Status
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Responses
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Deadline
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Actions
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for solicitation in solicitations %}
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4">
+                                    <div>
+                                        <div class="text-sm font-medium text-gray-900">
+                                            {{ solicitation.title }}
+                                        </div>
+                                        <div class="text-sm text-gray-500">
+                                            Created {{ solicitation.date_created|date:"M j, Y" }}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="badge badge-md {% if solicitation.solicitation_type == 'eoi' %}primary-light{% else %}warning-light{% endif %}">
+                                        {{ solicitation.get_solicitation_type_display }}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="badge badge-md {% if solicitation.status == 'active' %}success-light{% elif solicitation.status == 'draft' %}neutral-light{% else %}neutral-dark{% endif %}">
+                                        {{ solicitation.get_status_display }}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    <div class="flex items-center">
+                                        <span class="font-medium">{{ solicitation.submitted_response_count }}</span>
+                                        <span class="text-gray-500 ml-1">submitted</span>
+                                        {% if solicitation.response_count > solicitation.submitted_response_count %}
+                                            <span class="text-gray-400 ml-2">({{ solicitation.response_count|add:"-"|add:solicitation.submitted_response_count }} drafts)</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    {{ solicitation.application_deadline|date:"M j, Y" }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <div class="flex items-center space-x-3">
+                                        <a href="{% url 'program:response_list' org_slug=request.org.slug pk=program.pk solicitation_pk=solicitation.pk %}" 
+                                           class="text-brand-indigo hover:text-brand-deep-purple">
+                                            <i class="fa-solid fa-inbox mr-1"></i>
+                                            View Responses
+                                        </a>
+                                        <a href="{% url 'solicitations:detail' pk=solicitation.pk %}" 
+                                           class="text-gray-600 hover:text-gray-900"
+                                           target="_blank">
+                                            <i class="fa-solid fa-external-link-alt mr-1"></i>
+                                            Public View
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-12">
+                <div class="mx-auto h-12 w-12 text-gray-400">
+                    <i class="fa-solid fa-file-lines text-4xl"></i>
+                </div>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">No solicitations yet</h3>
+                <p class="mt-1 text-sm text-gray-500">Get started by creating your first EOI or RFP.</p>
+                <div class="mt-6">
+                    <a href="#" class="button button-md primary-dark">
+                        <i class="fa-solid fa-plus mr-2"></i>
+                        Create New Solicitation
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+        <div class="mt-6 flex items-center justify-between">
+            <div class="flex items-center text-sm text-gray-700">
+                <span>
+                    Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} results
+                </span>
+            </div>
+            <div class="flex items-center space-x-2">
+                {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}" class="button button-sm outline-style">
+                        <i class="fa-solid fa-chevron-left mr-1"></i>
+                        Previous
+                    </a>
+                {% endif %}
+                
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}" class="button button-sm outline-style">
+                        Next
+                        <i class="fa-solid fa-chevron-right ml-1"></i>
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}
