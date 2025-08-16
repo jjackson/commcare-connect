@@ -11,7 +11,7 @@
     }
   },
   {
-    "model": "program.program", 
+    "model": "program.program",
     "pk": 1,
     "fields": {
       "name": "CommCare Connect Child Health Campaign",
@@ -45,4 +45,3 @@
     }
   }
 ]
-

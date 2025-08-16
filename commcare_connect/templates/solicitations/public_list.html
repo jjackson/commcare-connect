@@ -5,7 +5,7 @@
     {% if current_type == 'eoi' %}
         Expressions of Interest
     {% elif current_type == 'rfp' %}
-        Requests for Proposals  
+        Requests for Proposals
     {% else %}
         Current Opportunities
     {% endif %}
@@ -37,15 +37,15 @@
         <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
             <!-- Filter Tabs -->
             <div class="flex flex-wrap gap-2">
-                <a href="{% url 'solicitations:list' %}" 
+                <a href="{% url 'solicitations:list' %}"
                    class="button button-sm {% if current_type == 'all' %}primary-dark{% else %}outline-style{% endif %}">
                     All Opportunities ({{ total_active }})
                 </a>
-                <a href="{% url 'solicitations:eoi_list' %}" 
+                <a href="{% url 'solicitations:eoi_list' %}"
                    class="button button-sm {% if current_type == 'eoi' %}primary-dark{% else %}outline-style{% endif %}">
                     EOIs ({{ eoi_count }})
                 </a>
-                <a href="{% url 'solicitations:rfp_list' %}" 
+                <a href="{% url 'solicitations:rfp_list' %}"
                    class="button button-sm {% if current_type == 'rfp' %}primary-dark{% else %}outline-style{% endif %}">
                     RFPs ({{ rfp_count }})
                 </a>
@@ -53,17 +53,17 @@
 
             <!-- Search Form -->
             <form method="get" class="flex gap-2">
-                <input type="text" 
-                       name="search" 
-                       value="{{ search_query }}" 
-                       placeholder="Search opportunities..." 
+                <input type="text"
+                       name="search"
+                       value="{{ search_query }}"
+                       placeholder="Search opportunities..."
                        class="base-input">
-                <button type="submit" 
+                <button type="submit"
                         class="button button-md primary-dark">
                     Search
                 </button>
                 {% if search_query %}
-                    <a href="{% url request.resolver_match.url_name %}" 
+                    <a href="{% url request.resolver_match.url_name %}"
                        class="button button-md outline-style">
                         Clear
                     </a>
@@ -90,14 +90,14 @@
                                 <span>Active</span>
                             </div>
                         </div>
-                        
+
                         <h3 class="card_title mb-2">
-                            <a href="{% url 'solicitations:detail' solicitation.pk %}" 
+                            <a href="{% url 'solicitations:detail' solicitation.pk %}"
                                class="hover:text-brand-cornflower-blue transition-colors">
                                 {{ solicitation.title }}
                             </a>
                         </h3>
-                        
+
                         <p class="card_description mb-3">
                             {{ solicitation.description|truncatewords:25 }}
                         </p>
@@ -110,12 +110,12 @@
                                 <i class="fa-solid fa-location-dot text-gray-400"></i>
                                 <span>{{ solicitation.target_population }}</span>
                             </div>
-                            
+
                             <div class="flex items-center gap-2">
                                 <i class="fa-solid fa-building text-gray-400"></i>
                                 <span>{{ solicitation.program.organization.name }}</span>
                             </div>
-                            
+
                             {% if solicitation.estimated_scale %}
                                 <div class="flex items-center gap-2">
                                     <i class="fa-solid fa-chart-bar text-gray-400"></i>
@@ -132,7 +132,7 @@
                                 <span class="font-medium">Deadline:</span>
                                 {{ solicitation.application_deadline|date:"M d, Y" }}
                             </div>
-                            <a href="{% url 'solicitations:detail' solicitation.pk %}" 
+                            <a href="{% url 'solicitations:detail' solicitation.pk %}"
                                class="button button-sm primary-dark">
                                 View Details
                             </a>
@@ -147,9 +147,9 @@
             <div class="flex justify-center">
                 <nav class="flex items-center gap-2">
                     {% if page_obj.has_previous %}
-                        <a href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}" 
+                        <a href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}"
                            class="button button-sm outline-style">First</a>
-                        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}" 
+                        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}"
                            class="button button-sm outline-style">Previous</a>
                     {% endif %}
 
@@ -158,9 +158,9 @@
                     </span>
 
                     {% if page_obj.has_next %}
-                        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}" 
+                        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}"
                            class="button button-sm outline-style">Next</a>
-                        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}" 
+                        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}"
                            class="button button-sm outline-style">Last</a>
                     {% endif %}
                 </nav>
@@ -186,7 +186,7 @@
                 {% endif %}
             </p>
             {% if search_query %}
-                <a href="{% url 'solicitations:list' %}" 
+                <a href="{% url 'solicitations:list' %}"
                    class="button button-md primary-dark">
                     View All Opportunities
                 </a>
@@ -194,4 +194,3 @@
         </div>
     {% endif %}
 {% endblock %}
-

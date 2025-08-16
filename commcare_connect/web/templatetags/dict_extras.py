@@ -10,8 +10,8 @@ def lookup(dictionary, key):
     Usage: {{ dict|lookup:key }}
     """
     if isinstance(dictionary, dict):
-        return dictionary.get(key, '')
-    return ''
+        return dictionary.get(key, "")
+    return ""
 
 
 @register.filter

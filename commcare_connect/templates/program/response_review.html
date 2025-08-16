@@ -38,7 +38,7 @@
                         <span class="badge badge-lg {% if solicitation.solicitation_type == 'eoi' %}primary-light{% else %}warning-light{% endif %}">
                             {{ solicitation.get_solicitation_type_display }}
                         </span>
-                        <span class="badge badge-lg 
+                        <span class="badge badge-lg
                             {% if response.status == 'submitted' %}neutral-light
                             {% elif response.status == 'under_review' %}warning-light
                             {% elif response.status == 'accepted' %}success-light
@@ -49,7 +49,7 @@
                     </div>
                     <h1 class="text-3xl font-bold text-brand-deep-purple mb-2">Review Response</h1>
                     <p class="text-gray-600 mb-4">{{ solicitation.title }}</p>
-                    
+
                     <!-- Response Information -->
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div class="flex items-center text-sm text-gray-600">
@@ -66,9 +66,9 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="flex items-center space-x-3">
-                    <a href="{% url 'program:response_list' org_slug=request.org.slug pk=program.pk solicitation_pk=solicitation.pk %}" 
+                    <a href="{% url 'program:response_list' org_slug=request.org.slug pk=program.pk solicitation_pk=solicitation.pk %}"
                        class="button button-md outline-style">
                         <i class="fa-solid fa-arrow-left mr-2"></i>
                         Back to Responses
@@ -86,7 +86,7 @@
                         <i class="fa-solid fa-clipboard-question mr-2"></i>
                         Response Answers
                     </h2>
-                    
+
                     {% if questions %}
                         <div class="space-y-6">
                             {% for question in questions %}
@@ -102,7 +102,7 @@
                                                     <span class="text-red-500">*</span>
                                                 {% endif %}
                                             </h3>
-                                            
+
                                             {% with response.responses|default_if_none:""  as responses_dict %}
                                                 {% if responses_dict and question.question_text in responses_dict %}
                                                     <div class="bg-gray-50 rounded-lg p-4">
@@ -143,7 +143,7 @@
                             <i class="fa-solid fa-paperclip mr-2"></i>
                             Supporting Documents
                         </h2>
-                        
+
                         <div class="space-y-3">
                             {% for attachment in response.file_attachments.all %}
                                 <div class="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -154,7 +154,7 @@
                                             <p class="text-xs text-gray-500">{{ attachment.file_size_mb }} MB • Uploaded {{ attachment.date_created|date:"M j, Y g:i A" }}</p>
                                         </div>
                                     </div>
-                                    <a href="{{ attachment.file.url }}" 
+                                    <a href="{{ attachment.file.url }}"
                                        class="text-brand-indigo hover:text-brand-deep-purple text-sm font-medium"
                                        target="_blank">
                                         <i class="fa-solid fa-download mr-1"></i>
@@ -175,50 +175,50 @@
                         <i class="fa-solid fa-star mr-2"></i>
                         Your Review
                     </h2>
-                    
+
                     <form method="post" class="space-y-6">
                         {% csrf_token %}
-                        
+
                         <!-- Score -->
                         <div>
                             <label for="score" class="block text-sm font-medium text-gray-700 mb-2">
                                 Score (1-100)
                             </label>
-                            <input type="number" 
-                                   id="score" 
-                                   name="score" 
-                                   min="1" 
+                            <input type="number"
+                                   id="score"
+                                   name="score"
+                                   min="1"
                                    max="100"
                                    value="{% if existing_review.score %}{{ existing_review.score }}{% endif %}"
                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo">
                         </div>
-                        
+
                         <!-- Tags -->
                         <div>
                             <label for="tags" class="block text-sm font-medium text-gray-700 mb-2">
                                 Tags
                             </label>
-                            <input type="text" 
-                                   id="tags" 
-                                   name="tags" 
+                            <input type="text"
+                                   id="tags"
+                                   name="tags"
                                    value="{% if existing_review.tags %}{{ existing_review.tags }}{% endif %}"
                                    placeholder="e.g., experienced, rural-focus, strong-proposal"
                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo">
                             <p class="text-xs text-gray-500 mt-1">Separate tags with commas</p>
                         </div>
-                        
+
                         <!-- Notes -->
                         <div>
                             <label for="notes" class="block text-sm font-medium text-gray-700 mb-2">
                                 Review Notes
                             </label>
-                            <textarea id="notes" 
-                                      name="notes" 
+                            <textarea id="notes"
+                                      name="notes"
                                       rows="4"
                                       placeholder="Add your detailed review notes..."
                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo">{% if existing_review.notes %}{{ existing_review.notes }}{% endif %}</textarea>
                         </div>
-                        
+
                         <!-- Recommendation -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-3">
@@ -226,8 +226,8 @@
                             </label>
                             <div class="space-y-3">
                                 <label class="flex items-center">
-                                    <input type="radio" 
-                                           name="recommendation" 
+                                    <input type="radio"
+                                           name="recommendation"
                                            value="accept"
                                            {% if existing_review.recommendation == 'accept' %}checked{% endif %}
                                            class="h-4 w-4 text-brand-indigo border-gray-300 focus:ring-brand-indigo">
@@ -237,8 +237,8 @@
                                     </span>
                                 </label>
                                 <label class="flex items-center">
-                                    <input type="radio" 
-                                           name="recommendation" 
+                                    <input type="radio"
+                                           name="recommendation"
                                            value="reject"
                                            {% if existing_review.recommendation == 'reject' %}checked{% endif %}
                                            class="h-4 w-4 text-brand-indigo border-gray-300 focus:ring-brand-indigo">
@@ -248,8 +248,8 @@
                                     </span>
                                 </label>
                                 <label class="flex items-center">
-                                    <input type="radio" 
-                                           name="recommendation" 
+                                    <input type="radio"
+                                           name="recommendation"
                                            value="needs_more_info"
                                            {% if existing_review.recommendation == 'needs_more_info' %}checked{% endif %}
                                            class="h-4 w-4 text-brand-indigo border-gray-300 focus:ring-brand-indigo">
@@ -260,7 +260,7 @@
                                 </label>
                             </div>
                         </div>
-                        
+
                         <!-- Submit Button -->
                         <div class="pt-4 border-t border-gray-200">
                             <button type="submit" class="w-full button button-md primary-dark">
@@ -306,7 +306,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Auto-save functionality could be added here
     const form = document.querySelector('form');
     const inputs = form.querySelectorAll('input, textarea, select');
-    
+
     // Add visual feedback when recommendation changes
     const recommendationInputs = document.querySelectorAll('input[name="recommendation"]');
     recommendationInputs.forEach(input => {

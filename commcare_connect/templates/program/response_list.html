@@ -38,7 +38,7 @@
                 </div>
                 <h1 class="text-3xl font-bold text-brand-deep-purple mb-2">{{ solicitation.title }}</h1>
                 <p class="text-gray-600 mb-4">{{ solicitation.description|truncatewords:30 }}</p>
-                
+
                 <!-- Key Information -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div class="flex items-center text-sm text-gray-600">
@@ -55,15 +55,15 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="flex items-center space-x-3">
-                <a href="{% url 'solicitations:detail' pk=solicitation.pk %}" 
+                <a href="{% url 'solicitations:detail' pk=solicitation.pk %}"
                    class="button button-md outline-style"
                    target="_blank">
                     <i class="fa-solid fa-external-link-alt mr-2"></i>
                     View Public Page
                 </a>
-                <a href="{% url 'program:solicitation_dashboard' org_slug=request.org.slug pk=program.pk %}" 
+                <a href="{% url 'program:solicitation_dashboard' org_slug=request.org.slug pk=program.pk %}"
                    class="button button-md outline-style">
                     <i class="fa-solid fa-arrow-left mr-2"></i>
                     Back to Dashboard
@@ -85,7 +85,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="bg-white rounded-xl shadow-sm p-6">
             <div class="flex items-center">
                 <div class="p-3 bg-yellow-100 rounded-lg mr-4">
@@ -99,7 +99,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="bg-white rounded-xl shadow-sm p-6">
             <div class="flex items-center">
                 <div class="p-3 bg-green-100 rounded-lg mr-4">
@@ -113,7 +113,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="bg-white rounded-xl shadow-sm p-6">
             <div class="flex items-center">
                 <div class="p-3 bg-red-100 rounded-lg mr-4">
@@ -139,7 +139,7 @@
                 </div>
             </div>
         </div>
-        
+
         {% if responses %}
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
@@ -195,7 +195,7 @@
                                     <div class="text-sm text-gray-500">{{ response.submitted_by.email }}</div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <span class="badge badge-md 
+                                    <span class="badge badge-md
                                         {% if response.status == 'submitted' %}neutral-light
                                         {% elif response.status == 'under_review' %}warning-light
                                         {% elif response.status == 'accepted' %}success-light
@@ -228,7 +228,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    <a href="{% url 'program:response_review' org_slug=request.org.slug pk=program.pk response_pk=response.pk %}" 
+                                    <a href="{% url 'program:response_review' org_slug=request.org.slug pk=program.pk response_pk=response.pk %}"
                                        class="text-brand-indigo hover:text-brand-deep-purple">
                                         <i class="fa-solid fa-eye mr-1"></i>
                                         Review
@@ -249,7 +249,7 @@
                     Organizations haven't submitted any responses to this solicitation yet.
                 </p>
                 <div class="mt-6">
-                    <a href="{% url 'solicitations:detail' pk=solicitation.pk %}" 
+                    <a href="{% url 'solicitations:detail' pk=solicitation.pk %}"
                        class="button button-md primary-dark"
                        target="_blank">
                         <i class="fa-solid fa-external-link-alt mr-2"></i>
@@ -275,7 +275,7 @@
                         Previous
                     </a>
                 {% endif %}
-                
+
                 {% if page_obj.has_next %}
                     <a href="?page={{ page_obj.next_page_number }}" class="button button-sm outline-style">
                         Next
