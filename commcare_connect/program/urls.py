@@ -8,6 +8,10 @@ from commcare_connect.program.views import (
     invite_organization,
     manage_application,
     program_home,
+    # Phase 3: Solicitation Management Views
+    ProgramSolicitationDashboard,
+    SolicitationResponseList,
+    SolicitationResponseReview,
 )
 
 app_name = "program"
@@ -24,4 +28,8 @@ urlpatterns = [
         view=apply_or_decline_application,
         name="apply_or_decline_application",
     ),
+    # Phase 3: Solicitation Management URLs
+    path("<int:pk>/solicitations/", view=ProgramSolicitationDashboard.as_view(), name="solicitation_dashboard"),
+    path("<int:pk>/solicitations/<int:solicitation_pk>/responses/", view=SolicitationResponseList.as_view(), name="response_list"),
+    path("<int:pk>/solicitations/response/<int:response_pk>/review/", view=SolicitationResponseReview.as_view(), name="response_review"),
 ]

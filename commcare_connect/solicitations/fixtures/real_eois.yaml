@@ -1,0 +1,227 @@
+# Real EOI data from previous publications
+# This file contains actual EOIs that have been published
+
+programs:
+  - slug: "ccc-chc-program"
+    name: "CommCare Connect Child Health Campaign"
+    description: "High-need child health interventions for children under 5"
+    organization_slug: "dimagi"
+    budget: 500000
+    currency: "USD"
+
+  - slug: "kmc-initiative"
+    name: "Kangaroo Mother Care Initiative"
+    description: "Improving neonatal outcomes through home visits by trained FLWs"
+    organization_slug: "dimagi"
+    budget: 750000
+    currency: "USD"
+
+solicitations:
+  - title: "CommCare Connect Child Health Campaign (CCC-CHC) - Expression of Interest"
+    program_slug: "ccc-chc-program"
+    solicitation_type: "eoi"
+    status: "completed"  # This was a past EOI
+    is_publicly_listed: true
+    description: |
+      We are seeking partners to deliver door-to-door child health services including:
+      - Vitamin A supplementation
+      - Deworming tablets distribution
+      - Malnutrition screening
+      - Vaccine status checking
+      - ORS/Zinc drop-off for diarrhea management
+      
+      This campaign targets children under 5 in high-need regions characterized by 
+      high child mortality and malnutrition rates. Partners will use a smartphone 
+      app for service delivery and real-time data entry.
+    
+    target_population: "Children under 5 in high-need regions"
+    scope_of_work: |
+      - Door-to-door delivery of vitamin A, deworming tablets
+      - Malnutrition screening using MUAC measurements
+      - Vaccine checking and referrals
+      - ORS/Zinc distribution for diarrhea cases
+      - Real-time data entry via CommCare Connect smartphone app
+    
+    estimated_scale: "40,000 children across multiple regions"
+    expected_start_date: "2025-04-01"
+    expected_end_date: "2025-07-31"
+    application_deadline: "2025-02-15"
+    
+    questions:
+      - text: "Describe your organization's experience with child health campaigns"
+        type: "textarea"
+        required: true
+        order: 1
+      
+      - text: "What is your organization's experience with door-to-door service delivery?"
+        type: "textarea" 
+        required: true
+        order: 2
+      
+      - text: "How many field workers can your organization deploy for this campaign?"
+        type: "number"
+        required: true
+        order: 3
+      
+      - text: "Upload your organization's registration certificate"
+        type: "file"
+        required: true
+        order: 4
+      
+      - text: "Describe your experience with digital technology and smartphone apps"
+        type: "textarea"
+        required: true
+        order: 5
+      
+      - text: "What geographical areas does your organization currently operate in?"
+        type: "textarea"
+        required: true
+        order: 6
+
+  - title: "Kangaroo Mother Care Initiative - Expression of Interest"
+    program_slug: "kmc-initiative"
+    solicitation_type: "eoi"
+    status: "completed"
+    is_publicly_listed: true
+    description: |
+      We are seeking Locally Led Organizations (LLOs) in Kenya and Uganda to partner 
+      with us in improving neonatal outcomes through the Kangaroo Mother Care (KMC) 
+      initiative. This program focuses on supporting mothers with Small-Vulnerable 
+      Newborns (SVNs) through home visits by trained Field Workers (FLWs).
+      
+      The initiative uses a three-stage implementation approach:
+      1. Feasibility/validation phase
+      2. Intervention refinement
+      3. Larger pilot implementation
+    
+    target_population: "Small-Vulnerable Newborns (SVNs) and their mothers"
+    scope_of_work: |
+      - Identify Small-Vulnerable Newborns through facility-based screening
+      - Provide home-based KMC support and training
+      - Counsel mothers on exclusive breastfeeding
+      - Conduct neonatal screening and health assessments
+      - Provide referrals for complications
+      - Support continuous maternal care practices
+    
+    estimated_scale: "1,000 SVN-mother pairs in pilot phase"
+    expected_start_date: "2025-01-15"
+    expected_end_date: "2025-12-31"
+    application_deadline: "2024-12-01"
+    
+    questions:
+      - text: "Describe your organization's past work relevant to Small-Vulnerable Newborns or KMC"
+        type: "textarea"
+        required: true
+        order: 1
+      
+      - text: "Provide data on SVN birth rates, neonatal mortality, and typical care levels in your target geography"
+        type: "textarea"
+        required: true
+        order: 2
+      
+      - text: "What is your awareness of minimal care baseline in your target regions?"
+        type: "textarea"
+        required: true
+        order: 3
+      
+      - text: "Describe your organization's experience with digital technology platforms"
+        type: "textarea"
+        required: true
+        order: 4
+      
+      - text: "How will your organization identify SVNs in the community?"
+        type: "textarea"
+        required: true
+        order: 5
+      
+      - text: "Estimate the number of SVNs you expect to reach in a pilot program"
+        type: "number"
+        required: true
+        order: 6
+      
+      - text: "How many FLWs will you deploy and what are their cadres/qualifications?"
+        type: "textarea"
+        required: true
+        order: 7
+      
+      - text: "What is your strategy for obtaining necessary government permissions?"
+        type: "textarea"
+        required: true
+        order: 8
+      
+      - text: "What is your expected timeline to start and what factors influence this?"
+        type: "textarea"
+        required: true
+        order: 9
+      
+      - text: "Describe your experience working with government/policy advocacy"
+        type: "textarea"
+        required: true
+        order: 10
+
+  - title: "Child Health Campaign - Request for Proposals"
+    program_slug: "ccc-chc-program"
+    solicitation_type: "rfp"
+    status: "active"
+    is_publicly_listed: true
+    description: |
+      Following our Expression of Interest process, we invite selected organizations 
+      to submit detailed proposals for implementing the Child Health Campaign. 
+      This RFP outlines specific requirements, deliverables, and performance metrics 
+      for the 3-4 month campaign targeting 40,000 children.
+    
+    target_population: "Children under 5 in selected high-need regions"
+    scope_of_work: |
+      - Recruit and train 25-50 Field Workers
+      - Implement door-to-door service delivery protocol
+      - Achieve target coverage of 40,000 children
+      - Maintain data quality standards (>95% accuracy)
+      - Submit weekly progress reports
+      - Ensure commodity procurement and logistics
+    
+    estimated_scale: "40,000 children, 25-50 FLWs"
+    expected_start_date: "2025-06-01"
+    expected_end_date: "2025-09-30"
+    application_deadline: "2025-04-01"
+    
+    questions:
+      - text: "Provide a detailed implementation timeline with milestones"
+        type: "textarea"
+        required: true
+        order: 1
+      
+      - text: "Submit your detailed budget breakdown including FLW payments"
+        type: "file"
+        required: true
+        order: 2
+      
+      - text: "Describe your quality assurance processes for data collection"
+        type: "textarea"
+        required: true
+        order: 3
+      
+      - text: "Upload supporting documentation (licenses, certifications, references)"
+        type: "file"
+        required: true
+        order: 4
+      
+      - text: "How will you measure and report on program outcomes?"
+        type: "textarea"
+        required: true
+        order: 5
+      
+      - text: "What risks do you anticipate and how will you mitigate them?"
+        type: "textarea"
+        required: true
+        order: 6
+      
+      - text: "Describe your commodity procurement and logistics capacity"
+        type: "textarea"
+        required: true
+        order: 7
+      
+      - text: "What is your strategy for government buy-in and compliance?"
+        type: "textarea"
+        required: true
+        order: 8
+
