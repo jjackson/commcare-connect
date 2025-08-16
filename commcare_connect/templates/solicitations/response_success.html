@@ -112,13 +112,13 @@
 
             <!-- Actions -->
             <div class="flex flex-col sm:flex-row items-center justify-center gap-4 pt-6 border-t border-gray-200">
-                <a href="{% url 'solicitations:detail' pk=response.solicitation.pk %}" 
+                <a href="{% url 'solicitations:detail' pk=response.solicitation.pk %}"
                    class="button button-md outline-style">
                     <i class="fa-solid fa-arrow-left mr-2"></i>
                     Back to Solicitation
                 </a>
-                
-                <a href="{% url 'solicitations:list' %}" 
+
+                <a href="{% url 'solicitations:list' %}"
                    class="button button-md primary-dark">
                     <i class="fa-solid fa-list mr-2"></i>
                     View All Opportunities
@@ -127,5 +127,3 @@
         </div>
     </div>
 {% endblock %}
-
-

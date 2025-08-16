@@ -68,7 +68,7 @@
             <!-- Solicitation Summary -->
             <div class="flex flex-col p-6 rounded-xl shadow-sm bg-white gap-5 relative mb-8">
                 <div class="absolute w-8 bg-brand-mango h-2 top-0 -translate-y-1/2 left-6 rounded-full"></div>
-                
+
                 <div class="flex w-full justify-between">
                     <div class="w-full">
                         <div class="flex items-center gap-3 mb-2">
@@ -84,7 +84,7 @@
                         <p class="card_description w-full max-w-3xl">{{ solicitation.description|truncatewords:30 }}</p>
                     </div>
                 </div>
-                
+
                 <!-- Key Information Row -->
                 <div class="bg-neutral-100 rounded-lg w-full px-5 py-4">
                     <div class="flex items-center justify-between gap-4">
@@ -95,9 +95,9 @@
                             <p>{{ solicitation.program.name }}</p>
                         </div>
                     </div>
-                    
+
                     <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
-                    
+
                     <div class="infocard-dark !w-fit">
                         <i class="fa-solid fa-location-dot"></i>
                         <div>
@@ -105,10 +105,10 @@
                             <p>{{ solicitation.target_population }}</p>
                         </div>
                     </div>
-                    
+
                     {% if solicitation.estimated_scale %}
                         <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
-                        
+
                         <div class="infocard-dark !w-fit">
                             <i class="fa-solid fa-chart-bar"></i>
                             <div>
@@ -117,9 +117,9 @@
                             </div>
                         </div>
                     {% endif %}
-                    
+
                     <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
-                    
+
                     <div class="infocard-dark !w-fit">
                         <i class="fa-solid fa-clock"></i>
                         <div>
@@ -127,9 +127,9 @@
                             <p>{{ solicitation.application_deadline|date:"M j, Y" }}</p>
                         </div>
                     </div>
-                    
+
                     <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
-                    
+
                     <div class="infocard-dark !w-fit">
                         <i class="fa-solid fa-calendar-check"></i>
                         <div>
@@ -137,9 +137,9 @@
                             <p>{{ solicitation.expected_start_date|date:"M Y"|default:"TBD" }}</p>
                         </div>
                     </div>
-                    
+
                     <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
-                    
+
                     <div class="infocard-dark !w-fit">
                         <i class="fa-solid fa-calendar-xmark"></i>
                         <div>
@@ -154,7 +154,7 @@
             <!-- Response Form -->
             <form id="response-form" method="post" enctype="multipart/form-data" class="space-y-6" novalidate>
                 {% csrf_token %}
-                
+
                 <!-- Organization Info -->
                 <div class="bg-blue-50 rounded-lg p-6">
                     <h4 class="text-lg font-medium text-brand-deep-purple mb-3">
@@ -180,7 +180,7 @@
                             <i class="fa-solid fa-clipboard-question mr-2"></i>
                             Application Questions
                         </h4>
-                        
+
                         {% for field in form %}
                             {% if field.name != 'attachments' %}
                                 <div class="border border-gray-200 rounded-lg p-6">
@@ -190,9 +190,9 @@
                                             <span class="text-red-500">*</span>
                                         {% endif %}
                                     </label>
-                                    
+
                                     {{ field }}
-                                    
+
                                     {% if field.errors %}
                                         {% for error in field.errors %}
                                             <p class="text-red-500 text-sm mt-1">{{ error }}</p>
@@ -207,30 +207,30 @@
                 <!-- Form Actions -->
                 <div class="flex items-center justify-between pt-6 border-t border-gray-200">
                     <div class="flex items-center space-x-4">
-                        <a href="{% url 'solicitations:detail' pk=solicitation.pk %}" 
+                        <a href="{% url 'solicitations:detail' pk=solicitation.pk %}"
                            class="button button-md outline-style">
                             <i class="fa-solid fa-arrow-left mr-2"></i>
                             Back to Solicitation
                         </a>
-                        
+
                         {% if user.memberships.exists %}
-                            <a href="{% url 'solicitations:draft_list' %}" 
+                            <a href="{% url 'solicitations:draft_list' %}"
                                class="text-sm text-gray-600 hover:text-gray-900">
                                 <i class="fa-solid fa-file-lines mr-1"></i>
                                 My Drafts
                             </a>
                         {% endif %}
                     </div>
-                    
+
                     <div class="flex items-center space-x-3">
                         <button type="submit" name="action" value="save_draft"
-                                class="button button-md outline-style" 
+                                class="button button-md outline-style"
                                 id="save-draft-btn">
                             <i class="fa-solid fa-floppy-disk mr-2"></i>
                             Save Draft
                         </button>
-                        
-                        <button type="submit" name="action" value="submit" 
+
+                        <button type="submit" name="action" value="submit"
                                 class="button button-md primary-dark"
                                 id="submit-btn">
                             <i class="fa-solid fa-paper-plane mr-2"></i>
@@ -240,7 +240,7 @@
                 </div>
             </form>
         </div>
-        
+
         <!-- File Attachments Section (Outside Main Form) -->
         <div class="bg-white rounded-xl shadow-sm p-8">
             <h4 class="text-lg font-medium text-brand-deep-purple mb-3">
@@ -250,13 +250,13 @@
             <p class="text-sm text-gray-600 mb-4">
                 Upload supporting documents for your response (optional). You can upload multiple files one at a time.
             </p>
-            
+
             <!-- File Upload Form (Separate from main form) -->
             <form method="post" enctype="multipart/form-data" action="{% url 'solicitations:upload_attachment' pk=solicitation.pk %}" class="mb-6">
                 {% csrf_token %}
                 <div class="flex items-end gap-3">
                     <div class="flex-1">
-                        <input type="file" 
+                        <input type="file"
                                name="attachment"
                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
                                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
@@ -271,7 +271,7 @@
                     Accepted formats: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max 10MB per file)
                 </p>
             </form>
-            
+
             <!-- Uploaded Files List -->
             {% if existing_attachments %}
                 <div class="space-y-2">
@@ -287,7 +287,7 @@
                             </div>
                             <form method="post" action="{% url 'solicitations:delete_attachment' pk=solicitation.pk attachment_id=attachment.pk %}" class="inline">
                                 {% csrf_token %}
-                                <button type="submit" 
+                                <button type="submit"
                                         class="text-red-600 hover:text-red-800 p-1"
                                         title="Delete file"
                                         onclick="return confirm('Are you sure you want to delete this file?')">
@@ -312,28 +312,28 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('response-form');
     const saveDraftBtn = document.getElementById('save-draft-btn');
     const submitBtn = document.getElementById('submit-btn');
-    
+
     // Auto-save functionality (text only, files handled separately)
     let autoSaveTimer;
     const autoSaveDelay = 30000; // 30 seconds
-    
+
     function collectFormData() {
         const formData = new FormData(form);
         const responses = {};
-        
+
         // Collect all form fields (excluding files and form actions)
         for (let [key, value] of formData.entries()) {
             if (key !== 'csrfmiddlewaretoken' && key !== 'action') {
                 responses[key] = value;
             }
         }
-        
+
         return { responses: responses };
     }
-    
+
     function saveAsDraft() {
         const data = collectFormData();
-        
+
         fetch("{% url 'solicitations:save_draft' pk=solicitation.pk %}", {
             method: 'POST',
             headers: {
@@ -354,13 +354,13 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Auto-save error:', error);
         });
     }
-    
+
     function showNotification(message, type = 'info') {
         // Create notification element
         const notification = document.createElement('div');
         let bgColor = 'bg-blue-500';
         let icon = 'info';
-        
+
         if (type === 'success') {
             bgColor = 'bg-green-500';
             icon = 'check';
@@ -368,7 +368,7 @@ document.addEventListener('DOMContentLoaded', function() {
             bgColor = 'bg-red-500';
             icon = 'exclamation-triangle';
         }
-        
+
         notification.className = `fixed top-4 right-4 px-4 py-2 rounded-md shadow-lg z-50 ${bgColor} text-white`;
         notification.innerHTML = `
             <div class="flex items-center">
@@ -376,42 +376,42 @@ document.addEventListener('DOMContentLoaded', function() {
                 ${message}
             </div>
         `;
-        
+
         document.body.appendChild(notification);
-        
+
         // Remove after 3 seconds (longer for errors)
         setTimeout(() => {
             notification.remove();
         }, type === 'error' ? 5000 : 3000);
     }
-    
+
     // Set up auto-save on form changes (only for main response form)
     if (form) {
         form.addEventListener('input', function() {
             clearTimeout(autoSaveTimer);
             autoSaveTimer = setTimeout(saveAsDraft, autoSaveDelay);
         });
-        
+
         form.addEventListener('change', function() {
             clearTimeout(autoSaveTimer);
             autoSaveTimer = setTimeout(saveAsDraft, autoSaveDelay);
         });
     }
-    
+
     // Manual save draft button
     if (saveDraftBtn) {
         saveDraftBtn.addEventListener('click', function(e) {
             showNotification('Saving draft...', 'info');
         });
     }
-    
+
     // Submit button validation and confirmation
     if (submitBtn) {
         submitBtn.addEventListener('click', function(e) {
             // Check required fields only for submission
             const requiredFields = form.querySelectorAll('[required]');
             let hasEmptyRequired = false;
-            
+
             requiredFields.forEach(field => {
                 if (!field.value.trim()) {
                     hasEmptyRequired = true;
@@ -422,13 +422,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     field.style.boxShadow = '';
                 }
             });
-            
+
             if (hasEmptyRequired) {
                 e.preventDefault();
                 showNotification('Please fill in all required fields before submitting.', 'error');
                 return;
             }
-            
+
             if (!confirm('Are you sure you want to submit this response? Once submitted, you cannot make changes.')) {
                 e.preventDefault();
             }
@@ -437,4 +437,3 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
-

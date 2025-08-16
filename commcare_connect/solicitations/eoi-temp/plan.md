@@ -8,11 +8,12 @@ Build new web pages for **CommCare Connect** that support a two-phase procuremen
 2. **Request for Proposal (RFP)** - Detailed proposal phase for EOI winners
 
 **Key Features**:
+
 1. **Program-owned Solicitations**: Programs can create and publish EOIs/RFPs
 2. **Public Viewing**: Beautiful public pages to showcase active solicitations (for donors/stakeholders)
 3. **Authenticated Responses**: Organizations submit responses on behalf of their org
 4. **Flexible Review Process**: Admin ability to review, score, and progress responses
-5. **Two-Phase Workflow**: EOI → RFP → Opportunity (final phase out of scope).  Some RFPs may not require EOIs.
+5. **Two-Phase Workflow**: EOI → RFP → Opportunity (final phase out of scope). Some RFPs may not require EOIs.
 
 ## Implementation Notes
 
@@ -24,6 +25,7 @@ Build new web pages for **CommCare Connect** that support a two-phase procuremen
 ## Core Data Models
 
 ### 1. Solicitation (unified model for EOI/RFP)
+
 - `title` - Name of the solicitation
 - `description` - Rich text description of the program
 - `target_population` - Who will be served
@@ -40,6 +42,7 @@ Build new web pages for **CommCare Connect** that support a two-phase procuremen
 - `attachments` - File field for supporting documents
 
 ### 2. SolicitationResponse
+
 - `solicitation` - Foreign key to Solicitation
 - `organization` - Foreign key to Organization (responding org)
 - `submitted_by` - User who submitted the response
@@ -50,6 +53,7 @@ Build new web pages for **CommCare Connect** that support a two-phase procuremen
 - `progressed_to_solicitation` - FK to RFP if EOI response was accepted
 
 ### 3. SolicitationReview (for admin scoring)
+
 - `response` - Foreign key to SolicitationResponse
 - `reviewer` - Admin doing the review
 - `score` - Numeric score
@@ -59,6 +63,7 @@ Build new web pages for **CommCare Connect** that support a two-phase procuremen
 - `recommendation` - accept, reject, needs_more_info
 
 ### 4. SolicitationQuestion (for flexible forms)
+
 - `solicitation` - Foreign key to Solicitation
 - `question_text` - The question
 - `question_type` - text, textarea, number, file, multiple_choice
@@ -69,9 +74,11 @@ Build new web pages for **CommCare Connect** that support a two-phase procuremen
 ## Implementation Phases
 
 ### Phase 1: Public Solicitation Viewing (Start Here)
+
 **Goal**: Beautiful public pages to showcase active EOIs/RFPs (donor-facing)
 
 **Implementation**:
+
 - Create new Django app: `commcare_connect/solicitations/`
 - Add public URLs outside org-specific paths (e.g., `/solicitations/`)
 - Create core models with unified Solicitation model
@@ -80,6 +87,7 @@ Build new web pages for **CommCare Connect** that support a two-phase procuremen
 - Support both EOI and RFP types in same views
 
 **Key Features**:
+
 - Filter by type (EOI vs RFP)
 - Status-based visibility (active vs completed)
 - Direct URL access for non-publicly-listed items
@@ -87,9 +95,11 @@ Build new web pages for **CommCare Connect** that support a two-phase procuremen
 - Professional design suitable for donor presentations
 
 ### Phase 2: Authenticated Response Submission
+
 **Goal**: Allow authenticated organization users to submit responses
 
 **Implementation**:
+
 - Require user authentication and organization membership
 - Create flexible response forms based on SolicitationQuestion
 - Support file uploads for supporting documents
@@ -98,15 +108,18 @@ Build new web pages for **CommCare Connect** that support a two-phase procuremen
 - Validate user has organization membership
 
 **Key Features**:
+
 - Dynamic form generation from questions
 - File upload support
 - Organization context validation
 - Email notifications to program managers
 
 ### Phase 3: Admin Review Interface
+
 **Goal**: Program managers can review, score, and progress responses
 
 **Implementation**:
+
 - Add review models and forms within program structure
 - Create program manager dashboard for solicitations
 - Build individual response review pages
@@ -114,15 +127,18 @@ Build new web pages for **CommCare Connect** that support a two-phase procuremen
 - Support EOI → RFP progression workflow
 
 **Key Features**:
+
 - Review dashboard showing all responses
 - Individual response review with scoring
 - Bulk actions for common operations
 - EOI acceptance → RFP creation workflow
 
 ### Phase 4: Admin Solicitation Authoring
+
 **Goal**: Program managers can create and publish EOIs/RFPs
 
 **Implementation**:
+
 - Create solicitation creation and editing forms
 - Add rich text editor for descriptions
 - Build draft/publish workflow with visibility controls
@@ -130,6 +146,7 @@ Build new web pages for **CommCare Connect** that support a two-phase procuremen
 - Support file attachments
 
 **Key Features**:
+
 - WYSIWYG editor for descriptions
 - Dynamic question builder interface
 - Draft/active/completed status management
@@ -139,6 +156,7 @@ Build new web pages for **CommCare Connect** that support a two-phase procuremen
 ## Technical Approach
 
 ### App Structure
+
 ```
 commcare_connect/solicitations/
 ├── __init__.py
@@ -154,6 +172,7 @@ commcare_connect/solicitations/
 ```
 
 ### URL Structure
+
 ```
 # Public URLs (no auth required - donor-facing)
 /solicitations/                    # List all publicly listed solicitations
@@ -172,6 +191,7 @@ commcare_connect/solicitations/
 ```
 
 ### Template Structure
+
 ```
 commcare_connect/templates/solicitations/
 ├── public_base.html              # Donor-facing base template (professional)
@@ -191,21 +211,25 @@ commcare_connect/templates/solicitations/
 ### Integration Points
 
 **Program Integration**:
+
 - Solicitations are owned by Programs
 - Program managers can create/manage solicitations
 - Follows existing program permission patterns
 
 **Organization Integration**:
+
 - Responses require organization membership
 - Users respond on behalf of their organization
 - Uses existing organization models and permissions
 
 **User Integration**:
+
 - Authentication required for responses
 - Uses existing user/organization membership system
 - Email notifications via existing task system
 
 **File Management**:
+
 - Support file attachments for both solicitations and responses
 - Uses Django's file handling system
 - Proper security for file access
@@ -250,9 +274,11 @@ The unified Solicitation model supports both EOI and RFP phases while maintainin
 ## Implementation Progress (Current Status)
 
 ### ✅ COMPLETED - Phase 1: Public Solicitation Viewing
+
 **Goal**: Beautiful donor-facing public pages to showcase active EOIs/RFPs
 
 **What's Done**:
+
 - ✅ Created complete Django app: `commcare_connect/solicitations/`
 - ✅ Implemented all core models:
   - `Solicitation` (unified EOI/RFP model)
@@ -275,13 +301,16 @@ The unified Solicitation model supports both EOI and RFP phases while maintainin
 - ✅ Database migrations completed
 
 **URLs Ready for Testing**:
+
 - http://localhost:8000/solicitations/ (all opportunities)
 - http://localhost:8000/solicitations/eoi/ (EOIs only)
 - http://localhost:8000/solicitations/rfp/ (RFPs only)
 - http://localhost:8000/solicitations/<id>/ (individual solicitation)
 
 ### ✅ COMPLETED - Sample Data & Initial Testing
+
 **What's Done**:
+
 - ✅ Fixed Django management command `create_sample_solicitations`
   - Resolved `TypeError` with `fake.future_date()` method
   - Fixed `AttributeError` with model property conflicts
@@ -294,41 +323,46 @@ The unified Solicitation model supports both EOI and RFP phases while maintainin
   - Search functionality operational
 
 ### ✅ COMPLETED - Phase 2: Authenticated Response Submission
+
 **Goal**: Allow authenticated organization users to submit responses
 
 **What's Done**:
-- ✅ **Authentication & Authorization**: 
+
+- ✅ **Authentication & Authorization**:
   - Implemented `LoginRequiredMixin` for secure access
   - Added organization membership validation
   - Prevent duplicate submissions from same organization
-- ✅ **Dynamic Response Forms**: 
+- ✅ **Dynamic Response Forms**:
   - Created `SolicitationResponseForm` with dynamic field generation
   - Support for all question types: text, textarea, number, file, multiple_choice
   - Form validation and error handling
-- ✅ **File Upload Support**: 
+- ✅ **File Upload Support**:
   - Multiple file attachment support for supporting documents
   - Proper file handling and security
-- ✅ **Email Notifications**: 
+- ✅ **Email Notifications**:
   - Automatic email notifications to program managers on submission
   - Includes submission details and organization information
-- ✅ **User Experience**: 
+- ✅ **User Experience**:
   - Beautiful response submission form with clear UI
   - Success page with next steps and submission details
   - Breadcrumb navigation and consistent styling
 - ✅ **Templates Created**:
   - `response_form.html` - Dynamic form with solicitation context
   - `response_success.html` - Professional confirmation page
-- ✅ **URL Integration**: 
+- ✅ **URL Integration**:
   - `/solicitations/<id>/respond/` - Response submission
   - `/solicitations/response/<id>/success/` - Success confirmation
   - Updated "Submit Response" button with proper linking
 
 **URLs Ready for Testing**:
+
 - http://localhost:8000/solicitations/<id>/respond/ (authenticated response submission)
 - http://localhost:8000/solicitations/response/<id>/success/ (success page)
 
 ### ✅ COMPLETED - Final Phase 2 Fixes
+
 **Focus**: Draft validation and user experience improvements
+
 - ✅ Fixed draft validation issue - required fields can now be left empty when saving drafts
 - ✅ Implemented simple HTML5 validation bypass with `novalidate` attribute
 - ✅ Added client-side validation for final submissions only
@@ -336,9 +370,11 @@ The unified Solicitation model supports both EOI and RFP phases while maintainin
 - ✅ Simplified JavaScript approach for better reliability
 
 ### 🔄 CURRENTLY WORKING ON: Phase 3 - Admin Review Interface
+
 **Goal**: Program managers can review, score, and progress responses
 
 **Phase 3 Requirements**:
+
 - Add review models and forms within program structure
 - Create program manager dashboard for solicitations
 - Build individual response review pages
@@ -346,12 +382,14 @@ The unified Solicitation model supports both EOI and RFP phases while maintainin
 - Support EOI → RFP progression workflow
 
 **Key Features to Implement**:
+
 - Review dashboard showing all responses
 - Individual response review with scoring
 - Bulk actions for common operations
 - EOI acceptance → RFP creation workflow
 
 ### 📋 NEXT PHASES (Ready to Begin After Phase 3):
+
 - **Phase 4**: Admin Solicitation Authoring
 
 **Status**: Phase 1 & 2 are 100% complete and fully functional. Public viewing with beautiful donor-facing pages, authenticated response submission with email notifications, and draft validation are all working perfectly. Now beginning Phase 3 (Admin Review Interface).

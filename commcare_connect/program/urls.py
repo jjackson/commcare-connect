@@ -1,17 +1,16 @@
 from django.urls import path
 
-from commcare_connect.program.views import (
+from commcare_connect.program.views import (  # Phase 3: Solicitation Management Views
     ManagedOpportunityInit,
     ManagedOpportunityList,
     ProgramCreateOrUpdate,
+    ProgramSolicitationDashboard,
+    SolicitationResponseList,
+    SolicitationResponseReview,
     apply_or_decline_application,
     invite_organization,
     manage_application,
     program_home,
-    # Phase 3: Solicitation Management Views
-    ProgramSolicitationDashboard,
-    SolicitationResponseList,
-    SolicitationResponseReview,
 )
 
 app_name = "program"
@@ -30,6 +29,14 @@ urlpatterns = [
     ),
     # Phase 3: Solicitation Management URLs
     path("<int:pk>/solicitations/", view=ProgramSolicitationDashboard.as_view(), name="solicitation_dashboard"),
-    path("<int:pk>/solicitations/<int:solicitation_pk>/responses/", view=SolicitationResponseList.as_view(), name="response_list"),
-    path("<int:pk>/solicitations/response/<int:response_pk>/review/", view=SolicitationResponseReview.as_view(), name="response_review"),
+    path(
+        "<int:pk>/solicitations/<int:solicitation_pk>/responses/",
+        view=SolicitationResponseList.as_view(),
+        name="response_list",
+    ),
+    path(
+        "<int:pk>/solicitations/response/<int:response_pk>/review/",
+        view=SolicitationResponseReview.as_view(),
+        name="response_review",
+    ),
 ]
