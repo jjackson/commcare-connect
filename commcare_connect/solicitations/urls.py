@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    AdminSolicitationOverview,
     PublicEOIListView,
     PublicRFPListView,
     PublicSolicitationDetailView,
@@ -30,4 +31,6 @@ urlpatterns = [
     # File management
     path("<int:pk>/upload-attachment/", upload_attachment, name="upload_attachment"),
     path("<int:pk>/delete-attachment/<int:attachment_id>/", delete_attachment, name="delete_attachment"),
+    # Admin overview
+    path("admin-overview/", AdminSolicitationOverview.as_view(), name="admin_overview"),
 ]
