@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils.timezone import now
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, UpdateView
+from django_tables2 import SingleTableView
 
 from commcare_connect.opportunity.models import (
     Opportunity,
@@ -35,6 +36,7 @@ from commcare_connect.solicitations.models import (
     SolicitationResponse,
     SolicitationReview,
 )
+from commcare_connect.solicitations.tables import SolicitationTable
 
 from .utils import is_program_manager
 
@@ -378,12 +380,13 @@ def _make_recent_activity_data(
 # =============================================================================
 
 
-class ProgramSolicitationDashboard(ProgramManagerMixin, ListView):
+class ProgramSolicitationDashboard(ProgramManagerMixin, SingleTableView):
     """
     Dashboard view for program managers to see all their solicitations and responses
     """
 
     template_name = "program/solicitation_dashboard.html"
+    table_class = SolicitationTable
     context_object_name = "solicitations"
     paginate_by = 20
 
@@ -393,54 +396,39 @@ class ProgramSolicitationDashboard(ProgramManagerMixin, ListView):
 
         return (
             Solicitation.objects.filter(program=program)
-            .select_related("program")
+            .select_related("program", "program__organization")
             .prefetch_related("responses")
-            .annotate(submitted_response_count=Count("responses", filter=~Q(responses__status="draft")))
+            .annotate(
+                total_responses=Count("responses", filter=~Q(responses__status="draft")),
+                under_review_count=Count("responses", filter=Q(responses__status="under_review")),
+                accepted_count=Count("responses", filter=Q(responses__status="accepted")),
+                rejected_count=Count("responses", filter=Q(responses__status="rejected")),
+                submitted_count=Count("responses", filter=Q(responses__status="submitted")),
+            )
             .order_by("-date_created")
         )
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        program_pk = self.kwargs.get("pk")
-        context["program"] = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
-        return context
-
-
-class SolicitationResponseList(ProgramManagerMixin, ListView):
-    """
-    List view for all responses to a specific solicitation
-    """
-
-    template_name = "program/response_list.html"
-    context_object_name = "responses"
-    paginate_by = 20
-
-    def get_queryset(self):
-        program_pk = self.kwargs.get("pk")
-        solicitation_pk = self.kwargs.get("solicitation_pk")
-
-        # Verify program ownership
-        program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
-        solicitation = get_object_or_404(Solicitation, pk=solicitation_pk, program=program)
-
-        return (
-            SolicitationResponse.objects.filter(solicitation=solicitation)
-            .exclude(status="draft")  # Don't show drafts to program managers
-            .select_related("organization", "submitted_by", "solicitation")
-            .prefetch_related("reviews", "file_attachments")
-            .order_by("-submission_date")
-        )
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        kwargs["org_slug"] = self.request.org.slug
+        kwargs["show_program_org"] = False  # Hide program/org column for program dashboard
+        return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         program_pk = self.kwargs.get("pk")
-        solicitation_pk = self.kwargs.get("solicitation_pk")
-
         program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
-        solicitation = get_object_or_404(Solicitation, pk=solicitation_pk, program=program)
-
         context["program"] = program
-        context["solicitation"] = solicitation
+
+        # Add summary statistics for the statistics cards
+        solicitations = self.get_queryset()
+        context["stats"] = {
+            "total_solicitations": solicitations.count(),
+            "active_eois": solicitations.filter(solicitation_type="eoi", status="active").count(),
+            "active_rfps": solicitations.filter(solicitation_type="rfp", status="active").count(),
+            "total_responses": sum(s.total_responses or 0 for s in solicitations),
+        }
+
         return context
 
 
@@ -532,5 +520,8 @@ class SolicitationResponseReview(ProgramManagerMixin, UpdateView):
 
         # Redirect back to response list
         return redirect(
-            "program:response_list", pk=response.solicitation.program.pk, solicitation_pk=response.solicitation.pk
+            "program:response_list",
+            org_slug=self.request.org.slug,
+            pk=response.solicitation.program.pk,
+            solicitation_pk=response.solicitation.pk,
         )

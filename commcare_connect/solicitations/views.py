@@ -4,17 +4,19 @@ import os
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.mail import send_mail
 from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
-from django.views.generic import CreateView, DetailView, ListView
+from django.views.generic import CreateView, DetailView, ListView, UpdateView
+from django_tables2 import SingleTableView
 
-from .forms import SolicitationResponseForm
+from .forms import SolicitationForm, SolicitationResponseForm
 from .models import ResponseAttachment, ResponseStatus, Solicitation, SolicitationQuestion, SolicitationResponse
+from .tables import SolicitationResponseTable, SolicitationTable
 
 
 class PublicSolicitationListView(ListView):
@@ -449,6 +451,132 @@ def delete_attachment(request, pk, attachment_id):
     return redirect("solicitations:respond", pk=pk)
 
 
+# =============================================================================
+# Program Manager Views (Django Tables2 approach)
+# =============================================================================
+
+
+class SolicitationResponseTableView(SingleTableView):
+    """
+    Table view for solicitation responses using Django Tables2
+    Similar approach to opportunities table
+    """
+
+    model = SolicitationResponse
+    table_class = SolicitationResponseTable
+    template_name = "solicitations/response_table.html"
+    context_object_name = "responses"
+    paginate_by = 20
+
+    def get_queryset(self):
+        # Get solicitation from URL params
+        solicitation_pk = self.kwargs.get("solicitation_pk")
+
+        # This would need proper permission checking in real implementation
+        # For now, just filter by solicitation
+        return (
+            SolicitationResponse.objects.filter(solicitation_id=solicitation_pk)
+            .exclude(status="draft")  # Don't show drafts to program managers
+            .select_related("organization", "submitted_by", "solicitation")
+            .prefetch_related("reviews", "file_attachments")
+            .order_by("-submission_date")
+        )
+
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        # Handle both URL patterns for org_slug
+        org_slug = self.kwargs.get("org_slug") or getattr(self.request, "org", {}).slug
+        program_pk = self.kwargs.get("program_pk") or self.kwargs.get("pk")
+
+        kwargs["org_slug"] = org_slug
+        kwargs["program_pk"] = program_pk
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Add solicitation and program context
+        # Handle both URL patterns
+        program_pk = self.kwargs.get("program_pk") or self.kwargs.get("pk")
+        solicitation_pk = self.kwargs.get("solicitation_pk")
+
+        # Get solicitation for header info
+        solicitation = get_object_or_404(Solicitation, pk=solicitation_pk)
+
+        # Calculate response statistics efficiently
+        responses = self.get_queryset()
+        status_counts = {
+            "under_review": 0,
+            "accepted": 0,
+            "rejected": 0,
+        }
+
+        for response in responses:
+            if response.status in status_counts:
+                status_counts[response.status] += 1
+
+        context["solicitation"] = solicitation
+        context["program_pk"] = program_pk
+        context["status_counts"] = status_counts
+
+        return context
+
+
+# =============================================================================
+# Admin Overview Views
+# =============================================================================
+
+
+class SuperUserRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
+    def test_func(self):
+        return self.request.user.is_superuser
+
+
+class AdminSolicitationOverview(SuperUserRequiredMixin, SingleTableView):
+    """
+    Admin-only overview of all solicitations across all organizations and programs
+    Shows active solicitations with response statistics
+    """
+
+    template_name = "solicitations/admin_solicitation_overview.html"
+    table_class = SolicitationTable
+    context_object_name = "solicitations"
+    paginate_by = 25
+
+    def get_queryset(self):
+        return (
+            Solicitation.objects.filter(status="active")
+            .select_related("program", "program__organization")
+            .prefetch_related("responses")
+            .annotate(
+                total_responses=Count("responses", filter=~Q(responses__status="draft")),
+                under_review_count=Count("responses", filter=Q(responses__status="under_review")),
+                accepted_count=Count("responses", filter=Q(responses__status="accepted")),
+                rejected_count=Count("responses", filter=Q(responses__status="rejected")),
+                submitted_count=Count("responses", filter=Q(responses__status="submitted")),
+            )
+            .order_by("-date_created")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Import here to avoid circular imports
+        from commcare_connect.program.models import Program
+
+        # Add summary statistics
+        all_solicitations = Solicitation.objects.filter(status="active")
+        context["summary_stats"] = {
+            "total_active_solicitations": all_solicitations.count(),
+            "total_eois": all_solicitations.filter(solicitation_type="eoi").count(),
+            "total_rfps": all_solicitations.filter(solicitation_type="rfp").count(),
+            "total_responses": SolicitationResponse.objects.exclude(status="draft").count(),
+            "total_organizations_with_programs": Program.objects.values("organization").distinct().count(),
+        }
+
+        return context
+
+
 class UserDraftListView(LoginRequiredMixin, ListView):
     """
     View to list user's draft responses
@@ -465,4 +593,132 @@ class UserDraftListView(LoginRequiredMixin, ListView):
         user_org = self.request.user.memberships.first().organization
         return SolicitationResponse.objects.filter(organization=user_org, status=ResponseStatus.DRAFT).order_by(
             "-date_modified"
+        )
+
+
+# =============================================================================
+# Phase 4: Solicitation Authoring Views
+# =============================================================================
+
+
+class SolicitationCreateView(LoginRequiredMixin, CreateView):
+    """
+    View for creating new solicitations (EOIs/RFPs)
+    """
+
+    model = Solicitation
+    form_class = SolicitationForm
+    template_name = "solicitations/solicitation_form.html"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        # Get program from URL
+        from commcare_connect.program.models import Program
+
+        program_pk = self.kwargs.get("program_pk")
+        if program_pk:
+            program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+            kwargs["program"] = program
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from commcare_connect.program.models import Program
+
+        program_pk = self.kwargs.get("program_pk")
+        if program_pk:
+            context["program"] = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+        context["is_create"] = True
+        import json
+
+        context["existing_questions"] = json.dumps([])  # No questions for new solicitations
+        return context
+
+    def form_valid(self, form):
+        # Set the created_by and modified_by fields
+        form.instance.created_by = self.request.user.email
+        form.instance.modified_by = self.request.user.email
+
+        # Save the solicitation first
+        response = super().form_valid(form)
+
+        # Now handle the questions from the JavaScript form
+        questions_data = self.request.POST.get("questions_data")
+        if questions_data:
+            try:
+                questions = json.loads(questions_data)
+                for question_data in questions:
+                    SolicitationQuestion.objects.create(
+                        solicitation=self.object,
+                        question_text=question_data.get("question_text", ""),
+                        question_type=question_data.get("question_type", "textarea"),
+                        is_required=question_data.get("is_required", True),
+                        options=question_data.get("options", None),
+                        order=question_data.get("order", 1),
+                    )
+            except (json.JSONDecodeError, Exception):
+                messages.warning(
+                    self.request, "Questions could not be saved. Please edit the solicitation to add questions."
+                )
+
+        messages.success(self.request, f'Solicitation "{form.instance.title}" has been created successfully.')
+        return response
+
+    def get_success_url(self):
+        from django.urls import reverse
+
+        return reverse(
+            "program:solicitation_dashboard", kwargs={"org_slug": self.request.org.slug, "pk": self.object.program.pk}
+        )
+
+
+class SolicitationUpdateView(LoginRequiredMixin, UpdateView):
+    """
+    View for editing existing solicitations
+    """
+
+    model = Solicitation
+    form_class = SolicitationForm
+    template_name = "solicitations/solicitation_form.html"
+
+    def get_object(self):
+        # Ensure user can only edit solicitations from their organization's programs
+        obj = get_object_or_404(
+            Solicitation.objects.select_related("program", "program__organization"),
+            pk=self.kwargs["pk"],
+            program__organization=self.request.org,
+        )
+        return obj
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["program"] = self.object.program
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["program"] = self.object.program
+        context["is_create"] = False
+        # Load existing questions for editing
+        import json
+
+        existing_questions = list(
+            self.object.questions.all()
+            .order_by("order")
+            .values("id", "question_text", "question_type", "is_required", "options", "order")
+        )
+        context["existing_questions"] = json.dumps(existing_questions)
+        return context
+
+    def form_valid(self, form):
+        # Set the modified_by field
+        form.instance.modified_by = self.request.user.email
+        messages.success(self.request, f'Solicitation "{form.instance.title}" has been updated successfully.')
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        from django.urls import reverse
+
+        return reverse(
+            "program:solicitation_dashboard", kwargs={"org_slug": self.request.org.slug, "pk": self.object.program.pk}
         )

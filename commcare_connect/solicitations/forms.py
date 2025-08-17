@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.forms import ModelForm
 from django.utils.translation import gettext_lazy as _
 
-from .models import SolicitationQuestion, SolicitationResponse
+from .models import Solicitation, SolicitationQuestion, SolicitationResponse
 
 
 class SolicitationResponseForm(ModelForm):
@@ -202,3 +202,144 @@ class SolicitationResponseForm(ModelForm):
             response.save()
 
         return response
+
+
+class SolicitationForm(ModelForm):
+    """
+    Form for creating and editing solicitations (EOIs/RFPs)
+    """
+
+    class Meta:
+        model = Solicitation
+        fields = [
+            "title",
+            "description",
+            "solicitation_type",
+            "expected_start_date",
+            "expected_end_date",
+            "application_deadline",
+            "status",
+            "is_publicly_listed",
+        ]
+        widgets = {
+            "title": forms.TextInput(
+                attrs={
+                    "class": (
+                        "w-full px-3 py-2 border border-gray-300 rounded-md "
+                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                    ),
+                    "placeholder": "Enter solicitation title...",
+                }
+            ),
+            "description": forms.Textarea(
+                attrs={
+                    "class": (
+                        "w-full px-3 py-2 border border-gray-300 rounded-md "
+                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                    ),
+                    "rows": 6,
+                    "placeholder": "Describe the solicitation, its objectives, and requirements...",
+                }
+            ),
+            "solicitation_type": forms.Select(
+                attrs={
+                    "class": (
+                        "w-full px-3 py-2 border border-gray-300 rounded-md "
+                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                    )
+                }
+            ),
+            "expected_start_date": forms.DateInput(
+                attrs={
+                    "class": (
+                        "w-full px-3 py-2 border border-gray-300 rounded-md "
+                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                    ),
+                    "type": "date",
+                }
+            ),
+            "expected_end_date": forms.DateInput(
+                attrs={
+                    "class": (
+                        "w-full px-3 py-2 border border-gray-300 rounded-md "
+                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                    ),
+                    "type": "date",
+                }
+            ),
+            "application_deadline": forms.DateInput(
+                attrs={
+                    "class": (
+                        "w-full px-3 py-2 border border-gray-300 rounded-md "
+                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                    ),
+                    "type": "date",
+                }
+            ),
+            "status": forms.Select(
+                attrs={
+                    "class": (
+                        "w-full px-3 py-2 border border-gray-300 rounded-md "
+                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                    )
+                }
+            ),
+            "is_publicly_listed": forms.CheckboxInput(
+                attrs={"class": "h-4 w-4 text-brand-indigo border-gray-300 rounded focus:ring-brand-indigo"}
+            ),
+        }
+
+    def __init__(self, program=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.program = program
+
+        # Add helpful labels and help text
+        self.fields["title"].label = "Solicitation Title"
+        self.fields["description"].label = "Description"
+        self.fields["solicitation_type"].label = "Type"
+
+        self.fields["expected_start_date"].label = "Expected Start Date"
+        self.fields["expected_end_date"].label = "Expected End Date"
+        self.fields["application_deadline"].label = "Application Deadline"
+        self.fields["status"].label = "Status"
+        self.fields["is_publicly_listed"].label = "Publicly Listed"
+
+        # Add help text
+        self.fields["description"].help_text = "Provide a detailed description of the solicitation"
+
+        self.fields["is_publicly_listed"].help_text = "Check to make this solicitation visible in public listings"
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        # Validate date ranges
+        start_date = cleaned_data.get("expected_start_date")
+        end_date = cleaned_data.get("expected_end_date")
+        deadline = cleaned_data.get("application_deadline")
+
+        if start_date and end_date and start_date >= end_date:
+            raise ValidationError("Expected end date must be after the start date.")
+
+        if deadline and start_date and deadline >= start_date:
+            raise ValidationError("Application deadline must be before the expected start date.")
+
+        return cleaned_data
+
+    def save(self, commit=True):
+        solicitation = super().save(commit=False)
+
+        if self.program:
+            solicitation.program = self.program
+
+        # Set default values for fields we're no longer collecting in the form
+        if not solicitation.target_population:
+            solicitation.target_population = "To be determined"
+        if not solicitation.scope_of_work:
+            solicitation.scope_of_work = "Details will be provided through application questions"
+        if not solicitation.estimated_scale:
+            solicitation.estimated_scale = "To be determined"
+
+        if commit:
+            solicitation.save()
+
+        return solicitation
