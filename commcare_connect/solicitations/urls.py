@@ -22,7 +22,7 @@ urlpatterns = [
     path("eoi/", PublicEOIListView.as_view(), name="eoi_list"),
     path("rfp/", PublicRFPListView.as_view(), name="rfp_list"),
     path("<int:pk>/", PublicSolicitationDetailView.as_view(), name="detail"),
-    # Phase 2: Authenticated response submission
+    # Authenticated response submission
     path("<int:pk>/respond/", SolicitationResponseCreateView.as_view(), name="respond"),
     path("response/<int:pk>/success/", ResponseSuccessView.as_view(), name="response_success"),
     # Draft management
