@@ -32,43 +32,21 @@
 {% endblock %}
 
 {% block main_content %}
-    <!-- Filter and Search Section -->
+    <!-- Filter Section -->
     <div class="card_bg mb-8">
-        <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <!-- Filter Tabs -->
-            <div class="flex flex-wrap gap-2">
-                <a href="{% url 'solicitations:list' %}"
-                   class="button button-sm {% if current_type == 'all' %}primary-dark{% else %}outline-style{% endif %}">
-                    All Opportunities ({{ total_active }})
-                </a>
-                <a href="{% url 'solicitations:eoi_list' %}"
-                   class="button button-sm {% if current_type == 'eoi' %}primary-dark{% else %}outline-style{% endif %}">
-                    EOIs ({{ eoi_count }})
-                </a>
-                <a href="{% url 'solicitations:rfp_list' %}"
-                   class="button button-sm {% if current_type == 'rfp' %}primary-dark{% else %}outline-style{% endif %}">
-                    RFPs ({{ rfp_count }})
-                </a>
-            </div>
-
-            <!-- Search Form -->
-            <form method="get" class="flex gap-2">
-                <input type="text"
-                       name="search"
-                       value="{{ search_query }}"
-                       placeholder="Search opportunities..."
-                       class="base-input">
-                <button type="submit"
-                        class="button button-md primary-dark">
-                    Search
-                </button>
-                {% if search_query %}
-                    <a href="{% url request.resolver_match.url_name %}"
-                       class="button button-md outline-style">
-                        Clear
-                    </a>
-                {% endif %}
-            </form>
+        <div class="flex flex-wrap gap-2">
+            <a href="{% url 'solicitations:list' %}"
+               class="button button-sm {% if current_type == 'all' %}primary-dark{% else %}outline-style{% endif %}">
+                All Opportunities ({{ total_active }})
+            </a>
+            <a href="{% url 'solicitations:eoi_list' %}"
+               class="button button-sm {% if current_type == 'eoi' %}primary-dark{% else %}outline-style{% endif %}">
+                EOIs ({{ eoi_count }})
+            </a>
+            <a href="{% url 'solicitations:rfp_list' %}"
+               class="button button-sm {% if current_type == 'rfp' %}primary-dark{% else %}outline-style{% endif %}">
+                RFPs ({{ rfp_count }})
+            </a>
         </div>
     </div>
 

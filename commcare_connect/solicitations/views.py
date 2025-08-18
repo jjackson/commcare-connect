@@ -43,16 +43,6 @@ class PublicSolicitationListView(ListView):
         if solicitation_type in ["eoi", "rfp"]:
             queryset = queryset.filter(solicitation_type=solicitation_type)
 
-        # Search functionality
-        search = self.request.GET.get("search")
-        if search:
-            queryset = queryset.filter(
-                Q(title__icontains=search)
-                | Q(description__icontains=search)
-                | Q(target_population__icontains=search)
-                | Q(program__name__icontains=search)
-            )
-
         return queryset.order_by("-date_created")
 
     def get_context_data(self, **kwargs):
@@ -60,7 +50,6 @@ class PublicSolicitationListView(ListView):
 
         # Add filter information
         context["current_type"] = self.kwargs.get("type", "all")
-        context["search_query"] = self.request.GET.get("search", "")
 
         # Add summary statistics for the page
         context["total_active"] = Solicitation.objects.filter(is_publicly_listed=True, status="active").count()
