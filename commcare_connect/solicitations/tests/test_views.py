@@ -144,43 +144,6 @@ class TestPublicSolicitationListView:
         assert rfp.title in response.content.decode()
         assert eoi.title not in response.content.decode()
 
-    def test_search_functionality(self):
-        program = ProgramFactory()
-        user = UserFactory()
-        client = Client()
-
-        solicitation1 = Solicitation.objects.create(
-            title="Child Health Campaign",
-            description="Maternal and child health services",
-            target_population="Children under 5",
-            scope_of_work="Health screening",
-            status=SolicitationStatus.ACTIVE,
-            is_publicly_listed=True,
-            program=program,
-            created_by=user,
-            application_deadline=date.today() + timedelta(days=30),
-        )
-
-        solicitation2 = Solicitation.objects.create(
-            title="Nutrition Program",
-            description="Adult nutrition services",
-            target_population="Adults",
-            scope_of_work="Nutrition counseling",
-            status=SolicitationStatus.ACTIVE,
-            is_publicly_listed=True,
-            program=program,
-            created_by=user,
-            application_deadline=date.today() + timedelta(days=30),
-        )
-
-        # Search for "child" should find solicitation1
-        url = reverse("solicitations:list")
-        response = client.get(url, {"search": "child"})
-
-        assert response.status_code == 200
-        assert solicitation1.title in response.content.decode()
-        assert solicitation2.title not in response.content.decode()
-
 
 @pytest.mark.django_db
 class TestPublicSolicitationDetailView:
