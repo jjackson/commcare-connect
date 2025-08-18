@@ -213,7 +213,7 @@ class ResendInvitesView(ClientProtectedResourceMixin, View):
         return HttpResponse(status=200)
 
 
-class RetrieveUserOTPView(UserPassesTestMixin, TemplateView):
+class RetrieveUserOTPView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
     template_name = "pages/connect_user_otp.html"
 
     def test_func(self):
