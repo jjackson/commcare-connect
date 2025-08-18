@@ -46,7 +46,7 @@
             </div>
 
             <div class="flex items-center gap-x-4">
-                <a href="{% url 'program:solicitation_create' org_slug=request.org.slug program_pk=program.pk %}" class="button button-md primary-dark">
+                <a href="{% url 'org_solicitations:program_solicitation_create' org_slug=request.org.slug program_pk=program.pk %}" class="button button-md primary-dark">
                     <i class="fa-solid fa-plus mr-2"></i>
                     Create New Solicitation
                 </a>
