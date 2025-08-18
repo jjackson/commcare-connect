@@ -28,7 +28,8 @@ class SolicitationFactory(factory.django.DjangoModelFactory):
     status = SolicitationStatus.ACTIVE
     is_publicly_listed = True
     program = factory.SubFactory(ProgramFactory)
-    created_by = factory.SubFactory(UserFactory)
+    created_by = factory.Faker("email")
+    modified_by = factory.Faker("email")
     application_deadline = factory.LazyFunction(lambda: timezone.now().date() + timedelta(days=30))
     estimated_scale = factory.Faker("sentence", nb_words=4)
     expected_start_date = factory.LazyFunction(lambda: timezone.now().date() + timedelta(days=60))
