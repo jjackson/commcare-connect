@@ -16,7 +16,7 @@ from django.core.files.storage import default_storage, storages
 from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -845,6 +845,12 @@ def approve_visits(request, org_slug, opp_id):
         .prefetch_related("opportunity")
         .only("status", "review_status", "flagged", "justification", "review_created_on")
     )
+
+    if len({visit.user_id for visit in visits}) > 1:
+        return HttpResponseBadRequest(
+            "All visits must belong to the same user.",
+            headers={"HX-Trigger": "form_error"},
+        )
 
     today = now()
     for visit in visits:
