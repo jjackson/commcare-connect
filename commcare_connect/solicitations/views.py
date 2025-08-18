@@ -14,6 +14,8 @@ from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 
+from commcare_connect.reports.views import SuperUserRequiredMixin
+
 from .forms import SolicitationForm, SolicitationResponseForm
 from .models import ResponseAttachment, ResponseStatus, Solicitation, SolicitationQuestion, SolicitationResponse
 from .tables import SolicitationResponseTable, SolicitationTable
@@ -510,11 +512,6 @@ class SolicitationResponseTableView(SingleTableView):
 # =============================================================================
 # Admin Overview Views
 # =============================================================================
-
-
-class SuperUserRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
-    def test_func(self):
-        return self.request.user.is_superuser
 
 
 class AdminSolicitationOverview(SuperUserRequiredMixin, SingleTableView):
