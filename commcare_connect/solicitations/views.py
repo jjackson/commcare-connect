@@ -648,7 +648,8 @@ class SolicitationCreateView(LoginRequiredMixin, CreateView):
         from django.urls import reverse
 
         return reverse(
-            "program:solicitation_dashboard", kwargs={"org_slug": self.request.org.slug, "pk": self.object.program.pk}
+            "org_solicitations:program_dashboard",
+            kwargs={"org_slug": self.request.org.slug, "pk": self.object.program.pk},
         )
 
 
@@ -700,5 +701,184 @@ class SolicitationUpdateView(LoginRequiredMixin, UpdateView):
         from django.urls import reverse
 
         return reverse(
-            "program:solicitation_dashboard", kwargs={"org_slug": self.request.org.slug, "pk": self.object.program.pk}
+            "org_solicitations:program_dashboard",
+            kwargs={"org_slug": self.request.org.slug, "pk": self.object.program.pk},
+        )
+
+
+# =============================================================================
+# Program Management Views (moved from program app)
+# =============================================================================
+
+
+class ProgramSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, SingleTableView):
+    """
+    Dashboard view for program managers to see all their solicitations and responses
+    """
+
+    template_name = "program/solicitation_dashboard.html"
+    table_class = SolicitationTable
+    context_object_name = "solicitations"
+    paginate_by = 20
+
+    def test_func(self):
+        """Use same permission logic as ProgramManagerMixin"""
+        org_membership = getattr(self.request, "org_membership", None)
+        is_admin = getattr(org_membership, "is_admin", False)
+        org = getattr(self.request, "org", None)
+        program_manager = getattr(org, "program_manager", False)
+        return (org_membership is not None and is_admin and program_manager) or self.request.user.is_superuser
+
+    def get_queryset(self):
+        from commcare_connect.program.models import Program
+
+        program_pk = self.kwargs.get("pk")
+        program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+
+        return (
+            Solicitation.objects.filter(program=program)
+            .select_related("program", "program__organization")
+            .prefetch_related("responses")
+            .annotate(
+                total_responses=Count("responses", filter=~Q(responses__status="draft")),
+                under_review_count=Count("responses", filter=Q(responses__status="under_review")),
+                accepted_count=Count("responses", filter=Q(responses__status="accepted")),
+                rejected_count=Count("responses", filter=Q(responses__status="rejected")),
+                submitted_count=Count("responses", filter=Q(responses__status="submitted")),
+            )
+            .order_by("-date_created")
+        )
+
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        kwargs["org_slug"] = self.request.org.slug
+        kwargs["show_program_org"] = False  # Hide program/org column for program dashboard
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        from commcare_connect.program.models import Program
+
+        context = super().get_context_data(**kwargs)
+        program_pk = self.kwargs.get("pk")
+        program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+        context["program"] = program
+
+        # Add summary statistics for the statistics cards
+        solicitations = self.get_queryset()
+        context["stats"] = {
+            "total_solicitations": solicitations.count(),
+            "active_eois": solicitations.filter(solicitation_type="eoi", status="active").count(),
+            "active_rfps": solicitations.filter(solicitation_type="rfp", status="active").count(),
+            "total_responses": sum(s.total_responses or 0 for s in solicitations),
+        }
+
+        return context
+
+
+class SolicitationResponseReview(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+    """
+    Individual response review view for program managers
+    """
+
+    template_name = "program/response_review.html"
+    fields = []  # We'll handle the form manually
+
+    def test_func(self):
+        """Use same permission logic as ProgramManagerMixin"""
+        org_membership = getattr(self.request, "org_membership", None)
+        is_admin = getattr(org_membership, "is_admin", False)
+        org = getattr(self.request, "org", None)
+        program_manager = getattr(org, "program_manager", False)
+        return (org_membership is not None and is_admin and program_manager) or self.request.user.is_superuser
+
+    def get_object(self):
+        from commcare_connect.program.models import Program
+
+        program_pk = self.kwargs.get("pk")
+        response_pk = self.kwargs.get("response_pk")
+
+        # Verify program ownership through the response's solicitation
+        program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+        response = get_object_or_404(
+            SolicitationResponse.objects.select_related(
+                "solicitation__program", "organization", "submitted_by"
+            ).prefetch_related("file_attachments", "reviews"),
+            pk=response_pk,
+            solicitation__program=program,
+        )
+
+        return response
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        response = self.get_object()
+        program = response.solicitation.program
+
+        # Get questions for this solicitation
+        questions = SolicitationQuestion.objects.filter(solicitation=response.solicitation).order_by("order")
+
+        # Get existing review by current user (if any)
+        from .models import SolicitationReview
+
+        existing_review = SolicitationReview.objects.filter(response=response, reviewer=self.request.user).first()
+
+        context.update(
+            {
+                "program": program,
+                "solicitation": response.solicitation,
+                "response": response,
+                "questions": questions,
+                "existing_review": existing_review,
+            }
+        )
+
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """Handle review form submission"""
+        from .models import ReviewRecommendation, SolicitationReview
+
+        response = self.get_object()
+
+        # Get or create review
+        review, created = SolicitationReview.objects.get_or_create(
+            response=response,
+            reviewer=request.user,
+            defaults={"score": None, "notes": "", "recommendation": None, "tags": ""},
+        )
+
+        # Update review with form data
+        score = request.POST.get("score")
+        if score:
+            try:
+                review.score = int(score)
+            except (ValueError, TypeError):
+                review.score = None
+
+        review.notes = request.POST.get("notes", "")
+        review.tags = request.POST.get("tags", "")
+        recommendation = request.POST.get("recommendation")
+        if recommendation in [choice[0] for choice in ReviewRecommendation.choices]:
+            review.recommendation = recommendation
+
+        review.save()
+
+        # Handle status changes based on recommendation
+        if recommendation == ReviewRecommendation.ACCEPT:
+            response.status = ResponseStatus.ACCEPTED
+            response.save(update_fields=["status"])
+            messages.success(request, f"Response from {response.organization.name} has been accepted.")
+        elif recommendation == ReviewRecommendation.REJECT:
+            response.status = ResponseStatus.REJECTED
+            response.save(update_fields=["status"])
+            messages.success(request, f"Response from {response.organization.name} has been rejected.")
+        else:
+            messages.success(request, "Review saved successfully.")
+
+        # Redirect back to response list
+        return redirect(
+            "org_solicitations:program_response_list",
+            org_slug=self.request.org.slug,
+            pk=response.solicitation.program.pk,
+            solicitation_pk=response.solicitation.pk,
         )
