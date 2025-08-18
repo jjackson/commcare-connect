@@ -1,11 +1,5 @@
 from django.urls import path
 
-from .ajax_views import (
-    solicitation_question_create,
-    solicitation_question_delete,
-    solicitation_question_reorder,
-    solicitation_question_update,
-)
 from .views import (
     AdminSolicitationOverview,
     ProgramSolicitationDashboard,
@@ -22,6 +16,10 @@ from .views import (
     UserDraftListView,
     delete_attachment,
     save_draft_ajax,
+    solicitation_question_create,
+    solicitation_question_delete,
+    solicitation_question_reorder,
+    solicitation_question_update,
     upload_attachment,
 )
 
