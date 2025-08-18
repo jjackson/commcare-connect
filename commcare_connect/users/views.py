@@ -13,7 +13,7 @@ from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
-from django.views.generic import RedirectView, TemplateView, UpdateView, View
+from django.views.generic import FormView, RedirectView, UpdateView, View
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from oauth2_provider.views.mixins import ClientProtectedResourceMixin
 from rest_framework.decorators import api_view, authentication_classes
@@ -213,19 +213,16 @@ class ResendInvitesView(ClientProtectedResourceMixin, View):
         return HttpResponse(status=200)
 
 
-class RetrieveUserOTPView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+class RetrieveUserOTPView(LoginRequiredMixin, UserPassesTestMixin, FormView):
     template_name = "pages/connect_user_otp.html"
+    form_class = ManualUserOTPForm
 
     def test_func(self):
         return self.request.user.is_superuser
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["form"] = ManualUserOTPForm()
-        return context
-
     def post(self, request, *args, **kwargs):
-        form = ManualUserOTPForm(request.POST)
+        form = self.get_form()
+
         if not form.is_valid():
             errors = ", ".join(form.errors["phone_number"])
             messages.error(request, f"{errors}")
