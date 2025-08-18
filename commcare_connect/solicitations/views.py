@@ -155,9 +155,6 @@ class PublicRFPListView(PublicSolicitationListView):
         return super().get_queryset().filter(solicitation_type="rfp")
 
 
-# Phase 2: Authenticated Response Submission Views
-
-
 class SolicitationResponseCreateView(LoginRequiredMixin, CreateView):
     """
     Authenticated view for submitting responses to solicitations
@@ -461,8 +458,7 @@ class SolicitationResponseTableView(SingleTableView):
         # Get solicitation from URL params
         solicitation_pk = self.kwargs.get("solicitation_pk")
 
-        # This would need proper permission checking in real implementation
-        # For now, just filter by solicitation
+        # Filter responses by solicitation
         return (
             SolicitationResponse.objects.filter(solicitation_id=solicitation_pk)
             .exclude(status="draft")  # Don't show drafts to program managers
@@ -583,11 +579,6 @@ class UserDraftListView(LoginRequiredMixin, ListView):
         return SolicitationResponse.objects.filter(organization=user_org, status=ResponseStatus.DRAFT).order_by(
             "-date_modified"
         )
-
-
-# =============================================================================
-# Phase 4: Solicitation Authoring Views
-# =============================================================================
 
 
 class SolicitationCreateView(LoginRequiredMixin, CreateView):
