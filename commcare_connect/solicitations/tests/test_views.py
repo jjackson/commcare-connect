@@ -1,218 +1,134 @@
-from datetime import date, timedelta
-
 import pytest
-from django.test import Client
 from django.urls import reverse
 
-from commcare_connect.program.tests.factories import ProgramFactory
-from commcare_connect.solicitations.models import Solicitation, SolicitationStatus, SolicitationType
-from commcare_connect.users.tests.factories import UserFactory
+from commcare_connect.solicitations.models import SolicitationStatus, SolicitationType
+from commcare_connect.solicitations.tests.factories import EOIFactory, RFPFactory, SolicitationFactory
+
+
+class BaseSolicitationViewTest:
+    """Base class for solicitation view tests with common setup"""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, anonymous_client):
+        self.client = anonymous_client
 
 
 @pytest.mark.django_db
-class TestPublicSolicitationListView:
+class TestPublicSolicitationListView(BaseSolicitationViewTest):
     def test_public_list_view_shows_active_public_solicitations(self):
-        program = ProgramFactory()
-        user = UserFactory()
-        client = Client()
-
-        # Create various solicitations
-        active_public_eoi = Solicitation.objects.create(
+        """Test that public list only shows active, publicly listed solicitations"""
+        # Create various solicitations using factory
+        active_public_eoi = EOIFactory(
             title="Active Public EOI",
-            description="Test description",
-            target_population="Test population",
-            scope_of_work="Test scope",
-            solicitation_type=SolicitationType.EOI,
             status=SolicitationStatus.ACTIVE,
             is_publicly_listed=True,
-            program=program,
-            created_by=user,
-            application_deadline=date.today() + timedelta(days=30),
         )
 
-        active_private_eoi = Solicitation.objects.create(
+        active_private_eoi = EOIFactory(
             title="Active Private EOI",
-            description="Test description",
-            target_population="Test population",
-            scope_of_work="Test scope",
-            solicitation_type=SolicitationType.EOI,
             status=SolicitationStatus.ACTIVE,
             is_publicly_listed=False,
-            program=program,
-            created_by=user,
-            application_deadline=date.today() + timedelta(days=30),
         )
 
-        draft_public_eoi = Solicitation.objects.create(
+        draft_public_eoi = EOIFactory(
             title="Draft Public EOI",
-            description="Test description",
-            target_population="Test population",
-            scope_of_work="Test scope",
-            solicitation_type=SolicitationType.EOI,
             status=SolicitationStatus.DRAFT,
             is_publicly_listed=True,
-            program=program,
-            created_by=user,
-            application_deadline=date.today() + timedelta(days=30),
         )
 
         url = reverse("solicitations:list")
-        response = client.get(url)
+        response = self.client.get(url)
 
         assert response.status_code == 200
-        assert active_public_eoi.title in response.content.decode()
-        assert active_private_eoi.title not in response.content.decode()
-        assert draft_public_eoi.title not in response.content.decode()
+        content = response.content.decode()
+        assert active_public_eoi.title in content
+        assert active_private_eoi.title not in content
+        assert draft_public_eoi.title not in content
 
-    def test_eoi_filter_view(self):
-        program = ProgramFactory()
-        user = UserFactory()
-        client = Client()
-
-        # Create EOI and RFP
-        eoi = Solicitation.objects.create(
+    @pytest.mark.parametrize(
+        "solicitation_type,url_name,should_show_eoi,should_show_rfp",
+        [
+            (SolicitationType.EOI, "solicitations:eoi_list", True, False),
+            (SolicitationType.RFP, "solicitations:rfp_list", False, True),
+        ],
+    )
+    def test_type_filter_views(self, solicitation_type, url_name, should_show_eoi, should_show_rfp):
+        """Test that type-specific filter views only show solicitations of that type"""
+        # Create EOI and RFP using factories
+        eoi = EOIFactory(
             title="Test EOI",
-            description="Test description",
-            target_population="Test population",
-            scope_of_work="Test scope",
-            solicitation_type=SolicitationType.EOI,
             status=SolicitationStatus.ACTIVE,
             is_publicly_listed=True,
-            program=program,
-            created_by=user,
-            application_deadline=date.today() + timedelta(days=30),
         )
 
-        rfp = Solicitation.objects.create(
+        rfp = RFPFactory(
             title="Test RFP",
-            description="Test description",
-            target_population="Test population",
-            scope_of_work="Test scope",
-            solicitation_type=SolicitationType.RFP,
             status=SolicitationStatus.ACTIVE,
             is_publicly_listed=True,
-            program=program,
-            created_by=user,
-            application_deadline=date.today() + timedelta(days=30),
         )
 
-        # Test EOI filter
-        url = reverse("solicitations:eoi_list")
-        response = client.get(url)
+        # Test the filter view
+        url = reverse(url_name)
+        response = self.client.get(url)
 
         assert response.status_code == 200
-        assert eoi.title in response.content.decode()
-        assert rfp.title not in response.content.decode()
+        content = response.content.decode()
 
-    def test_rfp_filter_view(self):
-        program = ProgramFactory()
-        user = UserFactory()
-        client = Client()
+        if should_show_eoi:
+            assert eoi.title in content
+        else:
+            assert eoi.title not in content
 
-        # Create EOI and RFP
-        eoi = Solicitation.objects.create(
-            title="Test EOI",
-            description="Test description",
-            target_population="Test population",
-            scope_of_work="Test scope",
-            solicitation_type=SolicitationType.EOI,
-            status=SolicitationStatus.ACTIVE,
-            is_publicly_listed=True,
-            program=program,
-            created_by=user,
-            application_deadline=date.today() + timedelta(days=30),
-        )
-
-        rfp = Solicitation.objects.create(
-            title="Test RFP",
-            description="Test description",
-            target_population="Test population",
-            scope_of_work="Test scope",
-            solicitation_type=SolicitationType.RFP,
-            status=SolicitationStatus.ACTIVE,
-            is_publicly_listed=True,
-            program=program,
-            created_by=user,
-            application_deadline=date.today() + timedelta(days=30),
-        )
-
-        # Test RFP filter
-        url = reverse("solicitations:rfp_list")
-        response = client.get(url)
-
-        assert response.status_code == 200
-        assert rfp.title in response.content.decode()
-        assert eoi.title not in response.content.decode()
+        if should_show_rfp:
+            assert rfp.title in content
+        else:
+            assert rfp.title not in content
 
 
 @pytest.mark.django_db
-class TestPublicSolicitationDetailView:
+class TestPublicSolicitationDetailView(BaseSolicitationViewTest):
     def test_detail_view_shows_active_solicitation(self):
-        program = ProgramFactory()
-        user = UserFactory()
-        client = Client()
-
-        solicitation = Solicitation.objects.create(
+        """Test that detail view shows active solicitation content"""
+        solicitation = SolicitationFactory(
             title="Test Solicitation",
             description="Detailed description of the program",
-            target_population="Test population",
             scope_of_work="Detailed scope of work",
             status=SolicitationStatus.ACTIVE,
-            program=program,
-            created_by=user,
-            application_deadline=date.today() + timedelta(days=30),
         )
 
         url = reverse("solicitations:detail", kwargs={"pk": solicitation.pk})
-        response = client.get(url)
+        response = self.client.get(url)
 
         assert response.status_code == 200
-        assert solicitation.title in response.content.decode()
-        assert solicitation.description in response.content.decode()
-        assert solicitation.scope_of_work in response.content.decode()
+        content = response.content.decode()
+        assert solicitation.title in content
+        assert solicitation.description in content
+        assert solicitation.scope_of_work in content
 
     def test_detail_view_shows_private_solicitation_via_direct_url(self):
         """Private solicitations should be accessible via direct URL"""
-        program = ProgramFactory()
-        user = UserFactory()
-        client = Client()
-
-        private_solicitation = Solicitation.objects.create(
+        private_solicitation = SolicitationFactory(
             title="Private Solicitation",
             description="This is not publicly listed",
-            target_population="Test population",
-            scope_of_work="Test scope",
             status=SolicitationStatus.ACTIVE,
             is_publicly_listed=False,
-            program=program,
-            created_by=user,
-            application_deadline=date.today() + timedelta(days=30),
         )
 
         url = reverse("solicitations:detail", kwargs={"pk": private_solicitation.pk})
-        response = client.get(url)
+        response = self.client.get(url)
 
         assert response.status_code == 200
         assert private_solicitation.title in response.content.decode()
 
     def test_detail_view_404_for_draft_solicitation(self):
         """Draft solicitations should not be accessible even via direct URL"""
-        program = ProgramFactory()
-        user = UserFactory()
-        client = Client()
-
-        draft_solicitation = Solicitation.objects.create(
+        draft_solicitation = SolicitationFactory(
             title="Draft Solicitation",
             description="This is a draft",
-            target_population="Test population",
-            scope_of_work="Test scope",
             status=SolicitationStatus.DRAFT,
-            program=program,
-            created_by=user,
-            application_deadline=date.today() + timedelta(days=30),
         )
 
         url = reverse("solicitations:detail", kwargs={"pk": draft_solicitation.pk})
-        response = client.get(url)
+        response = self.client.get(url)
 
         assert response.status_code == 404
