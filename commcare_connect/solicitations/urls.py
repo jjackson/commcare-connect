@@ -1,13 +1,24 @@
 from django.urls import path
 
+from .ajax_views import (
+    solicitation_question_create,
+    solicitation_question_delete,
+    solicitation_question_reorder,
+    solicitation_question_update,
+)
 from .views import (
     AdminSolicitationOverview,
+    ProgramSolicitationDashboard,
     PublicEOIListView,
     PublicRFPListView,
     PublicSolicitationDetailView,
     PublicSolicitationListView,
     ResponseSuccessView,
+    SolicitationCreateView,
     SolicitationResponseCreateView,
+    SolicitationResponseReview,
+    SolicitationResponseTableView,
+    SolicitationUpdateView,
     UserDraftListView,
     delete_attachment,
     save_draft_ajax,
@@ -33,4 +44,47 @@ urlpatterns = [
     path("<int:pk>/delete-attachment/<int:attachment_id>/", delete_attachment, name="delete_attachment"),
     # Admin overview
     path("admin-overview/", AdminSolicitationOverview.as_view(), name="admin_overview"),
+    # Program management URLs (moved from program app)
+    path("program/<int:pk>/", ProgramSolicitationDashboard.as_view(), name="program_dashboard"),
+    path(
+        "program/<int:pk>/solicitations/<int:solicitation_pk>/responses/",
+        SolicitationResponseTableView.as_view(),
+        name="program_response_list",
+    ),
+    path(
+        "program/<int:pk>/solicitations/response/<int:response_pk>/review/",
+        SolicitationResponseReview.as_view(),
+        name="program_response_review",
+    ),
+    path(
+        "program/<int:program_pk>/solicitations/create/",
+        SolicitationCreateView.as_view(),
+        name="program_solicitation_create",
+    ),
+    path(
+        "program/<int:program_pk>/solicitations/<int:pk>/edit/",
+        SolicitationUpdateView.as_view(),
+        name="program_solicitation_edit",
+    ),
+    # AJAX endpoints for question management
+    path(
+        "program/<int:program_pk>/solicitations/<int:solicitation_pk>/questions/create/",
+        solicitation_question_create,
+        name="program_solicitation_question_create",
+    ),
+    path(
+        "program/<int:program_pk>/solicitations/<int:solicitation_pk>/questions/<int:question_pk>/update/",
+        solicitation_question_update,
+        name="program_solicitation_question_update",
+    ),
+    path(
+        "program/<int:program_pk>/solicitations/<int:solicitation_pk>/questions/<int:question_pk>/delete/",
+        solicitation_question_delete,
+        name="program_solicitation_question_delete",
+    ),
+    path(
+        "program/<int:program_pk>/solicitations/<int:solicitation_pk>/questions/reorder/",
+        solicitation_question_reorder,
+        name="program_solicitation_question_reorder",
+    ),
 ]

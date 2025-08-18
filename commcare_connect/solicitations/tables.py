@@ -123,7 +123,7 @@ class SolicitationResponseTable(OrgContextTable):
     def render_actions(self, record):
         """Render action links"""
         url = reverse(
-            "program:response_review",
+            "org_solicitations:program_response_review",
             kwargs={"org_slug": self.org_slug, "pk": self.program_pk, "response_pk": record.pk},
         )
 
@@ -321,7 +321,7 @@ class SolicitationTable(OrgContextTable):
         if hasattr(record, "program") and hasattr(record.program, "organization"):
             # Edit link (only for program managers)
             edit_url = reverse(
-                "program:solicitation_edit",
+                "org_solicitations:program_solicitation_edit",
                 kwargs={
                     "org_slug": record.program.organization.slug,
                     "program_pk": record.program.pk,
@@ -335,7 +335,7 @@ class SolicitationTable(OrgContextTable):
 
             # Responses link
             responses_url = reverse(
-                "program:response_list",
+                "org_solicitations:program_response_list",
                 kwargs={
                     "org_slug": record.program.organization.slug,
                     "pk": record.program.pk,

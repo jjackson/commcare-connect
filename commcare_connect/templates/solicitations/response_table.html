@@ -16,7 +16,7 @@
             <i class="fa-solid fa-chevron-right"></i>
         </li>
         <li>
-            <a href="{% url 'program:solicitation_dashboard' org_slug=request.org.slug pk=program_pk %}">Solicitations</a>
+            <a href="{% url 'org_solicitations:program_dashboard' org_slug=request.org.slug pk=program_pk %}">Solicitations</a>
             <i class="fa-solid fa-chevron-right"></i>
         </li>
         <li>
@@ -64,7 +64,7 @@
                     <i class="fa-solid fa-external-link-alt mr-2"></i>
                     View Public Page
                 </a>
-                <a href="{% url 'program:solicitation_dashboard' org_slug=request.org.slug pk=program_pk %}"
+                <a href="{% url 'org_solicitations:program_dashboard' org_slug=request.org.slug pk=program_pk %}"
                    class="button button-md outline-style">
                     <i class="fa-solid fa-arrow-left mr-2"></i>
                     Back to Dashboard
