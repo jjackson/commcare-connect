@@ -141,4 +141,4 @@ class TestRetrieveUserOTPView:
         user.is_superuser = True
         user.save()
         client.force_login(user)
-        return client.post(self.url, data={"phone_number": "+1234567890"})
+        return client.post(self.url, data={"phone_number": "+1234567890"}, follow=True)
