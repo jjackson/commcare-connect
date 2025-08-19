@@ -6,7 +6,7 @@ from django.utils.translation import gettext_lazy as _
 from .models import Solicitation, SolicitationQuestion, SolicitationResponse
 
 
-class SolicitationResponseForm(ModelForm):
+class SolicitationResponseForm(forms.Form):
     """
     Dynamic form for responding to solicitations
     Fields are generated based on SolicitationQuestion instances
@@ -14,11 +14,9 @@ class SolicitationResponseForm(ModelForm):
 
     # Remove the old single file field - we'll handle multiple files differently
 
-    class Meta:
-        model = SolicitationResponse
-        fields = []  # No file fields in the main form
-
-    def __init__(self, solicitation, user, is_draft_save=False, *args, **kwargs):
+    def __init__(self, solicitation, user, is_draft_save=False, instance=None, *args, **kwargs):
+        # Extract instance from kwargs since Form doesn't handle it automatically
+        self.instance = instance
         super().__init__(*args, **kwargs)
         self.solicitation = solicitation
         self.user = user
@@ -166,8 +164,12 @@ class SolicitationResponseForm(ModelForm):
         return cleaned_data
 
     def save(self, commit=True):
-        # Create the response instance
-        response = super().save(commit=False)
+        # Create or update the response instance
+        if self.instance:
+            response = self.instance
+        else:
+            response = SolicitationResponse()
+
         response.solicitation = self.solicitation
         response.submitted_by = self.user
 
@@ -191,12 +193,8 @@ class SolicitationResponseForm(ModelForm):
                 except SolicitationQuestion.DoesNotExist:
                     continue
 
-        # CRITICAL: Ensure responses is always set before any save operation
-        # This prevents the IntegrityError for null values
-        if not hasattr(response, "responses") or response.responses is None:
-            response.responses = responses_data
-        else:
-            response.responses = responses_data
+        # Set the responses data
+        response.responses = responses_data
 
         if commit:
             response.save()
@@ -293,20 +291,8 @@ class SolicitationForm(ModelForm):
         super().__init__(*args, **kwargs)
         self.program = program
 
-        # Add helpful labels and help text
-        self.fields["title"].label = "Solicitation Title"
-        self.fields["description"].label = "Description"
-        self.fields["solicitation_type"].label = "Type"
-
-        self.fields["expected_start_date"].label = "Expected Start Date"
-        self.fields["expected_end_date"].label = "Expected End Date"
-        self.fields["application_deadline"].label = "Application Deadline"
-        self.fields["status"].label = "Status"
-        self.fields["is_publicly_listed"].label = "Publicly Listed"
-
-        # Add help text
+        # Add help text (labels are now automatically populated from model verbose_name)
         self.fields["description"].help_text = "Provide a detailed description of the solicitation"
-
         self.fields["is_publicly_listed"].help_text = "Check to make this solicitation visible in public listings"
 
     def clean(self):
