@@ -217,25 +217,26 @@ class RetrieveUserOTPView(LoginRequiredMixin, UserPassesTestMixin, FormView):
     template_name = "pages/connect_user_otp.html"
     form_class = ManualUserOTPForm
 
+    @property
+    def success_url(self):
+        return reverse("users:connect_user_otp")
+
     def test_func(self):
         return self.request.user.is_superuser
 
-    def post(self, request, *args, **kwargs):
-        form = self.get_form()
-
-        if not form.is_valid():
-            errors = ", ".join(form.errors["phone_number"])
-            messages.error(request, f"{errors}")
-            return self.get(request, *args, **kwargs)
-
+    def form_valid(self, form):
         otp = generate_and_fetch_otp(form.cleaned_data["phone_number"])
         if otp is None:
             messages.error(
-                request,
+                self.request,
                 "Failed to fetch OTP. Please make sure the number is correct and"
                 " that the user has started their device seating process.",
             )
-            return self.get(request, *args, **kwargs)
+        else:
+            messages.success(self.request, f"The user's OTP is: {otp}")
+        return super().form_valid(form)
 
-        messages.success(request, f"The user's OTP is: {otp}")
-        return self.get(request, *args, **kwargs)
+    def form_invalid(self, form):
+        errors = ", ".join(form.errors["phone_number"])
+        messages.error(self.request, f"{errors}")
+        return super().form_invalid(form)
