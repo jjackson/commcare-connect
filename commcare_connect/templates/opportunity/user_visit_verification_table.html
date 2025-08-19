@@ -10,7 +10,6 @@
       hx-get="{% url 'opportunity:user_visit_verification_table' request.org.slug opportunity_access.opportunity.id opportunity_access.id %}"
       hx-trigger="reload_table from:body"
       hx-swap="outerHTML"
-      x-data="selectionManager"
   >
   <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14 better-tabs overflow-x-auto">
     <div class="tabs">
