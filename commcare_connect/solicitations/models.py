@@ -25,16 +25,23 @@ class Solicitation(BaseModel):
     Unified model for both EOIs and RFPs
     """
 
-    title = models.CharField(max_length=255)
-    description = models.TextField(help_text="Rich text description of the program and requirements")
+    title = models.CharField(max_length=255, verbose_name="Solicitation Title")
+    description = models.TextField(
+        verbose_name="Description", help_text="Rich text description of the program and requirements"
+    )
     target_population = models.CharField(
         max_length=255, help_text="Who will be served (e.g., 'Children under 5 in rural areas')"
     )
     scope_of_work = models.TextField(help_text="What work needs to be done")
-    solicitation_type = models.CharField(max_length=3, choices=SolicitationType.choices, default=SolicitationType.EOI)
-    status = models.CharField(max_length=10, choices=SolicitationStatus.choices, default=SolicitationStatus.DRAFT)
+    solicitation_type = models.CharField(
+        max_length=3, choices=SolicitationType.choices, default=SolicitationType.EOI, verbose_name="Type"
+    )
+    status = models.CharField(
+        max_length=10, choices=SolicitationStatus.choices, default=SolicitationStatus.DRAFT, verbose_name="Status"
+    )
     is_publicly_listed = models.BooleanField(
         default=True,
+        verbose_name="Publicly Listed",
         help_text="Whether this appears in public listings (can still be accessed via direct URL if False)",
     )
 
@@ -55,9 +62,9 @@ class Solicitation(BaseModel):
     )
 
     # Timeline
-    expected_start_date = models.DateField(null=True, blank=True)
-    expected_end_date = models.DateField(null=True, blank=True)
-    application_deadline = models.DateField()
+    expected_start_date = models.DateField(null=True, blank=True, verbose_name="Expected Start Date")
+    expected_end_date = models.DateField(null=True, blank=True, verbose_name="Expected End Date")
+    application_deadline = models.DateField(verbose_name="Application Deadline")
 
     # Additional details
     estimated_scale = models.CharField(max_length=255, blank=True, help_text="e.g., '40,000 children, 25-50 FLWs'")
