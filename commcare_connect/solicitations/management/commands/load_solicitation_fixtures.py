@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.dateparse import parse_date
 
+from commcare_connect.opportunity.models import DeliveryType
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
 from commcare_connect.program.models import Program
 from commcare_connect.solicitations.models import Solicitation, SolicitationQuestion
@@ -14,11 +15,14 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Load real EOI/RFP data from YAML fixtures"
+    help = "Load solicitation data from YAML fixtures"
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--file", type=str, default="real_eois.yaml", help="YAML file name in solicitations/fixtures/ directory"
+            "--file",
+            type=str,
+            default="sample_solicitations.yaml",
+            help="YAML file name in solicitations/fixtures/ directory",
         )
         parser.add_argument(
             "--dry-run", action="store_true", help="Show what would be created without actually creating it"
@@ -26,6 +30,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--update", action="store_true", help="Update existing solicitations if they already exist"
         )
+        parser.add_argument("--cleanup", action="store_true", help="Clean up existing fixture data before loading")
 
     def get_fixtures_path(self, filename):
         """Get the full path to the fixtures file"""
@@ -85,6 +90,19 @@ class Command(BaseCommand):
         """Create programs from YAML data"""
         programs = {}
 
+        # Get or create a default delivery type
+        if not dry_run:
+            delivery_type, created = DeliveryType.objects.get_or_create(
+                name="Digital Health Services",
+                defaults={
+                    "name": "Digital Health Services",
+                    "slug": "digital-health-services",
+                    "description": "Digital health service delivery programs",
+                },
+            )
+            if created:
+                self.stdout.write(f"Created delivery type: {delivery_type.name}")
+
         for program_data in programs_data:
             org = self.get_or_create_organization(program_data["organization_slug"])
 
@@ -103,6 +121,7 @@ class Command(BaseCommand):
                     "start_date": datetime.now().date(),
                     "end_date": datetime.now().date().replace(year=datetime.now().year + 1),
                     "organization": org,
+                    "delivery_type": delivery_type,
                 },
             )
 
@@ -194,10 +213,29 @@ class Command(BaseCommand):
 
         return created_count, updated_count
 
+    def clean_fixture_data(self):
+        """Clean up existing fixture data"""
+        self.stdout.write("Cleaning up existing fixture data...")
+
+        # Delete solicitations that look like fixture data (could be refined)
+        deletions = [
+            lambda: SolicitationQuestion.objects.filter(solicitation__title__icontains="sample").delete(),
+            lambda: Solicitation.objects.filter(title__icontains="sample").delete(),
+        ]
+
+        for delete in deletions:
+            delete()
+
+        self.stdout.write("Cleanup complete.")
+
     def handle(self, *args, **options):
         filename = options["file"]
         dry_run = options["dry_run"]
         update = options["update"]
+        cleanup = options["cleanup"]
+
+        if cleanup:
+            self.clean_fixture_data()
 
         # Load YAML data
         filepath = self.get_fixtures_path(filename)
@@ -223,13 +261,14 @@ class Command(BaseCommand):
         if not dry_run:
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"Successfully loaded real EOI data! " f"Created: {created_count}, Updated: {updated_count}"
+                    f"Successfully loaded solicitation fixture data! "
+                    f"Created: {created_count}, Updated: {updated_count}"
                 )
             )
 
             # Print helpful URLs
             self.stdout.write("\n" + "=" * 50)
-            self.stdout.write("🎉 Real EOI data loaded! Check these URLs:")
+            self.stdout.write("🎉 Solicitation fixture data loaded! Check these URLs:")
             self.stdout.write("=" * 50)
             self.stdout.write("📋 Public solicitations: http://localhost:8000/solicitations/")
             self.stdout.write("🔍 EOIs only: http://localhost:8000/solicitations/eoi/")
