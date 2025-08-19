@@ -116,17 +116,17 @@ class TestRetrieveUserOTPView:
 
         assert response.status_code == 403
 
-    @patch("commcare_connect.users.views.generate_and_fetch_otp")
-    def test_superuser_can_generate_and_fetch_otp(self, generate_and_fetch_otp_mock, user, client):
-        generate_and_fetch_otp_mock.return_value = "1234"
+    @patch("commcare_connect.users.views.get_user_otp")
+    def test_superuser_can_get_user_otp(self, get_user_otp_mock, user, client):
+        get_user_otp_mock.return_value = "1234"
         response = self._get_superuser_response(client, user)
 
         messages = list(response.context["messages"])
         assert str(messages[0]) == "The user's OTP is: 1234"
 
-    @patch("commcare_connect.users.views.generate_and_fetch_otp")
-    def test_otp_not_retrieved(self, generate_and_fetch_otp_mock, user, client):
-        generate_and_fetch_otp_mock.return_value = None
+    @patch("commcare_connect.users.views.get_user_otp")
+    def test_otp_not_retrieved(self, get_user_otp_mock, user, client):
+        get_user_otp_mock.return_value = None
         response = self._get_superuser_response(client, user)
 
         expected_failure_message = (
