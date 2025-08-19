@@ -155,7 +155,8 @@ class SolicitationTable(OrgContextTable):
     status = tables.Column(verbose_name="Status")
     date_created = tables.Column(verbose_name="Published")
     application_deadline = tables.Column(verbose_name="Deadline")
-    response_statistics = tables.Column(empty_values=(), verbose_name="Response Statistics", orderable=False)
+    total = tables.Column(empty_values=(), verbose_name="Total", orderable=False)
+    reviewed = tables.Column(empty_values=(), verbose_name="Reviewed", orderable=False)
     actions = tables.Column(empty_values=(), verbose_name="Actions", orderable=False)
 
     class Meta:
@@ -167,7 +168,8 @@ class SolicitationTable(OrgContextTable):
             "status",
             "date_created",
             "application_deadline",
-            "response_statistics",
+            "total",
+            "reviewed",
             "actions",
         )
         sequence = (
@@ -177,7 +179,8 @@ class SolicitationTable(OrgContextTable):
             "status",
             "date_created",
             "application_deadline",
-            "response_statistics",
+            "total",
+            "reviewed",
             "actions",
         )
         order_by = ("-date_created",)
@@ -271,42 +274,27 @@ class SolicitationTable(OrgContextTable):
             formatted_date,
         )
 
-    def render_response_statistics(self, record):
-        """Render response statistics with colored dots"""
-        # Get the annotated counts from the queryset
+    def render_total(self, record):
+        """Render total responses count"""
         total = getattr(record, "total_responses", 0)
-        under_review = getattr(record, "under_review_count", 0)
+        return format_html('<span class="text-sm font-medium text-gray-900">{}</span>', total)
+
+    def render_reviewed(self, record):
+        """Render reviewed responses count (accepted + rejected)"""
         accepted = getattr(record, "accepted_count", 0)
         rejected = getattr(record, "rejected_count", 0)
-
-        html_parts = [
-            (
-                f'<div class="flex items-center">'
-                f'<div class="w-2 h-2 bg-blue-500 rounded-full mr-1"></div>'
-                f'<span class="text-xs text-gray-600">{total}</span></div>'
-            ),
-            (
-                f'<div class="flex items-center">'
-                f'<div class="w-2 h-2 bg-yellow-500 rounded-full mr-1"></div>'
-                f'<span class="text-xs text-gray-600">{under_review}</span></div>'
-            ),
-            (
-                f'<div class="flex items-center">'
-                f'<div class="w-2 h-2 bg-green-500 rounded-full mr-1"></div>'
-                f'<span class="text-xs text-gray-600">{accepted}</span></div>'
-            ),
-            (
-                f'<div class="flex items-center">'
-                f'<div class="w-2 h-2 bg-red-500 rounded-full mr-1"></div>'
-                f'<span class="text-xs text-gray-600">{rejected}</span></div>'
-            ),
-        ]
-
-        return format_html('<div class="flex items-center space-x-4">{}</div>', mark_safe("".join(html_parts)))
+        reviewed = accepted + rejected
+        return format_html('<span class="text-sm font-medium text-gray-900">{}</span>', reviewed)
 
     def render_actions(self, record):
         """Render action links"""
-        public_url = reverse("solicitations:detail", kwargs={"pk": record.pk})
+        # Check if we're in org context or global context for public detail view
+        if hasattr(self, "org_slug") and self.org_slug:
+            # Organization context - use org_solicitations namespace
+            public_url = reverse("org_solicitations:detail", kwargs={"org_slug": self.org_slug, "pk": record.pk})
+        else:
+            # Global context - use solicitations namespace
+            public_url = reverse("solicitations:detail", kwargs={"pk": record.pk})
 
         actions = []
 
@@ -319,28 +307,48 @@ class SolicitationTable(OrgContextTable):
 
         # For admin overview, we might not have org context, so handle gracefully
         if hasattr(record, "program") and hasattr(record.program, "organization"):
-            # Edit link (only for program managers)
-            edit_url = reverse(
-                "org_solicitations:program_solicitation_edit",
-                kwargs={
-                    "org_slug": record.program.organization.slug,
-                    "program_pk": record.program.pk,
-                    "pk": record.pk,
-                },
-            )
+            # Check if we have org_slug context (org-specific admin overview)
+            # vs global admin overview
+            if hasattr(self, "org_slug") and self.org_slug:
+                # Organization context - use org_solicitations namespace
+                edit_url = reverse(
+                    "org_solicitations:program_solicitation_edit",
+                    kwargs={
+                        "org_slug": self.org_slug,
+                        "program_pk": record.program.pk,
+                        "pk": record.pk,
+                    },
+                )
+                responses_url = reverse(
+                    "org_solicitations:program_response_list",
+                    kwargs={
+                        "org_slug": self.org_slug,
+                        "pk": record.program.pk,
+                        "solicitation_pk": record.pk,
+                    },
+                )
+            else:
+                # Global context - build full URLs to org-specific pages
+                edit_url = reverse(
+                    "org_solicitations:program_solicitation_edit",
+                    kwargs={
+                        "org_slug": record.program.organization.slug,
+                        "program_pk": record.program.pk,
+                        "pk": record.pk,
+                    },
+                )
+                responses_url = reverse(
+                    "org_solicitations:program_response_list",
+                    kwargs={
+                        "org_slug": record.program.organization.slug,
+                        "pk": record.program.pk,
+                        "solicitation_pk": record.pk,
+                    },
+                )
+
             actions.append(
                 f'<a href="{edit_url}" class="text-brand-indigo hover:text-brand-deep-purple" '
                 f'title="Edit Solicitation"><i class="fa-solid fa-edit"></i></a>'
-            )
-
-            # Responses link
-            responses_url = reverse(
-                "org_solicitations:program_response_list",
-                kwargs={
-                    "org_slug": record.program.organization.slug,
-                    "pk": record.program.pk,
-                    "solicitation_pk": record.pk,
-                },
             )
             actions.append(
                 f'<a href="{responses_url}" class="text-brand-indigo hover:text-brand-deep-purple" '

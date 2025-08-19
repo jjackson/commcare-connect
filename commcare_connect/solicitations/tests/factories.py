@@ -1,7 +1,9 @@
+import random
 from datetime import timedelta
 
 import factory
 from django.utils import timezone
+from faker import Faker
 
 from commcare_connect.program.tests.factories import ProgramFactory
 from commcare_connect.solicitations.models import (
@@ -15,15 +17,64 @@ from commcare_connect.solicitations.models import (
 )
 from commcare_connect.users.tests.factories import OrganizationFactory, UserFactory
 
+fake = Faker()
+
+# Template data moved from management command
+SOLICITATION_TEMPLATES = {
+    "eoi": {
+        "title_suffix": "Expression of Interest",
+        "description": (
+            "We are seeking qualified local organizations to partner with us in delivering {focus} "
+            "services to underserved communities. This Expression of Interest will help us identify "
+            "potential partners for our upcoming program."
+        ),
+        "questions": [
+            "Describe your organization's experience working with {target_population}",
+            "What is your organization's approach to community engagement?",
+            "How many field workers can your organization deploy?",
+            "Upload your organization's registration certificate",
+            "What geographical areas does your organization currently serve?",
+        ],
+    },
+    "rfp": {
+        "title_suffix": "Request for Proposals",
+        "description": (
+            "Following our Expression of Interest process, we invite selected organizations to submit "
+            "detailed proposals for implementing {focus} interventions. This RFP outlines specific "
+            "requirements and deliverables."
+        ),
+        "questions": [
+            "Provide a detailed implementation timeline",
+            "Submit your detailed budget breakdown",
+            "Describe your quality assurance processes",
+            "Upload supporting documentation (licenses, certifications, etc.)",
+            "How will you measure and report on program outcomes?",
+            "What risks do you anticipate and how will you mitigate them?",
+        ],
+    },
+}
+
+FOCUS_AREAS = ["maternal health", "child nutrition", "vaccination campaigns", "community health screening"]
+TARGET_POPULATIONS = ["pregnant women", "children under 5", "rural communities", "vulnerable families"]
+
+
+def get_question_type_from_text(question_text):
+    """Smart question type detection from text content"""
+    text_lower = question_text.lower()
+    if "upload" in text_lower or "submit" in text_lower:
+        return QuestionType.FILE
+    elif "how many" in text_lower or "number" in text_lower:
+        return QuestionType.NUMBER
+    else:
+        return QuestionType.TEXTAREA
+
 
 class SolicitationFactory(factory.django.DjangoModelFactory):
+    """Factory that creates realistic solicitations with proper templates"""
+
     class Meta:
         model = Solicitation
 
-    title = factory.Faker("catch_phrase")
-    description = factory.Faker("text", max_nb_chars=500)
-    target_population = factory.Faker("sentence", nb_words=6)
-    scope_of_work = factory.Faker("text", max_nb_chars=300)
     solicitation_type = factory.Iterator([SolicitationType.EOI, SolicitationType.RFP])
     status = SolicitationStatus.ACTIVE
     is_publicly_listed = True
@@ -31,23 +82,50 @@ class SolicitationFactory(factory.django.DjangoModelFactory):
     created_by = factory.Faker("email")
     modified_by = factory.Faker("email")
     application_deadline = factory.LazyFunction(lambda: timezone.now().date() + timedelta(days=30))
-    estimated_scale = factory.Faker("sentence", nb_words=4)
     expected_start_date = factory.LazyFunction(lambda: timezone.now().date() + timedelta(days=60))
     expected_end_date = factory.LazyFunction(lambda: timezone.now().date() + timedelta(days=365))
 
+    @factory.lazy_attribute
+    def title(self):
+        focus_area = random.choice(FOCUS_AREAS)
+        template = SOLICITATION_TEMPLATES[self.solicitation_type]
+        return f"Sample {focus_area.title()} - {template['title_suffix']}"
+
+    @factory.lazy_attribute
+    def description(self):
+        focus_area = random.choice(FOCUS_AREAS)
+        target_population = random.choice(TARGET_POPULATIONS)
+        template = SOLICITATION_TEMPLATES[self.solicitation_type]
+        return template["description"].format(focus=focus_area, target_population=target_population)
+
+    @factory.lazy_attribute
+    def target_population(self):
+        return random.choice(TARGET_POPULATIONS)
+
+    @factory.lazy_attribute
+    def scope_of_work(self):
+        focus_area = random.choice(FOCUS_AREAS)
+        return (
+            f"Implement {focus_area} interventions including community outreach, "
+            f"service delivery, and data collection"
+        )
+
+    @factory.lazy_attribute
+    def estimated_scale(self):
+        target_population = random.choice(TARGET_POPULATIONS)
+        return f"{fake.random_int(min=1000, max=50000)} {target_population}"
+
 
 class EOIFactory(SolicitationFactory):
-    """Factory specifically for EOIs"""
+    """EOI with proper template"""
 
     solicitation_type = SolicitationType.EOI
-    title = factory.Sequence(lambda n: f"EOI: Health Initiative {n}")
 
 
 class RFPFactory(SolicitationFactory):
-    """Factory specifically for RFPs"""
+    """RFP with proper template"""
 
     solicitation_type = SolicitationType.RFP
-    title = factory.Sequence(lambda n: f"RFP: Implementation Proposal {n}")
 
 
 class SolicitationQuestionFactory(factory.django.DjangoModelFactory):
@@ -81,7 +159,7 @@ class SolicitationResponseFactory(factory.django.DjangoModelFactory):
 
 
 class SolicitationWithQuestionsFactory(SolicitationFactory):
-    """Factory that creates a solicitation with associated questions"""
+    """Factory that creates solicitation with template-based questions"""
 
     @factory.post_generation
     def questions(self, create, extracted, **kwargs):
@@ -89,24 +167,57 @@ class SolicitationWithQuestionsFactory(SolicitationFactory):
             return
 
         if extracted:
-            # If specific questions were provided
+            # Use provided questions
             for question_data in extracted:
                 SolicitationQuestionFactory(solicitation=self, **question_data)
         else:
-            # Create default questions
-            default_questions = [
-                {
-                    "question_text": "Describe your organization's relevant experience",
-                    "question_type": QuestionType.TEXTAREA,
-                    "order": 1,
-                },
-                {"question_text": "How many staff can you deploy?", "question_type": QuestionType.NUMBER, "order": 2},
-                {
-                    "question_text": "Upload your organization registration",
-                    "question_type": QuestionType.FILE,
-                    "order": 3,
-                },
-            ]
+            # Use template questions
+            focus_area = random.choice(FOCUS_AREAS)
+            target_population = random.choice(TARGET_POPULATIONS)
+            template = SOLICITATION_TEMPLATES[self.solicitation_type]
+            for idx, question_text in enumerate(template["questions"]):
+                formatted_text = question_text.format(target_population=target_population, focus=focus_area)
+                SolicitationQuestionFactory(
+                    solicitation=self,
+                    question_text=formatted_text,
+                    question_type=get_question_type_from_text(formatted_text),
+                    order=idx + 1,
+                    is_required=True,
+                )
 
-            for question_data in default_questions:
-                SolicitationQuestionFactory(solicitation=self, **question_data)
+
+class SolicitationWithResponsesFactory(SolicitationWithQuestionsFactory):
+    """Factory that creates solicitation with realistic responses"""
+
+    @factory.post_generation
+    def responses(self, create, extracted, num_responses=3, **kwargs):
+        if not create:
+            return
+
+        # Create responding organizations and responses
+        for i in range(num_responses):
+            org = OrganizationFactory(name=f"Sample Responding Organization {i+1}", slug=f"sample-responder-{i+1}")
+            user = UserFactory()
+
+            # Generate responses to all questions
+            question_responses = {}
+            for question in self.questions.all():
+                if question.question_type == QuestionType.FILE:
+                    question_responses[f"question_{question.id}"] = "sample_document.pdf"
+                else:
+                    question_responses[f"question_{question.id}"] = fake.text(max_nb_chars=300)
+
+            SolicitationResponseFactory(
+                solicitation=self,
+                organization=org,
+                submitted_by=user,
+                responses=question_responses,
+                status=random.choice(
+                    [
+                        ResponseStatus.SUBMITTED,
+                        ResponseStatus.UNDER_REVIEW,
+                        ResponseStatus.ACCEPTED,
+                        ResponseStatus.REJECTED,
+                    ]
+                ),
+            )

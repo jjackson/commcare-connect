@@ -9,6 +9,10 @@ from commcare_connect.opportunity.models import DeliveryType
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
 from commcare_connect.program.models import Program
 from commcare_connect.solicitations.models import Solicitation, SolicitationQuestion, SolicitationResponse
+from commcare_connect.solicitations.tests.factories import (
+    SolicitationWithQuestionsFactory,
+    SolicitationWithResponsesFactory,
+)
 from commcare_connect.users.tests.factories import UserFactory
 
 User = get_user_model()
@@ -144,87 +148,28 @@ class Command(BaseCommand):
         return orgs
 
     def create_sample_solicitations(self, programs, count):
-        """Create sample solicitations"""
+        """Create sample solicitations using factories"""
         solicitations = []
-
-        solicitation_templates = [
-            {
-                "type": "eoi",
-                "title_suffix": "Expression of Interest",
-                "description": (
-                    "We are seeking qualified local organizations to partner with us in delivering {focus} "
-                    "services to underserved communities. This Expression of Interest will help us identify "
-                    "potential partners for our upcoming program."
-                ),
-                "questions": [
-                    "Describe your organization's experience working with {target_population}",
-                    "What is your organization's approach to community engagement?",
-                    "How many field workers can your organization deploy?",
-                    "Upload your organization's registration certificate",
-                    "What geographical areas does your organization currently serve?",
-                ],
-            },
-            {
-                "type": "rfp",
-                "title_suffix": "Request for Proposals",
-                "description": (
-                    "Following our Expression of Interest process, we invite selected organizations to submit "
-                    "detailed proposals for implementing {focus} interventions. This RFP outlines specific "
-                    "requirements and deliverables."
-                ),
-                "questions": [
-                    "Provide a detailed implementation timeline",
-                    "Submit your detailed budget breakdown",
-                    "Describe your quality assurance processes",
-                    "Upload supporting documentation (licenses, certifications, etc.)",
-                    "How will you measure and report on program outcomes?",
-                    "What risks do you anticipate and how will you mitigate them?",
-                ],
-            },
-        ]
-
-        focuses = ["maternal health", "child nutrition", "vaccination campaigns", "community health screening"]
-        target_populations = ["pregnant women", "children under 5", "rural communities", "vulnerable families"]
 
         for i in range(count):
             program = random.choice(programs)
-            template = random.choice(solicitation_templates)
-            focus = random.choice(focuses)
-            target_pop = random.choice(target_populations)
 
-            # Create solicitation
-            solicitation = Solicitation.objects.create(
-                title=f"Sample {focus.title()} - {template['title_suffix']}",
-                description=template["description"].format(focus=focus, target_population=target_pop),
-                target_population=target_pop,
-                scope_of_work=(
-                    f"Implement {focus} interventions including community outreach, "
-                    f"service delivery, and data collection"
-                ),
-                solicitation_type=template["type"],
+            # Choose between EOI and RFP, create with questions
+            solicitation_type = random.choice(["eoi", "rfp"])
+
+            # Create solicitation with questions using factory
+            solicitation = SolicitationWithQuestionsFactory(
+                program=program,
+                solicitation_type=solicitation_type,
                 status=random.choice(["draft", "active", "active", "active"]),  # Bias toward active
                 is_publicly_listed=random.choice([True, True, True, False]),  # Bias toward public
-                program=program,
                 created_by=program.organization.members.filter(
                     memberships__role=UserOrganizationMembership.Role.ADMIN
                 ).first(),
                 application_deadline=fake.future_date(end_date="+60d"),
-                estimated_scale=f"{fake.random_int(min=1000, max=50000)} {target_pop}",
                 expected_start_date=fake.future_date(end_date="+90d"),
                 expected_end_date=fake.future_date(end_date="+365d"),
             )
-
-            # Create questions for this solicitation
-            for idx, question_text in enumerate(template["questions"]):
-                question_type = "file" if "upload" in question_text.lower() else "textarea"
-
-                SolicitationQuestion.objects.create(
-                    solicitation=solicitation,
-                    question_text=question_text.format(target_population=target_pop, focus=focus),
-                    question_type=question_type,
-                    is_required=True,
-                    order=idx + 1,
-                )
 
             solicitations.append(solicitation)
             self.stdout.write(f"Created solicitation: {solicitation.title}")
@@ -232,7 +177,7 @@ class Command(BaseCommand):
         return solicitations
 
     def create_sample_responses(self, solicitations, responding_orgs):
-        """Create sample responses to solicitations"""
+        """Create sample responses to solicitations using factory logic"""
         responses = []
 
         for solicitation in solicitations:
@@ -244,7 +189,7 @@ class Command(BaseCommand):
                 if not user:
                     continue
 
-                # Generate responses to questions
+                # Generate responses to questions (using same logic as factory)
                 question_responses = {}
                 for question in solicitation.questions.all():
                     if question.question_type == "file":
@@ -264,6 +209,36 @@ class Command(BaseCommand):
                 self.stdout.write(f"Created response from {org.name} to {solicitation.title}")
 
         return responses
+
+    def create_solicitations_with_responses(self, programs, count, responding_orgs):
+        """Create solicitations with responses using the factory"""
+        solicitations = []
+
+        for i in range(count):
+            program = random.choice(programs)
+
+            # Choose between EOI and RFP, create with questions and responses
+            solicitation_type = random.choice(["eoi", "rfp"])
+
+            # Create solicitation with questions and responses using factory
+            solicitation = SolicitationWithResponsesFactory(
+                program=program,
+                solicitation_type=solicitation_type,
+                status=random.choice(["draft", "active", "active", "active"]),  # Bias toward active
+                is_publicly_listed=random.choice([True, True, True, False]),  # Bias toward public
+                created_by=program.organization.members.filter(
+                    memberships__role=UserOrganizationMembership.Role.ADMIN
+                ).first(),
+                application_deadline=fake.future_date(end_date="+60d"),
+                expected_start_date=fake.future_date(end_date="+90d"),
+                expected_end_date=fake.future_date(end_date="+365d"),
+                responses__num_responses=random.randint(1, min(3, len(responding_orgs))),
+            )
+
+            solicitations.append(solicitation)
+            self.stdout.write(f"Created solicitation with responses: {solicitation.title}")
+
+        return solicitations
 
     def handle(self, *args, **options):
         count = options["count"]
@@ -289,11 +264,12 @@ class Command(BaseCommand):
             responding_orgs = self.create_responding_organizations(responding_orgs_count)
 
         # 4. Create sample solicitations
-        solicitations = self.create_sample_solicitations(programs, count)
-
-        # 5. Create sample responses (if requested)
         if with_responses and responding_orgs:
-            self.create_sample_responses(solicitations, responding_orgs)
+            # Create solicitations with responses using factory
+            solicitations = self.create_solicitations_with_responses(programs, count, responding_orgs)
+        else:
+            # Create solicitations without responses
+            solicitations = self.create_sample_solicitations(programs, count)
 
         self.stdout.write(
             self.style.SUCCESS(f"Successfully created {len(solicitations)} sample solicitations with full ecosystem!")
