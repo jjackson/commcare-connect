@@ -3,6 +3,7 @@ from django.conf import settings
 from httpx import BasicAuth, Response
 
 from commcare_connect.cache import quickcache
+from commcare_connect.connect_id_client.exceptions import ConnectIDClientError
 from commcare_connect.connect_id_client.models import (
     ConnectIdUser,
     DemoUser,
@@ -86,8 +87,14 @@ def get_user_otp(phone_number):
         response = _make_request(GET, "/users/generate_manual_otp", params={"phone_number": phone_number})
         data = response.json()
         return data.get("otp")
-    except httpx.HTTPError:
-        return None
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise ConnectIDClientError(
+                "Failed to fetch OTP. Please make sure the number is correct and "
+                "that the user has started their device seating process.",
+            )
+        else:
+            raise ConnectIDClientError(f"Failed to fetch OTP: HTTP {e.response.status_code}")
 
 
 def _make_request(method, path, params=None, json=None, timeout=5) -> Response:

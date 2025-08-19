@@ -21,6 +21,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from commcare_connect.connect_id_client.exceptions import ConnectIDClientError
 from commcare_connect.connect_id_client.main import fetch_demo_user_tokens, get_user_otp
 from commcare_connect.connect_id_client.models import ConnectIdUser
 from commcare_connect.opportunity.models import HQApiKey, Opportunity, OpportunityAccess, UserInvite, UserInviteStatus
@@ -225,13 +226,10 @@ class RetrieveUserOTPView(LoginRequiredMixin, UserPassesTestMixin, FormView):
         return self.request.user.is_superuser
 
     def form_valid(self, form):
-        otp = get_user_otp(form.cleaned_data["phone_number"])
-        if otp is None:
-            messages.error(
-                self.request,
-                "Failed to fetch OTP. Please make sure the number is correct and"
-                " that the user has started their device seating process.",
-            )
+        try:
+            otp = get_user_otp(form.cleaned_data["phone_number"])
+        except ConnectIDClientError as e:
+            messages.error(self.request, str(e))
         else:
             messages.success(self.request, f"The user's OTP is: {otp}")
         return super().form_valid(form)

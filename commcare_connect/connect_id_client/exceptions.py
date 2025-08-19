@@ -1,0 +1,2 @@
+class ConnectIDClientError(Exception):
+    pass
