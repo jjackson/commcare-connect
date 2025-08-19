@@ -44,57 +44,67 @@
 
         <!-- Statistics with Pipe Separators -->
         <div class="bg-neutral-100 rounded-lg w-full px-5 py-4 mt-6">
-            <div class="flex items-center justify-evenly">
+            <div class="flex gap-2 w-full items-center justify-between flex-wrap">
                 <!-- Active Solicitations -->
-                <div class="infocard-dark !w-fit text-center">
-                    <i class="fa-solid fa-clipboard-list"></i>
-                    <div>
-                        <h6 class="text-center">Active Solicitations</h6>
-                        <p class="text-center">{{ summary_stats.total_active_solicitations }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-clipboard-list"></i>
+                        <div>
+                            <h6>Active Solicitations</h6>
+                            <p>{{ summary_stats.total_active_solicitations }}</p>
+                        </div>
                     </div>
                 </div>
 
                 <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
 
                 <!-- EOIs -->
-                <div class="infocard-dark !w-fit text-center">
-                    <i class="fa-solid fa-hand-paper"></i>
-                    <div>
-                        <h6 class="text-center">EOIs</h6>
-                        <p class="text-center">{{ summary_stats.total_eois }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-hand-paper"></i>
+                        <div>
+                            <h6>EOIs</h6>
+                            <p>{{ summary_stats.total_eois }}</p>
+                        </div>
                     </div>
                 </div>
 
                 <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
 
                 <!-- RFPs -->
-                <div class="infocard-dark !w-fit text-center">
-                    <i class="fa-solid fa-file-contract"></i>
-                    <div>
-                        <h6 class="text-center">RFPs</h6>
-                        <p class="text-center">{{ summary_stats.total_rfps }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-file-contract"></i>
+                        <div>
+                            <h6>RFPs</h6>
+                            <p>{{ summary_stats.total_rfps }}</p>
+                        </div>
                     </div>
                 </div>
 
                 <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
 
                 <!-- Total Responses -->
-                <div class="infocard-dark !w-fit text-center">
-                    <i class="fa-solid fa-paper-plane"></i>
-                    <div>
-                        <h6 class="text-center">Total Responses</h6>
-                        <p class="text-center">{{ summary_stats.total_responses }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-paper-plane"></i>
+                        <div>
+                            <h6>Total Responses</h6>
+                            <p>{{ summary_stats.total_responses }}</p>
+                        </div>
                     </div>
                 </div>
 
                 <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
 
                 <!-- Program Organizations -->
-                <div class="infocard-dark !w-fit text-center">
-                    <i class="fa-solid fa-building"></i>
-                    <div>
-                        <h6 class="text-center">Program Organizations</h6>
-                        <p class="text-center">{{ summary_stats.total_organizations_with_programs }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-building"></i>
+                        <div>
+                            <h6>Program Organizations</h6>
+                            <p>{{ summary_stats.total_organizations_with_programs }}</p>
+                        </div>
                     </div>
                 </div>
             </div>

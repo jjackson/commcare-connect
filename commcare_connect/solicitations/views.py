@@ -820,12 +820,28 @@ class SolicitationResponseReview(LoginRequiredMixin, UserPassesTestMixin, Update
 
         existing_review = SolicitationReview.objects.filter(response=response, reviewer=self.request.user).first()
 
+        # Process questions with their answers for template
+        # This eliminates the need for custom template tags
+        questions_with_answers = []
+        responses_dict = response.responses or {}
+
+        for question in questions:
+            answer = responses_dict.get(question.question_text, "")
+            questions_with_answers.append(
+                {
+                    "question": question,
+                    "answer": answer,
+                    "has_answer": bool(answer),
+                }
+            )
+
         context.update(
             {
                 "program": program,
                 "solicitation": response.solicitation,
                 "response": response,
-                "questions": questions,
+                "questions": questions,  # Keep for backward compatibility if needed
+                "questions_with_answers": questions_with_answers,  # New structured data
                 "existing_review": existing_review,
             }
         )

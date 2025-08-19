@@ -74,68 +74,78 @@
 
         <!-- Key Information Row -->
         <div class="bg-neutral-100 rounded-lg w-full px-5 py-4">
-            <div class="flex items-center justify-between gap-4">
-                <div class="infocard-dark !w-fit">
-                    <i class="fa-solid fa-building"></i>
-                    <div>
-                        <h6>Program</h6>
-                        <p>{{ solicitation.program.name }}</p>
+            <div class="flex gap-2 w-full items-center justify-between flex-wrap">
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-building"></i>
+                        <div>
+                            <h6>Program</h6>
+                            <p>{{ solicitation.program.name }}</p>
+                        </div>
                     </div>
                 </div>
 
                 <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
 
-                <div class="infocard-dark !w-fit">
-                    <i class="fa-solid fa-location-dot"></i>
-                    <div>
-                        <h6>Target Population</h6>
-                        <p>{{ solicitation.target_population }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-location-dot"></i>
+                        <div>
+                            <h6>Target Population</h6>
+                            <p>{{ solicitation.target_population }}</p>
+                        </div>
                     </div>
                 </div>
 
                 {% if solicitation.estimated_scale %}
                     <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
 
-                    <div class="infocard-dark !w-fit">
-                        <i class="fa-solid fa-chart-bar"></i>
-                        <div>
-                            <h6>Scale</h6>
-                            <p>{{ solicitation.estimated_scale }}</p>
+                    <div class="flex gap-2 items-start">
+                        <div class="infocard-dark">
+                            <i class="fa-solid fa-chart-bar"></i>
+                            <div>
+                                <h6>Scale</h6>
+                                <p>{{ solicitation.estimated_scale }}</p>
+                            </div>
                         </div>
                     </div>
                 {% endif %}
 
                 <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
 
-                <div class="infocard-dark !w-fit">
-                    <i class="fa-solid fa-clock"></i>
-                    <div>
-                        <h6>Application Deadline</h6>
-                        <p>{{ solicitation.application_deadline|date:"M j, Y" }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-clock"></i>
+                        <div>
+                            <h6>Application Deadline</h6>
+                            <p>{{ solicitation.application_deadline|date:"M j, Y" }}</p>
+                        </div>
                     </div>
                 </div>
 
                 <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
 
-                <div class="infocard-dark !w-fit">
-                    <i class="fa-solid fa-calendar-check"></i>
-                    <div>
-                        <h6>Start Date</h6>
-                        <p>{{ solicitation.expected_start_date|date:"M Y"|default:"TBD" }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-calendar-check"></i>
+                        <div>
+                            <h6>Start Date</h6>
+                            <p>{{ solicitation.expected_start_date|date:"M Y"|default:"TBD" }}</p>
+                        </div>
                     </div>
                 </div>
 
                 <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
 
-                <div class="infocard-dark !w-fit">
-                    <i class="fa-solid fa-calendar-xmark"></i>
-                    <div>
-                        <h6>End Date</h6>
-                        <p>{{ solicitation.expected_end_date|date:"M Y"|default:"TBD" }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-calendar-xmark"></i>
+                        <div>
+                            <h6>End Date</h6>
+                            <p>{{ solicitation.expected_end_date|date:"M Y"|default:"TBD" }}</p>
+                        </div>
                     </div>
                 </div>
-
-
             </div>
         </div>
     </div>

@@ -58,7 +58,7 @@
             </div>
 
             <div class="flex items-center gap-x-4">
-                <a href="{% url 'solicitations:detail' pk=solicitation.pk %}"
+                <a href="{% if request.org %}{% url 'org_solicitations:detail' org_slug=request.org.slug pk=solicitation.pk %}{% else %}{% url 'solicitations:detail' pk=solicitation.pk %}{% endif %}"
                    class="button button-md outline-style"
                    target="_blank">
                     <i class="fa-solid fa-external-link-alt mr-2"></i>
@@ -74,46 +74,54 @@
 
         <!-- Response Statistics - Full Width -->
         <div class="bg-neutral-100 rounded-lg w-full px-5 py-4 mt-6">
-            <div class="flex items-center justify-evenly">
+            <div class="flex gap-2 w-full items-center justify-between flex-wrap">
                 <!-- Total Responses -->
-                <div class="infocard-dark !w-fit text-center">
-                    <i class="fa-solid fa-inbox"></i>
-                    <div>
-                        <h6 class="text-center">Total Responses</h6>
-                        <p class="text-center">{{ table.data|length }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-inbox"></i>
+                        <div>
+                            <h6>Total Responses</h6>
+                            <p>{{ table.data|length }}</p>
+                        </div>
                     </div>
                 </div>
 
                 <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
 
                 <!-- Under Review -->
-                <div class="infocard-dark !w-fit text-center">
-                    <i class="fa-solid fa-clock"></i>
-                    <div>
-                        <h6 class="text-center">Under Review</h6>
-                        <p class="text-center">{{ status_counts.under_review|default:0 }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-clock"></i>
+                        <div>
+                            <h6>Under Review</h6>
+                            <p>{{ status_counts.under_review|default:0 }}</p>
+                        </div>
                     </div>
                 </div>
 
                 <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
 
                 <!-- Accepted -->
-                <div class="infocard-dark !w-fit text-center">
-                    <i class="fa-solid fa-check-circle"></i>
-                    <div>
-                        <h6 class="text-center">Accepted</h6>
-                        <p class="text-center">{{ status_counts.accepted|default:0 }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-check-circle"></i>
+                        <div>
+                            <h6>Accepted</h6>
+                            <p>{{ status_counts.accepted|default:0 }}</p>
+                        </div>
                     </div>
                 </div>
 
                 <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
 
                 <!-- Rejected -->
-                <div class="infocard-dark !w-fit text-center">
-                    <i class="fa-solid fa-times-circle"></i>
-                    <div>
-                        <h6 class="text-center">Rejected</h6>
-                        <p class="text-center">{{ status_counts.rejected|default:0 }}</p>
+                <div class="flex gap-2 items-start">
+                    <div class="infocard-dark">
+                        <i class="fa-solid fa-times-circle"></i>
+                        <div>
+                            <h6>Rejected</h6>
+                            <p>{{ status_counts.rejected|default:0 }}</p>
+                        </div>
                     </div>
                 </div>
             </div>
