@@ -19,7 +19,7 @@
         hx-swap="none"
         @submit.stop.prevent
         hx-indicator="#spinner"
-        @htmx:afterRequest.window="{{ modal_name }} = false"
+        hx-on::after-request="{{ modal_name }} = false;"
     >
       {% csrf_token %}
 
