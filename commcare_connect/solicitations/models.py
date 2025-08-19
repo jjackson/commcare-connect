@@ -160,9 +160,6 @@ class SolicitationResponse(BaseModel):
     responses = models.JSONField(default=dict, help_text="Flexible storage for question/answer pairs")
     status = models.CharField(max_length=20, choices=ResponseStatus.choices, default=ResponseStatus.DRAFT)
 
-    # File attachments - keeping for backward compatibility but will use separate model
-    attachments = models.FileField(upload_to="solicitations/responses/", null=True, blank=True)
-
     # Progression tracking
     progressed_to_solicitation = models.ForeignKey(
         Solicitation,
