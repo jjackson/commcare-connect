@@ -17,9 +17,9 @@
    <form
         hx-post="{{ form_action }}"
         hx-swap="none"
-        @submit.stop.prevent
+        @submit.stop.prevent="{{ modal_name }} = false"
         hx-indicator="#spinner"
-        hx-on::after-request="{{ modal_name }} = false;"
+        @htmx:afterRequest.window="{{ modal_name }} = false"
     >
       {% csrf_token %}
 
