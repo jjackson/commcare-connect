@@ -1,37 +1,38 @@
 # Dev Team Questions
 
-**Quick Question**: What's the preferred way to load real/specific data (not fake generated data) in this codebase?
+**Question**: File Upload Implementation - Django FileField vs Direct Processing?
 
-**Context**: Need to load actual EOI data from past campaigns (CCC-CHC, KMC) for testing/demos.
+**Context**: Code reviewer questioned whether file uploads are properly configured and if FileField approach follows project patterns.
 
-**Options**:
+**Current Implementation**:
 
-1. YAML + management command (Cursor's recommendation)
-2. JSON fixtures
-3. Python data files
-4. CSV import
+- Solicitation model uses `FileField(upload_to="solicitations/attachments/")`
+- ResponseAttachment model uses `FileField(upload_to="solicitations/response_attachments/")`
+- Full upload/validation/deletion system implemented
+
+**Key Findings**:
+
+**✅ Infrastructure Exists**:
+
+- S3 storage configured for production (`MediaRootS3Boto3Storage`)
+- Media URL serving configured in main urls.py
+- Custom storage backends in `utils/storages.py`
+
+**❌ Pattern Inconsistency**:
+
+- **Human-written opportunity app** uses direct file processing:
+  ```python
+  file = request.FILES.get("visits")
+  saved_path = default_storage.save(file_path, file)
+  # Process immediately, no FileField storage
+  ```
+- **Zero FileField usage** in existing human-written code
+- Files processed immediately for Excel/CSV imports, not stored as attachments
+
+**Questions for Senior Dev**:
+
+1. Is S3 file storage actually configured/working in production?
+2. Should solicitations follow existing pattern (direct processing) or introduce persistent file attachments?
+3. Are persistent file attachments desired for solicitation documents?
 
 **Answer**:
-
----
-
-**Question**: How to show timestamps in user's local timezone?
-
-**Context**: Currently shows UTC time (5:10 PM when local time is 11:00 AM).
-
-**Answer**: ✅ **RESOLVED** - Implemented client-side timezone conversion using modern JavaScript. Updated templates to use semantic `<time>` elements with ISO 8601 datetime attributes, then convert to user's local timezone using `Date.toLocaleString()`. Applied to solicitation response page timestamps (draft save time and file upload times). Solution provides progressive enhancement (fallback to UTC if JS disabled) and follows web standards.
-
----
-
-**Question**: Is using a custom template tag (`dict_extras.py`) the right way to handle dynamic dictionary lookups in templates?
-
-**Context**: Need to display form responses where question text is the dictionary key: `{{ responses_dict|lookup:question.question_text }}`. Django templates don't support `{{ dict[variable_key] }}` syntax.
-
-**Alternative approaches**:
-
-1. Custom template tag (current implementation)
-2. Process data in view and restructure for template
-3. Use template context processors
-4. Custom template filter vs template tag
-
-**Answer**: ✅ **RESOLVED** - Implemented approach #2 (process data in view). Replaced custom template tag with view-level data processing in `SolicitationResponseReview.get_context_data()`. Template now uses simple `{{ item.answer }}` instead of `{{ responses_dict|lookup:question.question_text }}`. Custom template tag removed as it's no longer needed. This follows Django best practices of keeping business logic in views, not templates.
