@@ -239,6 +239,8 @@
       page: defaultPage,
       showBulkApproveModal: false,
       showBulkRejectModal: false,
+      selectAll: false,
+      selected: [],
 
 
       updateUrlAndRequest() {
@@ -256,11 +258,6 @@
         window.history.pushState({}, '', url.toString());
         this.$dispatch('reload_table');
       },
-    }));
-
-    Alpine.data('selectionManager', (initialTab, defaultPage) => ({
-      selectAll: false,
-      selected: [],
 
       updateVisitStatusMap() {
         const tableRows = document.querySelectorAll(
