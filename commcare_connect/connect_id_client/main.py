@@ -1,4 +1,5 @@
 import httpx
+import sentry_sdk
 from django.conf import settings
 from httpx import BasicAuth, Response
 
@@ -94,6 +95,7 @@ def get_user_otp(phone_number):
                 "that the user has started their device seating process.",
             )
         else:
+            sentry_sdk.capture_message(message=f"ConnectID client error: {str(e)}", level="error")
             raise ConnectIDClientError(f"Failed to fetch OTP: HTTP {e.response.status_code}")
 
 
