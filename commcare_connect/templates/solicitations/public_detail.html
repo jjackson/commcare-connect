@@ -49,12 +49,13 @@
                 {% if solicitation.can_accept_responses %}
                     {% if has_submitted_response %}
                         <div class="text-right">
-                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 mb-2">
-                                <i class="fa-solid fa-check-circle mr-2"></i>
-                                Response Submitted
-                            </span>
-                            <p class="text-xs text-gray-600">
-                                Submitted {{ submitted_response.submission_date|date:"M j, Y" }}
+                            <a href="{% url 'solicitations:user_response_detail' pk=submitted_response.pk %}"
+                               class="button button-md primary-dark">
+                                <i class="fa-solid fa-eye mr-2"></i>
+                                View Response
+                            </a>
+                            <p class="text-xs text-gray-600 mt-2">
+                                Submitted <time class="local-datetime" datetime="{{ submitted_response.submission_date|date:'c' }}">{{ submitted_response.submission_date|date:"M j, Y \a\t g:i A" }}</time>
                             </p>
                         </div>
                     {% elif has_draft %}

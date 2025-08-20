@@ -320,39 +320,7 @@
 
 {% block inline_javascript %}
 <script>
-// Simple timezone conversion function
-function convertTimestamps() {
-    console.log('Converting timestamps...');
-    var elements = document.querySelectorAll('.local-datetime');
-    console.log('Found elements:', elements.length);
 
-    for (var i = 0; i < elements.length; i++) {
-        var element = elements[i];
-        var isoDateTime = element.getAttribute('datetime');
-        console.log('Processing datetime:', isoDateTime);
-
-        if (isoDateTime) {
-            var date = new Date(isoDateTime);
-            var localTime = date.toLocaleString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            });
-            console.log('Converted to:', localTime);
-            element.textContent = localTime;
-        }
-    }
-}
-
-// Run conversion when page loads
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', convertTimestamps);
-} else {
-    convertTimestamps();
-}
 
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -474,10 +442,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 e.preventDefault();
                 showNotification('Please fill in all required fields before submitting.', 'error');
                 return;
-            }
-
-            if (!confirm('Are you sure you want to submit this response? Once submitted, you cannot make changes.')) {
-                e.preventDefault();
             }
         });
     }
