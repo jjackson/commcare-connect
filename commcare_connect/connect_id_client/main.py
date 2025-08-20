@@ -1,10 +1,8 @@
 import httpx
-import sentry_sdk
 from django.conf import settings
 from httpx import BasicAuth, Response
 
 from commcare_connect.cache import quickcache
-from commcare_connect.connect_id_client.exceptions import ConnectIDClientError
 from commcare_connect.connect_id_client.models import (
     ConnectIdUser,
     DemoUser,
@@ -91,9 +89,7 @@ def get_user_otp(phone_number):
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             return None
-        else:
-            sentry_sdk.capture_message(message=f"ConnectID client error: {str(e)}", level="error")
-            raise ConnectIDClientError(f"Failed to fetch OTP: HTTP {e.response.status_code}")
+        raise
 
 
 def _make_request(method, path, params=None, json=None, timeout=5) -> Response:

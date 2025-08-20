@@ -9,7 +9,6 @@ from django.http import HttpRequest
 from django.test import RequestFactory
 from django.urls import reverse
 
-from commcare_connect.connect_id_client.exceptions import ConnectIDClientError
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.forms import UserAdminChangeForm
 from commcare_connect.users.models import ConnectIDUserLink, User
@@ -134,16 +133,6 @@ class TestRetrieveUserOTPView:
             "Failed to fetch OTP. Please make sure the number is correct "
             "and that the user has started their device seating process."
         )
-
-        messages = list(response.context["messages"])
-        assert str(messages[0]) == expected_failure_message
-
-    @patch("commcare_connect.users.views.get_user_otp")
-    def test_error_during_otp_retrieval(self, get_user_otp_mock, user, client):
-        get_user_otp_mock.side_effect = ConnectIDClientError("Failed to fetch OTP with some error.")
-        response = self._get_superuser_response(client, user)
-
-        expected_failure_message = "Failed to fetch OTP with some error."
 
         messages = list(response.context["messages"])
         assert str(messages[0]) == expected_failure_message
