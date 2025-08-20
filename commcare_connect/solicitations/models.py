@@ -229,9 +229,9 @@ class ResponseAttachment(BaseModel):
 
 
 class ReviewRecommendation(models.TextChoices):
-    ACCEPT = "accept", _("Accept")
-    REJECT = "reject", _("Reject")
-    NEEDS_MORE_INFO = "needs_more_info", _("Needs More Information")
+    RECOMMENDED = "recommended", _("Recommended")
+    NOT_RECOMMENDED = "not_recommended", _("Not Recommended")
+    NEUTRAL = "neutral", _("Neutral")
 
 
 class SolicitationReview(models.Model):
