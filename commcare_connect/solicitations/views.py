@@ -162,7 +162,6 @@ class PublicSolicitationDetailView(DetailView):
                     ResponseStatus.UNDER_REVIEW,
                     ResponseStatus.ACCEPTED,
                     ResponseStatus.REJECTED,
-                    ResponseStatus.PROGRESSED_TO_RFP,
                 ],
             ).first()
 
@@ -224,7 +223,6 @@ class SolicitationResponseCreateView(LoginRequiredMixin, CreateView):
                 ResponseStatus.UNDER_REVIEW,
                 ResponseStatus.ACCEPTED,
                 ResponseStatus.REJECTED,
-                ResponseStatus.PROGRESSED_TO_RFP,
             ],
         ).first()
 
@@ -373,7 +371,6 @@ class UserResponseDetailView(LoginRequiredMixin, SolicitationResponseDetailMixin
                         ResponseStatus.UNDER_REVIEW,
                         ResponseStatus.ACCEPTED,
                         ResponseStatus.REJECTED,
-                        ResponseStatus.PROGRESSED_TO_RFP,
                     ],
                 )
                 .select_related("solicitation", "organization", "submitted_by")
