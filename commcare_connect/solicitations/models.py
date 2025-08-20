@@ -52,14 +52,6 @@ class Solicitation(BaseModel):
         related_name="solicitations",
         help_text="The program that owns this solicitation",
     )
-    parent_solicitation = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="child_solicitations",
-        help_text="For RFPs that follow from EOIs",
-    )
 
     # Timeline
     expected_start_date = models.DateField(null=True, blank=True, verbose_name="Expected Start Date")
@@ -143,7 +135,6 @@ class ResponseStatus(models.TextChoices):
     UNDER_REVIEW = "under_review", _("Under Review")
     ACCEPTED = "accepted", _("Accepted")
     REJECTED = "rejected", _("Rejected")
-    PROGRESSED_TO_RFP = "progressed_to_rfp", _("Progressed to RFP")
 
 
 class SolicitationResponse(BaseModel):
@@ -159,16 +150,6 @@ class SolicitationResponse(BaseModel):
     # Response data
     responses = models.JSONField(default=dict, help_text="Flexible storage for question/answer pairs")
     status = models.CharField(max_length=20, choices=ResponseStatus.choices, default=ResponseStatus.DRAFT)
-
-    # Progression tracking
-    progressed_to_solicitation = models.ForeignKey(
-        Solicitation,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="parent_responses",
-        help_text="If this EOI response was accepted and progressed to RFP",
-    )
 
     class Meta:
         ordering = ["-submission_date"]

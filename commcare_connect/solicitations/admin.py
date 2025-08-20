@@ -44,7 +44,6 @@ class SolicitationResponseAdmin(admin.ModelAdmin):
         ("Status", {"fields": ("status",)}),
         ("Responses", {"fields": ("responses",), "classes": ("collapse",)}),
         ("Files", {"fields": ("attachments",)}),
-        ("Progression", {"fields": ("progressed_to_solicitation",)}),
     )
 
 
