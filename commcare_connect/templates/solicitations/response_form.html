@@ -164,7 +164,7 @@
             </div>
 
             <!-- Response Form -->
-            <form id="response-form" method="post" enctype="multipart/form-data" class="space-y-6" novalidate>
+            <form x-data="responseFormHandler()" @submit="handleSubmit($event)" method="post" enctype="multipart/form-data" class="space-y-6" novalidate>
                 {% csrf_token %}
 
                 <!-- Organization Info -->
@@ -236,15 +236,13 @@
 
                     <div class="flex items-center gap-4">
                         <button type="submit" name="action" value="save_draft"
-                                class="button button-md outline-style"
-                                id="save-draft-btn">
+                                class="button button-md outline-style">
                             <i class="fa-solid fa-floppy-disk mr-2"></i>
                             Save Draft
                         </button>
 
                         <button type="submit" name="action" value="submit"
-                                class="button button-md primary-dark"
-                                id="submit-btn">
+                                class="button button-md primary-dark">
                             <i class="fa-solid fa-paper-plane mr-2"></i>
                             Submit Response
                         </button>
@@ -316,115 +314,112 @@
             {% endif %}
         </div>
     </div>
+
+    <!-- Notification Area -->
+    <div x-data="{ notifications: [] }" @show-notification.window="notifications.push($event.detail); setTimeout(() => notifications.shift(), $event.detail.type === 'error' ? 5000 : 3000)" class="fixed top-4 right-4 z-50 space-y-2">
+        <template x-for="(notification, index) in notifications" :key="index">
+            <div class="px-4 py-2 rounded-md shadow-lg text-white flex items-center"
+                 :class="{
+                     'bg-blue-500': notification.type === 'info',
+                     'bg-green-500': notification.type === 'success',
+                     'bg-red-500': notification.type === 'error'
+                 }"
+                 x-transition:enter="transform ease-out duration-300 transition"
+                 x-transition:enter-start="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2"
+                 x-transition:enter-end="translate-y-0 opacity-100 sm:translate-x-0"
+                 x-transition:leave="transition ease-in duration-100"
+                 x-transition:leave-start="opacity-100"
+                 x-transition:leave-end="opacity-0">
+                <i class="fa-solid mr-2"
+                   :class="{
+                       'fa-info-circle': notification.type === 'info',
+                       'fa-check-circle': notification.type === 'success',
+                       'fa-exclamation-triangle-circle': notification.type === 'error'
+                   }"></i>
+                <span x-text="notification.message"></span>
+            </div>
+        </template>
+    </div>
 {% endblock %}
 
-{% block inline_javascript %}
+{% block extra_js %}
 <script>
+// Alpine.js Component for Response Form Handler
 
+function responseFormHandler() {
+    return {
+        autoSaveTimer: null,
+        autoSaveDelay: 30000, // 30 seconds
 
-document.addEventListener('DOMContentLoaded', function() {
+        init() {
+            // Set up auto-save on form changes
+            this.$el.addEventListener('input', () => {
+                clearTimeout(this.autoSaveTimer);
+                this.autoSaveTimer = setTimeout(() => this.autoSave(), this.autoSaveDelay);
+            });
 
-    const form = document.getElementById('response-form');
-    const saveDraftBtn = document.getElementById('save-draft-btn');
-    const submitBtn = document.getElementById('submit-btn');
+            this.$el.addEventListener('change', () => {
+                clearTimeout(this.autoSaveTimer);
+                this.autoSaveTimer = setTimeout(() => this.autoSave(), this.autoSaveDelay);
+            });
+        },
 
-    // Auto-save functionality (text only, files handled separately)
-    let autoSaveTimer;
-    const autoSaveDelay = 30000; // 30 seconds
+        collectFormData() {
+            const formData = new FormData(this.$el);
+            const responses = {};
 
-    function collectFormData() {
-        const formData = new FormData(form);
-        const responses = {};
-
-        // Collect all form fields (excluding files and form actions)
-        for (let [key, value] of formData.entries()) {
-            if (key !== 'csrfmiddlewaretoken' && key !== 'action') {
-                responses[key] = value;
+            // Collect all form fields (excluding files and form actions)
+            for (let [key, value] of formData.entries()) {
+                if (key !== 'csrfmiddlewaretoken' && key !== 'action') {
+                    responses[key] = value;
+                }
             }
-        }
 
-        return { responses: responses };
-    }
+            return { responses: responses };
+        },
 
-    function saveAsDraft() {
-        const data = collectFormData();
+        showNotification(message, type = 'info') {
+            // Use Alpine.js event system for notifications
+            window.dispatchEvent(new CustomEvent('show-notification', {
+                detail: { message, type }
+            }));
+        },
 
-        fetch("{% url 'solicitations:save_draft' pk=solicitation.pk %}", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-            },
-            body: JSON.stringify(data)
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification('Draft saved automatically', 'success');
-            } else {
-                console.error('Auto-save failed:', data.error);
+        async autoSave() {
+            const data = this.collectFormData();
+
+            try {
+                const response = await fetch("{% url 'solicitations:save_draft' pk=solicitation.pk %}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    this.showNotification('Draft saved automatically', 'success');
+                } else {
+                    console.error('Auto-save failed:', result.error);
+                }
+            } catch (error) {
+                console.error('Auto-save error:', error);
             }
-        })
-        .catch(error => {
-            console.error('Auto-save error:', error);
-        });
-    }
+        },
 
-    function showNotification(message, type = 'info') {
-        // Create notification element
-        const notification = document.createElement('div');
-        let bgColor = 'bg-blue-500';
-        let icon = 'info';
+        handleSubmit(e) {
+            // Check if this is a draft save - no validation needed
+            const actionButton = e.submitter;
+            if (actionButton && actionButton.value === 'save_draft') {
+                // Allow draft save without validation
+                return true;
+            }
 
-        if (type === 'success') {
-            bgColor = 'bg-green-500';
-            icon = 'check';
-        } else if (type === 'error') {
-            bgColor = 'bg-red-500';
-            icon = 'exclamation-triangle';
-        }
-
-        notification.className = `fixed top-4 right-4 px-4 py-2 rounded-md shadow-lg z-50 ${bgColor} text-white`;
-        notification.innerHTML = `
-            <div class="flex items-center">
-                <i class="fa-solid fa-${icon}-circle mr-2"></i>
-                ${message}
-            </div>
-        `;
-
-        document.body.appendChild(notification);
-
-        // Remove after 3 seconds (longer for errors)
-        setTimeout(() => {
-            notification.remove();
-        }, type === 'error' ? 5000 : 3000);
-    }
-
-    // Set up auto-save on form changes (only for main response form)
-    if (form) {
-        form.addEventListener('input', function() {
-            clearTimeout(autoSaveTimer);
-            autoSaveTimer = setTimeout(saveAsDraft, autoSaveDelay);
-        });
-
-        form.addEventListener('change', function() {
-            clearTimeout(autoSaveTimer);
-            autoSaveTimer = setTimeout(saveAsDraft, autoSaveDelay);
-        });
-    }
-
-    // Manual save draft button
-    if (saveDraftBtn) {
-        saveDraftBtn.addEventListener('click', function(e) {
-            showNotification('Saving draft...', 'info');
-        });
-    }
-
-    // Submit button validation and confirmation
-    if (submitBtn) {
-        submitBtn.addEventListener('click', function(e) {
+            // For submit action, validate required fields
             // Check required fields only for submission
-            const requiredFields = form.querySelectorAll('[required]');
+            const requiredFields = this.$el.querySelectorAll('[required]');
             let hasEmptyRequired = false;
 
             requiredFields.forEach(field => {
@@ -440,11 +435,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (hasEmptyRequired) {
                 e.preventDefault();
-                showNotification('Please fill in all required fields before submitting.', 'error');
-                return;
+                this.showNotification('Please fill in all required fields before submitting.', 'error');
+                return false;
             }
-        });
+
+            // Allow form to submit normally
+            return true;
+        }
     }
+}
+
+// Register Alpine.js component
+document.addEventListener('alpine:init', () => {
+    Alpine.data('responseFormHandler', responseFormHandler);
 });
 </script>
 {% endblock %}
