@@ -1705,7 +1705,7 @@ class BaseWorkerListView(OrganizationUserMixin, OpportunityObjectMixin, View):
             path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
             path.append(
                 {
-                    "title": opportunity.managedopportunity.program.name,
+                    "title": opportunity.program_name,
                     "url": reverse("program:home", args=(org_slug,)),
                 }
             )
