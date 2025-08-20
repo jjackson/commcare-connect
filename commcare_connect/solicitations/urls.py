@@ -18,10 +18,6 @@ from .views import (
     UserResponseEditView,
     delete_attachment,
     save_draft_ajax,
-    solicitation_question_create,
-    solicitation_question_delete,
-    solicitation_question_reorder,
-    solicitation_question_update,
     upload_attachment,
 )
 
@@ -68,26 +64,5 @@ urlpatterns = [
         "program/<int:program_pk>/solicitations/<int:pk>/edit/",
         SolicitationUpdateView.as_view(),
         name="program_solicitation_edit",
-    ),
-    # AJAX endpoints for question management
-    path(
-        "program/<int:program_pk>/solicitations/<int:solicitation_pk>/questions/create/",
-        solicitation_question_create,
-        name="program_solicitation_question_create",
-    ),
-    path(
-        "program/<int:program_pk>/solicitations/<int:solicitation_pk>/questions/<int:question_pk>/update/",
-        solicitation_question_update,
-        name="program_solicitation_question_update",
-    ),
-    path(
-        "program/<int:program_pk>/solicitations/<int:solicitation_pk>/questions/<int:question_pk>/delete/",
-        solicitation_question_delete,
-        name="program_solicitation_question_delete",
-    ),
-    path(
-        "program/<int:program_pk>/solicitations/<int:solicitation_pk>/questions/reorder/",
-        solicitation_question_reorder,
-        name="program_solicitation_question_reorder",
     ),
 ]

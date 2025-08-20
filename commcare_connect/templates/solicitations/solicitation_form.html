@@ -1,422 +1,248 @@
-{% extends "base.html" %}
-{% load static %}
-
-{% block page_title %}{% if is_create %}Create New Solicitation{% else %}Edit Solicitation{% endif %} - {{ program.name }}{% endblock %}
+{% extends 'base.html' %}
+{% load static i18n crispy_forms_tags %}
 
 {% block content %}
-    <!-- Breadcrumb Navigation -->
-    <ul class="breadcrumb mb-8">
-        <li>
-            <a href="{% url 'program:home' org_slug=request.org.slug %}">Programs</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="{% url 'program:opportunity_list' org_slug=request.org.slug pk=program.pk %}">{{ program.name }}</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="{% url 'org_solicitations:program_dashboard' org_slug=request.org.slug pk=program.pk %}">Solicitations</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="#">{% if is_create %}Create New{% else %}Edit{% endif %}</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-    </ul>
+    <div class="max-w-4xl mx-auto">
+        <div class="mb-6">
+            <nav class="text-sm text-gray-500 mb-4">
+                <a href="{% url 'program:home' request.org.slug %}" class="hover:text-gray-700">{{ program.name }}</a>
+                <span class="mx-2">/</span>
+                <a href="{% url 'solicitations:program_dashboard' request.org.slug program.pk %}" class="hover:text-gray-700">Solicitations</a>
+                <span class="mx-2">/</span>
+                <span class="text-gray-900">
+                    {% if is_create %}Create Solicitation{% else %}Edit {{ object.title }}{% endif %}
+                </span>
+            </nav>
 
-    <!-- Header Card -->
-    <div class="bg-white rounded-xl shadow-sm p-8 mb-8">
-        <div class="flex items-start justify-between">
-            <div class="flex-1">
-                <h1 class="text-3xl font-bold text-brand-deep-purple mb-2">
+            <h1 class="text-3xl font-bold text-brand-deep-purple">
                     {% if is_create %}
-                        <i class="fa-solid fa-plus mr-3 text-brand-indigo"></i>
+                    <i class="fa-solid fa-plus mr-3"></i>
                         Create New Solicitation
                     {% else %}
-                        <i class="fa-solid fa-edit mr-3 text-brand-indigo"></i>
+                    <i class="fa-solid fa-edit mr-3"></i>
                         Edit Solicitation
                     {% endif %}
                 </h1>
-                <p class="text-gray-600 mb-6">
-                    {% if is_create %}
-                        Create a new Expression of Interest (EOI) or Request for Proposals (RFP) for {{ program.name }}
-                    {% else %}
-                        Update the details for this solicitation
-                    {% endif %}
+    </div>
+
+    <form method="post" class="space-y-8" id="solicitation-form">
+        {% csrf_token %}
+
+        {% crispy form %}
+
+        <!-- Application Questions Section - Inline Editing -->
+        <div x-data="solicitationQuestionBuilder()"
+             data-solicitation-id="{% if not is_create %}{{ object.id }}{% else %}{% endif %}"
+             data-is-create="{% if is_create %}true{% else %}false{% endif %}"
+             data-org-slug="{{ request.org.slug }}"
+             data-program-pk="{{ program.pk }}">
+
+        <h2 class="text-xl font-semibold text-brand-deep-purple mb-6 pb-2 border-b border-gray-200">
+                <i class="fa-solid fa-clipboard-list mr-2"></i>
+                Application Questions
+        </h2>
+
+            <div class="mb-4">
+                <p class="text-sm text-gray-600 mb-4">
+                    Configure the questions that applicants will need to answer when responding to this solicitation.
                 </p>
+            </div>
 
-                <!-- Program Information -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="flex items-center text-sm text-gray-600">
-                        <i class="fa-solid fa-building mr-2 text-gray-400"></i>
-                        <span>Program: {{ program.name }}</span>
-                    </div>
-                    <div class="flex items-center text-sm text-gray-600">
-                        <i class="fa-solid fa-users mr-2 text-gray-400"></i>
-                        <span>Organization: {{ program.organization.name }}</span>
-                    </div>
+            <!-- Questions Container -->
+            <div class="space-y-4">
+                <template x-for="(question, index) in questions" :key="question.id || index">
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <!-- Editing Mode -->
+                        <div x-show="question.editing" class="space-y-4">
+                <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Question Text <span class="text-red-500">*</span>
+                    </label>
+                                <textarea x-model="question.question_text" rows="2" required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                        placeholder="Enter your question..."></textarea>
                 </div>
-            </div>
 
-            <div class="flex items-center gap-x-4">
-                <a href="{% url 'org_solicitations:program_dashboard' org_slug=request.org.slug pk=program.pk %}"
-                   class="button button-md outline-style">
-                    <i class="fa-solid fa-arrow-left mr-2"></i>
-                    Back to Dashboard
-                </a>
-            </div>
-        </div>
-    </div>
-
-    <!-- Solicitation Form -->
-    <div class="bg-white rounded-xl shadow-sm p-8">
-        <form method="post" class="space-y-8" id="solicitation-form">
-            {% csrf_token %}
-            <input type="hidden" id="questions-data" name="questions_data" value="">
-
-            <!-- Basic Information Section -->
-            <div>
-                <h2 class="text-xl font-semibold text-brand-deep-purple mb-6 pb-2 border-b border-gray-200">
-                    <i class="fa-solid fa-info-circle mr-2"></i>
-                    Basic Information
-                </h2>
-
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <!-- Title -->
-                    <div class="lg:col-span-2">
-                        <label for="{{ form.title.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
-                            {{ form.title.label }}
-                            {% if form.title.field.required %}<span class="text-red-500">*</span>{% endif %}
-                        </label>
-                        {{ form.title }}
-                        {% if form.title.errors %}
-                            <div class="mt-1 text-sm text-red-600">{{ form.title.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-
-                    <!-- Type -->
-                    <div>
-                        <label for="{{ form.solicitation_type.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
-                            {{ form.solicitation_type.label }}
-                            {% if form.solicitation_type.field.required %}<span class="text-red-500">*</span>{% endif %}
-                        </label>
-                        {{ form.solicitation_type }}
-                        {% if form.solicitation_type.errors %}
-                            <div class="mt-1 text-sm text-red-600">{{ form.solicitation_type.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-
-                    <!-- Status -->
-                    <div>
-                        <label for="{{ form.status.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
-                            {{ form.status.label }}
-                            {% if form.status.field.required %}<span class="text-red-500">*</span>{% endif %}
-                        </label>
-                        {{ form.status }}
-                        {% if form.status.errors %}
-                            <div class="mt-1 text-sm text-red-600">{{ form.status.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-
-                    <!-- Description -->
-                    <div class="lg:col-span-2">
-                        <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
-                            {{ form.description.label }}
-                            {% if form.description.field.required %}<span class="text-red-500">*</span>{% endif %}
-                        </label>
-                        {{ form.description }}
-                        {% if form.description.help_text %}
-                            <p class="mt-1 text-sm text-gray-500">{{ form.description.help_text }}</p>
-                        {% endif %}
-                        {% if form.description.errors %}
-                            <div class="mt-1 text-sm text-red-600">{{ form.description.errors.0 }}</div>
-                        {% endif %}
-                    </div>
+                            <div class="grid grid-cols-2 gap-4">
+                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Question Type <span class="text-red-500">*</span>
+                    </label>
+                                    <select x-model="question.question_type" required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo">
+                        <option value="text">Short Text</option>
+                                        <option value="textarea">Long Text</option>
+                        <option value="number">Number</option>
+                        <option value="file">File Upload</option>
+                        <option value="multiple_choice">Multiple Choice</option>
+                                    </select>
                 </div>
-            </div>
 
-            <!-- Program Details Section - Dynamic Question Builder -->
-            <div>
-                <h2 class="text-xl font-semibold text-brand-deep-purple mb-6 pb-2 border-b border-gray-200">
-                    <i class="fa-solid fa-clipboard-list mr-2"></i>
-                    Application Questions
-                </h2>
+                                <div class="flex items-center">
+                                    <input x-model="question.is_required" type="checkbox"
+                                        class="simple-checkbox mr-2">
+                                    <label class="text-sm font-medium text-gray-700">Required Question</label>
+                                </div>
+                            </div>
 
-                <div class="mb-4">
-                    <p class="text-sm text-gray-600 mb-4">
-                        Configure the questions that applicants will need to answer when responding to this solicitation.
-                    </p>
-
-                    <button type="button" id="add-question-btn" class="button button-md outline-style">
-                        <i class="fa-solid fa-plus mr-2"></i>
-                        Add Question
+                            <!-- Multiple Choice Options -->
+                            <div x-show="question.question_type === 'multiple_choice'" class="space-y-2">
+                                <label class="block text-sm font-medium text-gray-700">Options</label>
+                                <template x-for="(option, optionIndex) in question.options" :key="optionIndex">
+                                    <div class="flex items-center gap-2">
+                                        <input type="text" x-model="question.options[optionIndex]"
+                                            class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                                            placeholder="Option text...">
+                                        <button type="button" @click="question.options.splice(optionIndex, 1)" class="text-red-600 hover:text-red-800">
+                                            <i class="fa-solid fa-times"></i>
+                                        </button>
+                    </div>
+                                </template>
+                                <button type="button" @click="question.options.push('')" class="text-sm text-brand-indigo hover:text-brand-deep-purple">
+                        <i class="fa-solid fa-plus mr-1"></i> Add Option
                     </button>
                 </div>
 
-                <!-- Questions Container -->
-                <div id="questions-container" class="space-y-4">
-                    <!-- Questions will be dynamically added here -->
-                </div>
+                            <div class="flex justify-end gap-2 pt-4 border-t border-gray-200">
+                                <button type="button" @click="cancelEdit(index)" class="button button-sm outline-style">
+                                    Cancel
+                                </button>
+                                <button type="button" @click="saveQuestion(index)" class="button button-sm primary-dark">
+                                    <i class="fa-solid fa-check mr-1"></i> Save
+                                </button>
+                            </div>
+                        </div>
 
-                <!-- Empty State -->
-                <div id="questions-empty-state" class="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
-                    <i class="fa-solid fa-question-circle text-4xl text-gray-300 mb-4"></i>
-                    <h3 class="text-lg font-medium text-gray-700 mb-2">No Questions Added Yet</h3>
-                    <p class="text-gray-500 mb-4">Add questions that applicants will need to answer when responding to this solicitation.</p>
-                    <button type="button" class="add-question-trigger button button-md primary-dark">
-                        <i class="fa-solid fa-plus mr-2"></i>
-                        Add Your First Question
-                    </button>
-                </div>
+                        <!-- Display Mode -->
+                        <div x-show="!question.editing" class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="text-sm font-medium text-gray-500" x-text="`Q${index + 1}`"></span>
+                                    <span class="badge badge-sm" :class="question.is_required ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'" x-text="question.is_required ? 'Required' : 'Optional'"></span>
+                                    <span class="badge badge-sm bg-blue-100 text-blue-700" x-text="getTypeLabel(question.question_type)"></span>
+                                </div>
+                                <p class="text-gray-800 font-medium mb-1" x-text="question.question_text"></p>
+                                <div x-show="question.question_type === 'multiple_choice' && question.options && question.options.length > 0" class="mt-2">
+                                    <strong class="text-sm text-gray-600">Options:</strong>
+                                    <ul class="mt-1 text-sm text-gray-600 list-disc list-inside">
+                                        <template x-for="option in question.options" :key="option">
+                                            <li x-text="option"></li>
+                                        </template>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 ml-4">
+                                <button type="button" @click="editQuestion(index)" class="text-brand-indigo hover:text-brand-deep-purple">
+                                    <i class="fa-solid fa-edit"></i>
+                                </button>
+                                <button type="button" @click="deleteQuestion(index)" class="text-red-600 hover:text-red-800">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                                <div class="flex flex-col gap-1">
+                                    <button type="button"
+                                            @click="moveQuestion(index, 'up')"
+                                            :class="index === 0 ? 'opacity-50 text-gray-300' : 'text-gray-400 hover:text-gray-600 cursor-pointer'">
+                                        <i class="fa-solid fa-chevron-up text-xs"></i>
+                                    </button>
+                                    <button type="button"
+                                            @click="moveQuestion(index, 'down')"
+                                            :class="index === questions.length - 1 ? 'opacity-50 text-gray-300' : 'text-gray-400 hover:text-gray-600 cursor-pointer'">
+                                        <i class="fa-solid fa-chevron-down text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
             </div>
 
-            <!-- Timeline Section -->
-            <div>
-                <h2 class="text-xl font-semibold text-brand-deep-purple mb-6 pb-2 border-b border-gray-200">
-                    <i class="fa-solid fa-calendar mr-2"></i>
-                    Timeline
-                </h2>
-
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <!-- Application Deadline -->
-                    <div>
-                        <label for="{{ form.application_deadline.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
-                            {{ form.application_deadline.label }}
-                            {% if form.application_deadline.field.required %}<span class="text-red-500">*</span>{% endif %}
-                        </label>
-                        {{ form.application_deadline }}
-                        {% if form.application_deadline.errors %}
-                            <div class="mt-1 text-sm text-red-600">{{ form.application_deadline.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-
-                    <!-- Expected Start Date -->
-                    <div>
-                        <label for="{{ form.expected_start_date.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
-                            {{ form.expected_start_date.label }}
-                            {% if form.expected_start_date.field.required %}<span class="text-red-500">*</span>{% endif %}
-                        </label>
-                        {{ form.expected_start_date }}
-                        {% if form.expected_start_date.errors %}
-                            <div class="mt-1 text-sm text-red-600">{{ form.expected_start_date.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-
-                    <!-- Expected End Date -->
-                    <div>
-                        <label for="{{ form.expected_end_date.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
-                            {{ form.expected_end_date.label }}
-                            {% if form.expected_end_date.field.required %}<span class="text-red-500">*</span>{% endif %}
-                        </label>
-                        {{ form.expected_end_date }}
-                        {% if form.expected_end_date.errors %}
-                            <div class="mt-1 text-sm text-red-600">{{ form.expected_end_date.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <!-- Visibility Settings -->
-            <div>
-                <h2 class="text-xl font-semibold text-brand-deep-purple mb-6 pb-2 border-b border-gray-200">
-                    <i class="fa-solid fa-eye mr-2"></i>
-                    Visibility Settings
-                </h2>
-
-                <div class="flex items-start">
-                    <div class="flex items-center h-5">
-                        {{ form.is_publicly_listed }}
-                    </div>
-                    <div class="ml-3">
-                        <label for="{{ form.is_publicly_listed.id_for_label }}" class="text-sm font-medium text-gray-700">
-                            {{ form.is_publicly_listed.label }}
-                        </label>
-                        {% if form.is_publicly_listed.help_text %}
-                            <p class="text-sm text-gray-500">{{ form.is_publicly_listed.help_text }}</p>
-                        {% endif %}
-                        {% if form.is_publicly_listed.errors %}
-                            <div class="mt-1 text-sm text-red-600">{{ form.is_publicly_listed.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <!-- Form Errors -->
-            {% if form.non_field_errors %}
-                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-                    {% for error in form.non_field_errors %}
-                        <p class="text-red-600 text-sm">
-                            <i class="fa-solid fa-exclamation-triangle mr-2"></i>
-                            {{ error }}
-                        </p>
-                    {% endfor %}
-                </div>
-            {% endif %}
-
-            <!-- Action Buttons -->
-            <div class="flex justify-end gap-4 pt-6 border-t border-gray-200">
-                <a href="{% url 'org_solicitations:program_dashboard' org_slug=request.org.slug pk=program.pk %}"
-                   class="button button-md outline-style">
-                    Cancel
-                </a>
-                <button type="submit" class="button button-md primary-dark">
-                    <i class="fa-solid fa-save mr-2"></i>
-                    {% if is_create %}Create Solicitation{% else %}Update Solicitation{% endif %}
+            <!-- Add Question Button -->
+            <div class="mt-4">
+                <button type="button" @click="addNewQuestion()" class="button button-md outline-style">
+                    <i class="fa-solid fa-plus mr-2"></i>
+                    Add Question
                 </button>
-            </div>
-        </form>
-    </div>
-
-    <!-- Question Builder Modal -->
-    <div id="question-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
-        <div class="flex items-center justify-center min-h-screen p-4">
-            <div class="bg-white rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto">
-                <div class="p-6">
-                    <div class="flex items-center justify-between mb-6">
-                        <h3 id="question-modal-title" class="text-xl font-semibold text-brand-deep-purple">Add Question</h3>
-                        <button type="button" id="close-modal" class="text-gray-400 hover:text-gray-600">
-                            <i class="fa-solid fa-times text-xl"></i>
-                        </button>
                     </div>
-
-                    <form id="question-form" class="space-y-6">
-                        <!-- Question Text -->
-                        <div>
-                            <label for="question-text" class="block text-sm font-medium text-gray-700 mb-2">
-                                Question Text <span class="text-red-500">*</span>
-                            </label>
-                            <textarea id="question-text" name="question_text" rows="3" required
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                                placeholder="Enter your question..."></textarea>
-                        </div>
-
-                        <!-- Question Type -->
-                        <div>
-                            <label for="question-type" class="block text-sm font-medium text-gray-700 mb-2">
-                                Question Type <span class="text-red-500">*</span>
-                            </label>
-                            <select id="question-type" name="question_type" required
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo">
-                                <option value="text">Short Text</option>
-                                <option value="textarea" selected>Long Text</option>
-                                <option value="number">Number</option>
-                                <option value="file">File Upload</option>
-                                <option value="multiple_choice">Multiple Choice</option>
-                            </select>
-                        </div>
-
-                        <!-- Multiple Choice Options (shown only for multiple choice) -->
-                        <div id="options-container" class="hidden">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">
-                                Options <span class="text-red-500">*</span>
-                            </label>
-                            <div id="options-list" class="space-y-2">
-                                <!-- Options will be added here -->
-                            </div>
-                            <button type="button" id="add-option" class="mt-2 text-sm text-brand-indigo hover:text-brand-deep-purple">
-                                <i class="fa-solid fa-plus mr-1"></i> Add Option
-                            </button>
-                        </div>
-
-                        <!-- Required -->
-                        <div class="flex items-start">
-                            <div class="flex items-center h-5">
-                                <input id="question-required" name="is_required" type="checkbox" checked
-                                    class="h-4 w-4 text-brand-indigo border-gray-300 rounded focus:ring-brand-indigo">
-                            </div>
-                            <div class="ml-3">
-                                <label for="question-required" class="text-sm font-medium text-gray-700">
-                                    Required Question
-                                </label>
-                                <p class="text-sm text-gray-500">Applicants must answer this question to submit their response</p>
-                            </div>
-                        </div>
-
-                        <!-- Modal Actions -->
-                        <div class="flex justify-end gap-4 pt-6 border-t border-gray-200">
-                            <button type="button" id="cancel-question" class="button button-md outline-style">
-                                Cancel
-                            </button>
-                            <button type="submit" class="button button-md primary-dark">
-                                <span id="save-question-text">Add Question</span>
-                            </button>
-                        </div>
-                    </form>
                 </div>
-            </div>
-        </div>
-    </div>
+
+        <!-- Form Actions -->
+                <div class="flex justify-end gap-4 pt-6 border-t border-gray-200">
+            <a href="{% url 'solicitations:program_dashboard' request.org.slug program.pk %}" class="button button-md outline-style">
+                <i class="fa-solid fa-times mr-2"></i>
+                        Cancel
+            </a>
+                    <button type="submit" class="button button-md primary-dark">
+                <i class="fa-solid fa-save mr-2"></i>
+                {% if is_create %}Create Solicitation{% else %}Update Solicitation{% endif %}
+                    </button>
+                </div>
+    </form>
+
 {% endblock %}
 
 {% block inline_javascript %}
+<!-- Questions Data -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Question management state
-    let questions = {{ existing_questions|safe }};
-    let editingQuestionId = null;
-    let solicitationId = {% if not is_create %}{{ object.id }}{% else %}null{% endif %};
+try {
+    window.existingQuestions = {{ existing_questions|safe|default:"[]" }};
+} catch(e) {
+    console.error('Error loading questions:', e);
+    window.existingQuestions = [];
+}
+</script>
 
-    // DOM elements
-    const questionsContainer = document.getElementById('questions-container');
-    const emptyState = document.getElementById('questions-empty-state');
-    const modal = document.getElementById('question-modal');
-    const modalTitle = document.getElementById('question-modal-title');
-    const questionForm = document.getElementById('question-form');
-    const saveButtonText = document.getElementById('save-question-text');
+<script>
+// Alpine.js Components for Solicitation Question Builder
 
-    // Initialize
-    renderQuestions();
+function solicitationQuestionBuilder() {
+    return {
+        questions: [],
+        solicitationId: null,
+
+        init() {
+            // Read questions data from global variable
+            try {
+                console.log('Raw existing questions data:', window.existingQuestions);
+                if (window.existingQuestions && Array.isArray(window.existingQuestions)) {
+                    this.questions = window.existingQuestions;
+                    console.log('Loaded questions:', this.questions);
+                } else {
+                    this.questions = [];
+                    console.log('No questions found, starting with empty array');
+                }
+            } catch (e) {
+                console.error('Error loading existing questions:', e);
+                this.questions = [];
+            }
+
+            this.solicitationId = this.$el.dataset.solicitationId || null;
+            console.log('Solicitation ID:', this.solicitationId);
+
+            // Sort questions by order on initialization
+            this.questions.sort((a, b) => a.order - b.order);
+
+            // Ensure all questions have an editing property
+            this.questions.forEach(question => {
+                if (question.editing === undefined) {
+                    question.editing = false;
+                }
+            });
 
     // Form submission handler
     const solicitationForm = document.getElementById('solicitation-form');
+    const self = this; // Capture the correct 'this' context
     if (solicitationForm) {
-        solicitationForm.addEventListener('submit', function(e) {
-            // Populate the hidden field with questions data before submitting
+        solicitationForm.addEventListener('submit', (e) => {
             const questionsDataField = document.getElementById('questions-data');
             if (questionsDataField) {
-                questionsDataField.value = JSON.stringify(questions);
+                questionsDataField.value = JSON.stringify(self.questions);
+                console.log('Questions data being submitted:', self.questions);
             }
         });
     }
+        },
 
-    // Event listeners
-    const addQuestionBtn = document.getElementById('add-question-btn');
-    if (addQuestionBtn) {
-        addQuestionBtn.addEventListener('click', openAddModal);
-    }
-    document.querySelectorAll('.add-question-trigger').forEach(btn => {
-        btn.addEventListener('click', openAddModal);
-    });
-    document.getElementById('close-modal').addEventListener('click', closeModal);
-    document.getElementById('cancel-question').addEventListener('click', closeModal);
-    document.getElementById('question-type').addEventListener('change', toggleOptionsContainer);
-    document.getElementById('add-option').addEventListener('click', addOption);
-    questionForm.addEventListener('submit', saveQuestion);
-
-    // Functions
-    function renderQuestions() {
-        questionsContainer.innerHTML = '';
-
-        if (questions.length === 0) {
-            emptyState.style.display = 'block';
-            return;
-        }
-
-        emptyState.style.display = 'none';
-
-        questions.sort((a, b) => a.order - b.order);
-
-        questions.forEach((question, index) => {
-            const questionEl = createQuestionElement(question, index);
-            questionsContainer.appendChild(questionEl);
-        });
-    }
-
-    function createQuestionElement(question, index) {
-        const div = document.createElement('div');
-        div.className = 'bg-gray-50 border border-gray-200 rounded-lg p-4';
-        div.dataset.questionId = question.id || 'temp-' + Date.now();
-
+        getTypeLabel(type) {
         const typeLabels = {
             'text': 'Short Text',
             'textarea': 'Long Text',
@@ -424,307 +250,85 @@ document.addEventListener('DOMContentLoaded', function() {
             'file': 'File Upload',
             'multiple_choice': 'Multiple Choice'
         };
+            return typeLabels[type] || type;
+        },
 
-        let optionsHtml = '';
-        if (question.question_type === 'multiple_choice' && question.options) {
-            optionsHtml = `
-                <div class="mt-2">
-                    <strong class="text-sm text-gray-600">Options:</strong>
-                    <ul class="mt-1 text-sm text-gray-600 list-disc list-inside">
-                        ${question.options.map(opt => `<li>${opt}</li>`).join('')}
-                    </ul>
-                </div>
-            `;
-        }
+        addNewQuestion() {
+            const newQuestion = {
+                // Don't set ID for new questions - let server assign it
+                question_text: '',
+                question_type: 'textarea',
+                is_required: true,
+                options: [],
+                order: this.questions.length + 1,
+                editing: true,
+                isNew: true
+            };
 
-        div.innerHTML = `
-            <div class="flex items-start justify-between">
-                <div class="flex-1">
-                    <div class="flex items-center gap-2 mb-2">
-                        <span class="text-sm font-medium text-gray-500">Q${index + 1}</span>
-                        <span class="badge badge-sm ${question.is_required ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}">
-                            ${question.is_required ? 'Required' : 'Optional'}
-                        </span>
-                        <span class="badge badge-sm bg-blue-100 text-blue-700">${typeLabels[question.question_type]}</span>
-                    </div>
-                    <p class="text-gray-800 font-medium mb-1">${question.question_text}</p>
-                    ${optionsHtml}
-                </div>
-                <div class="flex items-center gap-2 ml-4">
-                    <button type="button" class="text-brand-indigo hover:text-brand-deep-purple" onclick="editQuestion('${question.id || 'temp'}')">
-                        <i class="fa-solid fa-edit"></i>
-                    </button>
-                    <button type="button" class="text-red-600 hover:text-red-800" onclick="deleteQuestion('${question.id || 'temp'}')">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
-                    <div class="flex flex-col gap-1">
-                        <button type="button" class="text-gray-400 hover:text-gray-600 ${index === 0 ? 'opacity-50 cursor-not-allowed' : ''}"
-                                onclick="moveQuestion('${question.id || 'temp'}', 'up')" ${index === 0 ? 'disabled' : ''}>
-                            <i class="fa-solid fa-chevron-up text-xs"></i>
-                        </button>
-                        <button type="button" class="text-gray-400 hover:text-gray-600 ${index === questions.length - 1 ? 'opacity-50 cursor-not-allowed' : ''}"
-                                onclick="moveQuestion('${question.id || 'temp'}', 'down')" ${index === questions.length - 1 ? 'disabled' : ''}>
-                            <i class="fa-solid fa-chevron-down text-xs"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
+            this.questions.push(newQuestion);
+        },
 
-        return div;
-    }
+        editQuestion(index) {
+            // Cancel any other editing questions
+            this.questions.forEach(q => q.editing = false);
+            this.questions[index].editing = true;
+        },
 
-    function openAddModal() {
-        editingQuestionId = null;
-        modalTitle.textContent = 'Add Question';
-        saveButtonText.textContent = 'Add Question';
-        resetForm();
-        modal.classList.remove('hidden');
-    }
-
-    function openEditModal(questionId) {
-        const question = questions.find(q => q.id == questionId);
-        if (!question) return;
-
-        editingQuestionId = questionId;
-        modalTitle.textContent = 'Edit Question';
-        saveButtonText.textContent = 'Update Question';
-
-        // Populate form
-        document.getElementById('question-text').value = question.question_text;
-        document.getElementById('question-type').value = question.question_type;
-        document.getElementById('question-required').checked = question.is_required;
-
-        if (question.question_type === 'multiple_choice' && question.options) {
-            renderOptions(question.options);
-        }
-
-        toggleOptionsContainer();
-        modal.classList.remove('hidden');
-    }
-
-    function closeModal() {
-        modal.classList.add('hidden');
-        resetForm();
-    }
-
-    function resetForm() {
-        questionForm.reset();
-        document.getElementById('question-type').value = 'textarea';
-        document.getElementById('question-required').checked = true;
-        document.getElementById('options-list').innerHTML = '';
-        toggleOptionsContainer();
-    }
-
-    function toggleOptionsContainer() {
-        const questionType = document.getElementById('question-type').value;
-        const optionsContainer = document.getElementById('options-container');
-
-        if (questionType === 'multiple_choice') {
-            optionsContainer.classList.remove('hidden');
-            if (document.getElementById('options-list').children.length === 0) {
-                addOption();
-                addOption();
+        cancelEdit(index) {
+            if (this.questions[index].isNew) {
+                // Remove new question if cancelled
+                this.questions.splice(index, 1);
+            } else {
+                // Just stop editing
+                this.questions[index].editing = false;
             }
-        } else {
-            optionsContainer.classList.add('hidden');
-        }
-    }
+        },
 
-    function addOption() {
-        const optionsList = document.getElementById('options-list');
-        const optionDiv = document.createElement('div');
-        optionDiv.className = 'flex items-center gap-2';
-        optionDiv.innerHTML = `
-            <input type="text" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo" placeholder="Option text..." required>
-            <button type="button" class="text-red-600 hover:text-red-800" onclick="this.parentElement.remove()">
-                <i class="fa-solid fa-times"></i>
-            </button>
-        `;
-        optionsList.appendChild(optionDiv);
-    }
+        saveQuestion(index) {
+            const question = this.questions[index];
 
-    function renderOptions(options) {
-        const optionsList = document.getElementById('options-list');
-        optionsList.innerHTML = '';
-
-        options.forEach(option => {
-            const optionDiv = document.createElement('div');
-            optionDiv.className = 'flex items-center gap-2';
-            optionDiv.innerHTML = `
-                <input type="text" value="${option}" class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo" placeholder="Option text..." required>
-                <button type="button" class="text-red-600 hover:text-red-800" onclick="this.parentElement.remove()">
-                    <i class="fa-solid fa-times"></i>
-                </button>
-            `;
-            optionsList.appendChild(optionDiv);
-        });
-    }
-
-    function saveQuestion(e) {
-        e.preventDefault();
-
-        const formData = new FormData(questionForm);
-        const questionData = {
-            question_text: formData.get('question_text'),
-            question_type: formData.get('question_type'),
-            is_required: formData.has('is_required')
-        };
-
-        // Handle multiple choice options
-        if (questionData.question_type === 'multiple_choice') {
-            const optionInputs = document.querySelectorAll('#options-list input');
-            questionData.options = Array.from(optionInputs).map(input => input.value.trim()).filter(val => val);
-
-            if (questionData.options.length === 0) {
-                alert('Please add at least one option for multiple choice questions.');
+            if (!question.question_text.trim()) {
+                alert('Please enter a question text');
                 return;
             }
-        }
 
-        if (editingQuestionId) {
-            updateQuestion(editingQuestionId, questionData);
-        } else {
-            createQuestion(questionData);
-        }
-    }
+            question.editing = false;
+            question.isNew = false;
+        },
 
-    function createQuestion(questionData) {
-        if (solicitationId) {
-            // For existing solicitations, save to server
-            fetch(`/a/{{ request.org.slug }}/program/{{ program.pk }}/solicitations/${solicitationId}/questions/create/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                },
-                body: JSON.stringify(questionData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    questions.push(data.question);
-                    renderQuestions();
-                    closeModal();
-                } else {
-                    alert('Error: ' + data.error);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while saving the question.');
+        deleteQuestion(index) {
+            this.questions.splice(index, 1);
+
+            // Update order for remaining questions
+            this.questions.forEach((q, i) => {
+                q.order = i;
             });
-        } else {
-            // For new solicitations, store locally
-            questionData.id = 'temp-' + Date.now();
-            questionData.order = questions.length + 1;
-            questions.push(questionData);
-            renderQuestions();
-            closeModal();
-        }
-    }
+        },
 
-    function updateQuestion(questionId, questionData) {
-        if (solicitationId && !questionId.toString().startsWith('temp')) {
-            // Update on server
-            fetch(`/a/{{ request.org.slug }}/program/{{ program.pk }}/solicitations/${solicitationId}/questions/${questionId}/update/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                },
-                body: JSON.stringify(questionData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const index = questions.findIndex(q => q.id == questionId);
-                    if (index !== -1) {
-                        questions[index] = data.question;
-                        renderQuestions();
-                        closeModal();
-                    }
-                } else {
-                    alert('Error: ' + data.error);
-                }
-            });
-        } else {
-            // Update locally
-            const index = questions.findIndex(q => q.id == questionId);
-            if (index !== -1) {
-                questions[index] = {...questions[index], ...questionData};
-                renderQuestions();
-                closeModal();
+        moveQuestion(index, direction) {
+            const newIndex = direction === 'up' ? index - 1 : index + 1;
+
+            // Check boundaries
+            if (newIndex < 0 || newIndex >= this.questions.length) {
+                return;
             }
+
+            // Swap questions
+            [this.questions[index], this.questions[newIndex]] = [this.questions[newIndex], this.questions[index]];
+
+            // Update order for all questions
+            this.questions.forEach((question, i) => {
+                question.order = i + 1;
+            });
+
+            console.log('Questions reordered:', this.questions.map(q => ({ text: q.question_text, order: q.order })));
         }
     }
+}
 
-    // Global functions for inline event handlers
-    window.editQuestion = function(questionId) {
-        openEditModal(questionId);
-    };
-
-    window.deleteQuestion = function(questionId) {
-        if (!confirm('Are you sure you want to delete this question?')) return;
-
-        if (solicitationId && !questionId.toString().startsWith('temp')) {
-            // Delete on server
-            fetch(`/a/{{ request.org.slug }}/program/{{ program.pk }}/solicitations/${solicitationId}/questions/${questionId}/delete/`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    questions = questions.filter(q => q.id != questionId);
-                    renderQuestions();
-                } else {
-                    alert('Error: ' + data.error);
-                }
-            });
-        } else {
-            // Delete locally
-            questions = questions.filter(q => q.id != questionId);
-            renderQuestions();
-        }
-    };
-
-    window.moveQuestion = function(questionId, direction) {
-        const index = questions.findIndex(q => q.id == questionId);
-        if (index === -1) return;
-
-        const newIndex = direction === 'up' ? index - 1 : index + 1;
-        if (newIndex < 0 || newIndex >= questions.length) return;
-
-        // Swap questions
-        [questions[index], questions[newIndex]] = [questions[newIndex], questions[index]];
-
-        // Update order values
-        questions.forEach((q, i) => {
-            q.order = i + 1;
-        });
-
-        renderQuestions();
-
-        // If editing existing solicitation, update order on server
-        if (solicitationId) {
-            const questionOrders = questions.map(q => ({
-                id: q.id,
-                order: q.order
-            }));
-
-            fetch(`/a/{{ request.org.slug }}/program/{{ program.pk }}/solicitations/${solicitationId}/questions/reorder/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                },
-                body: JSON.stringify({question_orders: questionOrders})
-            });
-        }
-    };
+// Register Alpine.js component
+document.addEventListener('alpine:init', () => {
+    Alpine.data('solicitationQuestionBuilder', solicitationQuestionBuilder);
 });
 </script>
 {% endblock %}
