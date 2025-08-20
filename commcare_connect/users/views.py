@@ -231,7 +231,15 @@ class RetrieveUserOTPView(LoginRequiredMixin, UserPassesTestMixin, FormView):
         except ConnectIDClientError as e:
             messages.error(self.request, str(e))
         else:
-            messages.success(self.request, f"The user's OTP is: {otp}")
+            if otp is None:
+                messages.error(
+                    self.request,
+                    "Failed to fetch OTP. Please make sure the number is correct and "
+                    "that the user has started their device seating process.",
+                )
+            else:
+                messages.success(self.request, f"The user's OTP is: {otp}")
+
         return super().form_valid(form)
 
     def form_invalid(self, form):
