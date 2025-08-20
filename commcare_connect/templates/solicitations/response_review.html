@@ -89,7 +89,7 @@
                     Your Review
                 </h2>
 
-                <form method="post" class="space-y-6">
+                <form x-data="responseReviewHandler()" method="post" class="space-y-6">
                     {% csrf_token %}
 
                     <!-- Score -->
@@ -139,31 +139,25 @@
                         </label>
                         <div class="flex gap-2">
                             <!-- Hidden input to store the selected value -->
-                            <input type="hidden" name="recommendation" id="recommendation-input" value="{% if existing_review.recommendation %}{{ existing_review.recommendation }}{% endif %}">
+                            <input type="hidden" name="recommendation" x-model="selectedRecommendation">
 
-                            <button type="button"
-                                    class="recommendation-btn flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer"
-                                    data-value="recommended"
-                                    data-default-classes="outline-style hover:bg-gray-100"
-                                    data-active-classes="primary-dark">
+                            <button type="button" @click="selectedRecommendation = 'recommended'"
+                                    class="flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer"
+                                    :class="selectedRecommendation === 'recommended' ? 'primary-dark' : 'outline-style hover:bg-gray-100'">
                                 <i class="fa-solid fa-thumbs-up mr-2"></i>
                                 Recommended
                             </button>
 
-                            <button type="button"
-                                    class="recommendation-btn flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer"
-                                    data-value="not_recommended"
-                                    data-default-classes="outline-style hover:bg-gray-100"
-                                    data-active-classes="primary-dark">
+                            <button type="button" @click="selectedRecommendation = 'not_recommended'"
+                                    class="flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer"
+                                    :class="selectedRecommendation === 'not_recommended' ? 'primary-dark' : 'outline-style hover:bg-gray-100'">
                                 <i class="fa-solid fa-thumbs-down mr-2"></i>
                                 Not Recommended
                             </button>
 
-                            <button type="button"
-                                    class="recommendation-btn flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer"
-                                    data-value="neutral"
-                                    data-default-classes="outline-style hover:bg-gray-100"
-                                    data-active-classes="primary-dark">
+                            <button type="button" @click="selectedRecommendation = 'neutral'"
+                                    class="flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer"
+                                    :class="selectedRecommendation === 'neutral' ? 'primary-dark' : 'outline-style hover:bg-gray-100'">
                                 <i class="fa-solid fa-minus-circle mr-2"></i>
                                 Neutral
                             </button>
@@ -220,51 +214,24 @@
     </div>
 {% endblock %}
 
-{% block inline_javascript %}
+{% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Handle recommendation button group
-    const recommendationButtons = document.querySelectorAll('.recommendation-btn');
-    const recommendationInput = document.getElementById('recommendation-input');
+// Alpine.js Component for Response Review Handler
 
-    // Function to update button states
-    function updateButtonStates(selectedValue) {
-        recommendationButtons.forEach(btn => {
-            const defaultClasses = btn.dataset.defaultClasses;
-            const activeClasses = btn.dataset.activeClasses;
-            const value = btn.dataset.value;
+function responseReviewHandler() {
+    return {
+        selectedRecommendation: '{% if existing_review.recommendation %}{{ existing_review.recommendation }}{% endif %}',
 
-            // Reset to base classes
-            btn.className = 'recommendation-btn flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer';
-
-            // Add appropriate classes
-            if (value === selectedValue) {
-                btn.className += ' ' + activeClasses;
-            } else {
-                btn.className += ' ' + defaultClasses;
-            }
-        });
+        init() {
+            // Component is initialized with the existing recommendation value
+            // Alpine.js x-model will handle the rest automatically
+        }
     }
+}
 
-    // Set initial state based on existing value
-    if (recommendationInput.value) {
-        updateButtonStates(recommendationInput.value);
-    } else {
-        updateButtonStates(null);
-    }
-
-    // Add click handlers to recommendation buttons
-    recommendationButtons.forEach(btn => {
-        btn.addEventListener('click', function() {
-            const value = this.dataset.value;
-
-            // Update hidden input
-            recommendationInput.value = value;
-
-            // Update button states
-            updateButtonStates(value);
-        });
-    });
+// Register Alpine.js component
+document.addEventListener('alpine:init', () => {
+    Alpine.data('responseReviewHandler', responseReviewHandler);
 });
 </script>
 {% endblock %}

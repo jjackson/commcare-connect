@@ -6,7 +6,6 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.mail import send_mail
-from django.db import models
 from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -854,8 +853,32 @@ class SolicitationUpdateView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         # Set the modified_by field
         form.instance.modified_by = self.request.user.email
+
+        # Save the solicitation first
+        response = super().form_valid(form)
+
+        # Now handle the questions from the JavaScript form
+        questions_data = self.request.POST.get("questions_data")
+        if questions_data:
+            try:
+                questions = json.loads(questions_data)
+                self.object.questions.all().delete()
+
+                for index, question_data in enumerate(questions):
+                    SolicitationQuestion.objects.create(
+                        solicitation=self.object,
+                        question_text=question_data.get("question_text", ""),
+                        question_type=question_data.get("question_type", "textarea"),
+                        is_required=question_data.get("is_required", True),
+                        options=question_data.get("options", None),
+                        order=index + 1,
+                    )
+
+            except (json.JSONDecodeError, Exception) as e:
+                messages.warning(self.request, f"Questions could not be saved properly: {str(e)}. Please try again.")
+
         messages.success(self.request, f'Solicitation "{form.instance.title}" has been updated successfully.')
-        return super().form_valid(form)
+        return response
 
     def get_success_url(self):
         from django.urls import reverse
@@ -866,11 +889,7 @@ class SolicitationUpdateView(LoginRequiredMixin, UpdateView):
         )
 
 
-# =============================================================================
-# Program Management Views (moved from program app)
-# =============================================================================
-
-
+# Program Management Views
 class ProgramSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, SingleTableView):
     """
     Dashboard view for program managers to see all their solicitations and responses
@@ -1050,153 +1069,3 @@ class SolicitationResponseReview(LoginRequiredMixin, UserPassesTestMixin, Solici
             pk=self.kwargs["pk"],
             response_pk=response.pk,
         )
-
-
-# AJAX views for solicitation question management
-
-
-@login_required
-@require_POST
-def solicitation_question_create(request, org_slug, program_pk, solicitation_pk):
-    """
-    AJAX endpoint to create a new question for a solicitation
-    """
-    try:
-        solicitation = get_object_or_404(
-            Solicitation.objects.select_related("program", "program__organization"),
-            pk=solicitation_pk,
-            program__pk=program_pk,
-            program__organization=request.org,
-        )
-
-        data = json.loads(request.body)
-
-        # Get the next order number
-        max_order = (
-            SolicitationQuestion.objects.filter(solicitation=solicitation).aggregate(models.Max("order"))["order__max"]
-            or 0
-        )
-
-        question = SolicitationQuestion.objects.create(
-            solicitation=solicitation,
-            question_text=data.get("question_text", ""),
-            question_type=data.get("question_type", "textarea"),
-            is_required=data.get("is_required", True),
-            options=data.get("options", None),
-            order=max_order + 1,
-        )
-
-        return JsonResponse(
-            {
-                "success": True,
-                "question": {
-                    "id": question.id,
-                    "question_text": question.question_text,
-                    "question_type": question.question_type,
-                    "is_required": question.is_required,
-                    "options": question.options,
-                    "order": question.order,
-                },
-            }
-        )
-
-    except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)}, status=400)
-
-
-@login_required
-@require_POST
-def solicitation_question_update(request, org_slug, program_pk, solicitation_pk, question_pk):
-    """
-    AJAX endpoint to update a question
-    """
-    try:
-        question = get_object_or_404(
-            SolicitationQuestion.objects.select_related(
-                "solicitation", "solicitation__program", "solicitation__program__organization"
-            ),
-            pk=question_pk,
-            solicitation__pk=solicitation_pk,
-            solicitation__program__pk=program_pk,
-            solicitation__program__organization=request.org,
-        )
-
-        data = json.loads(request.body)
-
-        question.question_text = data.get("question_text", question.question_text)
-        question.question_type = data.get("question_type", question.question_type)
-        question.is_required = data.get("is_required", question.is_required)
-        question.options = data.get("options", question.options)
-        question.save()
-
-        return JsonResponse(
-            {
-                "success": True,
-                "question": {
-                    "id": question.id,
-                    "question_text": question.question_text,
-                    "question_type": question.question_type,
-                    "is_required": question.is_required,
-                    "options": question.options,
-                    "order": question.order,
-                },
-            }
-        )
-
-    except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)}, status=400)
-
-
-@login_required
-@require_POST
-def solicitation_question_delete(request, org_slug, program_pk, solicitation_pk, question_pk):
-    """
-    AJAX endpoint to delete a question
-    """
-    try:
-        question = get_object_or_404(
-            SolicitationQuestion.objects.select_related(
-                "solicitation", "solicitation__program", "solicitation__program__organization"
-            ),
-            pk=question_pk,
-            solicitation__pk=solicitation_pk,
-            solicitation__program__pk=program_pk,
-            solicitation__program__organization=request.org,
-        )
-
-        question.delete()
-
-        return JsonResponse({"success": True})
-
-    except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)}, status=400)
-
-
-@login_required
-@require_POST
-def solicitation_question_reorder(request, org_slug, program_pk, solicitation_pk):
-    """
-    AJAX endpoint to reorder questions
-    """
-    try:
-        solicitation = get_object_or_404(
-            Solicitation.objects.select_related("program", "program__organization"),
-            pk=solicitation_pk,
-            program__pk=program_pk,
-            program__organization=request.org,
-        )
-
-        data = json.loads(request.body)
-        question_orders = data.get("question_orders", [])
-
-        # Update order for each question
-        for item in question_orders:
-            question_id = item.get("id")
-            new_order = item.get("order")
-
-            SolicitationQuestion.objects.filter(id=question_id, solicitation=solicitation).update(order=new_order)
-
-        return JsonResponse({"success": True})
-
-    except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)}, status=400)

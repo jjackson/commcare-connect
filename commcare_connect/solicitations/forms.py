@@ -1,3 +1,5 @@
+from crispy_forms.helper import FormHelper
+from crispy_forms.layout import HTML, Column, Div, Field, Layout
 from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import ModelForm
@@ -282,9 +284,7 @@ class SolicitationForm(ModelForm):
                     )
                 }
             ),
-            "is_publicly_listed": forms.CheckboxInput(
-                attrs={"class": "h-4 w-4 text-brand-indigo border-gray-300 rounded focus:ring-brand-indigo"}
-            ),
+            "is_publicly_listed": forms.CheckboxInput(attrs={"class": "simple-checkbox"}),
         }
 
     def __init__(self, program=None, *args, **kwargs):
@@ -294,6 +294,49 @@ class SolicitationForm(ModelForm):
         # Add help text (labels are now automatically populated from model verbose_name)
         self.fields["description"].help_text = "Provide a detailed description of the solicitation"
         self.fields["is_publicly_listed"].help_text = "Check to make this solicitation visible in public listings"
+
+        # Setup crispy forms
+        self.helper = FormHelper(self)
+        self.helper.form_class = "space-y-8"
+        self.helper.form_id = "solicitation-form"
+        self.helper.form_method = "post"
+
+        self.helper.layout = Layout(
+            # Hidden field for questions data
+            HTML('<input type="hidden" name="questions_data" id="questions-data" value="">'),
+            # Basic Information Section
+            Div(
+                HTML(
+                    '<h2 class="text-xl font-semibold text-brand-deep-purple mb-6 pb-2 border-b border-gray-200">'
+                    '<i class="fa-solid fa-info-circle mr-2"></i>Basic Information</h2>'
+                ),
+                Div(
+                    # Title (full width)
+                    Field("title", wrapper_class="mb-6"),
+                    # Row 2: Type, Status, and Visibility
+                    Div(
+                        Column(Field("solicitation_type"), css_class="flex-1"),
+                        Column(Field("status"), css_class="flex-1"),
+                        Column(Field("is_publicly_listed"), css_class="flex-1"),
+                        css_class="flex flex-col md:flex-row gap-6 mb-6",
+                    ),
+                    # Description
+                    Field("description", wrapper_class="mb-6"),
+                    # Timeline Fields Row
+                    Div(
+                        Column(Field("application_deadline"), css_class="flex-1"),
+                        Column(Field("expected_start_date"), css_class="flex-1"),
+                        Column(Field("expected_end_date"), css_class="flex-1"),
+                        css_class="flex flex-col md:flex-row gap-4 mb-6",
+                    ),
+                    css_class="space-y-6",
+                ),
+                css_class="bg-white rounded-xl shadow-sm p-8 mb-8",
+            ),
+        )
+
+        # Don't render submit buttons - let template handle them
+        self.helper.form_tag = False
 
     def clean(self):
         cleaned_data = super().clean()
