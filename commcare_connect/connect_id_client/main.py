@@ -90,10 +90,7 @@ def get_user_otp(phone_number):
         return data.get("otp")
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            raise ConnectIDClientError(
-                "Failed to fetch OTP. Please make sure the number is correct and "
-                "that the user has started their device seating process.",
-            )
+            return None
         else:
             sentry_sdk.capture_message(message=f"ConnectID client error: {str(e)}", level="error")
             raise ConnectIDClientError(f"Failed to fetch OTP: HTTP {e.response.status_code}")

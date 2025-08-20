@@ -126,6 +126,19 @@ class TestRetrieveUserOTPView:
         assert str(messages[0]) == "The user's OTP is: 1234"
 
     @patch("commcare_connect.users.views.get_user_otp")
+    def test_no_otp_returned(self, get_user_otp_mock, user, client):
+        get_user_otp_mock.return_value = None
+        response = self._get_superuser_response(client, user)
+
+        expected_failure_message = (
+            "Failed to fetch OTP. Please make sure the number is correct "
+            "and that the user has started their device seating process."
+        )
+
+        messages = list(response.context["messages"])
+        assert str(messages[0]) == expected_failure_message
+
+    @patch("commcare_connect.users.views.get_user_otp")
     def test_error_during_otp_retrieval(self, get_user_otp_mock, user, client):
         get_user_otp_mock.side_effect = ConnectIDClientError("Failed to fetch OTP with some error.")
         response = self._get_superuser_response(client, user)
