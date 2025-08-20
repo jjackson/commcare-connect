@@ -36,3 +36,16 @@
 3. Are persistent file attachments desired for solicitation documents?
 
 **Answer**:
+
+---
+
+**Question**: SuperUserRequiredMixin is now also used in Solicitations in addition to Reports - Should we Extract Shared Mixins?
+
+**Context**: `SuperUserRequiredMixin` is now also used in solicitations in addition to reports apps.
+
+**Suggested Locations**:
+
+1. `commcare_connect/web/mixins.py`
+2. `commcare_connect/users/mixins.py`
+
+**Answer**:

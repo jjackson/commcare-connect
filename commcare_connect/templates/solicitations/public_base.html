@@ -29,3 +29,8 @@
         {% block main_content %}{% endblock %}
     </div>
 {% endblock %}
+
+{% block javascript %}
+    {{ block.super }}
+    <script src="{% static 'js/datetime-utils.js' %}" defer></script>
+{% endblock %}

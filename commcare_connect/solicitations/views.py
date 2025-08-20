@@ -10,6 +10,7 @@ from django.db import models
 from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
@@ -20,6 +21,35 @@ from commcare_connect.reports.views import SuperUserRequiredMixin
 from .forms import SolicitationForm, SolicitationResponseForm
 from .models import ResponseAttachment, ResponseStatus, Solicitation, SolicitationQuestion, SolicitationResponse
 from .tables import SolicitationResponseTable, SolicitationTable
+
+
+class SolicitationResponseDetailMixin:
+    """
+    Mixin for shared response detail functionality between user and reviewer views
+    """
+
+    def get_questions_with_answers(self, response):
+        """
+        Process questions and answers for template display
+        """
+        solicitation = response.solicitation
+        questions = solicitation.questions.all().order_by("order")
+        questions_with_answers = []
+
+        for question in questions:
+            answer = response.responses.get(question.question_text, "")
+            questions_with_answers.append({"question": question, "answer": answer, "has_answer": bool(answer)})
+
+        return questions_with_answers
+
+    def get_response_context(self, response):
+        """
+        Get common context data for response display
+        """
+        return {
+            "questions_with_answers": self.get_questions_with_answers(response),
+            "solicitation": response.solicitation,
+        }
 
 
 class PublicSolicitationListView(ListView):
@@ -320,6 +350,141 @@ class ResponseSuccessView(LoginRequiredMixin, DetailView):
             user_org = self.request.user.memberships.first().organization
             return SolicitationResponse.objects.filter(organization=user_org)
         return SolicitationResponse.objects.none()
+
+
+class UserResponseDetailView(LoginRequiredMixin, SolicitationResponseDetailMixin, DetailView):
+    """
+    Detailed view of a response for the user who submitted it
+    """
+
+    model = SolicitationResponse
+    template_name = "solicitations/user_response_detail.html"
+    context_object_name = "response"
+
+    def get_queryset(self):
+        # Only allow users to view their own organization's responses
+        if self.request.user.memberships.exists():
+            user_org = self.request.user.memberships.first().organization
+            return (
+                SolicitationResponse.objects.filter(
+                    organization=user_org,
+                    status__in=[
+                        ResponseStatus.SUBMITTED,
+                        ResponseStatus.UNDER_REVIEW,
+                        ResponseStatus.ACCEPTED,
+                        ResponseStatus.REJECTED,
+                        ResponseStatus.PROGRESSED_TO_RFP,
+                    ],
+                )
+                .select_related("solicitation", "organization", "submitted_by")
+                .prefetch_related("file_attachments")
+            )
+        return SolicitationResponse.objects.none()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        response = self.object
+
+        # Use mixin to get shared context
+        shared_context = self.get_response_context(response)
+        context.update(shared_context)
+
+        # Add user-specific context
+        context["can_edit"] = response.status in [ResponseStatus.SUBMITTED, ResponseStatus.UNDER_REVIEW]
+
+        return context
+
+
+class UserResponseEditView(LoginRequiredMixin, UpdateView):
+    """
+    Edit view for users to modify their own submitted responses
+    """
+
+    model = SolicitationResponse
+    form_class = SolicitationResponseForm
+    template_name = "solicitations/response_form.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        # First, let LoginRequiredMixin handle authentication
+        if not request.user.is_authenticated:
+            return super().dispatch(request, *args, **kwargs)
+
+        # Get the response object
+        self.response = get_object_or_404(
+            SolicitationResponse.objects.select_related("solicitation", "organization"), pk=kwargs["pk"]
+        )
+        self.solicitation = self.response.solicitation
+
+        # Check if user has organization membership
+        if not request.user.memberships.exists():
+            messages.error(request, "You must be a member of an organization.")
+            return redirect("solicitations:detail", pk=self.solicitation.pk)
+
+        # Check if user's organization owns this response
+        user_org = request.user.memberships.first().organization
+        if self.response.organization != user_org:
+            messages.error(request, "You can only edit your organization's responses.")
+            return redirect("solicitations:detail", pk=self.solicitation.pk)
+
+        # Check if response is in an editable state
+        if self.response.status not in [ResponseStatus.SUBMITTED, ResponseStatus.UNDER_REVIEW]:
+            messages.error(request, "This response can no longer be edited.")
+            return redirect("solicitations:user_response_detail", pk=self.response.pk)
+
+        # Check if solicitation still accepts responses (for editing)
+        if not self.solicitation.can_accept_responses:
+            messages.warning(
+                request, "This solicitation is no longer accepting responses, but you can still view your submission."
+            )
+            return redirect("solicitations:user_response_detail", pk=self.response.pk)
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_object(self):
+        return self.response
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["solicitation"] = self.solicitation
+        kwargs["user"] = self.request.user
+
+        # Check if this is a draft save
+        if self.request.method == "POST":
+            kwargs["is_draft_save"] = self.request.POST.get("action") == "save_draft"
+        else:
+            kwargs["is_draft_save"] = False
+
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["solicitation"] = self.solicitation
+        context["questions"] = SolicitationQuestion.objects.filter(solicitation=self.solicitation).order_by("order")
+        context["is_editing"] = True
+        context["response"] = self.response
+        context["existing_attachments"] = self.response.file_attachments.all()
+        return context
+
+    def form_valid(self, form):
+        response = form.save()
+
+        # Handle draft vs submission
+        if self.request.POST.get("action") == "save_draft":
+            response.status = ResponseStatus.DRAFT
+            response.save(update_fields=["status"])
+            messages.success(self.request, "Your response has been saved as a draft.")
+            return redirect("solicitations:user_response_edit", pk=response.pk)
+        else:
+            # This is a submission/update
+            response.status = ResponseStatus.SUBMITTED
+            response.submission_date = timezone.now()
+            response.save(update_fields=["status", "submission_date"])
+
+            messages.success(self.request, "Your response has been updated successfully.")
+            return redirect("solicitations:user_response_detail", pk=response.pk)
+
+    def get_success_url(self):
+        return reverse("solicitations:user_response_detail", kwargs={"pk": self.object.pk})
 
 
 @login_required
@@ -773,12 +938,12 @@ class ProgramSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, Sing
         return context
 
 
-class SolicitationResponseReview(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+class SolicitationResponseReview(LoginRequiredMixin, UserPassesTestMixin, SolicitationResponseDetailMixin, UpdateView):
     """
     Individual response review view for program managers
     """
 
-    template_name = "program/response_review.html"
+    template_name = "solicitations/response_review.html"
     fields = []  # We'll handle the form manually
 
     def test_func(self):
@@ -812,36 +977,20 @@ class SolicitationResponseReview(LoginRequiredMixin, UserPassesTestMixin, Update
         response = self.get_object()
         program = response.solicitation.program
 
-        # Get questions for this solicitation
-        questions = SolicitationQuestion.objects.filter(solicitation=response.solicitation).order_by("order")
+        # Use mixin to get shared context
+        shared_context = self.get_response_context(response)
+        context.update(shared_context)
 
         # Get existing review by current user (if any)
         from .models import SolicitationReview
 
         existing_review = SolicitationReview.objects.filter(response=response, reviewer=self.request.user).first()
 
-        # Process questions with their answers for template
-        # This eliminates the need for custom template tags
-        questions_with_answers = []
-        responses_dict = response.responses or {}
-
-        for question in questions:
-            answer = responses_dict.get(question.question_text, "")
-            questions_with_answers.append(
-                {
-                    "question": question,
-                    "answer": answer,
-                    "has_answer": bool(answer),
-                }
-            )
-
+        # Add reviewer-specific context
         context.update(
             {
                 "program": program,
-                "solicitation": response.solicitation,
                 "response": response,
-                "questions": questions,  # Keep for backward compatibility if needed
-                "questions_with_answers": questions_with_answers,  # New structured data
                 "existing_review": existing_review,
             }
         )
@@ -878,23 +1027,31 @@ class SolicitationResponseReview(LoginRequiredMixin, UserPassesTestMixin, Update
         review.save()
 
         # Handle status changes based on recommendation
-        if recommendation == ReviewRecommendation.ACCEPT:
+        if recommendation == ReviewRecommendation.RECOMMENDED:
             response.status = ResponseStatus.ACCEPTED
             response.save(update_fields=["status"])
-            messages.success(request, f"Response from {response.organization.name} has been accepted.")
-        elif recommendation == ReviewRecommendation.REJECT:
+            messages.success(
+                request,
+                f"Response from {response.organization.name} has been marked as recommended. "
+                f"You can update this review at any time.",
+            )
+        elif recommendation == ReviewRecommendation.NOT_RECOMMENDED:
             response.status = ResponseStatus.REJECTED
             response.save(update_fields=["status"])
-            messages.success(request, f"Response from {response.organization.name} has been rejected.")
+            messages.success(
+                request,
+                f"Response from {response.organization.name} has been marked as not recommended. "
+                f"You can update this review at any time.",
+            )
         else:
-            messages.success(request, "Review saved successfully.")
+            messages.success(request, "Review saved successfully. You can update this review at any time.")
 
-        # Redirect back to response list
+        # Redirect back to the same review page to allow further editing
         return redirect(
-            "org_solicitations:program_response_list",
+            "org_solicitations:program_response_review",
             org_slug=self.request.org.slug,
-            pk=response.solicitation.program.pk,
-            solicitation_pk=response.solicitation.pk,
+            pk=self.kwargs["pk"],
+            response_pk=response.pk,
         )
 
 

@@ -14,6 +14,8 @@ from .views import (
     SolicitationResponseTableView,
     SolicitationUpdateView,
     UserDraftListView,
+    UserResponseDetailView,
+    UserResponseEditView,
     delete_attachment,
     save_draft_ajax,
     solicitation_question_create,
@@ -34,6 +36,9 @@ urlpatterns = [
     # Authenticated response submission
     path("s/<int:pk>/respond/", SolicitationResponseCreateView.as_view(), name="respond"),
     path("response/<int:pk>/success/", ResponseSuccessView.as_view(), name="response_success"),
+    # User response management
+    path("response/<int:pk>/", UserResponseDetailView.as_view(), name="user_response_detail"),
+    path("response/<int:pk>/edit/", UserResponseEditView.as_view(), name="user_response_edit"),
     # Draft management
     path("drafts/", UserDraftListView.as_view(), name="draft_list"),
     path("s/<int:pk>/save-draft/", save_draft_ajax, name="save_draft"),

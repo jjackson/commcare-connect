@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block page_title %}Review Response - {{ response.organization.name }}{% endblock %}
+
+{% block content %}
+    <!-- Breadcrumb Navigation -->
+    <ul class="breadcrumb mb-8">
+        <li>
+            <a href="{% url 'program:home' org_slug=request.org.slug %}">Programs</a>
+            <i class="fa-solid fa-chevron-right"></i>
+        </li>
+        <li>
+            <a href="{% url 'program:opportunity_list' org_slug=request.org.slug pk=program.pk %}">{{ program.name }}</a>
+            <i class="fa-solid fa-chevron-right"></i>
+        </li>
+        <li>
+            <a href="{% url 'org_solicitations:program_dashboard' org_slug=request.org.slug pk=program.pk %}">Solicitations</a>
+            <i class="fa-solid fa-chevron-right"></i>
+        </li>
+        <li>
+            <a href="{% url 'org_solicitations:program_response_list' org_slug=request.org.slug pk=program.pk solicitation_pk=solicitation.pk %}">{{ solicitation.title|truncatechars:20 }}</a>
+            <i class="fa-solid fa-chevron-right"></i>
+        </li>
+        <li>
+            <a href="#">Review {{ response.organization.name|truncatechars:20 }}</a>
+            <i class="fa-solid fa-chevron-right"></i>
+        </li>
+    </ul>
+
+    <div class="max-w-6xl mx-auto">
+        <!-- Header Card -->
+        <div class="bg-white rounded-xl shadow-sm p-8 mb-8">
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="badge badge-md {% if solicitation.solicitation_type == 'eoi' %}primary-dark{% else %}warning-dark{% endif %}">
+                            {{ solicitation.get_solicitation_type_display }}
+                        </span>
+                        <span class="badge badge-md
+                            {% if response.status == 'submitted' %}neutral-light
+                            {% elif response.status == 'under_review' %}warning-dark
+                            {% elif response.status == 'accepted' %}positive-dark
+                            {% elif response.status == 'rejected' %}negative-dark
+                            {% else %}neutral-dark{% endif %}">
+                            {{ response.get_status_display }}
+                        </span>
+                    </div>
+                    <h1 class="text-3xl font-bold text-brand-deep-purple mb-2">Review Response</h1>
+                    <p class="text-gray-600 mb-6">{{ solicitation.title }}</p>
+
+                    <!-- Response Information -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="flex items-center text-sm text-gray-600">
+                            <i class="fa-solid fa-building mr-2 text-gray-400"></i>
+                            <span>{{ response.organization.name }}</span>
+                        </div>
+                        <div class="flex items-center text-sm text-gray-600">
+                            <i class="fa-solid fa-user mr-2 text-gray-400"></i>
+                            <span>{{ response.submitted_by.get_full_name|default:response.submitted_by.email }}</span>
+                        </div>
+                        <div class="flex items-center text-sm text-gray-600">
+                            <i class="fa-solid fa-calendar mr-2 text-gray-400"></i>
+                            <span>Submitted <span class="local-datetime" datetime="{{ response.submission_date|date:'c' }}">{{ response.submission_date|date:"M j, Y g:i A" }}</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-x-4">
+                    <a href="{% url 'org_solicitations:program_response_list' org_slug=request.org.slug pk=program.pk solicitation_pk=solicitation.pk %}"
+                       class="button button-md outline-style">
+                        <i class="fa-solid fa-arrow-left mr-2"></i>
+                        Back to Responses
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <!-- Response Answers -->
+            {% include "solicitations/components/response_answers.html" %}
+
+            <!-- File Attachments -->
+            {% include "solicitations/components/file_attachments.html" with section_title="Supporting Documents" %}
+
+            <!-- Review Panel (Full Width) -->
+            <div class="bg-white rounded-xl shadow-sm p-8">
+                <h2 class="text-xl font-semibold text-brand-deep-purple mb-6">
+                    Your Review
+                </h2>
+
+                <form method="post" class="space-y-6">
+                    {% csrf_token %}
+
+                    <!-- Score -->
+                    <div>
+                        <label for="score" class="block text-sm font-medium text-gray-700 mb-2">
+                            Score (1-100)
+                        </label>
+                        <input type="number"
+                               id="score"
+                               name="score"
+                               min="1"
+                               max="100"
+                               value="{% if existing_review.score %}{{ existing_review.score }}{% endif %}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo">
+                    </div>
+
+                    <!-- Tags -->
+                    <div>
+                        <label for="tags" class="block text-sm font-medium text-gray-700 mb-2">
+                            Tags
+                        </label>
+                        <input type="text"
+                               id="tags"
+                               name="tags"
+                               value="{% if existing_review.tags %}{{ existing_review.tags }}{% endif %}"
+                               placeholder="e.g., experienced, rural-focus, strong-proposal"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo">
+                        <p class="text-xs text-gray-500 mt-1">Separate tags with commas</p>
+                    </div>
+
+                    <!-- Notes -->
+                    <div>
+                        <label for="notes" class="block text-sm font-medium text-gray-700 mb-2">
+                            Review Notes
+                        </label>
+                            <textarea id="notes"
+                                      name="notes"
+                                      rows="4"
+                                      placeholder="Add your detailed review notes..."
+                                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo">{% if existing_review.notes %}{{ existing_review.notes }}{% endif %}</textarea>
+                    </div>
+
+                    <!-- Recommendation -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-3">
+                            Recommendation
+                        </label>
+                        <div class="flex gap-2">
+                            <!-- Hidden input to store the selected value -->
+                            <input type="hidden" name="recommendation" id="recommendation-input" value="{% if existing_review.recommendation %}{{ existing_review.recommendation }}{% endif %}">
+
+                            <button type="button"
+                                    class="recommendation-btn flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer"
+                                    data-value="recommended"
+                                    data-default-classes="outline-style hover:bg-gray-100"
+                                    data-active-classes="primary-dark">
+                                <i class="fa-solid fa-thumbs-up mr-2"></i>
+                                Recommended
+                            </button>
+
+                            <button type="button"
+                                    class="recommendation-btn flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer"
+                                    data-value="not_recommended"
+                                    data-default-classes="outline-style hover:bg-gray-100"
+                                    data-active-classes="primary-dark">
+                                <i class="fa-solid fa-thumbs-down mr-2"></i>
+                                Not Recommended
+                            </button>
+
+                            <button type="button"
+                                    class="recommendation-btn flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer"
+                                    data-value="neutral"
+                                    data-default-classes="outline-style hover:bg-gray-100"
+                                    data-active-classes="primary-dark">
+                                <i class="fa-solid fa-minus-circle mr-2"></i>
+                                Neutral
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="pt-4 border-t border-gray-200">
+                        <button type="submit" class="w-full button button-md primary-dark">
+                            <i class="fa-solid fa-save mr-2"></i>
+                            {% if existing_review %}Update Review{% else %}Save Review{% endif %}
+                        </button>
+                        {% if existing_review %}
+                        <p class="text-xs text-gray-500 text-center mt-2">
+                            <i class="fa-solid fa-info-circle mr-1"></i>
+                            You can update this review at any time
+                        </p>
+                        {% else %}
+                        <p class="text-xs text-gray-500 text-center mt-2">
+                            <i class="fa-solid fa-info-circle mr-1"></i>
+                            You can edit this review after saving
+                        </p>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+
+            <!-- Existing Review Info -->
+            {% if existing_review %}
+                <div class="bg-blue-50 rounded-xl p-6">
+                    <h3 class="text-sm font-medium text-blue-900 mb-3">
+                        <i class="fa-solid fa-info-circle mr-2"></i>
+                        Review History
+                    </h3>
+                    <div class="text-sm text-blue-800">
+                        <p class="mb-2">
+                            <strong>Last updated:</strong> {{ existing_review.review_date|date:"M j, Y g:i A" }}
+                        </p>
+                        {% if existing_review.score %}
+                            <p class="mb-2">
+                                <strong>Current score:</strong> {{ existing_review.score }}/100
+                            </p>
+                        {% endif %}
+                        {% if existing_review.recommendation %}
+                            <p>
+                                <strong>Current recommendation:</strong> {{ existing_review.get_recommendation_display }}
+                            </p>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block inline_javascript %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle recommendation button group
+    const recommendationButtons = document.querySelectorAll('.recommendation-btn');
+    const recommendationInput = document.getElementById('recommendation-input');
+
+    // Function to update button states
+    function updateButtonStates(selectedValue) {
+        recommendationButtons.forEach(btn => {
+            const defaultClasses = btn.dataset.defaultClasses;
+            const activeClasses = btn.dataset.activeClasses;
+            const value = btn.dataset.value;
+
+            // Reset to base classes
+            btn.className = 'recommendation-btn flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer';
+
+            // Add appropriate classes
+            if (value === selectedValue) {
+                btn.className += ' ' + activeClasses;
+            } else {
+                btn.className += ' ' + defaultClasses;
+            }
+        });
+    }
+
+    // Set initial state based on existing value
+    if (recommendationInput.value) {
+        updateButtonStates(recommendationInput.value);
+    } else {
+        updateButtonStates(null);
+    }
+
+    // Add click handlers to recommendation buttons
+    recommendationButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const value = this.dataset.value;
+
+            // Update hidden input
+            recommendationInput.value = value;
+
+            // Update button states
+            updateButtonStates(value);
+        });
+    });
+});
+</script>
+{% endblock %}
