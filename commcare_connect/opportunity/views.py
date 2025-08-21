@@ -16,7 +16,7 @@ from django.core.files.storage import default_storage, storages
 from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -353,7 +353,7 @@ class OpportunityDashboard(OpportunityObjectMixin, OrganizationUserMixin, Detail
                 "icon": "fa-arrow-right !text-brand-mango",  # color is also changed",
             },
             {
-                "name": "Max Workers",
+                "name": "Max Connect Workers",
                 "count": header_with_tooltip(
                     safe_display(object.number_of_users), "Maximum allowed workers in the Opportunity"
                 ),
@@ -521,7 +521,7 @@ def add_budget_existing_users(request, org_slug=None, opp_id=None):
     tabs = [
         {
             "key": "existing_workers",
-            "label": "Existing Workers",
+            "label": "Existing Connect Workers",
         },
     ]
     # Nm are not allowed to increase the managed opportunity budget so do not provide that tab.
@@ -529,7 +529,7 @@ def add_budget_existing_users(request, org_slug=None, opp_id=None):
         tabs.append(
             {
                 "key": "new_workers",
-                "label": "New Workers",
+                "label": "New Connect Workers",
             }
         )
 
@@ -831,37 +831,59 @@ def send_message_mobile_users(request, org_slug=None, opp_id=None):
 
 @org_member_required
 @require_POST
-def approve_visit(request, org_slug=None, pk=None):
-    user_visit = UserVisit.objects.get(pk=pk)
-    if user_visit.status != VisitValidationStatus.approved or user_visit.review_status == VisitReviewStatus.disagree:
-        user_visit.status = VisitValidationStatus.approved
-        if user_visit.opportunity.managed:
-            user_visit.review_created_on = now()
-            if user_visit.review_status == VisitReviewStatus.disagree:
-                user_visit.review_status = VisitReviewStatus.pending
+def approve_visits(request, org_slug, opp_id):
+    visit_ids = request.POST.getlist("visit_ids[]")
 
-            if user_visit.flagged:
+    visits = (
+        UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id)
+        .filter(~Q(status=VisitValidationStatus.approved) | Q(review_status=VisitReviewStatus.disagree))
+        .prefetch_related("opportunity")
+        .only("status", "review_status", "flagged", "justification", "review_created_on")
+    )
+
+    if len({visit.user_id for visit in visits}) > 1:
+        return HttpResponseBadRequest(
+            "All visits must belong to the same user.",
+            headers={"HX-Trigger": "form_error"},
+        )
+
+    today = now()
+    for visit in visits:
+        visit.status = VisitValidationStatus.approved
+        if visit.opportunity.managed:
+            visit.review_created_on = today
+            if visit.review_status == VisitReviewStatus.disagree:
+                visit.review_status = VisitReviewStatus.pending
+            if visit.flagged:
                 justification = request.POST.get("justification")
                 if not justification:
-                    messages.error(request, "Justification is mandatory for flagged visits.")
-                user_visit.justification = justification
+                    return HttpResponse(
+                        "Justification is mandatory for flagged visits.",
+                        status=400,
+                        headers={"HX-Trigger": "form_error"},
+                    )
+                visit.justification = justification
 
-        user_visit.save()
-        update_payment_accrued(opportunity=user_visit.opportunity, users=[user_visit.user], incremental=True)
+    UserVisit.objects.bulk_update(visits, ["status", "review_created_on", "review_status", "justification"])
+    if visits:
+        update_payment_accrued(opportunity=visits[0].opportunity, users=[visits[0].user], incremental=True)
 
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
 
 @org_member_required
 @require_POST
-def reject_visit(request, org_slug=None, pk=None):
-    user_visit = UserVisit.objects.get(pk=pk)
-    reason = request.POST.get("reason")
-    user_visit.status = VisitValidationStatus.rejected
-    user_visit.reason = reason
-    user_visit.save()
-    access = OpportunityAccess.objects.get(user_id=user_visit.user_id, opportunity_id=user_visit.opportunity_id)
-    update_payment_accrued(opportunity=access.opportunity, users=[access.user])
+def reject_visits(request, org_slug=None, opp_id=None):
+    opp = get_opportunity_or_404(opp_id, org_slug)
+    visit_ids = request.POST.getlist("visit_ids[]")
+    reason = request.POST.get("reason", "").strip()
+
+    UserVisit.objects.filter(id__in=visit_ids, opportunity_id=opp_id).exclude(
+        status=VisitValidationStatus.rejected
+    ).update(status=VisitValidationStatus.rejected, reason=reason)
+    if visit_ids:
+        visit = UserVisit.objects.get(id=visit_ids[0])
+        update_payment_accrued(opportunity=opp, users=[visit.user])
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
 
@@ -1088,7 +1110,7 @@ def opportunity_user_invite(request, org_slug=None, opp_id=None):
     return render(
         request,
         "components/form.html",
-        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Invite Workers", form=form),
+        dict(title=f"{request.org.slug} - {opportunity.name}", form_title="Invite Connect Workers", form=form),
     )
 
 
@@ -1137,13 +1159,13 @@ def payment_report(request, org_slug, opp_id):
         {
             "amount": render_amount(total_user_payment_accrued),
             "icon": "fa-user-friends",
-            "label": "Worker",
+            "label": "Connect Worker",
             "subtext": "Total Accrued",
         },
         {
             "amount": render_amount(total_paid_users),
             "icon": "fa-user-friends",
-            "label": "Worker",
+            "label": "Connect Worker",
             "subtext": "Total Paid",
         },
         {
@@ -1196,7 +1218,6 @@ def invoice_list(request, org_slug, opp_id):
         request,
         "opportunity/invoice_list.html",
         {
-            "header_title": "Invoices",
             "opportunity": opportunity,
             "table": table,
             "form": form,
@@ -1334,10 +1355,10 @@ def user_visit_verification(request, org_slug, opp_id, pk):
             {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
             {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opp_id))},
             {
-                "title": "Workers",
+                "title": "Connect Workers",
                 "url": reverse("opportunity:worker_deliver", args=(org_slug, opp_id)),
             },
-            {"title": "Worker", "url": request.path},
+            {"title": opportunity_access.user.name, "url": request.path},
         ]
     )
 
@@ -1345,7 +1366,6 @@ def user_visit_verification(request, org_slug, opp_id, pk):
         request,
         "opportunity/user_visit_verification.html",
         context={
-            "header_title": "Worker",
             "opportunity_access": opportunity_access,
             "counts": user_visit_counts,
             "flagged_info": flagged_info,
@@ -1369,6 +1389,7 @@ def get_user_visit_counts(opportunity_access_id: int, date=None):
                 "id",
                 filter=Q(
                     review_status=VisitReviewStatus.pending,
+                    status=VisitValidationStatus.approved,
                     review_created_on__isnull=False,
                 ),
             ),
@@ -1431,6 +1452,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["organization"] = self.request.org
+        kwargs["is_opportunity_pm"] = self.request.is_opportunity_pm
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -1533,6 +1555,7 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
             filter_kwargs.update(
                 {
                     "review_status": VisitReviewStatus.pending,
+                    "status": VisitValidationStatus.approved,
                     "review_created_on__isnull": False,
                 }
             )
@@ -1551,7 +1574,6 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
                     "review_created_on__isnull": False,
                 }
             )
-
         return UserVisit.objects.filter(**filter_kwargs).order_by("visit_date")
 
 
@@ -1665,7 +1687,7 @@ class BaseWorkerListView(OrganizationUserMixin, OpportunityObjectMixin, View):
     hx_template_name = "opportunity/workers.html"
     active_tab = "workers"
     tabs = [
-        {"key": "workers", "label": "Workers", "url_name": "opportunity:worker_list"},
+        {"key": "workers", "label": "Connect Workers", "url_name": "opportunity:worker_list"},
         {"key": "learn", "label": "Learn", "url_name": "opportunity:worker_learn"},
         {"key": "deliver", "label": "Deliver", "url_name": "opportunity:worker_deliver"},
         {"key": "payments", "label": "Payments", "url_name": "opportunity:worker_payments"},
@@ -1686,7 +1708,7 @@ class BaseWorkerListView(OrganizationUserMixin, OpportunityObjectMixin, View):
         workers_count = (
             UserInvite.objects.filter(opportunity=opportunity).exclude(status=UserInviteStatus.not_found).count()
         )
-        tabs_with_urls[0]["label"] = f"Workers ({workers_count})"
+        tabs_with_urls[0]["label"] = f"Connect Workers ({workers_count})"
         return tabs_with_urls
 
     def get(self, request, org_slug, opp_id):
@@ -1713,7 +1735,10 @@ class BaseWorkerListView(OrganizationUserMixin, OpportunityObjectMixin, View):
             [
                 {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
                 {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
-                {"title": "Workers", "url": reverse("opportunity:worker_list", args=(org_slug, opportunity.id))},
+                {
+                    "title": "Connect Workers",
+                    "url": reverse("opportunity:worker_list", args=(org_slug, opportunity.id)),
+                },
             ]
         )
 
@@ -1843,7 +1868,7 @@ def worker_learn_status_view(request, org_slug, opp_id, access_id):
     return render(
         request,
         "opportunity/opportunity_worker_learn.html",
-        {"header_title": "Worker", "total_learn_duration": total_duration, "table": table, "access": access},
+        {"total_learn_duration": total_duration, "table": table, "access": access},
     )
 
 
@@ -1958,7 +1983,7 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
         {
             "stage": "Accepted",
             "count": header_with_tooltip(
-                accepted, "Workers that have clicked on the SMS or push notification or gone into Learn app"
+                accepted, "Connect Workers that have clicked on the SMS or push notification or gone into Learn app"
             ),
             "icon": "circle-check",
         },
@@ -1970,27 +1995,27 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
         {
             "stage": "Completed Learning",
             "count": header_with_tooltip(
-                result.completed_learning, "Workers that have completed all Learn modules but not assessment"
+                result.completed_learning, "Connect Workers that have completed all Learn modules but not assessment"
             ),
             "icon": "book",
         },
         {
             "stage": "Completed Assessment",
-            "count": header_with_tooltip(result.completed_assessments, "Workers that passed the assessment"),
+            "count": header_with_tooltip(result.completed_assessments, "Connect Workers that passed the assessment"),
             "icon": "award",
         },
         {
             "stage": "Claimed Job",
             "count": header_with_tooltip(
                 result.claimed_job,
-                "Workers that have read the Opportunity terms and started download of the Deliver app",
+                "Connect Workers that have read the Opportunity terms and started download of the Deliver app",
             ),
             "icon": "user-check",
         },
         {
             "stage": "Started Delivery",
             "count": header_with_tooltip(
-                result.started_deliveries, "Workers that have submitted at least 1 Learn form"
+                result.started_deliveries, "Connect Workers that have submitted at least 1 Learn form"
             ),
             "icon": "house-chimney-user",
         },
@@ -2047,7 +2072,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
             ],
         },
         {
-            "title": "Payments to Workers",
+            "title": "Payments to Connect Workers",
             "progress": [
                 {
                     "title": "Earned",
@@ -2062,7 +2087,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                 {
                     "title": "Paid",
                     "total": header_with_tooltip(
-                        amount_with_currency(result.total_paid), "Paid Amount to All Workers"
+                        amount_with_currency(result.total_paid), "Paid Amount to All Connect Workers"
                     ),
                     "value": header_with_tooltip(
                         f"{paid_percentage:.2f}%", "Percentage Paid to all  workers out of Earned amount"
@@ -2131,26 +2156,26 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
 
     opp_stats = [
         {
-            "title": "Workers",
+            "title": "Connect Workers",
             "sub_heading": "",
             "value": "",
             "panels": [
                 {
                     "icon": "fa-user-group",
-                    "name": "Workers",
+                    "name": "Connect Workers",
                     "status": "Invited",
                     "value": stats.workers_invited,
                     "url": status_url,
                 },
                 {
                     "icon": "fa-user-check",
-                    "name": "Workers",
+                    "name": "Connect Workers",
                     "status": "Yet to Accept Invitation",
                     "value": stats.pending_invites,
                 },
                 {
                     "icon": "fa-clipboard-list",
-                    "name": "Workers",
+                    "name": "Connect Workers",
                     "status": "Inactive last 3 days",
                     "value": header_with_tooltip(
                         stats.inactive_workers, "Did not submit a Learn or Deliver form in the last 3 days"

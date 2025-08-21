@@ -565,12 +565,14 @@ class OpportunityTable(BaseOpportunityList):
 
     pending_invites = tables.Column(
         verbose_name=header_with_tooltip(
-            "Pending Invites", "Workers not yet clicked on invite link or started learning in app"
+            "Pending Invites", "Connect Workers not yet clicked on invite link or started learning in app"
         ),
         attrs=col_attrs,
     )
     inactive_workers = tables.Column(
-        verbose_name=header_with_tooltip("Inactive Workers", "Did not submit a Learn or Deliver form in 3 day"),
+        verbose_name=header_with_tooltip(
+            "Inactive Connect Workers", "Did not submit a Learn or Deliver form in 3 day"
+        ),
         attrs=col_attrs,
     )
     pending_approvals = tables.Column(
@@ -621,7 +623,7 @@ class OpportunityTable(BaseOpportunityList):
                 "url": reverse("opportunity:detail", args=[self.org_slug, record.id]),
             },
             {
-                "title": "View Workers",
+                "title": "View Connect Workers",
                 "url": reverse("opportunity:worker_list", args=[self.org_slug, record.id]),
             },
         ]
@@ -648,7 +650,7 @@ class OpportunityTable(BaseOpportunityList):
 class ProgramManagerOpportunityTable(BaseOpportunityList):
     active_workers = tables.Column(
         verbose_name=header_with_tooltip(
-            "Active Workers", "Worker delivered a Learn or Deliver form in the last 3 days"
+            "Active Connect Workers", "Worker delivered a Learn or Deliver form in the last 3 days"
         ),
         attrs=TEXT_CENTER_ATTR,
     )
@@ -713,7 +715,7 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
                 "url": reverse("opportunity:detail", args=[self.org_slug, record.id]),
             },
             {
-                "title": "View Workers",
+                "title": "View Connect Workers",
                 "url": reverse("opportunity:worker_list", args=[self.org_slug, record.id]),
             },
         ]
@@ -738,6 +740,27 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
 
 
 class UserVisitVerificationTable(tables.Table):
+    select = tables.CheckBoxColumn(
+        accessor="pk",
+        attrs={
+            "th__input": {
+                "@click": "toggleSelectAll()",
+                "x-model": "selectAll",
+                "name": "select_all",
+                "type": "checkbox",
+                "class": "checkbox",
+            },
+            "td__input": {
+                "x-model": "selected",
+                "@click.stop": "",  # used to stop click propagation
+                "name": "row_select",
+                "type": "checkbox",
+                "class": "checkbox",
+                "value": lambda record: record.pk,
+                "id": lambda record: f"row_checkbox_{record.pk}",
+            },
+        },
+    )
     date_time = columns.DateTimeColumn(verbose_name="Date", accessor="visit_date", format="d M, Y H:i")
     entity_name = columns.Column(verbose_name="Entity Name")
     deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
@@ -775,6 +798,7 @@ class UserVisitVerificationTable(tables.Table):
     class Meta:
         model = UserVisit
         sequence = (
+            "select",
             "date_time",
             "entity_name",
             "deliver_unit",
@@ -785,16 +809,14 @@ class UserVisitVerificationTable(tables.Table):
         )
         fields = []
         empty_text = "No Visits for this filter."
-
-    def __init__(self, *args, **kwargs):
-        organization = kwargs.pop("organization", None)
-        super().__init__(*args, **kwargs)
-        self.use_view_url = True
-        self.attrs = {"x-data": "{selectedRow: null}"}
-        self.row_attrs = {
-            "hx-get": lambda record: reverse(
+        attrs = {
+            "x-data": "{selectedRow: null}",
+            "@change": "updateSelectAll()",
+        }
+        row_attrs = {
+            "hx-get": lambda record, table: reverse(
                 "opportunity:user_visit_details",
-                args=[organization.slug, record.opportunity_id, record.pk],
+                args=[table.organization.slug, record.opportunity_id, record.pk],
             ),
             "hx-trigger": "click",
             "hx-indicator": "#visit-loading-indicator",
@@ -803,7 +825,16 @@ class UserVisitVerificationTable(tables.Table):
             "hx-swap": "innerHTML",
             "@click": lambda record: f"selectedRow = {record.id}",
             ":class": lambda record: f"selectedRow == {record.id} && 'active'",
+            "data-visit-id": lambda record: record.pk,
+            "data-visit-status": lambda record: record.status,
         }
+
+    def __init__(self, *args, **kwargs):
+        self.organization = kwargs.pop("organization", None)
+        self.is_opportunity_pm = kwargs.pop("is_opportunity_pm", False)
+        super().__init__(*args, **kwargs)
+        self.columns["select"].column.visible = not self.is_opportunity_pm
+        self.use_view_url = True
 
     def get_icons(self, statuses):
         status_meta = {
