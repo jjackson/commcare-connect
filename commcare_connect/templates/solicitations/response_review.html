@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static crispy_forms_tags %}
 
 {% block page_title %}Review Response - {{ response.organization.name }}{% endblock %}
 
@@ -84,131 +84,20 @@
             {% include "solicitations/components/file_attachments.html" with section_title="Supporting Documents" %}
 
             <!-- Review Panel (Full Width) -->
-            <div class="bg-white rounded-xl shadow-sm p-8">
-                <h2 class="text-xl font-semibold text-brand-deep-purple mb-6">
-                    Your Review
-                </h2>
+            <form x-data="responseReviewHandler()" method="post">
+                {% csrf_token %}
+                {% crispy form %}
 
-                <form x-data="responseReviewHandler()" method="post" class="space-y-6">
-                    {% csrf_token %}
-
-                    <!-- Score -->
-                    <div>
-                        <label for="score" class="block text-sm font-medium text-gray-700 mb-2">
-                            Score (1-100)
-                        </label>
-                        <input type="number"
-                               id="score"
-                               name="score"
-                               min="1"
-                               max="100"
-                               value="{% if existing_review.score %}{{ existing_review.score }}{% endif %}"
-                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo">
-                    </div>
-
-                    <!-- Tags -->
-                    <div>
-                        <label for="tags" class="block text-sm font-medium text-gray-700 mb-2">
-                            Tags
-                        </label>
-                        <input type="text"
-                               id="tags"
-                               name="tags"
-                               value="{% if existing_review.tags %}{{ existing_review.tags }}{% endif %}"
-                               placeholder="e.g., experienced, rural-focus, strong-proposal"
-                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo">
-                        <p class="text-xs text-gray-500 mt-1">Separate tags with commas</p>
-                    </div>
-
-                    <!-- Notes -->
-                    <div>
-                        <label for="notes" class="block text-sm font-medium text-gray-700 mb-2">
-                            Review Notes
-                        </label>
-                            <textarea id="notes"
-                                      name="notes"
-                                      rows="4"
-                                      placeholder="Add your detailed review notes..."
-                                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo">{% if existing_review.notes %}{{ existing_review.notes }}{% endif %}</textarea>
-                    </div>
-
-                    <!-- Recommendation -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-3">
-                            Recommendation
-                        </label>
-                        <div class="flex gap-2">
-                            <!-- Hidden input to store the selected value -->
-                            <input type="hidden" name="recommendation" x-model="selectedRecommendation">
-
-                            <button type="button" @click="selectedRecommendation = 'recommended'"
-                                    class="flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer"
-                                    :class="selectedRecommendation === 'recommended' ? 'primary-dark' : 'outline-style hover:bg-gray-100'">
-                                <i class="fa-solid fa-thumbs-up mr-2"></i>
-                                Recommended
-                            </button>
-
-                            <button type="button" @click="selectedRecommendation = 'not_recommended'"
-                                    class="flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer"
-                                    :class="selectedRecommendation === 'not_recommended' ? 'primary-dark' : 'outline-style hover:bg-gray-100'">
-                                <i class="fa-solid fa-thumbs-down mr-2"></i>
-                                Not Recommended
-                            </button>
-
-                            <button type="button" @click="selectedRecommendation = 'neutral'"
-                                    class="flex-1 px-4 py-3 text-sm font-medium rounded-lg border transition-all duration-200 focus:outline-none cursor-pointer"
-                                    :class="selectedRecommendation === 'neutral' ? 'primary-dark' : 'outline-style hover:bg-gray-100'">
-                                <i class="fa-solid fa-minus-circle mr-2"></i>
-                                Neutral
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Submit Button -->
-                    <div class="pt-4 border-t border-gray-200">
-                        <button type="submit" class="w-full button button-md primary-dark">
-                            <i class="fa-solid fa-save mr-2"></i>
-                            {% if existing_review %}Update Review{% else %}Save Review{% endif %}
-                        </button>
-                        {% if existing_review %}
-                        <p class="text-xs text-gray-500 text-center mt-2">
-                            <i class="fa-solid fa-info-circle mr-1"></i>
-                            You can update this review at any time
-                        </p>
-                        {% else %}
-                        <p class="text-xs text-gray-500 text-center mt-2">
-                            <i class="fa-solid fa-info-circle mr-1"></i>
-                            You can edit this review after saving
-                        </p>
-                        {% endif %}
-                    </div>
-                </form>
-            </div>
-
-            <!-- Existing Review Info -->
-            {% if existing_review %}
-                <div class="bg-blue-50 rounded-xl p-6">
-                    <h3 class="text-sm font-medium text-blue-900 mb-3">
-                        <i class="fa-solid fa-info-circle mr-2"></i>
-                        Review History
-                    </h3>
-                    <div class="text-sm text-blue-800">
-                        <p class="mb-2">
-                            <strong>Last updated:</strong> {{ existing_review.review_date|date:"M j, Y g:i A" }}
-                        </p>
-                        {% if existing_review.score %}
-                            <p class="mb-2">
-                                <strong>Current score:</strong> {{ existing_review.score }}/100
-                            </p>
-                        {% endif %}
-                        {% if existing_review.recommendation %}
-                            <p>
-                                <strong>Current recommendation:</strong> {{ existing_review.get_recommendation_display }}
-                            </p>
-                        {% endif %}
-                    </div>
+                <!-- Submit Button -->
+                <div class="pt-4 border-t border-gray-200 bg-white rounded-xl shadow-sm p-8 mt-8">
+                    <button type="submit" class="w-full button button-md primary-dark">
+                        <i class="fa-solid fa-save mr-2"></i>
+                        {% if existing_review %}Update Review{% else %}Save Review{% endif %}
+                    </button>
                 </div>
-            {% endif %}
+            </form>
+
+
             </div>
         </div>
     </div>
