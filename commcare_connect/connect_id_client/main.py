@@ -1,5 +1,4 @@
 import httpx
-import sentry_sdk
 from django.conf import settings
 from httpx import BasicAuth, Response
 
@@ -90,10 +89,6 @@ def get_user_otp(phone_number):
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             return None
-        sentry_sdk.capture_exception(e)
-        raise
-    except httpx.HTTPError as e:
-        sentry_sdk.capture_exception(e)
         raise
 
 
