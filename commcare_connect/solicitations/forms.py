@@ -5,7 +5,8 @@ from django.core.exceptions import ValidationError
 from django.forms import ModelForm
 from django.utils.translation import gettext_lazy as _
 
-from .models import Solicitation, SolicitationQuestion, SolicitationResponse
+from .helpers import process_question_form_data
+from .models import ReviewRecommendation, Solicitation, SolicitationQuestion, SolicitationResponse
 
 
 class SolicitationResponseForm(forms.Form):
@@ -38,55 +39,23 @@ class SolicitationResponseForm(forms.Form):
                     label=question.question_text,
                     required=field_required,
                     max_length=500,
-                    widget=forms.TextInput(
-                        attrs={
-                            "class": (
-                                "w-full px-3 py-2 border border-gray-300 rounded-md "
-                                "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                            )
-                        }
-                    ),
                 )
             elif question.question_type == "textarea":
                 field = forms.CharField(
                     label=question.question_text,
                     required=field_required,
-                    widget=forms.Textarea(
-                        attrs={
-                            "class": (
-                                "w-full px-3 py-2 border border-gray-300 rounded-md "
-                                "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                            ),
-                            "rows": 4,
-                        }
-                    ),
+                    widget=forms.Textarea(attrs={"rows": 4}),
                 )
             elif question.question_type == "number":
                 field = forms.IntegerField(
                     label=question.question_text,
                     required=field_required,
-                    widget=forms.NumberInput(
-                        attrs={
-                            "class": (
-                                "w-full px-3 py-2 border border-gray-300 rounded-md "
-                                "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                            )
-                        }
-                    ),
                 )
             elif question.question_type == "file":
                 # File fields are never required (as per user request)
                 field = forms.FileField(
                     label=question.question_text,
                     required=False,
-                    widget=forms.FileInput(
-                        attrs={
-                            "class": (
-                                "w-full px-3 py-2 border border-gray-300 rounded-md "
-                                "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                            )
-                        }
-                    ),
                 )
             elif question.question_type == "multiple_choice":
                 choices = [("", "Select an option...")]  # Add empty choice for optional fields
@@ -97,28 +66,12 @@ class SolicitationResponseForm(forms.Form):
                     label=question.question_text,
                     required=field_required,
                     choices=choices,
-                    widget=forms.Select(
-                        attrs={
-                            "class": (
-                                "w-full px-3 py-2 border border-gray-300 rounded-md "
-                                "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                            )
-                        }
-                    ),
                 )
             else:
                 # Default to text field
                 field = forms.CharField(
                     label=question.question_text,
                     required=field_required,
-                    widget=forms.TextInput(
-                        attrs={
-                            "class": (
-                                "w-full px-3 py-2 border border-gray-300 rounded-md "
-                                "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                            )
-                        }
-                    ),
                 )
 
             self.fields[field_name] = field
@@ -131,6 +84,35 @@ class SolicitationResponseForm(forms.Form):
                     saved_value = self.instance.responses[question.question_text]
                     # Set initial value regardless of whether it's empty or not
                     self.fields[field_name].initial = saved_value or ""
+
+        # Setup crispy forms
+        self.helper = FormHelper(self)
+        self.helper.form_class = "space-y-6"
+        self.helper.form_method = "post"
+        self.helper.form_enctype = "multipart/form-data"
+        self.helper.form_tag = False  # Let template handle form tag
+
+        # Create dynamic layout based on questions
+        layout_fields = []
+        for question in questions:
+            field_name = f"question_{question.id}"
+            if field_name in self.fields:
+                layout_fields.append(
+                    Div(Field(field_name, wrapper_class="border border-gray-200 rounded-lg p-6"), css_class="mb-4")
+                )
+
+        if layout_fields:
+            self.helper.layout = Layout(
+                Div(
+                    HTML(
+                        '<h4 class="text-lg font-medium text-brand-deep-purple mb-4">'
+                        '<i class="fa-solid fa-clipboard-question mr-2"></i>'
+                        "Application Questions</h4>"
+                    ),
+                    *layout_fields,
+                    css_class="bg-white rounded-lg p-6 space-y-6",
+                )
+            )
 
     def full_clean(self):
         """
@@ -179,21 +161,8 @@ class SolicitationResponseForm(forms.Form):
         user_org = self.user.memberships.first().organization
         response.organization = user_org
 
-        # Prepare the dynamic responses as JSON
-        responses_data = {}
-        for field_name, value in self.cleaned_data.items():
-            if field_name.startswith("question_"):
-                question_id = field_name.split("_")[1]
-                try:
-                    question = SolicitationQuestion.objects.get(id=question_id)
-                    # For drafts, save all values (including empty ones to preserve user's clearing of fields)
-                    # For submissions, only save non-empty values
-                    if self.is_draft_save:
-                        responses_data[question.question_text] = value
-                    elif value:  # For submission, only save non-empty values
-                        responses_data[question.question_text] = value
-                except SolicitationQuestion.DoesNotExist:
-                    continue
+        # Use helper function to process question form data
+        responses_data = process_question_form_data(self.cleaned_data, self.is_draft_save)
 
         # Set the responses data
         response.responses = responses_data
@@ -372,3 +341,68 @@ class SolicitationForm(ModelForm):
             solicitation.save()
 
         return solicitation
+
+
+class SolicitationReviewForm(forms.Form):
+    """
+    Form for reviewing solicitation responses
+    """
+
+    score = forms.IntegerField(
+        label="Score (1-100)",
+        min_value=1,
+        max_value=100,
+        required=False,
+        widget=forms.NumberInput(attrs={"placeholder": "Enter score 1-100"}),
+    )
+    notes = forms.CharField(
+        label="Review Notes",
+        widget=forms.Textarea(attrs={"rows": 4, "placeholder": "Add your review notes..."}),
+        required=False,
+        help_text="Provide detailed feedback about this response",
+    )
+    tags = forms.CharField(
+        label="Tags",
+        required=False,
+        widget=forms.TextInput(attrs={"placeholder": "e.g., strong-technical, needs-clarification"}),
+        help_text="Add comma-separated tags to categorize this response",
+    )
+    recommendation = forms.ChoiceField(
+        label="Recommendation",
+        choices=ReviewRecommendation.choices,
+        required=False,
+        help_text="Your overall recommendation for this response",
+    )
+
+    def __init__(self, instance=None, *args, **kwargs):
+        self.instance = instance
+        super().__init__(*args, **kwargs)
+
+        # Pre-populate fields if editing existing review
+        if instance:
+            self.fields["score"].initial = instance.score
+            self.fields["notes"].initial = instance.notes
+            self.fields["tags"].initial = instance.tags
+            self.fields["recommendation"].initial = instance.recommendation
+
+        # Setup crispy forms
+        self.helper = FormHelper(self)
+        self.helper.form_method = "post"
+        self.helper.form_tag = False  # Let template handle form tag
+        self.helper.form_class = "space-y-6"
+
+        self.helper.layout = Layout(
+            Div(
+                HTML('<h2 class="text-xl font-semibold text-brand-deep-purple mb-6">' "Your Review</h2>"),
+                # First row - Review Notes (full width)
+                Field("notes", wrapper_class="mb-6"),
+                # Second row - Score, Recommendation, and Tags (three columns)
+                Div(
+                    Column(Field("score"), css_class="flex-1"),
+                    Column(Field("recommendation"), css_class="flex-1"),
+                    Column(Field("tags"), css_class="flex-1"),
+                    css_class="flex flex-col md:flex-row gap-4 mb-6",
+                ),
+                css_class="bg-white rounded-xl shadow-sm p-8",
+            )
+        )
