@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.mail import send_mail
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -22,7 +22,6 @@ from .helpers import (
     build_question_context,
     calculate_response_permissions,
     get_solicitation_dashboard_statistics,
-    get_solicitation_response_statistics,
     process_solicitation_questions,
     update_solicitation_questions,
 )
@@ -140,13 +139,16 @@ class AdminSolicitationOverview(SuperUserRequiredMixin, SingleTableView):
     paginate_by = 25
 
     def get_queryset(self):
-        base_queryset = (
-            Solicitation.objects.filter(status="active")
+        return (
+            Solicitation.objects.filter(status=Solicitation.Status.ACTIVE)
             .select_related("program", "program__organization")
             .prefetch_related("responses")
+            .annotate(
+                total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
+                submitted_count=Count("responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)),
+            )
             .order_by("-date_created")
         )
-        return get_solicitation_response_statistics(base_queryset)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -186,13 +188,16 @@ class ProgramSolicitationDashboard(SolicitationManagerMixin, SingleTableView):
         program_pk = self.kwargs.get("pk")
         program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
 
-        base_queryset = (
+        return (
             Solicitation.objects.filter(program=program)
             .select_related("program", "program__organization")
             .prefetch_related("responses")
+            .annotate(
+                total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
+                submitted_count=Count("responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)),
+            )
             .order_by("-date_created")
         )
-        return get_solicitation_response_statistics(base_queryset)
 
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
@@ -677,13 +682,16 @@ class UserSolicitationDashboard(SolicitationAccessMixin, SingleTableView):
         # Get solicitations for programs owned by any of the user's organizations
         # This includes both Program Manager orgs (who create solicitations) and
         # Network Manager orgs (who can respond to solicitations for their own programs)
-        base_queryset = (
-            Solicitation.objects.filter(program__organization__in=user_orgs, status="active")
+        return (
+            Solicitation.objects.filter(program__organization__in=user_orgs, status=Solicitation.Status.ACTIVE)
             .select_related("program", "program__organization")
             .prefetch_related("responses")
+            .annotate(
+                total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
+                submitted_count=Count("responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)),
+            )
             .order_by("-date_created")
         )
-        return get_solicitation_response_statistics(base_queryset)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
