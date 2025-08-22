@@ -10,22 +10,6 @@ from django.db.models import Count, Q
 from .models import Solicitation, SolicitationQuestion, SolicitationResponse
 
 
-def get_solicitation_response_statistics(queryset):
-    """
-    Add response statistics annotations to a solicitation queryset.
-
-    Args:
-        queryset: A Solicitation queryset to annotate
-
-    Returns:
-        Annotated queryset with response count fields
-    """
-    return queryset.annotate(
-        total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
-        submitted_count=Count("responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)),
-    )
-
-
 def get_user_organization_context(user):
     """
     Get organization context for a user.
@@ -184,7 +168,9 @@ def get_solicitation_dashboard_statistics(solicitations_queryset):
     }
 
     # Calculate total responses across all solicitations
-    annotated_solicitations = get_solicitation_response_statistics(solicitations_queryset)
+    annotated_solicitations = solicitations_queryset.annotate(
+        total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT))
+    )
     stats["total_responses"] = sum(s.total_responses or 0 for s in annotated_solicitations)
 
     return stats
