@@ -6,7 +6,7 @@ from django.forms import ModelForm
 from django.utils.translation import gettext_lazy as _
 
 from .helpers import process_question_form_data
-from .models import ReviewRecommendation, Solicitation, SolicitationQuestion, SolicitationResponse
+from .models import Solicitation, SolicitationQuestion, SolicitationResponse, SolicitationReview
 
 
 class SolicitationResponseForm(forms.Form):
@@ -369,7 +369,7 @@ class SolicitationReviewForm(forms.Form):
     )
     recommendation = forms.ChoiceField(
         label="Recommendation",
-        choices=ReviewRecommendation.choices,
+        choices=SolicitationReview.Recommendation.choices,
         required=False,
         help_text="Your overall recommendation for this response",
     )

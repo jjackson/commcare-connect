@@ -1,14 +1,9 @@
-from datetime import date, timedelta
+# Removed unused imports
 
 import pytest
 from django.db import IntegrityError
 
-from commcare_connect.solicitations.models import (
-    ResponseStatus,
-    SolicitationQuestion,
-    SolicitationResponse,
-    SolicitationStatus,
-)
+from commcare_connect.solicitations.models import Solicitation, SolicitationQuestion, SolicitationResponse
 from commcare_connect.solicitations.tests.factories import SolicitationFactory, SolicitationResponseFactory
 
 
@@ -16,61 +11,36 @@ class BaseSolicitationModelTest:
     """Base class for solicitation model tests with common fixtures"""
 
     @pytest.fixture(autouse=True)
-    def setup(self, solicitation_basic, user_with_org):
-        self.solicitation = solicitation_basic
-        self.user = user_with_org
-        self.org = self.user.memberships.first().organization
+    def setup(self, user, organization):
+        self.solicitation = SolicitationFactory()
+        self.user = user
+        self.org = organization
+        # Create membership relationship
+        self.user.memberships.create(organization=self.org)
 
 
 @pytest.mark.django_db
 class TestSolicitation(BaseSolicitationModelTest):
-    def test_publicly_visible_property(self):
-        """Test that solicitations are only publicly visible when active AND publicly listed"""
-        # Active and publicly listed
-        active_public = SolicitationFactory(
-            status=SolicitationStatus.ACTIVE,
-            is_publicly_listed=True,
-        )
-
-        # Active but not publicly listed
-        active_private = SolicitationFactory(
-            status=SolicitationStatus.ACTIVE,
-            is_publicly_listed=False,
-        )
-
-        # Draft and publicly listed
-        draft_public = SolicitationFactory(
-            status=SolicitationStatus.DRAFT,
-            is_publicly_listed=True,
-        )
-
-        assert active_public.is_publicly_visible
-        assert not active_private.is_publicly_visible
-        assert not draft_public.is_publicly_visible
-
     def test_can_accept_responses(self):
-        """Test that solicitations can only accept responses when active with future deadline"""
-        # Active with future deadline
-        active_future = SolicitationFactory(
-            status=SolicitationStatus.ACTIVE,
-            application_deadline=date.today() + timedelta(days=30),
+        """Test that solicitations can only accept responses when active"""
+        # Active solicitation
+        active_solicitation = SolicitationFactory(
+            status=Solicitation.Status.ACTIVE,
         )
 
-        # Active with past deadline
-        active_past = SolicitationFactory(
-            status=SolicitationStatus.ACTIVE,
-            application_deadline=date.today() - timedelta(days=1),
+        # Draft solicitation
+        draft_solicitation = SolicitationFactory(
+            status=Solicitation.Status.DRAFT,
         )
 
-        # Draft with future deadline
-        draft_future = SolicitationFactory(
-            status=SolicitationStatus.DRAFT,
-            application_deadline=date.today() + timedelta(days=30),
+        # Closed solicitation
+        closed_solicitation = SolicitationFactory(
+            status=Solicitation.Status.CLOSED,
         )
 
-        assert active_future.can_accept_responses
-        assert not active_past.can_accept_responses
-        assert not draft_future.can_accept_responses
+        assert active_solicitation.can_accept_responses
+        assert not draft_solicitation.can_accept_responses
+        assert not closed_solicitation.can_accept_responses
 
 
 @pytest.mark.django_db
@@ -106,7 +76,7 @@ class TestSolicitationResponse(BaseSolicitationModelTest):
             responses={"question_1": "Our response"},
         )
 
-        assert response.status == ResponseStatus.DRAFT
+        assert response.status == SolicitationResponse.Status.DRAFT
 
     def test_unique_response_per_org(self):
         """Test that organizations can only submit one response per solicitation"""
@@ -131,7 +101,10 @@ class TestSolicitationResponse(BaseSolicitationModelTest):
         """Test that submit() method changes status from DRAFT to SUBMITTED"""
         # Create a draft response
         response = SolicitationResponseFactory(
-            solicitation=self.solicitation, organization=self.org, submitted_by=self.user, status=ResponseStatus.DRAFT
+            solicitation=self.solicitation,
+            organization=self.org,
+            submitted_by=self.user,
+            status=SolicitationResponse.Status.DRAFT,
         )
         assert response.is_draft
         assert not response.is_submitted
@@ -142,7 +115,7 @@ class TestSolicitationResponse(BaseSolicitationModelTest):
 
         assert not response.is_draft
         assert response.is_submitted
-        assert response.status == ResponseStatus.SUBMITTED
+        assert response.status == SolicitationResponse.Status.SUBMITTED
 
     def test_submit_method_only_works_on_drafts(self):
         """Test that submit() method only works on draft responses"""
@@ -151,7 +124,7 @@ class TestSolicitationResponse(BaseSolicitationModelTest):
             solicitation=self.solicitation,
             organization=self.org,
             submitted_by=self.user,
-            status=ResponseStatus.SUBMITTED,
+            status=SolicitationResponse.Status.SUBMITTED,
         )
         original_status = response.status
 

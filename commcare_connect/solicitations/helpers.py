@@ -9,7 +9,7 @@ pattern from opportunity/helpers.py.
 from django.db.models import Count, Q
 from django.utils import timezone
 
-from .models import ResponseStatus, SolicitationQuestion, SolicitationResponse
+from .models import SolicitationQuestion, SolicitationResponse
 
 
 def get_solicitation_response_statistics(queryset):
@@ -27,9 +27,6 @@ def get_solicitation_response_statistics(queryset):
     """
     return queryset.annotate(
         total_responses=Count("responses", filter=~Q(responses__status="draft")),
-        under_review_count=Count("responses", filter=Q(responses__status="under_review")),
-        accepted_count=Count("responses", filter=Q(responses__status="accepted")),
-        rejected_count=Count("responses", filter=Q(responses__status="rejected")),
         submitted_count=Count("responses", filter=Q(responses__status="submitted")),
     )
 
@@ -93,12 +90,7 @@ def calculate_response_permissions(user, solicitation):
     existing_submitted_response = SolicitationResponse.objects.filter(
         solicitation=solicitation,
         organization=user_org,
-        status__in=[
-            ResponseStatus.SUBMITTED,
-            ResponseStatus.UNDER_REVIEW,
-            ResponseStatus.ACCEPTED,
-            ResponseStatus.REJECTED,
-        ],
+        status=SolicitationResponse.Status.SUBMITTED,
     ).first()
 
     if existing_submitted_response:
@@ -114,7 +106,7 @@ def calculate_response_permissions(user, solicitation):
     existing_draft = SolicitationResponse.objects.filter(
         solicitation=solicitation,
         organization=user_org,
-        status=ResponseStatus.DRAFT,
+        status=SolicitationResponse.Status.DRAFT,
     ).first()
 
     result["can_respond"] = True
@@ -214,7 +206,7 @@ def get_existing_response_for_organization(solicitation, organization, include_d
     )
 
     if not include_drafts:
-        queryset = queryset.exclude(status=ResponseStatus.DRAFT)
+        queryset = queryset.exclude(status=SolicitationResponse.Status.DRAFT)
 
     return queryset.first()
 

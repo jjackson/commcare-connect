@@ -7,13 +7,10 @@ from faker import Faker
 
 from commcare_connect.program.tests.factories import ProgramFactory
 from commcare_connect.solicitations.models import (
-    QuestionType,
-    ResponseStatus,
     Solicitation,
     SolicitationQuestion,
     SolicitationResponse,
-    SolicitationStatus,
-    SolicitationType,
+    SolicitationReview,
 )
 from commcare_connect.users.tests.factories import OrganizationFactory, UserFactory
 
@@ -62,11 +59,11 @@ def get_question_type_from_text(question_text):
     """Smart question type detection from text content"""
     text_lower = question_text.lower()
     if "upload" in text_lower or "submit" in text_lower:
-        return QuestionType.FILE
+        return SolicitationQuestion.Type.FILE
     elif "how many" in text_lower or "number" in text_lower:
-        return QuestionType.NUMBER
+        return SolicitationQuestion.Type.NUMBER
     else:
-        return QuestionType.TEXTAREA
+        return SolicitationQuestion.Type.TEXTAREA
 
 
 class SolicitationFactory(factory.django.DjangoModelFactory):
@@ -75,8 +72,8 @@ class SolicitationFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Solicitation
 
-    solicitation_type = factory.Iterator([SolicitationType.EOI, SolicitationType.RFP])
-    status = SolicitationStatus.ACTIVE
+    solicitation_type = factory.Iterator([Solicitation.Type.EOI, Solicitation.Type.RFP])
+    status = Solicitation.Status.ACTIVE
     is_publicly_listed = True
     program = factory.SubFactory(ProgramFactory)
     created_by = factory.Faker("email")
@@ -119,13 +116,13 @@ class SolicitationFactory(factory.django.DjangoModelFactory):
 class EOIFactory(SolicitationFactory):
     """EOI with proper template"""
 
-    solicitation_type = SolicitationType.EOI
+    solicitation_type = Solicitation.Type.EOI
 
 
 class RFPFactory(SolicitationFactory):
     """RFP with proper template"""
 
-    solicitation_type = SolicitationType.RFP
+    solicitation_type = Solicitation.Type.RFP
 
 
 class SolicitationQuestionFactory(factory.django.DjangoModelFactory):
@@ -135,7 +132,12 @@ class SolicitationQuestionFactory(factory.django.DjangoModelFactory):
     solicitation = factory.SubFactory(SolicitationFactory)
     question_text = factory.Faker("sentence", nb_words=8)
     question_type = factory.Iterator(
-        [QuestionType.TEXT, QuestionType.TEXTAREA, QuestionType.NUMBER, QuestionType.FILE]
+        [
+            SolicitationQuestion.Type.TEXT,
+            SolicitationQuestion.Type.TEXTAREA,
+            SolicitationQuestion.Type.NUMBER,
+            SolicitationQuestion.Type.FILE,
+        ]
     )
     is_required = True
     order = factory.Sequence(lambda n: n + 1)
@@ -155,7 +157,7 @@ class SolicitationResponseFactory(factory.django.DjangoModelFactory):
             "question_3": factory.Faker("random_int", min=1, max=100),
         }
     )
-    status = ResponseStatus.SUBMITTED
+    status = SolicitationResponse.Status.SUBMITTED
 
 
 class SolicitationWithQuestionsFactory(SolicitationFactory):
@@ -202,7 +204,7 @@ class SolicitationWithResponsesFactory(SolicitationWithQuestionsFactory):
             # Generate responses to all questions
             question_responses = {}
             for question in self.questions.all():
-                if question.question_type == QuestionType.FILE:
+                if question.question_type == SolicitationQuestion.Type.FILE:
                     question_responses[f"question_{question.id}"] = "sample_document.pdf"
                 else:
                     question_responses[f"question_{question.id}"] = fake.text(max_nb_chars=300)
@@ -214,10 +216,27 @@ class SolicitationWithResponsesFactory(SolicitationWithQuestionsFactory):
                 responses=question_responses,
                 status=random.choice(
                     [
-                        ResponseStatus.SUBMITTED,
-                        ResponseStatus.UNDER_REVIEW,
-                        ResponseStatus.ACCEPTED,
-                        ResponseStatus.REJECTED,
+                        SolicitationResponse.Status.SUBMITTED,
                     ]
                 ),
             )
+
+
+class SolicitationReviewFactory(factory.django.DjangoModelFactory):
+    """Factory for creating solicitation reviews"""
+
+    class Meta:
+        model = SolicitationReview
+
+    response = factory.SubFactory(SolicitationResponseFactory)
+    reviewer = factory.SubFactory(UserFactory)
+    score = factory.Faker("random_int", min=1, max=100)
+    tags = factory.Faker("words", nb=3)
+    notes = factory.Faker("text", max_nb_chars=200)
+    recommendation = factory.Iterator(
+        [
+            SolicitationReview.Recommendation.RECOMMENDED,
+            SolicitationReview.Recommendation.NOT_RECOMMENDED,
+            SolicitationReview.Recommendation.NEUTRAL,
+        ]
+    )
