@@ -80,13 +80,8 @@ class Opportunity(BaseModel):
         on_delete=models.CASCADE,
         null=True,
     )
-    # to be removed
-    max_visits_per_user = models.IntegerField(null=True)
-    daily_max_visits_per_user = models.IntegerField(null=True)
     start_date = models.DateField(default=datetime.date.today)
     end_date = models.DateField(null=True)
-    # to be removed
-    budget_per_visit = models.IntegerField(null=True)
     total_budget = models.PositiveBigIntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
     currency = models.CharField(max_length=3, null=True)
@@ -181,19 +176,19 @@ class Opportunity(BaseModel):
 
     @property
     def allotted_visits(self):
-        return self.max_visits_per_user_new * self.number_of_users
+        return self.max_visits_per_user * self.number_of_users
 
     @property
-    def max_visits_per_user_new(self):
+    def max_visits_per_user(self):
         # aggregates return None
         return self.paymentunit_set.aggregate(max_total=Sum("max_total")).get("max_total", 0) or 0
 
     @property
-    def daily_max_visits_per_user_new(self):
+    def daily_max_visits_per_user(self):
         return self.paymentunit_set.aggregate(max_daily=Sum("max_daily")).get("max_daily", 0) or 0
 
     @property
-    def budget_per_visit_new(self):
+    def budget_per_visit(self):
         return self.paymentunit_set.aggregate(amount=Max("amount")).get("amount", 0) or 0
 
     @property
@@ -267,7 +262,10 @@ class OpportunityAccess(models.Model):
     last_active = models.DateTimeField(null=True)
 
     class Meta:
-        indexes = [models.Index(fields=["invite_id"])]
+        indexes = [
+            models.Index(fields=["invite_id"]),
+            models.Index(fields=["opportunity", "date_learn_started"]),
+        ]
         unique_together = ("user", "opportunity")
 
     @cached_property
@@ -702,11 +700,20 @@ class UserVisit(XFormBaseModel):
             return flags
         return []
 
+    @property
+    def hq_link(self):
+        hq_url = self.deliver_unit.app.hq_server.url
+        domain = self.opportunity.deliver_app.cc_domain
+        return f"{hq_url}/a/{domain}/reports/form_data/{self.xform_id}/"
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
                 fields=["xform_id", "entity_id", "deliver_unit"], name="unique_xform_entity_deliver_unit"
             )
+        ]
+        indexes = [
+            models.Index(fields=["opportunity", "status"]),
         ]
 
 
