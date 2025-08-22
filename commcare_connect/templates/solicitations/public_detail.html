@@ -59,12 +59,12 @@
                             </p>
                         </div>
                     {% elif has_draft %}
-                        <a href="{% url 'solicitations:respond' pk=solicitation.pk %}"
+                        <a href="{% url 'solicitations:respond' solicitation_pk=solicitation.pk %}"
                            class="button button-md primary-dark">
                             Continue Draft
                         </a>
                     {% else %}
-                        <a href="{% url 'solicitations:respond' pk=solicitation.pk %}"
+                        <a href="{% url 'solicitations:respond' solicitation_pk=solicitation.pk %}"
                            class="button button-md primary-dark">
                             Submit Response
                         </a>

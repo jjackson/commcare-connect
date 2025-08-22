@@ -1,7 +1,7 @@
 import pytest
 from django.urls import reverse
 
-from commcare_connect.solicitations.models import SolicitationStatus, SolicitationType
+from commcare_connect.solicitations.models import Solicitation
 from commcare_connect.solicitations.tests.factories import EOIFactory, RFPFactory, SolicitationFactory
 
 
@@ -9,8 +9,8 @@ class BaseSolicitationViewTest:
     """Base class for solicitation view tests with common setup"""
 
     @pytest.fixture(autouse=True)
-    def setup(self, anonymous_client):
-        self.client = anonymous_client
+    def setup(self, client):
+        self.client = client
 
 
 @pytest.mark.django_db
@@ -20,19 +20,19 @@ class TestPublicSolicitationListView(BaseSolicitationViewTest):
         # Create various solicitations using factory
         active_public_eoi = EOIFactory(
             title="Active Public EOI",
-            status=SolicitationStatus.ACTIVE,
+            status=Solicitation.Status.ACTIVE,
             is_publicly_listed=True,
         )
 
         active_private_eoi = EOIFactory(
             title="Active Private EOI",
-            status=SolicitationStatus.ACTIVE,
+            status=Solicitation.Status.ACTIVE,
             is_publicly_listed=False,
         )
 
         draft_public_eoi = EOIFactory(
             title="Draft Public EOI",
-            status=SolicitationStatus.DRAFT,
+            status=Solicitation.Status.DRAFT,
             is_publicly_listed=True,
         )
 
@@ -48,8 +48,8 @@ class TestPublicSolicitationListView(BaseSolicitationViewTest):
     @pytest.mark.parametrize(
         "solicitation_type,url_name,should_show_eoi,should_show_rfp",
         [
-            (SolicitationType.EOI, "solicitations:eoi_list", True, False),
-            (SolicitationType.RFP, "solicitations:rfp_list", False, True),
+            (Solicitation.Type.EOI, "solicitations:eoi_list", True, False),
+            (Solicitation.Type.RFP, "solicitations:rfp_list", False, True),
         ],
     )
     def test_type_filter_views(self, solicitation_type, url_name, should_show_eoi, should_show_rfp):
@@ -57,13 +57,13 @@ class TestPublicSolicitationListView(BaseSolicitationViewTest):
         # Create EOI and RFP using factories
         eoi = EOIFactory(
             title="Test EOI",
-            status=SolicitationStatus.ACTIVE,
+            status=Solicitation.Status.ACTIVE,
             is_publicly_listed=True,
         )
 
         rfp = RFPFactory(
             title="Test RFP",
-            status=SolicitationStatus.ACTIVE,
+            status=Solicitation.Status.ACTIVE,
             is_publicly_listed=True,
         )
 
@@ -93,7 +93,7 @@ class TestPublicSolicitationDetailView(BaseSolicitationViewTest):
             title="Test Solicitation",
             description="Detailed description of the program",
             scope_of_work="Detailed scope of work",
-            status=SolicitationStatus.ACTIVE,
+            status=Solicitation.Status.ACTIVE,
         )
 
         url = reverse("solicitations:detail", kwargs={"pk": solicitation.pk})
@@ -110,7 +110,7 @@ class TestPublicSolicitationDetailView(BaseSolicitationViewTest):
         private_solicitation = SolicitationFactory(
             title="Private Solicitation",
             description="This is not publicly listed",
-            status=SolicitationStatus.ACTIVE,
+            status=Solicitation.Status.ACTIVE,
             is_publicly_listed=False,
         )
 
@@ -125,7 +125,7 @@ class TestPublicSolicitationDetailView(BaseSolicitationViewTest):
         draft_solicitation = SolicitationFactory(
             title="Draft Solicitation",
             description="This is a draft",
-            status=SolicitationStatus.DRAFT,
+            status=Solicitation.Status.DRAFT,
         )
 
         url = reverse("solicitations:detail", kwargs={"pk": draft_solicitation.pk})

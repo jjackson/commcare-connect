@@ -4,7 +4,8 @@ import pytest
 
 from commcare_connect.program.tests.factories import ProgramFactory
 from commcare_connect.solicitations.forms import SolicitationForm, SolicitationResponseForm
-from commcare_connect.solicitations.models import QuestionType, SolicitationStatus, SolicitationType
+from commcare_connect.solicitations.models import Solicitation, SolicitationQuestion
+from commcare_connect.solicitations.tests.factories import SolicitationWithQuestionsFactory
 from commcare_connect.users.tests.factories import UserFactory
 
 
@@ -12,10 +13,11 @@ class BaseSolicitationFormTest:
     """Base class for solicitation form tests with common fixtures"""
 
     @pytest.fixture(autouse=True)
-    def setup(self, user_with_org, solicitation_basic):
-        self.user = user_with_org
-        self.org = self.user.memberships.first().organization
-        self.solicitation = solicitation_basic
+    def setup(self, user, organization):
+        self.user = user
+        self.org = organization
+        # Create membership relationship
+        self.user.memberships.create(organization=self.org)
         self.program = ProgramFactory()
 
     def _get_solicitation_form_data(self, **overrides):
@@ -23,11 +25,11 @@ class BaseSolicitationFormTest:
         base_data = {
             "title": "Test Solicitation",
             "description": "A test solicitation description",
-            "solicitation_type": SolicitationType.EOI,
+            "solicitation_type": Solicitation.Type.EOI,
             "expected_start_date": date.today() + timedelta(days=60),
             "expected_end_date": date.today() + timedelta(days=365),
             "application_deadline": date.today() + timedelta(days=30),
-            "status": SolicitationStatus.DRAFT,
+            "status": Solicitation.Status.DRAFT,
             "is_publicly_listed": True,
         }
         base_data.update(overrides)
@@ -87,9 +89,9 @@ class TestSolicitationForm(BaseSolicitationFormTest):
 @pytest.mark.django_db
 class TestSolicitationResponseForm(BaseSolicitationFormTest):
     @pytest.fixture(autouse=True)
-    def response_form_setup(self, solicitation_with_questions):
+    def response_form_setup(self):
         """Additional setup for response form tests"""
-        self.solicitation_with_questions = solicitation_with_questions
+        self.solicitation_with_questions = SolicitationWithQuestionsFactory()
         self.questions = list(self.solicitation_with_questions.questions.all())
 
     def test_form_creates_dynamic_fields(self):
@@ -166,7 +168,7 @@ class TestSolicitationResponseForm(BaseSolicitationFormTest):
         # Add all required fields to make form valid
         for question in self.questions:
             if question.is_required and question != test_question:
-                if question.question_type == QuestionType.NUMBER:
+                if question.question_type == SolicitationQuestion.Type.NUMBER:
                     form_data[f"question_{question.id}"] = "10"
                 else:
                     form_data[f"question_{question.id}"] = "Required answer"
