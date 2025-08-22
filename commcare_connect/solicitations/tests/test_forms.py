@@ -105,14 +105,21 @@ class TestSolicitationResponseForm(BaseSolicitationFormTest):
 
             field = form.fields[field_name]
             assert field.label == question.question_text
-            assert field.required == question.is_required
+
+            # File fields are always optional regardless of question.is_required
+            if question.question_type == "file":
+                assert field.required is False
+            else:
+                assert field.required == question.is_required
 
     def test_form_validation_requires_organization_membership(self):
         """Test that form requires user to have organization membership"""
         user_no_org = UserFactory()  # No organization membership
 
         form_data = {}
-        form = SolicitationResponseForm(data=form_data, solicitation=self.solicitation, user=user_no_org)
+        form = SolicitationResponseForm(
+            data=form_data, solicitation=self.solicitation_with_questions, user=user_no_org
+        )
 
         assert not form.is_valid()
         assert len(form.errors) >= 1
