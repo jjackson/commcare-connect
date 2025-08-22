@@ -80,7 +80,7 @@
 
                     <!-- Action Buttons -->
                     <div class="flex gap-4">
-                        <a href="{% url 'solicitations:respond' draft.solicitation.pk %}"
+                        <a href="{% url 'solicitations:respond' solicitation_pk=draft.solicitation.pk %}"
                            class="flex-1 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand-indigo hover:bg-brand-indigo-dark">
                             <i class="fa-solid fa-edit mr-2"></i>
                             Continue

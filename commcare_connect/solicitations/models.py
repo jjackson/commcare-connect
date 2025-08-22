@@ -1,5 +1,4 @@
 from django.db import models
-from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.organization.models import Organization
@@ -8,22 +7,19 @@ from commcare_connect.users.models import User
 from commcare_connect.utils.db import BaseModel
 
 
-class SolicitationType(models.TextChoices):
-    EOI = "eoi", _("Expression of Interest")
-    RFP = "rfp", _("Request for Proposal")
-
-
-class SolicitationStatus(models.TextChoices):
-    DRAFT = "draft", _("Draft")
-    ACTIVE = "active", _("Active")
-    COMPLETED = "completed", _("Completed")
-    CLOSED = "closed", _("Closed")
-
-
 class Solicitation(BaseModel):
     """
     Unified model for both EOIs and RFPs
     """
+
+    class Type(models.TextChoices):
+        EOI = "eoi", _("Expression of Interest")
+        RFP = "rfp", _("Request for Proposal")
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", _("Draft")
+        ACTIVE = "active", _("Active")
+        CLOSED = "closed", _("Closed")
 
     title = models.CharField(max_length=255, verbose_name="Solicitation Title")
     description = models.TextField(
@@ -33,12 +29,8 @@ class Solicitation(BaseModel):
         max_length=255, help_text="Who will be served (e.g., 'Children under 5 in rural areas')"
     )
     scope_of_work = models.TextField(help_text="What work needs to be done")
-    solicitation_type = models.CharField(
-        max_length=3, choices=SolicitationType.choices, default=SolicitationType.EOI, verbose_name="Type"
-    )
-    status = models.CharField(
-        max_length=10, choices=SolicitationStatus.choices, default=SolicitationStatus.DRAFT, verbose_name="Status"
-    )
+    solicitation_type = models.CharField(max_length=3, choices=Type.choices, default=Type.EOI, verbose_name="Type")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT, verbose_name="Status")
     is_publicly_listed = models.BooleanField(
         default=True,
         verbose_name="Publicly Listed",
@@ -77,34 +69,9 @@ class Solicitation(BaseModel):
     def __str__(self):
         return f"{self.get_solicitation_type_display()}: {self.title}"
 
-    def get_absolute_url(self):
-        return reverse("solicitations:detail", kwargs={"pk": self.pk})
-
-    @property
-    def is_active(self):
-        return self.status == SolicitationStatus.ACTIVE
-
-    @property
-    def is_publicly_visible(self):
-        return self.is_publicly_listed and self.is_active
-
-    @property
-    def response_count(self):
-        return self.responses.count()
-
     @property
     def can_accept_responses(self):
-        from django.utils import timezone
-
-        return self.is_active and self.application_deadline >= timezone.now().date()
-
-
-class QuestionType(models.TextChoices):
-    TEXT = "text", _("Short Text")
-    TEXTAREA = "textarea", _("Long Text")
-    NUMBER = "number", _("Number")
-    FILE = "file", _("File Upload")
-    MULTIPLE_CHOICE = "multiple_choice", _("Multiple Choice")
+        return self.status == Solicitation.Status.ACTIVE
 
 
 class SolicitationQuestion(models.Model):
@@ -112,9 +79,16 @@ class SolicitationQuestion(models.Model):
     Questions for each solicitation to enable flexible forms
     """
 
+    class Type(models.TextChoices):
+        TEXT = "text", _("Short Text")
+        TEXTAREA = "textarea", _("Long Text")
+        NUMBER = "number", _("Number")
+        FILE = "file", _("File Upload")
+        MULTIPLE_CHOICE = "multiple_choice", _("Multiple Choice")
+
     solicitation = models.ForeignKey(Solicitation, on_delete=models.CASCADE, related_name="questions")
     question_text = models.TextField()
-    question_type = models.CharField(max_length=15, choices=QuestionType.choices, default=QuestionType.TEXTAREA)
+    question_type = models.CharField(max_length=15, choices=Type.choices, default=Type.TEXTAREA)
     is_required = models.BooleanField(default=True)
     options = models.JSONField(
         null=True, blank=True, help_text="For multiple choice questions, store options as JSON array"
@@ -129,18 +103,14 @@ class SolicitationQuestion(models.Model):
         return f"{self.solicitation.title} - Q{self.order}"
 
 
-class ResponseStatus(models.TextChoices):
-    DRAFT = "draft", _("Draft")
-    SUBMITTED = "submitted", _("Submitted")
-    UNDER_REVIEW = "under_review", _("Under Review")
-    ACCEPTED = "accepted", _("Accepted")
-    REJECTED = "rejected", _("Rejected")
-
-
 class SolicitationResponse(BaseModel):
     """
     Responses submitted by organizations to solicitations
     """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", _("Draft")
+        SUBMITTED = "submitted", _("Submitted")
 
     solicitation = models.ForeignKey(Solicitation, on_delete=models.CASCADE, related_name="responses")
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="solicitation_responses")
@@ -149,7 +119,7 @@ class SolicitationResponse(BaseModel):
 
     # Response data
     responses = models.JSONField(default=dict, help_text="Flexible storage for question/answer pairs")
-    status = models.CharField(max_length=20, choices=ResponseStatus.choices, default=ResponseStatus.DRAFT)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
 
     class Meta:
         ordering = ["-submission_date"]
@@ -165,17 +135,17 @@ class SolicitationResponse(BaseModel):
     @property
     def is_draft(self):
         """Check if this response is still a draft"""
-        return self.status == ResponseStatus.DRAFT
+        return self.status == SolicitationResponse.Status.DRAFT
 
     @property
     def is_submitted(self):
         """Check if this response has been submitted"""
-        return self.status != ResponseStatus.DRAFT
+        return self.status != SolicitationResponse.Status.DRAFT
 
     def submit(self):
         """Submit the draft response"""
         if self.is_draft:
-            self.status = ResponseStatus.SUBMITTED
+            self.status = SolicitationResponse.Status.SUBMITTED
             self.save(update_fields=["status"])
 
 
@@ -209,23 +179,22 @@ class ResponseAttachment(BaseModel):
         super().delete(*args, **kwargs)
 
 
-class ReviewRecommendation(models.TextChoices):
-    RECOMMENDED = "recommended", _("Recommended")
-    NOT_RECOMMENDED = "not_recommended", _("Not Recommended")
-    NEUTRAL = "neutral", _("Neutral")
-
-
 class SolicitationReview(models.Model):
     """
     Reviews and scoring of responses by program managers
     """
+
+    class Recommendation(models.TextChoices):
+        RECOMMENDED = "recommended", _("Recommended")
+        NOT_RECOMMENDED = "not_recommended", _("Not Recommended")
+        NEUTRAL = "neutral", _("Neutral")
 
     response = models.ForeignKey(SolicitationResponse, on_delete=models.CASCADE, related_name="reviews")
     reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="solicitation_reviews")
     score = models.PositiveIntegerField(null=True, blank=True, help_text="Numeric score (1-100)")
     tags = models.CharField(max_length=255, blank=True, help_text="Comma-separated tags")
     notes = models.TextField(blank=True)
-    recommendation = models.CharField(max_length=15, choices=ReviewRecommendation.choices, null=True, blank=True)
+    recommendation = models.CharField(max_length=15, choices=Recommendation.choices, null=True, blank=True)
     review_date = models.DateTimeField(auto_now_add=True)
 
     class Meta:
