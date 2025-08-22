@@ -145,7 +145,7 @@ class TestProcessSolicitationQuestions:
         success, error = process_solicitation_questions(invalid_json, self.solicitation)
 
         assert success is False
-        assert "Invalid questions data format" in error
+        assert "Malformed JSON in questions data" in error
 
     def test_process_questions_with_missing_fields(self):
         """Test processing questions with missing required fields"""
