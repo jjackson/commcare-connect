@@ -111,11 +111,17 @@ class TestSolicitationResponseCreateOrUpdate:
         client.force_login(self.user)
         url = reverse("solicitations:respond", kwargs={"solicitation_pk": self.solicitation.pk})
 
-        # Get the questions to build form data
+        # Get the questions to build form data with appropriate values per question type
         questions = list(self.solicitation.questions.all())
         form_data = {}
         for question in questions:
-            form_data[f"question_{question.id}"] = "Test answer"
+            if question.question_type == "number":
+                form_data[f"question_{question.id}"] = "10"  # Valid number string
+            elif question.question_type == "file":
+                # File fields are not required, so skip them for this test
+                pass
+            else:
+                form_data[f"question_{question.id}"] = "Test answer"
 
         response = client.post(url, data=form_data)
 
