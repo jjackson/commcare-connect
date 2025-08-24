@@ -15,20 +15,15 @@
     <!-- Breadcrumb Navigation -->
     <ul class="breadcrumb mb-8">
         <li>
-            <a href="{% url 'solicitations:list' %}">All Opportunities</a>
+            <a href="/solicitations/">Solicitations</a>
             <i class="fa-solid fa-chevron-right"></i>
         </li>
         <li>
-            <a href="{% url 'solicitations:'|add:solicitation.solicitation_type|add:'_list' %}">{{ solicitation.get_solicitation_type_display }}s</a>
+            <a href="/solicitations/s/{{ solicitation.pk }}/">{{ solicitation.title|truncatechars:30 }}</a>
             <i class="fa-solid fa-chevron-right"></i>
         </li>
         <li>
-            <a href="{% url 'solicitations:detail' pk=solicitation.pk %}">{{ solicitation.title|truncatechars:30 }}</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="#">Submit Response</a>
-            <i class="fa-solid fa-chevron-right"></i>
+            <a href="#">{% if is_editing_draft %}Edit Response{% else %}Submit Response{% endif %}</a>
         </li>
     </ul>
 
@@ -193,14 +188,14 @@
                 <!-- Form Actions -->
                 <div class="flex items-center justify-between pt-6 border-t border-gray-200">
                     <div class="flex items-center gap-4">
-                        <a href="{% url 'solicitations:detail' pk=solicitation.pk %}"
+                        <a href="/solicitations/s/{{ solicitation.pk }}/"
                            class="button button-md outline-style">
                             <i class="fa-solid fa-arrow-left mr-2"></i>
                             Back to Solicitation
                         </a>
 
                         {% if user.memberships.exists %}
-                            <a href="{% url 'solicitations:draft_list' %}"
+                            <a href="{% url 'org_solicitations:draft_list' org_slug=request.org.slug %}"
                                class="button button-md outline-style">
                                 <i class="fa-solid fa-file-lines mr-2"></i>
                                 My Drafts
@@ -236,7 +231,7 @@
             </p>
 
             <!-- File Upload Form (Separate from main form) -->
-            <form method="post" enctype="multipart/form-data" action="{% url 'solicitations:upload_attachment' pk=solicitation.pk %}" class="mb-6">
+            <form method="post" enctype="multipart/form-data" action="{% url 'org_solicitations:upload_attachment' org_slug=request.org.slug pk=solicitation.pk %}" class="mb-6">
                 {% csrf_token %}
                 <div class="flex items-end gap-3">
                     <div class="flex-1">
@@ -269,7 +264,7 @@
                                     <p class="text-xs text-gray-500">{{ attachment.file_size_mb }} MB • Uploaded <time class="local-datetime" datetime="{{ attachment.date_created|date:'c' }}">{{ attachment.date_created|date:"M j, Y g:i A" }}</time></p>
                                 </div>
                             </div>
-                            <form method="post" action="{% url 'solicitations:delete_attachment' pk=solicitation.pk attachment_id=attachment.pk %}" class="inline">
+                            <form method="post" action="{% url 'org_solicitations:delete_attachment' org_slug=request.org.slug pk=solicitation.pk attachment_id=attachment.pk %}" class="inline">
                                 {% csrf_token %}
                                 <button type="submit"
                                         class="text-red-600 hover:text-red-800 p-1"
@@ -316,7 +311,7 @@
     </div>
 {% endblock %}
 
-{% block extra_js %}
+{% block inline_javascript %}
 <script>
 // Alpine.js Component for Response Form Handler
 
@@ -363,7 +358,7 @@ function responseFormHandler() {
             const data = this.collectFormData();
 
             try {
-                const response = await fetch("{% url 'solicitations:save_draft' pk=solicitation.pk %}", {
+                const response = await fetch("{% url 'org_solicitations:save_draft' org_slug=request.org.slug pk=solicitation.pk %}", {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

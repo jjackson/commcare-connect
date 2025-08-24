@@ -49,7 +49,6 @@ Testing focus: **Response Submission (Organization Users)**
    - **Single File Upload**: Test individual file attachments
    - **Multiple Files**: Test uploading multiple files if supported
    - **File Types**: Test various file types (PDF, DOC, images)
-   - **File Size Limits**: Test large files and size validation
    - **File Display**: Verify uploaded files display correctly in form
 
 4. **Draft Functionality**
@@ -84,7 +83,7 @@ Testing focus: **Response Submission (Organization Users)**
 
 ### For Response Submission Testing:
 
-- **Organization User Setup**: You'll need organization user credentials (different from admin creds above)
+- **Organization User Setup**: You'll need organization user credentials
 - **Test URLs**: Focus on `/solicitations/<id>/respond/` and `/solicitations/response/<id>/success/`
 - **Systematic Testing**: Work through each solicitation type (EOI vs RFP)
 - **Document Everything**:
@@ -107,7 +106,7 @@ Testing focus: **Response Submission (Organization Users)**
 ### Testing Data Notes:
 
 - **Test Solicitations**: Use the auto-generated test data mentioned above
-- **File Uploads**: Prepare various file types (PDF, DOC, images) for upload testing
+- **File Uploads**: Prepare various file types (PDF, DOC, images) for upload testing, files don't need to be valid
 - **Form Completion**: Test both partial (draft) and complete form submissions
 
 ## Deliverables (Markdown Format)
@@ -120,7 +119,6 @@ Testing focus: **Response Submission (Organization Users)**
 - [ ] **Draft Functionality**: Save/resume draft testing results
 - [ ] **Edge Case Testing**: Results from duplicate submission, deadline, session timeout testing
 - [ ] **Mobile/Browser Compatibility**: Cross-platform testing results
-- [ ] **Performance Issues**: Any slow loads, UI lag, or upload delays
 
 ### Overall Summary:
 
@@ -129,3 +127,5 @@ Testing focus: **Response Submission (Organization Users)**
 - [ ] **Cursor-Ready Fix Prompts**: Specific, actionable prompts for each issue
 - [ ] **Nice-to-Haves/Polish**: UX improvements and cosmetic fixes
 - [ ] **Open Questions**: Items needing Product/Design clarification
+
+Provide the output in a table format and include a proposed cursor prompt to fix this issue

@@ -343,10 +343,14 @@ class SolicitationForm(ModelForm):
         return solicitation
 
 
-class SolicitationReviewForm(forms.Form):
+class SolicitationReviewForm(forms.ModelForm):
     """
     Form for reviewing solicitation responses
     """
+
+    class Meta:
+        model = SolicitationReview
+        fields = ["score", "notes", "tags", "recommendation"]
 
     score = forms.IntegerField(
         label="Score (1-100)",
@@ -374,16 +378,18 @@ class SolicitationReviewForm(forms.Form):
         help_text="Your overall recommendation for this response",
     )
 
-    def __init__(self, instance=None, *args, **kwargs):
-        self.instance = instance
+    def __init__(self, response=None, reviewer=None, *args, **kwargs):
+        # Store context for potential use
+        self.response = response
+        self.reviewer = reviewer
         super().__init__(*args, **kwargs)
 
         # Pre-populate fields if editing existing review
-        if instance:
-            self.fields["score"].initial = instance.score
-            self.fields["notes"].initial = instance.notes
-            self.fields["tags"].initial = instance.tags
-            self.fields["recommendation"].initial = instance.recommendation
+        if self.instance:
+            self.fields["score"].initial = self.instance.score
+            self.fields["notes"].initial = self.instance.notes
+            self.fields["tags"].initial = self.instance.tags
+            self.fields["recommendation"].initial = self.instance.recommendation
 
         # Setup crispy forms
         self.helper = FormHelper(self)

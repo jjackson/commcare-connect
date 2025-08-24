@@ -2,7 +2,7 @@
 
 ## 🎉 V1 IMPLEMENTATION COMPLETE - Ready for QA
 
-**Status**: V1 implementation complete with all core features functional
+**Status**: V1 implementation complete with all core features functional, this file is out of date compared to latest code and the latest code should be viewed as the source of truth.
 **Last Updated**: August 17, 2025
 
 ## System Overview
@@ -30,7 +30,8 @@ A comprehensive two-phase procurement system for CommCare Connect:
 **Architecture Principles**:
 
 - **Pattern Consistency**: Follows existing Connect patterns (models, views, templates, URLs)
-- **Professional UI**: Uses established Tailwind CSS classes and component patterns
+- **Professional UI**: Uses established Tailwind CSS classes and component patterns, use Alpine.js for javascript
+- **Frameworks**: Uses Alpine.js for javascript and Crispy forms for data entry forms.
 - **Database Integration**: Proper foreign keys, indexes, and migrations
 - **Security**: Same authentication/authorization patterns as existing features
 

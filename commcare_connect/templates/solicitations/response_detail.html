@@ -13,20 +13,15 @@
     <!-- Breadcrumb Navigation -->
     <ul class="breadcrumb mb-8">
         <li>
-            <a href="{% url 'solicitations:list' %}">All Opportunities</a>
+            <a href="/solicitations/">Solicitations</a>
             <i class="fa-solid fa-chevron-right"></i>
         </li>
         <li>
-            <a href="{% url 'solicitations:'|add:solicitation.solicitation_type|add:'_list' %}">{{ solicitation.get_solicitation_type_display }}s</a>
+            <a href="/solicitations/s/{{ solicitation.pk }}/">{{ solicitation.title|truncatechars:30 }}</a>
             <i class="fa-solid fa-chevron-right"></i>
         </li>
         <li>
-            <a href="{% url 'solicitations:detail' pk=solicitation.pk %}">{{ solicitation.title|truncatechars:30 }}</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="#">Your Response</a>
-            <i class="fa-solid fa-chevron-right"></i>
+            <a href="{% url 'org_solicitations:user_response_detail' org_slug=request.org.slug pk=response.pk %}">Your Response</a>
         </li>
     </ul>
 
@@ -70,22 +65,26 @@
 
                 <div class="flex items-center gap-x-4">
                     {% if can_edit %}
-                        <a href="{% url 'solicitations:user_response_edit' pk=response.pk %}"
+                        <a href="{% url 'org_solicitations:user_response_edit' org_slug=request.org.slug pk=response.pk %}"
                            class="button button-md primary-dark">
                             <i class="fa-solid fa-edit mr-2"></i>
                             Edit Response
                         </a>
+                    {% else %}
+                        <a href="/solicitations/s/{{ solicitation.pk }}/"
+                           class="button button-md outline-style">
+                            <i class="fa-solid fa-arrow-left mr-2"></i>
+                            Back to Solicitation
+                        </a>
                     {% endif %}
-                    <a href="{% url 'solicitations:detail' pk=solicitation.pk %}"
-                       class="button button-md outline-style">
-                        <i class="fa-solid fa-arrow-left mr-2"></i>
-                        Back to Solicitation
-                    </a>
                 </div>
             </div>
         </div>
 
         <div>
+            <!-- Organization Overview -->
+            {% include "solicitations/components/organization_overview.html" with organization=response.organization %}
+
             <!-- Response Answers -->
             {% include "solicitations/components/response_answers.html" with section_title="Your Answers" %}
 

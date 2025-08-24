@@ -151,8 +151,16 @@ class TestSolicitationResponseCreateOrUpdate:
 
 
 @pytest.mark.django_db
-class TestUserSolicitationDashboard:
-    """Test user dashboard functionality"""
+class TestUnifiedSolicitationDashboard:
+    """
+    Test unified dashboard functionality in user mode.
+
+    The UnifiedSolicitationDashboard replaces the old UserSolicitationDashboard,
+    AdminSolicitationOverview, and ProgramSolicitationDashboard with a single
+    view that adapts based on user permissions and URL context.
+
+    This test class focuses on user mode (dashboard URL without admin or program context).
+    """
 
     def test_user_with_multiple_organizations_sees_correct_responses(self, client):
         """Test that users with multiple organization memberships see responses from all their orgs"""
@@ -298,20 +306,20 @@ class TestUserSolicitationDashboard:
         assert other_solicitation.title not in content
 
         # VERIFY SECTION 2: Check that we have 3 user responses in the table
-        user_responses_table = response.context["user_responses_table"]
-        assert len(user_responses_table.data) == 3
+        responses_table = response.context["responses_table"]
+        assert len(responses_table.data) == 3
 
         # Verify our responses are there but not the other org's
-        response_ids = [row.id for row in user_responses_table.data]
+        response_ids = [row.id for row in responses_table.data]
         assert response1.id in response_ids
         assert response2.id in response_ids
         assert another_response.id in response_ids
         assert other_response.id not in response_ids
 
         # VERIFY REVIEWS:
-        user_reviews_table = response.context["user_reviews_table"]
-        assert len(user_reviews_table.data) == 3
-        review_ids = [row.id for row in user_reviews_table.data]
+        reviews_table = response.context["reviews_table"]
+        assert len(reviews_table.data) == 3
+        review_ids = [row.id for row in reviews_table.data]
         assert review1.id in review_ids
         assert review2.id in review_ids
         assert review3.id in review_ids
@@ -388,13 +396,13 @@ class TestUserSolicitationDashboard:
         assert len(solicitations_table.data) == 0
 
         # VERIFY: Network Manager should see their response in responses table
-        user_responses_table = response.context["user_responses_table"]
-        assert len(user_responses_table.data) == 1
-        assert nm_response.id in [row.id for row in user_responses_table.data]
+        responses_table = response.context["responses_table"]
+        assert len(responses_table.data) == 1
+        assert nm_response.id in [row.id for row in responses_table.data]
 
         # VERIFY: Network Manager should NOT see any reviews (they can't review)
-        user_reviews_table = response.context["user_reviews_table"]
-        assert len(user_reviews_table.data) == 0  # Empty reviews table
+        reviews_table = response.context["reviews_table"]
+        assert len(reviews_table.data) == 0  # Empty reviews table
 
         # VERIFY: Stats should reflect Network Manager perspective
         stats = response.context["stats"]
