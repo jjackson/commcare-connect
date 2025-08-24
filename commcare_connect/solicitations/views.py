@@ -15,8 +15,6 @@ from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, UpdateView
 from django_tables2 import SingleTableView
 
-from commcare_connect.reports.views import SuperUserRequiredMixin
-
 from .forms import SolicitationForm, SolicitationResponseForm, SolicitationReviewForm
 from .helpers import (
     build_question_context,
@@ -26,12 +24,7 @@ from .helpers import (
     update_solicitation_questions,
 )
 from .models import ResponseAttachment, Solicitation, SolicitationQuestion, SolicitationResponse, SolicitationReview
-from .tables import (
-    SolicitationResponseTable,
-    SolicitationTable,
-    UserSolicitationResponseTable,
-    UserSolicitationReviewTable,
-)
+from .tables import ProgramTable, SolicitationResponseTable, SolicitationReviewTable, SolicitationTable
 
 # =============================================================================
 # Permission Mixins (following established patterns)
@@ -123,111 +116,21 @@ def solicitation_access_required(view_func):
 
 
 # =============================================================================
-# Admin Overview Views
+# Admin Overview Views - REPLACED BY UnifiedSolicitationDashboard
 # =============================================================================
 
-
-class AdminSolicitationOverview(SuperUserRequiredMixin, SingleTableView):
-    """
-    Admin-only overview of all solicitations across all organizations and programs
-    Shows active solicitations with response statistics
-    """
-
-    template_name = "solicitations/admin_solicitation_overview.html"
-    table_class = SolicitationTable
-    context_object_name = "solicitations"
-    paginate_by = 25
-
-    def get_queryset(self):
-        return (
-            Solicitation.objects.filter(status=Solicitation.Status.ACTIVE)
-            .select_related("program", "program__organization")
-            .prefetch_related("responses")
-            .annotate(
-                total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
-                submitted_count=Count("responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)),
-            )
-            .order_by("-date_created")
-        )
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        # Import here to avoid circular imports
-        from commcare_connect.program.models import Program
-
-        # Add summary statistics
-        all_solicitations = Solicitation.objects.filter(status="active")
-        context["summary_stats"] = {
-            "total_active_solicitations": all_solicitations.count(),
-            "total_eois": all_solicitations.filter(solicitation_type="eoi").count(),
-            "total_rfps": all_solicitations.filter(solicitation_type="rfp").count(),
-            "total_responses": SolicitationResponse.objects.exclude(status="draft").count(),
-            "total_organizations_with_programs": Program.objects.values("organization").distinct().count(),
-        }
-
-        return context
+# AdminSolicitationOverview, ProgramSolicitationDashboard, and UserSolicitationDashboard
+# have been consolidated into UnifiedSolicitationDashboard (see bottom of file)
 
 
-# =============================================================================
-# Program Management - to decide if this should exist or move to an integrated screen for programs
-# =============================================================================
-class ProgramSolicitationDashboard(SolicitationManagerMixin, SingleTableView):
-    """
-    Dashboard view for program managers to see all their solicitations and responses
-    """
-
-    template_name = "program/solicitation_dashboard.html"
-    table_class = SolicitationTable
-    context_object_name = "solicitations"
-    paginate_by = 20
-
-    def get_queryset(self):
-        from commcare_connect.program.models import Program
-
-        program_pk = self.kwargs.get("pk")
-        program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
-
-        return (
-            Solicitation.objects.filter(program=program)
-            .select_related("program", "program__organization")
-            .prefetch_related("responses")
-            .annotate(
-                total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
-                submitted_count=Count("responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)),
-            )
-            .order_by("-date_created")
-        )
-
-    def get_table_kwargs(self):
-        kwargs = super().get_table_kwargs()
-        kwargs["org_slug"] = self.request.org.slug
-        kwargs["show_program_org"] = False  # Hide program/org column for program dashboard
-        return kwargs
-
-    def get_context_data(self, **kwargs):
-        from commcare_connect.program.models import Program
-
-        context = super().get_context_data(**kwargs)
-        program_pk = self.kwargs.get("pk")
-        program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
-        context["program"] = program
-
-        # Add summary statistics for the statistics cards
-        solicitations = self.get_queryset()
-        context["stats"] = get_solicitation_dashboard_statistics(solicitations)
-
-        return context
-
-
-class PublicSolicitationListView(ListView):
+class SolicitationListView(ListView):
     """
     Public list view of all publicly listed solicitations
     Beautiful donor-facing page
     """
 
     model = Solicitation
-    template_name = "solicitations/public_list.html"
+    template_name = "solicitations/solicitation_list.html"
     context_object_name = "solicitations"
     paginate_by = 12
 
@@ -266,14 +169,14 @@ class PublicSolicitationListView(ListView):
         return context
 
 
-class PublicSolicitationDetailView(DetailView):
+class SolicitationDetailView(DetailView):
     """
     Public detail view of a specific solicitation
     Accessible even if not publicly listed (via direct URL)
     """
 
     model = Solicitation
-    template_name = "solicitations/public_detail.html"
+    template_name = "solicitations/solicitation_detail.html"
     context_object_name = "solicitation"
 
     def get_queryset(self):
@@ -335,6 +238,118 @@ class PublicSolicitationDetailView(DetailView):
         return context
 
 
+class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
+    """
+    Consolidated view for creating and editing solicitations.
+
+    Follows the ProgramCreateOrUpdate pattern exactly:
+    - Create mode: get_object() returns None, uses program_pk from URL
+    - Edit mode: get_object() returns existing solicitation, uses pk from URL
+    """
+
+    model = Solicitation
+    form_class = SolicitationForm
+    template_name = "solicitations/solicitation_form.html"
+
+    def get_object(self, queryset=None):
+        """Return None for create mode, existing solicitation for edit mode"""
+        pk = self.kwargs.get("pk")
+        if pk:
+            # Edit mode - return existing solicitation with permission checks
+            # Also filter by program_pk if provided in URL
+            program_pk = self.kwargs.get("program_pk")
+            filters = {
+                "pk": pk,
+                "program__organization": self.request.org,
+            }
+            if program_pk:
+                filters["program_id"] = program_pk
+
+            obj = get_object_or_404(Solicitation.objects.select_related("program", "program__organization"), **filters)
+            return obj
+        # Create mode - return None (like ProgramCreateOrUpdate)
+        return None
+
+    def get_form_kwargs(self):
+        """Setup form with proper program context"""
+        kwargs = super().get_form_kwargs()
+        from commcare_connect.program.models import Program
+
+        if self.object:
+            # Edit mode - get program from existing object
+            kwargs["program"] = self.object.program
+        else:
+            # Create mode - get program from URL
+            program_pk = self.kwargs.get("program_pk")
+            if program_pk:
+                program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+                kwargs["program"] = program
+
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        """Provide context for both create and edit modes"""
+        context = super().get_context_data(**kwargs)
+        from commcare_connect.program.models import Program
+
+        if self.object:
+            # Edit mode context
+            context["program"] = self.object.program
+            question_context = build_question_context(self.object, is_edit=True)
+        else:
+            # Create mode context
+            program_pk = self.kwargs.get("program_pk")
+            if program_pk:
+                context["program"] = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+            question_context = build_question_context(None, is_edit=False)
+
+        context.update(question_context)
+        return context
+
+    def form_valid(self, form):
+        """Handle form submission for both create and edit modes"""
+        is_edit = self.object is not None
+
+        # Set audit fields
+        if is_edit:
+            form.instance.modified_by = self.request.user.email
+        else:
+            form.instance.created_by = self.request.user.email
+            form.instance.modified_by = self.request.user.email
+
+        # Save the solicitation first
+        response = super().form_valid(form)
+
+        # Process questions using appropriate helper
+        questions_data = self.request.POST.get("questions_data")
+        if is_edit:
+            success, error_message = update_solicitation_questions(questions_data, self.object)
+        else:
+            success, error_message = process_solicitation_questions(questions_data, self.object)
+
+        if not success:
+            if is_edit:
+                messages.warning(self.request, f"Questions could not be saved: {error_message}. Please try again.")
+            else:
+                messages.warning(
+                    self.request,
+                    f"Questions could not be saved: {error_message}. Please edit the solicitation to add questions.",
+                )
+
+        # Success message
+        status = ("created", "updated")[is_edit]
+        messages.success(self.request, f'Solicitation "{form.instance.title}" has been {status} successfully.')
+
+        return response
+
+    def get_success_url(self):
+        """Redirect to program dashboard"""
+        return reverse(
+            "org_solicitations:program_dashboard",
+            kwargs={"org_slug": self.request.org.slug, "pk": self.object.program.pk},
+        )
+
+
 # Type-specific views that inherit from the main list view
 # =============================================================================
 # Response Overview Views
@@ -348,7 +363,7 @@ class SolicitationResponseTableView(SolicitationManagerMixin, SingleTableView):
 
     model = SolicitationResponse
     table_class = SolicitationResponseTable
-    template_name = "solicitations/response_table.html"
+    template_name = "solicitations/response_list.html"
     context_object_name = "responses"
     paginate_by = 20
 
@@ -663,185 +678,7 @@ class SolicitationResponseDraftListView(SolicitationAccessMixin, ListView):
         ).order_by("-date_modified")
 
 
-class UserSolicitationDashboard(SolicitationAccessMixin, SingleTableView):
-    """
-    User dashboard view showing solicitations for programs they're a member of,
-    their responses, and their reviews.
-    """
-
-    model = Solicitation
-    table_class = SolicitationTable
-    template_name = "solicitations/dashboard.html"
-    context_object_name = "solicitations"
-    paginate_by = 20
-
-    def get_queryset(self):
-        # Get all organizations the user is a member of
-        user_orgs = [membership.organization for membership in self.request.user.memberships.all()]
-
-        # Get solicitations for programs owned by any of the user's organizations
-        # This includes both Program Manager orgs (who create solicitations) and
-        # Network Manager orgs (who can respond to solicitations for their own programs)
-        return (
-            Solicitation.objects.filter(program__organization__in=user_orgs, status=Solicitation.Status.ACTIVE)
-            .select_related("program", "program__organization")
-            .prefetch_related("responses")
-            .annotate(
-                total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
-                submitted_count=Count("responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)),
-            )
-            .order_by("-date_created")
-        )
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        # Get all organizations the user is a member of
-        user_orgs = [membership.organization for membership in self.request.user.memberships.all()]
-
-        # Get programs owned by any of the user's organizations (direct relationship)
-        from commcare_connect.program.models import Program
-
-        user_programs = Program.objects.filter(organization__in=user_orgs)
-
-        # Add summary statistics for the statistics cards
-        solicitations = self.get_queryset()
-        context["stats"] = {
-            "total_active_solicitations": solicitations.count(),
-            "total_eois": solicitations.filter(solicitation_type="eoi").count(),
-            "total_rfps": solicitations.filter(solicitation_type="rfp").count(),
-            "total_responses": SolicitationResponse.objects.filter(organization__in=user_orgs)
-            .exclude(status="draft")
-            .count(),
-            "programs_count": user_programs.count(),
-        }
-
-        # User responses table (submitted/draft) - across all user's organizations
-        user_responses = (
-            SolicitationResponse.objects.filter(organization__in=user_orgs)
-            .select_related("solicitation", "solicitation__program", "submitted_by")
-            .order_by("-date_modified")
-        )
-
-        context["user_responses_table"] = UserSolicitationResponseTable(user_responses)
-
-        # User reviews table (if any)
-        user_reviews = (
-            SolicitationReview.objects.filter(reviewer=self.request.user)
-            .select_related("response__solicitation", "response__organization")
-            .order_by("-review_date")
-        )
-
-        context["user_reviews_table"] = UserSolicitationReviewTable(user_reviews)
-
-        return context
-
-
-class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
-    """
-    Consolidated view for creating and editing solicitations.
-
-    Follows the ProgramCreateOrUpdate pattern exactly:
-    - Create mode: get_object() returns None, uses program_pk from URL
-    - Edit mode: get_object() returns existing solicitation, uses pk from URL
-    """
-
-    model = Solicitation
-    form_class = SolicitationForm
-    template_name = "solicitations/solicitation_form.html"
-
-    def get_object(self, queryset=None):
-        """Return None for create mode, existing solicitation for edit mode"""
-        pk = self.kwargs.get("pk")
-        if pk:
-            # Edit mode - return existing solicitation with permission checks
-            obj = get_object_or_404(
-                Solicitation.objects.select_related("program", "program__organization"),
-                pk=pk,
-                program__organization=self.request.org,
-            )
-            return obj
-        # Create mode - return None (like ProgramCreateOrUpdate)
-        return None
-
-    def get_form_kwargs(self):
-        """Setup form with proper program context"""
-        kwargs = super().get_form_kwargs()
-        from commcare_connect.program.models import Program
-
-        if self.object:
-            # Edit mode - get program from existing object
-            kwargs["program"] = self.object.program
-        else:
-            # Create mode - get program from URL
-            program_pk = self.kwargs.get("program_pk")
-            if program_pk:
-                program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
-                kwargs["program"] = program
-
-        return kwargs
-
-    def get_context_data(self, **kwargs):
-        """Provide context for both create and edit modes"""
-        context = super().get_context_data(**kwargs)
-        from commcare_connect.program.models import Program
-
-        if self.object:
-            # Edit mode context
-            context["program"] = self.object.program
-            question_context = build_question_context(self.object, is_edit=True)
-        else:
-            # Create mode context
-            program_pk = self.kwargs.get("program_pk")
-            if program_pk:
-                context["program"] = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
-            question_context = build_question_context(None, is_edit=False)
-
-        context.update(question_context)
-        return context
-
-    def form_valid(self, form):
-        """Handle form submission for both create and edit modes"""
-        is_edit = self.object is not None
-
-        # Set audit fields
-        if is_edit:
-            form.instance.modified_by = self.request.user.email
-        else:
-            form.instance.created_by = self.request.user.email
-            form.instance.modified_by = self.request.user.email
-
-        # Save the solicitation first
-        response = super().form_valid(form)
-
-        # Process questions using appropriate helper
-        questions_data = self.request.POST.get("questions_data")
-        if is_edit:
-            success, error_message = update_solicitation_questions(questions_data, self.object)
-        else:
-            success, error_message = process_solicitation_questions(questions_data, self.object)
-
-        if not success:
-            if is_edit:
-                messages.warning(self.request, f"Questions could not be saved: {error_message}. Please try again.")
-            else:
-                messages.warning(
-                    self.request,
-                    f"Questions could not be saved: {error_message}. Please edit the solicitation to add questions.",
-                )
-
-        # Success message
-        status = ("created", "updated")[is_edit]
-        messages.success(self.request, f'Solicitation "{form.instance.title}" has been {status} successfully.')
-
-        return response
-
-    def get_success_url(self):
-        """Redirect to program dashboard"""
-        return reverse(
-            "org_solicitations:program_dashboard",
-            kwargs={"org_slug": self.request.org.slug, "pk": self.object.program.pk},
-        )
+# UserSolicitationDashboard - REPLACED BY UnifiedSolicitationDashboard
 
 
 class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, ResponseContextMixin, UpdateView):
@@ -855,7 +692,7 @@ class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, Respons
 
     model = SolicitationReview
     form_class = SolicitationReviewForm
-    template_name = "solicitations/response_review.html"
+    template_name = "solicitations/review_form.html"
 
     def get_object(self, queryset=None):
         """Return existing review for edit mode, None for create mode"""
@@ -884,11 +721,9 @@ class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, Respons
     def get_form_kwargs(self):
         """Setup form with proper context"""
         kwargs = super().get_form_kwargs()
-
-        # For create mode, we don't have an instance yet
-        if not self.object:
-            kwargs.pop("instance", None)
-
+        # Add response and reviewer context for form initialization
+        kwargs["response"] = self.response
+        kwargs["reviewer"] = self.request.user
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -936,29 +771,19 @@ class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, Respons
 
     def form_valid(self, form):
         """Handle form submission for both create and edit modes"""
-        is_edit_mode = self.object is not None
+        is_edit = self.object is not None
 
-        if is_edit_mode:
-            # Edit mode - update existing review
-            review = self.object
-        else:
-            # Create mode - create new review
-            review = SolicitationReview(response=self.response, reviewer=self.request.user)
+        # For create mode, set the foreign key relationships
+        if not is_edit:
+            form.instance.response = self.response
+            form.instance.reviewer = self.request.user
 
-        # Update review with form data
-        review.score = form.cleaned_data.get("score")
-        review.notes = form.cleaned_data.get("notes", "")
-        review.tags = form.cleaned_data.get("tags", "")
-        review.recommendation = form.cleaned_data.get("recommendation")
-        review.save()
+        response = super().form_valid(form)
 
-        # Set self.object for success URL generation
-        self.object = review
+        status = ("created", "updated")[is_edit]
+        messages.success(self.request, f"Review {status} for {self.response.organization.name}.")
 
-        # Review submitted successfully - no status changes needed
-        messages.success(self.request, f"Review submitted for {self.response.organization.name}.")
-
-        return super().form_valid(form)
+        return response
 
     def get_success_url(self):
         """Redirect back to response list for the program"""
@@ -1078,3 +903,280 @@ def delete_attachment(request, pk, attachment_id):
         messages.error(request, f"Failed to delete file: {str(e)}")
 
     return redirect("solicitations:respond", pk=pk)
+
+
+# =============================================================================
+# Unified Dashboard View
+# =============================================================================
+
+
+class UnifiedSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, SingleTableView):
+    """
+    Unified dashboard that adapts based on user permissions and context.
+    """
+
+    template_name = "solicitations/unified_dashboard.html"
+    table_class = SolicitationTable
+    context_object_name = "solicitations"
+    paginate_by = 10
+
+    def get_dashboard_mode(self):
+        """Determine dashboard mode based on user and URL parameters"""
+        if self.request.user.is_superuser and "admin" in self.request.path:
+            return "admin"
+        elif self.kwargs.get("pk"):  # Program PK in URL
+            return "program"
+        else:
+            return "user"
+
+    def test_func(self):
+        """Permission check based on dashboard mode"""
+        mode = self.get_dashboard_mode()
+
+        if mode == "admin":
+            return self.request.user.is_superuser
+        elif mode == "program":
+            # Program manager permissions
+            org_membership = getattr(self.request, "org_membership", None)
+            is_admin = getattr(org_membership, "is_admin", False)
+            org = getattr(self.request, "org", None)
+            program_manager = getattr(org, "program_manager", False)
+            return (org_membership is not None and is_admin and program_manager) or self.request.user.is_superuser
+        else:
+            # User permissions - organization membership required (follow SolicitationAccessMixin pattern exactly)
+            return self.request.org_membership != None or self.request.user.is_superuser  # noqa: E711
+
+    def get_queryset(self):
+        """Get solicitations based on dashboard mode"""
+        mode = self.get_dashboard_mode()
+
+        if mode == "admin":
+            return self._get_admin_solicitations()
+        elif mode == "program":
+            return self._get_program_solicitations()
+        else:
+            return self._get_user_solicitations()
+
+    def _get_admin_solicitations(self):
+        """Get all active solicitations for admin view"""
+        return (
+            Solicitation.objects.filter(status=Solicitation.Status.ACTIVE)
+            .select_related("program", "program__organization")
+            .prefetch_related("responses")
+            .annotate(
+                total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
+                submitted_count=Count("responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)),
+            )
+            .order_by("-date_created")
+        )
+
+    def _get_program_solicitations(self):
+        """Get solicitations for specific program"""
+        from commcare_connect.program.models import Program
+
+        program_pk = self.kwargs.get("pk")
+        program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+
+        return (
+            Solicitation.objects.filter(program=program)
+            .select_related("program", "program__organization")
+            .prefetch_related("responses")
+            .annotate(
+                total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
+                submitted_count=Count("responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)),
+            )
+            .order_by("-date_created")
+        )
+
+    def _get_user_solicitations(self):
+        """Get solicitations for user's organizations"""
+        user_orgs = [membership.organization for membership in self.request.user.memberships.all()]
+
+        return (
+            Solicitation.objects.filter(program__organization__in=user_orgs, status=Solicitation.Status.ACTIVE)
+            .select_related("program", "program__organization")
+            .prefetch_related("responses")
+            .annotate(
+                total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
+                submitted_count=Count("responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)),
+            )
+            .order_by("-date_created")
+        )
+
+    def get_table_kwargs(self):
+        """Configure table based on dashboard mode"""
+        kwargs = super().get_table_kwargs()
+        mode = self.get_dashboard_mode()
+
+        if mode == "program":
+            kwargs["org_slug"] = self.request.org.slug
+            kwargs["show_program_org"] = False  # Hide program/org column for program dashboard
+        elif mode == "user":
+            kwargs["org_slug"] = getattr(self.request.org, "slug", "")
+
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        """Build context based on dashboard mode"""
+        context = super().get_context_data(**kwargs)
+        mode = self.get_dashboard_mode()
+
+        context["dashboard_mode"] = mode
+        context.update(self._get_dashboard_context(mode))
+
+        return context
+
+    def _get_manageable_programs(self, mode):
+        """Get programs where the user can create solicitations (has program manager status)"""
+        from commcare_connect.program.models import Program
+
+        if mode == "admin":
+            # Admin can manage all programs
+            programs = Program.objects.all()
+        else:
+            # User can only manage programs from organizations where they are admin and org is program_manager
+            user_orgs = []
+            for membership in self.request.user.memberships.all():
+                if membership.is_admin and membership.organization.program_manager:
+                    user_orgs.append(membership.organization)
+
+            programs = Program.objects.filter(organization__in=user_orgs)
+
+        # Annotate with solicitation and response counts
+        programs = (
+            programs.select_related("organization")
+            .annotate(
+                active_solicitations_count=Count(
+                    "solicitations", filter=Q(solicitations__status=Solicitation.Status.ACTIVE)
+                ),
+                total_responses_count=Count(
+                    "solicitations__responses",
+                    filter=~Q(solicitations__responses__status=SolicitationResponse.Status.DRAFT),
+                ),
+            )
+            .order_by("name")
+        )
+
+        return programs
+
+    def _get_dashboard_context(self, mode):
+        """Get context for dashboard based on mode"""
+        from commcare_connect.program.models import Program
+
+        solicitations = self.get_queryset()
+
+        # Common context structure
+        context = {
+            "show_programs": mode != "admin",
+        }
+
+        # Add programs table for admin and user modes (not program mode since they're viewing a specific program)
+        if mode in ["admin", "user"]:
+            programs_queryset = self._get_manageable_programs(mode)
+            context["programs_table"] = ProgramTable(programs_queryset)
+
+        if mode == "admin":
+            # Admin: System-wide view
+            all_solicitations = Solicitation.objects.filter(status="active")
+
+            responses = (
+                SolicitationResponse.objects.exclude(status="draft")
+                .select_related("solicitation", "solicitation__program", "organization", "submitted_by")
+                .order_by("-submission_date")
+            )
+
+            reviews = (
+                SolicitationReview.objects.all()
+                .select_related("response__solicitation", "response__organization", "reviewer")
+                .order_by("-review_date")
+            )
+
+            context.update(
+                {
+                    "page_title": "Admin Solicitation Overview",
+                    "page_subtitle": "System-wide view of all active solicitations and response statistics",
+                    "stats": {
+                        "total_active_solicitations": all_solicitations.count(),
+                        "total_eois": all_solicitations.filter(solicitation_type="eoi").count(),
+                        "total_rfps": all_solicitations.filter(solicitation_type="rfp").count(),
+                        "total_responses": SolicitationResponse.objects.exclude(status="draft").count(),
+                        "total_organizations_with_programs": Program.objects.values("organization").distinct().count(),
+                    },
+                    "responses_table": SolicitationResponseTable(
+                        responses, mode="admin", org_slug=self.request.org.slug
+                    ),
+                    "reviews_table": SolicitationReviewTable(reviews),
+                    "show_programs": False,
+                }
+            )
+
+        elif mode == "program":
+            # Program: Single program view
+            program_pk = self.kwargs.get("pk")
+            program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+
+            responses = (
+                SolicitationResponse.objects.filter(solicitation__program=program)
+                .exclude(status="draft")
+                .select_related("solicitation", "organization", "submitted_by")
+                .order_by("-submission_date")
+            )
+
+            reviews = (
+                SolicitationReview.objects.filter(response__solicitation__program=program)
+                .select_related("response__solicitation", "response__organization", "reviewer")
+                .order_by("-review_date")
+            )
+
+            context.update(
+                {
+                    "page_title": f"Solicitation Dashboard - {program.name}",
+                    "page_subtitle": f"Manage EOIs and RFPs for {program.name}",
+                    "program": program,
+                    "stats": get_solicitation_dashboard_statistics(solicitations),
+                    "responses_table": SolicitationResponseTable(
+                        responses, mode="program", org_slug=self.request.org.slug, program_pk=program.pk
+                    ),
+                    "reviews_table": SolicitationReviewTable(reviews),
+                    "show_breadcrumb": True,
+                }
+            )
+
+        else:  # user mode
+            # User: Organization-based view
+            user_orgs = [membership.organization for membership in self.request.user.memberships.all()]
+            user_programs = Program.objects.filter(organization__in=user_orgs)
+
+            responses = (
+                SolicitationResponse.objects.filter(organization__in=user_orgs)
+                .select_related("solicitation", "solicitation__program", "submitted_by")
+                .order_by("-date_modified")
+            )
+
+            reviews = (
+                SolicitationReview.objects.filter(reviewer=self.request.user)
+                .select_related("response__solicitation", "response__organization")
+                .order_by("-review_date")
+            )
+
+            context.update(
+                {
+                    "page_title": "Solicitation Dashboard",
+                    "page_subtitle": "Your organization's solicitations, responses, and reviews",
+                    "stats": {
+                        "total_active_solicitations": solicitations.count(),
+                        "total_eois": solicitations.filter(solicitation_type="eoi").count(),
+                        "total_rfps": solicitations.filter(solicitation_type="rfp").count(),
+                        "total_responses": SolicitationResponse.objects.filter(organization__in=user_orgs)
+                        .exclude(status="draft")
+                        .count(),
+                        "programs_count": user_programs.count(),
+                    },
+                    "responses_table": SolicitationResponseTable(
+                        responses, mode="user", org_slug=self.request.org.slug
+                    ),
+                    "reviews_table": SolicitationReviewTable(reviews),
+                }
+            )
+
+        return context

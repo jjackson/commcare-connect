@@ -65,7 +65,7 @@ After analyzing the existing `opportunity`, `program`, and core apps, the follow
 
 Based on analysis of human-authored codebase patterns, here's the implementation plan:
 
-### Phase 1: JavaScript & Template Organization
+### [Completed] Phase 1: JavaScript & Template Organization
 
 **Priority: HIGH - Immediate Impact**
 
@@ -93,7 +93,7 @@ Keep Alpine.js directives in templates (x-data, x-show, etc.)
 Follow opportunity/add_visits_existing_users.html pattern
 ```
 
-#### 1.2 Template Component Strategy
+[ignore / skipped] #### 1.2 Template Component Strategy
 
 **Current Problem**: Large template files and repeated patterns
 **Solution**: Keep components within solicitations app (preferred for code containment)
@@ -105,15 +105,13 @@ Approach: Inline existing components back into main templates
 Rationale: Solicitations-specific components don't need global reuse
 
 Actions:
-- Inline solicitations/components/response_answers.html into templates that use it
-- Inline solicitations/components/file_attachments.html into templates that use it
 - Extract large template sections to separate include files within solicitations/
 - Use {% include "solicitations/partial_name.html" %} pattern for app-specific includes
 
 This keeps solicitations code self-contained while following human patterns
 ```
 
-### Phase 2: View Refactoring
+### [Completed] Phase 2: View Refactoring
 
 **Priority: HIGH - Core Architecture**
 
@@ -137,7 +135,7 @@ Extract business logic functions (following opportunity/helpers.py pattern):
 Keep helpers within solicitations app for code containment
 ```
 
-#### 2.2 Create Focused Mixins
+[completed] #### 2.2 Create Focused Mixins
 
 **Current Problem**: Repeated permission and context logic across views
 **Solution**: Create reusable mixins within solicitations app
@@ -195,7 +193,7 @@ ProgramSolicitationDashboard:
 - Use helper functions for complex query annotations
 ```
 
-### Phase 3: Code Organization
+### [Completed] Phase 3: Code Organization
 
 **Priority: MEDIUM - Long-term Maintainability**
 
