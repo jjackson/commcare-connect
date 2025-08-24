@@ -1,0 +1,28 @@
+{% load render_table from django_tables2 %}
+
+<div class="flex flex-col w-full gap-2 mb-8">
+    <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
+        <p class="text-sm text-brand-deep-purple">{{ title }}</p>
+        <div class="flex items-center gap-x-4">
+            <div class="text-sm text-gray-500">
+                {% if table.data %}
+                    {{ table.data|length }} {{ title|lower|default:"items" }}
+                {% else %}
+                    0 {{ title|lower|default:"items" }}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="w-full overflow-y-auto rounded-lg shadow-xs">
+        {% if table.data %}
+            {% render_table table %}
+        {% else %}
+            <div class="bg-white rounded-lg p-8 text-center">
+                <i class="fa-solid fa-inbox text-4xl text-gray-300 mb-4"></i>
+                <p class="text-gray-500 text-lg mb-2">No {{ title|lower }} yet</p>
+                <p class="text-gray-400">{{ empty_message|default:"No data available." }}</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
