@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% load render_table from django_tables2 %}
+{% load static %}
+
+{% block page_title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+    <!-- Breadcrumb Navigation (Program Dashboard Only) -->
+    {% if show_breadcrumb %}
+        <ul class="breadcrumb mb-8">
+            <li>
+                <a href="{% url 'program:home' org_slug=request.org.slug %}">Programs</a>
+                <i class="fa-solid fa-chevron-right"></i>
+            </li>
+            <li>
+                <a href="{% url 'program:opportunity_list' org_slug=request.org.slug pk=program.pk %}">{{ program.name }}</a>
+                <i class="fa-solid fa-chevron-right"></i>
+            </li>
+            <li>
+                <a href="#">Solicitations</a>
+                <i class="fa-solid fa-chevron-right"></i>
+            </li>
+        </ul>
+    {% endif %}
+
+    <!-- Program Dashboard Header (Program Mode Only) -->
+    {% if dashboard_mode == 'program' %}
+        <div class="bg-white rounded-xl shadow-sm p-8 mb-8">
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <h1 class="text-3xl font-bold text-brand-deep-purple mb-2">{{ page_title }}</h1>
+                    <p class="text-gray-600 mb-6">{{ page_subtitle }}</p>
+
+                    <!-- Key Information -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="flex items-center text-sm text-gray-600">
+                            <i class="fa-solid fa-building mr-2 text-gray-400"></i>
+                            <span>Program: {{ program.name }}</span>
+                        </div>
+                        <div class="flex items-center text-sm text-gray-600">
+                            <i class="fa-solid fa-clipboard-list mr-2 text-gray-400"></i>
+                            <span>{{ stats.total_solicitations }} solicitation{{ stats.total_solicitations|pluralize }}</span>
+                        </div>
+                        <div class="flex items-center text-sm text-gray-600">
+                            <i class="fa-solid fa-paper-plane mr-2 text-gray-400"></i>
+                            <span>{{ stats.total_responses }} total response{{ stats.total_responses|pluralize }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-x-4">
+                    <a href="{% url 'org_solicitations:program_solicitation_create' org_slug=request.org.slug program_pk=program.pk %}" class="button button-md primary-dark">
+                        <i class="fa-solid fa-plus mr-2"></i>
+                        Create New Solicitation
+                    </a>
+                </div>
+            </div>
+
+            <!-- Statistics with Pipe Separators -->
+            <div class="bg-neutral-100 rounded-lg w-full px-5 py-4 mt-6">
+                <div class="flex items-center justify-evenly">
+                    <!-- Total Solicitations -->
+                    <div class="infocard-dark !w-fit text-center">
+                        <i class="fa-solid fa-file-lines"></i>
+                        <div>
+                            <h6 class="text-center">Total Solicitations</h6>
+                            <p class="text-center">{{ stats.total_solicitations }}</p>
+                        </div>
+                    </div>
+
+                    <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
+
+                    <!-- Active EOIs -->
+                    <div class="infocard-dark !w-fit text-center">
+                        <i class="fa-solid fa-hand-paper"></i>
+                        <div>
+                            <h6 class="text-center">Active EOIs</h6>
+                            <p class="text-center">{{ stats.active_eois }}</p>
+                        </div>
+                    </div>
+
+                    <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
+
+                    <!-- Active RFPs -->
+                    <div class="infocard-dark !w-fit text-center">
+                        <i class="fa-solid fa-file-contract"></i>
+                        <div>
+                            <h6 class="text-center">Active RFPs</h6>
+                            <p class="text-center">{{ stats.active_rfps }}</p>
+                        </div>
+                    </div>
+
+                    <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
+
+                    <!-- Total Responses -->
+                    <div class="infocard-dark !w-fit text-center">
+                        <i class="fa-solid fa-inbox"></i>
+                        <div>
+                            <h6 class="text-center">Total Responses</h6>
+                            <p class="text-center">{{ stats.total_responses }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <!-- Standard Header Card with Stats (Admin and User modes) -->
+        {% include "solicitations/components/stats_card.html" with title=page_title subtitle=page_subtitle %}
+    {% endif %}
+
+    <!-- Programs Table (Admin and User modes only) -->
+    {% if programs_table and dashboard_mode != 'program' %}
+        {% if dashboard_mode == 'admin' %}
+            {% include "solicitations/components/table_section.html" with title="Manageable Programs" table=programs_table empty_message="No programs found." %}
+        {% else %}
+            {% include "solicitations/components/table_section.html" with title="Your Programs" table=programs_table empty_message="You don't have program manager access to any programs." %}
+        {% endif %}
+    {% endif %}
+
+    <!-- Solicitations Table -->
+    {% if dashboard_mode == 'admin' %}
+        {% include "solicitations/components/table_section.html" with title="Active Solicitations" table=table empty_message="No active solicitations found." %}
+    {% elif dashboard_mode == 'program' %}
+        {% include "solicitations/components/table_section.html" with title="Available Solicitations" table=table empty_message="No solicitations created for this program yet." %}
+    {% else %}
+        {% include "solicitations/components/table_section.html" with title="Your Solicitations" table=table empty_message="No solicitations available for your organizations." %}
+    {% endif %}
+
+    <!-- Responses Table -->
+    {% if responses_table.data %}
+        {% if dashboard_mode == 'admin' %}
+            {% include "solicitations/components/table_section.html" with title="All Responses" table=responses_table empty_message="No responses submitted yet." %}
+        {% elif dashboard_mode == 'program' %}
+            {% include "solicitations/components/table_section.html" with title="Responses to Your Solicitations" table=responses_table empty_message="No responses received yet." %}
+        {% else %}
+            {% include "solicitations/components/table_section.html" with title="My Responses" table=responses_table empty_message="Your organization hasn't submitted any responses to solicitations." %}
+        {% endif %}
+    {% elif dashboard_mode == 'user' %}
+        <!-- Always show responses section for user dashboard, even if empty -->
+        {% include "solicitations/components/table_section.html" with title="My Responses" table=responses_table empty_message="Your organization hasn't submitted any responses to solicitations." %}
+    {% endif %}
+
+    <!-- Reviews Table -->
+    {% if reviews_table.data %}
+        {% if dashboard_mode == 'admin' %}
+            {% include "solicitations/components/table_section.html" with title="All Reviews" table=reviews_table empty_message="No reviews submitted yet." %}
+        {% elif dashboard_mode == 'program' %}
+            {% include "solicitations/components/table_section.html" with title="Reviews of Your Responses" table=reviews_table empty_message="No reviews completed yet." %}
+        {% else %}
+            {% include "solicitations/components/table_section.html" with title="My Reviews" table=reviews_table empty_message="You haven't created any reviews yet." %}
+        {% endif %}
+    {% elif dashboard_mode == 'user' %}
+        <!-- Only show reviews section for users if they have reviews -->
+    {% endif %}
+
+    <!-- Pagination -->
+    {% include "solicitations/components/pagination.html" %}
+{% endblock %}

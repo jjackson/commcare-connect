@@ -1,247 +1,523 @@
-# Sample solicitation data for development, testing, and demos
-# This file contains realistic solicitation examples that can be used across environments
+# Realistic UAT data for development, testing, and demos
+# This file contains diverse, professional solicitation examples
 
+# Delivery Types
+delivery_types:
+  - name: 'Community Health Services'
+  - name: 'Digital Health Solutions'
+  - name: 'Nutrition Programs'
+  - name: 'Education & Training'
+  - name: 'Emergency Response'
+  - name: 'Water & Sanitation'
+  - name: 'Agricultural Support'
+  - name: 'Economic Empowerment'
+
+# Program-managing organizations
+program_organizations:
+  - slug: 'uat-ghif'
+    name: 'Global Health Initiative Foundation'
+    program_manager: true
+    manager_name: 'Dr. Sarah Chen'
+    manager_email: 's.chen@ghif.org'
+    manager_first_name: 'Sarah'
+    manager_last_name: 'Chen'
+
+  - slug: 'uat-cdp'
+    name: 'Community Development Partners'
+    program_manager: true
+    manager_name: 'Michael Rodriguez'
+    manager_email: 'm.rodriguez@cdpartners.org'
+    manager_first_name: 'Michael'
+    manager_last_name: 'Rodriguez'
+
+  - slug: 'uat-rhn'
+    name: 'Rural Health Network'
+    program_manager: true
+    manager_name: 'Dr. Amara Okafor'
+    manager_email: 'a.okafor@ruralhealthnet.org'
+    manager_first_name: 'Amara'
+    manager_last_name: 'Okafor'
+
+# Implementing organizations
+implementing_organizations:
+  - slug: 'uat-sahel-health'
+    name: 'Sahel Community Health Services'
+    program_manager: false
+    region: 'West Africa'
+    contact_name: 'Fatima Al-Rashid'
+    contact_email: 'f.alrashid@sahelhealth.org'
+    contact_first_name: 'Fatima'
+    contact_last_name: 'Al-Rashid'
+
+  - slug: 'uat-andes-dev'
+    name: 'Andes Development Collective'
+    program_manager: false
+    region: 'South America'
+    contact_name: 'Carlos Mendoza'
+    contact_email: 'c.mendoza@andesdev.org'
+    contact_first_name: 'Carlos'
+    contact_last_name: 'Mendoza'
+
+  - slug: 'uat-mekong-partners'
+    name: 'Mekong Delta Partners'
+    program_manager: false
+    region: 'Southeast Asia'
+    contact_name: 'Linh Nguyen'
+    contact_email: 'l.nguyen@mekongpartners.org'
+    contact_first_name: 'Linh'
+    contact_last_name: 'Nguyen'
+
+  - slug: 'uat-ea-womens-coop'
+    name: "East African Women's Cooperative"
+    program_manager: false
+    region: 'East Africa'
+    contact_name: 'Grace Wanjiku'
+    contact_email: 'g.wanjiku@eawomenscoop.org'
+    contact_first_name: 'Grace'
+    contact_last_name: 'Wanjiku'
+
+  - slug: 'uat-pacific-health'
+    name: 'Pacific Islands Health Alliance'
+    program_manager: false
+    region: 'Pacific Islands'
+    contact_name: 'Tavita Malolo'
+    contact_email: 't.malolo@pacifichealthalliance.org'
+    contact_first_name: 'Tavita'
+    contact_last_name: 'Malolo'
+
+  - slug: 'uat-himalayan-trust'
+    name: 'Himalayan Rural Development Trust'
+    program_manager: false
+    region: 'South Asia'
+    contact_name: 'Tenzin Norbu'
+    contact_email: 't.norbu@himalayantrust.org'
+    contact_first_name: 'Tenzin'
+    contact_last_name: 'Norbu'
+
+# Programs
 programs:
-  - slug: 'sample-maternal-health-program'
-    name: 'Sample Maternal Health Program'
-    description: 'Improving maternal health outcomes in rural communities through community health worker interventions'
-    organization_slug: 'sample-program-org'
+  - slug: 'uat-mch-initiative'
+    name: 'UAT Maternal & Child Health Initiative'
+    description: 'Comprehensive maternal and child health services targeting rural communities with limited healthcare access'
+    organization_slug: 'uat-ghif'
+    delivery_type: 'Community Health Services'
+    budget: 850000
+    currency: 'USD'
+
+  - slug: 'uat-digital-health'
+    name: 'UAT Digital Health Innovation Program'
+    description: 'Leveraging mobile technology and telemedicine to improve healthcare delivery in remote areas'
+    organization_slug: 'uat-cdp'
+    delivery_type: 'Digital Health Solutions'
+    budget: 650000
+    currency: 'USD'
+
+  - slug: 'uat-nutrition-program'
+    name: 'UAT Community Nutrition Enhancement'
+    description: 'Addressing malnutrition through community-based screening, treatment, and prevention programs'
+    organization_slug: 'uat-ghif'
+    delivery_type: 'Nutrition Programs'
+    budget: 450000
+    currency: 'USD'
+
+  - slug: 'uat-emergency-prep'
+    name: 'UAT Emergency Preparedness Network'
+    description: 'Building community resilience and emergency response capacity for natural disasters and health crises'
+    organization_slug: 'uat-rhn'
+    delivery_type: 'Emergency Response'
     budget: 750000
     currency: 'USD'
 
-  - slug: 'sample-child-nutrition-program'
-    name: 'Sample Child Nutrition Program'
-    description: 'Addressing malnutrition in children under 5 through screening, treatment, and prevention services'
-    organization_slug: 'sample-program-org'
-    budget: 500000
-    currency: 'USD'
-
-  - slug: 'sample-vaccination-program'
-    name: 'Sample Vaccination Campaign Program'
-    description: 'Increasing vaccination coverage through targeted outreach and service delivery'
-    organization_slug: 'sample-program-org'
-    budget: 300000
+  - slug: 'uat-rural-education'
+    name: 'UAT Rural Education Access Program'
+    description: 'Improving educational outcomes through community-based learning centers and teacher training'
+    organization_slug: 'uat-cdp'
+    delivery_type: 'Education & Training'
+    budget: 550000
     currency: 'USD'
 
 solicitations:
-  - title: 'Sample Maternal Health Services - Expression of Interest'
-    program_slug: 'sample-maternal-health-program'
+  - title: 'UAT Maternal Health Services - Expression of Interest'
+    program_slug: 'uat-mch-initiative'
     solicitation_type: 'eoi'
     status: 'active'
     is_publicly_listed: true
     description: |
-      We are seeking qualified local organizations to partner with us in delivering maternal health
-      services to underserved communities. This Expression of Interest will help us identify
-      potential partners for our upcoming program focused on reducing maternal mortality
-      and improving birth outcomes.
+      We seek qualified local organizations to deliver comprehensive maternal health services in underserved rural communities.
+      This EOI will identify potential implementing partners for our maternal and child health initiative.
 
     target_population: 'Pregnant women and new mothers in rural communities'
     scope_of_work: |
-      - Provide antenatal care services through community health workers
-      - Conduct safe delivery support and postnatal care visits
-      - Identify and refer high-risk pregnancies to health facilities
-      - Deliver health education on maternal nutrition and care practices
-      - Maintain accurate records and data collection through mobile technology
+      Provide antenatal care, safe delivery support, postnatal care, health education, and data collection through trained community health workers
 
-    estimated_scale: '15,000 pregnant women and new mothers across 5 districts'
-    expected_start_date: '2025-03-01'
+    estimated_scale: '12,000 pregnant women and new mothers across 4 districts'
+    expected_start_date: '2025-03-15'
     expected_end_date: '2025-12-31'
-    application_deadline: '2025-02-01'
+    application_deadline: '2025-02-15'
 
     questions:
-      - text: "Describe your organization's experience working with pregnant women and new mothers"
+      - text: "Describe your organization's experience delivering maternal health services"
         type: 'textarea'
         required: true
         order: 1
 
-      - text: "What is your organization's approach to community engagement in maternal health?"
-        type: 'textarea'
+      - text: 'How many trained community health workers can you deploy?'
+        type: 'number'
         required: true
         order: 2
 
-      - text: 'How many community health workers can your organization deploy?'
-        type: 'number'
+      - text: 'Upload your organization registration certificate'
+        type: 'file'
         required: true
         order: 3
 
-      - text: "Upload your organization's registration certificate"
-        type: 'file'
+      - text: 'What geographic areas does your organization currently serve?'
+        type: 'textarea'
         required: true
         order: 4
 
-      - text: 'What geographical areas does your organization currently serve?'
-        type: 'textarea'
-        required: true
-        order: 5
-
-  - title: 'Sample Child Nutrition Screening - Request for Proposals'
-    program_slug: 'sample-child-nutrition-program'
+  - title: 'UAT Digital Health Platform Implementation - Request for Proposals'
+    program_slug: 'uat-digital-health'
     solicitation_type: 'rfp'
     status: 'active'
     is_publicly_listed: true
     description: |
-      Following our Expression of Interest process, we invite selected organizations to submit
-      detailed proposals for implementing child nutrition screening and treatment interventions.
-      This RFP outlines specific requirements and deliverables for a comprehensive
-      malnutrition prevention and treatment program.
+      Following our EOI process, we invite selected organizations to submit detailed proposals for implementing a comprehensive digital health platform
+      including telemedicine, mobile health records, and remote monitoring capabilities.
 
-    target_population: 'Children under 5 in high-malnutrition areas'
+    target_population: 'Rural communities with limited healthcare facility access'
     scope_of_work: |
-      - Conduct systematic malnutrition screening using MUAC measurements
-      - Provide therapeutic feeding for severely malnourished children
-      - Deliver nutrition education to caregivers and families
-      - Establish community-based management protocols
-      - Maintain comprehensive data collection and reporting systems
-      - Coordinate with health facilities for referrals
+      Deploy mobile health technology, train healthcare workers on digital tools, establish telemedicine networks, and maintain comprehensive digital health records
 
-    estimated_scale: '25,000 children under 5 across 8 districts'
+    estimated_scale: '25,000 patients across 8 health facilities in 3 regions'
     expected_start_date: '2025-04-01'
-    expected_end_date: '2025-09-30'
+    expected_end_date: '2025-11-30'
     application_deadline: '2025-03-01'
 
     questions:
-      - text: 'Provide a detailed implementation timeline with key milestones'
+      - text: 'Provide detailed technical specifications for your proposed digital health platform'
         type: 'textarea'
         required: true
         order: 1
 
-      - text: 'Submit your detailed budget breakdown including staff costs and supplies'
+      - text: 'Submit your comprehensive budget breakdown and implementation timeline'
         type: 'file'
         required: true
         order: 2
 
-      - text: 'Describe your quality assurance processes for nutrition screening'
+      - text: 'Describe your approach to training healthcare workers on digital health tools'
         type: 'textarea'
         required: true
         order: 3
 
-      - text: 'Upload supporting documentation (licenses, certifications, references)'
+      - text: 'Upload evidence of successful digital health implementations'
         type: 'file'
         required: true
         order: 4
 
-      - text: 'How will you measure and report on program outcomes?'
+      - text: 'How will you ensure data security and patient privacy?'
         type: 'textarea'
         required: true
         order: 5
 
-      - text: 'What risks do you anticipate and how will you mitigate them?'
-        type: 'textarea'
-        required: true
-        order: 6
-
-  - title: 'Sample Vaccination Campaign - Expression of Interest'
-    program_slug: 'sample-vaccination-program'
+  - title: 'UAT Community Nutrition Screening Program - Expression of Interest'
+    program_slug: 'uat-nutrition-program'
     solicitation_type: 'eoi'
     status: 'active'
     is_publicly_listed: true
     description: |
-      We are seeking qualified local organizations to partner with us in delivering vaccination
-      services to underserved communities. This Expression of Interest will help us identify
-      potential partners for our upcoming campaign focused on increasing routine immunization
-      coverage and conducting catch-up vaccination activities.
+      We are seeking experienced local organizations to implement community-based nutrition screening and treatment programs targeting
+      children under 5 and pregnant women in high-malnutrition areas.
 
-    target_population: 'Children under 2 and pregnant women'
+    target_population: 'Children under 5 and pregnant women in high-malnutrition communities'
     scope_of_work: |
-      - Implement door-to-door vaccination services using trained field workers
-      - Conduct community mobilization and health education activities
-      - Maintain cold chain management for vaccine storage and transport
-      - Provide accurate record keeping and data collection via mobile app
-      - Coordinate with local health facilities and government programs
+      Conduct systematic malnutrition screening, provide therapeutic feeding, deliver nutrition education, establish referral systems, and maintain comprehensive program data
 
-    estimated_scale: '10,000 children and 2,000 pregnant women across 3 districts'
+    estimated_scale: '18,000 children under 5 and 3,000 pregnant women across 6 districts'
     expected_start_date: '2025-05-01'
-    expected_end_date: '2025-08-31'
+    expected_end_date: '2025-10-31'
     application_deadline: '2025-04-01'
 
     questions:
-      - text: "Describe your organization's experience with vaccination campaigns"
+      - text: "Describe your organization's experience with nutrition programs"
         type: 'textarea'
         required: true
         order: 1
 
-      - text: "What is your organization's approach to community mobilization?"
+      - text: 'What is your approach to community mobilization for nutrition services?'
         type: 'textarea'
         required: true
         order: 2
 
-      - text: 'How many field workers can your organization deploy for this campaign?'
+      - text: 'How many nutrition specialists can your organization deploy?'
         type: 'number'
         required: true
         order: 3
 
-      - text: "Upload your organization's registration certificate"
+      - text: "Upload documentation of your organization's nutrition program certifications"
         type: 'file'
         required: true
         order: 4
 
-      - text: 'Describe your experience with cold chain management and vaccine handling'
-        type: 'textarea'
-        required: true
-        order: 5
-
-      - text: 'What geographical areas does your organization currently serve?'
-        type: 'textarea'
-        required: true
-        order: 6
-
-  - title: 'Sample Community Health Screening - Request for Proposals'
-    program_slug: 'sample-child-nutrition-program'
+  - title: 'UAT Emergency Response Capacity Building - Request for Proposals'
+    program_slug: 'uat-emergency-prep'
     solicitation_type: 'rfp'
     status: 'draft'
     is_publicly_listed: false
     description: |
-      Following our Expression of Interest process, we invite selected organizations to submit
-      detailed proposals for implementing comprehensive community health screening services.
-      This RFP outlines specific requirements for delivering integrated health services
-      including basic diagnostics, treatment, and referral systems.
+      We invite qualified organizations to submit proposals for building community emergency preparedness and response capacity,
+      including disaster risk reduction, emergency health services, and community resilience programs.
 
-    target_population: 'Rural communities with limited health facility access'
+    target_population: 'Vulnerable communities in disaster-prone areas'
     scope_of_work: |
-      - Provide comprehensive health screening services at community level
-      - Conduct basic diagnostic tests and treatment protocols
-      - Establish referral pathways to higher-level health facilities
-      - Deliver health education and prevention messaging
-      - Maintain comprehensive health records and data systems
-      - Train and supervise community health workers
+      Develop emergency response plans, train community volunteers, establish early warning systems, create emergency supply chains, and conduct regular preparedness drills
 
-    estimated_scale: '50,000 community members across 10 districts'
+    estimated_scale: '50 communities across 5 disaster-prone regions'
     expected_start_date: '2025-06-01'
-    expected_end_date: '2025-11-30'
+    expected_end_date: '2025-12-31'
     application_deadline: '2025-05-01'
 
     questions:
-      - text: 'Provide a detailed implementation timeline with key deliverables'
+      - text: 'Provide a detailed emergency preparedness implementation plan'
         type: 'textarea'
         required: true
         order: 1
 
-      - text: 'Submit your detailed budget breakdown and cost justification'
+      - text: 'Submit your budget breakdown and resource allocation strategy'
         type: 'file'
         required: true
         order: 2
 
-      - text: 'Describe your approach to community health worker training and supervision'
+      - text: 'Describe your approach to community volunteer training and coordination'
         type: 'textarea'
         required: true
         order: 3
 
-      - text: 'Upload supporting documentation (organizational capacity, past performance)'
+      - text: 'Upload evidence of previous emergency response program implementations'
         type: 'file'
         required: true
         order: 4
 
-      - text: 'How will you ensure quality of services and data collection?'
+      - text: 'How will you measure and evaluate emergency preparedness improvements?'
         type: 'textarea'
         required: true
         order: 5
 
-      - text: 'What partnerships do you have with local health facilities?'
-        type: 'textarea'
-        required: true
-        order: 6
+  - title: 'UAT Rural Education Access Initiative - Expression of Interest'
+    program_slug: 'uat-rural-education'
+    solicitation_type: 'eoi'
+    status: 'active'
+    is_publicly_listed: true
+    description: |
+      We seek local organizations to establish and operate community-based learning centers that provide quality education access
+      to children in remote rural areas with limited school infrastructure.
 
-      - text: 'Describe your risk management and mitigation strategies'
+    target_population: 'School-age children (6-14 years) in remote rural communities'
+    scope_of_work: |
+      Establish community learning centers, recruit and train local teachers, develop culturally appropriate curricula, provide educational materials, and maintain student progress tracking
+
+    estimated_scale: '2,500 children across 15 remote communities in 3 regions'
+    expected_start_date: '2025-07-01'
+    expected_end_date: '2025-12-31'
+    application_deadline: '2025-06-01'
+
+    questions:
+      - text: "Describe your organization's experience in education program delivery"
         type: 'textarea'
         required: true
-        order: 7
+        order: 1
+
+      - text: 'What is your approach to recruiting and training community-based teachers?'
+        type: 'textarea'
+        required: true
+        order: 2
+
+      - text: 'How many learning centers can your organization establish and manage?'
+        type: 'number'
+        required: true
+        order: 3
+
+      - text: "Upload your organization's education program credentials and certifications"
+        type: 'file'
+        required: true
+        order: 4
+
+  - title: 'UAT Water & Sanitation Infrastructure - Request for Proposals'
+    program_slug: 'uat-mch-initiative'
+    solicitation_type: 'rfp'
+    status: 'active'
+    is_publicly_listed: true
+    description: |
+      We are seeking qualified contractors to design and implement comprehensive water and sanitation infrastructure
+      in rural health facilities and surrounding communities to support maternal health outcomes.
+
+    target_population: 'Rural communities and health facilities serving pregnant women and new mothers'
+    scope_of_work: |
+      Design and construct water systems, sanitation facilities, waste management systems, and hygiene education programs
+      for 25 health facilities and surrounding communities
+
+    estimated_scale: '25 health facilities and 50,000 community members across 6 districts'
+    expected_start_date: '2025-09-01'
+    expected_end_date: '2026-08-31'
+    application_deadline: '2025-05-15'
+
+    questions:
+      - text: 'Provide detailed technical specifications for your proposed water system design'
+        type: 'textarea'
+        required: true
+        order: 1
+
+      - text: 'What is your total project cost including materials, labor, and maintenance for 2 years?'
+        type: 'number'
+        required: true
+        order: 2
+
+      - text: 'Upload technical drawings and engineering specifications'
+        type: 'file'
+        required: true
+        order: 3
+
+      - text: 'Describe your quality assurance and project management approach'
+        type: 'textarea'
+        required: true
+        order: 4
+
+      - text: 'How will you ensure sustainability and community ownership of the infrastructure?'
+        type: 'textarea'
+        required: true
+        order: 5
+
+  - title: 'UAT Digital Health Data Platform - Request for Proposals'
+    program_slug: 'uat-digital-health'
+    solicitation_type: 'rfp'
+    status: 'active'
+    is_publicly_listed: true
+    description: |
+      We require a comprehensive digital health data platform to integrate patient records, health worker performance tracking,
+      and real-time health system monitoring across multiple facilities and regions.
+
+    target_population: 'Health workers, facility managers, and 150,000 patients across the health system'
+    scope_of_work: |
+      Design, develop, deploy, and maintain a cloud-based digital health platform with mobile applications,
+      data analytics dashboard, and integration capabilities with existing health information systems
+
+    estimated_scale: '200 health facilities, 2,000 health workers, and 150,000 patient records'
+    expected_start_date: '2025-06-01'
+    expected_end_date: '2026-12-31'
+    application_deadline: '2025-04-30'
+
+    questions:
+      - text: 'Provide detailed technical architecture and system requirements for your proposed platform'
+        type: 'textarea'
+        required: true
+        order: 1
+
+      - text: 'What is your total development and 2-year maintenance cost?'
+        type: 'number'
+        required: true
+        order: 2
+
+      - text: 'Upload technical documentation and system architecture diagrams'
+        type: 'file'
+        required: true
+        order: 3
+
+      - text: 'How will you ensure data security, privacy, and HIPAA compliance?'
+        type: 'textarea'
+        required: true
+        order: 4
+
+      - text: 'Describe your user training and change management approach'
+        type: 'textarea'
+        required: true
+        order: 5
+
+  - title: 'UAT Community Nutrition Program Evaluation - Request for Proposals'
+    program_slug: 'uat-nutrition-program'
+    solicitation_type: 'rfp'
+    status: 'active'
+    is_publicly_listed: true
+    description: |
+      We seek an independent evaluation partner to conduct a comprehensive impact evaluation of our community nutrition programs,
+      including randomized controlled trial design and implementation.
+
+    target_population: 'Research and evaluation organizations with expertise in nutrition program assessment'
+    scope_of_work: |
+      Design and implement rigorous impact evaluation methodology, conduct baseline and endline surveys,
+      perform statistical analysis, and produce comprehensive evaluation report with policy recommendations
+
+    estimated_scale: '15,000 program participants across 50 communities in 4 regions'
+    expected_start_date: '2025-08-01'
+    expected_end_date: '2026-07-31'
+    application_deadline: '2025-06-15'
+
+    questions:
+      - text: 'Provide detailed evaluation methodology and research design'
+        type: 'textarea'
+        required: true
+        order: 1
+
+      - text: 'What is your total evaluation cost including all research activities?'
+        type: 'number'
+        required: true
+        order: 2
+
+      - text: 'Upload CVs of key research staff and previous evaluation reports'
+        type: 'file'
+        required: true
+        order: 3
+
+      - text: 'How will you ensure ethical research standards and community engagement?'
+        type: 'textarea'
+        required: true
+        order: 4
+
+      - text: 'Describe your approach to knowledge dissemination and policy engagement'
+        type: 'textarea'
+        required: true
+        order: 5
+
+  - title: 'UAT Emergency Medical Supply Chain - Request for Proposals'
+    program_slug: 'uat-emergency-prep'
+    solicitation_type: 'rfp'
+    status: 'active'
+    is_publicly_listed: true
+    description: |
+      We require a reliable partner to establish and manage an emergency medical supply chain system capable of rapid deployment
+      during health crises and natural disasters across multiple countries.
+
+    target_population: 'Emergency response teams and affected populations during health crises'
+    scope_of_work: |
+      Establish regional supply chain hubs, develop inventory management systems, create rapid deployment protocols,
+      and maintain 24/7 emergency response capacity for medical supplies and equipment
+
+    estimated_scale: 'Multi-country emergency response capacity serving up to 500,000 people per emergency'
+    expected_start_date: '2025-07-01'
+    expected_end_date: '2027-06-30'
+    application_deadline: '2025-05-01'
+
+    questions:
+      - text: 'Provide detailed supply chain management and logistics plan'
+        type: 'textarea'
+        required: true
+        order: 1
+
+      - text: 'What is your total 2-year contract cost including all logistics and storage?'
+        type: 'number'
+        required: true
+        order: 2
+
+      - text: 'Upload organizational capacity documents and emergency response certifications'
+        type: 'file'
+        required: true
+        order: 3
+
+      - text: 'How will you ensure 48-hour emergency deployment capability?'
+        type: 'textarea'
+        required: true
+        order: 4
+
+      - text: 'Describe your quality control and cold chain management systems'
+        type: 'textarea'
+        required: true
+        order: 5
