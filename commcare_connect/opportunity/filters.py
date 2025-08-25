@@ -59,6 +59,10 @@ class DeliverFilterSet(django_filters.FilterSet):
         label="Has Duplicate Deliveries",
         choices=YES_OR_NO_CHOICES,
     )
+    has_flags = django_filters.ChoiceFilter(
+        label="Deliveries with flags",
+        choices=YES_OR_NO_CHOICES,
+    )
     has_overlimit = django_filters.ChoiceFilter(
         label="Has Overlimit Deliveries",
         choices=YES_OR_NO_CHOICES,
