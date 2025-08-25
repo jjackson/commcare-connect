@@ -4,8 +4,13 @@
 
 {% block tab_options %}
   <div x-data="{showVisitImportModal: false, showVisitExportModal: false, showFilterModal: false}">
-    <button type="button" @click="showFilterModal = true" class="button-icon">
-      <i class="fa-solid fa-filter text-brand-deep-purple"></i>
+    <button type="button" @click="showFilterModal = true" class="relative button-icon">
+      <i class="fa-solid fa-sliders text-brand-deep-purple"></i>
+      {% if filters_applied_count %}
+      <span class="absolute flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-brand-marigold border-2 border-white rounded-full transform translate-x-1/2 -translate-y-1/2">
+        {{ filters_applied_count }}
+      </span>
+      {% endif %}
     </button>
     <button type="button" @click="showVisitImportModal = true" class="button-icon"
             {% if request.org_membership.is_viewer %} disabled {% endif %}>
