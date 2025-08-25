@@ -1840,6 +1840,7 @@ class WorkerDeliverView(BaseWorkerListView, FilterMixin):
     def get_extra_context(self, opportunity, org_slug):
         return {
             "filter_form": self.get_filter_form(self.request.GET),
+            "filters_applied_count": self.filters_applied_count(self.request.GET),
             "visit_export_form": VisitExportForm(),
             "review_visit_export_form": ReviewVisitExportForm(),
             "import_export_delivery_urls": {
