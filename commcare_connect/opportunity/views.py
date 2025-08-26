@@ -428,7 +428,7 @@ def review_visit_export(request, org_slug, opp_id):
     status = form.cleaned_data["status"]
 
     result = generate_review_visit_export.delay(opp_id, date_range, status, export_format)
-    return redirect(f"{redirect_url}&export_task_id={result.id}")
+    return redirect(f"{redirect_url}?export_task_id={result.id}")
 
 
 @org_member_required
