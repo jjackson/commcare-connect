@@ -38,6 +38,12 @@ class FilterMixin:
     def filters_applied_count(self, data=None):
         return len([v for v in self.get_filter_values(data).values() if v not in (None, "")])
 
+    def get_filter_context(self, data):
+        return {
+            "filter_form": self.get_filter_form(data),
+            "filters_applied_count": self.filters_applied_count(data),
+        }
+
 
 YES_OR_NO_CHOICES = (
     (True, "Yes"),
