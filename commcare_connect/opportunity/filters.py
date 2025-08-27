@@ -51,6 +51,12 @@ YES_OR_NO_CHOICES = (
 )
 
 
+class YesNoFilter(django_filters.ChoiceFilter):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("choices", YES_OR_NO_CHOICES)
+        super().__init__(*args, **kwargs)
+
+
 class DeliverFilterSet(django_filters.FilterSet):
     last_active = django_filters.ChoiceFilter(
         label="Last Active",
@@ -61,19 +67,15 @@ class DeliverFilterSet(django_filters.FilterSet):
         ),
         empty_label="Any time",
     )
-    has_duplicates = django_filters.ChoiceFilter(
+    has_duplicates = YesNoFilter(
         label="Has Duplicate Deliveries",
-        choices=YES_OR_NO_CHOICES,
     )
-    has_flags = django_filters.ChoiceFilter(
+    has_flags = YesNoFilter(
         label="Deliveries with flags",
-        choices=YES_OR_NO_CHOICES,
     )
-    has_overlimit = django_filters.ChoiceFilter(
+    has_overlimit = YesNoFilter(
         label="Has Overlimit Deliveries",
-        choices=YES_OR_NO_CHOICES,
     )
-    review_pending = django_filters.ChoiceFilter(
+    review_pending = YesNoFilter(
         label="Deliveries with Pending Review",
-        choices=YES_OR_NO_CHOICES,
     )

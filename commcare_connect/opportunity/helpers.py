@@ -334,7 +334,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity, fi
             else:
                 queryset = queryset.filter(pending=0)
 
-        if filters.get("has_flags", None) is not None:
+        if filters.get("has_flags", None) not in (None, ""):
             flagged_visits_sq = UserVisit.objects.filter(
                 deliver_unit__payment_unit=payment_unit, opportunity_access_id=OuterRef("pk"), flagged=True
             )
