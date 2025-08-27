@@ -434,8 +434,40 @@ def test_get_opportunity_funnel_progress(opportunity):
 
 
 @pytest.mark.django_db
-def test_deliver_status_query_with_filters(opportunity: Opportunity):
+@pytest.mark.parametrize(
+    "filters,expected_usernames",
+    [
+        # last_active
+        ({"last_active": 5}, lambda users: {users["mobile_user1"]}),
+        # has_duplicates
+        ({"has_duplicates": True}, lambda users: {users["mobile_user1"]}),
+        (
+            {"has_duplicates": False},
+            lambda users: {users["mobile_user2"], users["mobile_user3"], users["mobile_user4"]},
+        ),
+        # has_overlimit
+        ({"has_overlimit": True}, lambda users: {users["mobile_user2"]}),
+        (
+            {"has_overlimit": False},
+            lambda users: {users["mobile_user1"], users["mobile_user3"], users["mobile_user4"]},
+        ),
+        # review_pending
+        ({"review_pending": True}, lambda users: {users["mobile_user1"]}),
+        (
+            {"review_pending": False},
+            lambda users: {users["mobile_user2"], users["mobile_user3"], users["mobile_user4"]},
+        ),
+        # has_flags
+        ({"has_flags": True}, lambda users: {users["mobile_user3"]}),
+        ({"has_flags": False}, lambda users: {users["mobile_user1"], users["mobile_user2"], users["mobile_user4"]}),
+        # filters combination
+        ({"has_duplicates": True, "review_pending": True}, lambda users: {users["mobile_user1"]}),
+        ({"has_duplicates": True, "review_pending": False}, lambda users: set()),
+    ],
+)
+def test_deliver_status_query_with_filters(opportunity, filters, expected_usernames):
     payment_unit = PaymentUnitFactory(opportunity=opportunity)
+
     mobile_user1 = MobileUserFactory()
     access1 = OpportunityAccessFactory(
         opportunity=opportunity, user=mobile_user1, accepted=True, last_active=now() - timedelta(days=10)
@@ -462,71 +494,14 @@ def test_deliver_status_query_with_filters(opportunity: Opportunity):
     mobile_user4 = MobileUserFactory()
     OpportunityAccessFactory(opportunity=opportunity, user=mobile_user4, accepted=True, last_active=now())
 
-    # last_active
-    access_objects = get_annotated_opportunity_access_deliver_status(opportunity, {"last_active": 5})
-    assert len(access_objects) == 1
-    assert access_objects[0].user.username == mobile_user1.username
-
-    # has_duplicates
-    access_objects = get_annotated_opportunity_access_deliver_status(opportunity, {"has_duplicates": True})
-    assert len(access_objects) == 1
-    assert access_objects[0].user.username == mobile_user1.username
-
-    access_objects = get_annotated_opportunity_access_deliver_status(opportunity, {"has_duplicates": False})
-    assert len(access_objects) == 3
-    assert {a.user.username for a in access_objects} == {
-        mobile_user2.username,
-        mobile_user3.username,
-        mobile_user4.username,
+    users = {
+        "mobile_user1": mobile_user1.username,
+        "mobile_user2": mobile_user2.username,
+        "mobile_user3": mobile_user3.username,
+        "mobile_user4": mobile_user4.username,
     }
 
-    # has_overlimit
-    access_objects = get_annotated_opportunity_access_deliver_status(opportunity, {"has_overlimit": True})
-    assert len(access_objects) == 1
-    assert access_objects[0].user.username == mobile_user2.username
+    access_objects = get_annotated_opportunity_access_deliver_status(opportunity, filters)
+    usernames = {a.user.username for a in access_objects}
 
-    access_objects = get_annotated_opportunity_access_deliver_status(opportunity, {"has_overlimit": False})
-    assert len(access_objects) == 3
-    assert {a.user.username for a in access_objects} == {
-        mobile_user1.username,
-        mobile_user3.username,
-        mobile_user4.username,
-    }
-
-    # review_pending
-    access_objects = get_annotated_opportunity_access_deliver_status(opportunity, {"review_pending": True})
-    assert len(access_objects) == 1
-    assert access_objects[0].user.username == mobile_user1.username
-
-    access_objects = get_annotated_opportunity_access_deliver_status(opportunity, {"review_pending": False})
-    assert len(access_objects) == 3
-    assert {a.user.username for a in access_objects} == {
-        mobile_user2.username,
-        mobile_user3.username,
-        mobile_user4.username,
-    }
-
-    # has_flags
-    access_objects = get_annotated_opportunity_access_deliver_status(opportunity, {"has_flags": True})
-    assert len(access_objects) == 1
-    assert access_objects[0].user.username == mobile_user3.username
-
-    access_objects = get_annotated_opportunity_access_deliver_status(opportunity, {"has_flags": False})
-    assert len(access_objects) == 3
-    assert {a.user.username for a in access_objects} == {
-        mobile_user1.username,
-        mobile_user2.username,
-        mobile_user4.username,
-    }
-
-    # filters combination
-    access_objects = get_annotated_opportunity_access_deliver_status(
-        opportunity, {"has_duplicates": True, "review_pending": True}
-    )
-    assert len(access_objects) == 1
-    assert access_objects[0].user.username == mobile_user1.username
-
-    access_objects = get_annotated_opportunity_access_deliver_status(
-        opportunity, {"has_duplicates": True, "review_pending": False}
-    )
-    assert len(access_objects) == 0
+    assert usernames == expected_usernames(users)
