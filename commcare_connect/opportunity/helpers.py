@@ -338,12 +338,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity, fi
             flagged_visits_sq = UserVisit.objects.filter(
                 deliver_unit__payment_unit=payment_unit, opportunity_access_id=OuterRef("pk"), flagged=True
             )
-            queryset = queryset.annotate(has_flags=Exists(flagged_visits_sq))
-
-            if filters["has_flags"]:
-                queryset = queryset.filter(has_flags=True)
-            else:
-                queryset = queryset.filter(has_flags=False)
+            queryset = queryset.annotate(has_flags=Exists(flagged_visits_sq)).filter(has_flags=filters["has_flags"])
 
         access_objects += queryset
     access_objects.sort(key=lambda a: a.user.name)
