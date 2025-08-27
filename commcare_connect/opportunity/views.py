@@ -1838,9 +1838,7 @@ class WorkerDeliverView(BaseWorkerListView, FilterMixin):
     filter_class = DeliverFilterSet
 
     def get_extra_context(self, opportunity, org_slug):
-        return {
-            "filter_form": self.get_filter_form(self.request.GET),
-            "filters_applied_count": self.filters_applied_count(self.request.GET),
+        context = {
             "visit_export_form": VisitExportForm(),
             "review_visit_export_form": ReviewVisitExportForm(),
             "import_export_delivery_urls": {
@@ -1868,6 +1866,8 @@ class WorkerDeliverView(BaseWorkerListView, FilterMixin):
                 else "Import Verified Visits"
             ),
         }
+        context.update(self.get_filter_context(self.request.GET))
+        return context
 
     def get_table(self, opportunity, org_slug):
         data = get_annotated_opportunity_access_deliver_status(opportunity, self.get_filter_values(self.request.GET))
