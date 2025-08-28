@@ -507,7 +507,7 @@ def add_budget_existing_users(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opp_id)
     opportunity_access = OpportunityAccess.objects.filter(opportunity=opportunity)
     opportunity_claims = OpportunityClaim.objects.filter(opportunity_access__in=opportunity_access).annotate(
-        total_max_visits=Sum("opportunityclaimlimit__max_visits")
+        total_max_visits=Coalesce(Sum("opportunityclaimlimit__max_visits"), Value(0))
     )
 
     form = AddBudgetExistingUsersForm(
