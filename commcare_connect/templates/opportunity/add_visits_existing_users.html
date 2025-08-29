@@ -1,4 +1,4 @@
-{% extends "tailwind/base.html" %}
+{% extends "base.html" %}
 {% load static %}
 {% load crispy_forms_tags %}
 {% load i18n %}
@@ -76,7 +76,7 @@
     x-data="opportunityBudgetComponent('{{ request.GET.active_tab|default:"existing_workers" }}', {{ tabs|safe }})"
     x-clock
     x-effect="setTab(selectedTab)">
-  {% include "tailwind/components/breadcrumbs.html" with path=path %}
+  {% include "components/breadcrumbs.html" with path=path %}
       <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
         <ul class="tabs">
           {% for tab in tabs %}
@@ -112,7 +112,7 @@
             {% endif %}
 
             {% if opportunity_claims %}
-            <h3 class="mb-2">Add Visits for Existing Workers</h3>
+            <h3 class="mb-2">Add Visits for Existing Connect Workers</h3>
             <table class="base-table">
               <thead>
               <tr>
@@ -140,8 +140,7 @@
                 </td>
                 <td>{{ opp_claim.opportunity_access.user.name }}</td>
                 <td>{{ opp_claim.opportunity_access.user.username }}</td>
-                <!-- Todo; replace by climitlimit.max_visits -->
-                <td>{{ opp_claim.max_payments }}</td>
+                <td>{{ opp_claim.total_max_visits }}</td>
                 <td>{{ opp_claim.opportunity_access.visit_count }}</td>
                 <td>{{ opp_claim.end_date }}</td>
               </tr>
@@ -173,7 +172,7 @@
                 <div class="header flex justify-between items-center">
                   <h2 class="title">Confirm</h2>
                   <button @click="closeModal()" class="button-icon" aria-label="Close">
-                    <i class="fa-light fa-xmark"></i>
+                    <i class="fa-solid fa-xmark"></i>
                   </button>
                 </div>
                 <div class="py-4">
@@ -202,10 +201,10 @@
         <div
           x-show="selectedTab === 'new_workers'"
         >
-          <h3 class="mb-2">Add Budget for New Workers</h3>
+          <h3 class="mb-2">Add Budget for New Connect Workers</h3>
           <div
             id="new_user_container"
-            hx-get="{% url 'opportunity:add_budget_new_users' org_slug=request.org.slug pk=opportunity.pk %}"
+            hx-get="{% url 'opportunity:add_budget_new_users' org_slug=request.org.slug opp_id=opportunity.pk %}"
             hx-swap="innerHTML"
             hx-trigger="loadNewUserForm from:body">
             <h2 class="text-center text-gray-500 italic animate-pulse py-4">Loading...</h2>
