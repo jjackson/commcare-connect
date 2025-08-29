@@ -195,7 +195,7 @@ def test_get_opportunity_list_data_all_annotations(opportunity):
         visit_date=three_days_ago - timedelta(days=2),
     )
 
-    queryset = OpportunityData(opportunity.organization, False).get_data()
+    queryset = OpportunityData(opportunity.organization, False, {}).get_data()
     opp = queryset[0]
     assert opp.pending_invites == 3
     assert opp.pending_approvals == 1
