@@ -1,8 +1,9 @@
 import datetime
 from collections import Counter, defaultdict
+from decimal import Decimal
 from uuid import uuid4
 
-from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Count, F, Max, Q, Sum
 from django.utils.dateparse import parse_datetime
@@ -10,6 +11,7 @@ from django.utils.functional import cached_property
 from django.utils.timezone import now
 from django.utils.translation import gettext
 
+from commcare_connect.commcarehq.models import HQServer
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
 from commcare_connect.utils.db import BaseModel, slugify_uniquely
@@ -27,13 +29,14 @@ class CommCareApp(BaseModel):
     name = models.CharField(max_length=255)
     description = models.TextField()
     passing_score = models.IntegerField(null=True)
+    hq_server = models.ForeignKey(HQServer, on_delete=models.DO_NOTHING, null=True)
 
     def __str__(self):
         return self.name
 
     @property
     def url(self):
-        return f"{settings.COMMCARE_HQ_URL}/a/{self.cc_domain}/apps/view/{self.cc_app_id}"
+        return f"{self.hq_server.url}/a/{self.cc_domain}/apps/view/{self.cc_app_id}"
 
 
 class HQApiKey(models.Model):
@@ -42,6 +45,8 @@ class HQApiKey(models.Model):
         User,
         on_delete=models.CASCADE,
     )
+    hq_server = models.ForeignKey(HQServer, on_delete=models.DO_NOTHING, null=True)
+    date_created = models.DateTimeField(auto_now_add=True)
 
 
 class DeliveryType(models.Model):
@@ -75,13 +80,8 @@ class Opportunity(BaseModel):
         on_delete=models.CASCADE,
         null=True,
     )
-    # to be removed
-    max_visits_per_user = models.IntegerField(null=True)
-    daily_max_visits_per_user = models.IntegerField(null=True)
     start_date = models.DateField(default=datetime.date.today)
     end_date = models.DateField(null=True)
-    # to be removed
-    budget_per_visit = models.IntegerField(null=True)
     total_budget = models.PositiveBigIntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
     currency = models.CharField(max_length=3, null=True)
@@ -90,6 +90,7 @@ class Opportunity(BaseModel):
     is_test = models.BooleanField(default=True)
     delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
     managed = models.BooleanField(default=False)
+    hq_server = models.ForeignKey(HQServer, on_delete=models.DO_NOTHING, null=True)
 
     def __str__(self):
         return self.name
@@ -175,19 +176,19 @@ class Opportunity(BaseModel):
 
     @property
     def allotted_visits(self):
-        return self.max_visits_per_user_new * self.number_of_users
+        return self.max_visits_per_user * self.number_of_users
 
     @property
-    def max_visits_per_user_new(self):
+    def max_visits_per_user(self):
         # aggregates return None
         return self.paymentunit_set.aggregate(max_total=Sum("max_total")).get("max_total", 0) or 0
 
     @property
-    def daily_max_visits_per_user_new(self):
+    def daily_max_visits_per_user(self):
         return self.paymentunit_set.aggregate(max_daily=Sum("max_daily")).get("max_daily", 0) or 0
 
     @property
-    def budget_per_visit_new(self):
+    def budget_per_visit(self):
         return self.paymentunit_set.aggregate(amount=Max("amount")).get("amount", 0) or 0
 
     @property
@@ -261,7 +262,10 @@ class OpportunityAccess(models.Model):
     last_active = models.DateTimeField(null=True)
 
     class Meta:
-        indexes = [models.Index(fields=["invite_id"])]
+        indexes = [
+            models.Index(fields=["invite_id"]),
+            models.Index(fields=["opportunity", "date_learn_started"]),
+        ]
         unique_together = ("user", "opportunity")
 
     @cached_property
@@ -306,16 +310,15 @@ class OpportunityAccess(models.Model):
 
     @property
     def total_paid(self):
-        return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get("total", 0) or 0
+        return Payment.objects.filter(opportunity_access=self).aggregate(total=Sum("amount")).get(
+            "total", 0
+        ) or Decimal("0.00")
 
     @property
     def total_confirmed_paid(self):
-        return (
-            Payment.objects.filter(opportunity_access=self, confirmed=True)
-            .aggregate(total=Sum("amount"))
-            .get("total", 0)
-            or 0
-        )
+        return Payment.objects.filter(opportunity_access=self, confirmed=True).aggregate(total=Sum("amount")).get(
+            "total", 0
+        ) or Decimal("0.00")
 
     @property
     def display_name(self):
@@ -438,12 +441,37 @@ class VisitValidationStatus(models.TextChoices):
     trial = "trial", gettext("Trial")
 
 
+class ExchangeRate(models.Model):
+    currency_code = models.CharField(max_length=3)
+    rate = models.DecimalField(max_digits=10, decimal_places=6)
+    rate_date = models.DateField(db_index=True)
+    fetched_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["currency_code", "rate_date"], name="unique_currency_code_date")
+        ]
+
+    @classmethod
+    def latest_exchange_rate(cls, currency_code, date):
+        from commcare_connect.opportunity.tasks import fetch_exchange_rates
+
+        latest_rates = cls.objects.filter(currency_code=currency_code, rate_date__lte=date).order_by("-rate_date")
+        if latest_rates:
+            return latest_rates.first()
+        else:
+            date = date.replace(day=1)
+            return fetch_exchange_rates(date, currency_code)
+
+
 class PaymentInvoice(models.Model):
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
-    amount = models.PositiveIntegerField()
+    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    amount_usd = models.DecimalField(max_digits=10, decimal_places=2, null=True)
     date = models.DateField()
     invoice_number = models.CharField(max_length=50)
     service_delivery = models.BooleanField(default=True)
+    exchange_rate = models.ForeignKey(ExchangeRate, on_delete=models.DO_NOTHING, null=True)
 
     class Meta:
         unique_together = ("opportunity", "invoice_number")
@@ -451,7 +479,7 @@ class PaymentInvoice(models.Model):
 
 class Payment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
-    amount = models.PositiveIntegerField()
+    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     amount_usd = models.DecimalField(max_digits=10, decimal_places=2, null=True)
     date_paid = models.DateTimeField(default=datetime.datetime.utcnow)
     # This is used to indicate payments made to Opportunity Users
@@ -672,11 +700,20 @@ class UserVisit(XFormBaseModel):
             return flags
         return []
 
+    @property
+    def hq_link(self):
+        hq_url = self.deliver_unit.app.hq_server.url
+        domain = self.opportunity.deliver_app.cc_domain
+        return f"{hq_url}/a/{domain}/reports/form_data/{self.xform_id}/"
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
                 fields=["xform_id", "entity_id", "deliver_unit"], name="unique_xform_entity_deliver_unit"
             )
+        ]
+        indexes = [
+            models.Index(fields=["opportunity", "status"]),
         ]
 
 
@@ -796,15 +833,3 @@ class CatchmentArea(models.Model):
 
     class Meta:
         unique_together = ("site_code", "opportunity")
-
-
-class ExchangeRate(models.Model):
-    currency_code = models.CharField(max_length=3)
-    rate = models.DecimalField(max_digits=10, decimal_places=6)
-    rate_date = models.DateField()
-    fetched_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["currency_code", "rate_date"], name="unique_currency_code_date")
-        ]

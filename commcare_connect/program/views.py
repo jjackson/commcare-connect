@@ -9,7 +9,6 @@ from django.urls import reverse
 from django.utils.timezone import now
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, UpdateView
-from django_tables2 import SingleTableView
 
 from commcare_connect.opportunity.models import (
     Opportunity,
@@ -27,9 +26,7 @@ from commcare_connect.organization.decorators import (
 )
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
-from commcare_connect.program.helpers import get_annotated_managed_opportunity, get_delivery_performance_report
 from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplication, ProgramApplicationStatus
-from commcare_connect.program.tables import DeliveryPerformanceTable, FunnelPerformanceTable, ProgramApplicationTable
 
 from .utils import is_program_manager
 
@@ -150,31 +147,6 @@ def invite_organization(request, org_slug, pk):
     return redirect(reverse("program:home", kwargs={"org_slug": org_slug}))
 
 
-class ProgramApplicationList(ProgramManagerMixin, SingleTableView):
-    model = ProgramApplication
-    table_class = ProgramApplicationTable
-    paginate_by = 10
-    template_name = "program/application_list.html"
-
-    def get_queryset(self):
-        program_id = self.kwargs.get("pk")
-        return ProgramApplication.objects.filter(program__id=program_id).order_by("date_modified")
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["pk"] = self.kwargs.get("pk")
-        program = get_object_or_404(Program, id=self.kwargs.get("pk"), organization=self.request.org)
-
-        org_already_member_ids = ProgramApplication.objects.filter(
-            program__id=self.kwargs.get("pk"),
-            status__in=[ProgramApplicationStatus.ACCEPTED, ProgramApplicationStatus.APPLIED],
-        ).values_list("organization_id", flat=True)
-
-        context["organizations"] = Organization.objects.exclude(id__in=[*org_already_member_ids, self.request.org.pk])
-        context["program"] = program
-        return context
-
-
 @org_program_manager_required
 @require_POST
 def manage_application(request, org_slug, application_id, action):
@@ -227,41 +199,6 @@ def apply_or_decline_application(request, application_id, action, org_slug=None,
     return redirect(redirect_url)
 
 
-@org_program_manager_required
-def dashboard(request, **kwargs):
-    program = get_object_or_404(Program, id=kwargs.get("pk"), organization=request.org)
-    context = {
-        "program": program,
-    }
-    return render(request, "program/dashboard.html", context)
-
-
-class FunnelPerformanceTableView(ProgramManagerMixin, SingleTableView):
-    model = ManagedOpportunity
-    paginate_by = 10
-    table_class = FunnelPerformanceTable
-    template_name = "tables/single_table.html"
-
-    def get_queryset(self):
-        program_id = self.kwargs["pk"]
-        program = get_object_or_404(Program, id=program_id)
-        return get_annotated_managed_opportunity(program)
-
-
-class DeliveryPerformanceTableView(ProgramManagerMixin, SingleTableView):
-    model = ManagedOpportunity
-    paginate_by = 10
-    table_class = DeliveryPerformanceTable
-    template_name = "tables/single_table.html"
-
-    def get_queryset(self):
-        program_id = self.kwargs["pk"]
-        program = get_object_or_404(Program, id=program_id)
-        start_date = self.request.GET.get("start_date") or None
-        end_date = self.request.GET.get("end_date") or None
-        return get_delivery_performance_report(program, start_date, end_date)
-
-
 @org_viewer_required
 def program_home(request, org_slug):
     org = Organization.objects.get(slug=org_slug)
@@ -303,9 +240,7 @@ def program_manager_home(request, org):
         .annotate(count=Count("id"))
     )
 
-    pending_review = _make_recent_activity_data(
-        pending_review_data, org.slug, "opportunity:worker_list", {"active_tab": "delivery"}
-    )
+    pending_review = _make_recent_activity_data(pending_review_data, org.slug, "opportunity:worker_deliver")
 
     pending_payments_data = (
         PaymentInvoice.objects.filter(
@@ -318,7 +253,7 @@ def program_manager_home(request, org):
     )
 
     pending_payments = _make_recent_activity_data(
-        pending_payments_data, org.slug, "opportunity:invoice_list", small_text=True, opportunity_slug="pk"
+        pending_payments_data, org.slug, "opportunity:invoice_list", small_text=True, opportunity_slug="opp_id"
     )
 
     organizations = Organization.objects.exclude(pk=org.pk)
@@ -353,9 +288,7 @@ def network_manager_home(request, org):
         .values("opportunity__id", "opportunity__name", "opportunity__organization__name")
         .annotate(count=Count("id", distinct=True))
     )
-    pending_review = _make_recent_activity_data(
-        pending_review_data, org.slug, "opportunity:worker_list", {"active_tab": "delivery"}
-    )
+    pending_review = _make_recent_activity_data(pending_review_data, org.slug, "opportunity:worker_deliver")
     access_qs = OpportunityAccess.objects.filter(opportunity__managed=True, opportunity__organization=org)
 
     pending_payments_data_opps = (
@@ -375,7 +308,7 @@ def network_manager_home(request, org):
         for data in pending_payments_data_opps
     ]
     pending_payments = _make_recent_activity_data(
-        pending_payments_data, org.slug, "opportunity:worker_list", {"active_tab": "payments"}, small_text=True
+        pending_payments_data, org.slug, "opportunity:worker_payments", small_text=True
     )
 
     three_days_before = now() - timedelta(days=3)
@@ -388,13 +321,11 @@ def network_manager_home(request, org):
         .values("opportunity__id", "opportunity__name", "opportunity__organization__name")
         .annotate(count=Count("id", distinct=True))
     )
-    inactive_workers = _make_recent_activity_data(
-        inactive_workers_data, org.slug, "opportunity:worker_list", {"active_tab": "workers"}
-    )
+    inactive_workers = _make_recent_activity_data(inactive_workers_data, org.slug, "opportunity:worker_list")
     recent_activities = [
         {"title": "Pending Review", "rows": pending_review},
         {"title": "Pending Payments", "rows": pending_payments},
-        {"title": "Inactive Workers", "rows": inactive_workers},
+        {"title": "Inactive Connect Workers", "rows": inactive_workers},
     ]
     context = {
         "programs": results,
@@ -408,18 +339,15 @@ def _make_recent_activity_data(
     data: list[dict],
     org_slug: str,
     url_slug: str,
-    url_get_kwargs: dict = {},
     small_text=False,
     opportunity_slug="opp_id",
 ):
-    get_string = "&".join([f"{key}={value}" for key, value in url_get_kwargs.items()])
     return [
         {
             "opportunity__name": row["opportunity__name"],
             "opportunity__organization__name": row["opportunity__organization__name"],
             "count": row.get("count", 0),
-            "url": reverse(url_slug, kwargs={"org_slug": org_slug, opportunity_slug: row["opportunity__id"]})
-            + f"?{get_string}",
+            "url": reverse(url_slug, kwargs={"org_slug": org_slug, opportunity_slug: row["opportunity__id"]}),
             "small_text": small_text,
         }
         for row in data
