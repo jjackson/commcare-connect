@@ -69,7 +69,8 @@ def test_func(self):
 ### Views Using `SolicitationManagerMixin` (Program Manager Required)
 
 - `ProgramSolicitationDashboard` - View program's solicitations
-- `SolicitationResponseTableView` - View responses to solicitations
+- `SolicitationResponseTableView` - View responses to a specific solicitation
+- `SolicitationResponseAndReviewTable` - Combined table showing responses with review data on dashboard
 - `SolicitationCreateOrUpdate` - Create/edit solicitations
 - `SolicitationResponseReviewCreateOrUpdate` - Review responses
 

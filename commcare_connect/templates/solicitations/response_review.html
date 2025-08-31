@@ -5,28 +5,7 @@
 
 {% block content %}
     <!-- Breadcrumb Navigation -->
-    <ul class="breadcrumb mb-8">
-        <li>
-            <a href="{% url 'program:home' org_slug=request.org.slug %}">Programs</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="{% url 'program:opportunity_list' org_slug=request.org.slug pk=program.pk %}">{{ program.name }}</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="{% url 'org_solicitations:program_dashboard' org_slug=request.org.slug pk=program.pk %}">Solicitations</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="{% url 'org_solicitations:program_response_list' org_slug=request.org.slug pk=program.pk solicitation_pk=solicitation.pk %}">{{ solicitation.title|truncatechars:20 }}</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="#">Review {{ response.organization.name|truncatechars:20 }}</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-    </ul>
+    {% include 'components/breadcrumbs.html' with path=path %}
 
     <div class="max-w-6xl mx-auto">
         <!-- Header Card -->
@@ -87,7 +66,7 @@
             {% include "solicitations/components/file_attachments.html" with section_title="Supporting Documents" %}
 
             <!-- Review Panel (Full Width) -->
-            <form x-data="responseReviewHandler()" method="post">
+            <form method="post">
                 {% csrf_token %}
                 {% crispy form %}
 
@@ -104,26 +83,4 @@
             </div>
         </div>
     </div>
-{% endblock %}
-
-{% block inline_javascript %}
-<script>
-// Alpine.js Component for Response Review Handler
-
-function responseReviewHandler() {
-    return {
-        selectedRecommendation: '{% if existing_review.recommendation %}{{ existing_review.recommendation }}{% endif %}',
-
-        init() {
-            // Component is initialized with the existing recommendation value
-            // Alpine.js x-model will handle the rest automatically
-        }
-    }
-}
-
-// Register Alpine.js component
-document.addEventListener('alpine:init', () => {
-    Alpine.data('responseReviewHandler', responseReviewHandler);
-});
-</script>
 {% endblock %}

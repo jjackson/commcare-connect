@@ -6,15 +6,25 @@
 {% block content %}
 <div class="max-w-4xl mx-auto">
     <!-- Breadcrumbs -->
-    <nav class="mb-6" aria-label="breadcrumb">
-        <ol class="flex items-center space-x-2 text-sm text-gray-600">
-            <li><a href="{% url 'solicitations:list' %}" class="hover:text-brand-indigo">Solicitations</a></li>
-            <li class="text-gray-400">/</li>
-            <li><a href="{% url 'solicitations:detail' solicitation.pk %}" class="hover:text-brand-indigo">{{ solicitation.title }}</a></li>
-            <li class="text-gray-400">/</li>
-            <li class="text-gray-900">Organization Required</li>
-        </ol>
-    </nav>
+    {% if path %}
+        {% include 'components/breadcrumbs.html' with path=path %}
+    {% else %}
+        <ul class="breadcrumb mb-8">
+            <li>
+                <a href="{% url 'solicitations:list' %}">Solicitations</a>
+                <i class="fa-solid fa-chevron-right"></i>
+            </li>
+            {% if solicitation %}
+            <li>
+                <a href="{% url 'solicitations:detail' solicitation.pk %}">{{ solicitation.title }}</a>
+                <i class="fa-solid fa-chevron-right"></i>
+            </li>
+            {% endif %}
+            <li>
+                <a href="#">Organization Required</a>
+            </li>
+        </ul>
+    {% endif %}
 
     <!-- Error Card -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8">

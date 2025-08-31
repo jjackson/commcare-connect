@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-from commcare_connect.solicitations.models import Solicitation, SolicitationResponse, SolicitationReview
+from commcare_connect.solicitations.models import Solicitation, SolicitationResponse
 from commcare_connect.utils.tables import OrgContextTable
 
 # =============================================================================
@@ -22,8 +22,8 @@ def get_status_badge_class(status):
         "closed": "badge badge-sm bg-red-600/20 text-red-600",
         # Review recommendations
         "recommended": "badge badge-sm bg-green-600/20 text-green-600",
-        "not_recommended": "badge badge-sm bg-red-600/20 text-red-600",
-        "neutral": "badge badge-sm bg-orange-600/20 text-orange-600",
+        "not_recommended": "badge badge-sm bg-orange-600/20 text-orange-600",
+        "neutral": "badge badge-sm bg-violet-500/20 text-violet-500",
         # Solicitation types
         "eoi": "badge badge-sm bg-green-600/20 text-green-600",
         "rfp": "badge badge-sm bg-orange-600/20 text-orange-600",
@@ -35,9 +35,7 @@ def render_text_with_badge(title, solicitation_type):
     """Render solicitation title with type badge at the end"""
     badge_class = get_status_badge_class(solicitation_type)
     badge_text = solicitation_type.upper()
-    return format_html(
-        '<div class="break-words max-w-xs">{} <span class="{}">{}</span></div>', title, badge_class, badge_text
-    )
+    return format_html('<div class="text-wrap">{} <span class="{}">{}</span></div>', title, badge_class, badge_text)
 
 
 def render_two_line_text(title, subtitle=None):
@@ -76,6 +74,7 @@ class ProgramTable(tables.Table):
         model = None  # Will be set dynamically to Program model
         fields = ("name", "organization", "active_solicitations", "total_responses", "actions")
         order_by = ("name",)
+        template_name = "base_table.html"
 
     def __init__(self, *args, **kwargs):
         self.org_slug = kwargs.pop("org_slug", "")
@@ -123,7 +122,7 @@ class ProgramTable(tables.Table):
             create_action_link(dashboard_url, "fa-eye", "View Dashboard"),
         ]
 
-        return format_html('<div class="flex items-center space-x-3">{}</div>', mark_safe("".join(actions)))
+        return format_html('<div class="flex items-center space-x-2">{}</div>', mark_safe("".join(actions)))
 
 
 # =============================================================================
@@ -149,6 +148,7 @@ class SolicitationTable(OrgContextTable):
         model = Solicitation
         fields = ("title", "program_org", "status", "application_deadline", "total", "reviewed", "actions")
         order_by = ("-application_deadline",)
+        template_name = "base_table.html"
 
     def render_title(self, value, record):
         """Render solicitation title with type badge"""
@@ -204,42 +204,44 @@ class SolicitationTable(OrgContextTable):
         return format_html('<div class="flex items-center space-x-2">{}</div>', mark_safe("".join(actions)))
 
 
-class SolicitationResponseTable(OrgContextTable):
-    """Unified table for displaying solicitation responses across all dashboard modes"""
+class SolicitationResponseAndReviewTable(OrgContextTable):
+    """Combined table showing solicitation responses with their review data"""
 
     def __init__(self, *args, **kwargs):
         self.mode = kwargs.pop("mode", "user")  # 'admin', 'program', 'user'
         self.program_pk = kwargs.pop("program_pk", None)
+        self.user = kwargs.pop("user", None)  # For permission checking
         super().__init__(*args, **kwargs)
 
     solicitation = tables.Column(accessor="solicitation__title", verbose_name="Solicitation")
-    program_org = tables.Column(empty_values=(), verbose_name="Program & Org", orderable=False)
-    # submitted_by = tables.Column()
-    # status = tables.Column()
-    last_edit_date = tables.Column(accessor="submission_date", verbose_name="Last Edited")
+    submitting_org = tables.Column(empty_values=(), verbose_name="Submitting Org", orderable=False)
+    submitted_by = tables.Column(verbose_name="Submitted By")
+    last_edited = tables.Column(accessor="submission_date", verbose_name="Last Edited")
+    recommendation = tables.Column(empty_values=(), verbose_name="Recommendation", orderable=False)
+    score = tables.Column(empty_values=(), verbose_name="Score", orderable=False)
     actions = tables.Column(empty_values=(), verbose_name="Actions", orderable=False)
 
     class Meta:
         model = SolicitationResponse
-        fields = ("solicitation", "program_org", "submitted_by", "status", "last_edit_date", "actions")
-        order_by = ("-last_edit_date",)
+        fields = (
+            "solicitation",
+            "submitting_org",
+            "submitted_by",
+            "last_edited",
+            "recommendation",
+            "score",
+            "actions",
+        )
+        order_by = ("-last_edited",)
+        template_name = "base_table.html"
 
     def render_solicitation(self, value, record):
         """Render solicitation title with type badge"""
         return render_text_with_badge(value, record.solicitation.solicitation_type)
 
-    def render_program_org(self, record):
-        """Render program name with organization"""
-        program = record.solicitation.program
-        return render_two_line_text(program.name, program.organization.name)
-
-    def render_last_edit_date(self, value):
-        """Render last edit date and time on separate lines"""
-        if not value:
-            return "—"
-        date_str = value.strftime("%d-%b-%Y")
-        time_str = value.strftime("%I:%M %p").lower()
-        return render_two_line_text(date_str, time_str)
+    def render_submitting_org(self, record):
+        """Render submitting organization name"""
+        return record.organization.name
 
     def render_submitted_by(self, value, record):
         """Render submitted by user info"""
@@ -248,85 +250,93 @@ class SolicitationResponseTable(OrgContextTable):
         name = value.get_full_name() or value.email
         return render_two_line_text(name, value.email)
 
-    def render_status(self, value, record):
-        """Render status badge"""
-        badge_class = get_status_badge_class(value)
-        return format_html('<span class="{}">{}</span>', badge_class, record.get_status_display())
+    def render_last_edited(self, value):
+        """Render last edit date and time on separate lines"""
+        if not value:
+            return "—"
+        date_str = value.strftime("%d-%b-%Y")
+        time_str = value.strftime("%I:%M %p").lower()
+        return render_two_line_text(date_str, time_str)
+
+    def render_recommendation(self, record):
+        """Render recommendation from review if it exists"""
+        try:
+            review = record.reviews.first()
+            if review and review.recommendation:
+                badge_class = get_status_badge_class(review.recommendation)
+                return format_html('<span class="{}">{}</span>', badge_class, review.get_recommendation_display())
+        except Exception:
+            pass
+        return "—"
+
+    def render_score(self, record):
+        """Render score from review if it exists"""
+        try:
+            review = record.reviews.first()
+            if review and review.score is not None:
+                return review.score
+        except Exception:
+            pass
+        return "—"
 
     def render_actions(self, record):
-        """Render action links based on mode"""
+        """Render action links based on mode and permissions"""
+        actions = []
+
         if self.mode == "admin":
+            # Admin can always view in admin
             url = f"/admin/solicitations/solicitationresponse/{record.pk}/change/"
-            action = create_action_link(url, "fa-eye", "View in Admin")
+            actions.append(create_action_link(url, "fa-eye", "View in Admin"))
+
         elif self.mode == "program":
+            # Program managers can review responses
             url = reverse(
                 "org_solicitations:program_response_review",
                 kwargs={"org_slug": self.org_slug, "pk": self.program_pk, "response_pk": record.pk},
             )
-            action = create_action_link(url, "fa-pen-to-square", "Review Response")
-        else:
-            # User mode - Edit or View response
+            actions.append(create_action_link(url, "fa-pen-to-square", "Review Response"))
+
+        else:  # user mode
+            # Users can edit/view their own responses
+            response_org_slug = record.organization.slug
             if record.status == SolicitationResponse.Status.DRAFT:
                 url = reverse(
                     "org_solicitations:user_response_edit",
-                    kwargs={"org_slug": self.org_slug, "pk": record.pk},
+                    kwargs={"org_slug": response_org_slug, "pk": record.pk},
                 )
-                action = create_action_link(url, "fa-pen-to-square", "Edit Response")
+                actions.append(create_action_link(url, "fa-pen-to-square", "Edit Response"))
             else:
                 url = reverse(
                     "org_solicitations:user_response_detail",
-                    kwargs={"org_slug": self.org_slug, "pk": record.pk},
+                    kwargs={"org_slug": response_org_slug, "pk": record.pk},
                 )
-                action = create_action_link(url, "fa-eye", "View Response")
+                actions.append(create_action_link(url, "fa-eye", "View Response"))
 
-        return format_html('<div class="flex items-center space-x-3">{}</div>', mark_safe(action))
+            # Check if user can review this response
+            if self._user_can_review_response(record):
+                review_url = reverse(
+                    "org_solicitations:program_response_review",
+                    kwargs={
+                        "org_slug": record.solicitation.program.organization.slug,
+                        "pk": record.solicitation.program.pk,
+                        "response_pk": record.pk,
+                    },
+                )
+                actions.append(create_action_link(review_url, "fa-clipboard-check", "Review"))
 
+        return format_html('<div class="flex items-center space-x-2">{}</div>', mark_safe("".join(actions)))
 
-class SolicitationReviewTable(tables.Table):
-    """Unified table for displaying solicitation reviews across all dashboard modes"""
+    def _user_can_review_response(self, response):
+        """Check if the current user can review this response"""
+        if not self.user:
+            return False
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        # User can review if they are a program manager for the solicitation's program
+        program = response.solicitation.program
+        program_org = program.organization
 
-    solicitation = tables.Column(accessor="response.solicitation.title", verbose_name="Solicitation")
-    submitting_org = tables.Column(empty_values=(), verbose_name="Submitting Org", orderable=False)
-    actions = tables.Column(empty_values=(), verbose_name="Actions", orderable=False)
-
-    class Meta:
-        model = SolicitationReview
-        fields = ("solicitation", "submitting_org", "recommendation", "score", "review_date", "actions")
-        order_by = ("-review_date",)
-
-    def render_solicitation(self, value, record):
-        """Render solicitation title with type badge"""
-        return render_text_with_badge(value, record.response.solicitation.solicitation_type)
-
-    def render_submitting_org(self, record):
-        """Render submitting organization with response status"""
-        org_name = record.response.organization.name
-        status_info = f"Status: {record.response.status.title()}"
-        return render_two_line_text(org_name, status_info)
-
-    def render_recommendation(self, value, record):
-        """Render recommendation badge"""
-        if not value:
-            return "—"
-        badge_class = get_status_badge_class(value)
-        return format_html('<span class="{}">{}</span>', badge_class, record.get_recommendation_display())
-
-    def render_review_date(self, value):
-        """Render review date"""
-        return value.strftime("%d-%b-%Y") if value else "—"
-
-    def render_actions(self, record):
-        """Render action links - view review (permissions handled by the page)"""
-        # Always link to view the review - the page will handle edit permissions
-        url = reverse(
-            "org_solicitations:user_response_detail",
-            kwargs={
-                "org_slug": record.response.organization.slug,
-                "pk": record.response.pk,
-            },
-        )
-        action = create_action_link(url, "fa-eye", "View Review")
-        return format_html('<div class="flex items-center space-x-3">{}</div>', mark_safe(action))
+        # Check if user is admin of the program organization and org is program manager
+        for membership in self.user.memberships.all():
+            if membership.organization == program_org and membership.is_admin and program_org.program_manager:
+                return True
+        return False

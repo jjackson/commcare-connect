@@ -13,19 +13,7 @@
 
 {% block main_content %}
     <!-- Breadcrumb Navigation -->
-    <ul class="breadcrumb mb-8">
-        <li>
-            <a href="/solicitations/">Solicitations</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="/solicitations/s/{{ solicitation.pk }}/">{{ solicitation.title|truncatechars:30 }}</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="#">{% if is_editing_draft %}Edit Response{% else %}Submit Response{% endif %}</a>
-        </li>
-    </ul>
+    {% include 'components/breadcrumbs.html' with path=path %}
 
     <!-- Response Form -->
     <div class="max-w-4xl mx-auto">
