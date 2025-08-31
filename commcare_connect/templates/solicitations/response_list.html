@@ -6,24 +6,7 @@
 
 {% block content %}
     <!-- Breadcrumb Navigation -->
-    <ul class="breadcrumb mb-8">
-        <li>
-            <a href="{% url 'program:home' org_slug=request.org.slug %}">Programs</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="{% url 'program:opportunity_list' org_slug=request.org.slug pk=program_pk %}">Program</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="{% url 'org_solicitations:program_dashboard' org_slug=request.org.slug pk=program_pk %}">Solicitations</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="#">{{ solicitation.title|truncatechars:30 }}</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-    </ul>
+    {% include 'components/breadcrumbs.html' with path=path %}
 
     <!-- Header Section -->
     <div class="bg-white rounded-xl shadow-sm p-8 mb-8">
@@ -130,10 +113,10 @@
 
 
 
-    <!-- Responses Table (Django Tables2) -->
+    <!-- Responses & Reviews Table (Django Tables2) -->
     <div class="flex flex-col w-full gap-2">
         <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
-            <p class="text-sm text-brand-deep-purple">Submitted Responses</p>
+            <p class="text-sm text-brand-deep-purple">Responses & Reviews</p>
             <div class="flex items-center gap-x-4">
                 <!-- Future: Add bulk actions here -->
             </div>

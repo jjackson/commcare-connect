@@ -12,8 +12,10 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
-from django.views.generic import DetailView, ListView, UpdateView
-from django_tables2 import SingleTableView
+from django.views.generic import DetailView, ListView, TemplateView, UpdateView
+from django_tables2 import RequestConfig, SingleTableView
+
+from commcare_connect.program.models import Program
 
 from .forms import SolicitationForm, SolicitationResponseForm, SolicitationReviewForm
 from .helpers import (
@@ -24,7 +26,7 @@ from .helpers import (
     update_solicitation_questions,
 )
 from .models import ResponseAttachment, Solicitation, SolicitationQuestion, SolicitationResponse, SolicitationReview
-from .tables import ProgramTable, SolicitationResponseTable, SolicitationReviewTable, SolicitationTable
+from .tables import ProgramTable, SolicitationResponseAndReviewTable, SolicitationTable
 
 # =============================================================================
 # Permission Mixins (following established patterns)
@@ -59,6 +61,49 @@ class SolicitationManagerMixin(LoginRequiredMixin, UserPassesTestMixin):
         org = getattr(self.request, "org", None)
         program_manager = getattr(org, "program_manager", False)
         return (org_membership is not None and is_admin and program_manager) or self.request.user.is_superuser
+
+
+class SolicitationResponseViewAccessMixin(LoginRequiredMixin, UserPassesTestMixin):
+    """
+    Handles access permissions for viewing solicitation responses (including reviews).
+
+    Users can view a response if:
+    a) They wrote it
+    b) Their org wrote it and they are an admin in that org
+    c) It's a response to a solicitation for which they are a program manager
+    """
+
+    def test_func(self):
+        if self.request.user.is_superuser:
+            return True
+
+        # Get the response object
+        response = self.get_object()
+        user = self.request.user
+
+        # Rule a: User wrote the response
+        if response.submitted_by == user:
+            return True
+
+        # Rule b: User's org wrote it and user is admin in that org
+        user_orgs_admin = []
+        for membership in user.memberships.all():
+            if membership.is_admin:
+                user_orgs_admin.append(membership.organization)
+
+        if response.organization in user_orgs_admin:
+            return True
+
+        # Rule c: Response is to a solicitation for which user is a program manager
+        solicitation = response.solicitation
+        if solicitation.program:
+            program_org = solicitation.program.organization
+            # Check if user is admin of the program manager organization
+            for membership in user.memberships.all():
+                if membership.organization == program_org and membership.is_admin and program_org.program_manager:
+                    return True
+
+        return False
 
 
 class ResponseContextMixin:
@@ -235,6 +280,16 @@ class SolicitationDetailView(DetailView):
                 context["has_submitted_response"] = True
                 context["submitted_response"] = submitted_response
 
+        # Add breadcrumb navigation
+        context["path"] = [
+            {"title": "All Opportunities", "url": reverse("solicitations:list")},
+            {
+                "title": f"{solicitation.get_solicitation_type_display()}s",
+                "url": reverse(f"solicitations:{solicitation.solicitation_type}_list"),
+            },
+            {"title": solicitation.title[:50], "url": "#"},
+        ]
+
         return context
 
 
@@ -273,7 +328,6 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
     def get_form_kwargs(self):
         """Setup form with proper program context"""
         kwargs = super().get_form_kwargs()
-        from commcare_connect.program.models import Program
 
         if self.object:
             # Edit mode - get program from existing object
@@ -290,7 +344,6 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
     def get_context_data(self, **kwargs):
         """Provide context for both create and edit modes"""
         context = super().get_context_data(**kwargs)
-        from commcare_connect.program.models import Program
 
         if self.object:
             # Edit mode context
@@ -304,6 +357,34 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
             question_context = build_question_context(None, is_edit=False)
 
         context.update(question_context)
+
+        # Add breadcrumb navigation
+        if self.object:
+            # Edit mode breadcrumbs
+            program = self.object.program
+            action_title = "Edit Solicitation"
+        else:
+            # Create mode breadcrumbs
+            program_pk = self.kwargs.get("program_pk")
+            program = get_object_or_404(Program, pk=program_pk, organization=self.request.org) if program_pk else None
+            action_title = "Create Solicitation"
+
+        if program:
+            context["path"] = [
+                {"title": "Programs", "url": reverse("program:home", kwargs={"org_slug": self.request.org.slug})},
+                {
+                    "title": program.name,
+                    "url": reverse(
+                        "program:opportunity_list", kwargs={"org_slug": self.request.org.slug, "pk": program.pk}
+                    ),
+                },
+                {
+                    "title": "Solicitations",
+                    "url": reverse("solicitations:program_dashboard", kwargs={"pk": program.pk}),
+                },
+                {"title": action_title, "url": "#"},
+            ]
+
         return context
 
     def form_valid(self, form):
@@ -357,12 +438,12 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
 class SolicitationResponseTableView(SolicitationManagerMixin, SingleTableView):
     """
     Table view for solicitation responses using Django Tables2
-    Similar approach to opportunities table
+    Uses the combined SolicitationResponseAndReviewTable to show responses with their review data
     Requires program manager permissions to view responses
     """
 
     model = SolicitationResponse
-    table_class = SolicitationResponseTable
+    table_class = SolicitationResponseAndReviewTable
     template_name = "solicitations/response_list.html"
     context_object_name = "responses"
     paginate_by = 20
@@ -388,6 +469,8 @@ class SolicitationResponseTableView(SolicitationManagerMixin, SingleTableView):
 
         kwargs["org_slug"] = org_slug
         kwargs["program_pk"] = program_pk
+        kwargs["mode"] = "program"  # Set mode for proper action rendering
+        kwargs["user"] = self.request.user  # Pass user for permission checking
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -415,6 +498,24 @@ class SolicitationResponseTableView(SolicitationManagerMixin, SingleTableView):
         context["program_pk"] = program_pk
         context["status_counts"] = status_counts
 
+        # Add breadcrumb navigation
+        program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+
+        context["path"] = [
+            {"title": "Programs", "url": reverse("program:home", kwargs={"org_slug": self.request.org.slug})},
+            {
+                "title": program.name,
+                "url": reverse(
+                    "program:opportunity_list", kwargs={"org_slug": self.request.org.slug, "pk": program.pk}
+                ),
+            },
+            {
+                "title": "Solicitations",
+                "url": reverse("solicitations:program_dashboard", kwargs={"pk": program.pk}),
+            },
+            {"title": solicitation.title[:30], "url": "#"},
+        ]
+
         return context
 
 
@@ -434,9 +535,14 @@ class SolicitationResponseSuccessView(SolicitationAccessMixin, DetailView):
         return SolicitationResponse.objects.filter(organization=user_org)
 
 
-class SolicitationResponseDetailView(SolicitationAccessMixin, ResponseContextMixin, DetailView):
+class SolicitationResponseDetailView(SolicitationResponseViewAccessMixin, ResponseContextMixin, DetailView):
     """
-    Detailed view of a response for the user who submitted it
+    Detailed view of a response with proper access control for viewing responses and reviews.
+
+    Access is controlled by SolicitationResponseViewAccessMixin which allows:
+    a) Users who wrote the response
+    b) Admins of the org that wrote the response
+    c) Program managers of the solicitation's program
     """
 
     model = SolicitationResponse
@@ -444,18 +550,14 @@ class SolicitationResponseDetailView(SolicitationAccessMixin, ResponseContextMix
     context_object_name = "response"
 
     def get_queryset(self):
-        # Only allow users to view their own organization's responses
-        if self.request.user.memberships.exists():
-            user_org = self.request.user.memberships.first().organization
-            return (
-                SolicitationResponse.objects.filter(
-                    organization=user_org,
-                    status=SolicitationResponse.Status.SUBMITTED,
-                )
-                .select_related("solicitation", "organization", "submitted_by")
-                .prefetch_related("file_attachments")
+        # Return all submitted responses - access control is handled by the mixin
+        return (
+            SolicitationResponse.objects.filter(
+                status=SolicitationResponse.Status.SUBMITTED,
             )
-        return SolicitationResponse.objects.none()
+            .select_related("solicitation", "solicitation__program", "organization", "submitted_by")
+            .prefetch_related("file_attachments")
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -467,6 +569,16 @@ class SolicitationResponseDetailView(SolicitationAccessMixin, ResponseContextMix
 
         # Add user-specific context
         context["can_edit"] = response.status == SolicitationResponse.Status.DRAFT
+
+        # Add breadcrumb navigation
+        context["path"] = [
+            {"title": "Solicitations", "url": reverse("solicitations:list")},
+            {
+                "title": response.solicitation.title[:30],
+                "url": reverse("solicitations:detail", kwargs={"pk": response.solicitation.pk}),
+            },
+            {"title": "Your Response", "url": "#"},
+        ]
 
         return context
 
@@ -513,6 +625,33 @@ class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
     def dispatch(self, request, *args, **kwargs):
         """Handle solicitation-specific permission checks"""
         # SolicitationAccessMixin handles basic authentication and organization membership
+
+        # If user is accessing via public URL (no org_slug) and is authenticated,
+        # redirect to their first organization's context
+        if (
+            request.user.is_authenticated
+            and not kwargs.get("org_slug")
+            and hasattr(request, "org")
+            and request.org
+            and request.org.slug
+        ):
+            # Get the solicitation ID from the URL
+            solicitation_pk = kwargs.get("solicitation_pk")
+            response_pk = kwargs.get("pk")
+
+            if solicitation_pk:
+                # Create mode - redirect to org-scoped respond URL
+                org_url = reverse(
+                    "org_solicitations:respond",
+                    kwargs={"org_slug": request.org.slug, "solicitation_pk": solicitation_pk},
+                )
+                return redirect(org_url)
+            elif response_pk:
+                # Edit mode - redirect to org-scoped edit URL
+                org_url = reverse(
+                    "org_solicitations:user_response_edit", kwargs={"org_slug": request.org.slug, "pk": response_pk}
+                )
+                return redirect(org_url)
 
         # Get solicitation from URL (either directly or via response)
         if self.kwargs.get("pk"):
@@ -589,6 +728,17 @@ class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
                 context["existing_attachments"] = self.existing_draft.file_attachments.all()
             else:
                 context["existing_attachments"] = []
+
+        # Add breadcrumb navigation
+        action_title = "Edit Response" if is_edit_mode else "Submit Response"
+        context["path"] = [
+            {"title": "Solicitations", "url": reverse("solicitations:list")},
+            {
+                "title": self.solicitation.title[:30],
+                "url": reverse("solicitations:detail", kwargs={"pk": self.solicitation.pk}),
+            },
+            {"title": action_title, "url": "#"},
+        ]
 
         return context
 
@@ -696,7 +846,6 @@ class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, Respons
 
     def get_object(self, queryset=None):
         """Return existing review for edit mode, None for create mode"""
-        from commcare_connect.program.models import Program
 
         program_pk = self.kwargs.get("pk")
         response_pk = self.kwargs.get("response_pk")
@@ -736,7 +885,6 @@ class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, Respons
             # Fallback if response wasn't set
             program_pk = self.kwargs.get("pk")
             response_pk = self.kwargs.get("response_pk")
-            from commcare_connect.program.models import Program
 
             program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
             response = get_object_or_404(
@@ -766,6 +914,29 @@ class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, Respons
 
         # Add the shared context from the mixin
         context.update(shared_context)
+
+        # Add breadcrumb navigation
+        context["path"] = [
+            {"title": "Programs", "url": reverse("program:home", kwargs={"org_slug": self.request.org.slug})},
+            {
+                "title": program.name,
+                "url": reverse(
+                    "program:opportunity_list", kwargs={"org_slug": self.request.org.slug, "pk": program.pk}
+                ),
+            },
+            {
+                "title": "Solicitations",
+                "url": reverse("solicitations:program_dashboard", kwargs={"pk": program.pk}),
+            },
+            {
+                "title": response.solicitation.title[:20],
+                "url": reverse(
+                    "solicitations:program_response_list",
+                    kwargs={"pk": program.pk, "solicitation_pk": response.solicitation.pk},
+                ),
+            },
+            {"title": "Review Response", "url": "#"},
+        ]
 
         return context
 
@@ -910,15 +1081,12 @@ def delete_attachment(request, pk, attachment_id):
 # =============================================================================
 
 
-class UnifiedSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, SingleTableView):
+class UnifiedSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
     """
     Unified dashboard that adapts based on user permissions and context.
     """
 
     template_name = "solicitations/unified_dashboard.html"
-    table_class = SolicitationTable
-    context_object_name = "solicitations"
-    paginate_by = 10
 
     def get_dashboard_mode(self):
         """Determine dashboard mode based on user and URL parameters"""
@@ -972,7 +1140,6 @@ class UnifiedSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, Sing
 
     def _get_program_solicitations(self):
         """Get solicitations for specific program"""
-        from commcare_connect.program.models import Program
 
         program_pk = self.kwargs.get("pk")
         program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
@@ -1024,11 +1191,29 @@ class UnifiedSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, Sing
         context["dashboard_mode"] = mode
         context.update(self._get_dashboard_context(mode))
 
+        # Add breadcrumb navigation based on mode
+        if mode == "program":
+            program_pk = self.kwargs.get("pk")
+            program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+
+            context["path"] = [
+                {"title": "Programs", "url": reverse("program:home", kwargs={"org_slug": self.request.org.slug})},
+                {
+                    "title": program.name,
+                    "url": reverse(
+                        "program:opportunity_list", kwargs={"org_slug": self.request.org.slug, "pk": program.pk}
+                    ),
+                },
+                {"title": "Solicitations", "url": "#"},
+            ]
+            context["show_breadcrumb"] = True
+        else:
+            context["show_breadcrumb"] = False
+
         return context
 
     def _get_manageable_programs(self, mode):
         """Get programs where the user can create solicitations (has program manager status)"""
-        from commcare_connect.program.models import Program
 
         if mode == "admin":
             # Admin can manage all programs
@@ -1047,7 +1232,7 @@ class UnifiedSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, Sing
             programs.select_related("organization")
             .annotate(
                 active_solicitations_count=Count(
-                    "solicitations", filter=Q(solicitations__status=Solicitation.Status.ACTIVE)
+                    "solicitations", filter=Q(solicitations__status=Solicitation.Status.ACTIVE), distinct=True
                 ),
                 total_responses_count=Count(
                     "solicitations__responses",
@@ -1059,37 +1244,89 @@ class UnifiedSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, Sing
 
         return programs
 
-    def _get_dashboard_context(self, mode):
-        """Get context for dashboard based on mode"""
-        from commcare_connect.program.models import Program
+    def _get_solicitations_queryset(self, mode):
+        """Get solicitations queryset based on mode"""
+        if mode == "admin":
+            return (
+                Solicitation.objects.filter(status=Solicitation.Status.ACTIVE)
+                .select_related("program", "program__organization")
+                .prefetch_related("responses")
+                .annotate(
+                    total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
+                    submitted_count=Count(
+                        "responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)
+                    ),
+                )
+                .order_by("-date_created")
+            )
+        elif mode == "program":
+            program_pk = self.kwargs.get("pk")
+            program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
+            return (
+                Solicitation.objects.filter(program=program)
+                .select_related("program", "program__organization")
+                .prefetch_related("responses")
+                .annotate(
+                    total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
+                    submitted_count=Count(
+                        "responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)
+                    ),
+                )
+                .order_by("-date_created")
+            )
+        else:  # user mode
+            user_orgs = [membership.organization for membership in self.request.user.memberships.all()]
+            return (
+                Solicitation.objects.filter(program__organization__in=user_orgs, status=Solicitation.Status.ACTIVE)
+                .select_related("program", "program__organization")
+                .prefetch_related("responses")
+                .annotate(
+                    total_responses=Count("responses", filter=~Q(responses__status=SolicitationResponse.Status.DRAFT)),
+                    submitted_count=Count(
+                        "responses", filter=Q(responses__status=SolicitationResponse.Status.SUBMITTED)
+                    ),
+                )
+                .order_by("-date_created")
+            )
 
-        solicitations = self.get_queryset()
+    def _get_dashboard_context(self, mode):
+        """Get context for dashboard based on mode using standard RequestConfig pattern"""
+
+        solicitations = self._get_solicitations_queryset(mode)
 
         # Common context structure
         context = {
             "show_programs": mode != "admin",
         }
 
-        # Add programs table for admin and user modes (not program mode since they're viewing a specific program)
+        # Add programs table for admin and user modes
         if mode in ["admin", "user"]:
             programs_queryset = self._get_manageable_programs(mode)
-            context["programs_table"] = ProgramTable(programs_queryset)
+            programs_table = ProgramTable(programs_queryset, prefix="programs-")
+            RequestConfig(self.request, paginate={"per_page": 10}).configure(programs_table)
+            context["programs_table"] = programs_table
+
+        # Add solicitations table (main table)
+        solicitations_queryset = self._get_solicitations_queryset(mode)
+        solicitations_table = SolicitationTable(solicitations_queryset, prefix="solicitations-")
+        RequestConfig(self.request, paginate={"per_page": 10}).configure(solicitations_table)
+        context["table"] = solicitations_table
 
         if mode == "admin":
             # Admin: System-wide view
             all_solicitations = Solicitation.objects.filter(status="active")
 
+            # Unified responses and reviews table
             responses = (
                 SolicitationResponse.objects.exclude(status="draft")
                 .select_related("solicitation", "solicitation__program", "organization", "submitted_by")
+                .prefetch_related("reviews")
                 .order_by("-submission_date")
             )
-
-            reviews = (
-                SolicitationReview.objects.all()
-                .select_related("response__solicitation", "response__organization", "reviewer")
-                .order_by("-review_date")
+            responses_and_reviews_table = SolicitationResponseAndReviewTable(
+                responses, mode="admin", org_slug=self.request.org.slug, user=self.request.user, prefix="responses-"
             )
+            RequestConfig(self.request, paginate={"per_page": 10}).configure(responses_and_reviews_table)
 
             context.update(
                 {
@@ -1102,10 +1339,7 @@ class UnifiedSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, Sing
                         "total_responses": SolicitationResponse.objects.exclude(status="draft").count(),
                         "total_organizations_with_programs": Program.objects.values("organization").distinct().count(),
                     },
-                    "responses_table": SolicitationResponseTable(
-                        responses, mode="admin", org_slug=self.request.org.slug
-                    ),
-                    "reviews_table": SolicitationReviewTable(reviews),
+                    "responses_and_reviews_table": responses_and_reviews_table,
                     "show_programs": False,
                 }
             )
@@ -1115,18 +1349,23 @@ class UnifiedSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, Sing
             program_pk = self.kwargs.get("pk")
             program = get_object_or_404(Program, pk=program_pk, organization=self.request.org)
 
+            # Unified responses and reviews table
             responses = (
                 SolicitationResponse.objects.filter(solicitation__program=program)
                 .exclude(status="draft")
                 .select_related("solicitation", "organization", "submitted_by")
+                .prefetch_related("reviews")
                 .order_by("-submission_date")
             )
-
-            reviews = (
-                SolicitationReview.objects.filter(response__solicitation__program=program)
-                .select_related("response__solicitation", "response__organization", "reviewer")
-                .order_by("-review_date")
+            responses_and_reviews_table = SolicitationResponseAndReviewTable(
+                responses,
+                mode="program",
+                org_slug=self.request.org.slug,
+                program_pk=program.pk,
+                user=self.request.user,
+                prefix="responses-",
             )
+            RequestConfig(self.request, paginate={"per_page": 10}).configure(responses_and_reviews_table)
 
             context.update(
                 {
@@ -1134,10 +1373,7 @@ class UnifiedSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, Sing
                     "page_subtitle": f"Manage EOIs and RFPs for {program.name}",
                     "program": program,
                     "stats": get_solicitation_dashboard_statistics(solicitations),
-                    "responses_table": SolicitationResponseTable(
-                        responses, mode="program", org_slug=self.request.org.slug, program_pk=program.pk
-                    ),
-                    "reviews_table": SolicitationReviewTable(reviews),
+                    "responses_and_reviews_table": responses_and_reviews_table,
                     "show_breadcrumb": True,
                 }
             )
@@ -1147,17 +1383,17 @@ class UnifiedSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, Sing
             user_orgs = [membership.organization for membership in self.request.user.memberships.all()]
             user_programs = Program.objects.filter(organization__in=user_orgs)
 
+            # Unified responses and reviews table
             responses = (
                 SolicitationResponse.objects.filter(organization__in=user_orgs)
                 .select_related("solicitation", "solicitation__program", "submitted_by")
+                .prefetch_related("reviews")
                 .order_by("-date_modified")
             )
-
-            reviews = (
-                SolicitationReview.objects.filter(reviewer=self.request.user)
-                .select_related("response__solicitation", "response__organization")
-                .order_by("-review_date")
+            responses_and_reviews_table = SolicitationResponseAndReviewTable(
+                responses, mode="user", user=self.request.user, prefix="responses-"
             )
+            RequestConfig(self.request, paginate={"per_page": 10}).configure(responses_and_reviews_table)
 
             context.update(
                 {
@@ -1172,10 +1408,7 @@ class UnifiedSolicitationDashboard(LoginRequiredMixin, UserPassesTestMixin, Sing
                         .count(),
                         "programs_count": user_programs.count(),
                     },
-                    "responses_table": SolicitationResponseTable(
-                        responses, mode="user", org_slug=self.request.org.slug
-                    ),
-                    "reviews_table": SolicitationReviewTable(reviews),
+                    "responses_and_reviews_table": responses_and_reviews_table,
                 }
             )
 
