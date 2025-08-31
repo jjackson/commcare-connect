@@ -7,20 +7,7 @@
 {% block content %}
     <!-- Breadcrumb Navigation (Program Dashboard Only) -->
     {% if show_breadcrumb %}
-        <ul class="breadcrumb mb-8">
-            <li>
-                <a href="{% url 'program:home' org_slug=request.org.slug %}">Programs</a>
-                <i class="fa-solid fa-chevron-right"></i>
-            </li>
-            <li>
-                <a href="{% url 'program:opportunity_list' org_slug=request.org.slug pk=program.pk %}">{{ program.name }}</a>
-                <i class="fa-solid fa-chevron-right"></i>
-            </li>
-            <li>
-                <a href="#">Solicitations</a>
-                <i class="fa-solid fa-chevron-right"></i>
-            </li>
-        </ul>
+        {% include 'components/breadcrumbs.html' with path=path %}
     {% endif %}
 
     <!-- Program Dashboard Header (Program Mode Only) -->
@@ -110,49 +97,33 @@
 
     <!-- Programs Table (Admin and User modes only) -->
     {% if programs_table and dashboard_mode != 'program' %}
-        {% if dashboard_mode == 'admin' %}
-            {% include "solicitations/components/table_section.html" with title="Manageable Programs" table=programs_table empty_message="No programs found." %}
-        {% else %}
-            {% include "solicitations/components/table_section.html" with title="Your Programs" table=programs_table empty_message="You don't have program manager access to any programs." %}
-        {% endif %}
+        <div class="flex flex-col w-full gap-2 mb-8">
+            <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
+                <p class="text-sm text-brand-deep-purple">Programs</p>
+            </div>
+            <div class="w-full overflow-y-auto rounded-lg shadow-xs">
+                {% render_table programs_table %}
+            </div>
+        </div>
     {% endif %}
 
     <!-- Solicitations Table -->
-    {% if dashboard_mode == 'admin' %}
-        {% include "solicitations/components/table_section.html" with title="Active Solicitations" table=table empty_message="No active solicitations found." %}
-    {% elif dashboard_mode == 'program' %}
-        {% include "solicitations/components/table_section.html" with title="Available Solicitations" table=table empty_message="No solicitations created for this program yet." %}
-    {% else %}
-        {% include "solicitations/components/table_section.html" with title="Your Solicitations" table=table empty_message="No solicitations available for your organizations." %}
-    {% endif %}
+    <div class="flex flex-col w-full gap-2 mb-8">
+        <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
+            <p class="text-sm text-brand-deep-purple">Solicitations</p>
+        </div>
+        <div class="w-full overflow-y-auto rounded-lg shadow-xs">
+            {% render_table table %}
+        </div>
+    </div>
 
-    <!-- Responses Table -->
-    {% if responses_table.data %}
-        {% if dashboard_mode == 'admin' %}
-            {% include "solicitations/components/table_section.html" with title="All Responses" table=responses_table empty_message="No responses submitted yet." %}
-        {% elif dashboard_mode == 'program' %}
-            {% include "solicitations/components/table_section.html" with title="Responses to Your Solicitations" table=responses_table empty_message="No responses received yet." %}
-        {% else %}
-            {% include "solicitations/components/table_section.html" with title="My Responses" table=responses_table empty_message="Your organization hasn't submitted any responses to solicitations." %}
-        {% endif %}
-    {% elif dashboard_mode == 'user' %}
-        <!-- Always show responses section for user dashboard, even if empty -->
-        {% include "solicitations/components/table_section.html" with title="My Responses" table=responses_table empty_message="Your organization hasn't submitted any responses to solicitations." %}
-    {% endif %}
-
-    <!-- Reviews Table -->
-    {% if reviews_table.data %}
-        {% if dashboard_mode == 'admin' %}
-            {% include "solicitations/components/table_section.html" with title="All Reviews" table=reviews_table empty_message="No reviews submitted yet." %}
-        {% elif dashboard_mode == 'program' %}
-            {% include "solicitations/components/table_section.html" with title="Reviews of Your Responses" table=reviews_table empty_message="No reviews completed yet." %}
-        {% else %}
-            {% include "solicitations/components/table_section.html" with title="My Reviews" table=reviews_table empty_message="You haven't created any reviews yet." %}
-        {% endif %}
-    {% elif dashboard_mode == 'user' %}
-        <!-- Only show reviews section for users if they have reviews -->
-    {% endif %}
-
-    <!-- Pagination -->
-    {% include "solicitations/components/pagination.html" %}
+    <!-- Responses & Reviews Table -->
+    <div class="flex flex-col w-full gap-2 mb-8">
+        <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
+            <p class="text-sm text-brand-deep-purple">Responses & Reviews</p>
+        </div>
+        <div class="w-full overflow-y-auto rounded-lg shadow-xs">
+            {% render_table responses_and_reviews_table %}
+        </div>
+    </div>
 {% endblock %}

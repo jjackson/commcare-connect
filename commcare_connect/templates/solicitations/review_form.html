@@ -5,28 +5,7 @@
 
 {% block content %}
     <!-- Breadcrumb Navigation -->
-    <ul class="breadcrumb mb-8">
-        <li>
-            <a href="{% url 'program:home' org_slug=request.org.slug %}">Programs</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="{% url 'program:opportunity_list' org_slug=request.org.slug pk=program.pk %}">{{ program.name }}</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="{% url 'org_solicitations:program_dashboard' org_slug=request.org.slug pk=program.pk %}">Solicitations</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="{% url 'org_solicitations:program_response_list' org_slug=request.org.slug pk=program.pk solicitation_pk=solicitation.pk %}">{{ solicitation.title|truncatechars:20 }}</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-        <li>
-            <a href="#">Review {{ response.organization.name|truncatechars:20 }}</a>
-            <i class="fa-solid fa-chevron-right"></i>
-        </li>
-    </ul>
+    {% include 'components/breadcrumbs.html' with path=path %}
 
     <div class="max-w-6xl mx-auto">
         <!-- Header Card -->

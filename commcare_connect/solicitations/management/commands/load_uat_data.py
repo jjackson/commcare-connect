@@ -29,7 +29,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--existing-user",
             type=str,
-            help="Username of existing user to associate with some responses (e.g., jjackson-dev)",
+            required=True,
+            help="Username of existing user to associate with some responses (e.g., jjackson-dev@dimagi.com)",
         )
 
     def load_yaml_data(self, filename):
@@ -160,7 +161,7 @@ class Command(BaseCommand):
                     "target_population": sol_data.get("target_population", "General population"),
                     "estimated_scale": sol_data.get("estimated_scale", "Regional"),
                     "status": sol_data.get("status", "active"),
-                    "solicitation_type": sol_data.get("type", "eoi"),
+                    "solicitation_type": sol_data.get("solicitation_type", "eoi"),
                     "application_deadline": date.today() + timedelta(days=30),
                 },
             )
@@ -183,7 +184,10 @@ class Command(BaseCommand):
         return solicitations
 
     def create_sample_responses_and_reviews(self, solicitations, organizations, existing_user=None):
-        """Create sample responses and reviews"""
+        """Create sample responses and reviews with specific requirements:
+        - Active solicitations: 5 responses each, 2 reviewed
+        - Closed solicitations: 20 responses for EOI, 10 for RFP, all reviewed
+        """
         import random
 
         from faker import Faker
@@ -202,20 +206,31 @@ class Command(BaseCommand):
         implementing_orgs = [org for org in organizations.values() if not org.program_manager]
 
         for solicitation in solicitations:
-            if solicitation.status != "active":
+            # Determine number of responses based on status and type
+            if solicitation.status == "active":
+                num_responses = 5
+                num_reviews = 2
+            elif solicitation.status == "closed":
+                if solicitation.solicitation_type == "eoi":
+                    num_responses = 20
+                else:  # rfp
+                    num_responses = 10
+                num_reviews = num_responses  # All closed solicitation responses are reviewed
+            else:
+                # Skip draft solicitations
                 continue
 
-            # Random subset of orgs respond
-            num_responses = random.randint(2, 4)
+            # Select respondent organizations
             respondent_orgs = random.sample(implementing_orgs, k=min(num_responses, len(implementing_orgs)))
 
-            # Add existing user's orgs sometimes (ensure they participate in some solicitations)
-            if existing_user_orgs and random.choice([True, False, True]):  # 2/3 chance
-                for org in existing_user_orgs:
-                    if org not in respondent_orgs:
-                        respondent_orgs.append(org)
+            # For active solicitations, ensure existing user participates in half of them
+            if solicitation.status == "active" and existing_user_orgs and random.choice([True, False]):
+                # Replace one random org with existing user's org
+                if existing_user_orgs[0] not in respondent_orgs and len(respondent_orgs) > 0:
+                    respondent_orgs[0] = existing_user_orgs[0]
 
-            for org in respondent_orgs:
+            solicitation_responses = []
+            for i, org in enumerate(respondent_orgs):
                 # Use existing user if this is one of their orgs
                 if existing_user and org in existing_user_orgs:
                     user = existing_user
@@ -244,30 +259,53 @@ class Command(BaseCommand):
                     status="submitted",
                 )
                 responses.append(response)
+                solicitation_responses.append(response)
 
-                # Create review (2/3 chance)
-                if random.choice([True, False, True]):
-                    reviewer = solicitation.program.organization.members.filter(
-                        memberships__role=UserOrganizationMembership.Role.ADMIN
-                    ).first()
+            # Create reviews
+            reviewer = solicitation.program.organization.members.filter(
+                memberships__role=UserOrganizationMembership.Role.ADMIN
+            ).first()
 
-                    if reviewer:
-                        score = random.randint(65, 95)
-                        recommendation = "recommended" if score >= 80 else random.choice(["recommended", "neutral"])
+            if reviewer:
+                # For active solicitations: review only the first num_reviews responses
+                # For closed solicitations: review all responses
+                responses_to_review = (
+                    solicitation_responses[:num_reviews] if solicitation.status == "active" else solicitation_responses
+                )
 
-                        review = SolicitationReview.objects.create(
-                            response=response,
-                            reviewer=reviewer,
-                            score=score,
-                            recommendation=recommendation,
-                            notes=f"Review of {org.name}'s response. " + fake.text(max_nb_chars=200),
-                        )
-                        reviews.append(review)
+                for response in responses_to_review:
+                    score = random.randint(65, 95)
+                    recommendation = (
+                        "recommended" if score >= 80 else random.choice(["recommended", "neutral", "not_recommended"])
+                    )
+
+                    review = SolicitationReview.objects.create(
+                        response=response,
+                        reviewer=reviewer,
+                        score=score,
+                        recommendation=recommendation,
+                        notes=f"Review of {response.organization.name}'s response to {solicitation.title}. "
+                        + fake.text(max_nb_chars=200),
+                    )
+                    reviews.append(review)
 
         self.stdout.write(f"Created {len(responses)} responses and {len(reviews)} reviews")
         if existing_user:
             user_responses = [r for r in responses if r.submitted_by == existing_user]
             self.stdout.write(f"  • {len(user_responses)} responses from {existing_user.email}")
+
+        # Summary by solicitation status
+        active_responses = [r for r in responses if r.solicitation.status == "active"]
+        closed_responses = [r for r in responses if r.solicitation.status == "closed"]
+        active_reviews = [r for r in reviews if r.response.solicitation.status == "active"]
+        closed_reviews = [r for r in reviews if r.response.solicitation.status == "closed"]
+
+        self.stdout.write(
+            f"  • Active solicitations: {len(active_responses)} responses, {len(active_reviews)} reviews"
+        )
+        self.stdout.write(
+            f"  • Closed solicitations: {len(closed_responses)} responses, {len(closed_reviews)} reviews"
+        )
 
         return responses, reviews
 
@@ -289,11 +327,27 @@ class Command(BaseCommand):
 
         self.stdout.write("Data cleared (users preserved).")
 
-    def associate_existing_user(self, organizations, existing_user):
-        """Associate existing user with implementing organizations"""
-        # Associate user with 2 implementing organizations
-        implementing_org_list = list(organizations.values())
-        implementing_orgs_to_join = [org for org in implementing_org_list if not org.program_manager][:2]
+    def associate_existing_user(self, organizations, existing_user, programs):
+        """Associate existing user with program manager organizations that own half the solicitations"""
+        # Get program manager organizations
+        program_manager_orgs = [org for org in organizations.values() if org.program_manager]
+
+        # Associate user with half of the program manager organizations to ensure they own half the solicitations
+        num_orgs_to_join = max(1, len(program_manager_orgs) // 2)
+        orgs_to_join = program_manager_orgs[:num_orgs_to_join]
+
+        for org in orgs_to_join:
+            membership, created = UserOrganizationMembership.objects.get_or_create(
+                user=existing_user,
+                organization=org,
+                defaults={"role": UserOrganizationMembership.Role.ADMIN, "accepted": True},
+            )
+            if created:
+                self.stdout.write(f"Associated {existing_user.email} with program manager org: {org.name}")
+
+        # Also associate with a couple implementing organizations for responses
+        implementing_orgs = [org for org in organizations.values() if not org.program_manager]
+        implementing_orgs_to_join = implementing_orgs[:2]
 
         for org in implementing_orgs_to_join:
             membership, created = UserOrganizationMembership.objects.get_or_create(
@@ -302,7 +356,7 @@ class Command(BaseCommand):
                 defaults={"role": UserOrganizationMembership.Role.MEMBER, "accepted": True},
             )
             if created:
-                self.stdout.write(f"Associated {existing_user.email} with {org.name}")
+                self.stdout.write(f"Associated {existing_user.email} with implementing org: {org.name}")
 
     def handle(self, *args, **options):
         clear_data = options["clear"]
@@ -325,9 +379,17 @@ class Command(BaseCommand):
                 if existing_user:
                     self.stdout.write(f"Found existing user: {existing_user.email}")
                 else:
-                    self.stdout.write(f"Warning: User {existing_username} not found")
+                    self.stdout.write(
+                        self.style.ERROR(
+                            f"Error: User '{existing_username}' not found. "
+                            f"Please check the username/email. Common mistake: "
+                            f"use 'jjackson-dev@dimagi.com' not 'jjackson-dev'"
+                        )
+                    )
+                    return
             except Exception as e:
-                self.stdout.write(f"Error finding user {existing_username}: {e}")
+                self.stdout.write(self.style.ERROR(f"Error finding user {existing_username}: {e}"))
+                return
 
         self.stdout.write(f"Loading UAT data from {filename}...")
 
@@ -343,7 +405,7 @@ class Command(BaseCommand):
 
             # Associate existing user with organizations if specified
             if existing_user:
-                self.associate_existing_user(organizations, existing_user)
+                self.associate_existing_user(organizations, existing_user, programs)
 
             # Create responses and reviews if requested
             responses = []
