@@ -991,6 +991,27 @@ class StatusIndicatorColumn(tables.Column):
 
 
 class WorkerStatusTable(tables.Table):
+    select = tables.CheckBoxColumn(
+        accessor="pk",
+        attrs={
+            "th__input": {
+                "@click": "toggleSelectAll()",
+                "x-model": "selectAll",
+                "name": "select_all",
+                "type": "checkbox",
+                "class": "checkbox",
+            },
+            "td__input": {
+                "x-model": "selected",
+                "@click.stop": "",  # used to stop click propagation
+                "name": "row_select",
+                "type": "checkbox",
+                "class": "checkbox",
+                "value": lambda record: record.pk,
+                "id": lambda record: f"row_checkbox_{record.pk}",
+            },
+        },
+    )
     index = IndexColumn()
     user = UserInviteInfoColumn(
         accessor="opportunity_access__user",
@@ -1029,6 +1050,7 @@ class WorkerStatusTable(tables.Table):
 
     class Meta:
         sequence = (
+            "select",
             "index",
             "status",
             "user",
@@ -1041,6 +1063,30 @@ class WorkerStatusTable(tables.Table):
             "days_to_start_delivery",
         )
         order_by = ("-last_active",)
+        attrs = {
+            "x-data": """{
+                selectAll: false,
+                selected: [],
+                toggleSelectAll() {
+                    this.selectAll = !this.selectAll;
+                    if (this.selectAll) {
+                        this.selected = Array.from(document.querySelectorAll('input[name=\"row_select\"]'))
+                            .map(c => c.value);
+                    } else {
+                        this.selected = [];
+                    }
+                },
+                updateSelectAll() {
+                    const boxes = Array.from(document.querySelectorAll('input[name=\"row_select\"]'));
+                    const checked = boxes.filter(b => b.checked).length;
+                    this.selectAll = boxes.length > 0 && checked === boxes.length;
+                    this.selected = boxes.filter(b => b.checked).map(b => b.value);
+                    const $workerTabOptions = document.getElementById('worker-tab-options');
+                    window.Alpine.$data($workerTabOptions).selected = this.selected;
+                }
+            }""",
+            "@change": "updateSelectAll()",
+        }
 
 
 class WorkerPaymentsTable(tables.Table):
