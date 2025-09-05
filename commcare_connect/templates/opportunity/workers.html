@@ -20,11 +20,13 @@
     {% endblock %}
     {% if request.org_membership.is_viewer %}
       <button disabled class="button button-md outline-style">
-        Add Connect Worker
+        <i class="fa-solid fa-plus"></i>
+        <span>{% trans "Add Worker" %}</span>
       </button>
     {% else %}
       <a href="{% url 'opportunity:user_invite' request.org.slug opportunity.id %}" class="button button-md outline-style">
-        Add Connect Worker
+        <i class="fa-solid fa-plus"></i>
+        <span>{% trans "Add Worker" %}</span>
       </a>
     {% endif %}
     <form hx-post="{% url 'opportunity:resend_user_invites' org_slug=request.org.slug opp_id=opportunity.pk %}"
