@@ -1324,9 +1324,9 @@ def resend_user_invites(request, org_slug, opp_id):
         "opportunity_access__user"
     )
 
-    resent_count = 0
     recent_invites = []
     not_found_phone_numbers = set()
+    valid_phone_numbers = []
     for user_invite in user_invites:
         if user_invite.notification_date and (now() - user_invite.notification_date) < timedelta(days=1):
             recent_invites.append(user_invite.phone_number)
@@ -1336,7 +1336,12 @@ def resend_user_invites(request, org_slug, opp_id):
             not_found_phone_numbers.add(user_invite.phone_number)
             continue
         else:
-            user = User.objects.get(phone_number=user_invite.phone_number)
+            valid_phone_numbers.append(user_invite.phone_number)
+
+    resent_count = 0
+    if valid_phone_numbers:
+        users = User.objects.filter(phone_number__in=valid_phone_numbers)
+        for user in users:
             access, _ = OpportunityAccess.objects.get_or_create(user=user, opportunity_id=opp_id)
             invite_user.delay(user.id, access.pk)
             resent_count += 1
