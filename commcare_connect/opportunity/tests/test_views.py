@@ -8,7 +8,6 @@ from django.test import Client
 from django.urls import reverse
 from django.utils.timezone import now
 
-from commcare_connect.connect_id_client.models import ConnectIdUser
 from commcare_connect.opportunity.helpers import OpportunityData, TieredQueryset
 from commcare_connect.opportunity.models import (
     Opportunity,
@@ -397,21 +396,25 @@ class TestResendUserInvites:
         response = self.client.post(self.url, data={"user_invite_ids": [self.not_found_invite.id]})
 
         assert response.status_code == 200
-        mock_fetch_users.assert_called_once_with([self.not_found_invite.phone_number])
+        mock_fetch_users.assert_called_once_with(set({self.not_found_invite.phone_number}))
         messages = list(get_messages(response.wsgi_request))
         assert len(messages) == 1
         assert str(messages[0]) == (
             "The following invites were skipped, as they are not registered on "
-            f"PersonalID: ['{self.not_found_invite.phone_number}']"
+            f"PersonalID: {{'{self.not_found_invite.phone_number}'}}"
         )
 
     @mock.patch("commcare_connect.opportunity.views.update_user_and_send_invite")
     @mock.patch("commcare_connect.opportunity.views.fetch_users")
     def test_not_found_invite_with_found_user(self, mock_fetch_users, mock_update_and_send):
-        mock_user = ConnectIdUser(username="newuser", name="New User", phone_number=self.not_found_invite.phone_number)
+        mock_user = {
+            "username": "newuser",
+            "name": "New User",
+            "phone_number": self.not_found_invite.phone_number,
+        }
         mock_fetch_users.return_value = [mock_user]
         response = self.client.post(self.url, data={"user_invite_ids": [self.not_found_invite.id]})
 
         assert response.status_code == 200
         assert response.headers["HX-Redirect"] == self.expected_redirect
-        mock_update_and_send.assert_called_once_with(mock_user, opp_id=self.opportunity.id)
+        mock_update_and_send.assert_called_once_with(mock_user, self.opportunity.id)

@@ -1326,24 +1326,26 @@ def resend_user_invites(request, org_slug, opp_id):
 
     resent_count = 0
     recent_invites = []
-    not_found_invites = []
+    not_found_phone_numbers = set()
     for user_invite in user_invites:
         if user_invite.notification_date and (now() - user_invite.notification_date) < timedelta(days=1):
             recent_invites.append(user_invite.phone_number)
             continue
 
         if user_invite.status == UserInviteStatus.not_found:
-            found_user_list = fetch_users([user_invite.phone_number])
-            if not found_user_list:
-                not_found_invites.append(user_invite.phone_number)
-                continue
-            connect_user = found_user_list[0]
-            update_user_and_send_invite(connect_user, opp_id=opp_id)
-            resent_count += 1
+            not_found_phone_numbers.add(user_invite.phone_number)
+            continue
         else:
             user = User.objects.get(phone_number=user_invite.phone_number)
             access, _ = OpportunityAccess.objects.get_or_create(user=user, opportunity_id=opp_id)
             invite_user.delay(user.id, access.pk)
+            resent_count += 1
+
+    if not_found_phone_numbers:
+        found_user_list = fetch_users(not_found_phone_numbers)
+        for found_user in found_user_list:
+            not_found_phone_numbers.remove(found_user["phone_number"])
+            update_user_and_send_invite(found_user, opp_id)
             resent_count += 1
 
     if resent_count > 0:
@@ -1353,11 +1355,12 @@ def resend_user_invites(request, org_slug, opp_id):
             request,
             mark_safe(f"The following invites were skipped, as they were sent in the last 24 hours: {recent_invites}"),
         )
-    if not_found_invites:
+    if not_found_phone_numbers:
         messages.warning(
             request,
             mark_safe(
-                f"The following invites were skipped, as they are not registered on PersonalID: {not_found_invites}"
+                "The following invites were skipped, as they are not "
+                f"registered on PersonalID: {not_found_phone_numbers}"
             ),
         )
 
