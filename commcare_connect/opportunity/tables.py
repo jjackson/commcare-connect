@@ -970,7 +970,10 @@ class StatusIndicatorColumn(tables.Column):
 
     def render(self, record):
         if record.opportunity_access and record.opportunity_access.suspended:
-            return
+            return format_html(
+                '<span x-data x-tooltip.raw="{}">' '<i class="fa-solid fa-minus-square text-black-600"></i>' "</span>",
+                _("User suspended"),
+            )
 
         if record.status == UserInviteStatus.accepted:
             return format_html(
