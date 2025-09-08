@@ -518,31 +518,15 @@ class OpportunityData:
 
 
 def get_worker_table_data(opportunity):
-    learn_modules_count = opportunity.learn_app.learn_modules.count()
-
-    min_dates_per_module = (
-        CompletedModule.objects.filter(opportunity_access=OuterRef("opportunity_access_id"))
-        .values("module")
-        .annotate(min_date=Min("date"))
-        .values("min_date")
-    )
-
-    queryset = (
+    return (
         UserInvite.objects.filter(opportunity=opportunity)
         .annotate(
             completed_modules_count=Count(
                 "opportunity_access__completedmodule__module",
                 distinct=True,
             ),
-            completed_learn=Case(
-                When(
-                    Q(completed_modules_count=learn_modules_count),
-                    then=Subquery(min_dates_per_module.order_by("-min_date")[:1]),
-                ),
-                default=None,
-            ),
             days_to_complete_learn=ExpressionWrapper(
-                F("completed_learn") - F("opportunity_access__date_learn_started"),
+                F("opportunity_access__completed_learn_date") - F("opportunity_access__date_learn_started"),
                 output_field=DurationField(),
             ),
             first_delivery=Min(
@@ -562,8 +546,6 @@ def get_worker_table_data(opportunity):
         )
         .select_related("opportunity_access", "opportunity_access__user")
     )
-
-    return queryset
 
 
 def get_worker_learn_table_data(opportunity):

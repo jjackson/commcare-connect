@@ -1028,7 +1028,8 @@ class WorkerStatusTable(tables.Table):
         accessor="opportunity_access__date_learn_started",
     )
     completed_learn = DMYTColumn(
-        verbose_name=header_with_tooltip("Completed Learn", "Completed all Learn modules except assessment")
+        verbose_name=header_with_tooltip("Completed Learn", "Completed all Learn modules except assessment"),
+        accessor="opportunity_access__completed_learn_date",
     )
     days_to_complete_learn = DurationColumn(
         verbose_name=header_with_tooltip(
