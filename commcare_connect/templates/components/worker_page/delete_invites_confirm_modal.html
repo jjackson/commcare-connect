@@ -19,7 +19,7 @@
                 {% blocktrans %}
                     Are you sure you want to delete the
                     <span x-text="selected.length"></span>
-                    selected invites?
+                    selected invite(s)?
                 {% endblocktrans %}
             </p>
             <p class="text-red-600 text-sm font-medium">
@@ -42,7 +42,7 @@
                 <button type="submit" class="button button-md bg-red-600 hover:bg-red-700 text-white"
                         @click="{{ modal_name }} = false">
                     <i class="fa-solid fa-trash"></i>
-                    {% trans 'Delete Invites' %}
+                    {% trans 'Delete Invite(s)' %}
                 </button>
             </form>
         </div>
