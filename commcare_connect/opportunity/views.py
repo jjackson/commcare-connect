@@ -1360,14 +1360,17 @@ def resend_user_invites(request, org_slug, opp_id):
     if recent_invites:
         messages.warning(
             request,
-            mark_safe(f"The following invites were skipped, as they were sent in the last 24 hours: {recent_invites}"),
+            mark_safe(
+                "The following invites were skipped, as they were sent in the "
+                f"last 24 hours: {', '.join(recent_invites)}"
+            ),
         )
     if not_found_phone_numbers:
         messages.warning(
             request,
             mark_safe(
                 "The following invites were skipped, as they are not "
-                f"registered on PersonalID: {not_found_phone_numbers}"
+                f"registered on PersonalID: {', '.join(not_found_phone_numbers)}"
             ),
         )
     if accepted_invites:
