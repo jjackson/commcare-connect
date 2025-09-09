@@ -387,7 +387,7 @@ class TestResendUserInvites:
         assert len(messages) == 1
         assert str(messages[0]) == (
             "The following invites were skipped, as they were sent in the last 24 hours: "
-            f"['{self.recent_invite.phone_number}']"
+            f"{self.recent_invite.phone_number}"
         )
 
     @mock.patch("commcare_connect.opportunity.views.fetch_users")
@@ -401,7 +401,7 @@ class TestResendUserInvites:
         assert len(messages) == 1
         assert str(messages[0]) == (
             "The following invites were skipped, as they are not registered on "
-            f"PersonalID: {{'{self.not_found_invite.phone_number}'}}"
+            f"PersonalID: {self.not_found_invite.phone_number}"
         )
 
     @mock.patch("commcare_connect.opportunity.views.update_user_and_send_invite")
