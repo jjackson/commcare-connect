@@ -1293,20 +1293,23 @@ def delete_user_invites(request, org_slug, opp_id):
     if not invite_ids:
         return HttpResponseBadRequest()
 
-    user_invites = UserInvite.objects.filter(
-        id__in=invite_ids, opportunity_id=opp_id, status=UserInviteStatus.not_found
+    user_invites = (
+        UserInvite.objects.filter(id__in=invite_ids, opportunity_id=opp_id)
+        .exclude(status=UserInviteStatus.accepted)
+        .select_related("opportunity_access")
     )
+
+    opportunity_access_ids = [invite.opportunity_access.id for invite in user_invites if invite.opportunity_access]
     deleted_count = user_invites.count()
     cannot_delete_count = len(invite_ids) - deleted_count
     user_invites.delete()
+    OpportunityAccess.objects.filter(id__in=opportunity_access_ids).delete()
     if deleted_count > 0:
         messages.success(request, mark_safe(f"Successfully deleted {deleted_count} invite(s)."))
     if cannot_delete_count > 0:
         messages.warning(
             request,
-            mark_safe(
-                f"Cannot delete {cannot_delete_count} invite(s). Only invites with 'not found' status can be deleted."
-            ),
+            mark_safe(f"Cannot delete {cannot_delete_count} invite(s). Accepted invites cannot be deleted."),
         )
 
     redirect_url = reverse("opportunity:worker_list", args=(request.org.slug, opp_id))
