@@ -1325,18 +1325,20 @@ def resend_user_invites(request, org_slug, opp_id):
     )
 
     recent_invites = []
+    accepted_invites = []
     not_found_phone_numbers = set()
     valid_phone_numbers = []
     for user_invite in user_invites:
+        if user_invite.status == UserInviteStatus.accepted:
+            accepted_invites.append(user_invite.phone_number)
+            continue
         if user_invite.notification_date and (now() - user_invite.notification_date) < timedelta(days=1):
             recent_invites.append(user_invite.phone_number)
             continue
-
         if user_invite.status == UserInviteStatus.not_found:
             not_found_phone_numbers.add(user_invite.phone_number)
             continue
-        else:
-            valid_phone_numbers.append(user_invite.phone_number)
+        valid_phone_numbers.append(user_invite.phone_number)
 
     resent_count = 0
     if valid_phone_numbers:
@@ -1366,6 +1368,13 @@ def resend_user_invites(request, org_slug, opp_id):
             mark_safe(
                 "The following invites were skipped, as they are not "
                 f"registered on PersonalID: {not_found_phone_numbers}"
+            ),
+        )
+    if accepted_invites:
+        messages.warning(
+            request,
+            mark_safe(
+                f"The following invites were skipped, as they have already accepted: {', '.join(accepted_invites)}"
             ),
         )
 
