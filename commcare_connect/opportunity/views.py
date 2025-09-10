@@ -371,14 +371,14 @@ class OpportunityDashboard(OpportunityObjectMixin, OrganizationUserMixin, Detail
             {
                 "name": "Max Connect Workers",
                 "count": header_with_tooltip(
-                    safe_display(object.number_of_users), "Maximum allowed workers in the Opportunity"
+                    safe_display(int(object.number_of_users)), "Maximum allowed workers in the Opportunity"
                 ),
                 "icon": "fa-users",
             },
             {
                 "name": "Max Service Deliveries",
                 "count": header_with_tooltip(
-                    safe_display(object.allotted_visits),
+                    safe_display(int(object.allotted_visits)),
                     "Maximum number of payment units that can be delivered. Each payment unit is a service delivery",
                 ),
                 "icon": "fa-gears",
@@ -2073,7 +2073,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                         "Number of Service Deliveries Approved by both PM and NM or Auto-approved",
                     ),
                     "value": header_with_tooltip(
-                        f"{verified_percentage:.2f}%", "Percentage Approved out of Delivered"
+                        f"{verified_percentage:.0f}%", "Percentage Approved out of Delivered"
                     ),
                     "badge_type": True,
                     "percent": verified_percentage,
@@ -2082,7 +2082,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                     "title": "Rejected",
                     "total": header_with_tooltip(result.rejected_deliveries, "Number of Service Deliveries Rejected"),
                     "value": header_with_tooltip(
-                        f"{rejected_percentage:.2f}%", "Percentage Rejected out of Delivered"
+                        f"{rejected_percentage:.0f}%", "Percentage Rejected out of Delivered"
                     ),
                     "badge_type": True,
                     "percent": rejected_percentage,
@@ -2096,7 +2096,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                     "title": "Earned",
                     "total": header_with_tooltip(amount_with_currency(result.total_accrued), "Earned Amount"),
                     "value": header_with_tooltip(
-                        f"{earned_percentage:.2f}%",
+                        f"{earned_percentage:.0f}%",
                         "Percentage Earned by all workers out of Max Budget in the Opportunity",
                     ),
                     "badge_type": True,
@@ -2108,7 +2108,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                         amount_with_currency(result.total_paid), "Paid Amount to All Connect Workers"
                     ),
                     "value": header_with_tooltip(
-                        f"{paid_percentage:.2f}%", "Percentage Paid to all  workers out of Earned amount"
+                        f"{paid_percentage:.0f}%", "Percentage Paid to all  workers out of Earned amount"
                     ),
                     "badge_type": True,
                     "percent": paid_percentage,
