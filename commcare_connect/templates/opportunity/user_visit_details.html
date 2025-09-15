@@ -205,7 +205,7 @@
             </div>
           {% endfor %}
         {% endif %}
-        {% if deliver_unit_flags_config.require_attachments %}
+        {% if attachment_flagged %}
         <div>
           <div class="text-sm text-brand-blue-light">{% translate "Photos" %}</div>
           <div class="text-sm font-normal text-brand-deep-purple">{{ user_visit.images|yesno:"Yes,No" }}</div>
