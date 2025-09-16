@@ -341,7 +341,6 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
 
         if not access.last_active or access.last_active < user_visit.visit_date:
             access.last_active = user_visit.visit_date
-            access.save()
 
         if completed_work is not None:
             if completed_work.completed_count > 0 and completed_work.status == CompletedWorkStatus.incomplete:
