@@ -1068,7 +1068,6 @@ class WorkerStatusTable(tables.Table):
         )
         order_by = ("-last_active",)
         attrs = {
-            "x-data": "connectWorkers()",
             "@change": "updateSelectAll()",
         }
 
