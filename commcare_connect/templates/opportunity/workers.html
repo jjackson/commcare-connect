@@ -30,19 +30,17 @@
       <template x-for="id in selected">
         <input type="hidden" name="user_invite_ids" :value="id">
       </template>
-      <button {% if request.org_membership.is_viewer %}disabled{% endif %}
-              type="submit"
+      <button type="submit"
               class="button-icon"
-              :disabled="selected.length === 0"
+              :disabled="{% if request.org_membership.is_viewer %}true{% else %}selected.length === 0{% endif %}"
               x-tooltip.raw="{% trans 'Resend Invite(s)' %}">
         <i class="fa-solid fa-rotate-right"></i>
       </button>
     </form>
-    <button {% if request.org_membership.is_viewer %}disabled{% endif %}
-            type="button"
+    <button type="button"
             class="button button-md bg-red-600 text-white"
             @click="showConfirmDeleteInvitesModal = true"
-            :disabled="selected.length === 0">
+            :disabled="{% if request.org_membership.is_viewer %}true{% else %}selected.length === 0{% endif %}">
       <i class="fa-solid fa-trash"></i>
       <span x-text="selected.length > 0 ? `{% trans 'Delete Invite(s)' %} (${selected.length})` : `{% trans 'Delete Invite(s)' %}`"></span>
     </button>
