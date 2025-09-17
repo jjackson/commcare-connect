@@ -457,8 +457,8 @@ class OpportunityData:
                 CompletedWork.objects.filter(opportunity_access__opportunity_id__in=opp_ids)
                 .values("opportunity_access__opportunity_id")
                 .annotate(
-                    total_deliveries=Sum("saved_completed_count"),
-                    verified_deliveries=Sum("saved_approved_count"),
+                    total_deliveries=Count("id", distinct=True),
+                    verified_deliveries=Count("id", filter=Q(status=CompletedWorkStatus.approved), distinct=True),
                 )
             )
             deliveries_by_opp = {
