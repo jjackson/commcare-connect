@@ -1,6 +1,7 @@
 import datetime
 import sys
 from collections import Counter, defaultdict
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from http import HTTPStatus
 from urllib.parse import urlencode, urlparse
@@ -372,14 +373,14 @@ class OpportunityDashboard(OpportunityObjectMixin, OrganizationUserMixin, Detail
             {
                 "name": "Max Connect Workers",
                 "count": header_with_tooltip(
-                    safe_display(object.number_of_users), "Maximum allowed workers in the Opportunity"
+                    safe_display(int(object.number_of_users)), "Maximum allowed workers in the Opportunity"
                 ),
                 "icon": "fa-users",
             },
             {
                 "name": "Max Service Deliveries",
                 "count": header_with_tooltip(
-                    safe_display(object.allotted_visits),
+                    safe_display(int(object.allotted_visits)),
                     "Maximum number of payment units that can be delivered. Each payment unit is a service delivery",
                 ),
                 "icon": "fa-gears",
@@ -429,7 +430,7 @@ def review_visit_export(request, org_slug, opp_id):
     status = form.cleaned_data["status"]
 
     result = generate_review_visit_export.delay(opp_id, date_range, status, export_format)
-    return redirect(f"{redirect_url}&export_task_id={result.id}")
+    return redirect(f"{redirect_url}?export_task_id={result.id}")
 
 
 @org_member_required
@@ -507,7 +508,9 @@ def review_visit_import(request, org_slug=None, opp_id=None):
 def add_budget_existing_users(request, org_slug=None, opp_id=None):
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opp_id)
     opportunity_access = OpportunityAccess.objects.filter(opportunity=opportunity)
-    opportunity_claims = OpportunityClaim.objects.filter(opportunity_access__in=opportunity_access)
+    opportunity_claims = OpportunityClaim.objects.filter(opportunity_access__in=opportunity_access).annotate(
+        total_max_visits=Coalesce(Sum("opportunityclaimlimit__max_visits"), Value(0))
+    )
 
     form = AddBudgetExistingUsersForm(
         opportunity_claims=opportunity_claims,
@@ -1286,36 +1289,104 @@ def invoice_approve(request, org_slug, opp_id):
 @org_member_required
 @require_POST
 @csrf_exempt
-def user_invite_delete(request, org_slug, opp_id, pk):
-    opportunity = get_opportunity_or_404(opp_id, org_slug)
-    invite = get_object_or_404(UserInvite, pk=pk, opportunity=opportunity)
-    if invite.status != UserInviteStatus.not_found:
-        return HttpResponse(status=403, data="User Invite cannot be deleted.")
-    invite.delete()
-    return HttpResponse(status=200, headers={"HX-Trigger": "userStatusReload"})
+def delete_user_invites(request, org_slug, opp_id):
+    invite_ids = request.POST.getlist("user_invite_ids")
+    if not invite_ids:
+        return HttpResponseBadRequest()
+
+    user_invites = (
+        UserInvite.objects.filter(id__in=invite_ids, opportunity_id=opp_id)
+        .exclude(status=UserInviteStatus.accepted)
+        .select_related("opportunity_access")
+    )
+
+    opportunity_access_ids = [invite.opportunity_access.id for invite in user_invites if invite.opportunity_access]
+    deleted_count = user_invites.count()
+    cannot_delete_count = len(invite_ids) - deleted_count
+    user_invites.delete()
+    OpportunityAccess.objects.filter(id__in=opportunity_access_ids).delete()
+    if deleted_count > 0:
+        messages.success(request, mark_safe(f"Successfully deleted {deleted_count} invite(s)."))
+    if cannot_delete_count > 0:
+        messages.warning(
+            request,
+            mark_safe(f"Cannot delete {cannot_delete_count} invite(s). Accepted invites cannot be deleted."),
+        )
+
+    redirect_url = reverse("opportunity:worker_list", args=(request.org.slug, opp_id))
+    return HttpResponse(headers={"HX-Redirect": redirect_url})
 
 
 @org_admin_required
 @require_POST
-def resend_user_invite(request, org_slug, opp_id, pk):
-    user_invite = get_object_or_404(UserInvite, id=pk)
+def resend_user_invites(request, org_slug, opp_id):
+    invite_ids = request.POST.getlist("user_invite_ids")
+    if not invite_ids:
+        return HttpResponseBadRequest()
 
-    if user_invite.notification_date and (now() - user_invite.notification_date) < datetime.timedelta(days=1):
-        return HttpResponse("You can only send one invitation per user every 24 hours. Please try again later.")
+    user_invites = UserInvite.objects.filter(id__in=invite_ids, opportunity_id=opp_id).select_related(
+        "opportunity_access__user"
+    )
 
-    if user_invite.status == UserInviteStatus.not_found:
-        found_user_list = fetch_users([user_invite.phone_number])
-        if not found_user_list:
-            return HttpResponse("The user is not registered on Connect ID yet. Please ask them to sign up first.")
+    recent_invites = []
+    accepted_invites = []
+    not_found_phone_numbers = set()
+    valid_phone_numbers = []
+    for user_invite in user_invites:
+        if user_invite.status == UserInviteStatus.accepted:
+            accepted_invites.append(user_invite.phone_number)
+            continue
+        if user_invite.notification_date and (now() - user_invite.notification_date) < timedelta(days=1):
+            recent_invites.append(user_invite.phone_number)
+            continue
+        if user_invite.status == UserInviteStatus.not_found:
+            not_found_phone_numbers.add(user_invite.phone_number)
+            continue
+        valid_phone_numbers.append(user_invite.phone_number)
 
-        connect_user = found_user_list[0]
-        update_user_and_send_invite(connect_user, opp_id=pk)
-    else:
-        user = User.objects.get(phone_number=user_invite.phone_number)
-        access, _ = OpportunityAccess.objects.get_or_create(user=user, opportunity_id=opp_id)
-        invite_user.delay(user.id, access.pk)
+    resent_count = 0
+    if valid_phone_numbers:
+        users = User.objects.filter(phone_number__in=valid_phone_numbers)
+        for user in users:
+            access, _ = OpportunityAccess.objects.get_or_create(user=user, opportunity_id=opp_id)
+            invite_user.delay(user.id, access.pk)
+            resent_count += 1
 
-    return HttpResponse("The invitation has been successfully resent to the user.")
+    if not_found_phone_numbers:
+        found_user_list = fetch_users(not_found_phone_numbers)
+        for found_user in found_user_list:
+            not_found_phone_numbers.remove(found_user.phone_number)
+            update_user_and_send_invite(found_user, opp_id)
+            resent_count += 1
+
+    if resent_count > 0:
+        messages.success(request, mark_safe(f"Successfully resent {resent_count} invite(s)."))
+    if recent_invites:
+        messages.warning(
+            request,
+            mark_safe(
+                "The following invites were skipped, as they were sent in the "
+                f"last 24 hours: {', '.join(recent_invites)}"
+            ),
+        )
+    if not_found_phone_numbers:
+        messages.warning(
+            request,
+            mark_safe(
+                "The following invites were skipped, as they are not "
+                f"registered on PersonalID: {', '.join(not_found_phone_numbers)}"
+            ),
+        )
+    if accepted_invites:
+        messages.warning(
+            request,
+            mark_safe(
+                f"The following invites were skipped, as they have already accepted: {', '.join(accepted_invites)}"
+            ),
+        )
+
+    redirect_url = reverse("opportunity:worker_list", args=(request.org.slug, opp_id))
+    return HttpResponse(headers={"HX-Redirect": redirect_url})
 
 
 def sync_deliver_units(request, org_slug, opp_id):
@@ -2105,7 +2176,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                         "Number of Service Deliveries Approved by both PM and NM or Auto-approved",
                     ),
                     "value": header_with_tooltip(
-                        f"{verified_percentage:.2f}%", "Percentage Approved out of Delivered"
+                        f"{verified_percentage:.0f}%", "Percentage Approved out of Delivered"
                     ),
                     "badge_type": True,
                     "percent": verified_percentage,
@@ -2114,7 +2185,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                     "title": "Rejected",
                     "total": header_with_tooltip(result.rejected_deliveries, "Number of Service Deliveries Rejected"),
                     "value": header_with_tooltip(
-                        f"{rejected_percentage:.2f}%", "Percentage Rejected out of Delivered"
+                        f"{rejected_percentage:.0f}%", "Percentage Rejected out of Delivered"
                     ),
                     "badge_type": True,
                     "percent": rejected_percentage,
@@ -2128,7 +2199,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                     "title": "Earned",
                     "total": header_with_tooltip(amount_with_currency(result.total_accrued), "Earned Amount"),
                     "value": header_with_tooltip(
-                        f"{earned_percentage:.2f}%",
+                        f"{earned_percentage:.0f}%",
                         "Percentage Earned by all workers out of Max Budget in the Opportunity",
                     ),
                     "badge_type": True,
@@ -2140,7 +2211,7 @@ def opportunity_worker_progress(request, org_slug, opp_id):
                         amount_with_currency(result.total_paid), "Paid Amount to All Connect Workers"
                     ),
                     "value": header_with_tooltip(
-                        f"{paid_percentage:.2f}%", "Percentage Paid to all  workers out of Earned amount"
+                        f"{paid_percentage:.0f}%", "Percentage Paid to all  workers out of Earned amount"
                     ),
                     "badge_type": True,
                     "percent": paid_percentage,
