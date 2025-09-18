@@ -187,6 +187,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "commcare_connect.users.context_processors.allauth_settings",
                 "commcare_connect.web.context_processors.page_settings",
+                "commcare_connect.web.context_processors.gtm_context",
             ],
         },
     }
@@ -373,3 +374,4 @@ OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth2_provider.Application"
 
 GA_MEASUREMENT_ID = env("GA_MEASUREMENT_ID", default="")
 GA_API_SECRET = env("GA_API_SECRET", default="")
+GTM_ID = env("GTM_ID", default="")
