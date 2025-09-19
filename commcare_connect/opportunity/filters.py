@@ -124,4 +124,7 @@ class OpportunityListFilterSet(django_filters.FilterSet):
 
         if request:
             user_programs = Program.objects.filter(organization=request.org)
-            self.filters["program"].extra["choices"] = [(p.slug, p.name) for p in user_programs]
+            if user_programs.exists():
+                self.filters["program"].extra["choices"] = [(p.slug, p.name) for p in user_programs]
+            else:
+                del self.filters["program"]
