@@ -1,4 +1,5 @@
 import django_filters
+from crispy_forms.helper import FormHelper
 from django import forms
 
 from commcare_connect.opportunity.models import OpportunityAccess
@@ -48,13 +49,20 @@ class FilterMixin:
         return {}
 
     def filters_applied_count(self):
-        return len([v for v in self.get_filter_values().values() if v not in (None, "")])
+        return len([v for v in self.get_filter_values().values() if v not in (None, "", [])])
 
     def get_filter_context(self):
         return {
             "filter_form": self.get_filter_form(),
             "filters_applied_count": self.filters_applied_count(),
         }
+
+
+class CSRFExemptForm(forms.Form):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.disable_csrf = True
 
 
 YES_OR_NO_CHOICES = (
@@ -92,6 +100,9 @@ class DeliverFilterSet(django_filters.FilterSet):
         label="Deliveries with Pending Review",
     )
 
+    class Meta:
+        form = CSRFExemptForm
+
 
 class OpportunityListFilterSet(django_filters.FilterSet):
     is_test = YesNoFilter(label="Is Test")
@@ -103,6 +114,9 @@ class OpportunityListFilterSet(django_filters.FilterSet):
     program = django_filters.MultipleChoiceFilter(
         label="Program", choices=[], widget=forms.SelectMultiple(attrs={"data-tomselect": "1"})
     )
+
+    class Meta:
+        form = CSRFExemptForm
 
     def __init__(self, *args, **kwargs):
         request = kwargs.pop("request", None)
