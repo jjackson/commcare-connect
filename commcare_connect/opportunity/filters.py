@@ -65,15 +65,18 @@ class CSRFExemptForm(forms.Form):
         self.helper.disable_csrf = True
 
 
-YES_OR_NO_CHOICES = (
-    (True, "Yes"),
-    (False, "No"),
-)
-
-
-class YesNoFilter(django_filters.ChoiceFilter):
+class YesNoFilter(django_filters.BooleanFilter):
     def __init__(self, *args, **kwargs):
-        kwargs.setdefault("choices", YES_OR_NO_CHOICES)
+        kwargs.setdefault(
+            "widget",
+            forms.Select(
+                choices=[
+                    ("", "---------"),
+                    (True, "Yes"),
+                    (False, "No"),
+                ]
+            ),
+        )
         super().__init__(*args, **kwargs)
 
 
