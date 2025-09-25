@@ -909,7 +909,7 @@ def reject_visits(request, org_slug=None, opp_id=None):
         visit = UserVisit.objects.get(id=visit_ids[0])
         update_payment_accrued(opportunity=opp, users=[visit.user])
 
-    send_event_to_ga(request, "bulk_approve_confirm", {"updated": updated_count, "total": len(visit_ids)})
+    send_event_to_ga(request, "bulk_reject_confirm", {"updated": updated_count, "total": len(visit_ids)})
 
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
