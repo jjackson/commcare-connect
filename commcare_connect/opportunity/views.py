@@ -321,7 +321,6 @@ class OpportunityDashboard(OpportunityObjectMixin, OrganizationUserMixin, Detail
 
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
-        print(request.is_opportunity_pm)
         if not self.object.is_setup_complete:
             messages.warning(request, "Please complete the opportunity setup to view it")
             return redirect("opportunity:add_payment_units", org_slug=request.org.slug, opp_id=self.object.id)
