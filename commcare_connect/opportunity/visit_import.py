@@ -621,7 +621,7 @@ def _bulk_update_catchments(opportunity: Opportunity, dataset: Dataset):
                     seen_catchments.add(str(catchment.id))
 
             except InvalidValueError as e:
-                invalid_rows.append(([escape(r) for r in row], f"Error in row {row}: {e}"))
+                invalid_rows.append(([escape(r) for r in row], f"Error in row: {e}"))
 
         if to_create:
             CatchmentArea.objects.bulk_create(to_create)
