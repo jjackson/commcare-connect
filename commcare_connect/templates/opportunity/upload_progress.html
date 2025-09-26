@@ -27,7 +27,7 @@
     {% endif %}
     {% if progress.message %}
     <div class="alert alert-info" role="alert">
-    {{ progress.message }}
+    {{ progress.message | safe }}
     </div>
     {% endif %}
   {% endif %}
