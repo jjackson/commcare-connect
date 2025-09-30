@@ -9,7 +9,7 @@ from django.db.models import Count, F, Q, Sum
 from django.utils.dateparse import parse_datetime
 from django.utils.functional import cached_property
 from django.utils.timezone import now
-from django.utils.translation import gettext
+from django.utils.translation import gettext, gettext_lazy
 
 from commcare_connect.commcarehq.models import HQServer
 from commcare_connect.organization.models import Organization
@@ -833,3 +833,32 @@ class CatchmentArea(models.Model):
 
     class Meta:
         unique_together = ("site_code", "opportunity")
+
+
+class LearnLevel(models.TextChoices):
+    LEARN_PASSED = "LEARN_PASSED", gettext_lazy("Learning passed")
+
+
+class DeliveryLevel(models.TextChoices):
+    # TODO: Confirm what values should be here
+    pass
+
+
+class CredentialIssuer(models.Model):
+    opportunity = models.ForeignKey(
+        Opportunity,
+        unique=True,
+        on_delete=models.CASCADE,
+    )
+    learn_level = models.CharField(
+        null=True,
+        blank=True,
+        max_length=32,
+        choices=LearnLevel.choices,
+    )
+    delivery_level = models.CharField(
+        null=True,
+        blank=True,
+        max_length=32,
+        choices=DeliveryLevel.choices,
+    )
