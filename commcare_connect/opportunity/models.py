@@ -9,10 +9,11 @@ from django.db.models import Count, F, Q, Sum
 from django.utils.dateparse import parse_datetime
 from django.utils.functional import cached_property
 from django.utils.timezone import now
-from django.utils.translation import gettext, gettext_lazy
+from django.utils.translation import gettext
 
 from commcare_connect.commcarehq.models import HQServer
 from commcare_connect.organization.models import Organization
+from commcare_connect.users.credential_levels import DeliveryLevel, LearnLevel
 from commcare_connect.users.models import User
 from commcare_connect.utils.db import BaseModel, slugify_uniquely
 
@@ -833,15 +834,6 @@ class CatchmentArea(models.Model):
 
     class Meta:
         unique_together = ("site_code", "opportunity")
-
-
-class LearnLevel(models.TextChoices):
-    LEARN_PASSED = "LEARN_PASSED", gettext_lazy("Learning passed")
-
-
-class DeliveryLevel(models.TextChoices):
-    # TODO: Confirm what values should be here
-    pass
 
 
 class CredentialIssuer(models.Model):
