@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.commcarehq.models import HQServer
-from commcare_connect.opportunity.models import DeliveryLevel, DeliveryType, LearnLevel, Opportunity
+from commcare_connect.users.credential_levels import DeliveryLevel, LearnLevel
 from commcare_connect.users.managers import UserManager
 
 
@@ -84,8 +84,8 @@ class UserCredential(models.Model):
         DELIVERY = "DELIVERY", _("Deliver")
 
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
-    delivery_type = models.ForeignKey(DeliveryType, on_delete=models.CASCADE)
+    opportunity = models.ForeignKey("opportunity.Opportunity", on_delete=models.CASCADE)
+    delivery_type = models.ForeignKey("opportunity.DeliveryType", on_delete=models.CASCADE)
     created_on = models.DateTimeField(auto_now_add=True)
     issued_on = models.DateTimeField(null=True, blank=True)
     credential_type = models.CharField(
