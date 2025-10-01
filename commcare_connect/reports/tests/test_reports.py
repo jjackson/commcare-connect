@@ -358,8 +358,6 @@ class TestKPIReportPermission:
         def dummy_login(request):
             return HttpResponse("Login page")
 
-        reports_urls.urlpatterns.append(path("accounts/login/", dummy_login, name="account_login"))
-
         # Dummy function-based view
         @kpi_report_access_required
         def dummy_view(request):
