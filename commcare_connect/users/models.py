@@ -54,6 +54,7 @@ class User(AbstractUser):
         permissions = [
             ("demo_users_access", "Allow viewing OTPs for demo users"),
             ("otp_access", "Allow fetching OTPs for Connect users"),
+            ("kpi_report_access", "Allow accessing KPI report"),
         ]
 
     def __str__(self):
