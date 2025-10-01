@@ -360,6 +360,11 @@ OAUTH2_PROVIDER = {
         CONNECTID_CLIENT_ID,
         CONNECTID_CLIENT_SECRET,
     ),
+    "SCOPES": {
+        "read": "Read scope",
+        "write": "Write scope",
+        "export": "Allow exporting data to other platforms using export API's.",
+    },
 }
 
 TWILIO_ACCOUNT_SID = env("TWILIO_SID", default=None)
