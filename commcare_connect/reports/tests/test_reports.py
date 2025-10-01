@@ -354,10 +354,6 @@ class TestKPIReportPermission:
         self.client = Client()
         self.normal_user = UserFactory()
 
-        # Dummy login URL
-        def dummy_login(request):
-            return HttpResponse("Login page")
-
         # Dummy function-based view
         @kpi_report_access_required
         def dummy_view(request):
