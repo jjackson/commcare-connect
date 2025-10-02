@@ -8,4 +8,7 @@ urlpatterns = [
     path("opportunity/<int:opp_id>/", views.SingleOpportunityDataView.as_view(), name="opportunity_data"),
     path("opportunity/<int:opp_id>/user-data/", views.OpportunityUserDataView.as_view(), name="opportunity_user_data"),
     path("opportunity/<int:opp_id>/user-visits/", views.UserVisitDataView.as_view(), name="user_visit_data"),
+    path(
+        "opportunity/<int:opp_id>/completed-works/", views.CompletedWorkDataView.as_view(), name="completed_work_data"
+    ),
 ]
