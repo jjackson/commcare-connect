@@ -59,7 +59,7 @@ class ProgramOpportunityOrganizationDataView(BaseDataExportView):
         return JsonResponse({"organizations": org_data, "opportunities": opp_data, "programs": program_data})
 
 
-class OpportunityDataView(RetrieveAPIView, BaseDataExportView):
+class SingleOpportunityDataView(RetrieveAPIView, BaseDataExportView):
     serializer_class = BaseOpportunitySerializer
 
     def get_object(self):
