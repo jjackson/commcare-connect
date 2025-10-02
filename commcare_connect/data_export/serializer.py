@@ -1,7 +1,13 @@
 from rest_framework import serializers
 
 from commcare_connect.opportunity.api.serializers import OpportunityClaimLimitSerializer
-from commcare_connect.opportunity.models import CompletedWork, Opportunity, OpportunityClaimLimit, UserVisit
+from commcare_connect.opportunity.models import (
+    Assessment,
+    CompletedWork,
+    Opportunity,
+    OpportunityClaimLimit,
+    UserVisit,
+)
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import Program
 
@@ -114,3 +120,14 @@ class CompletedWorkDataSerializer(serializers.ModelSerializer):
 
     def get_opportunity_id(self, obj):
         return obj.opportunity_id
+
+
+class AssessmentDataSerializer(serializers.ModelSerializer):
+    username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Assessment
+        fields = ["username", "app", "opportunity_id", "date", "score", "passing_score", "passed"]
+
+    def get_username(self, obj):
+        return obj.username
