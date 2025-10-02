@@ -7,4 +7,5 @@ urlpatterns = [
     path("opp-org-program-list/", views.ProgramOpportunityOrganizationDataView.as_view(), name="opp_org_program_list"),
     path("opportunity/<int:opp_id>/", views.SingleOpportunityDataView.as_view(), name="opportunity_data"),
     path("opportunity/<int:opp_id>/user-data/", views.OpportunityUserDataView.as_view(), name="opportunity_user_data"),
+    path("opportunity/<int:opp_id>/user-visits/", views.UserVisitDataView.as_view(), name="user_visit_data"),
 ]

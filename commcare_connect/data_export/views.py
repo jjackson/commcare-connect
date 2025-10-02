@@ -12,9 +12,10 @@ from commcare_connect.data_export.serializer import (
     OpportunityUserDataSerializer,
     OrganizationDataExportSerializer,
     ProgramDataExportSerializer,
+    UserVisitDataSerialier,
 )
 from commcare_connect.opportunity.api.serializers import BaseOpportunitySerializer
-from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
+from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, UserVisit
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import Program
 
@@ -80,3 +81,14 @@ class OpportunityUserDataView(BaseDataExportView):
         )
         user_data = OpportunityUserDataSerializer(users, many=True).data
         return JsonResponse({"users": user_data})
+
+
+class UserVisitDataView(BaseStreamingCSVExportView):
+    serializer_class = UserVisitDataSerialier
+
+    def get_queryset(self, request, opp_id):
+        return (
+            UserVisit.objects.filter(opportunity_id=opp_id)
+            .annotate(username=F("user__username"))
+            .select_related("user")
+        )
