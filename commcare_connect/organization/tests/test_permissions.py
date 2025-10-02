@@ -1,6 +1,6 @@
 import pytest
 from django.http import HttpResponse
-from django.urls import path, reverse
+from django.urls import clear_url_caches, path, reverse
 from django.views import View
 
 from commcare_connect.opportunity.views import OrganizationUserMemberRoleMixin, OrganizationUserMixin
@@ -12,6 +12,8 @@ from commcare_connect.users.tests.factories import UserFactory
 class TestAllOrgAccessPermission:
     @pytest.fixture(autouse=True)
     def setup(self, db):
+        clear_url_caches()
+
         @org_member_required
         def dummy_member_view(request, org_slug):
             return HttpResponse("OK")
