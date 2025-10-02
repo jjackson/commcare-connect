@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 from dateutil.relativedelta import relativedelta
 from django.http import HttpResponse
-from django.urls import path, reverse
+from django.urls import clear_url_caches, path, reverse
 from django.utils import timezone
 from django.utils.timezone import now
 from django.views import View
@@ -349,6 +349,8 @@ def test_results_to_geojson():
 class TestKPIReportPermission:
     @pytest.fixture(autouse=True)
     def setup(self, db):
+        clear_url_caches()
+
         # Dummy function-based view
         @kpi_report_access_required
         def dummy_view(request):
