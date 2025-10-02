@@ -134,3 +134,10 @@ class AssessmentDataView(BaseStreamingCSVExportView):
         return Assessment.objects.filter(opportunity_id=opp_id).annotate(
             username=F("opportunity_access__user__username"),
         )
+
+
+class OrganizationProgramDataView(BaseStreamingCSVExportView):
+    serializer_class = ProgramDataExportSerializer
+
+    def get_queryset(self, request, org_slug):
+        return Program.objects.filter(organization__slug=org_slug)
