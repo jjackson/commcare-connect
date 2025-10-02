@@ -1,5 +1,7 @@
+import csv
+
 from django.db.models import F
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from oauth2_provider.contrib.rest_framework.permissions import TokenHasScope
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -20,6 +22,29 @@ from commcare_connect.program.models import Program
 class BaseDataExportView(APIView):
     permission_classes = [IsAuthenticated, TokenHasScope]
     required_scopes = ["export"]
+
+
+class PseudoSupportsWrite:
+    def write(self, value):
+        return value
+
+
+class BaseStreamingCSVExportView(BaseDataExportView):
+    serializer_class = None
+
+    def get_serializer_class(self, *args, **kwargs):
+        return self.serializer_class
+
+    def get_queryset(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def get(self, *args, **kwargs):
+        objects = self.get_queryset(*args, **kwargs)
+        serialized_data = self.serializer_class(objects, many=True).data
+        fieldnames = self.serializer_class().get_fields().keys()
+        writer = csv.DictWriter(PseudoSupportsWrite(), fieldnames=fieldnames)
+        data = [writer.writeheader()] + [writer.writerow(row) for row in serialized_data]
+        return StreamingHttpResponse(data, content_type="text/csv")
 
 
 class ProgramOpportunityOrganizationDataView(BaseDataExportView):
