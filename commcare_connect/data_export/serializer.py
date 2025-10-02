@@ -53,8 +53,7 @@ class OpportunityUserDataSerializer(serializers.Serializer):
     claim_limits = serializers.SerializerMethodField()
 
     def get_claim_limits(self, obj):
-        access_id = obj.get("id")
-        claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__opportunity_access_id=access_id)
+        claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__opportunity_access=obj)
         return OpportunityClaimLimitSerializer(claim_limits, many=True).data
 
 
