@@ -12,4 +12,9 @@ urlpatterns = [
         "opportunity/<int:opp_id>/completed-works/", views.CompletedWorkDataView.as_view(), name="completed_work_data"
     ),
     path("opportunity/<int:opp_id>/assessment/", views.AssessmentDataView.as_view(), name="assessment_data"),
+    path(
+        "opportunity/<int:opp_id>/completed-module/",
+        views.CompletedModuleDataView.as_view(),
+        name="completed_module_data",
+    ),
 ]
