@@ -32,9 +32,12 @@ class OrganizationDataExportSerializer(serializers.ModelSerializer):
 
 
 class ProgramDataExportSerializer(serializers.ModelSerializer):
+    organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
+    delivery_type = serializers.SlugRelatedField(read_only=True, slug_field="slug")
+
     class Meta:
         model = Program
-        fields = ["id", "name"]
+        fields = ["id", "name", "delivery_type", "currency", "organization"]
 
 
 class OpportunityUserDataSerializer(serializers.Serializer):
