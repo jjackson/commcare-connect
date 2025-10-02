@@ -55,6 +55,7 @@ class User(AbstractUser):
             ("demo_users_access", "Allow viewing OTPs for demo users"),
             ("otp_access", "Allow fetching OTPs for Connect users"),
             ("kpi_report_access", "Allow accessing KPI report"),
+            ("all_org_access", "Allow user to access all orgs"),
         ]
 
     def __str__(self):
