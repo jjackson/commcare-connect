@@ -18,6 +18,11 @@ urlpatterns = [
         name="completed_module_data",
     ),
     path(
+        "program/<int:program_id>/opportunity/",
+        views.ProgramOpportunityDataView.as_view(),
+        name="program_opportunity_data",
+    ),
+    path(
         "organization/<slug:org_slug>/program/",
         views.OrganizationProgramDataView.as_view(),
         name="organization_program_data",

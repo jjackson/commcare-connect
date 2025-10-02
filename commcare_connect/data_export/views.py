@@ -141,3 +141,10 @@ class OrganizationProgramDataView(BaseStreamingCSVExportView):
 
     def get_queryset(self, request, org_slug):
         return Program.objects.filter(organization__slug=org_slug)
+
+
+class ProgramOpportunityDataView(BaseStreamingCSVExportView):
+    serializer_class = OpportunityDataExportSerializer
+
+    def get_queryset(self, request, program_id):
+        return Opportunity.objects.filter(managedopportunity__program=program_id)
