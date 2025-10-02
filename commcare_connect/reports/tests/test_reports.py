@@ -3,9 +3,7 @@ from unittest import mock
 
 import pytest
 from dateutil.relativedelta import relativedelta
-from django.contrib.auth.models import Permission
 from django.http import HttpResponse
-from django.test import Client
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.timezone import now
@@ -351,9 +349,6 @@ def test_results_to_geojson():
 class TestKPIReportPermission:
     @pytest.fixture(autouse=True)
     def setup(self, db):
-        self.client = Client()
-        self.normal_user = UserFactory()
-
         # Dummy function-based view
         @kpi_report_access_required
         def dummy_view(request):
@@ -372,36 +367,11 @@ class TestKPIReportPermission:
             ]
         )
 
-    def _check_permissions(self, url):
-        # Anonymous → not allowed and redirect
-        response = self.client.get(url)
-        assert response.status_code == 302
-        assert "/accounts/login/" in response.url
-
-        # logged in user with no such permissions → forbidden
-        self.client.force_login(self.normal_user)
-        response = self.client.get(url)
-        assert response.status_code == 403
-        self.client.logout()
-
-        # With permission → allowed
-        perm = Permission.objects.get(codename="kpi_report_access")
-        self.normal_user.user_permissions.add(perm)
-        self.client.force_login(self.normal_user)
-        response = self.client.get(url)
-        assert response.status_code == 200
-        self.client.logout()
-
-        # Superuser → allowed
-        self.normal_user.user_permissions.remove(perm)
-        self.normal_user.is_superuser = True
-        self.normal_user.is_staff = True
-        self.normal_user.save()
-        self.client.force_login(self.normal_user)
-        response = self.client.get(url)
-        assert response.status_code == 200
-
     @pytest.mark.parametrize("url_name", ["dummy_fbv", "dummy_cbv"])
-    def test_permissions(self, url_name):
+    def test_permissions(self, url_name, check_basic_permissions):
         url = reverse(f"reports:{url_name}")
-        self._check_permissions(url)
+        check_basic_permissions(
+            UserFactory(),
+            url,
+            "kpi_report_access",
+        )
