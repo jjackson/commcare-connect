@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from commcare_connect.data_export.serializer import (
+    AssessmentDataSerializer,
     CompletedWorkDataSerializer,
     OpportunityDataExportSerializer,
     OpportunityUserDataSerializer,
@@ -16,7 +17,7 @@ from commcare_connect.data_export.serializer import (
     UserVisitDataSerialier,
 )
 from commcare_connect.opportunity.api.serializers import BaseOpportunitySerializer
-from commcare_connect.opportunity.models import CompletedWork, Opportunity, OpportunityAccess, UserVisit
+from commcare_connect.opportunity.models import Assessment, CompletedWork, Opportunity, OpportunityAccess, UserVisit
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import Program
 
@@ -106,4 +107,13 @@ class CompletedWorkDataView(BaseStreamingCSVExportView):
                 opportunity_id=F("opportunity_access__opportunity_id"),
             )
             .select_related("opportunity_access")
+        )
+
+
+class AssessmentDataView(BaseStreamingCSVExportView):
+    serializer_class = AssessmentDataSerializer
+
+    def get_queryset(self, request, opp_id):
+        return Assessment.objects.filter(opportunity_id=opp_id).annotate(
+            username=F("opportunity_access__user__username"),
         )
