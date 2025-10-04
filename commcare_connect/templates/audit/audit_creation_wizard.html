@@ -83,28 +83,28 @@
           <table class="base-table">
             <thead>
               <tr>
-                <th>
+                <th class="w-12">
                   <span>Select</span>
                 </th>
-                <th>
+                <th class="w-16">
                   <span>ID</span>
                 </th>
-                <th>
+                <th class="w-1/4">
                   <span>Opportunity Name</span>
                 </th>
-                <th>
+                <th class="w-1/6">
                   <span>Organization</span>
                 </th>
-                <th>
+                <th class="w-1/6">
                   <span>Program</span>
                 </th>
-                <th>
+                <th class="w-20 text-center">
                   <span>Visits</span>
                 </th>
-                <th>
+                <th class="w-24">
                   <span>Dates</span>
                 </th>
-                <th>
+                <th class="w-24">
                   <span>Status</span>
                 </th>
               </tr>
@@ -121,35 +121,28 @@
                            @click.stop>
                   </td>
                   <td>
-                    <span class="font-medium text-brand-deep-purple" x-text="opportunity.id"></span>
+                    <span x-text="opportunity.id"></span>
                   </td>
                   <td>
-                    <div class="font-medium text-brand-deep-purple" x-text="opportunity.name"></div>
-                    <div class="text-xs text-gray-500 mt-1 line-clamp-2" x-text="opportunity.description"></div>
+                    <div class="truncate max-w-xs" :title="opportunity.name + (opportunity.description ? ': ' + opportunity.description : '')" x-text="opportunity.name"></div>
                   </td>
                   <td>
-                    <span x-text="opportunity.organization_name"></span>
+                    <span class="truncate block max-w-[150px]" :title="opportunity.organization_name" x-text="opportunity.organization_name"></span>
                   </td>
                   <td>
-                    <span x-text="opportunity.program_name || '-'"></span>
+                    <span class="truncate block max-w-[150px]" :title="opportunity.program_name" x-text="opportunity.program_name || '-'"></span>
                   </td>
-                  <td>
+                  <td class="text-center">
                     <template x-if="opportunity.visit_count !== undefined">
-                      <div class="text-center">
-                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                          <span x-text="opportunity.visit_count"></span> visits
-                        </span>
-                      </div>
+                      <span class="inline-flex items-center justify-center px-2 py-1 text-sm font-medium rounded bg-blue-50 text-blue-700" x-text="opportunity.visit_count"></span>
                     </template>
                     <template x-if="opportunity.visit_count === undefined">
-                      <div class="text-center text-gray-400">
-                        <i class="fa-solid fa-spinner fa-spin"></i>
-                      </div>
+                      <i class="fa-solid fa-spinner fa-spin text-gray-400"></i>
                     </template>
                   </td>
                   <td>
                     <template x-if="opportunity.start_date">
-                      <div class="text-sm">
+                      <div>
                         <div x-text="formatDate(opportunity.start_date)"></div>
                         <template x-if="opportunity.end_date">
                           <div class="text-xs text-gray-500">to <span x-text="formatDate(opportunity.end_date)"></span></div>
@@ -159,13 +152,13 @@
                   </td>
                   <td>
                     <div class="flex flex-wrap gap-1">
-                      <span x-show="opportunity.active" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                      <span x-show="opportunity.active" class="inline-flex px-2 py-1 text-xs rounded bg-green-50 text-green-700">
                         Active
                       </span>
-                      <span x-show="!opportunity.active" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                      <span x-show="!opportunity.active" class="inline-flex px-2 py-1 text-xs rounded bg-red-50 text-red-700">
                         Inactive
                       </span>
-                      <span x-show="opportunity.is_test" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
+                      <span x-show="opportunity.is_test" class="inline-flex px-2 py-1 text-xs rounded bg-orange-50 text-orange-700">
                         Test
                       </span>
                     </div>
@@ -637,14 +630,5 @@ function auditCreationPage() {
   }
 }
 </script>
-
-<style>
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-</style>
 
 {% endblock %}
