@@ -1,0 +1,650 @@
+{% extends 'base.html' %}
+{% load static i18n %}
+
+{% block content %}
+{% csrf_token %}
+<div class="max-w-7xl mx-auto" x-data="auditCreationPage()">
+
+  <!-- Header -->
+  <div class="mb-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Create New Audit Session</h1>
+        <p class="text-gray-600">Search and select opportunities, configure audit criteria, and preview FLW counts</p>
+      </div>
+      <div class="flex gap-3">
+        <a href="{% url 'audit:session_list' %}"
+           class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+          ← Back to Sessions
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 1: Program Search and Selection -->
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
+      <i class="fa-solid fa-search mr-2"></i>
+      Step 1: Search and Select Opportunities
+    </h2>
+
+    <!-- Search Input -->
+    <div class="mb-4">
+      <label for="program-search" class="block text-sm font-medium text-gray-700 mb-2">
+        Search Opportunities
+      </label>
+      <div class="relative">
+        <input
+          type="text"
+          id="opportunity-search"
+          x-model="searchQuery"
+          @input.debounce.300ms="searchOpportunities()"
+          placeholder="Search by opportunity name or ID..."
+          class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-brand-indigo focus:border-brand-indigo"
+        >
+        <div class="absolute inset-y-0 right-0 flex items-center pr-3">
+          <i class="fa-solid fa-search text-gray-400" x-show="!searching"></i>
+          <i class="fa-solid fa-spinner fa-spin text-brand-indigo" x-show="searching"></i>
+        </div>
+      </div>
+      <p class="text-xs text-gray-500 mt-1">
+        Search by opportunity name or enter a specific opportunity ID
+      </p>
+    </div>
+
+    <!-- Search Results -->
+    <div x-show="searchResults.length > 0 || searchPerformed" class="mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-medium text-gray-700">
+          Search Results
+          <span x-show="searchResults.length > 0" class="text-brand-indigo">
+            (<span x-text="searchResults.length"></span> found)
+          </span>
+        </h3>
+        <button
+          @click="clearSearch()"
+          x-show="searchQuery || searchResults.length > 0"
+          class="text-xs text-gray-500 hover:text-gray-700">
+          Clear
+        </button>
+      </div>
+
+      <!-- No Results Message -->
+      <div x-show="searchPerformed && searchResults.length === 0 && !searching"
+           class="text-center py-8 text-gray-500">
+        <i class="fa-solid fa-search text-3xl mb-2"></i>
+        <p>No opportunities found matching "<span x-text="searchQuery"></span>"</p>
+        <p class="text-sm">Try a different search term or opportunity ID</p>
+      </div>
+
+      <!-- Results Table -->
+      <div x-show="searchResults.length > 0" class="overflow-hidden table-container flex flex-col gap-2 mb-1">
+        <div class="w-full overflow-x-auto block">
+          <table class="base-table">
+            <thead>
+              <tr>
+                <th>
+                  <span>Select</span>
+                </th>
+                <th>
+                  <span>ID</span>
+                </th>
+                <th>
+                  <span>Opportunity Name</span>
+                </th>
+                <th>
+                  <span>Organization</span>
+                </th>
+                <th>
+                  <span>Program</span>
+                </th>
+                <th>
+                  <span>Visits</span>
+                </th>
+                <th>
+                  <span>Dates</span>
+                </th>
+                <th>
+                  <span>Status</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="opportunity in searchResults" :key="opportunity.id">
+                <tr class="group hover:bg-gray-50 cursor-pointer"
+                    :class="selectedOpportunities.some(o => o.id === opportunity.id) ? 'bg-brand-indigo/5' : ''"
+                    @click="toggleOpportunitySelection(opportunity)">
+                  <td class="text-center">
+                    <input type="checkbox"
+                           :checked="selectedOpportunities.some(o => o.id === opportunity.id)"
+                           class="h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300 rounded"
+                           @click.stop>
+                  </td>
+                  <td>
+                    <span class="font-medium text-brand-deep-purple" x-text="opportunity.id"></span>
+                  </td>
+                  <td>
+                    <div class="font-medium text-brand-deep-purple" x-text="opportunity.name"></div>
+                    <div class="text-xs text-gray-500 mt-1 line-clamp-2" x-text="opportunity.description"></div>
+                  </td>
+                  <td>
+                    <span x-text="opportunity.organization_name"></span>
+                  </td>
+                  <td>
+                    <span x-text="opportunity.program_name || '-'"></span>
+                  </td>
+                  <td>
+                    <template x-if="opportunity.visit_count !== undefined">
+                      <div class="text-center">
+                        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                          <span x-text="opportunity.visit_count"></span> visits
+                        </span>
+                      </div>
+                    </template>
+                    <template x-if="opportunity.visit_count === undefined">
+                      <div class="text-center text-gray-400">
+                        <i class="fa-solid fa-spinner fa-spin"></i>
+                      </div>
+                    </template>
+                  </td>
+                  <td>
+                    <template x-if="opportunity.start_date">
+                      <div class="text-sm">
+                        <div x-text="formatDate(opportunity.start_date)"></div>
+                        <template x-if="opportunity.end_date">
+                          <div class="text-xs text-gray-500">to <span x-text="formatDate(opportunity.end_date)"></span></div>
+                        </template>
+                      </div>
+                    </template>
+                  </td>
+                  <td>
+                    <div class="flex flex-wrap gap-1">
+                      <span x-show="opportunity.active" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        Active
+                      </span>
+                      <span x-show="!opportunity.active" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                        Inactive
+                      </span>
+                      <span x-show="opportunity.is_test" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
+                        Test
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Selected Opportunities Summary -->
+    <div x-show="selectedOpportunities.length > 0" class="border-t pt-4">
+      <h3 class="text-sm font-medium text-gray-700 mb-3">
+        Selected Opportunities (<span x-text="selectedOpportunities.length"></span>)
+      </h3>
+      <div class="flex flex-wrap gap-2">
+        <template x-for="opportunity in selectedOpportunities" :key="opportunity.id">
+          <div class="flex items-center gap-2 px-3 py-1 bg-brand-indigo text-white rounded-full text-sm">
+            <span x-text="opportunity.name"></span>
+            <button @click="removeOpportunitySelection(opportunity)" class="hover:text-gray-200">
+              <i class="fa-solid fa-times"></i>
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Audit Criteria -->
+  <div x-show="selectedOpportunities.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
+      <i class="fa-solid fa-cog mr-2"></i>
+      Step 2: Configure Audit Criteria
+    </h2>
+
+    <!-- Audit Type Selection -->
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-gray-700 mb-3">
+        Select Audit Type
+      </label>
+      <div class="space-y-3">
+        <!-- Date Range Option -->
+        <div class="flex items-start">
+          <input
+            type="radio"
+            id="audit-type-date-range"
+            name="audit-type"
+            value="date_range"
+            x-model="auditCriteria.type"
+            class="mt-1 h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300"
+          >
+          <div class="ml-3 flex-1">
+            <label for="audit-type-date-range" class="text-sm font-medium text-gray-700 cursor-pointer">
+              Date Range
+            </label>
+            <p class="text-xs text-gray-500">
+              Audit all visits within a specific date range
+            </p>
+
+            <!-- Date Range Inputs -->
+            <div x-show="auditCriteria.type === 'date_range'" class="mt-3 grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  x-model="auditCriteria.startDate"
+                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-brand-indigo focus:border-brand-indigo"
+                >
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">End Date</label>
+                <input
+                  type="date"
+                  x-model="auditCriteria.endDate"
+                  class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-brand-indigo focus:border-brand-indigo"
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Last N per FLW Option -->
+        <div class="flex items-start">
+          <input
+            type="radio"
+            id="audit-type-per-flw"
+            name="audit-type"
+            value="last_n_per_flw"
+            x-model="auditCriteria.type"
+            class="mt-1 h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300"
+          >
+          <div class="ml-3 flex-1">
+            <label for="audit-type-per-flw" class="text-sm font-medium text-gray-700 cursor-pointer">
+              Last N Visits per FLW
+            </label>
+            <p class="text-xs text-gray-500">
+              Audit the most recent N visits for each Field Learning Worker
+            </p>
+
+            <!-- Per FLW Count Input -->
+            <div x-show="auditCriteria.type === 'last_n_per_flw'" class="mt-3">
+              <label class="block text-xs font-medium text-gray-600 mb-1">Number of visits per FLW</label>
+              <input
+                type="number"
+                x-model="auditCriteria.countPerFlw"
+                min="1"
+                max="1000"
+                placeholder="e.g., 100"
+                class="w-32 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-brand-indigo focus:border-brand-indigo"
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- Last N across Opportunity Option -->
+        <div class="flex items-start">
+          <input
+            type="radio"
+            id="audit-type-across-opp"
+            name="audit-type"
+            value="last_n_across_opp"
+            x-model="auditCriteria.type"
+            class="mt-1 h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300"
+          >
+          <div class="ml-3 flex-1">
+            <label for="audit-type-across-opp" class="text-sm font-medium text-gray-700 cursor-pointer">
+              Last N Visits across Opportunity
+            </label>
+            <p class="text-xs text-gray-500">
+              Audit the most recent N visits across the entire opportunity, regardless of FLW
+            </p>
+
+            <!-- Across Opportunity Count Input -->
+            <div x-show="auditCriteria.type === 'last_n_across_opp'" class="mt-3">
+              <label class="block text-xs font-medium text-gray-600 mb-1">Total number of visits</label>
+              <input
+                type="number"
+                x-model="auditCriteria.countAcrossOpp"
+                min="1"
+                max="10000"
+                placeholder="e.g., 500"
+                class="w-32 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-brand-indigo focus:border-brand-indigo"
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Update Preview Button -->
+    <div class="flex justify-center">
+            <button
+        @click="updatePreview()"
+        :disabled="!isAuditCriteriaValid() || updating"
+        class="px-6 py-2 bg-brand-indigo text-white rounded-md hover:bg-brand-indigo/90 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
+        <i class="fa-solid fa-refresh" :class="{'fa-spin': updating}"></i>
+        <span x-text="updating ? 'Updating...' : 'Update Preview'"></span>
+            </button>
+    </div>
+  </div>
+
+  <!-- Step 3: Preview Results -->
+  <div x-show="previewResults.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
+      <i class="fa-solid fa-eye mr-2"></i>
+      Step 3: Preview Audit Scope
+    </h2>
+
+    <div class="space-y-6">
+      <template x-for="result in previewResults" :key="result.opportunity_id">
+        <div class="border border-gray-200 rounded-lg">
+          <!-- Opportunity Header -->
+          <div class="bg-gray-50 px-4 py-3 border-b border-gray-200 rounded-t-lg">
+            <div class="flex items-center justify-between">
+              <h3 class="font-medium text-brand-deep-purple" x-text="result.opportunity_name"></h3>
+              <span class="text-sm text-gray-500">ID: <span x-text="result.opportunity_id"></span></span>
+            </div>
+            <div class="mt-2 flex items-center gap-6 text-sm">
+              <span class="text-blue-600">
+                <i class="fa-solid fa-users mr-1"></i>
+                <span x-text="result.total_flws"></span> FLWs
+              </span>
+              <span class="text-green-600">
+                <i class="fa-solid fa-chart-line mr-1"></i>
+                <span x-text="result.total_visits"></span> Total Visits
+              </span>
+              <span class="text-purple-600">
+                <i class="fa-solid fa-calculator mr-1"></i>
+                <span x-text="result.avg_visits_per_flw"></span> Avg per FLW
+              </span>
+              <span class="text-gray-500">
+                <i class="fa-solid fa-calendar mr-1"></i>
+                <span x-text="result.date_range"></span>
+              </span>
+            </div>
+          </div>
+
+          <!-- FLW Details Table -->
+          <div class="p-4">
+            <template x-if="result.flws && result.flws.length > 0">
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        FLW Name
+                      </th>
+                      <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Connect ID
+                      </th>
+                      <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Visits in Audit
+                      </th>
+                      <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date Range
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="bg-white divide-y divide-gray-200">
+                    <template x-for="flw in result.flws" :key="flw.connect_id">
+                      <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                          <span x-text="flw.name"></span>
+                        </td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                          <span x-text="flw.connect_id"></span>
+                        </td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                            <span x-text="flw.visit_count"></span> visits
+                          </span>
+                        </td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                          <template x-if="flw.earliest_visit && flw.latest_visit">
+                            <span>
+                              <span x-text="formatDate(flw.earliest_visit)"></span> -
+                              <span x-text="formatDate(flw.latest_visit)"></span>
+                            </span>
+                    </template>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+                    </template>
+
+            <!-- Loading state for FLW details -->
+            <template x-if="!result.flws">
+              <div class="text-center py-4 text-gray-500">
+                <i class="fa-solid fa-spinner fa-spin mr-2"></i>
+                Loading FLW details...
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Action Buttons -->
+  <div x-show="selectedOpportunities.length > 0" class="flex justify-end gap-4">
+    <button
+      @click="clearAllSelections()"
+      class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+      Clear All
+    </button>
+    <button
+      @click="createAuditSession()"
+      :disabled="!previewResults.length || creating"
+      class="px-4 py-2 bg-brand-indigo text-white rounded-md hover:bg-brand-indigo/90 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
+      <i class="fa-solid fa-plus" :class="{'fa-spin': creating}"></i>
+      <span x-text="creating ? 'Creating...' : 'Create Audit Session'"></span>
+    </button>
+  </div>
+
+</div>
+
+<script>
+function auditCreationPage() {
+  return {
+    // Search state
+    searchQuery: '',
+    searchResults: [],
+    searchPerformed: false,
+    searching: false,
+
+    // Selection state
+    selectedOpportunities: [],
+
+    // Audit criteria state
+    auditCriteria: {
+      type: 'date_range',
+      startDate: '',
+      endDate: '',
+      countPerFlw: 100,
+      countAcrossOpp: 500
+    },
+
+    // Preview state
+    previewResults: [],
+    updating: false,
+    creating: false,
+
+    // Methods
+    async searchOpportunities() {
+      if (!this.searchQuery.trim()) {
+        this.searchResults = [];
+        this.searchPerformed = false;
+        return;
+      }
+
+      this.searching = true;
+
+      const response = await fetch(`{% url "audit:program_search" %}?q=${encodeURIComponent(this.searchQuery)}&limit=20`);
+      const data = await response.json();
+
+      if (data.success) {
+        this.searchResults = data.opportunities;
+        this.searchPerformed = true;
+      } else {
+        console.error('Search failed:', data.error);
+        this.searchResults = [];
+      }
+
+      this.searching = false;
+    },
+
+    toggleOpportunitySelection(opportunity) {
+      const index = this.selectedOpportunities.findIndex(o => o.id === opportunity.id);
+      if (index >= 0) {
+        this.selectedOpportunities.splice(index, 1);
+      } else {
+        this.selectedOpportunities.push(opportunity);
+      }
+    },
+
+    removeOpportunitySelection(opportunity) {
+      const index = this.selectedOpportunities.findIndex(o => o.id === opportunity.id);
+      if (index >= 0) {
+        this.selectedOpportunities.splice(index, 1);
+      }
+    },
+
+
+    clearSearch() {
+      this.searchQuery = '';
+      this.searchResults = [];
+      this.searchPerformed = false;
+    },
+
+    clearAllSelections() {
+      this.selectedOpportunities = [];
+      this.previewResults = [];
+    },
+
+    formatDate(dateString) {
+      if (!dateString) return '';
+      return new Date(dateString).toLocaleDateString();
+    },
+
+    // Audit criteria validation
+    isAuditCriteriaValid() {
+      if (!this.auditCriteria.type) return false;
+
+      switch (this.auditCriteria.type) {
+        case 'date_range':
+          return this.auditCriteria.startDate && this.auditCriteria.endDate;
+        case 'last_n_per_flw':
+          return this.auditCriteria.countPerFlw && this.auditCriteria.countPerFlw > 0;
+        case 'last_n_across_opp':
+          return this.auditCriteria.countAcrossOpp && this.auditCriteria.countAcrossOpp > 0;
+        default:
+          return false;
+      }
+    },
+
+    // Update preview with FLW counts
+    async updatePreview() {
+      if (!this.isAuditCriteriaValid() || this.selectedOpportunities.length === 0) {
+        return;
+      }
+
+      this.updating = true;
+      this.previewResults = [];
+
+      const payload = {
+        opportunities: this.selectedOpportunities.map(o => o.id),
+        criteria: this.auditCriteria
+      };
+
+      const response = await fetch('{% url "audit:preview_audit" %}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        this.previewResults = data.results;
+      } else {
+        console.error('Preview failed:', data.error);
+        alert('Failed to generate preview: ' + (data.error || 'Unknown error'));
+      }
+
+      this.updating = false;
+    },
+
+    // Create audit session
+    async createAuditSession() {
+      if (!this.previewResults.length) {
+        return;
+      }
+
+      this.creating = true;
+
+      try {
+        const payload = {
+          opportunities: this.selectedOpportunities.map(o => o.id),
+          criteria: this.auditCriteria,
+          preview: this.previewResults
+        };
+
+        const response = await fetch('{% url "audit:create_session" %}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Redirect to the created audit session
+          window.location.href = data.redirect_url;
+        } else {
+          console.error('Creation failed:', data.error);
+          alert('Failed to create audit session: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Creation error:', error);
+        alert('Failed to create audit session. Please try again.');
+      } finally {
+        this.creating = false;
+      }
+    },
+
+    // Initialize
+    init() {
+      // Set default dates (last 30 days)
+      const today = new Date();
+      const thirtyDaysAgo = new Date(today);
+      thirtyDaysAgo.setDate(today.getDate() - 30);
+
+      this.auditCriteria.endDate = today.toISOString().split('T')[0];
+      this.auditCriteria.startDate = thirtyDaysAgo.toISOString().split('T')[0];
+
+      // Load some initial opportunities
+      this.searchOpportunities();
+    }
+  }
+}
+</script>
+
+<style>
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+</style>
+
+{% endblock %}

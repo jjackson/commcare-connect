@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<div class="flex items-center justify-center">
+  <div class="max-w-2xl w-full">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div class="mb-6">
+        <h1 class="text-xl font-semibold text-brand-deep-purple mb-2">
+          {% translate "Create New Audit Session" %}
+        </h1>
+        <p class="text-sm text-brand-blue-light">
+          {% translate "Create a new audit session to review field worker visits for a specific period." %}
+        </p>
+      </div>
+
+      <form method="post" class="space-y-6">
+        {% csrf_token %}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label for="{{ form.flw_username.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+              {{ form.flw_username.label }}
+            </label>
+            {{ form.flw_username }}
+            {% if form.flw_username.help_text %}
+            <p class="mt-1 text-sm text-gray-500">{{ form.flw_username.help_text }}</p>
+            {% endif %}
+            {% if form.flw_username.errors %}
+            <div class="mt-1 text-sm text-red-600">
+              {{ form.flw_username.errors }}
+            </div>
+            {% endif %}
+          </div>
+
+          <div>
+            <label for="{{ form.opportunity_name.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+              {{ form.opportunity_name.label }}
+            </label>
+            {{ form.opportunity_name }}
+            {% if form.opportunity_name.help_text %}
+            <p class="mt-1 text-sm text-gray-500">{{ form.opportunity_name.help_text }}</p>
+            {% endif %}
+            {% if form.opportunity_name.errors %}
+            <div class="mt-1 text-sm text-red-600">
+              {{ form.opportunity_name.errors }}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label for="{{ form.domain.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+              {{ form.domain.label }}
+            </label>
+            {{ form.domain }}
+            {% if form.domain.help_text %}
+            <p class="mt-1 text-sm text-gray-500">{{ form.domain.help_text }}</p>
+            {% endif %}
+            {% if form.domain.errors %}
+            <div class="mt-1 text-sm text-red-600">
+              {{ form.domain.errors }}
+            </div>
+            {% endif %}
+          </div>
+
+          <div>
+            <label for="{{ form.app_id.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+              {{ form.app_id.label }}
+            </label>
+            {{ form.app_id }}
+            {% if form.app_id.help_text %}
+            <p class="mt-1 text-sm text-gray-500">{{ form.app_id.help_text }}</p>
+            {% endif %}
+            {% if form.app_id.errors %}
+            <div class="mt-1 text-sm text-red-600">
+              {{ form.app_id.errors }}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label for="{{ form.start_date.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+              {{ form.start_date.label }}
+            </label>
+            {{ form.start_date }}
+            {% if form.start_date.help_text %}
+            <p class="mt-1 text-sm text-gray-500">{{ form.start_date.help_text }}</p>
+            {% endif %}
+            {% if form.start_date.errors %}
+            <div class="mt-1 text-sm text-red-600">
+              {{ form.start_date.errors }}
+            </div>
+            {% endif %}
+          </div>
+
+          <div>
+            <label for="{{ form.end_date.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+              {{ form.end_date.label }}
+            </label>
+            {{ form.end_date }}
+            {% if form.end_date.help_text %}
+            <p class="mt-1 text-sm text-gray-500">{{ form.end_date.help_text }}</p>
+            {% endif %}
+            {% if form.end_date.errors %}
+            <div class="mt-1 text-sm text-red-600">
+              {{ form.end_date.errors }}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div>
+          <label for="{{ form.notes.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
+            {{ form.notes.label }}
+          </label>
+          {{ form.notes }}
+          {% if form.notes.help_text %}
+          <p class="mt-1 text-sm text-gray-500">{{ form.notes.help_text }}</p>
+          {% endif %}
+          {% if form.notes.errors %}
+          <div class="mt-1 text-sm text-red-600">
+            {{ form.notes.errors }}
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="flex justify-end gap-4 pt-6 border-t border-gray-200">
+          <a href="{% url 'audit:session_list' %}" class="button button-md outline-style">
+            {% translate "Cancel" %}
+          </a>
+          <button type="submit" class="button button-md primary-dark">
+            {% translate "Create Audit Session" %}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Set default values for common fields
+  const domainField = document.getElementById('id_domain');
+  const appIdField = document.getElementById('id_app_id');
+
+  if (domainField && !domainField.value) {
+    domainField.value = 'connect-experiments';
+  }
+
+  if (appIdField && !appIdField.value) {
+    appIdField.value = '86bab9977e9afe5a61dbd30e0e500da7';
+  }
+
+  // Set date inputs to date type
+  const startDateField = document.getElementById('id_start_date');
+  const endDateField = document.getElementById('id_end_date');
+
+  if (startDateField) {
+    startDateField.type = 'date';
+  }
+
+  if (endDateField) {
+    endDateField.type = 'date';
+  }
+});
+</script>
+{% endblock %}
+{% endblock %}
