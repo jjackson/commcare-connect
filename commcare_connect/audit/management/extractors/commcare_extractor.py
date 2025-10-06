@@ -8,9 +8,8 @@ Supports forms, cases, and attachment downloads.
 
 import os
 import time
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
@@ -272,8 +271,6 @@ class CommCareExtractor:
         if not attachments:
             return downloaded_files
 
-        form_id = form.get("id", "unknown")
-
         for filename, attachment_info in attachments.items():
             # Filter by file type if specified
             if file_types:
@@ -289,7 +286,7 @@ class CommCareExtractor:
 
             if not attachment_url:
                 if verbose:
-                    print(f"⚠️ No URL found for attachment: {filename}")
+                    print(f"[WARNING] No URL found for attachment: {filename}")
                 continue
 
             # Create output path

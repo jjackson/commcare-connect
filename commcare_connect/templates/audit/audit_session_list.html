@@ -1,129 +1,130 @@
 {% extends 'base.html' %}
+{% load render_table from django_tables2 %}
 {% load i18n %}
 
 {% block content %}
+{% csrf_token %}
 <div class="flex items-center justify-center">
   <div class="flex flex-col gap-2 w-full">
     <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
       <p class="text-sm text-brand-deep-purple">{% translate "Audit Sessions" %}</p>
       <div class="flex gap-x-3">
-        <a class="button button-md primary-dark" href="{% url 'audit:creation_wizard' %}">
-          <i class="fa-solid fa-magic-wand-sparkles mr-2"></i>
-          {% translate "Create Audit (Wizard)" %}
+        <a class="button button-md outline-style" href="{% url 'audit:export_all' %}">
+          <i class="fa-solid fa-download mr-2"></i>
+          {% translate "Export All" %}
         </a>
-        <a class="button button-md outline-style" href="{% url 'audit:session_create' %}">
-          {% translate "Manual Entry" %}
+        <a class="button button-md primary-dark" href="{% url 'audit:creation_wizard' %}">
+          <i class="fa-solid fa-plus mr-2"></i>
+          {% translate "Create Audit" %}
         </a>
       </div>
     </div>
 
-    <!-- Sessions List -->
+    <!-- Sessions Table -->
     <div class="flex flex-col w-full gap-2">
-      {% if sessions %}
-        {% for session in sessions %}
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div class="flex items-center justify-between">
-            <div class="flex-1">
-              <div class="flex items-center gap-4">
-                <h3 class="text-lg font-medium text-brand-deep-purple">
-                  {{ session.opportunity_name }}
-                </h3>
-                <span class="px-2 py-1 text-xs rounded-full
-                  {% if session.status == 'completed' %}bg-green-100 text-green-800
-                  {% elif session.status == 'in_progress' %}bg-blue-100 text-blue-800
-                  {% else %}bg-gray-100 text-gray-800{% endif %}">
-                  {{ session.get_status_display }}
-                </span>
-              </div>
-
-              <div class="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                  <span class="text-brand-blue-light">{% translate "FLW" %}:</span>
-                  <span class="text-brand-deep-purple font-medium">{{ session.flw_username }}</span>
-                </div>
-                <div>
-                  <span class="text-brand-blue-light">{% translate "Auditor" %}:</span>
-                  <span class="text-brand-deep-purple font-medium">{{ session.auditor_username }}</span>
-                </div>
-                <div>
-                  <span class="text-brand-blue-light">{% translate "Date Range" %}:</span>
-                  <span class="text-brand-deep-purple font-medium">{{ session.start_date }} - {{ session.end_date }}</span>
-                </div>
-                <div>
-                  <span class="text-brand-blue-light">{% translate "Progress" %}:</span>
-                  <span class="text-brand-deep-purple font-medium">{{ session.progress_percentage }}%</span>
-                </div>
-              </div>
-
-              {% if session.overall_result %}
-              <div class="mt-2">
-                <span class="px-2 py-1 text-xs rounded-full
-                  {% if session.overall_result == 'pass' %}bg-green-100 text-green-800
-                  {% else %}bg-red-100 text-red-800{% endif %}">
-                  {% translate "Overall Result" %}: {{ session.get_overall_result_display }}
-                </span>
-              </div>
-              {% endif %}
-            </div>
-
-            <div class="flex gap-2">
-              <a href="{% url 'audit:session_detail' session.pk %}"
-                 class="button button-md primary-light">
-                {% translate "Audit" %}
-              </a>
-              {% if session.status == 'completed' %}
-              <a href="{% url 'audit:session_export' session.pk %}"
-                 class="button button-md outline-style">
-                {% translate "Export" %}
-              </a>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-        {% endfor %}
-
-        <!-- Pagination -->
-        {% if is_paginated %}
-        <div class="flex justify-center mt-4">
-          <nav class="flex space-x-2">
-            {% if page_obj.has_previous %}
-              <a href="?page=1" class="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-                {% translate "First" %}
-              </a>
-              <a href="?page={{ page_obj.previous_page_number }}" class="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-                {% translate "Previous" %}
-              </a>
-            {% endif %}
-
-            <span class="px-3 py-2 text-sm bg-brand-indigo text-white rounded-md">
-              {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
-            </span>
-
-            {% if page_obj.has_next %}
-              <a href="?page={{ page_obj.next_page_number }}" class="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-                {% translate "Next" %}
-              </a>
-              <a href="?page={{ page_obj.paginator.num_pages }}" class="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-                {% translate "Last" %}
-              </a>
-            {% endif %}
-          </nav>
-        </div>
-        {% endif %}
-
-      {% else %}
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-          <div class="text-gray-500">
-            <i class="fas fa-clipboard-list text-4xl mb-4"></i>
-            <h3 class="text-lg font-medium mb-2">{% translate "No Audit Sessions" %}</h3>
-            <p class="text-sm mb-4">{% translate "Create your first audit session to get started." %}</p>
-            <a href="{% url 'audit:session_create' %}" class="button button-md primary-dark">
-              {% translate "Create Audit Session" %}
-            </a>
-          </div>
-        </div>
-      {% endif %}
+      <div class="w-full overflow-y-auto rounded-lg shadow-xs">
+        {% render_table table %}
+      </div>
     </div>
+
+    <!-- Database Status Panel -->
+    <div class="mt-6 bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-6" x-data="databaseStatus()">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">
+          <i class="fa-solid fa-database mr-2"></i>
+          Database Status
+        </h3>
+        <button
+          @click="resetDatabase()"
+          class="button button-md outline-style text-red-600 hover:bg-red-50 border-red-300 hover:border-red-400">
+          <i class="fa-solid fa-trash mr-2"></i>
+          Reset Database
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-lg border border-gray-200">
+          <div class="text-2xl font-bold text-brand-indigo" x-text="stats.opportunities || '-'"></div>
+          <div class="text-sm text-gray-600">Opportunities</div>
+        </div>
+        <div class="bg-white p-4 rounded-lg border border-gray-200">
+          <div class="text-2xl font-bold text-brand-indigo" x-text="stats.users || '-'"></div>
+          <div class="text-sm text-gray-600">Users/FLWs</div>
+        </div>
+        <div class="bg-white p-4 rounded-lg border border-gray-200">
+          <div class="text-2xl font-bold text-brand-indigo" x-text="stats.visits || '-'"></div>
+          <div class="text-sm text-gray-600">User Visits</div>
+        </div>
+        <div class="bg-white p-4 rounded-lg border border-gray-200">
+          <div class="text-2xl font-bold text-brand-indigo" x-text="stats.audit_sessions || '-'"></div>
+          <div class="text-sm text-gray-600">Audit Sessions</div>
+        </div>
+      </div>
+
+      <div class="mt-4 text-xs text-gray-500">
+        <i class="fa-solid fa-info-circle mr-1"></i>
+        Reset will clear opportunities, users/FLWs, visits, and audit sessions. Login accounts and system configuration are preserved.
+      </div>
+    </div>
+
   </div>
 </div>
+
+<script>
+function databaseStatus() {
+  return {
+    stats: {
+      opportunities: '-',
+      users: '-',
+      visits: '-',
+      audit_sessions: '-'
+    },
+
+    async loadStats() {
+      try {
+        const response = await fetch('{% url "audit:database_stats" %}');
+        const data = await response.json();
+        if (data.success) {
+          this.stats = data.stats;
+        }
+      } catch (error) {
+        console.error('Failed to load stats:', error);
+      }
+    },
+
+    async resetDatabase() {
+      if (!confirm('⚠️ WARNING: This will delete all opportunities, users/FLWs, visits, and audit sessions.\n\nLogin accounts (superusers/staff) and system configuration will be preserved.\n\nAre you sure you want to continue?')) {
+        return;
+      }
+
+      try {
+        const response = await fetch('{% url "audit:reset_database" %}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert(`✅ Database reset complete!\n\nDeleted:\n- ${data.deleted.opportunities} opportunities\n- ${data.deleted.users} users/FLWs\n- ${data.deleted.visits} visits\n- ${data.deleted.audit_sessions} audit sessions`);
+          window.location.reload();
+        } else {
+          alert('Failed to reset database: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Reset error:', error);
+        alert('Failed to reset database. Please try again.');
+      }
+    },
+
+    init() {
+      this.loadStats();
+    }
+  }
+}
+</script>
+
 {% endblock %}

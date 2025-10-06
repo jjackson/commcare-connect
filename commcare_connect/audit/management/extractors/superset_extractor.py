@@ -9,7 +9,6 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 import requests
@@ -98,7 +97,7 @@ class SupersetExtractor:
             if self.csrf_token:
                 self.session.headers.update({"x-csrftoken": self.csrf_token, "Referer": f"{self.superset_url}/sqllab"})
 
-        print("✅ Authentication successful")
+        print("[OK] Authentication successful")
         return True
 
     def execute_query(
@@ -124,14 +123,12 @@ class SupersetExtractor:
             offset = existing_rows
             total_rows = existing_rows
             chunk_num = (existing_rows // self.chunk_size) + 1
-            print(f"📄 Found {total_lines:,} lines in file ({existing_rows:,} data rows + 1 header)")
-            print(f"🔄 Resuming from row {existing_rows:,} (chunk {chunk_num})")
-            print(f"📍 Starting offset: {offset:,}, chunk size: {self.chunk_size:,}")
+            print(f"[FILE] Found {total_lines:,} lines in file ({existing_rows:,} data rows + 1 header)")
+            print(f"[RESUME] Resuming from row {existing_rows:,} (chunk {chunk_num})")
+            print(f"[LOCATION] Starting offset: {offset:,}, chunk size: {self.chunk_size:,}")
 
         # For memory efficiency with large datasets
         if output_file:
-            import tempfile
-
             temp_files = []
 
         while True:
@@ -139,7 +136,7 @@ class SupersetExtractor:
             clean_query = sql_query.strip().rstrip(";")
             paginated_sql = f"{clean_query}\nOFFSET {offset}\nLIMIT {self.chunk_size}"
 
-            print(f"🔍 SQL: OFFSET {offset:,} LIMIT {self.chunk_size:,}")
+            # Query with offset and limit for chunking
 
             payload = {
                 "ctas_method": "TABLE",
@@ -167,12 +164,7 @@ class SupersetExtractor:
             chunk_data = result.get("data", [])
             columns = result.get("columns", [])
 
-            if verbose or chunk_num == 1:  # Always print first chunk columns
-                print(
-                    f"🔍 SUPERSET DEBUG: Chunk {chunk_num} - Got {len(columns)} columns: {[c.get('name') for c in columns]}"
-                )
-                if chunk_data:
-                    print(f"🔍 SUPERSET DEBUG: First row keys: {list(chunk_data[0].keys()) if chunk_data else 'N/A'}")
+            # Store column metadata from first chunk (verbose output suppressed)
 
             if not chunk_data:
                 break
@@ -180,13 +172,9 @@ class SupersetExtractor:
             # Store columns from first chunk
             if all_columns is None:
                 all_columns = columns
-                print(f"🔍 SUPERSET DEBUG: Stored column names: {[c.get('name') for c in all_columns]}")
 
             chunk_rows = len(chunk_data)
             total_rows += chunk_rows
-            current_offset = offset  # Capture offset used for this chunk
-
-            print(f"📦 Chunk {chunk_num}: {chunk_rows:,} rows (total: {total_rows:,}) [used offset {current_offset:,}]")
 
             # Write chunk to disk immediately for memory efficiency
             if output_file:
@@ -197,7 +185,7 @@ class SupersetExtractor:
                 else:
                     # Subsequent chunks or resuming - append without headers
                     chunk_df.to_csv(output_file, index=False, mode="a", header=False)
-                print(f"💾 Written to {output_file}")
+                print(f"[OK] Written to {output_file}")
             else:
                 # Legacy behavior - keep in memory
                 if "all_data" not in locals():
@@ -215,20 +203,20 @@ class SupersetExtractor:
             # Small delay to be nice to the server
             time.sleep(0.5)
 
-        print(f"✅ Complete! {total_rows:,} rows in {chunk_num - 1} chunks")
+        # Query complete - {total_rows} rows retrieved
 
         # If writing to file, return the file path info
         if output_file:
             if total_rows == 0:
-                print("No data was retrieved from the query")
+                # Silently return None for empty results
                 return None
-            print(f"📁 Data written to: {output_file}")
+            print(f"[ICON] Data written to: {output_file}")
             # Return a simple DataFrame with summary info
             return pd.DataFrame({"total_rows": [total_rows], "output_file": [output_file]})
 
         # Legacy behavior - create DataFrame from memory
         if "all_data" not in locals() or not all_data or not all_columns:
-            print("No data was retrieved from the query")
+            # Silently return None for empty results
             return None
 
         column_names = [col.get("name", f"col_{i}") for i, col in enumerate(all_columns)]
@@ -258,7 +246,7 @@ class SupersetExtractor:
         # Export to CSV
         df.to_csv(output_path, index=False, encoding="utf-8")
 
-        print(f"✅ Data exported to: {output_path}")
+        print(f"[OK] Data exported to: {output_path}")
         print(f"   Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
 
         return str(output_path)
@@ -287,11 +275,11 @@ def main():
 
     # Authenticate
     if not extractor.authenticate():
-        print("❌ Authentication failed")
+        print("[ERROR] Authentication failed")
         return
 
     # Execute the specific opportunities query
-    print(f"\n🚀 Executing specific_opportunities query...")
+    print("\n[RUN] Executing specific_opportunities query...")
     query = extractor.get_sql_query_specific_opportunities()
     print(f"Query preview: {query[:100]}...")
 
@@ -299,28 +287,28 @@ def main():
     df = extractor.execute_query(query, verbose=True)
 
     if df is not None:
-        print(f"\n✅ Query executed successfully!")
-        print(f"📊 Results: {len(df)} rows, {len(df.columns)} columns")
-        print(f"📋 Columns: {list(df.columns)}")
-        print(f"\n📋 Sample data:")
+        print("\n[OK] Query executed successfully!")
+        print(f"[DATA] Results: {len(df)} rows, {len(df.columns)} columns")
+        print(f"[DATA] Columns: {list(df.columns)}")
+        print("\n[DATA] Sample data:")
         print(df.head())
 
         # Export to CSV
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_filename = f"opportunity_visits_specific_{timestamp}"
 
-        print(f"\n💾 Exporting to CSV...")
+        print("\n[EXPORT] Exporting to CSV...")
         csv_path = extractor.export_query_to_csv(query, output_filename, verbose=True)
 
         if csv_path:
-            print(f"✅ Export successful: {csv_path}")
+            print(f"[OK] Export successful: {csv_path}")
         else:
-            print("❌ Export failed")
+            print("[ERROR] Export failed")
     else:
-        print("❌ Query execution failed")
+        print("[ERROR] Query execution failed")
 
     extractor.close()
-    print("\n🔚 Extractor closed")
+    print("\n[DONE] Extractor closed")
 
 
 if __name__ == "__main__":

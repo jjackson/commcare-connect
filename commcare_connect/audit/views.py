@@ -1,40 +1,36 @@
 import json
+import threading
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
 from django.utils import timezone
-from django.views.generic import CreateView, DetailView, ListView, TemplateView, View
+from django.views.generic import DetailView, TemplateView, View
+from django_tables2 import SingleTableView
 
 from commcare_connect.audit.management.extractors.connect_api_facade import ConnectAPIFacade
 from commcare_connect.audit.models import AuditResult, AuditSession
+from commcare_connect.audit.services.audit_creator import create_audit_sessions, preview_audit_sessions
+from commcare_connect.audit.services.database_manager import get_database_stats, reset_audit_database
+from commcare_connect.audit.services.progress_tracker import ProgressTracker
+from commcare_connect.audit.tables import AuditSessionTable
 from commcare_connect.opportunity.models import BlobMeta, UserVisit
 
+User = get_user_model()
 
-class AuditSessionListView(LoginRequiredMixin, ListView):
+
+class AuditSessionListView(LoginRequiredMixin, SingleTableView):
     """List all audit sessions"""
 
     model = AuditSession
+    table_class = AuditSessionTable
     template_name = "audit/audit_session_list.html"
-    context_object_name = "sessions"
     paginate_by = 20
 
     def get_queryset(self):
         return AuditSession.objects.order_by("-created_at")
-
-
-class AuditSessionCreateView(LoginRequiredMixin, CreateView):
-    """Create a new audit session"""
-
-    model = AuditSession
-    template_name = "audit/audit_session_create.html"
-    fields = ["flw_username", "opportunity_name", "domain", "app_id", "start_date", "end_date", "notes"]
-    success_url = reverse_lazy("audit:session_list")
-
-    def form_valid(self, form):
-        form.instance.auditor_username = self.request.user.username
-        return super().form_valid(form)
 
 
 class AuditSessionDetailView(LoginRequiredMixin, DetailView):
@@ -48,18 +44,8 @@ class AuditSessionDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         session = self.get_object()
 
-        # Get all UserVisits that could be audited for this session
-        all_visits = (
-            UserVisit.objects.filter(
-                opportunity__deliver_app__cc_domain=session.domain,
-                opportunity__deliver_app__cc_app_id=session.app_id,
-                visit_date__date__gte=session.start_date,
-                visit_date__date__lte=session.end_date,
-                status="approved",  # Only approved visits
-            )
-            .select_related("user", "opportunity", "deliver_unit")
-            .order_by("visit_date")
-        )
+        # Get all UserVisits explicitly assigned to this session
+        all_visits = session.visits.all().select_related("user", "opportunity", "deliver_unit").order_by("visit_date")
 
         # Get existing audit results
         existing_results = {result.user_visit_id: result for result in session.results.select_related("user_visit")}
@@ -141,14 +127,8 @@ class AuditResultUpdateView(LoginRequiredMixin, View):
             except json.JSONDecodeError:
                 pass  # Ignore invalid JSON
 
-            # Calculate updated progress
-            total_visits = UserVisit.objects.filter(
-                opportunity__deliver_app__cc_domain=session.domain,
-                opportunity__deliver_app__cc_app_id=session.app_id,
-                visit_date__date__gte=session.start_date,
-                visit_date__date__lte=session.end_date,
-                status="approved",
-            ).count()
+            # Calculate updated progress using explicit visit set
+            total_visits = session.visits.count()
 
             audited_count = session.results.count()
             progress_percentage = round((audited_count / total_visits) * 100, 1) if total_visits > 0 else 0
@@ -199,6 +179,26 @@ class AuditSessionCompleteView(LoginRequiredMixin, View):
             return JsonResponse({"error": str(e)}, status=500)
 
 
+class AuditSessionUncompleteView(LoginRequiredMixin, View):
+    """Reopen a completed audit session"""
+
+    def post(self, request, session_id):
+        try:
+            session = get_object_or_404(AuditSession, id=session_id)
+
+            if session.status != AuditSession.Status.COMPLETED:
+                return JsonResponse({"error": "Audit session is not completed"}, status=400)
+
+            session.status = AuditSession.Status.IN_PROGRESS
+            session.completed_at = None
+            session.save()
+
+            return JsonResponse({"success": True})
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+
 class AuditExportView(LoginRequiredMixin, DetailView):
     """Export audit session results as JSON"""
 
@@ -223,8 +223,84 @@ class AuditExportView(LoginRequiredMixin, DetailView):
                 "created_at": session.created_at.isoformat(),
                 "completed_at": session.completed_at.isoformat() if session.completed_at else None,
             },
-            "visit_results": [
-                {
+            "visit_results": [],
+        }
+
+        # Build visit results with images and image notes
+        for result in session.results.select_related("user_visit__user").prefetch_related("image_notes").all():
+            # Get image notes keyed by blob_id for easy lookup
+            image_notes_dict = {note.blob_id: note.note for note in result.image_notes.all()}
+
+            # Build images list with notes
+            images = []
+            for img in result.user_visit.images.all():
+                image_data = {
+                    "filename": img.name,
+                }
+                # Add note if exists for this image
+                if img.blob_id in image_notes_dict:
+                    image_data["note"] = image_notes_dict[img.blob_id]
+                images.append(image_data)
+
+            visit_result = {
+                "visit_id": result.user_visit.id,
+                "xform_id": result.user_visit.xform_id,
+                "visit_date": result.user_visit.visit_date.isoformat(),
+                "entity_id": result.user_visit.entity_id,
+                "entity_name": result.user_visit.entity_name,
+                "user_username": result.user_visit.user.username,
+                "result": result.result,
+                "notes": result.notes,
+                "images": images,
+                "image_count": len(images),
+                "audited_at": result.audited_at.isoformat(),
+            }
+            export_data["visit_results"].append(visit_result)
+
+        # Return as JSON download
+        response = HttpResponse(
+            content_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="audit_export_{session.id}.json"'},
+        )
+
+        json.dump(export_data, response, indent=2)
+        return response
+
+
+class AuditExportAllView(LoginRequiredMixin, View):
+    """Export all completed audit sessions as a single JSON file"""
+
+    def get(self, request):
+        # Get all completed audit sessions
+        completed_sessions = AuditSession.objects.filter(status=AuditSession.Status.COMPLETED).order_by(
+            "-completed_at"
+        )
+
+        if not completed_sessions.exists():
+            return JsonResponse({"error": "No completed audit sessions to export"}, status=404)
+
+        # Generate export data for all sessions
+        all_audits = []
+        for session in completed_sessions:
+            visit_results = []
+
+            # Build visit results with images and image notes
+            for result in session.results.select_related("user_visit__user").prefetch_related("image_notes").all():
+                # Get image notes keyed by blob_id for easy lookup
+                image_notes_dict = {note.blob_id: note.note for note in result.image_notes.all()}
+
+                # Build images list with notes
+                images = []
+                for img in result.user_visit.images.all():
+                    image_data = {
+                        "filename": img.name,
+                    }
+                    # Add note if exists for this image
+                    if img.blob_id in image_notes_dict:
+                        image_data["note"] = image_notes_dict[img.blob_id]
+                    images.append(image_data)
+
+                visit_result = {
                     "visit_id": result.user_visit.id,
                     "xform_id": result.user_visit.xform_id,
                     "visit_date": result.user_visit.visit_date.isoformat(),
@@ -233,17 +309,46 @@ class AuditExportView(LoginRequiredMixin, DetailView):
                     "user_username": result.user_visit.user.username,
                     "result": result.result,
                     "notes": result.notes,
-                    "image_count": result.user_visit.images.count(),
+                    "images": images,
+                    "image_count": len(images),
                     "audited_at": result.audited_at.isoformat(),
                 }
-                for result in session.results.select_related("user_visit__user").all()
-            ],
+                visit_results.append(visit_result)
+
+            audit_data = {
+                "audit_session": {
+                    "id": session.id,
+                    "auditor_username": session.auditor_username,
+                    "flw_username": session.flw_username,
+                    "opportunity_name": session.opportunity_name,
+                    "domain": session.domain,
+                    "app_id": session.app_id,
+                    "date_range": [str(session.start_date), str(session.end_date)],
+                    "overall_result": session.overall_result,
+                    "notes": session.notes,
+                    "kpi_notes": session.kpi_notes,
+                    "created_at": session.created_at.isoformat(),
+                    "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+                },
+                "visit_results": visit_results,
+            }
+            all_audits.append(audit_data)
+
+        # Create combined export
+        export_data = {
+            "export_metadata": {
+                "export_date": timezone.now().isoformat(),
+                "total_audits": len(all_audits),
+                "exported_by": request.user.username or request.user.email,
+            },
+            "audits": all_audits,
         }
 
         # Return as JSON download
+        filename = f'audit_export_all_{timezone.now().strftime("%Y%m%d_%H%M%S")}.json'
         response = HttpResponse(
             content_type="application/json",
-            headers={"Content-Disposition": f'attachment; filename="audit_export_{session.id}.json"'},
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
         json.dump(export_data, response, indent=2)
@@ -275,18 +380,8 @@ class AuditVisitDataView(LoginRequiredMixin, View):
         session = get_object_or_404(AuditSession, id=session_id)
         visit_index = int(request.GET.get("visit", 0))
 
-        # Get all visits for this session
-        all_visits = (
-            UserVisit.objects.filter(
-                opportunity__deliver_app__cc_domain=session.domain,
-                opportunity__deliver_app__cc_app_id=session.app_id,
-                visit_date__date__gte=session.start_date,
-                visit_date__date__lte=session.end_date,
-                status="approved",
-            )
-            .select_related("user", "opportunity", "deliver_unit")
-            .order_by("visit_date")
-        )
+        # Get all visits explicitly assigned to this session
+        all_visits = session.visits.all().select_related("user", "opportunity", "deliver_unit").order_by("visit_date")
 
         existing_results = {result.user_visit_id: result for result in session.results.select_related("user_visit")}
 
@@ -372,23 +467,23 @@ class ProgramSearchAPIView(LoginRequiredMixin, View):
         query = request.GET.get("q", "").strip()
         limit = min(int(request.GET.get("limit", 20)), 100)  # Cap at 100 results
 
-        print(f"🔍 DJANGO VIEW DEBUG: query='{query}', limit={limit}")
-        print(f"🔍 DJANGO VIEW DEBUG: user={request.user}")
+        print(f"[VIEW DEBUG] query='{query}', limit={limit}")
+        print(f"[VIEW DEBUG] user={request.user}")
 
         facade = ConnectAPIFacade()
-        print("🔍 DJANGO VIEW DEBUG: facade created")
+        print("[VIEW DEBUG] facade created")
 
         facade.authenticate()
-        print("🔍 DJANGO VIEW DEBUG: facade authenticated")
+        print("[VIEW DEBUG] facade authenticated")
 
         opportunities = facade.search_opportunities(query, limit)
-        print(f"🔍 DJANGO VIEW DEBUG: opportunities returned: {len(opportunities)}")
+        print(f"[VIEW DEBUG] opportunities returned: {len(opportunities)}")
 
         if opportunities:
             for opp in opportunities:
-                print(f"🔍 DJANGO VIEW DEBUG: - ID: {opp.id}, Name: {opp.name}, Visits: {opp.visit_count}")
+                print(f"[VIEW DEBUG] - ID: {opp.id}, Name: {opp.name}, Visits: {opp.visit_count}")
         else:
-            print("🔍 DJANGO VIEW DEBUG: No opportunities found")
+            print("[VIEW DEBUG] No opportunities found")
 
         # Convert opportunities to JSON-serializable format
         opportunities_data = []
@@ -474,102 +569,180 @@ class AuditPreviewAPIView(LoginRequiredMixin, View):
     """API endpoint for previewing audit scope (FLW counts and visit numbers)"""
 
     def post(self, request):
-        data = json.loads(request.body)
-        opportunity_ids = data.get("opportunities", [])
-        criteria = data.get("criteria", {})
+        try:
+            data = json.loads(request.body)
+            opportunity_ids = data.get("opportunities", [])
+            criteria = data.get("criteria", {})
 
-        if not opportunity_ids or not criteria:
-            return JsonResponse({"error": "Missing opportunities or criteria"}, status=400)
+            if not opportunity_ids or not criteria:
+                return JsonResponse({"error": "Missing opportunities or criteria"}, status=400)
 
-        facade = ConnectAPIFacade()
-        facade.authenticate()
+            # Initialize and authenticate facade
+            facade = ConnectAPIFacade()
+            if not facade.authenticate():
+                return JsonResponse({"error": "Failed to authenticate with data source"}, status=500)
 
-        results = []
+            try:
+                # Use the same service that creates audits to generate preview
+                result = preview_audit_sessions(
+                    facade=facade,
+                    opportunity_ids=opportunity_ids,
+                    criteria=criteria,
+                )
 
-        for opp_id in opportunity_ids:
-            # Get opportunity details
-            opportunities = facade.search_opportunities(str(opp_id), 1)
-            if not opportunities:
-                continue
+                if not result.success:
+                    return JsonResponse({"error": result.error}, status=500)
 
-            opportunity = opportunities[0]
+                return JsonResponse({"success": True, "results": result.preview_data})
 
-            # Get FLW and visit counts based on criteria
-            if criteria["type"] == "date_range":
-                counts = facade.get_flw_visit_counts_by_date_range(opp_id, criteria["startDate"], criteria["endDate"])
-            elif criteria["type"] == "last_n_per_flw":
-                counts = facade.get_flw_visit_counts_last_n_per_flw(opp_id, criteria["countPerFlw"])
-            elif criteria["type"] == "last_n_across_opp":
-                counts = facade.get_flw_visit_counts_last_n_across_opp(opp_id, criteria["countAcrossOpp"])
-            else:
-                continue
+            finally:
+                facade.close()
 
-            results.append(
-                {
-                    "opportunity_id": opp_id,
-                    "opportunity_name": opportunity.name,
-                    "total_flws": counts["total_flws"],
-                    "total_visits": counts["total_visits"],
-                    "avg_visits_per_flw": round(counts["total_visits"] / max(counts["total_flws"], 1), 1),
-                    "date_range": counts["date_range"],
-                    "flws": counts.get("flws", []),
-                }
-            )
+        except Exception as e:
+            import traceback
 
-        facade.close()
-
-        return JsonResponse({"success": True, "results": results})
+            return JsonResponse({"error": str(e), "traceback": traceback.format_exc()}, status=500)
 
 
 class AuditSessionCreateAPIView(LoginRequiredMixin, View):
-    """API endpoint for creating audit sessions"""
+    """API endpoint for creating audit sessions and loading data"""
+
+    def _run_audit_creation_in_background(self, task_id, opportunity_ids, criteria, auditor_username):
+        """Run audit creation in a background thread"""
+        progress_tracker = ProgressTracker(task_id=task_id)
+        facade = None
+
+        try:
+            # Initialize and authenticate facade
+            facade = ConnectAPIFacade()
+            if not facade.authenticate():
+                progress_tracker.error("Failed to authenticate with data source")
+                return
+
+            # Create audit sessions using the service with progress tracking
+            result = create_audit_sessions(
+                facade=facade,
+                opportunity_ids=opportunity_ids,
+                criteria=criteria,
+                auditor_username=auditor_username,
+                progress_tracker=progress_tracker,
+            )
+
+            if not result.success:
+                progress_tracker.error(result.error)
+                return
+
+            # Redirect to the first session if only one, otherwise to the list
+            if result.sessions_created == 1:
+                redirect_url = reverse_lazy("audit:session_detail", kwargs={"pk": result.first_session.pk})
+            else:
+                redirect_url = reverse_lazy("audit:session_list")
+
+            # Mark as complete with result data
+            progress_tracker.complete(
+                "Audit created successfully!",
+                result_data={
+                    "redirect_url": str(redirect_url),
+                    "sessions_created": result.sessions_created,
+                    "stats": result.stats,
+                },
+            )
+
+        except Exception as e:
+            import traceback
+
+            progress_tracker.error(str(e), traceback.format_exc())
+        finally:
+            if facade:
+                facade.close()
 
     def post(self, request):
         try:
             data = json.loads(request.body)
             opportunity_ids = data.get("opportunities", [])
             criteria = data.get("criteria", {})
-            preview = data.get("preview", [])
 
-            if not opportunity_ids or not criteria or not preview:
+            if not opportunity_ids or not criteria:
                 return JsonResponse({"error": "Missing required data"}, status=400)
 
-            # Create audit session(s) based on the criteria and opportunities
-            # For now, create one session per opportunity
-            created_sessions = []
+            # Use username or email as auditor identifier
+            auditor_username = request.user.username or request.user.email
 
-            for preview_result in preview:
-                opp_name = preview_result["opportunity_name"]
+            # Initialize progress tracker and set initial state in cache
+            progress_tracker = ProgressTracker()
+            progress_tracker.update(0, 5, "Starting audit creation...", "initializing")
 
-                # Create audit session notes
-                notes = (
-                    f"Audit criteria: {criteria['type']}, "
-                    f"Expected FLWs: {preview_result['total_flws']}, "
-                    f"Expected visits: {preview_result['total_visits']}"
-                )
+            # Start the audit creation in a background thread
+            thread = threading.Thread(
+                target=self._run_audit_creation_in_background,
+                args=(progress_tracker.task_id, opportunity_ids, criteria, auditor_username),
+                daemon=True,
+            )
+            thread.start()
 
-                # Create the audit session
-                session = AuditSession.objects.create(
-                    auditor_username=request.user.username,
-                    opportunity_name=opp_name,
-                    domain="",  # Will be populated when visits are loaded
-                    app_id="",  # Will be populated when visits are loaded
-                    start_date=criteria.get("startDate") if criteria["type"] == "date_range" else None,
-                    end_date=criteria.get("endDate") if criteria["type"] == "date_range" else None,
-                    notes=notes,
-                )
-
-                created_sessions.append(session)
-
-            # Redirect to the first session if only one, otherwise to the list
-            if len(created_sessions) == 1:
-                redirect_url = reverse_lazy("audit:session_detail", kwargs={"pk": created_sessions[0].pk})
-            else:
-                redirect_url = reverse_lazy("audit:session_list")
-
+            # Return task_id immediately so client can start polling
             return JsonResponse(
-                {"success": True, "redirect_url": str(redirect_url), "sessions_created": len(created_sessions)}
+                {
+                    "success": True,
+                    "task_id": progress_tracker.task_id,
+                }
             )
 
         except Exception as e:
+            import traceback
+
+            return JsonResponse({"error": str(e), "traceback": traceback.format_exc()}, status=500)
+
+
+class AuditProgressAPIView(LoginRequiredMixin, View):
+    """API endpoint for polling audit creation progress"""
+
+    def get(self, request):
+        task_id = request.GET.get("task_id")
+        if not task_id:
+            return JsonResponse({"error": "Missing task_id"}, status=400)
+
+        progress_tracker = ProgressTracker(task_id=task_id)
+        progress_data = progress_tracker.get_progress()
+
+        if progress_data is None:
+            return JsonResponse({"error": "Task not found"}, status=404)
+
+        return JsonResponse(progress_data)
+
+    def delete(self, request):
+        """Cancel an in-progress audit creation"""
+        task_id = request.GET.get("task_id")
+        if not task_id:
+            return JsonResponse({"error": "Missing task_id"}, status=400)
+
+        progress_tracker = ProgressTracker(task_id=task_id)
+        progress_tracker.cancel()
+
+        return JsonResponse({"success": True, "message": "Cancellation requested"})
+
+
+class DatabaseStatsAPIView(LoginRequiredMixin, View):
+    """API endpoint for getting database statistics"""
+
+    def get(self, request):
+        try:
+            stats = get_database_stats()
+            return JsonResponse({"success": True, "stats": stats})
+
+        except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
+
+
+class DatabaseResetAPIView(LoginRequiredMixin, View):
+    """API endpoint for resetting audit-related database tables"""
+
+    def post(self, request):
+        try:
+            deleted = reset_audit_database()
+            return JsonResponse({"success": True, "deleted": deleted})
+
+        except Exception as e:
+            import traceback
+
+            return JsonResponse({"error": str(e), "traceback": traceback.format_exc()}, status=500)

@@ -13,16 +13,27 @@ class AuditSession(models.Model):
         PASS = "pass", _("Pass")
         FAIL = "fail", _("Fail")
 
-    # Simplified fields - store as text instead of foreign keys
+    # Auditor info
     auditor_username = models.CharField(max_length=150, help_text="Username of person conducting the audit")
-    flw_username = models.CharField(max_length=150, help_text="Username of field worker being audited")
+
+    # The exact visits included in this audit session
+    visits = models.ManyToManyField(
+        "opportunity.UserVisit",
+        related_name="audit_sessions",
+        help_text="Explicit list of visits included in this audit",
+    )
+
+    # Metadata fields (for display/filtering only - NOT used to query visits)
+    flw_username = models.CharField(max_length=150, blank=True, help_text="FLW username (metadata only)")
     opportunity_name = models.CharField(max_length=255, help_text="Name of opportunity/program being audited")
     domain = models.CharField(max_length=255, help_text="CommCare domain/project space")
     app_id = models.CharField(max_length=50, help_text="CommCare application ID")
+    opportunity_ids = models.JSONField(default=list, blank=True, help_text="List of opportunity IDs (metadata only)")
+    user_ids = models.JSONField(default=list, blank=True, help_text="List of user IDs/FLWs (metadata only)")
 
-    # Audit period
-    start_date = models.DateField(help_text="Start date of audit period")
-    end_date = models.DateField(help_text="End date of audit period")
+    # Date range metadata (calculated from actual visits, for display only)
+    start_date = models.DateField(help_text="Start date of audit period (metadata only)")
+    end_date = models.DateField(help_text="End date of audit period (metadata only)")
 
     # Audit status and results
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.IN_PROGRESS)
@@ -52,30 +63,15 @@ class AuditSession(models.Model):
         return f"Audit: {self.flw_username} ({self.start_date} - {self.end_date})"
 
     @property
-    def visits(self):
-        """Get UserVisit records associated with this audit session"""
-        from commcare_connect.opportunity.models import UserVisit
-
-        # Get visits that have audit results for this session
-        return UserVisit.objects.filter(auditresult__audit_session=self).distinct()
-
-    @property
     def progress_percentage(self):
         """Calculate audit progress as percentage"""
-        from commcare_connect.opportunity.models import UserVisit
-
-        # Get ALL eligible visits for this audit session (not just audited ones)
-        total_visits = UserVisit.objects.filter(
-            opportunity__deliver_app__cc_domain=self.domain,
-            opportunity__deliver_app__cc_app_id=self.app_id,
-            visit_date__date__gte=self.start_date,
-            visit_date__date__lte=self.end_date,
-            status="approved",
-        ).count()
+        # Total visits is the explicit set of visits assigned to this session
+        total_visits = self.visits.count()
 
         if total_visits == 0:
             return 0
 
+        # Audited visits are those with results
         audited_visits = self.results.count()
         return round((audited_visits / total_visits) * 100, 1)
 

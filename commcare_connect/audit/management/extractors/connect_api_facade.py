@@ -99,6 +99,7 @@ class ConnectAPIFacade:
         """
         self.use_production_api = use_production_api
         self.superset_extractor = None
+        self.commcare_app_fallback = None  # Lazy-loaded fallback data
 
         if not use_production_api:
             # Initialize Superset extractor - fail loudly if not configured
@@ -111,6 +112,48 @@ class ConnectAPIFacade:
             raise NotImplementedError("Production API not yet available")
         else:
             return self.superset_extractor.authenticate()
+
+    def _load_commcare_app_fallback(self) -> dict:
+        """
+        Load CommCareApp fallback data from CSV file.
+
+        This is a temporary workaround because the opportunity_commcareapp table
+        is not synced to Superset (0 rows). Once that table is populated in Superset,
+        this fallback won't be needed.
+
+        Returns:
+            Dictionary mapping app_id -> {cc_domain, cc_app_id, name}
+        """
+        if self.commcare_app_fallback is not None:
+            return self.commcare_app_fallback
+
+        import csv
+        from pathlib import Path
+
+        self.commcare_app_fallback = {}
+
+        # CSV file is in the audit app directory (../../ from this module)
+        # This module is at: commcare_connect/audit/management/extractors/
+        # CSV file is at: commcare_connect/audit/
+        fallback_path = Path(__file__).parent.parent.parent / "commcare_app_fallback.csv"
+
+        if not fallback_path.exists():
+            return self.commcare_app_fallback
+
+        try:
+            with open(fallback_path) as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    app_id = int(row["id"])
+                    self.commcare_app_fallback[app_id] = {
+                        "cc_domain": row["cc_domain"],
+                        "cc_app_id": row["cc_app_id"],
+                        "name": row["name"],
+                    }
+        except Exception as e:
+            print(f"[WARNING] Could not load CommCareApp fallback data: {e}")
+
+        return self.commcare_app_fallback
 
     def search_programs(self, query: str = "", limit: int = 50) -> list[Program]:
         """
@@ -269,7 +312,7 @@ class ConnectAPIFacade:
                 escaped_query = query.replace("'", "''")  # Basic SQL injection protection
                 sql += f" AND (p.name ILIKE '%{escaped_query}%' OR p.description ILIKE '%{escaped_query}%')"
 
-        sql += f" ORDER BY p.name"
+        sql += " ORDER BY p.name"
 
         df = self.superset_extractor.execute_query(sql)
         if df is None or df.empty:
@@ -344,21 +387,11 @@ class ConnectAPIFacade:
                 escaped_query = query.replace("'", "''")  # Basic SQL injection protection
                 sql += f" AND (o.name ILIKE '%{escaped_query}%' OR o.description ILIKE '%{escaped_query}%')"
 
-        sql += f" ORDER BY COALESCE(visit_counts.visit_count, 0) DESC, o.name"
-
-        print(f"🔍 FACADE DEBUG: Executing SQL query:")
-        print(f"{'='*80}")
-        print(sql)
-        print(f"{'='*80}")
+        sql += " ORDER BY COALESCE(visit_counts.visit_count, 0) DESC, o.name"
 
         df = self.superset_extractor.execute_query(sql)
         if df is None or df.empty:
             return []
-
-        print(f"🔍 FACADE DEBUG: Got {len(df)} rows from Superset")
-        print(f"🔍 FACADE DEBUG: Columns: {list(df.columns)}")
-        if not df.empty:
-            print(f"🔍 FACADE DEBUG: First row visit_count: {df.iloc[0].get('visit_count', 'MISSING')}")
 
         opportunities = []
         for _, row in df.iterrows():
@@ -390,11 +423,7 @@ class ConnectAPIFacade:
                     vc = row["visit_count"]
                     if pd.notna(vc):  # Check if not NaN/None
                         visit_count = int(vc)
-                    print(f"🔍 FACADE DEBUG: Opp {row['id']} visit_count raw={vc}, processed={visit_count}")
-                else:
-                    print(f"🔍 FACADE DEBUG: Opp {row['id']} has NO visit_count column!")
-            except Exception as e:
-                print(f"🔍 FACADE DEBUG: Error processing visit_count for opp {row['id']}: {e}")
+            except Exception:
                 visit_count = 0
 
             opportunities.append(
@@ -668,16 +697,16 @@ class ConnectAPIFacade:
         SELECT
             uv.user_id,
             u.name as flw_name,
-            u.connect_id,
+            u.username,
             COUNT(*) as visit_count,
             MIN(uv.visit_date) as earliest_visit,
             MAX(uv.visit_date) as latest_visit
         FROM opportunity_uservisit uv
-        LEFT JOIN users_connectuser u ON u.id = uv.user_id
+        LEFT JOIN users_user u ON u.id = uv.user_id
         WHERE uv.opportunity_id = {opportunity_id}
         AND uv.visit_date::date >= '{start_date}'
         AND uv.visit_date::date <= '{end_date}'
-        GROUP BY uv.user_id, u.name, u.connect_id
+        GROUP BY uv.user_id, u.name, u.username
         ORDER BY visit_count DESC, u.name
         """
 
@@ -687,7 +716,9 @@ class ConnectAPIFacade:
             for _, flw_row in flw_df.iterrows():
                 flws.append(
                     {
-                        "connect_id": flw_row["connect_id"] or f"user_{flw_row['user_id']}",
+                        "connect_id": flw_row.get("username")
+                        or flw_row.get("connect_id")
+                        or f"user_{flw_row['user_id']}",
                         "name": flw_row["flw_name"] or f"User {flw_row['user_id']}",
                         "visit_count": int(flw_row["visit_count"]),
                         "earliest_visit": flw_row["earliest_visit"],
@@ -763,13 +794,13 @@ class ConnectAPIFacade:
         SELECT
             fv.user_id,
             u.name as flw_name,
-            u.connect_id,
+            u.username,
             COUNT(*) as visit_count,
             MIN(fv.visit_date) as earliest_visit,
             MAX(fv.visit_date) as latest_visit
         FROM filtered_visits fv
-        LEFT JOIN users_connectuser u ON u.id = fv.user_id
-        GROUP BY fv.user_id, u.name, u.connect_id
+        LEFT JOIN users_user u ON u.id = fv.user_id
+        GROUP BY fv.user_id, u.name, u.username
         ORDER BY visit_count DESC, u.name
         """
 
@@ -779,7 +810,9 @@ class ConnectAPIFacade:
             for _, flw_row in flw_df.iterrows():
                 flws.append(
                     {
-                        "connect_id": flw_row["connect_id"] or f"user_{flw_row['user_id']}",
+                        "connect_id": flw_row.get("username")
+                        or flw_row.get("connect_id")
+                        or f"user_{flw_row['user_id']}",
                         "name": flw_row["flw_name"] or f"User {flw_row['user_id']}",
                         "visit_count": int(flw_row["visit_count"]),
                         "earliest_visit": flw_row["earliest_visit"],
@@ -856,13 +889,13 @@ class ConnectAPIFacade:
         SELECT
             rv.user_id,
             u.name as flw_name,
-            u.connect_id,
+            u.username,
             COUNT(*) as visit_count,
             MIN(rv.visit_date) as earliest_visit,
             MAX(rv.visit_date) as latest_visit
         FROM recent_visits rv
-        LEFT JOIN users_connectuser u ON u.id = rv.user_id
-        GROUP BY rv.user_id, u.name, u.connect_id
+        LEFT JOIN users_user u ON u.id = rv.user_id
+        GROUP BY rv.user_id, u.name, u.username
         ORDER BY visit_count DESC, u.name
         """
 
@@ -872,7 +905,9 @@ class ConnectAPIFacade:
             for _, flw_row in flw_df.iterrows():
                 flws.append(
                     {
-                        "connect_id": flw_row["connect_id"] or f"user_{flw_row['user_id']}",
+                        "connect_id": flw_row.get("username")
+                        or flw_row.get("connect_id")
+                        or f"user_{flw_row['user_id']}",
                         "name": flw_row["flw_name"] or f"User {flw_row['user_id']}",
                         "visit_count": int(flw_row["visit_count"]),
                         "earliest_visit": flw_row["earliest_visit"],
@@ -886,6 +921,436 @@ class ConnectAPIFacade:
             "date_range": date_range,
             "flws": flws,
         }
+
+    def get_opportunity_details(self, opportunity_ids: list[int]) -> list[dict]:
+        """
+        Get full opportunity objects from Superset for data loading.
+
+        Args:
+            opportunity_ids: List of opportunity IDs to fetch
+
+        Returns:
+            List of opportunity dictionaries with all fields
+        """
+        if not opportunity_ids:
+            return []
+
+        ids_str = ",".join(str(id) for id in opportunity_ids)
+
+        sql = f"""
+        SELECT
+            o.id,
+            o.name,
+            o.description,
+            o.start_date,
+            o.end_date,
+            o.is_test,
+            o.active,
+            o.organization_id,
+            o.deliver_app_id,
+            mo.program_id,
+            p.name as program_name,
+            org.name as organization_name
+        FROM opportunity_opportunity o
+        LEFT JOIN program_managedopportunity mo ON mo.opportunity_ptr_id = o.id
+        LEFT JOIN program_program p ON p.id = mo.program_id
+        LEFT JOIN organization_organization org ON org.id = o.organization_id
+        WHERE o.id IN ({ids_str})
+        """
+
+        df = self.superset_extractor.execute_query(sql)
+        if df is None or df.empty:
+            print(f"[ERROR] No opportunity data found for IDs: {ids_str}")
+            return []
+
+        # Convert DataFrame to list of dictionaries
+        opportunities = []
+        for _, row in df.iterrows():
+            opp_dict = row.to_dict()
+            # Convert NaT/NaN to None for JSON serialization
+            for key, value in opp_dict.items():
+                if hasattr(value, "__class__") and "NaTType" in str(value.__class__):
+                    opp_dict[key] = None
+            opportunities.append(opp_dict)
+
+        return opportunities
+
+    def get_program_details(self, opportunity_ids: list[int]) -> list[dict]:
+        """
+        Get program objects for selected opportunities.
+
+        Args:
+            opportunity_ids: List of opportunity IDs
+
+        Returns:
+            List of unique program dictionaries
+        """
+        if not opportunity_ids:
+            return []
+
+        ids_str = ",".join(str(id) for id in opportunity_ids)
+
+        sql = f"""
+        SELECT DISTINCT
+            p.id,
+            p.name,
+            p.slug,
+            p.description,
+            p.organization_id,
+            p.start_date,
+            p.end_date,
+            p.budget,
+            p.currency,
+            org.name as organization_name
+        FROM program_program p
+        JOIN program_managedopportunity mo ON mo.program_id = p.id
+        LEFT JOIN users_organization org ON org.id = p.organization_id
+        WHERE mo.opportunity_ptr_id IN ({ids_str})
+        """
+
+        df = self.superset_extractor.execute_query(sql)
+        if df is None or df.empty:
+            return []
+
+        programs = []
+        for _, row in df.iterrows():
+            prog_dict = row.to_dict()
+            # Convert NaT/NaN to None
+            for key, value in prog_dict.items():
+                if hasattr(value, "__class__") and "NaTType" in str(value.__class__):
+                    prog_dict[key] = None
+            programs.append(prog_dict)
+
+        return programs
+
+    def get_users_for_opportunities(self, opportunity_ids: list[int]) -> list[dict]:
+        """
+        Get User records for FLWs who have visits in these opportunities.
+
+        Args:
+            opportunity_ids: List of opportunity IDs
+
+        Returns:
+            List of user dictionaries
+        """
+        if not opportunity_ids:
+            return []
+
+        ids_str = ",".join(str(id) for id in opportunity_ids)
+
+        sql = f"""
+        SELECT DISTINCT
+            u.id,
+            u.username,
+            u.name,
+            u.email,
+            u.phone_number,
+            u.date_joined,
+            u.last_login,
+            u.is_active
+        FROM users_user u
+        JOIN opportunity_uservisit uv ON uv.user_id = u.id
+        WHERE uv.opportunity_id IN ({ids_str})
+        ORDER BY u.username
+        """
+
+        df = self.superset_extractor.execute_query(sql)
+        if df is None or df.empty:
+            return []
+
+        users = []
+        for _, row in df.iterrows():
+            user_dict = row.to_dict()
+            # Convert NaT/NaN to None
+            for key, value in user_dict.items():
+                if hasattr(value, "__class__") and "NaTType" in str(value.__class__):
+                    user_dict[key] = None
+            users.append(user_dict)
+
+        return users
+
+    def get_unique_flws_across_opportunities(self, opportunity_ids: list[int]) -> list[dict]:
+        """
+        Get unique FLW list across all selected opportunities for 'per_flw' granularity.
+
+        Args:
+            opportunity_ids: List of opportunity IDs
+
+        Returns:
+            List of FLW dictionaries with their opportunity associations
+        """
+        if not opportunity_ids:
+            return []
+
+        ids_str = ",".join(str(id) for id in opportunity_ids)
+
+        sql = f"""
+        SELECT
+            u.id as user_id,
+            u.username,
+            u.name,
+            COUNT(DISTINCT uv.opportunity_id) as opp_count,
+            COUNT(uv.id) as total_visits,
+            array_agg(DISTINCT o.name) as opportunity_names,
+            array_agg(DISTINCT uv.opportunity_id) as opportunity_ids
+        FROM users_user u
+        JOIN opportunity_uservisit uv ON uv.user_id = u.id
+        JOIN opportunity_opportunity o ON o.id = uv.opportunity_id
+        WHERE uv.opportunity_id IN ({ids_str})
+          AND uv.status = 'approved'
+        GROUP BY u.id, u.username, u.name
+        ORDER BY u.name
+        """
+
+        df = self.superset_extractor.execute_query(sql)
+        if df is None or df.empty:
+            return []
+
+        flws = []
+        for _, row in df.iterrows():
+            # Handle Postgres array_agg results which may come as strings like "{1,2,3}" or "[1,2,3]"
+            opp_names = row["opportunity_names"]
+            if isinstance(opp_names, str):
+                # Remove curly/square braces and split
+                opp_names = (
+                    opp_names.strip("{}[]").split(",") if opp_names and opp_names not in ["{}", "[]", ""] else []
+                )
+                # Strip quotes from each name
+                opp_names = [name.strip().strip('"').strip("'") for name in opp_names if name.strip()]
+            elif not opp_names:
+                opp_names = []
+
+            opp_ids = row["opportunity_ids"]
+            if isinstance(opp_ids, str):
+                # Remove curly/square braces and split, then convert to ints
+                opp_ids_str = opp_ids.strip("{}[]")
+                if opp_ids_str and opp_ids not in ["{}", "[]", ""]:
+                    opp_ids = [int(oid.strip().strip('"').strip("'")) for oid in opp_ids_str.split(",") if oid.strip()]
+                else:
+                    opp_ids = []
+            elif not opp_ids:
+                opp_ids = []
+            else:
+                opp_ids = [int(oid) for oid in opp_ids]
+
+            flw_dict = {
+                "user_id": int(row["user_id"]),
+                "username": row["username"],
+                "name": row["name"],
+                "opp_count": int(row["opp_count"]),
+                "total_visits": int(row["total_visits"]),
+                "opportunity_names": opp_names,
+                "opportunity_ids": opp_ids,
+            }
+            flws.append(flw_dict)
+
+        return flws
+
+    def get_deliver_units_for_visits(self, opportunity_ids: list[int]) -> list[dict]:
+        """
+        Get DeliverUnit records (with their CommCareApp and HQServer) for visits in given opportunities.
+
+        Args:
+            opportunity_ids: List of opportunity IDs
+
+        Returns:
+            List of deliver unit dictionaries with nested app and server data
+        """
+        if not opportunity_ids:
+            return []
+
+        ids_str = ",".join(str(id) for id in opportunity_ids)
+
+        sql = f"""
+        SELECT DISTINCT
+            du.id,
+            du.name,
+            du.slug,
+            du.description,
+            du.optional,
+            du.app_id,
+            app.cc_app_id,
+            app.name as app_name,
+            app.cc_domain,
+            app.hq_server_id,
+            hs.name as hq_server_name,
+            hs.url as hq_server_url
+        FROM opportunity_deliverunit du
+        INNER JOIN opportunity_uservisit uv ON uv.deliver_unit_id = du.id
+        LEFT JOIN opportunity_commcareapp app ON app.id = du.app_id
+        LEFT JOIN commcarehq_hqserver hs ON hs.id = app.hq_server_id
+        WHERE uv.opportunity_id IN ({ids_str})
+            AND uv.status = 'approved'
+        ORDER BY du.id
+        """
+
+        df = self.superset_extractor.execute_query(sql)
+        if df is None or df.empty:
+            return []
+
+        import pandas as pd
+
+        deliver_units = []
+        for _, row in df.iterrows():
+            du_dict = row.to_dict()
+            # Convert NaT/NaN to None
+            for key, value in du_dict.items():
+                if pd.isna(value):
+                    du_dict[key] = None
+            deliver_units.append(du_dict)
+
+        return deliver_units
+
+    def get_user_visits_for_audit(
+        self,
+        opportunity_ids: list[int],
+        audit_type: str,
+        start_date: date = None,
+        end_date: date = None,
+        count: int = None,
+        user_id: int = None,
+    ) -> list[dict]:
+        """
+        Get UserVisit records based on audit criteria.
+
+        Args:
+            opportunity_ids: List of opportunity IDs
+            audit_type: 'date_range', 'last_n_per_flw', or 'last_n_across_opp'
+            start_date: Start date for date_range type
+            end_date: End date for date_range type
+            count: Number of visits for last_n types
+            user_id: Optional filter for specific user (for per_flw granularity)
+
+        Returns:
+            List of visit dictionaries
+        """
+        if not opportunity_ids:
+            return []
+
+        ids_str = ",".join(str(id) for id in opportunity_ids)
+
+        # Base SELECT clause (skip form_json - expensive download)
+        # IMPORTANT: cc_domain comes from opportunity_commcareapp table, but that table
+        # is currently EMPTY in Superset (0 rows). Until CommCareApp records are synced
+        # to Superset, cc_domain will be NULL and attachments cannot be downloaded.
+        # Get domain from deliver_unit app (preferred) or opportunity's deliver_app (fallback)
+        select_clause = """
+        SELECT
+            uv.id,
+            uv.xform_id,
+            uv.user_id,
+            uv.opportunity_id,
+            uv.visit_date,
+            uv.entity_id,
+            uv.entity_name,
+            uv.location,
+            uv.status,
+            uv.reason,
+            uv.flag_reason,
+            uv.flagged,
+            uv.deliver_unit_id,
+            u.username,
+            u.name as user_name,
+            COALESCE(unit_app.cc_domain, opp_app.cc_domain) as cc_domain,
+            COALESCE(unit_app.cc_app_id, opp_app.cc_app_id) as cc_app_id
+        FROM opportunity_uservisit uv
+        LEFT JOIN users_user u ON u.id = uv.user_id
+        LEFT JOIN opportunity_opportunity o ON o.id = uv.opportunity_id
+        LEFT JOIN opportunity_deliverunit du ON du.id = uv.deliver_unit_id
+        LEFT JOIN opportunity_commcareapp unit_app ON unit_app.id = du.app_id
+        LEFT JOIN opportunity_commcareapp opp_app ON opp_app.id = o.deliver_app_id
+        """
+
+        # Build WHERE clause based on audit type
+        where_conditions = [f"uv.opportunity_id IN ({ids_str})", "uv.status = 'approved'"]
+
+        if user_id:
+            where_conditions.append(f"uv.user_id = {user_id}")
+
+        if audit_type == "date_range":
+            if start_date and end_date:
+                where_conditions.append(f"DATE(uv.visit_date) >= '{start_date}'")
+                where_conditions.append(f"DATE(uv.visit_date) <= '{end_date}'")
+            sql = f"""
+            {select_clause}
+            WHERE {" AND ".join(where_conditions)}
+            ORDER BY uv.visit_date DESC
+            """
+
+        elif audit_type == "last_n_per_flw":
+            # Get last N visits per FLW
+            select_with_rank = select_clause.replace(
+                "SELECT", "SELECT ROW_NUMBER() OVER (PARTITION BY uv.user_id ORDER BY uv.visit_date DESC) as rank,"
+            )
+            sql = f"""
+            WITH ranked_visits AS (
+                {select_with_rank}
+                WHERE {" AND ".join(where_conditions)}
+            )
+            SELECT *
+            FROM ranked_visits
+            WHERE rank <= {count}
+            ORDER BY user_id, visit_date DESC
+            """
+
+        elif audit_type == "last_n_across_opp":
+            # Get last N visits across all opportunities
+            sql = f"""
+            {select_clause}
+            WHERE {" AND ".join(where_conditions)}
+            ORDER BY uv.visit_date DESC
+            LIMIT {count}
+            """
+
+        else:
+            raise ValueError(f"Unknown audit_type: {audit_type}")
+
+        df = self.superset_extractor.execute_query(sql)
+        if df is None or df.empty:
+            return []
+
+        visits = []
+        for _, row in df.iterrows():
+            visit_dict = row.to_dict()
+            # Convert NaT/NaN to None
+            for key, value in visit_dict.items():
+                if hasattr(value, "__class__") and "NaTType" in str(value.__class__):
+                    visit_dict[key] = None
+            visits.append(visit_dict)
+
+        # FALLBACK: If cc_domain is NULL, try to get it from fallback CSV
+        # This is needed because opportunity_commcareapp table is not synced to Superset
+        missing_domain_count = sum(1 for v in visits if not v.get("cc_domain"))
+        if missing_domain_count > 0:
+            fallback_data = self._load_commcare_app_fallback()
+            if fallback_data:
+                # Get opportunity deliver_app_id mapping from Superset
+                opp_app_sql = f"""
+                SELECT id, deliver_app_id
+                FROM opportunity_opportunity
+                WHERE id IN ({ids_str})
+                """
+                opp_df = self.superset_extractor.execute_query(opp_app_sql)
+                if opp_df is not None and not opp_df.empty:
+                    opp_to_app = {
+                        row["id"]: row["deliver_app_id"] for _, row in opp_df.iterrows() if row["deliver_app_id"]
+                    }
+
+                    # Enrich visits with fallback data
+                    enriched_count = 0
+                    for visit in visits:
+                        if not visit.get("cc_domain"):
+                            opp_id = visit.get("opportunity_id")
+                            app_id = opp_to_app.get(opp_id)
+                            if app_id and app_id in fallback_data:
+                                visit["cc_domain"] = fallback_data[app_id]["cc_domain"]
+                                visit["cc_app_id"] = fallback_data[app_id]["cc_app_id"]
+                                enriched_count += 1
+
+                    if enriched_count > 0:
+                        print(f"[INFO] Using fallback CSV for domain info ({len(fallback_data)} apps configured)")
+
+        return visits
 
     def close(self):
         """Clean up resources."""

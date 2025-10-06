@@ -86,6 +86,23 @@
         <p class="text-sm">Try a different search term or opportunity ID</p>
       </div>
 
+      <!-- Selected Opportunities Summary -->
+      <div x-show="selectedOpportunities.length > 0" class="mb-4 pb-4 border-b">
+        <h3 class="text-sm font-medium text-gray-700 mb-3">
+          Selected Opportunities (<span x-text="selectedOpportunities.length"></span>)
+        </h3>
+        <div class="flex flex-wrap gap-2">
+          <template x-for="opportunity in selectedOpportunities" :key="opportunity.id">
+            <div class="flex items-center gap-2 px-3 py-1 bg-brand-indigo text-white rounded-full text-sm">
+              <span x-text="opportunity.name"></span>
+              <button @click="removeOpportunitySelection(opportunity)" class="hover:text-gray-200">
+                <i class="fa-solid fa-times"></i>
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+
       <!-- Results Table -->
       <div x-show="searchResults.length > 0 && tableExpanded" class="overflow-hidden table-container flex flex-col gap-2 mb-1">
         <div class="w-full overflow-x-auto block">
@@ -127,7 +144,7 @@
                     <input type="checkbox"
                            :checked="selectedOpportunities.some(o => o.id === opportunity.id)"
                            class="h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300 rounded"
-                           @click.stop>
+                           @click.stop="toggleOpportunitySelection(opportunity)">
                   </td>
                   <td>
                     <span x-text="opportunity.id"></span>
@@ -179,30 +196,83 @@
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Selected Opportunities Summary -->
-    <div x-show="selectedOpportunities.length > 0" class="border-t pt-4">
-      <h3 class="text-sm font-medium text-gray-700 mb-3">
-        Selected Opportunities (<span x-text="selectedOpportunities.length"></span>)
-      </h3>
-      <div class="flex flex-wrap gap-2">
-        <template x-for="opportunity in selectedOpportunities" :key="opportunity.id">
-          <div class="flex items-center gap-2 px-3 py-1 bg-brand-indigo text-white rounded-full text-sm">
-            <span x-text="opportunity.name"></span>
-            <button @click="removeOpportunitySelection(opportunity)" class="hover:text-gray-200">
-              <i class="fa-solid fa-times"></i>
-            </button>
-          </div>
-        </template>
+  <!-- Step 2: Audit Granularity -->
+  <div x-show="selectedOpportunities.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
+      <i class="fa-solid fa-layer-group mr-2"></i>
+      Step 2: Select Audit Granularity
+    </h2>
+
+    <div class="space-y-3">
+      <!-- Combined Option -->
+      <div class="flex items-start p-4 border border-gray-200 rounded-lg hover:border-brand-indigo transition-colors">
+        <input
+          type="radio"
+          id="granularity-combined"
+          name="granularity"
+          value="combined"
+          x-model="auditCriteria.granularity"
+          class="mt-1 h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300"
+        >
+        <div class="ml-3 flex-1">
+          <label for="granularity-combined" class="text-sm font-medium text-gray-700 cursor-pointer">
+            One audit for all selected opportunities
+          </label>
+          <p class="text-xs text-gray-500 mt-1">
+            Creates a single audit session combining all FLWs across all selected opportunities. Best for organization-wide quality reviews.
+          </p>
+        </div>
+      </div>
+
+      <!-- Per Opportunity Option -->
+      <div class="flex items-start p-4 border border-gray-200 rounded-lg hover:border-brand-indigo transition-colors">
+        <input
+          type="radio"
+          id="granularity-per-opp"
+          name="granularity"
+          value="per_opp"
+          x-model="auditCriteria.granularity"
+          class="mt-1 h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300"
+        >
+        <div class="ml-3 flex-1">
+          <label for="granularity-per-opp" class="text-sm font-medium text-gray-700 cursor-pointer">
+            One audit per opportunity
+          </label>
+          <p class="text-xs text-gray-500 mt-1">
+            Creates <span x-text="selectedOpportunities.length"></span> separate audit session(s), one for each opportunity. Best for comparing performance across different programs.
+          </p>
+        </div>
+      </div>
+
+      <!-- Per FLW Option -->
+      <div class="flex items-start p-4 border border-gray-200 rounded-lg hover:border-brand-indigo transition-colors">
+        <input
+          type="radio"
+          id="granularity-per-flw"
+          name="granularity"
+          value="per_flw"
+          x-model="auditCriteria.granularity"
+          class="mt-1 h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300"
+        >
+        <div class="ml-3 flex-1">
+          <label for="granularity-per-flw" class="text-sm font-medium text-gray-700 cursor-pointer">
+            One audit per FLW
+          </label>
+          <p class="text-xs text-gray-500 mt-1">
+            Creates separate audit sessions for each field worker across all opportunities. Best for individual performance reviews and coaching.
+          </p>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Step 2: Audit Criteria -->
+  <!-- Step 3: Audit Criteria -->
   <div x-show="selectedOpportunities.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
       <i class="fa-solid fa-cog mr-2"></i>
-      Step 2: Configure Audit Criteria
+      Step 3: Configure Audit Criteria
     </h2>
 
     <!-- Audit Type Selection -->
@@ -331,11 +401,11 @@
     </div>
   </div>
 
-  <!-- Step 3: Preview Results -->
+  <!-- Step 4: Preview Results -->
   <div x-show="previewResults.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
       <i class="fa-solid fa-eye mr-2"></i>
-      Step 3: Preview Audit Scope
+      Step 4: Preview Audit Scope
     </h2>
 
     <div class="space-y-6">
@@ -398,9 +468,7 @@
                           <span x-text="flw.connect_id"></span>
                         </td>
                         <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                            <span x-text="flw.visit_count"></span> visits
-                          </span>
+                          <span x-text="flw.visit_count"></span>
                         </td>
                         <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
                           <template x-if="flw.earliest_visit && flw.latest_visit">
@@ -439,11 +507,86 @@
     </button>
     <button
       @click="createAuditSession()"
-      :disabled="!previewResults.length || creating"
+      :disabled="!previewResults.length || creating || updating"
       class="px-4 py-2 bg-brand-indigo text-white rounded-md hover:bg-brand-indigo/90 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
-      <i class="fa-solid fa-plus" :class="{'fa-spin': creating}"></i>
-      <span x-text="creating ? 'Creating...' : 'Create Audit Session'"></span>
+      <i class="fa-solid fa-plus" :class="{'fa-spin': creating || updating}"></i>
+      <span x-text="creating ? 'Creating...' : (updating ? 'Loading...' : 'Create Audit Session')"></span>
     </button>
+  </div>
+
+  <!-- Progress Modal -->
+  <div x-show="showProgressModal"
+       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+       x-cloak
+       @keydown.escape.window="cancelAuditCreation()">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg" @click.away="">
+      <div class="mb-6">
+        <h3 class="text-lg font-semibold text-gray-900">Creating Audit Session</h3>
+        <p class="text-sm text-gray-600 mt-1" x-text="progressMessage"></p>
+      </div>
+
+      <!-- Progress Steps -->
+      <div class="space-y-4 mb-6">
+        <template x-for="step in progressSteps" :key="step.name">
+          <div class="space-y-2">
+            <!-- Step Header -->
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <!-- Status Icon -->
+                <span x-show="step.status === 'complete'" class="text-green-600">
+                  <i class="fa-solid fa-check-circle"></i>
+                </span>
+                <span x-show="step.status === 'in_progress'" class="text-brand-indigo">
+                  <i class="fa-solid fa-spinner fa-spin"></i>
+                </span>
+                <span x-show="step.status === 'pending'" class="text-gray-400">
+                  <i class="fa-regular fa-circle"></i>
+                </span>
+
+                <!-- Step Message -->
+                <span class="text-sm font-medium"
+                      :class="{
+                        'text-green-600': step.status === 'complete',
+                        'text-brand-indigo': step.status === 'in_progress',
+                        'text-gray-500': step.status === 'pending'
+                      }"
+                      x-text="step.message"></span>
+              </div>
+
+              <!-- Percentage -->
+              <span class="text-xs text-gray-500"
+                    x-show="step.status !== 'pending'"
+                    x-text="`${step.percentage}%`"></span>
+            </div>
+
+            <!-- Progress Bar -->
+            <div x-show="step.status !== 'pending'" class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div class="h-full transition-all duration-300"
+                   :class="{
+                     'bg-green-500': step.status === 'complete',
+                     'bg-brand-indigo': step.status === 'in_progress'
+                   }"
+                   :style="`width: ${step.percentage}%`"></div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Error Message -->
+      <div x-show="progressError" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+        <p class="text-sm text-red-800" x-text="progressError"></p>
+      </div>
+
+      <!-- Cancel/Close Button -->
+      <div class="flex justify-end gap-3">
+        <button
+          @click="cancelAuditCreation()"
+          :disabled="progressStage === 'complete' || progressStage === 'error'"
+          class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+          <span x-text="progressStage === 'complete' ? 'Close' : 'Cancel'"></span>
+        </button>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -451,6 +594,21 @@
 <script>
 function auditCreationPage() {
   return {
+    // Progress tracking state
+    showProgressModal: false,
+    progressMessage: 'Initializing...',
+    progressPercentage: 0,
+    progressStage: 'loading',
+    progressError: null,
+    progressTaskId: null,
+    progressPollInterval: null,
+    progressSteps: [
+      { name: 'opportunities', message: 'Loading opportunities...', percentage: 0, status: 'pending' },
+      { name: 'users', message: 'Loading users...', percentage: 0, status: 'pending' },
+      { name: 'sessions', message: 'Creating sessions...', percentage: 0, status: 'pending' },
+      { name: 'attachments', message: 'Downloading attachments...', percentage: 0, status: 'pending' }
+    ],
+
     // Search state
     searchQuery: '',
     searchResults: [],
@@ -463,6 +621,7 @@ function auditCreationPage() {
 
     // Audit criteria state
     auditCriteria: {
+      granularity: 'combined',  // 'combined', 'per_opp', 'per_flw'
       type: 'date_range',
       startDate: '',
       endDate: '',
@@ -583,13 +742,116 @@ function auditCreationPage() {
       this.updating = false;
     },
 
-    // Create audit session
+    // Poll for progress updates
+    async pollProgress() {
+      if (!this.progressTaskId) return;
+
+      try {
+        const response = await fetch(`{% url "audit:audit_progress" %}?task_id=${this.progressTaskId}`);
+        const data = await response.json();
+
+        if (data.error) {
+          this.progressError = data.error;
+          this.progressStage = 'error';
+          this.stopProgressPolling();
+          return;
+        }
+
+        this.progressMessage = data.message || 'Processing...';
+        this.progressPercentage = data.percentage || 0;
+        this.progressStage = data.stage || 'processing';
+
+        // Update individual steps
+        if (data.steps && Array.isArray(data.steps)) {
+          data.steps.forEach(dataStep => {
+            const step = this.progressSteps.find(s => s.name === dataStep.name);
+            if (step) {
+              step.message = dataStep.message;
+              step.percentage = dataStep.percentage;
+              step.status = dataStep.status;
+            }
+          });
+        }
+
+        // Handle completion
+        if (data.stage === 'complete') {
+          this.stopProgressPolling();
+          if (data.result && data.result.redirect_url) {
+            setTimeout(() => {
+              window.location.href = data.result.redirect_url;
+            }, 500);
+          }
+        }
+
+        // Handle errors
+        if (data.stage === 'error') {
+          this.progressError = data.message;
+          this.stopProgressPolling();
+        }
+
+        // Handle cancellation
+        if (data.cancelled || data.stage === 'cancelled') {
+          this.progressMessage = 'Cancelled';
+          this.progressStage = 'cancelled';
+          this.stopProgressPolling();
+        }
+
+      } catch (error) {
+        console.error('Progress poll error:', error);
+        this.progressError = 'Failed to fetch progress';
+        this.stopProgressPolling();
+      }
+    },
+
+    stopProgressPolling() {
+      if (this.progressPollInterval) {
+        clearInterval(this.progressPollInterval);
+        this.progressPollInterval = null;
+      }
+    },
+
+    async cancelAuditCreation() {
+      if (this.progressStage === 'complete' || this.progressStage === 'error' || this.progressStage === 'cancelled') {
+        this.showProgressModal = false;
+        this.creating = false;
+        return;
+      }
+
+      if (this.progressTaskId) {
+        try {
+          await fetch(`{% url "audit:audit_progress" %}?task_id=${this.progressTaskId}`, {
+            method: 'DELETE',
+            headers: {
+              'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+          });
+        } catch (error) {
+          console.error('Cancel error:', error);
+        }
+      }
+
+      this.stopProgressPolling();
+      this.showProgressModal = false;
+      this.creating = false;
+    },
+
+    // Create audit session with progress tracking
     async createAuditSession() {
       if (!this.previewResults.length) {
         return;
       }
 
       this.creating = true;
+      this.progressError = null;
+      this.progressPercentage = 0;
+      this.progressMessage = 'Initializing...';
+      this.progressStage = 'loading';
+      // Reset all steps to pending
+      this.progressSteps.forEach(step => {
+        step.percentage = 0;
+        step.status = 'pending';
+      });
+      this.showProgressModal = true;
 
       try {
         const payload = {
@@ -598,6 +860,7 @@ function auditCreationPage() {
           preview: this.previewResults
         };
 
+        // Start the audit creation in background thread
         const response = await fetch('{% url "audit:create_session" %}', {
           method: 'POST',
           headers: {
@@ -609,18 +872,22 @@ function auditCreationPage() {
 
         const data = await response.json();
 
-        if (data.success) {
-          // Redirect to the created audit session
-          window.location.href = data.redirect_url;
-        } else {
-          console.error('Creation failed:', data.error);
-          alert('Failed to create audit session: ' + (data.error || 'Unknown error'));
+        if (!data.success || !data.task_id) {
+          this.progressError = data.error || 'Failed to start audit creation';
+          this.progressStage = 'error';
+          return;
         }
+
+        this.progressTaskId = data.task_id;
+
+        // Start polling for progress
+        this.progressPollInterval = setInterval(() => this.pollProgress(), 500);
+
       } catch (error) {
         console.error('Creation error:', error);
-        alert('Failed to create audit session. Please try again.');
-      } finally {
-        this.creating = false;
+        this.progressError = 'Failed to create audit session. Please try again.';
+        this.progressStage = 'error';
+        this.stopProgressPolling();
       }
     },
 
