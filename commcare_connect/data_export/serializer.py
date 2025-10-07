@@ -1,6 +1,11 @@
 from rest_framework import serializers
 
-from commcare_connect.opportunity.api.serializers import OpportunityClaimLimitSerializer
+from commcare_connect.opportunity.api.serializers import (
+    CommCareAppSerializer,
+    OpportunityClaimLimitSerializer,
+    OpportunityVerificationFlagsSerializer,
+    PaymentUnitSerializer,
+)
 from commcare_connect.opportunity.models import (
     Assessment,
     CompletedModule,
@@ -9,6 +14,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaimLimit,
     Payment,
     PaymentInvoice,
+    PaymentUnit,
     UserVisit,
 )
 from commcare_connect.organization.models import Organization
@@ -192,3 +198,57 @@ class CompletedModuleDataSerializer(serializers.ModelSerializer):
 
     def get_username(self, obj):
         return obj.username
+
+
+class OpportunitySerializer(serializers.ModelSerializer):
+    organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
+    learn_app = CommCareAppSerializer()
+    deliver_app = CommCareAppSerializer()
+    max_visits_per_user = serializers.SerializerMethodField()
+    daily_max_visits_per_user = serializers.SerializerMethodField()
+    budget_per_visit = serializers.SerializerMethodField()
+    budget_per_user = serializers.SerializerMethodField()
+    payment_units = serializers.SerializerMethodField()
+    verification_flags = OpportunityVerificationFlagsSerializer(source="opportunityverificationflags", read_only=True)
+
+    class Meta:
+        model = Opportunity
+        fields = [
+            "id",
+            "name",
+            "description",
+            "short_description",
+            "date_created",
+            "date_modified",
+            "organization",
+            "learn_app",
+            "deliver_app",
+            "start_date",
+            "end_date",
+            "max_visits_per_user",
+            "daily_max_visits_per_user",
+            "budget_per_user",
+            "budget_per_visit",
+            "total_budget",
+            "currency",
+            "is_active",
+            "payment_units",
+            "verification_flags",
+        ]
+
+    def get_max_visits_per_user(self, obj):
+        # return 1 for older opportunities
+        return obj.max_visits_per_user or -1
+
+    def get_daily_max_visits_per_user(self, obj):
+        return obj.daily_max_visits_per_user or -1
+
+    def get_budget_per_visit(self, obj):
+        return obj.budget_per_visit or -1
+
+    def get_budget_per_user(self, obj):
+        return obj.budget_per_user
+
+    def get_payment_units(self, obj):
+        payment_units = PaymentUnit.objects.filter(opportunity=obj).order_by("pk")
+        return PaymentUnitSerializer(payment_units, many=True).data
