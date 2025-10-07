@@ -78,6 +78,20 @@ def create_audit_sessions(
         end_date = criteria.get("endDate") if audit_type == "date_range" else None
         count_per_flw = criteria.get("countPerFlw") if audit_type == "last_n_per_flw" else None
         count_across_opp = criteria.get("countAcrossOpp") if audit_type == "last_n_across_opp" else None
+        sample_cache_key = criteria.get("sampleCacheKey")
+
+        # Check if we're using a pre-sampled visit list
+        sampled_visit_ids = None
+        if sample_cache_key:
+            from django.core.cache import cache
+
+            sampled_visit_ids = cache.get(sample_cache_key)
+            if sampled_visit_ids:
+                print(f"[INFO] Using pre-sampled visit IDs from cache ({len(sampled_visit_ids)} visits)")
+            else:
+                return AuditCreationResult(
+                    success=False, error="Sample expired or not found. Please preview again before creating audit."
+                )
 
         # Initialize data loader
         loader = AuditDataLoader(facade=facade, dry_run=False)
@@ -127,13 +141,17 @@ def create_audit_sessions(
             if progress_tracker:
                 progress_tracker.update(0, 100, "Loading visits...", "processing", step_name="sessions")
 
-            visits = loader.load_visits(
-                opportunity_ids=opportunity_ids,
-                audit_type=audit_type,
-                start_date=start_date,
-                end_date=end_date,
-                count=count_per_flw or count_across_opp,
-            )
+            # Load visits - either from cache (sampled) or fresh query
+            if sampled_visit_ids:
+                visits = loader.load_visits_by_ids(sampled_visit_ids)
+            else:
+                visits = loader.load_visits(
+                    opportunity_ids=opportunity_ids,
+                    audit_type=audit_type,
+                    start_date=start_date,
+                    end_date=end_date,
+                    count=count_per_flw or count_across_opp,
+                )
             all_visits.extend(visits)
 
             if progress_tracker:
@@ -181,13 +199,20 @@ def create_audit_sessions(
                         step_name="sessions",
                     )
 
-                visits = loader.load_visits(
-                    opportunity_ids=[opp_id],
-                    audit_type=audit_type,
-                    start_date=start_date,
-                    end_date=end_date,
-                    count=count_per_flw or count_across_opp,
-                )
+                # Load visits - either from cache (sampled) or fresh query
+                if sampled_visit_ids:
+                    # Filter sampled IDs for this opportunity
+                    # We need to check which IDs belong to this opportunity
+                    visits = loader.load_visits_by_ids(sampled_visit_ids)
+                    visits = [v for v in visits if v.opportunity_id == opp_id]
+                else:
+                    visits = loader.load_visits(
+                        opportunity_ids=[opp_id],
+                        audit_type=audit_type,
+                        start_date=start_date,
+                        end_date=end_date,
+                        count=count_per_flw or count_across_opp,
+                    )
                 all_visits.extend(visits)
 
                 # Calculate actual date range from loaded visits
@@ -249,14 +274,20 @@ def create_audit_sessions(
                         step_name="sessions",
                     )
 
-                visits = loader.load_visits(
-                    opportunity_ids=opportunity_ids,
-                    audit_type=audit_type,
-                    start_date=start_date,
-                    end_date=end_date,
-                    count=count_per_flw or count_across_opp,
-                    user_id=user_id,
-                )
+                # Load visits - either from cache (sampled) or fresh query
+                if sampled_visit_ids:
+                    # Filter sampled IDs for this FLW
+                    visits = loader.load_visits_by_ids(sampled_visit_ids)
+                    visits = [v for v in visits if v.user_id == user_id]
+                else:
+                    visits = loader.load_visits(
+                        opportunity_ids=opportunity_ids,
+                        audit_type=audit_type,
+                        start_date=start_date,
+                        end_date=end_date,
+                        count=count_per_flw or count_across_opp,
+                        user_id=user_id,
+                    )
                 all_visits.extend(visits)
 
                 # Determine which opportunities this FLW actually has visits in
@@ -344,10 +375,14 @@ def preview_audit_sessions(
     This uses the same logic as create_audit_sessions to ensure preview
     accurately reflects what will be created.
 
+    For sampling < 100%, this loads lightweight visit IDs, samples them,
+    caches the sampled IDs, and returns the cache key for creation to use.
+
     Args:
         facade: Authenticated ConnectAPIFacade instance
         opportunity_ids: List of opportunity IDs to audit
         criteria: Dictionary containing audit criteria (same format as create_audit_sessions)
+            - samplePercentage: Optional percentage to sample (1-100, default 100)
 
     Returns:
         AuditPreviewResult with preview data for each opportunity/granularity
@@ -360,6 +395,78 @@ def preview_audit_sessions(
         end_date = criteria.get("endDate") if audit_type == "date_range" else None
         count_per_flw = criteria.get("countPerFlw") if audit_type == "last_n_per_flw" else None
         count_across_opp = criteria.get("countAcrossOpp") if audit_type == "last_n_across_opp" else None
+        sample_percentage = criteria.get("samplePercentage", 100)
+
+        # Check if we need to sample
+        needs_sampling = sample_percentage < 100
+
+        # If sampling, load visit IDs and sample them
+        sample_cache_key = None
+        sampled_visit_counts_by_opp = {}  # Track actual sampled counts per opportunity
+        if needs_sampling:
+            print(f"[INFO] Sampling enabled: {sample_percentage}%")
+            print("[INFO] Loading visit IDs for sampling...")
+
+            # Load lightweight visit IDs (fast, minimal memory)
+            # Track which opportunity each visit belongs to for accurate preview counts
+            visit_id_to_opp = {}  # Map visit_id -> opportunity_id
+            all_visit_ids = []
+
+            if granularity == "per_flw":
+                # For per_flw, we need to load IDs per FLW
+                flws = facade.get_unique_flws_across_opportunities(opportunity_ids)
+                for flw in flws:
+                    user_id = flw["user_id"]
+                    visit_ids = facade.get_user_visit_ids_for_audit(
+                        opportunity_ids=opportunity_ids,
+                        audit_type=audit_type,
+                        start_date=start_date,
+                        end_date=end_date,
+                        count=count_per_flw or count_across_opp,
+                        user_id=user_id,
+                    )
+                    all_visit_ids.extend(visit_ids)
+            else:
+                # For combined/per_opp, load all visit IDs and track their opportunity
+                for opp_id in opportunity_ids:
+                    visit_ids = facade.get_user_visit_ids_for_audit(
+                        opportunity_ids=[opp_id],
+                        audit_type=audit_type,
+                        start_date=start_date,
+                        end_date=end_date,
+                        count=count_per_flw or count_across_opp,
+                    )
+                    # Track which opportunity these visits belong to
+                    for vid in visit_ids:
+                        visit_id_to_opp[vid] = opp_id
+                    all_visit_ids.extend(visit_ids)
+
+            # Remove duplicates (visits may appear in multiple opportunity queries)
+            all_visit_ids = list(set(all_visit_ids))
+            print(f"[INFO] Loaded {len(all_visit_ids)} visit IDs")
+
+            # Sample the IDs
+            import random
+            import uuid
+
+            sample_size = int(len(all_visit_ids) * sample_percentage / 100)
+            sampled_visit_ids = (
+                random.sample(all_visit_ids, sample_size) if sample_size < len(all_visit_ids) else all_visit_ids
+            )
+            print(f"[INFO] Sampled {len(sampled_visit_ids)} visit IDs ({sample_percentage}%)")
+
+            # Count actual sampled visits per opportunity
+            for vid in sampled_visit_ids:
+                opp_id = visit_id_to_opp.get(vid)
+                if opp_id:
+                    sampled_visit_counts_by_opp[opp_id] = sampled_visit_counts_by_opp.get(opp_id, 0) + 1
+
+            # Cache the sampled IDs with 1 hour expiry
+            from django.core.cache import cache
+
+            sample_cache_key = f"audit_sample_{uuid.uuid4()}"
+            cache.set(sample_cache_key, sampled_visit_ids, timeout=3600)
+            print(f"[INFO] Cached sampled visit IDs with key: {sample_cache_key}")
 
         preview_data = []
 
@@ -387,22 +494,42 @@ def preview_audit_sessions(
             if granularity == "per_flw":
                 sessions_to_create = counts["total_flws"]
 
-            preview_data.append(
-                {
-                    "opportunity_id": opp_id,
-                    "opportunity_name": opportunity.name,
-                    "total_flws": counts["total_flws"],
-                    "total_visits": counts["total_visits"],
-                    "avg_visits_per_flw": round(counts["total_visits"] / max(counts["total_flws"], 1), 1),
-                    "date_range": counts.get("date_range"),
-                    "flws": counts.get("flws", []),
-                    "sessions_to_create": sessions_to_create,
-                    "granularity": granularity,
-                    "audit_type": audit_type,
-                }
-            )
+            # Get actual sampled visit count for this opportunity
+            total_visits_before_sampling = counts["total_visits"]
+            if needs_sampling and opp_id in sampled_visit_counts_by_opp:
+                # Use ACTUAL sampled count (exact)
+                total_visits_after_sampling = sampled_visit_counts_by_opp[opp_id]
+            elif needs_sampling:
+                # Fallback to approximation if tracking failed (e.g., per_flw granularity)
+                total_visits_after_sampling = int(total_visits_before_sampling * sample_percentage / 100)
+            else:
+                # No sampling
+                total_visits_after_sampling = total_visits_before_sampling
+
+            preview_item = {
+                "opportunity_id": opp_id,
+                "opportunity_name": opportunity.name,
+                "total_flws": counts["total_flws"],
+                "total_visits": total_visits_after_sampling,  # Show actual sampled count
+                "total_visits_before_sampling": total_visits_before_sampling if needs_sampling else None,
+                "sample_percentage": sample_percentage if needs_sampling else None,
+                "avg_visits_per_flw": round(total_visits_after_sampling / max(counts["total_flws"], 1), 1),
+                "date_range": counts.get("date_range"),
+                "flws": counts.get("flws", []),
+                "sessions_to_create": sessions_to_create,
+                "granularity": granularity,
+                "audit_type": audit_type,
+            }
+
+            # Add cache key to first preview item (it's shared across all opportunities)
+            if needs_sampling and sample_cache_key and len(preview_data) == 0:
+                preview_item["sample_cache_key"] = sample_cache_key
+
+            preview_data.append(preview_item)
 
         return AuditPreviewResult(success=True, preview_data=preview_data)
 
     except Exception as e:
-        return AuditPreviewResult(success=False, error=str(e))
+        import traceback
+
+        return AuditPreviewResult(success=False, error=f"{str(e)}\n{traceback.format_exc()}")

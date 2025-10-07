@@ -1352,6 +1352,188 @@ class ConnectAPIFacade:
 
         return visits
 
+    def get_user_visit_ids_for_audit(
+        self,
+        opportunity_ids: list[int],
+        audit_type: str,
+        start_date: date = None,
+        end_date: date = None,
+        count: int = None,
+        user_id: int = None,
+    ) -> list[int]:
+        """
+        Get UserVisit IDs based on audit criteria (lightweight query for sampling).
+
+        This is a lightweight version of get_user_visits_for_audit that only returns IDs.
+        Used for preview with sampling to avoid loading full visit data.
+
+        Args:
+            opportunity_ids: List of opportunity IDs
+            audit_type: 'date_range', 'last_n_per_flw', or 'last_n_across_opp'
+            start_date: Start date for date_range type
+            end_date: End date for date_range type
+            count: Number of visits for last_n types
+            user_id: Optional filter for specific user (for per_flw granularity)
+
+        Returns:
+            List of visit IDs
+        """
+        if not opportunity_ids:
+            return []
+
+        ids_str = ",".join(str(id) for id in opportunity_ids)
+
+        # Base SELECT clause - only ID
+        select_clause = """
+        SELECT uv.id
+        FROM opportunity_uservisit uv
+        """
+
+        # Build WHERE clause based on audit type
+        where_conditions = [f"uv.opportunity_id IN ({ids_str})", "uv.status = 'approved'"]
+
+        if user_id:
+            where_conditions.append(f"uv.user_id = {user_id}")
+
+        if audit_type == "date_range":
+            if start_date and end_date:
+                where_conditions.append(f"DATE(uv.visit_date) >= '{start_date}'")
+                where_conditions.append(f"DATE(uv.visit_date) <= '{end_date}'")
+            sql = f"""
+            {select_clause}
+            WHERE {" AND ".join(where_conditions)}
+            ORDER BY uv.visit_date DESC
+            """
+
+        elif audit_type == "last_n_per_flw":
+            # Get last N visits per FLW
+            sql = f"""
+            WITH ranked_visits AS (
+                SELECT uv.id, uv.user_id, uv.visit_date,
+                       ROW_NUMBER() OVER (PARTITION BY uv.user_id ORDER BY uv.visit_date DESC) as rank
+                FROM opportunity_uservisit uv
+                WHERE {" AND ".join(where_conditions)}
+            )
+            SELECT id
+            FROM ranked_visits
+            WHERE rank <= {count}
+            ORDER BY user_id, visit_date DESC
+            """
+
+        elif audit_type == "last_n_across_opp":
+            # Get last N visits across all opportunities
+            sql = f"""
+            {select_clause}
+            WHERE {" AND ".join(where_conditions)}
+            ORDER BY uv.visit_date DESC
+            LIMIT {count}
+            """
+
+        else:
+            raise ValueError(f"Unknown audit_type: {audit_type}")
+
+        df = self.superset_extractor.execute_query(sql)
+        if df is None or df.empty:
+            return []
+
+        return df["id"].tolist()
+
+    def get_user_visits_by_ids(self, visit_ids: list[int]) -> list[dict]:
+        """
+        Get full UserVisit records for specific visit IDs.
+
+        This is used to load only sampled visits during audit creation.
+
+        Args:
+            visit_ids: List of visit IDs to load
+
+        Returns:
+            List of visit dictionaries
+        """
+        if not visit_ids:
+            return []
+
+        ids_str = ",".join(str(id) for id in visit_ids)
+
+        # Same SELECT clause as get_user_visits_for_audit
+        sql = """
+        SELECT
+            uv.id,
+            uv.xform_id,
+            uv.user_id,
+            uv.opportunity_id,
+            uv.visit_date,
+            uv.entity_id,
+            uv.entity_name,
+            uv.location,
+            uv.status,
+            uv.reason,
+            uv.flag_reason,
+            uv.flagged,
+            uv.deliver_unit_id,
+            u.username,
+            u.name as user_name,
+            COALESCE(unit_app.cc_domain, opp_app.cc_domain) as cc_domain,
+            COALESCE(unit_app.cc_app_id, opp_app.cc_app_id) as cc_app_id
+        FROM opportunity_uservisit uv
+        LEFT JOIN users_user u ON u.id = uv.user_id
+        LEFT JOIN opportunity_opportunity o ON o.id = uv.opportunity_id
+        LEFT JOIN opportunity_deliverunit du ON du.id = uv.deliver_unit_id
+        LEFT JOIN opportunity_commcareapp unit_app ON unit_app.id = du.app_id
+        LEFT JOIN opportunity_commcareapp opp_app ON opp_app.id = o.deliver_app_id
+        WHERE uv.id IN ({ids_str})
+        ORDER BY uv.visit_date DESC
+        """
+
+        df = self.superset_extractor.execute_query(sql.format(ids_str=ids_str))
+        if df is None or df.empty:
+            return []
+
+        visits = []
+        for _, row in df.iterrows():
+            visit_dict = row.to_dict()
+            # Convert NaT/NaN to None
+            for key, value in visit_dict.items():
+                if hasattr(value, "__class__") and "NaTType" in str(value.__class__):
+                    visit_dict[key] = None
+            visits.append(visit_dict)
+
+        # FALLBACK: If cc_domain is NULL, try to get it from fallback CSV
+        missing_domain_count = sum(1 for v in visits if not v.get("cc_domain"))
+        if missing_domain_count > 0:
+            fallback_data = self._load_commcare_app_fallback()
+            if fallback_data:
+                # Get opportunity deliver_app_id mapping from Superset
+                opp_ids = list({v["opportunity_id"] for v in visits if v.get("opportunity_id")})
+                if opp_ids:
+                    opp_ids_str = ",".join(str(id) for id in opp_ids)
+                    opp_app_sql = f"""
+                    SELECT id, deliver_app_id
+                    FROM opportunity_opportunity
+                    WHERE id IN ({opp_ids_str})
+                    """
+                    opp_df = self.superset_extractor.execute_query(opp_app_sql)
+                    if opp_df is not None and not opp_df.empty:
+                        opp_to_app = {
+                            row["id"]: row["deliver_app_id"] for _, row in opp_df.iterrows() if row["deliver_app_id"]
+                        }
+
+                        # Enrich visits with fallback data
+                        enriched_count = 0
+                        for visit in visits:
+                            if not visit.get("cc_domain"):
+                                opp_id = visit.get("opportunity_id")
+                                app_id = opp_to_app.get(opp_id)
+                                if app_id and app_id in fallback_data:
+                                    visit["cc_domain"] = fallback_data[app_id]["cc_domain"]
+                                    visit["cc_app_id"] = fallback_data[app_id]["cc_app_id"]
+                                    enriched_count += 1
+
+                        if enriched_count > 0:
+                            print(f"[INFO] Using fallback CSV for domain info ({len(fallback_data)} apps configured)")
+
+        return visits
+
     def close(self):
         """Clean up resources."""
         if self.superset_extractor:

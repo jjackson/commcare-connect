@@ -331,6 +331,66 @@ class AuditDataLoader:
 
         return visits
 
+    def load_visits_by_ids(self, visit_ids: list[int]) -> list[UserVisit]:
+        """
+        Load specific user visits by their IDs.
+
+        This is used when loading pre-sampled visits during audit creation.
+
+        Args:
+            visit_ids: List of visit IDs to load
+
+        Returns:
+            List of created/updated UserVisit instances
+        """
+        visit_data_list = self.facade.get_user_visits_by_ids(visit_ids)
+
+        visits = []
+
+        for visit_data in visit_data_list:
+            if self.dry_run:
+                print(f"[DRY RUN] Would create/update visit: {visit_data.get('xform_id')}")
+                continue
+
+            # Parse visit_date
+            visit_date = visit_data.get("visit_date")
+            if isinstance(visit_date, str):
+                visit_date = datetime.fromisoformat(visit_date.replace("Z", "+00:00"))
+            if not timezone.is_aware(visit_date):
+                visit_date = timezone.make_aware(visit_date)
+
+            # Get or create visit
+            visit, created = UserVisit.objects.update_or_create(
+                xform_id=visit_data.get("xform_id"),
+                defaults={
+                    "user_id": visit_data.get("user_id"),
+                    "opportunity_id": visit_data.get("opportunity_id"),
+                    "visit_date": visit_date,
+                    "entity_id": visit_data.get("entity_id"),
+                    "entity_name": visit_data.get("entity_name"),
+                    "location": visit_data.get("location"),
+                    "status": visit_data.get("status", "approved"),
+                    "reason": visit_data.get("reason"),
+                    "flag_reason": visit_data.get("flag_reason"),
+                    "flagged": visit_data.get("flagged", False),
+                    "form_json": {},  # Skip for now - expensive download
+                    "deliver_unit": None,  # Not needed for audit workflow
+                },
+            )
+
+            if created:
+                self.stats["visits_created"] += 1
+            else:
+                self.stats["visits_updated"] += 1
+
+            # Store domain info as temporary attribute for attachment downloads
+            visit._temp_cc_domain = visit_data.get("cc_domain")
+            visit._temp_cc_app_id = visit_data.get("cc_app_id")
+
+            visits.append(visit)
+
+        return visits
+
     def create_audit_session(
         self,
         auditor_username: str,

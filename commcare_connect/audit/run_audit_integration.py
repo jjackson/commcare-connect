@@ -1,33 +1,39 @@
 #!/usr/bin/env python
 """
-Audit Integration Workflow Script
+Audit Integration Test Script
 
-This script runs the complete audit creation workflow end-to-end with REAL data:
-1. Clear database and confirm empty
-2. Search for "readers" opportunities
-3. Select the top 2 projects with >1000 visits
-4. Create a per-FLW audit with last 10 visits per FLW
-5. Generate preview
-6. Create the audit sessions
+This script validates the complete audit creation workflow end-to-end using REAL data.
+It simulates the full UI workflow: search → select → preview → create
 
-This is NOT a test - it's an integration validation script that works with real data.
+Workflow Steps:
+    1. Search for opportunities (by keyword)
+    2. Select opportunities (by strategy: top_by_visits, first, random)
+    3. Preview audit (generates counts and samples if configured)
+    4. Create audit sessions (uses cached sample from preview)
+    5. Verify results
 
 Requirements:
-- Superset connection configured (SUPERSET_* env vars)
-- CommCare credentials (COMMCARE_USERNAME, COMMCARE_API_KEY) for image downloads
-- Django settings configured
+    - SUPERSET_* environment variables configured
+    - COMMCARE_USERNAME and COMMCARE_API_KEY for image downloads
+    - Django settings configured
 
 Usage:
-    python commcare_connect/audit/run_audit_integration.py
+    python commcare_connect/audit/run_audit_integration.py [config_key]
+
+    Available configs:
+        baseline_100pct  - Search "readers", select top 2, no sampling (100%)
+        sampling_50pct   - Search "readers", select top 2, 50% sampling
+        sampling_25pct   - Search "readers", select top 2, 25% sampling
 """
 
 import os
 import sys
+from dataclasses import dataclass, field
 
-# Add the project root to the Python path
+# Add project root to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-# Set Django settings
+# Configure Django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.local")
 
 import django  # noqa: E402
@@ -45,10 +51,89 @@ from commcare_connect.opportunity.models import Opportunity, UserVisit  # noqa: 
 User = get_user_model()
 
 
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+
+@dataclass
+class AuditRunConfig:
+    """
+    Configuration for an audit integration test run.
+
+    This configuration defines all parameters needed to run a complete
+    audit creation workflow from search to completion.
+    """
+
+    # Display
+    name: str  # Human-readable name for this configuration
+
+    # --- Search & Selection ---
+    # These parameters control how opportunities are discovered and selected
+    search_query: str  # Keyword to search for opportunities (e.g., "readers", "nutrition")
+    select_strategy: str  # How to select from results: 'top_by_visits', 'first', 'random'
+    select_count: int = 1  # Number of opportunities to select from search results
+
+    # --- Audit Scope ---
+    # These parameters define what visits to include in the audit
+    audit_type: str = "last_n_per_flw"  # 'date_range', 'last_n_per_flw', 'last_n_across_opp'
+    granularity: str = "per_flw"  # 'combined', 'per_opp', 'per_flw'
+    count_per_flw: int = None  # Number of visits per FLW (for last_n_per_flw type)
+    count_across_opp: int = None  # Total visits across opportunity (for last_n_across_opp type)
+    start_date: str = None  # Start date for date_range type (YYYY-MM-DD)
+    end_date: str = None  # End date for date_range type (YYYY-MM-DD)
+
+    # --- Sampling ---
+    # Control what percentage of matching visits to include
+    sample_percentage: int = 100  # Percentage to sample (1-100, default 100 = no sampling)
+
+    # --- Runtime Options ---
+    auditor_username: str = "integration_test"  # Username of person running the test
+    clear_db_before: bool = True  # Whether to clear database before running
+
+    # --- Internal State ---
+    # This field is populated dynamically during execution
+    opportunity_ids: list[int] = field(default_factory=list)  # Populated from search results
+
+
+# Predefined test configurations
+RUN_CONFIGS = {
+    "baseline_100pct": AuditRunConfig(
+        name="Baseline Run - 100% (No Sampling)",
+        search_query="readers",
+        select_strategy="top_by_visits",
+        select_count=2,
+        count_per_flw=5,
+        sample_percentage=100,
+    ),
+    "sampling_50pct": AuditRunConfig(
+        name="Sampling Run - 50%",
+        search_query="readers",
+        select_strategy="top_by_visits",
+        select_count=2,
+        count_per_flw=5,
+        sample_percentage=50,
+    ),
+    "sampling_25pct": AuditRunConfig(
+        name="Sampling Run - 25%",
+        search_query="readers",
+        select_strategy="top_by_visits",
+        select_count=2,
+        count_per_flw=5,
+        sample_percentage=25,
+    ),
+}
+
+
+# ============================================================================
+# WORKFLOW STEPS
+# ============================================================================
+
+
 def clear_database():
-    """Clear all audit-related data from the database using the same function as the UI."""
+    """Clear all audit-related data from the database."""
     print("\n" + "=" * 80)
-    print("STEP 1: CLEARING DATABASE")
+    print("CLEARING DATABASE")
     print("=" * 80)
 
     # Count before deletion
@@ -70,171 +155,214 @@ def clear_database():
     for key, count in deleted.items():
         print(f"  {key}: {count}")
 
-
-def confirm_empty():
-    """Confirm the database is empty."""
-    counts = {
+    # Verify database is empty
+    counts_after = {
         "opportunities": Opportunity.objects.count(),
         "visits": UserVisit.objects.count(),
         "audit_sessions": AuditSession.objects.count(),
     }
 
     print("\nAfter deletion:")
-    for key, count in counts.items():
+    for key, count in counts_after.items():
         print(f"  {key}: {count}")
 
-    all_zero = all(count == 0 for count in counts.values())
+    all_zero = all(count == 0 for count in counts_after.values())
     if all_zero:
-        print("\n[OK] Database is empty and ready for integration test")
+        print("\n[OK] Database is empty and ready")
     else:
-        print("\n[ERROR] WARNING: Database is not completely empty!")
-        return False
+        print("\n[WARNING] Database is not completely empty!")
 
-    return True
-
-
-def get_opportunity_385(facade: ConnectAPIFacade):
-    """Get opportunity 385 - the Readers opp with 2nd highest visit count."""
-    print("\n" + "=" * 80)
-    print("STEP 2: GETTING OPPORTUNITY 385")
-    print("=" * 80)
-
-    print("\nFetching opportunity details for ID 385...")
-
-    # Get opportunity details from Superset
-    opp_details = facade.get_opportunity_details([385])
-
-    if not opp_details:
-        print("\n[ERROR] Could not find opportunity 385 in Superset")
-        return None
-
-    opp_data = opp_details[0]
-
-    print("\n[OK] Found opportunity:")
-    print(f"  - ID: {opp_data['id']}")
-    print(f"  - Name: {opp_data['name']}")
-    print(f"  - Visit count: {opp_data.get('visit_count', 'N/A')}")
-    print(f"  - Domain: {opp_data.get('deliver_app_domain', 'N/A')}")
-
-    # Return in the expected format
-    from dataclasses import dataclass
-
-    @dataclass
-    class OpportunityResult:
-        id: int
-        name: str
-        visit_count: int
-        deliver_app_domain: str
-
-    return [
-        OpportunityResult(
-            id=opp_data["id"],
-            name=opp_data["name"],
-            visit_count=opp_data.get("visit_count", 0),
-            deliver_app_domain=opp_data.get("deliver_app_domain", ""),
-        )
-    ]
+    return all_zero
 
 
-def generate_preview(facade: ConnectAPIFacade, opportunity_ids: list[int], count_per_flw: int = 10):
-    """Generate preview of FLW counts and visit numbers using the audit creation service."""
-    print("\n" + "=" * 80)
-    print("STEP 3: GENERATING PREVIEW")
-    print("=" * 80)
+def search_opportunities(facade: ConnectAPIFacade, search_query: str) -> list:
+    """
+    Search for opportunities using a keyword.
 
-    print(f"\nGenerating preview for last {count_per_flw} visits per FLW...")
+    Args:
+        facade: Authenticated API facade
+        search_query: Keyword to search for
 
-    # Build criteria for preview (same format as creation)
+    Returns:
+        List of matching Opportunity objects
+    """
+    print(f"\n> Searching for opportunities matching '{search_query}'...")
+    opportunities = facade.search_opportunities(search_query, limit=50)
+
+    if not opportunities:
+        print("  [ERROR] No opportunities found")
+        return []
+
+    print(f"  [OK] Found {len(opportunities)} opportunities")
+    return opportunities
+
+
+def select_opportunities(opportunities: list, strategy: str, count: int) -> list[int]:
+    """
+    Select opportunities from search results using specified strategy.
+
+    Args:
+        opportunities: List of Opportunity objects from search
+        strategy: Selection strategy ('top_by_visits', 'first', 'random')
+        count: Number of opportunities to select
+
+    Returns:
+        List of selected opportunity IDs
+    """
+    print(f"\n> Selecting {count} opportunity(ies) using '{strategy}' strategy...")
+
+    if strategy == "top_by_visits":
+        selected = sorted(opportunities, key=lambda o: o.visit_count, reverse=True)[:count]
+    elif strategy == "first":
+        selected = opportunities[:count]
+    elif strategy == "random":
+        import random
+
+        selected = random.sample(opportunities, min(count, len(opportunities)))
+    else:
+        print(f"  [ERROR] Unknown selection strategy: {strategy}")
+        return []
+
+    print(f"  [OK] Selected {len(selected)} opportunity(ies):")
+    for opp in selected:
+        print(f"    - {opp.name} (ID: {opp.id}, Visits: {opp.visit_count})")
+
+    return [opp.id for opp in selected]
+
+
+def build_criteria(config: AuditRunConfig) -> dict:
+    """
+    Build criteria dictionary for preview and creation from config.
+
+    Args:
+        config: Audit run configuration
+
+    Returns:
+        Criteria dictionary for audit services
+    """
     criteria = {
-        "type": "last_n_per_flw",
-        "granularity": "per_flw",
-        "countPerFlw": count_per_flw,
+        "type": config.audit_type,
+        "granularity": config.granularity,
+        "samplePercentage": config.sample_percentage,
     }
 
-    # Use the same service that the UI uses
-    result = preview_audit_sessions(
-        facade=facade,
-        opportunity_ids=opportunity_ids,
-        criteria=criteria,
-    )
+    if config.audit_type == "last_n_per_flw":
+        criteria["countPerFlw"] = config.count_per_flw
+    elif config.audit_type == "last_n_across_opp":
+        criteria["countAcrossOpp"] = config.count_across_opp
+    elif config.audit_type == "date_range":
+        criteria["startDate"] = config.start_date
+        criteria["endDate"] = config.end_date
+
+    return criteria
+
+
+def preview_audit(facade: ConnectAPIFacade, config: AuditRunConfig):
+    """
+    Generate preview of what will be created.
+
+    Args:
+        facade: Authenticated API facade
+        config: Audit run configuration with opportunity_ids populated
+
+    Returns:
+        Preview result object (contains cache key if sampling)
+    """
+    print("\n> Generating preview...")
+
+    criteria = build_criteria(config)
+    result = preview_audit_sessions(facade=facade, opportunity_ids=config.opportunity_ids, criteria=criteria)
 
     if not result.success:
-        print(f"\n[ERROR] {result.error}")
-        return []
+        print(f"  [ERROR] {result.error}")
+        return None
 
     # Display preview results
     for preview in result.preview_data:
-        print(f"\n[OK] Opportunity: {preview['opportunity_name']} (ID: {preview['opportunity_id']})")
-        print(f"  Total FLWs: {preview['total_flws']}")
-        print(f"  Total visits: {preview['total_visits']}")
-        print(f"  Avg visits per FLW: {preview['avg_visits_per_flw']}")
-        print(f"  Sessions to create: {preview['sessions_to_create']}")
+        print(f"\n  Opportunity: {preview['opportunity_name']} (ID: {preview['opportunity_id']})")
+        print(f"    - FLWs: {preview['total_flws']}")
+        if preview.get("total_visits_before_sampling"):
+            print(f"    - Visits (before sampling): {preview['total_visits_before_sampling']}")
+            print(f"    - Visits (after {preview['sample_percentage']}% sampling): {preview['total_visits']}")
+        else:
+            print(f"    - Visits: {preview['total_visits']}")
+        print(f"    - Avg visits/FLW: {preview['avg_visits_per_flw']}")
+        print(f"    - Sessions to create: {preview['sessions_to_create']}")
 
-    return result.preview_data
+    print("\n  [OK] Preview generated successfully")
+    return result
 
 
-def create_per_flw_audits(
-    facade: ConnectAPIFacade,
-    opportunity_ids: list[int],
-    count_per_flw: int = 10,
-    auditor_username: str = "integration_test",
-):
-    """Create per-FLW audit sessions with last N visits per FLW using the audit creation service."""
-    print("\n" + "=" * 80)
-    print("STEP 4: CREATING PER-FLW AUDITS")
-    print("=" * 80)
+def create_audit(facade: ConnectAPIFacade, config: AuditRunConfig, preview_result):
+    """
+    Create audit sessions using cached sample from preview.
 
-    # Build criteria for per-FLW audit
-    criteria = {
-        "type": "last_n_per_flw",
-        "granularity": "per_flw",
-        "countPerFlw": count_per_flw,
-    }
+    Args:
+        facade: Authenticated API facade
+        config: Audit run configuration
+        preview_result: Result from preview step (contains cache key)
 
-    print(f"\nCreating per-FLW audits with last {count_per_flw} visits per FLW...")
+    Returns:
+        Creation result object
+    """
+    print("\n> Creating audit sessions...")
 
-    # Use the same service that the UI uses
+    criteria = build_criteria(config)
+
+    # If sampling was used, add the cache key from preview
+    if preview_result and preview_result.preview_data:
+        for preview in preview_result.preview_data:
+            if preview.get("sample_cache_key"):
+                criteria["sampleCacheKey"] = preview["sample_cache_key"]
+                print("  Using cached sample from preview")
+                break
+
     result = create_audit_sessions(
         facade=facade,
-        opportunity_ids=opportunity_ids,
+        opportunity_ids=config.opportunity_ids,
         criteria=criteria,
-        auditor_username=auditor_username,
-        limit_flws=None,  # No limit - run full workflow like UI
+        auditor_username=config.auditor_username,
+        limit_flws=None,
     )
 
     if not result.success:
-        print(f"\n[ERROR] {result.error}")
-        return []
+        print(f"  [ERROR] {result.error}")
+        return None
 
-    # Print results
-    print(f"\n[OK] Created {result.sessions_created} audit sessions")
+    print(f"\n  [OK] Created {result.sessions_created} audit session(s)")
 
-    # Print final stats
+    # Display statistics
     stats = result.stats
-    print("\n" + "=" * 80)
-    print("FINAL STATISTICS")
-    print("=" * 80)
-    print(f"Opportunities created: {stats.get('opportunities_created', 0)}")
-    print(f"Users created: {stats.get('users_created', 0)}")
-    print(f"Visits created: {stats.get('visits_created', 0)}")
-    print(f"Audit sessions created: {stats.get('audit_sessions_created', 0)}")
-    print(f"Attachments downloaded: {stats.get('attachments_downloaded', 0)}")
+    print("\n  Statistics:")
+    print(f"    - Opportunities created: {stats.get('opportunities_created', 0)}")
+    print(f"    - Users created: {stats.get('users_created', 0)}")
+    print(f"    - Visits loaded: {stats.get('visits_created', 0)}")
+    print(f"    - Audit sessions created: {stats.get('audit_sessions_created', 0)}")
+    print(f"    - Attachments downloaded: {stats.get('attachments_downloaded', 0)}")
 
-    return result.sessions
+    return result
 
 
-def verify_audits(sessions: list):
-    """Verify that audits were created correctly."""
-    print("\n" + "=" * 80)
-    print("STEP 5: VERIFICATION")
-    print("=" * 80)
+def verify_audit(result) -> bool:
+    """
+    Verify that audit sessions were created correctly.
 
-    print(f"\nVerifying {len(sessions)} audit sessions...")
+    Args:
+        result: Creation result object
 
+    Returns:
+        True if all sessions are valid, False otherwise
+    """
+    print("\n> Verifying audit sessions...")
+
+    if not result or not result.sessions:
+        print("  [ERROR] No sessions to verify")
+        return False
+
+    sessions = result.sessions
     all_valid = True
 
     for session in sessions:
-        # Refresh from database
         session.refresh_from_db()
 
         # Check status
@@ -243,9 +371,8 @@ def verify_audits(sessions: list):
             all_valid = False
             continue
 
-        # Count visits explicitly assigned to this session
+        # Check visits
         visit_count = session.visits.count()
-
         if visit_count == 0:
             print(f"  [ERROR] Session {session.id}: No visits found")
             all_valid = False
@@ -253,67 +380,128 @@ def verify_audits(sessions: list):
             print(f"  [OK] Session {session.id} ({session.flw_username}): {visit_count} visits")
 
     if all_valid:
-        print("\n[OK] All audit sessions created successfully!")
+        print("\n  [OK] All audit sessions verified successfully")
     else:
-        print("\n[ERROR] Some audit sessions have issues")
+        print("\n  [ERROR] Some audit sessions have issues")
 
     return all_valid
 
 
-def main():
-    """Run the complete integration workflow."""
+# ============================================================================
+# MAIN WORKFLOW
+# ============================================================================
+
+
+def run_audit_integration(config: AuditRunConfig) -> bool:
+    """
+    Execute complete audit integration workflow.
+
+    This is the main entry point that orchestrates all workflow steps:
+    1. Clear database (optional)
+    2. Search for opportunities
+    3. Select opportunities from results
+    4. Preview audit
+    5. Create audit
+    6. Verify results
+
+    Args:
+        config: Audit run configuration
+
+    Returns:
+        True if workflow completed successfully, False otherwise
+    """
     print("\n" + "=" * 80)
-    print("AUDIT INTEGRATION WORKFLOW")
+    print(f"AUDIT INTEGRATION: {config.name}")
     print("=" * 80)
-    print("\nThis script will:")
-    print("1. Clear the database")
-    print("2. Get opportunity 385 (Readers - 2nd highest visit count)")
-    print("3. Create per-FLW audits with last 5 visits per FLW")
-    print("4. Download images (if credentials configured)")
-    print("5. Verify the results")
+    print("\nConfiguration:")
+    print(f"  Search: '{config.search_query}' -> {config.select_count} ({config.select_strategy})")
+    print(f"  Audit: {config.audit_type} / {config.granularity}")
+    if config.count_per_flw:
+        print(f"  Visits: {config.count_per_flw} per FLW")
+    print(f"  Sampling: {config.sample_percentage}%")
 
     # Initialize facade
     facade = ConnectAPIFacade()
     if not facade.authenticate():
         print("\n[ERROR] Failed to authenticate with data source")
         print("Check SUPERSET_* environment variables")
-        return 1
+        return False
 
     try:
-        # Step 1: Clear database
-        clear_database()
-        if not confirm_empty():
-            return 1
+        # Step 0: Clear database (optional)
+        if config.clear_db_before:
+            if not clear_database():
+                return False
 
-        # Step 2: Get opportunity 385
-        selected_opportunities = get_opportunity_385(facade)
-        if not selected_opportunities:
-            print("\n[ERROR] Could not find opportunity 385")
-            return 1
+        # Step 1: Search
+        print("\n" + "=" * 80)
+        print("STEP 1: SEARCH FOR OPPORTUNITIES")
+        print("=" * 80)
+        opportunities = search_opportunities(facade, config.search_query)
+        if not opportunities:
+            return False
 
-        opportunity_ids = [opp.id for opp in selected_opportunities]
+        # Step 2: Select
+        print("\n" + "=" * 80)
+        print("STEP 2: SELECT OPPORTUNITIES")
+        print("=" * 80)
+        config.opportunity_ids = select_opportunities(opportunities, config.select_strategy, config.select_count)
+        if not config.opportunity_ids:
+            return False
 
-        # Step 3: Generate preview
-        generate_preview(facade, opportunity_ids, count_per_flw=5)
+        # Step 3: Preview
+        print("\n" + "=" * 80)
+        print("STEP 3: PREVIEW AUDIT")
+        print("=" * 80)
+        preview_result = preview_audit(facade, config)
+        if not preview_result:
+            return False
 
-        # Step 4: Create per-FLW audits
-        sessions = create_per_flw_audits(facade, opportunity_ids, count_per_flw=5)
+        # Step 4: Create
+        print("\n" + "=" * 80)
+        print("STEP 4: CREATE AUDIT")
+        print("=" * 80)
+        create_result = create_audit(facade, config, preview_result)
+        if not create_result:
+            return False
 
         # Step 5: Verify
-        success = verify_audits(sessions)
+        print("\n" + "=" * 80)
+        print("STEP 5: VERIFY RESULTS")
+        print("=" * 80)
+        success = verify_audit(create_result)
 
-        # Final message
+        # Final status
         print("\n" + "=" * 80)
         if success:
-            print("[SUCCESS] INTEGRATION WORKFLOW COMPLETED SUCCESSFULLY")
+            print(f"[SUCCESS] {config.name} completed successfully")
         else:
-            print("[ERROR] INTEGRATION WORKFLOW COMPLETED WITH ERRORS")
+            print(f"[ERROR] {config.name} completed with errors")
         print("=" * 80)
 
-        return 0 if success else 1
+        return success
 
     finally:
         facade.close()
+
+
+def main():
+    """Parse arguments and run the configured test."""
+    config_key = sys.argv[1] if len(sys.argv) > 1 else "baseline_100pct"
+
+    if config_key not in RUN_CONFIGS:
+        print(f"[ERROR] Unknown config: {config_key}")
+        print("\nUsage: python run_audit_integration.py [config_key]")
+        print("\nAvailable configurations:")
+        for key, cfg in RUN_CONFIGS.items():
+            print(f"  {key}: {cfg.name}")
+            print(f"    Search: '{cfg.search_query}' → top {cfg.select_count} ({cfg.select_strategy})")
+            print(f"    Sampling: {cfg.sample_percentage}%")
+        return 1
+
+    config = RUN_CONFIGS[config_key]
+    success = run_audit_integration(config)
+    return 0 if success else 1
 
 
 if __name__ == "__main__":
