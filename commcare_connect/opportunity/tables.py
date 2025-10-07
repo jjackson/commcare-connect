@@ -1020,6 +1020,7 @@ class WorkerStatusTable(tables.Table):
         accessor="opportunity_access__user",
         empty_values=(),
     )
+    phone_number = tables.Column(accessor="opportunity_access__user__phone_number", verbose_name="Phone Number")
     status = StatusIndicatorColumn(orderable=False)
     invited_date = DMYTColumn(accessor="notification_date", verbose_name=_("Invited Date"))
     last_active = DMYTColumn(
@@ -1058,6 +1059,7 @@ class WorkerStatusTable(tables.Table):
             "index",
             "status",
             "user",
+            "phone_number",
             "invited_date",
             "last_active",
             "started_learn",
