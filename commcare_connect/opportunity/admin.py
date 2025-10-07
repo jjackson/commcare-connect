@@ -38,6 +38,27 @@ admin.site.register(HQApiKey)
 @admin.register(Opportunity)
 class OpportunityAdmin(admin.ModelAdmin):
     actions = ["refresh_learn_and_deliver_modules"]
+    list_display = ["name", "organization", "active", "chat_widget_enabled"]
+    list_filter = ["active", "chat_widget_enabled", "organization"]
+    search_fields = ["name", "description"]
+    fieldsets = (
+        (None, {
+            "fields": ("name", "organization", "description", "short_description", "active")
+        }),
+        ("Apps", {
+            "fields": ("learn_app", "deliver_app", "api_key")
+        }),
+        ("Dates & Budget", {
+            "fields": ("start_date", "end_date", "total_budget", "currency")
+        }),
+        ("Settings", {
+            "fields": ("is_test", "delivery_type", "managed", "auto_approve_visits", "auto_approve_payments")
+        }),
+        ("Chat Widget", {
+            "fields": ("chat_widget_enabled", "chatbot_id"),
+            "description": "Configure OpenChatStudio chat widget integration for this opportunity."
+        }),
+    )
 
     @admin.action(description="Refresh Learn and Deliver Modules")
     def refresh_learn_and_deliver_modules(self, request, queryset):

@@ -91,6 +91,8 @@ class Opportunity(BaseModel):
     delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
     managed = models.BooleanField(default=False)
     hq_server = models.ForeignKey(HQServer, on_delete=models.DO_NOTHING, null=True)
+    chat_widget_enabled = models.BooleanField(default=False, help_text="Enable OpenChatStudio chat widget for this opportunity")
+    chatbot_id = models.CharField(max_length=255, null=True, blank=True, help_text="OpenChatStudio chatbot ID")
 
     def __str__(self):
         return self.name
