@@ -7,6 +7,7 @@ from commcare_connect.opportunity.models import (
     CompletedWork,
     Opportunity,
     OpportunityClaimLimit,
+    Payment,
     UserVisit,
 )
 from commcare_connect.organization.models import Organization
@@ -116,6 +117,36 @@ class CompletedWorkDataSerializer(serializers.ModelSerializer):
             "saved_payment_accrued_usd",
             "saved_org_payment_accrued",
             "saved_org_payment_accrued_usd",
+        ]
+
+    def get_username(self, obj):
+        return obj.username
+
+    def get_opportunity_id(self, obj):
+        return obj.opportunity_id
+
+
+class PaymentDataSerializer(serializers.ModelSerializer):
+    username = serializers.SerializerMethodField()
+    opportunity_id = serializers.SerializerMethodField()
+    organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
+
+    class Meta:
+        model = Payment
+        fields = [
+            "username",
+            "opportunity_id",
+            "created_at",
+            "amount",
+            "amount_usd",
+            "date_paid",
+            "payment_unit",
+            "confirmed",
+            "confirmation_date",
+            "organization",
+            "invoice_id",
+            "payment_method",
+            "payment_operator",
         ]
 
     def get_username(self, obj):

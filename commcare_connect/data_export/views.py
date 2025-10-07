@@ -1,6 +1,6 @@
 import csv
 
-from django.db.models import F
+from django.db.models import F, Q
 from django.http import JsonResponse, StreamingHttpResponse
 from oauth2_provider.contrib.rest_framework.permissions import TokenHasScope
 from rest_framework.generics import RetrieveAPIView
@@ -14,6 +14,7 @@ from commcare_connect.data_export.serializer import (
     OpportunityDataExportSerializer,
     OpportunityUserDataSerializer,
     OrganizationDataExportSerializer,
+    PaymentDataSerializer,
     ProgramDataExportSerializer,
     UserVisitDataSerialier,
 )
@@ -24,6 +25,7 @@ from commcare_connect.opportunity.models import (
     CompletedWork,
     Opportunity,
     OpportunityAccess,
+    Payment,
     UserVisit,
 )
 from commcare_connect.organization.models import Organization
@@ -115,6 +117,18 @@ class CompletedWorkDataView(BaseStreamingCSVExportView):
                 opportunity_id=F("opportunity_access__opportunity_id"),
             )
             .select_related("opportunity_access")
+        )
+
+
+class PaymentDataView(BaseStreamingCSVExportView):
+    serializer_class = PaymentDataSerializer
+
+    def get_queryset(self, request, opp_id):
+        return Payment.objects.filter(
+            Q(opportunity_access__opportunity_id=opp_id) | Q(invoice__opportunity_id=opp_id)
+        ).annotate(
+            username=F("opportunity_access__user__username"),
+            opportunity_id=F("opportunity_access__opportunity_id"),
         )
 
 
