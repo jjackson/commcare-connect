@@ -11,6 +11,7 @@ from commcare_connect.data_export.serializer import (
     AssessmentDataSerializer,
     CompletedModuleDataSerializer,
     CompletedWorkDataSerializer,
+    InvoiceDataSerializer,
     OpportunityDataExportSerializer,
     OpportunityUserDataSerializer,
     OrganizationDataExportSerializer,
@@ -26,6 +27,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
     Payment,
+    PaymentInvoice,
     UserVisit,
 )
 from commcare_connect.organization.models import Organization
@@ -130,6 +132,13 @@ class PaymentDataView(BaseStreamingCSVExportView):
             username=F("opportunity_access__user__username"),
             opportunity_id=F("opportunity_access__opportunity_id"),
         )
+
+
+class InvoiceDataView(BaseStreamingCSVExportView):
+    serializer_class = InvoiceDataSerializer
+
+    def get_queryset(self, request, opp_id):
+        return PaymentInvoice.objects.filter(opportunity_id=opp_id)
 
 
 class CompletedModuleDataView(BaseStreamingCSVExportView):
