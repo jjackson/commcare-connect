@@ -63,8 +63,8 @@ class BaseStreamingCSVExportView(BaseDataExportView):
 
 
 class ProgramOpportunityOrganizationDataView(BaseDataExportView):
-    def get(self):
-        organizations = Organization.objects.filter(memberships__user=self.request.user)
+    def get(self, request):
+        organizations = Organization.objects.filter(memberships__user=request.user)
         opportunities = Opportunity.objects.filter(organization__in=organizations)
         programs = Program.objects.filter(organization__in=organizations)
 
