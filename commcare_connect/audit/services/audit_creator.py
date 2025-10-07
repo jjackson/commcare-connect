@@ -124,6 +124,9 @@ def create_audit_sessions(
 
         if granularity == "combined":
             # One audit for all opportunities combined
+            if progress_tracker:
+                progress_tracker.update(0, 100, "Loading visits...", "processing", step_name="sessions")
+
             visits = loader.load_visits(
                 opportunity_ids=opportunity_ids,
                 audit_type=audit_type,
@@ -132,6 +135,9 @@ def create_audit_sessions(
                 count=count_per_flw or count_across_opp,
             )
             all_visits.extend(visits)
+
+            if progress_tracker:
+                progress_tracker.update(50, 100, "Creating audit session...", "processing", step_name="sessions")
 
             # Calculate actual date range from loaded visits
             session_start = start_date
@@ -160,9 +166,21 @@ def create_audit_sessions(
             session.visits.set(visits)
             created_sessions.append(session)
 
+            if progress_tracker:
+                progress_tracker.update(100, 100, "Session created", "processing", step_name="sessions")
+
         elif granularity == "per_opp":
             # One audit per opportunity
-            for opp_id in opportunity_ids:
+            for idx, opp_id in enumerate(opportunity_ids, 1):
+                if progress_tracker:
+                    progress_tracker.update(
+                        idx,
+                        len(opportunity_ids),
+                        f"Creating audit for opportunity {idx}/{len(opportunity_ids)}",
+                        "processing",
+                        step_name="sessions",
+                    )
+
                 visits = loader.load_visits(
                     opportunity_ids=[opp_id],
                     audit_type=audit_type,
@@ -241,6 +259,13 @@ def create_audit_sessions(
                 )
                 all_visits.extend(visits)
 
+                # Determine which opportunities this FLW actually has visits in
+                flw_opportunity_ids = list({v.opportunity_id for v in visits if v.opportunity_id})
+
+                # Skip if no visits found for this FLW
+                if not visits or not flw_opportunity_ids:
+                    continue
+
                 # Calculate actual date range from loaded visits (important for last_n type audits)
                 session_start = start_date
                 session_end = end_date
@@ -256,14 +281,16 @@ def create_audit_sessions(
 
                 session = loader.create_audit_session(
                     auditor_username=auditor_username,
-                    opportunity_ids=opportunity_ids,
+                    opportunity_ids=flw_opportunity_ids,  # Use only the opportunities this FLW has visits in
                     granularity="per_flw",
                     audit_type=audit_type,
                     start_date=session_start,
                     end_date=session_end,
                     count=count_per_flw or count_across_opp,
                     flw_username=flw.get("username"),
-                    opportunity_name=get_opportunity_name(opportunity_ids),
+                    opportunity_name=get_opportunity_name(
+                        flw_opportunity_ids
+                    ),  # Generate name from FLW's actual opportunities
                 )
                 # Explicitly assign the loaded visits to this session
                 session.visits.set(visits)

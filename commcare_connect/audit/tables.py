@@ -16,7 +16,7 @@ class AuditSessionTable(tables.Table):
     opportunity_name = tables.Column(
         verbose_name=_("Opportunity"),
         orderable=True,
-        attrs={"td": {"class": "text-sm text-brand-deep-purple font-medium"}},
+        attrs={"td": {"class": "text-sm text-brand-deep-purple font-medium whitespace-normal break-words"}},
     )
 
     opportunity_ids = tables.Column(
@@ -25,10 +25,6 @@ class AuditSessionTable(tables.Table):
 
     flw_username = tables.Column(
         verbose_name=_("FLW"), orderable=True, attrs={"td": {"class": "text-sm text-brand-deep-purple"}}
-    )
-
-    auditor_username = tables.Column(
-        verbose_name=_("Auditor"), orderable=True, attrs={"td": {"class": "text-sm text-gray-700"}}
     )
 
     start_date = DMYTColumn(verbose_name=_("Start Date"))
@@ -60,7 +56,6 @@ class AuditSessionTable(tables.Table):
             "opportunity_name",
             "opportunity_ids",
             "flw_username",
-            "auditor_username",
             "start_date",
             "end_date",
             "status",
@@ -73,7 +68,6 @@ class AuditSessionTable(tables.Table):
             "opportunity_name",
             "opportunity_ids",
             "flw_username",
-            "auditor_username",
             "start_date",
             "end_date",
             "status",

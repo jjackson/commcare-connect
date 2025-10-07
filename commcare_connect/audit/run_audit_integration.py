@@ -93,34 +93,47 @@ def confirm_empty():
     return True
 
 
-def search_readers_opportunities(facade: ConnectAPIFacade):
-    """Search for 'readers' opportunities and select top 1 with >1000 visits."""
+def get_opportunity_385(facade: ConnectAPIFacade):
+    """Get opportunity 385 - the Readers opp with 2nd highest visit count."""
     print("\n" + "=" * 80)
-    print("STEP 2: SEARCHING FOR READERS OPPORTUNITIES")
+    print("STEP 2: GETTING OPPORTUNITY 385")
     print("=" * 80)
 
-    print("\nSearching for 'readers' opportunities...")
-    opportunities = facade.search_opportunities("readers", limit=50)
+    print("\nFetching opportunity details for ID 385...")
 
-    print(f"Found {len(opportunities)} opportunities matching 'readers'")
+    # Get opportunity details from Superset
+    opp_details = facade.get_opportunity_details([385])
 
-    # Filter for high-volume opportunities (>1000 visits)
-    high_volume = [opp for opp in opportunities if opp.visit_count and opp.visit_count > 1000]
-
-    if len(high_volume) < 1:
-        print("\n[ERROR] No opportunities found with >1000 visits")
+    if not opp_details:
+        print("\n[ERROR] Could not find opportunity 385 in Superset")
         return None
 
-    # Select top 1
-    selected = high_volume[:1]
+    opp_data = opp_details[0]
 
-    print(f"\n[OK] Selected {len(selected)} opportunity:")
-    for opp in selected:
-        print(f"  - ID {opp.id}: {opp.name}")
-        print(f"    Visits: {opp.visit_count}")
-        print(f"    Domain: {opp.deliver_app_domain}")
+    print("\n[OK] Found opportunity:")
+    print(f"  - ID: {opp_data['id']}")
+    print(f"  - Name: {opp_data['name']}")
+    print(f"  - Visit count: {opp_data.get('visit_count', 'N/A')}")
+    print(f"  - Domain: {opp_data.get('deliver_app_domain', 'N/A')}")
 
-    return selected
+    # Return in the expected format
+    from dataclasses import dataclass
+
+    @dataclass
+    class OpportunityResult:
+        id: int
+        name: str
+        visit_count: int
+        deliver_app_domain: str
+
+    return [
+        OpportunityResult(
+            id=opp_data["id"],
+            name=opp_data["name"],
+            visit_count=opp_data.get("visit_count", 0),
+            deliver_app_domain=opp_data.get("deliver_app_domain", ""),
+        )
+    ]
 
 
 def generate_preview(facade: ConnectAPIFacade, opportunity_ids: list[int], count_per_flw: int = 10):
@@ -254,11 +267,10 @@ def main():
     print("=" * 80)
     print("\nThis script will:")
     print("1. Clear the database")
-    print("2. Search for 'readers' opportunities")
-    print("3. Select top 1 project with >1000 visits")
-    print("4. Create per-FLW audits with last 2 visits per FLW")
-    print("5. Download images (if credentials configured)")
-    print("6. Verify the results")
+    print("2. Get opportunity 385 (Readers - 2nd highest visit count)")
+    print("3. Create per-FLW audits with last 5 visits per FLW")
+    print("4. Download images (if credentials configured)")
+    print("5. Verify the results")
 
     # Initialize facade
     facade = ConnectAPIFacade()
@@ -273,19 +285,19 @@ def main():
         if not confirm_empty():
             return 1
 
-        # Step 2: Search for opportunities
-        selected_opportunities = search_readers_opportunities(facade)
+        # Step 2: Get opportunity 385
+        selected_opportunities = get_opportunity_385(facade)
         if not selected_opportunities:
-            print("\n[ERROR] Could not find suitable opportunities")
+            print("\n[ERROR] Could not find opportunity 385")
             return 1
 
         opportunity_ids = [opp.id for opp in selected_opportunities]
 
         # Step 3: Generate preview
-        generate_preview(facade, opportunity_ids, count_per_flw=2)
+        generate_preview(facade, opportunity_ids, count_per_flw=5)
 
         # Step 4: Create per-FLW audits
-        sessions = create_per_flw_audits(facade, opportunity_ids, count_per_flw=2)
+        sessions = create_per_flw_audits(facade, opportunity_ids, count_per_flw=5)
 
         # Step 5: Verify
         success = verify_audits(sessions)

@@ -45,13 +45,14 @@ class AuditSessionDetailView(LoginRequiredMixin, DetailView):
         session = self.get_object()
 
         # Get all UserVisits explicitly assigned to this session
-        all_visits = session.visits.all().select_related("user", "opportunity", "deliver_unit").order_by("visit_date")
+        # Note: deliver_unit can be NULL, so we don't include it in select_related (INNER JOIN)
+        all_visits = session.visits.all().select_related("user", "opportunity").order_by("visit_date")
 
         # Get existing audit results
         existing_results = {result.user_visit_id: result for result in session.results.select_related("user_visit")}
 
-        # Get current visit index from URL parameter
-        visit_index = int(self.request.GET.get("visit", 0))
+        # Get current visit index from URL parameter (1-based, convert to 0-based for array access)
+        visit_index = int(self.request.GET.get("visit", 1)) - 1
         total_visits = all_visits.count()
 
         # Ensure visit_index is within bounds
@@ -62,9 +63,22 @@ class AuditSessionDetailView(LoginRequiredMixin, DetailView):
 
         # Get current visit
         current_visit = None
+        current_image_notes = {}
         if total_visits > 0:
             current_visit = all_visits[visit_index]
             current_visit.audit_result = existing_results.get(current_visit.id)
+
+            # Load existing image notes if audit result exists
+            if current_visit.audit_result:
+                from .models import AuditImageNote
+
+                existing_image_notes = AuditImageNote.objects.filter(audit_result=current_visit.audit_result)
+                current_image_notes = {note.blob_id: note.note for note in existing_image_notes}
+
+        # Convert image notes to JSON for the template
+        import json
+
+        current_image_notes_json = json.dumps(current_image_notes)
 
         # Progress information
         audited_count = len(existing_results)
@@ -73,6 +87,7 @@ class AuditSessionDetailView(LoginRequiredMixin, DetailView):
         context.update(
             {
                 "current_visit": current_visit,
+                "current_image_notes_json": current_image_notes_json,
                 "visit_index": visit_index,
                 "total_visits": total_visits,
                 "audited_count": audited_count,
@@ -113,7 +128,14 @@ class AuditResultUpdateView(LoginRequiredMixin, View):
 
             # Handle image notes
             try:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.info(f"Received image_notes_json: {image_notes_json}")
+
                 image_notes = json.loads(image_notes_json)
+                logger.info(f"Parsed image_notes: {image_notes}")
+
                 # Clear existing image notes for this audit result
                 audit_result.image_notes.all().delete()
                 # Create new image notes
@@ -124,7 +146,9 @@ class AuditResultUpdateView(LoginRequiredMixin, View):
                         AuditImageNote.objects.create(
                             audit_result=audit_result, blob_id=blob_id, note=note_text.strip()
                         )
-            except json.JSONDecodeError:
+                        logger.info(f"Created image note for blob_id {blob_id}: {note_text.strip()}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to decode image_notes JSON: {e}")
                 pass  # Ignore invalid JSON
 
             # Calculate updated progress using explicit visit set
@@ -378,10 +402,11 @@ class AuditVisitDataView(LoginRequiredMixin, View):
 
     def get(self, request, session_id):
         session = get_object_or_404(AuditSession, id=session_id)
-        visit_index = int(request.GET.get("visit", 0))
+        visit_index = int(request.GET.get("visit", 1)) - 1  # Convert from 1-based URL to 0-based index
 
         # Get all visits explicitly assigned to this session
-        all_visits = session.visits.all().select_related("user", "opportunity", "deliver_unit").order_by("visit_date")
+        # Note: deliver_unit can be NULL, so we don't include it in select_related (INNER JOIN)
+        all_visits = session.visits.all().select_related("user", "opportunity").order_by("visit_date")
 
         existing_results = {result.user_visit_id: result for result in session.results.select_related("user_visit")}
 

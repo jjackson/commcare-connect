@@ -198,14 +198,14 @@
                        @click="openImageModal(image.url)">
                 </div>
                 <!-- Image Note -->
-                <div class="mt-2" x-data="{ imageNoteOpen: false }">
-                  <button @click="imageNoteOpen = !imageNoteOpen"
+                <div class="mt-2">
+                  <button @click="imageNotes[image.blob_id + '_open'] = !imageNotes[image.blob_id + '_open']"
                           class="flex items-center gap-1 text-xs text-brand-blue-light hover:text-brand-deep-purple">
-                    <i class="fas fa-chevron-right transition-transform text-xs" :class="imageNoteOpen ? 'rotate-90' : ''"></i>
+                    <i class="fas fa-chevron-right transition-transform text-xs" :class="imageNotes[image.blob_id + '_open'] ? 'rotate-90' : ''"></i>
                     Add Image Note
           </button>
-                  <div x-show="imageNoteOpen" x-transition class="mt-1">
-                    <textarea x-model="$root.imageNotes[image.blob_id]"
+                  <div x-show="imageNotes[image.blob_id + '_open']" x-transition class="mt-1">
+                    <textarea x-model="imageNotes[image.blob_id]"
                               placeholder="Add note about this image..."
                               class="w-full p-1 border border-gray-300 rounded text-xs resize-none"
                               rows="2"
@@ -227,14 +227,14 @@
                        @click="openImageModal('{% url 'audit:image' image.blob_id %}')">
                 </div>
                 <!-- Image Note -->
-                <div class="mt-2" x-data="{ imageNoteOpen: false }">
-                  <button @click="imageNoteOpen = !imageNoteOpen"
+                <div class="mt-2">
+                  <button @click="imageNotes['{{ image.blob_id }}_open'] = !imageNotes['{{ image.blob_id }}_open']"
                           class="flex items-center gap-1 text-xs text-brand-blue-light hover:text-brand-deep-purple">
-                    <i class="fas fa-chevron-right transition-transform text-xs" :class="imageNoteOpen ? 'rotate-90' : ''"></i>
+                    <i class="fas fa-chevron-right transition-transform text-xs" :class="imageNotes['{{ image.blob_id }}_open'] ? 'rotate-90' : ''"></i>
                     Add Image Note
         </button>
-                  <div x-show="imageNoteOpen" x-transition class="mt-1">
-                    <textarea x-model="$root.imageNotes['{{ image.blob_id }}']"
+                  <div x-show="imageNotes['{{ image.blob_id }}_open']" x-transition class="mt-1">
+                    <textarea x-model="imageNotes['{{ image.blob_id }}']"
                               placeholder="Add note about this image..."
                               class="w-full p-1 border border-gray-300 rounded text-xs resize-none"
                               rows="2"
@@ -436,7 +436,7 @@ function auditInterface() {
             currentVisit: null,
 
             // Image notes (keyed by blob_id)
-            imageNotes: {},
+            imageNotes: {{ current_image_notes_json|safe }},
 
             // Completion state
             overallResult: '{% if session.overall_result %}{{ session.overall_result }}{% endif %}',
@@ -460,8 +460,9 @@ function auditInterface() {
         if (event.state && event.state.visitIndex !== undefined) {
           visitIndex = event.state.visitIndex;
         } else {
+          // Convert from 1-based URL parameter to 0-based index
           const urlParams = new URLSearchParams(window.location.search);
-          visitIndex = parseInt(urlParams.get('visit') || '0');
+          visitIndex = parseInt(urlParams.get('visit') || '1') - 1;
         }
 
         // Get image size from URL
@@ -479,9 +480,9 @@ function auditInterface() {
             // Methods
             async navigateToVisit(index) {
               if (index >= 0 && index < this.totalVisits) {
-                // Update URL without reloading
+                // Update URL without reloading (convert 0-based index to 1-based URL)
                 const url = new URL(window.location);
-                url.searchParams.set('visit', index);
+                url.searchParams.set('visit', index + 1);
                 if (this.imageHeight !== 128) { // Only add if not default
                   url.searchParams.set('imageSize', Math.round(this.imageHeight));
                 }
@@ -495,7 +496,8 @@ function auditInterface() {
 
             async loadVisitData(visitIndex) {
               try {
-                const response = await fetch(`{% url "audit:visit_data" session.id %}?visit=${visitIndex}`);
+                // Convert 0-based index to 1-based URL parameter
+                const response = await fetch(`{% url "audit:visit_data" session.id %}?visit=${visitIndex + 1}`);
                 const data = await response.json();
 
                 // Update all the state with new visit data
@@ -521,9 +523,9 @@ function auditInterface() {
 
       } catch (error) {
                 console.error('Error loading visit data:', error);
-                // Fallback to page reload on error
+                // Fallback to page reload on error (convert 0-based index to 1-based URL)
                 const url = new URL(window.location);
-                url.searchParams.set('visit', visitIndex);
+                url.searchParams.set('visit', visitIndex + 1);
                 if (this.imageHeight !== 128) {
                   url.searchParams.set('imageSize', Math.round(this.imageHeight));
                 }
@@ -594,13 +596,24 @@ function auditInterface() {
       this.submitting = true;
 
         try {
+          console.log('Submitting image notes:', this.imageNotes);
           const formData = new FormData();
           formData.append('visit_id', this.currentVisit?.visit_id || '{{ current_visit.id }}');
           formData.append('result', result);
           formData.append('notes', this.currentNotes);
           formData.append('current_index', this.visitIndex);
           formData.append('auto_advance', 'true');
-          formData.append('image_notes', JSON.stringify(this.imageNotes));
+
+          // Filter out the _open keys (they're UI state, not actual notes)
+          const actualImageNotes = {};
+          for (const [key, value] of Object.entries(this.imageNotes)) {
+            if (!key.endsWith('_open')) {
+              actualImageNotes[key] = value;
+            }
+          }
+          const imageNotesJson = JSON.stringify(actualImageNotes);
+          console.log('Image notes JSON:', imageNotesJson);
+          formData.append('image_notes', imageNotesJson);
           formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
         const response = await fetch('{% url "audit:result_update" session.id %}', {
