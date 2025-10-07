@@ -8,6 +8,7 @@ from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityClaimLimit,
     Payment,
+    PaymentInvoice,
     UserVisit,
 )
 from commcare_connect.organization.models import Organization
@@ -154,6 +155,20 @@ class PaymentDataSerializer(serializers.ModelSerializer):
 
     def get_opportunity_id(self, obj):
         return obj.opportunity_id
+
+
+class InvoiceDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentInvoice
+        fields = [
+            "opportunity_id",
+            "amount",
+            "amount_usd",
+            "date",
+            "invoice_number",
+            "service_delivery",
+            "exchange_rate",
+        ]
 
 
 class AssessmentDataSerializer(serializers.ModelSerializer):
