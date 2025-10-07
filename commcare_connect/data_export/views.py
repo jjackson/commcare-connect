@@ -163,7 +163,11 @@ class OrganizationProgramDataView(BaseStreamingCSVExportView):
 
 
 class ProgramOpportunityDataView(BaseStreamingCSVExportView):
-    serializer_class = OpportunityDataExportSerializer
+    serializer_class = OpportunitySerializer
 
     def get_queryset(self, request, program_id):
-        return Opportunity.objects.filter(managedopportunity__program=program_id)
+        return (
+            Opportunity.objects.filter(managedopportunity__program=program_id)
+            .select_related("learn_app", "deliver_app")
+            .prefetch_related("paymentunit_set", "opportunityverificationflags")
+        )
