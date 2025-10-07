@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 from rest_framework import serializers
 
 from commcare_connect.opportunity.api.serializers import (
@@ -14,7 +16,6 @@ from commcare_connect.opportunity.models import (
     OpportunityClaimLimit,
     Payment,
     PaymentInvoice,
-    PaymentUnit,
     UserVisit,
 )
 from commcare_connect.organization.models import Organization
@@ -204,11 +205,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
     learn_app = CommCareAppSerializer()
     deliver_app = CommCareAppSerializer()
-    max_visits_per_user = serializers.SerializerMethodField()
-    daily_max_visits_per_user = serializers.SerializerMethodField()
-    budget_per_visit = serializers.SerializerMethodField()
-    budget_per_user = serializers.SerializerMethodField()
-    payment_units = serializers.SerializerMethodField()
+    payment_units = PaymentUnitSerializer(source="paymentunit_set", many=True)
     verification_flags = OpportunityVerificationFlagsSerializer(source="opportunityverificationflags", read_only=True)
 
     class Meta:
@@ -236,19 +233,15 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "verification_flags",
         ]
 
-    def get_max_visits_per_user(self, obj):
-        # return 1 for older opportunities
-        return obj.max_visits_per_user or -1
-
-    def get_daily_max_visits_per_user(self, obj):
-        return obj.daily_max_visits_per_user or -1
-
-    def get_budget_per_visit(self, obj):
-        return obj.budget_per_visit or -1
-
-    def get_budget_per_user(self, obj):
-        return obj.budget_per_user
-
-    def get_payment_units(self, obj):
-        payment_units = PaymentUnit.objects.filter(opportunity=obj).order_by("pk")
-        return PaymentUnitSerializer(payment_units, many=True).data
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        for key, value in data.items():
+            if isinstance(value, OrderedDict):
+                data[key] = dict(value)
+            elif isinstance(value, list):
+                cleaned_value = []
+                for item in value:
+                    if isinstance(item, OrderedDict):
+                        cleaned_value.append(dict(item))
+                data[key] = cleaned_value
+        return data
