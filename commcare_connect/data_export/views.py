@@ -13,13 +13,13 @@ from commcare_connect.data_export.serializer import (
     CompletedWorkDataSerializer,
     InvoiceDataSerializer,
     OpportunityDataExportSerializer,
+    OpportunitySerializer,
     OpportunityUserDataSerializer,
     OrganizationDataExportSerializer,
     PaymentDataSerializer,
     ProgramDataExportSerializer,
     UserVisitDataSerialier,
 )
-from commcare_connect.opportunity.api.serializers import BaseOpportunitySerializer
 from commcare_connect.opportunity.models import (
     Assessment,
     CompletedModule,
@@ -75,7 +75,7 @@ class ProgramOpportunityOrganizationDataView(BaseDataExportView):
 
 
 class SingleOpportunityDataView(RetrieveAPIView, BaseDataExportView):
-    serializer_class = BaseOpportunitySerializer
+    serializer_class = OpportunitySerializer
 
     def get_object(self):
         return Opportunity.objects.get(id=self.kwargs.get("opp_id"), organization__memberships__user=self.request.user)
