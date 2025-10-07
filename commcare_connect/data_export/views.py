@@ -81,20 +81,16 @@ class SingleOpportunityDataView(RetrieveAPIView, BaseDataExportView):
         return Opportunity.objects.get(id=self.kwargs.get("opp_id"), organization__memberships__user=self.request.user)
 
 
-class OpportunityUserDataView(BaseDataExportView):
-    def get(self, request, opp_id):
-        users = (
-            OpportunityAccess.objects.filter(opportunity_id=opp_id)
-            .annotate(
-                username=F("user__username"),
-                phone=F("user__phone_number"),
-                user_invite_status=F("userinvite__status"),
-                date_claimed=F("opportunityclaim__date_claimed"),
-            )
-            .values()
+class OpportunityUserDataView(BaseStreamingCSVExportView):
+    serializer_class = OpportunityUserDataSerializer
+
+    def get_queryset(self, request, opp_id):
+        return OpportunityAccess.objects.filter(opportunity_id=opp_id).annotate(
+            username=F("user__username"),
+            phone=F("user__phone_number"),
+            user_invite_status=F("userinvite__status"),
+            date_claimed=F("opportunityclaim__date_claimed"),
         )
-        user_data = OpportunityUserDataSerializer(users, many=True).data
-        return JsonResponse({"users": user_data})
 
 
 class UserVisitDataView(BaseStreamingCSVExportView):
