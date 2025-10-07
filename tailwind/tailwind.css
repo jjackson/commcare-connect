@@ -707,3 +707,7 @@
 select:disabled {
   @apply pointer-events-none opacity-50;
 }
+
+.textinput:disabled {
+  @apply pointer-events-none opacity-50;
+}

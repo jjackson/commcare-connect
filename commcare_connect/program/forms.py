@@ -83,9 +83,7 @@ class ManagedOpportunityInitForm(OpportunityInitForm):
 
         # Managed opportunities should use the currency specified in the program.
         self.fields["currency"].initial = self.program.currency
-        self.fields["currency"].widget = forms.TextInput(
-            attrs={"readonly": "readonly", "disabled": True, "class": "cursor-not-allowed !bg-gray-200"}
-        )
+        self.fields["currency"].widget = forms.TextInput(attrs={"readonly": "readonly", "disabled": True})
         self.fields["currency"].required = False
 
         program_members = Organization.objects.filter(
