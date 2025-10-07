@@ -1,0 +1,18 @@
+{% comment %}
+OpenChatStudio Chat Widget Component
+Include this in opportunity templates to show the chat widget.
+Usage: {% include 'components/chat_widget.html' with opportunity=object %}
+{% endcomment %}
+
+{% if opportunity.chat_widget_enabled and opportunity.chatbot_id and request.org_membership %}
+  {% comment %}Load widget script if not already loaded{% endcomment %}
+  <script type='module' src='https://unpkg.com/open-chat-studio-widget@0.4.8/dist/open-chat-studio-widget/open-chat-studio-widget.esm.js' async></script>
+  
+  <open-chat-studio-widget
+    visible="false"
+    chatbot-id="{{ opportunity.chatbot_id }}"
+    button-text="Let's Chat"
+    position="right"
+    expanded="false">
+  </open-chat-studio-widget>
+{% endif %}

@@ -128,4 +128,5 @@
       {% url 'opportunity:catchment_area_import' request.org.slug opportunity.pk as catchment_import_url %}
       {% include "components/worker_page/import_modal.html" with modal_name="showCatchmentImportModal" modal_title=_("Import Catchment Area") import_url=catchment_import_url input_name="catchments" input_help_text=_('The file must contain at least the "Area Name", "Active", "Latitude", "Longitude", "Site code" and "Radius" column.') %}
     </div>
+    {% include 'components/chat_widget.html' with opportunity=object %}
 {% endblock %}

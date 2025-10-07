@@ -90,6 +90,8 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             "short_description",
             "is_test",
             "delivery_type",
+            "chat_widget_enabled",
+            "chatbot_id",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -122,6 +124,25 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                         css_class=CHECKBOX_CLASS,
                         wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg",
                     ),
+                ),
+                css_class="grid grid-cols-2 gap-4 p-6 card_bg",
+            ),
+            Row(
+                HTML(
+                    "<div class='col-span-2'>"
+                    "<h6 class='title-sm'>Chat Widget Settings</h6>"
+                    "<span class='hint'>Configure the OpenChatStudio chat widget for this opportunity.</span>"
+                    "</div>"
+                ),
+                Column(
+                    Field(
+                        "chat_widget_enabled",
+                        css_class=CHECKBOX_CLASS,
+                        wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg",
+                    ),
+                ),
+                Column(
+                    Field("chatbot_id", wrapper_class="w-full"),
                 ),
                 css_class="grid grid-cols-2 gap-4 p-6 card_bg",
             ),
