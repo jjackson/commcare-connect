@@ -39,7 +39,10 @@ class BaseDataExportView(APIView):
     required_scopes = ["export"]
 
 
-class PseudoSupportsWrite:
+class EchoWriter:
+    """A Buffer interface that implements write for csv.writer
+    and returns back the value passed to write."""
+
     def write(self, value):
         return value
 
@@ -55,7 +58,7 @@ class BaseStreamingCSVExportView(BaseDataExportView):
 
     def get_data_generator(self, *args, **kwargs):
         fieldnames = self.serializer_class().get_fields().keys()
-        writer = csv.DictWriter(PseudoSupportsWrite(), fieldnames=fieldnames)
+        writer = csv.DictWriter(EchoWriter(), fieldnames=fieldnames)
         objects = self.get_queryset(*args, **kwargs)
         yield writer.writeheader()
 
