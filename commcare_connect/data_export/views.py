@@ -53,13 +53,18 @@ class BaseStreamingCSVExportView(BaseDataExportView):
     def get_queryset(self, *args, **kwargs):
         raise NotImplementedError
 
-    def get(self, *args, **kwargs):
-        objects = self.get_queryset(*args, **kwargs)
-        serialized_data = self.serializer_class(objects, many=True).data
+    def get_data_generator(self, *args, **kwargs):
         fieldnames = self.serializer_class().get_fields().keys()
         writer = csv.DictWriter(PseudoSupportsWrite(), fieldnames=fieldnames)
-        data = [writer.writeheader()] + [writer.writerow(row) for row in serialized_data]
-        return StreamingHttpResponse(data, content_type="text/csv")
+        objects = self.get_queryset(*args, **kwargs)
+        yield writer.writeheader()
+
+        for obj in objects:
+            serialized_data = self.serializer_class(obj).data
+            yield writer.writerow(serialized_data)
+
+    def get(self, *args, **kwargs):
+        return StreamingHttpResponse(self.get_data_generator(*args, **kwargs), content_type="text/csv")
 
 
 class ProgramOpportunityOrganizationDataView(BaseDataExportView):
