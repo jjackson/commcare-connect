@@ -943,15 +943,15 @@ class UserInviteInfoColumn(UserInfoColumn):
             "verbose_name",
             header_with_tooltip(
                 label=_("Name"),
-                tooltip_text=_("Phone numbers will be displayed if a worker does not have a PersonalID account"),
+                tooltip_text=_("A blank value will be displayed if a worker does not have a PersonalID account"),
             ),
         )
         super().__init__(*args, **kwargs)
 
     def render(self, value, record):
-        if value:
+        if not value:
             return super().render(value, record.opportunity_access)
-        return record.phone_number
+        return "—"
 
 
 class SuspendedIndicatorColumn(tables.Column):
