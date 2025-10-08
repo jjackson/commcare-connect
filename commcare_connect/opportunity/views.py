@@ -140,7 +140,7 @@ from commcare_connect.program.utils import is_program_manager
 from commcare_connect.users.models import User
 from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
 from commcare_connect.utils.file import get_file_extension
-from commcare_connect.utils.flags import FlagLabels
+from commcare_connect.utils.flags import FlagLabels, Flags
 from commcare_connect.utils.tables import get_duration_min, get_validated_page_size
 
 
@@ -318,7 +318,6 @@ class OpportunityDashboard(OpportunityObjectMixin, OrganizationUserMixin, Detail
 
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
-        print(request.is_opportunity_pm)
         if not self.object.is_setup_complete:
             messages.warning(request, "Please complete the opportunity setup to view it")
             return redirect("opportunity:add_payment_units", org_slug=request.org.slug, opp_id=self.object.id)
@@ -1666,9 +1665,6 @@ def user_visit_details(request, org_slug, opp_id, pk):
     opportunity = get_opportunity_or_404(opp_id, org_slug)
     user_visit = get_object_or_404(UserVisit, pk=pk, opportunity=opportunity)
     verification_flags_config = opportunity.opportunityverificationflags
-    deliver_unit_flags_config = DeliverUnitFlagRules.objects.filter(
-        opportunity=opportunity, deliver_unit=user_visit.deliver_unit
-    )
 
     serializer = XFormSerializer(data=user_visit.form_json)
     serializer.is_valid()
@@ -1744,10 +1740,14 @@ def user_visit_details(request, org_slug, opp_id, pk):
         visit_data.update({"lat": lat, "lon": lon, "precision": precision})
 
     flags = []
+    attachment_flagged = False
     if user_visit.flagged and user_visit.flag_reason:
-        flags = [
-            (FlagLabels.get_label(flag), description) for flag, description in user_visit.flag_reason.get("flags", [])
-        ]
+        for flag, description in user_visit.flag_reason.get("flags", []):
+            if flag == Flags.ATTACHMENT_MISSING.value:
+                attachment_flagged = True
+                continue
+            flags.append((FlagLabels.get_label(flag), description))
+    flag_count = len(flags) + attachment_flagged
 
     return render(
         request,
@@ -1760,8 +1760,9 @@ def user_visit_details(request, org_slug, opp_id, pk):
             visit_data=visit_data,
             closest_distance=closest_distance,
             verification_flags_config=verification_flags_config,
-            deliver_unit_flags_config=deliver_unit_flags_config,
             flags=flags,
+            flag_count=flag_count,
+            attachment_flagged=attachment_flagged,
         ),
     )
 
@@ -2236,8 +2237,8 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
     stats = get_opportunity_delivery_progress(opportunity.id)
 
     worker_list_url = reverse("opportunity:worker_list", args=(org_slug, opp_id))
-    status_url = worker_list_url + "?sort=-last_active"
-    delivery_url = reverse("opportunity:worker_deliver", args=(org_slug, opp_id)) + "?sort=-last_active"
+    status_url = f"{worker_list_url}?{urlencode({'sort': '-last_active'})}"
+    delivery_url = reverse("opportunity:worker_deliver", args=(org_slug, opp_id))
     payment_url = reverse("opportunity:worker_payments", args=(org_slug, opp_id))
 
     deliveries_panels = [
@@ -2246,7 +2247,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "name": "Services Delivered",
             "status": "Total",
             "value": header_with_tooltip(stats.total_deliveries, "Total delivered so far excluding duplicates"),
-            "url": delivery_url,
+            "url": f"{delivery_url}?{urlencode({'sort': '-last_active'})}",
             "incr": stats.deliveries_from_yesterday,
         },
         {
@@ -2256,6 +2257,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "value": header_with_tooltip(
                 stats.flagged_deliveries_waiting_for_review, "Flagged and pending review with NM"
             ),
+            "url": f"{delivery_url}?{urlencode({'review_pending': 'True'})}",
             "incr": stats.flagged_deliveries_waiting_for_review_since_yesterday,
         },
     ]
@@ -2266,6 +2268,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                 "icon": "fa-clipboard-list",
                 "name": "Services Delivered",
                 "status": "Pending PM Review",
+                "url": f"{delivery_url}?{urlencode({'review_pending': 'True'})}",
                 "value": header_with_tooltip(stats.visits_pending_for_pm_review, "Flagged and pending review with PM"),
                 "incr": stats.visits_pending_for_pm_review_since_yesterday,
             }
@@ -2294,6 +2297,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "icon": "fa-clipboard-list",
                     "name": "Connect Workers",
                     "status": "Inactive last 3 days",
+                    "url": f"{delivery_url}?{urlencode({'last_active': '3'})}",
                     "value": header_with_tooltip(
                         stats.inactive_workers, "Did not submit a Learn or Deliver form in the last 3 days"
                     ),
