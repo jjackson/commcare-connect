@@ -7,7 +7,7 @@ This service handles database cleanup and management operations for the audit sy
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
-from commcare_connect.audit.models import AuditSession
+from commcare_connect.audit.models import AuditDefinition, AuditSession
 from commcare_connect.opportunity.models import BlobMeta, CommCareApp, DeliverUnit, Opportunity, PaymentUnit, UserVisit
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
 
@@ -25,6 +25,7 @@ def reset_audit_database():
     Deletes:
     - All BlobMeta records (form attachments/images)
     - All UserVisit records (loaded from Superset for audits)
+    - All AuditDefinition records (audit configurations)
     - All AuditSession records and results
     - All Opportunity records
     - Payment and deliver units
@@ -39,6 +40,7 @@ def reset_audit_database():
     deleted = {
         "opportunities": Opportunity.objects.count(),
         "visits": UserVisit.objects.count(),
+        "audit_definitions": AuditDefinition.objects.count(),
         "audit_sessions": AuditSession.objects.count(),
         "users": User.objects.filter(is_superuser=False, is_staff=False).count(),
         "attachments": BlobMeta.objects.count(),
@@ -62,23 +64,26 @@ def reset_audit_database():
         # 3. Delete audit sessions and results
         AuditSession.objects.all().delete()
 
-        # 4. Delete payment and deliver units that block opportunity deletion
+        # 4. Delete audit definitions (audit configurations and preview data)
+        AuditDefinition.objects.all().delete()
+
+        # 5. Delete payment and deliver units that block opportunity deletion
         PaymentUnit.objects.all().delete()
         DeliverUnit.objects.all().delete()
 
-        # 5. Delete CommCare apps created for audit
+        # 6. Delete CommCare apps created for audit
         CommCareApp.objects.filter(cc_app_id="audit-app").delete()
 
-        # 6. Now we can delete opportunities
+        # 7. Now we can delete opportunities
         Opportunity.objects.all().delete()
 
-        # 7. Clean up organizations created for audit (before users due to membership FK)
+        # 8. Clean up organizations created for audit (before users due to membership FK)
         Organization.objects.filter(slug="audit-org").delete()
 
-        # 8. Delete organization memberships for FLW users
+        # 9. Delete organization memberships for FLW users
         UserOrganizationMembership.objects.filter(user_id__in=flw_user_ids).delete()
 
-        # 9. Delete FLW users (preserve all Connect web login accounts)
+        # 10. Delete FLW users (preserve all Connect web login accounts)
         # Only deletes users who had visits (loaded from Superset for audits)
         User.objects.filter(id__in=flw_user_ids).delete()
 
@@ -103,5 +108,6 @@ def get_database_stats():
         "opportunities": Opportunity.objects.count(),
         "users": flw_users_with_visits_count,
         "visits": UserVisit.objects.count(),
+        "audit_definitions": AuditDefinition.objects.count(),
         "audit_sessions": AuditSession.objects.count(),
     }

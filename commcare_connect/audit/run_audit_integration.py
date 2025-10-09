@@ -122,6 +122,26 @@ RUN_CONFIGS = {
         count_per_flw=5,
         sample_percentage=25,
     ),
+    "test_across_all": AuditRunConfig(
+        name="Test Last N Across All - 1000 total",
+        search_query="chc",
+        select_strategy="top_by_visits",
+        select_count=3,
+        audit_type="last_n_across_all",
+        granularity="combined",
+        count_across_opp=1000,
+        sample_percentage=100,
+    ),
+    "test_sampling_3pct": AuditRunConfig(
+        name="Test Sampling - CHC Top 3, 10k visits, 3% sampling",
+        search_query="chc",
+        select_strategy="top_by_visits",
+        select_count=3,
+        audit_type="last_n_across_all",
+        granularity="combined",
+        count_across_opp=10000,
+        sample_percentage=3,
+    ),
 }
 
 
@@ -248,8 +268,10 @@ def build_criteria(config: AuditRunConfig) -> dict:
 
     if config.audit_type == "last_n_per_flw":
         criteria["countPerFlw"] = config.count_per_flw
-    elif config.audit_type == "last_n_across_opp":
-        criteria["countAcrossOpp"] = config.count_across_opp
+    elif config.audit_type == "last_n_per_opp":
+        criteria["countPerOpp"] = config.count_per_opp
+    elif config.audit_type == "last_n_across_all":
+        criteria["countAcrossAll"] = config.count_across_opp
     elif config.audit_type == "date_range":
         criteria["startDate"] = config.start_date
         criteria["endDate"] = config.end_date
@@ -317,12 +339,16 @@ def create_audit(facade: ConnectAPIFacade, config: AuditRunConfig, preview_resul
                 print("  Using cached sample from preview")
                 break
 
+    # Get the audit_definition from the preview result if available
+    audit_definition = preview_result.audit_definition if preview_result else None
+
     result = create_audit_sessions(
         facade=facade,
         opportunity_ids=config.opportunity_ids,
         criteria=criteria,
         auditor_username=config.auditor_username,
         limit_flws=None,
+        audit_definition=audit_definition,
     )
 
     if not result.success:

@@ -48,6 +48,8 @@ class AuditCreationServiceTest(TestCase):
 
     def test_create_audit_sessions_per_flw_granularity(self):
         """Test creating separate audit sessions per FLW"""
+        from datetime import datetime
+
         # Mock all required facade methods
         self.mock_facade.get_opportunity_details.return_value = [
             {"id": 1, "name": "Test Opp", "organization_id": 1, "organization_name": "Org", "active": True}
@@ -57,7 +59,38 @@ class AuditCreationServiceTest(TestCase):
             {"id": 2, "username": "user2", "name": "User Two", "email": "user2@test.com", "is_active": True},
         ]
         self.mock_facade.get_deliver_units_for_visits.return_value = []
-        self.mock_facade.get_user_visits_for_audit.return_value = []
+
+        # Return visits for each user_id
+        def mock_get_visits(opportunity_ids, audit_type, start_date=None, end_date=None, count=None, user_id=None):
+            if user_id == 1:
+                return [
+                    {
+                        "xform_id": f"form{i}",
+                        "user_id": 1,
+                        "opportunity_id": 1,
+                        "visit_date": datetime.now(),
+                        "entity_id": f"entity{i}",
+                        "entity_name": f"Entity {i}",
+                        "status": "approved",
+                    }
+                    for i in range(5)
+                ]
+            elif user_id == 2:
+                return [
+                    {
+                        "xform_id": f"form{i+10}",
+                        "user_id": 2,
+                        "opportunity_id": 1,
+                        "visit_date": datetime.now(),
+                        "entity_id": f"entity{i}",
+                        "entity_name": f"Entity {i}",
+                        "status": "approved",
+                    }
+                    for i in range(5)
+                ]
+            return []
+
+        self.mock_facade.get_user_visits_for_audit.side_effect = mock_get_visits
         self.mock_facade.get_unique_flws_across_opportunities.return_value = [
             {"user_id": 1, "username": "user1"},
             {"user_id": 2, "username": "user2"},
@@ -76,6 +109,8 @@ class AuditCreationServiceTest(TestCase):
 
     def test_create_audit_sessions_with_flw_limit(self):
         """Test that limit_flws parameter works correctly"""
+        from datetime import datetime
+
         # Mock many FLWs
         self.mock_facade.get_opportunity_details.return_value = [
             {"id": 1, "name": "Test Opp", "organization_id": 1, "organization_name": "Org", "active": True}
@@ -85,7 +120,25 @@ class AuditCreationServiceTest(TestCase):
             for i in range(1, 11)
         ]
         self.mock_facade.get_deliver_units_for_visits.return_value = []
-        self.mock_facade.get_user_visits_for_audit.return_value = []
+
+        # Return visits for each user_id
+        def mock_get_visits(opportunity_ids, audit_type, start_date=None, end_date=None, count=None, user_id=None):
+            if user_id:
+                return [
+                    {
+                        "xform_id": f"form{user_id}_{i}",
+                        "user_id": user_id,
+                        "opportunity_id": 1,
+                        "visit_date": datetime.now(),
+                        "entity_id": f"entity{i}",
+                        "entity_name": f"Entity {i}",
+                        "status": "approved",
+                    }
+                    for i in range(5)
+                ]
+            return []
+
+        self.mock_facade.get_user_visits_for_audit.side_effect = mock_get_visits
         self.mock_facade.get_unique_flws_across_opportunities.return_value = [
             {"user_id": i, "username": f"user{i}"} for i in range(1, 11)
         ]

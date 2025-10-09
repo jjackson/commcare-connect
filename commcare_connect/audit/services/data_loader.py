@@ -255,7 +255,7 @@ class AuditDataLoader:
 
         Args:
             opportunity_ids: List of opportunity IDs
-            audit_type: 'date_range', 'last_n_per_flw', or 'last_n_across_opp'
+            audit_type: 'date_range', 'last_n_per_flw', 'last_n_per_opp', or 'last_n_across_all'
             start_date: Start date for date_range type
             end_date: End date for date_range type
             count: Number of visits for last_n types
@@ -402,6 +402,9 @@ class AuditDataLoader:
         count: int = None,
         flw_username: str = None,
         opportunity_name: str = None,
+        audit_definition=None,
+        audit_title: str = "",
+        audit_tag: str = "",
     ) -> AuditSession:
         """
         Create an audit session.
@@ -416,6 +419,7 @@ class AuditDataLoader:
             count: Count for last_n types
             flw_username: FLW username (for per_flw granularity)
             opportunity_name: Opportunity name (for naming)
+            audit_definition: Optional AuditDefinition to link to
 
         Returns:
             Created AuditSession instance
@@ -461,6 +465,9 @@ class AuditDataLoader:
             end_date=end_date or date.today(),
             notes="\n".join(notes),
             status="in_progress",
+            audit_definition=audit_definition,  # Link to audit definition if provided
+            title=audit_title,
+            tag=audit_tag,
         )
 
         self.stats["audit_sessions_created"] += 1
@@ -548,8 +555,16 @@ class AuditDataLoader:
             )
 
         total_downloaded = 0
+        # Use the original input count as the total for progress reporting
+        # (not the recalculated count after filtering, which may differ due to skipped visits)
+        total_visits_input = len(visits)
         total_visits_to_process = sum(len(v) for v in visits_by_domain.values())
         visits_processed = 0
+
+        print(
+            f"[INFO] Will download attachments for {total_visits_to_process} visits "
+            f"(out of {total_visits_input} total)"
+        )
 
         # Process each domain
         for domain, domain_visits in visits_by_domain.items():
@@ -572,10 +587,12 @@ class AuditDataLoader:
                     # Update progress
                     visits_processed += 1
                     if progress_tracker and (visits_processed % 5 == 0 or visits_processed == total_visits_to_process):
+                        # Use total_visits_input (the number passed in) as the denominator
+                        # This ensures the progress denominator matches what the user expects (e.g., sampled count)
                         progress_tracker.update(
                             visits_processed,
-                            total_visits_to_process,
-                            f"Downloading attachments ({visits_processed}/{total_visits_to_process} visits)...",
+                            total_visits_input,
+                            f"Downloading attachments ({visits_processed}/{total_visits_input} visits)...",
                             "downloading",
                             step_name="attachments",
                         )

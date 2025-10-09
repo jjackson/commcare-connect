@@ -11,7 +11,7 @@ from django.views.generic import DetailView, TemplateView, View
 from django_tables2 import SingleTableView
 
 from commcare_connect.audit.management.extractors.connect_api_facade import ConnectAPIFacade
-from commcare_connect.audit.models import AuditResult, AuditSession
+from commcare_connect.audit.models import AuditDefinition, AuditResult, AuditSession
 from commcare_connect.audit.services.audit_creator import create_audit_sessions, preview_audit_sessions
 from commcare_connect.audit.services.database_manager import get_database_stats, reset_audit_database
 from commcare_connect.audit.services.progress_tracker import ProgressTracker
@@ -68,17 +68,10 @@ class AuditSessionDetailView(LoginRequiredMixin, DetailView):
             current_visit = all_visits[visit_index]
             current_visit.audit_result = existing_results.get(current_visit.id)
 
-            # Load existing image notes if audit result exists
+            # Get existing image notes for this visit if audited
             if current_visit.audit_result:
-                from .models import AuditImageNote
-
-                existing_image_notes = AuditImageNote.objects.filter(audit_result=current_visit.audit_result)
-                current_image_notes = {note.blob_id: note.note for note in existing_image_notes}
-
-        # Convert image notes to JSON for the template
-        import json
-
-        current_image_notes_json = json.dumps(current_image_notes)
+                image_notes = current_visit.audit_result.image_notes.all()
+                current_image_notes = {note.blob_id: note.note for note in image_notes}
 
         # Progress information
         audited_count = len(existing_results)
@@ -87,7 +80,6 @@ class AuditSessionDetailView(LoginRequiredMixin, DetailView):
         context.update(
             {
                 "current_visit": current_visit,
-                "current_image_notes_json": current_image_notes_json,
                 "visit_index": visit_index,
                 "total_visits": total_visits,
                 "audited_count": audited_count,
@@ -97,6 +89,7 @@ class AuditSessionDetailView(LoginRequiredMixin, DetailView):
                 "has_next": visit_index < total_visits - 1,
                 "previous_index": visit_index - 1 if visit_index > 0 else 0,
                 "next_index": visit_index + 1 if visit_index < total_visits - 1 else visit_index,
+                "current_image_notes_json": json.dumps(current_image_notes),
             }
         )
 
@@ -128,14 +121,7 @@ class AuditResultUpdateView(LoginRequiredMixin, View):
 
             # Handle image notes
             try:
-                import logging
-
-                logger = logging.getLogger(__name__)
-                logger.info(f"Received image_notes_json: {image_notes_json}")
-
                 image_notes = json.loads(image_notes_json)
-                logger.info(f"Parsed image_notes: {image_notes}")
-
                 # Clear existing image notes for this audit result
                 audit_result.image_notes.all().delete()
                 # Create new image notes
@@ -146,9 +132,7 @@ class AuditResultUpdateView(LoginRequiredMixin, View):
                         AuditImageNote.objects.create(
                             audit_result=audit_result, blob_id=blob_id, note=note_text.strip()
                         )
-                        logger.info(f"Created image note for blob_id {blob_id}: {note_text.strip()}")
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to decode image_notes JSON: {e}")
+            except json.JSONDecodeError:
                 pass  # Ignore invalid JSON
 
             # Calculate updated progress using explicit visit set
@@ -593,6 +577,60 @@ class ProgramOpportunitiesAPIView(LoginRequiredMixin, View):
 class AuditPreviewAPIView(LoginRequiredMixin, View):
     """API endpoint for previewing audit scope (FLW counts and visit numbers)"""
 
+    def _run_preview_in_background(self, task_id, opportunity_ids, criteria, user):
+        """Run preview generation in a background thread"""
+        progress_tracker = ProgressTracker(task_id=task_id)
+        facade = None
+
+        try:
+            print(f"[PREVIEW] Starting preview for {len(opportunity_ids)} opportunities")
+            print(f"[PREVIEW] Criteria: {criteria}")
+
+            # Initialize and authenticate facade
+            facade = ConnectAPIFacade()
+            if not facade.authenticate():
+                error_msg = "Failed to authenticate with data source"
+                print(f"[ERROR] Preview: {error_msg}")
+                progress_tracker.error(error_msg)
+                return
+
+            # Use the same service that creates audits to generate preview
+            result = preview_audit_sessions(
+                facade=facade,
+                opportunity_ids=opportunity_ids,
+                criteria=criteria,
+                progress_tracker=progress_tracker,
+                user=user,
+            )
+
+            if not result.success:
+                print(f"[ERROR] Preview failed: {result.error}")
+                progress_tracker.error(result.error)
+                return
+
+            print(f"[PREVIEW] Success! Created AuditDefinition {result.audit_definition.id}")
+
+            # Mark as complete with audit definition
+            progress_tracker.complete(
+                "Preview generated successfully!",
+                result_data={
+                    "audit_definition_id": result.audit_definition.id,
+                    "preview_results": result.preview_data,
+                    "sampled_visit_ids_cache_key": result.sampled_visit_ids_cache_key,
+                },
+            )
+
+        except Exception as e:
+            import traceback
+
+            error_trace = traceback.format_exc()
+            print(f"[ERROR] Preview exception: {str(e)}")
+            print(error_trace)
+            progress_tracker.error(str(e), error_trace)
+        finally:
+            if facade:
+                facade.close()
+
     def post(self, request):
         try:
             data = json.loads(request.body)
@@ -602,42 +640,70 @@ class AuditPreviewAPIView(LoginRequiredMixin, View):
             if not opportunity_ids or not criteria:
                 return JsonResponse({"error": "Missing opportunities or criteria"}, status=400)
 
-            # Initialize and authenticate facade
-            facade = ConnectAPIFacade()
-            if not facade.authenticate():
-                return JsonResponse({"error": "Failed to authenticate with data source"}, status=500)
+            # Initialize progress tracker and set initial state in cache
+            progress_tracker = ProgressTracker()
+            progress_tracker.update(0, 5, "Starting preview generation...", "initializing")
 
-            try:
-                # Use the same service that creates audits to generate preview
-                result = preview_audit_sessions(
-                    facade=facade,
-                    opportunity_ids=opportunity_ids,
-                    criteria=criteria,
-                )
+            # Start the preview generation in a background thread
+            thread = threading.Thread(
+                target=self._run_preview_in_background,
+                args=(progress_tracker.task_id, opportunity_ids, criteria, request.user),
+                daemon=True,
+            )
+            thread.start()
 
-                if not result.success:
-                    return JsonResponse({"error": result.error}, status=500)
-
-                return JsonResponse({"success": True, "results": result.preview_data})
-
-            finally:
-                facade.close()
+            # Return task_id immediately so client can start polling
+            return JsonResponse(
+                {
+                    "success": True,
+                    "task_id": progress_tracker.task_id,
+                }
+            )
 
         except Exception as e:
             import traceback
 
-            return JsonResponse({"error": str(e), "traceback": traceback.format_exc()}, status=500)
+            error_trace = traceback.format_exc()
+            print(f"[ERROR] Failed to start preview: {str(e)}")
+            print(error_trace)
+            return JsonResponse({"error": str(e), "traceback": error_trace}, status=500)
 
 
 class AuditSessionCreateAPIView(LoginRequiredMixin, View):
     """API endpoint for creating audit sessions and loading data"""
 
-    def _run_audit_creation_in_background(self, task_id, opportunity_ids, criteria, auditor_username):
+    def _run_audit_creation_in_background(
+        self,
+        task_id,
+        opportunity_ids,
+        criteria,
+        auditor_username,
+        audit_definition_id=None,
+        selected_flw_user_ids=None,
+        audit_title="",
+        audit_tag="",
+    ):
         """Run audit creation in a background thread"""
         progress_tracker = ProgressTracker(task_id=task_id)
         facade = None
 
         try:
+            # Get audit definition if provided
+            audit_definition = None
+            if audit_definition_id:
+                from commcare_connect.audit.models import AuditDefinition
+
+                audit_definition = AuditDefinition.objects.filter(id=audit_definition_id).first()
+                if not audit_definition:
+                    progress_tracker.error(f"Audit definition {audit_definition_id} not found")
+                    return
+
+                # IMPORTANT: Use criteria from audit definition (includes sample_cache_key)
+                # The frontend criteria doesn't have the cache key
+                criteria = audit_definition.to_criteria_dict()
+                print(f"[INFO] Using criteria from AuditDefinition {audit_definition_id}")
+                print(f"[INFO] Criteria includes cache key: {criteria.get('sampleCacheKey', 'None')}")
+
             # Initialize and authenticate facade
             facade = ConnectAPIFacade()
             if not facade.authenticate():
@@ -651,6 +717,10 @@ class AuditSessionCreateAPIView(LoginRequiredMixin, View):
                 criteria=criteria,
                 auditor_username=auditor_username,
                 progress_tracker=progress_tracker,
+                audit_definition=audit_definition,
+                selected_flw_user_ids=selected_flw_user_ids,
+                audit_title=audit_title,
+                audit_tag=audit_tag,
             )
 
             if not result.success:
@@ -686,6 +756,10 @@ class AuditSessionCreateAPIView(LoginRequiredMixin, View):
             data = json.loads(request.body)
             opportunity_ids = data.get("opportunities", [])
             criteria = data.get("criteria", {})
+            audit_definition_id = data.get("audit_definition_id")  # Optional
+            selected_flw_user_ids = data.get("selected_flw_user_ids")  # Optional
+            audit_title = data.get("audit_title", "")  # Optional
+            audit_tag = data.get("audit_tag", "")  # Optional
 
             if not opportunity_ids or not criteria:
                 return JsonResponse({"error": "Missing required data"}, status=400)
@@ -700,7 +774,16 @@ class AuditSessionCreateAPIView(LoginRequiredMixin, View):
             # Start the audit creation in a background thread
             thread = threading.Thread(
                 target=self._run_audit_creation_in_background,
-                args=(progress_tracker.task_id, opportunity_ids, criteria, auditor_username),
+                args=(
+                    progress_tracker.task_id,
+                    opportunity_ids,
+                    criteria,
+                    auditor_username,
+                    audit_definition_id,
+                    selected_flw_user_ids,
+                    audit_title,
+                    audit_tag,
+                ),
                 daemon=True,
             )
             thread.start()
@@ -766,6 +849,72 @@ class DatabaseResetAPIView(LoginRequiredMixin, View):
         try:
             deleted = reset_audit_database()
             return JsonResponse({"success": True, "deleted": deleted})
+
+        except Exception as e:
+            import traceback
+
+            return JsonResponse({"error": str(e), "traceback": traceback.format_exc()}, status=500)
+
+
+class AuditDefinitionExportView(LoginRequiredMixin, View):
+    """Export an audit definition as JSON"""
+
+    def get(self, request, definition_id):
+        try:
+            definition = get_object_or_404(AuditDefinition, id=definition_id)
+            export_data = definition.to_dict()
+
+            # Return as JSON download
+            filename = f'audit_definition_{definition_id}_{timezone.now().strftime("%Y%m%d_%H%M%S")}.json'
+            response = HttpResponse(
+                content_type="application/json",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+
+            json.dump(export_data, response, indent=2)
+            return response
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+
+class AuditDefinitionImportView(LoginRequiredMixin, View):
+    """Import an audit definition from JSON file"""
+
+    def post(self, request):
+        try:
+            uploaded_file = request.FILES.get("definition_file")
+            if not uploaded_file:
+                return JsonResponse({"error": "No file uploaded"}, status=400)
+
+            # Read and parse JSON
+            try:
+                file_content = uploaded_file.read().decode("utf-8")
+                data = json.loads(file_content)
+            except json.JSONDecodeError as e:
+                return JsonResponse({"error": f"Invalid JSON file: {str(e)}"}, status=400)
+            except Exception as e:
+                return JsonResponse({"error": f"Could not read file: {str(e)}"}, status=400)
+
+            # Validate required fields
+            required_fields = ["opportunity_ids", "audit_type", "granularity"]
+            missing_fields = [field for field in required_fields if field not in data]
+            if missing_fields:
+                return JsonResponse({"error": f"Missing required fields: {', '.join(missing_fields)}"}, status=400)
+
+            # Create audit definition from imported data
+            definition = AuditDefinition.from_dict(data, user=request.user)
+            definition.name = data.get("name", "") or f"Imported {timezone.now().strftime('%Y-%m-%d %H:%M')}"
+            definition.save()
+
+            # Return full definition data so frontend can populate all fields
+            return JsonResponse(
+                {
+                    "success": True,
+                    "definition": definition.to_dict(),
+                    "message": "Audit definition imported successfully. Preview data loaded.",
+                }
+            )
 
         except Exception as e:
             import traceback

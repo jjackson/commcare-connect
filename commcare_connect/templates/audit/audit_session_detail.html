@@ -436,7 +436,7 @@ function auditInterface() {
             currentVisit: null,
 
             // Image notes (keyed by blob_id)
-            imageNotes: {{ current_image_notes_json|safe }},
+            imageNotes: {{ current_image_notes_json|safe|default:"{}" }},
 
             // Completion state
             overallResult: '{% if session.overall_result %}{{ session.overall_result }}{% endif %}',
@@ -760,7 +760,7 @@ function auditInterface() {
                 this.submittingCompletion = false;
               }
             }
-  }
+  };
 }
 </script>
 {% endblock %}

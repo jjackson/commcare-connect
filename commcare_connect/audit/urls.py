@@ -34,6 +34,13 @@ urlpatterns = [
     # Database management
     path("api/database/stats/", views.DatabaseStatsAPIView.as_view(), name="database_stats"),
     path("api/database/reset/", views.DatabaseResetAPIView.as_view(), name="reset_database"),
+    # Audit definition import/export
+    path(
+        "api/definition/<int:definition_id>/export/",
+        views.AuditDefinitionExportView.as_view(),
+        name="definition_export",
+    ),
+    path("api/definition/import/", views.AuditDefinitionImportView.as_view(), name="definition_import"),
     # Image serving
     path("image/<str:blob_id>/", views.AuditImageView.as_view(), name="image"),
 ]

@@ -1,0 +1,121 @@
+{
+  "audit_session": {
+    "id": 1467,
+    "auditor_username": "jjackson-dev@dimagi.com",
+    "flw_username": "ZCJTWNTS8KWXBQKWFCP2",
+    "opportunity_name": "[Kenya] Readers-C1",
+    "domain": "unknown",
+    "app_id": "unknown",
+    "date_range": ["2024-12-05", "2024-12-06"],
+    "overall_result": "pass",
+    "notes": "All 5 visits successfully completed with proper documentation. FLW demonstrated good compliance with image quality requirements.",
+    "kpi_notes": "",
+    "created_at": "2025-10-06T16:02:51.559729+00:00",
+    "completed_at": "2025-10-06T18:02:16.547510+00:00"
+  },
+  "visit_results": [
+    {
+      "visit_id": 10160,
+      "xform_id": "96501a73-5dd9-4568-b4ca-1c4eb5031d44",
+      "visit_date": "2024-12-05T13:53:52.798000+00:00",
+      "entity_id": "ELIZABETH ODERO73female0799068022",
+      "entity_name": "ELIZABETH ODERO",
+      "user_username": "ZCJTWNTS8KWXBQKWFCP2",
+      "result": "pass",
+      "notes": "",
+      "images": [
+        {
+          "filename": "1733407021197.jpg",
+          "note": "This is a corrected test note for image 1"
+        },
+        {
+          "filename": "1733407086719.jpg"
+        }
+      ],
+      "image_count": 2,
+      "audited_at": "2025-10-06T17:56:03.437797+00:00"
+    },
+    {
+      "visit_id": 10159,
+      "xform_id": "e79d65b9-cdb0-4ad0-bb8f-80e822def6d4",
+      "visit_date": "2024-12-05T14:22:40.610000+00:00",
+      "entity_id": "ELIZABETH OWICH66female0727941422",
+      "entity_name": "ELIZABETH OWICH",
+      "user_username": "ZCJTWNTS8KWXBQKWFCP2",
+      "result": "pass",
+      "notes": "Visit 2: Good quality photos, proper location data",
+      "images": [
+        {
+          "filename": "1733408865851.jpg",
+          "note": "Clear image of distribution materials"
+        },
+        {
+          "filename": "1733408906314.jpg",
+          "note": "Recipient signature visible and clear"
+        }
+      ],
+      "image_count": 2,
+      "audited_at": "2025-10-06T18:00:53.197999+00:00"
+    },
+    {
+      "visit_id": 10158,
+      "xform_id": "b1d75035-738c-4f1d-890e-1a46cece918d",
+      "visit_date": "2024-12-06T12:53:27.492000+00:00",
+      "entity_id": "GAUDENCIA ODUOR38female0790725209",
+      "entity_name": "GAUDENCIA ODUOR",
+      "user_username": "ZCJTWNTS8KWXBQKWFCP2",
+      "result": "pass",
+      "notes": "",
+      "images": [
+        {
+          "filename": "1733489845868.jpg"
+        },
+        {
+          "filename": "1733489899945.jpg"
+        }
+      ],
+      "image_count": 2,
+      "audited_at": "2025-10-06T18:01:35.924042+00:00"
+    },
+    {
+      "visit_id": 10157,
+      "xform_id": "df40510e-9545-4ba7-9ded-af8d8fa43dc5",
+      "visit_date": "2024-12-06T13:17:47.073000+00:00",
+      "entity_id": "PHELESTAS ADINO58female0710757355",
+      "entity_name": "PHELESTAS ADINO",
+      "user_username": "ZCJTWNTS8KWXBQKWFCP2",
+      "result": "pass",
+      "notes": "",
+      "images": [
+        {
+          "filename": "1733491252138.jpg"
+        },
+        {
+          "filename": "1733491299256.jpg"
+        }
+      ],
+      "image_count": 2,
+      "audited_at": "2025-10-06T18:01:43.985702+00:00"
+    },
+    {
+      "visit_id": 10156,
+      "xform_id": "3bd4333b-8b7b-4859-bdbf-4a4503a3dfcd",
+      "visit_date": "2024-12-06T13:44:32.219000+00:00",
+      "entity_id": "PAMELA OGOLA68female0700401596",
+      "entity_name": "PAMELA OGOLA",
+      "user_username": "ZCJTWNTS8KWXBQKWFCP2",
+      "result": "pass",
+      "notes": "",
+      "images": [
+        {
+          "filename": "1733492775019.jpg"
+        },
+        {
+          "filename": "1733492834549.jpg"
+        }
+      ],
+      "image_count": 2,
+      "audited_at": "2025-10-06T18:01:51.725385+00:00"
+    }
+  ]
+}

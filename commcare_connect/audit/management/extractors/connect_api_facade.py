@@ -1215,7 +1215,7 @@ class ConnectAPIFacade:
 
         Args:
             opportunity_ids: List of opportunity IDs
-            audit_type: 'date_range', 'last_n_per_flw', or 'last_n_across_opp'
+            audit_type: 'date_range', 'last_n_per_flw', 'last_n_per_opp', or 'last_n_across_all'
             start_date: Start date for date_range type
             end_date: End date for date_range type
             count: Number of visits for last_n types
@@ -1293,19 +1293,88 @@ class ConnectAPIFacade:
             ORDER BY user_id, visit_date DESC
             """
 
-        elif audit_type == "last_n_across_opp":
-            # Get last N visits across all opportunities
+        elif audit_type == "last_n_per_opp":
+            # Get last N visits per opportunity (limit applies per opportunity, not globally)
+            # NOTE: This is handled at the caller level by calling this method once per opportunity
+            # Use CTE to apply LIMIT in inner query, allowing Superset pagination on outer query
             sql = f"""
-            {select_clause}
-            WHERE {" AND ".join(where_conditions)}
-            ORDER BY uv.visit_date DESC
-            LIMIT {count}
+            WITH limited_visits AS (
+                SELECT
+                    uv.id,
+                    uv.xform_id,
+                    uv.user_id,
+                    uv.opportunity_id,
+                    uv.visit_date,
+                    uv.entity_id,
+                    uv.entity_name,
+                    uv.location,
+                    uv.status,
+                    uv.reason,
+                    uv.flag_reason,
+                    uv.flagged,
+                    uv.deliver_unit_id
+                FROM opportunity_uservisit uv
+                WHERE {" AND ".join(where_conditions)}
+                ORDER BY uv.visit_date DESC
+                LIMIT {count}
+            )
+            SELECT
+                lv.*,
+                u.username,
+                u.name as user_name,
+                COALESCE(unit_app.cc_domain, opp_app.cc_domain) as cc_domain,
+                COALESCE(unit_app.cc_app_id, opp_app.cc_app_id) as cc_app_id
+            FROM limited_visits lv
+            LEFT JOIN users_user u ON u.id = lv.user_id
+            LEFT JOIN opportunity_opportunity o ON o.id = lv.opportunity_id
+            LEFT JOIN opportunity_deliverunit du ON du.id = lv.deliver_unit_id
+            LEFT JOIN opportunity_commcareapp unit_app ON unit_app.id = du.app_id
+            LEFT JOIN opportunity_commcareapp opp_app ON opp_app.id = o.deliver_app_id
+            """
+
+        elif audit_type == "last_n_across_all":
+            # Get last N visits across ALL opportunities combined (limit applies globally)
+            # Use CTE to apply LIMIT in inner query, allowing Superset pagination on outer query
+            sql = f"""
+            WITH limited_visits AS (
+                SELECT
+                    uv.id,
+                    uv.xform_id,
+                    uv.user_id,
+                    uv.opportunity_id,
+                    uv.visit_date,
+                    uv.entity_id,
+                    uv.entity_name,
+                    uv.location,
+                    uv.status,
+                    uv.reason,
+                    uv.flag_reason,
+                    uv.flagged,
+                    uv.deliver_unit_id
+                FROM opportunity_uservisit uv
+                WHERE {" AND ".join(where_conditions)}
+                ORDER BY uv.visit_date DESC
+                LIMIT {count}
+            )
+            SELECT
+                lv.*,
+                u.username,
+                u.name as user_name,
+                COALESCE(unit_app.cc_domain, opp_app.cc_domain) as cc_domain,
+                COALESCE(unit_app.cc_app_id, opp_app.cc_app_id) as cc_app_id
+            FROM limited_visits lv
+            LEFT JOIN users_user u ON u.id = lv.user_id
+            LEFT JOIN opportunity_opportunity o ON o.id = lv.opportunity_id
+            LEFT JOIN opportunity_deliverunit du ON du.id = lv.deliver_unit_id
+            LEFT JOIN opportunity_commcareapp unit_app ON unit_app.id = du.app_id
+            LEFT JOIN opportunity_commcareapp opp_app ON opp_app.id = o.deliver_app_id
             """
 
         else:
             raise ValueError(f"Unknown audit_type: {audit_type}")
 
         df = self.superset_extractor.execute_query(sql)
+
         if df is None or df.empty:
             return []
 
@@ -1360,7 +1429,7 @@ class ConnectAPIFacade:
         end_date: date = None,
         count: int = None,
         user_id: int = None,
-    ) -> list[int]:
+    ) -> list[int] | list[tuple[int, int]]:
         """
         Get UserVisit IDs based on audit criteria (lightweight query for sampling).
 
@@ -1369,14 +1438,15 @@ class ConnectAPIFacade:
 
         Args:
             opportunity_ids: List of opportunity IDs
-            audit_type: 'date_range', 'last_n_per_flw', or 'last_n_across_opp'
+            audit_type: 'date_range', 'last_n_per_flw', 'last_n_per_opp', or 'last_n_across_all'
             start_date: Start date for date_range type
             end_date: End date for date_range type
             count: Number of visits for last_n types
             user_id: Optional filter for specific user (for per_flw granularity)
 
         Returns:
-            List of visit IDs
+            - For 'last_n_across_all': List of tuples (visit_id, opportunity_id)
+            - For other types: List of visit IDs
         """
         if not opportunity_ids:
             return []
@@ -1420,22 +1490,48 @@ class ConnectAPIFacade:
             ORDER BY user_id, visit_date DESC
             """
 
-        elif audit_type == "last_n_across_opp":
-            # Get last N visits across all opportunities
+        elif audit_type == "last_n_per_opp":
+            # Get last N visits per opportunity (limit applies per opportunity, not globally)
+            # NOTE: This is handled at the caller level by calling this method once per opportunity
+            # Use CTE to apply LIMIT in inner query, allowing Superset pagination on outer query
             sql = f"""
-            {select_clause}
-            WHERE {" AND ".join(where_conditions)}
-            ORDER BY uv.visit_date DESC
-            LIMIT {count}
+            WITH limited_visits AS (
+                SELECT uv.id
+                FROM opportunity_uservisit uv
+                WHERE {" AND ".join(where_conditions)}
+                ORDER BY uv.visit_date DESC
+                LIMIT {count}
+            )
+            SELECT id FROM limited_visits
+            """
+
+        elif audit_type == "last_n_across_all":
+            # Get last N visits across ALL opportunities combined (limit applies globally)
+            # Use CTE to apply LIMIT in inner query, allowing Superset pagination on outer query
+            # Also select opportunity_id so caller can track which opp each visit belongs to
+            sql = f"""
+            WITH limited_visits AS (
+                SELECT uv.id, uv.opportunity_id
+                FROM opportunity_uservisit uv
+                WHERE {" AND ".join(where_conditions)}
+                ORDER BY uv.visit_date DESC
+                LIMIT {count}
+            )
+            SELECT id, opportunity_id FROM limited_visits
             """
 
         else:
             raise ValueError(f"Unknown audit_type: {audit_type}")
 
         df = self.superset_extractor.execute_query(sql)
+
         if df is None or df.empty:
             return []
 
+        # For last_n_across_all, return list of tuples (id, opportunity_id)
+        # For other types, just return IDs for backwards compatibility
+        if audit_type == "last_n_across_all":
+            return list(df[["id", "opportunity_id"]].itertuples(index=False, name=None))
         return df["id"].tolist()
 
     def get_user_visits_by_ids(self, visit_ids: list[int]) -> list[dict]:

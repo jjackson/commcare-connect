@@ -85,19 +85,29 @@ class ProgressTracker:
 
         cache.set(self.cache_key, progress_data, timeout=self.timeout)
 
-    def complete_step(self, step_name: str, message: str = "Complete"):
-        """Mark a specific step as complete"""
+    def update_step(self, step_name: str, percentage: int, status: str, message: str):
+        """Update a specific step's progress"""
+        step_found = False
         for step in self.steps:
             if step["name"] == step_name:
-                step["status"] = "complete"
-                step["percentage"] = 100
+                step["percentage"] = percentage
+                step["status"] = status
                 step["message"] = message
+                step_found = True
                 break
+
+        if not step_found:
+            # Add new step if not found
+            self.steps.append({"name": step_name, "percentage": percentage, "status": status, "message": message})
 
         # Save to cache
         data = self.get_progress() or {}
         data["steps"] = self.steps
         cache.set(self.cache_key, data, timeout=self.timeout)
+
+    def complete_step(self, step_name: str, message: str = "Complete"):
+        """Mark a specific step as complete"""
+        self.update_step(step_name, 100, "complete", message)
 
     def complete(self, message: str = "Complete", result_data: dict | None = None):
         """Mark the task as complete"""
@@ -118,6 +128,10 @@ class ProgressTracker:
 
     def error(self, message: str, error_details: str | None = None):
         """Mark the task as failed"""
+        print(f"[PROGRESS TRACKER ERROR] Task {self.task_id}: {message}")
+        if error_details:
+            print(f"[ERROR DETAILS]\n{error_details}")
+
         progress_data = {
             "task_id": self.task_id,
             "stage": "error",
