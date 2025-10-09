@@ -7,5 +7,9 @@ class LearnLevel(models.TextChoices):
 
 
 class DeliveryLevel(models.TextChoices):
-    # TODO: Confirm what values should be here
-    pass
+    TWENTY_FIVE = "25_DELIVERIES", _("25 Deliveries")
+    FIFTY = "50_DELIVERIES", _("50 Deliveries")
+    ONE_HUNDRED = "100_DELIVERIES", _("100 Deliveries")
+    TWO_HUNDRED = "200_DELIVERIES", _("200 Deliveries")
+    FIVE_HUNDRED = "500_DELIVERIES", _("500 Deliveries")
+    ONE_THOUSAND = "1000_DELIVERIES", _("1000 Deliveries")

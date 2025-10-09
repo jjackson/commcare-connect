@@ -74,8 +74,14 @@ class ConnectIDUserLink(models.Model):
         constraints = [models.UniqueConstraint(fields=["user", "commcare_username"], name="connect_user")]
 
 
-# TODO: Confirm what values should be here
-DELIVERY_LEVEL_TO_NUMBER = {}
+DELIVERY_LEVEL_TO_NUMBER = {
+    DeliveryLevel.TWENTY_FIVE: 25,
+    DeliveryLevel.FIFTY: 50,
+    DeliveryLevel.ONE_HUNDRED: 100,
+    DeliveryLevel.TWO_HUNDRED: 200,
+    DeliveryLevel.FIVE_HUNDRED: 500,
+    DeliveryLevel.ONE_THOUSAND: 1000,
+}
 
 
 class UserCredential(models.Model):
