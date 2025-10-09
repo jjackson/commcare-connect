@@ -823,6 +823,10 @@ class SendMessageMobileUsersForm(forms.Form):
         required=False,
     )
     body = forms.CharField(widget=forms.Textarea)
+    message_type = forms.MultipleChoiceField(
+        choices=[("notification", "Push Notification"), ("sms", "SMS")],
+        widget=forms.CheckboxSelectMultiple,
+    )
 
     def __init__(self, *args, **kwargs):
         users = kwargs.pop("users", [])
@@ -833,6 +837,7 @@ class SendMessageMobileUsersForm(forms.Form):
             Field("selected_users"),
             Field("title"),
             Field("body"),
+            Field("message_type"),
             Submit(name="submit", value="Submit"),
         )
 
