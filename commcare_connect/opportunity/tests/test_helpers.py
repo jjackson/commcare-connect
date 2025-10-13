@@ -382,7 +382,7 @@ def test_opportunity_worker_progress_stats(opportunity):
         visit_date=yesterday,
     )
 
-    result = get_opportunity_worker_progress(opportunity.id)
+    result = get_opportunity_worker_progress(opportunity.id, opportunity.organization)
 
     assert result.id == opportunity.id
     assert result.total_deliveries == 5

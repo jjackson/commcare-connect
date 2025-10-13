@@ -2148,7 +2148,7 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
 
 @org_viewer_required
 def opportunity_worker_progress(request, org_slug, opp_id):
-    result = get_opportunity_worker_progress(opp_id)
+    result = get_opportunity_worker_progress(opp_id, request.org)
 
     def safe_percent(numerator, denominator):
         percent = (numerator / denominator) * 100 if denominator else 0
