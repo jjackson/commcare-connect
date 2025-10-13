@@ -713,9 +713,9 @@ def get_opportunity_delivery_progress(opp_id):
     return annotated_opportunity.first()
 
 
-def get_opportunity_worker_progress(opp_id):
+def get_opportunity_worker_progress(opp_id, org):
     return (
-        Opportunity.objects.filter(id=opp_id)
+        Opportunity.objects.filter(id=opp_id, organization=org)
         .annotate(
             total_deliveries=get_deliveries_count_subquery(),
             approved_deliveries=get_deliveries_count_subquery(CompletedWorkStatus.approved),
