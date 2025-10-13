@@ -323,7 +323,7 @@ def test_opportunity_delivery_stats(opportunity):
     PaymentFactory(opportunity_access=oa1, date_paid=yesterday, amount=100)
     PaymentFactory(opportunity_access=oa2, date_paid=today, amount=50)
 
-    result = get_opportunity_delivery_progress(opportunity.id)
+    result = get_opportunity_delivery_progress(opportunity.id, opportunity.organization)
 
     assert opportunity.id == result.id
     assert result.total_paid == total_paid

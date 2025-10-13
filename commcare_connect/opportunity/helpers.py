@@ -598,7 +598,7 @@ def get_worker_learn_table_data(opportunity):
     return queryset
 
 
-def get_opportunity_delivery_progress(opp_id):
+def get_opportunity_delivery_progress(opp_id, org):
     today = now().replace(hour=0, minute=0, second=0, microsecond=0)
     three_days_ago = today - timedelta(days=3)
     yesterday = today - timedelta(days=1)
@@ -692,7 +692,7 @@ def get_opportunity_delivery_progress(opp_id):
         output_field=DateTimeField(),
     )
 
-    annotated_opportunity = Opportunity.objects.filter(id=opp_id).annotate(
+    annotated_opportunity = Opportunity.objects.filter(id=opp_id, organization=org).annotate(
         inactive_workers=inactive_workers_subquery(three_days_ago),
         deliveries_from_yesterday=deliveries_from_yesterday_sq(),
         accrued_since_yesterday=accrued_since_yesterday_sq,
