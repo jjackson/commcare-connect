@@ -2085,7 +2085,7 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, OrgContextSingleTab
 
 @org_viewer_required
 def opportunity_funnel_progress(request, org_slug, opp_id):
-    result = get_opportunity_funnel_progress(opp_id)
+    result = get_opportunity_funnel_progress(opp_id, request.org)
 
     accepted = result.workers_invited - result.pending_invites
 

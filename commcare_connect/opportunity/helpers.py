@@ -728,7 +728,7 @@ def get_opportunity_worker_progress(opp_id, org):
     )
 
 
-def get_opportunity_funnel_progress(opp_id):
+def get_opportunity_funnel_progress(opp_id, org):
     claimed_job_subquery = Coalesce(
         Subquery(
             OpportunityClaim.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"))
@@ -774,7 +774,7 @@ def get_opportunity_funnel_progress(opp_id):
     )
 
     return (
-        Opportunity.objects.filter(id=opp_id)
+        Opportunity.objects.filter(id=opp_id, organization=org)
         .annotate(
             workers_invited=workers_invited_subquery(),
             pending_invites=pending_invites_subquery(),
