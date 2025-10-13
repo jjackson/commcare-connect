@@ -10,9 +10,10 @@ def page_settings(request):
 
 def gtm_context(request):
     """Provide Google Tag Manager context variables to templates."""
+    is_dimagi = request.user.is_authenticated and (request.user.email and request.user.email.endswith("@dimagi.com"))
     return {
         "GTM_VARS_JSON": {
-            "isDimagi": request.user.is_authenticated and request.user.email.endswith("@dimagi.com"),
+            "isDimagi": is_dimagi,
             "gtmID": settings.GTM_ID,
         }
     }
