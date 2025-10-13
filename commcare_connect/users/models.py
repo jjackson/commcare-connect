@@ -74,16 +74,6 @@ class ConnectIDUserLink(models.Model):
         constraints = [models.UniqueConstraint(fields=["user", "commcare_username"], name="connect_user")]
 
 
-DELIVERY_LEVEL_TO_NUMBER = {
-    DeliveryLevel.TWENTY_FIVE: 25,
-    DeliveryLevel.FIFTY: 50,
-    DeliveryLevel.ONE_HUNDRED: 100,
-    DeliveryLevel.TWO_HUNDRED: 200,
-    DeliveryLevel.FIVE_HUNDRED: 500,
-    DeliveryLevel.ONE_THOUSAND: 1000,
-}
-
-
 class UserCredential(models.Model):
     class CredentialType(models.TextChoices):
         LEARN = "LEARN", _("Learn")
@@ -107,10 +97,15 @@ class UserCredential(models.Model):
         unique_together = ("user", "opportunity", "credential_type")
 
     @property
+    def delivery_level_num(self):
+        if self.credential_type == self.CredentialType.LEARN:
+            return None
+        return int(self.level.split("_")[0])
+
+    @property
     def title(self):
         if self.credential_type == self.CredentialType.LEARN:
             return _("Passed learning assessment for {delivery_type}").format(delivery_type=self.delivery_type.name)
-        delivery_level_num = DELIVERY_LEVEL_TO_NUMBER.get(self.level)
         return _("Completed {delivery_level_num} deliveries for {delivery_type}").format(
-            delivery_level_num=delivery_level_num, delivery_type=self.delivery_type.name
+            delivery_level_num=self.delivery_level_num, delivery_type=self.delivery_type.name
         )
