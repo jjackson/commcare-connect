@@ -425,7 +425,7 @@ def test_get_opportunity_funnel_progress(opportunity):
     AssessmentFactory(opportunity=opportunity, user=user2.user, passed=True)
     AssessmentFactory(opportunity=opportunity, user=user3.user, passed=False)  # shouldn't count
 
-    result = get_opportunity_funnel_progress(opportunity.id)
+    result = get_opportunity_funnel_progress(opportunity.id, opportunity.organization)
 
     assert result.id == opportunity.id
     assert result.workers_invited == 3
