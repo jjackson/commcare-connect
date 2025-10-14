@@ -10,6 +10,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("auth", "0012_alter_user_first_name_max_length"),
+        ("waffle", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -128,4 +129,7 @@ class Migration(migrations.Migration):
                 "abstract": False,
             },
         ),
+        migrations.RunSQL("DROP TABLE IF EXISTS waffle_flag CASCADE", migrations.RunSQL.noop),
+        migrations.RunSQL("DROP TABLE IF EXISTS waffle_flag_users CASCADE", migrations.RunSQL.noop),
+        migrations.RunSQL("DROP TABLE IF EXISTS waffle_flag_groups CASCADE", migrations.RunSQL.noop),
     ]
