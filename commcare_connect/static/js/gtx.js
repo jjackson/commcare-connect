@@ -29,8 +29,7 @@
       const gtmData = JSON.parse(gtmDataScript.textContent);
       if (gtmData.gtmID) {
         window.dataLayer.push({
-          userEmail: gtmData.userEmail,
-          isDimagi: gtmData.userEmail.endsWith('@dimagi.com'),
+          isDimagi: gtmData.isDimagi,
         });
         loadGTM(gtmData.gtmID);
       }
