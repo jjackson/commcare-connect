@@ -13,6 +13,7 @@ from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.opportunity.models import (
     CommCareApp,
+    CredentialIssuer,
     DeliverUnit,
     DeliverUnitFlagRules,
     ExchangeRate,
@@ -30,6 +31,7 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import ManagedOpportunity
+from commcare_connect.users.credential_levels import DeliveryLevel, LearnLevel
 from commcare_connect.users.models import User
 
 FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Africa"), ("+91", "India")]
@@ -173,10 +175,31 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             required=False,
             help_text="Extends opportunity end date for all users.",
         )
+        self.add_credential_fields()
         if self.instance:
             if self.instance.end_date:
                 self.initial["end_date"] = self.instance.end_date.isoformat()
             self.currently_active = self.instance.active
+
+    def add_credential_fields(self):
+        credential_issuer = None
+        if self.instance:
+            credential_issuer = CredentialIssuer.objects.filter(opportunity=self.instance).first()
+
+        self.fields["learn_level"] = forms.ChoiceField(
+            choices=[("", _("None"))] + LearnLevel.choices,
+            required=False,
+            label=_("Learn Level"),
+            help_text=_("Credential level required for completing the learning phase."),
+            initial=credential_issuer.learn_level if credential_issuer else "",
+        )
+        self.fields["delivery_level"] = forms.ChoiceField(
+            choices=[("", _("None"))] + DeliveryLevel.choices,
+            required=False,
+            label=_("Delivery Level"),
+            help_text=_("Credential level required for completing deliveries."),
+            initial=credential_issuer.delivery_level if credential_issuer else "",
+        )
 
     def clean_active(self):
         active = self.cleaned_data["active"]
