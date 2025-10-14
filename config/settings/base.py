@@ -7,7 +7,7 @@ import environ
 
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
 # commcare_connect/
-APPS_DIR = BASE_DIR / "commcare_connect">>>>>>> main
+APPS_DIR = BASE_DIR / "commcare_connect"
 397
 
 env = environ.Env()
