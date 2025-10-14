@@ -103,10 +103,12 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
         self.helper.layout = Layout(
             Row(
                 HTML(
-                    "<div class='col-span-2'>"
-                    "<h6 class='title-sm'>Opportunity Details</h6>"
-                    "<span class='hint'>Edit the details of the opportunity. All fields are mandatory.</span>"
-                    "</div>"
+                    f"""
+                    <div class='col-span-2'>
+                        <h6 class='title-sm'>{_("Opportunity Details")}</h6>
+                        <span class='hint'>{_("Edit the details of the opportunity. All fields are mandatory.")}</span>
+                    </div>
+                """
                 ),
                 Column(
                     Field("name", wrapper_class="w-full"),
@@ -130,11 +132,17 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             ),
             Row(
                 HTML(
-                    "<div class='col-span-2'>"
-                    "<h6 class='title-sm'>Date</h6>"
-                    "<span class='hint'>Optional: If not specified, the opportunity start & end dates will"
-                    " apply to the form submissions.</span>"
-                    "</div>"
+                    f"""
+                    <div class='col-span-2'>
+                        <h6 class='title-sm'>{_("Date")}</h6>
+                        <span class='hint'>
+                            {_(
+                                "Optional: If not specified, the opportunity start & "
+                                "end dates will apply to the form submissions."
+                            )}
+                        </span>
+                    </div>
+                """
                 ),
                 Column(
                     Field("end_date"),
@@ -143,7 +151,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                 css_class="grid grid-cols-2 gap-4 p-6 card_bg",
             ),
             Row(
-                HTML("<div class='col-span-2'><h6 class='title-sm'>Invite Connect Workers</h6></div>"),
+                HTML(f"<div class='col-span-2'><h6 class='title-sm'>{_('Invite Connect Workers')}</h6></div>"),
                 Row(Field("users", wrapper_class="w-full"), css_class="col-span-2"),
                 css_class="grid grid-cols-2 gap-4 p-6 card_bg",
             ),
@@ -168,12 +176,12 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
         )
 
         self.fields["additional_users"] = forms.IntegerField(
-            required=False, help_text="Adds budget for additional users."
+            required=False, help_text=_("Adds budget for additional users.")
         )
         self.fields["end_date"] = forms.DateField(
             widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
             required=False,
-            help_text="Extends opportunity end date for all users.",
+            help_text=_("Extends opportunity end date for all users."),
         )
         self.add_credential_fields()
         if self.instance:
