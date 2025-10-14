@@ -48,6 +48,7 @@ def send_event_task(client_id: str, events: list[Event]):
 
     url = f"https://www.google-analytics.com/mp/collect?measurement_id={measurement_id}&api_secret={ga_api_secret}"
     response = httpx.post(url, json={"client_id": client_id, "events": events})
+    response.raise_for_status()
     return response
 
 
