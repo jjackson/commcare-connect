@@ -205,6 +205,7 @@ FIXTURE_DIRS = (str(APPS_DIR / "fixtures"),)
 # ------------------------------------------------------------------------------
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
+CSRF_USE_SESSIONS = True
 X_FRAME_OPTIONS = "DENY"
 
 # EMAIL
