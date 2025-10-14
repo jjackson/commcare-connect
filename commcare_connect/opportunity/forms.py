@@ -213,6 +213,23 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                 raise ValidationError("Cannot reactivate opportunity with reused applications", code="app_reused")
         return active
 
+    def save(self, commit=True):
+        instance = super().save(commit=commit)
+        learn_level = self.cleaned_data.get("learn_level") or None
+        delivery_level = self.cleaned_data.get("delivery_level") or None
+        if learn_level or delivery_level:
+            CredentialIssuer.objects.update_or_create(
+                opportunity=instance,
+                defaults={
+                    "learn_level": learn_level,
+                    "delivery_level": delivery_level,
+                },
+            )
+        else:
+            CredentialIssuer.objects.filter(opportunity=instance).delete()
+
+        return instance
+
 
 class OpportunityInitForm(forms.ModelForm):
     managed_opp = False
