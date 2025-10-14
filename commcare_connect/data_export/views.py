@@ -2,6 +2,7 @@ import csv
 
 from django.db.models import F, Q
 from django.http import JsonResponse, StreamingHttpResponse
+from drf_spectacular.utils import extend_schema, inline_serializer
 from oauth2_provider.contrib.rest_framework.permissions import TokenHasScope
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -66,11 +67,27 @@ class BaseStreamingCSVExportView(BaseDataExportView):
             serialized_data = self.serializer_class(obj).data
             yield writer.writerow(serialized_data)
 
+    @extend_schema(
+        description=(
+            "This API returns a CSV text StreamingHttpResponse. "
+            "The values shown in the example will be in CSV text format."
+        )
+    )
     def get(self, *args, **kwargs):
         return StreamingHttpResponse(self.get_data_generator(*args, **kwargs), content_type="text/csv")
 
 
 class ProgramOpportunityOrganizationDataView(BaseDataExportView):
+    @extend_schema(
+        responses=inline_serializer(
+            "ProgramOpportunityOrganizationDataSerializer",
+            {
+                "organizations": OrganizationDataExportSerializer(),
+                "opportunities": OpportunityDataExportSerializer(),
+                "programs": ProgramDataExportSerializer(),
+            },
+        )
+    )
     def get(self, request):
         organizations = Organization.objects.filter(memberships__user=request.user)
         opportunities = Opportunity.objects.filter(organization__in=organizations)
