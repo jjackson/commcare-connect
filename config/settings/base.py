@@ -7,7 +7,9 @@ import environ
 
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
 # commcare_connect/
-APPS_DIR = BASE_DIR / "commcare_connect"
+APPS_DIR = BASE_DIR / "commcare_connect">>>>>>> main
+397
+
 env = environ.Env()
 
 env.read_env(str(BASE_DIR / ".env"))
@@ -190,6 +192,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "commcare_connect.users.context_processors.allauth_settings",
                 "commcare_connect.web.context_processors.page_settings",
+                "commcare_connect.web.context_processors.gtm_context",
             ],
         },
     }
@@ -359,6 +362,8 @@ CONNECTID_CLIENT_ID = env("cid_client_id", default="")
 CONNECTID_CLIENT_SECRET = env("cid_client_secret", default="")
 
 # OAuth Settings
+CONNECTID_CREDENTIALS_CLIENT_ID = env("CONNECTID_CREDENTIALS_CLIENT_ID", default="")
+CONNECTID_CREDENTIALS_CLIENT_SECRET = env("CONNECTID_CREDENTIALS_CLIENT_SECRET", default="")
 OAUTH2_PROVIDER = {
     "ACCESS_TOKEN_EXPIRE_SECONDS": 1209600,  # seconds in two weeks
     "RESOURCE_SERVER_INTROSPECTION_URL": f"{CONNECTID_URL}/o/introspect/",
@@ -366,6 +371,11 @@ OAUTH2_PROVIDER = {
         CONNECTID_CLIENT_ID,
         CONNECTID_CLIENT_SECRET,
     ),
+    "SCOPES": {
+        "read": "Read scope",
+        "write": "Write scope",
+        "export": "Allow exporting data to other platforms using export API's.",
+    },
 }
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth2_provider.Application"
 
@@ -383,3 +393,5 @@ WAFFLE_FLAG_MODEL = "flags.Flag"
 WAFFLE_CREATE_MISSING_FLAGS = True
 
 WAFFLE_CREATE_MISSING_SWITCHES = True
+
+GTM_ID = env("GTM_ID", default="")
