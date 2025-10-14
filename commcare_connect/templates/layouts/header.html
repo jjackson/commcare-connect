@@ -13,7 +13,7 @@
             <div x-data="{ open: false }" @click.away="open = false" class="relative mx-8">
                 <button @click="open = !open" class="flex items-center gap-2 focus:outline-none">
                     <div class="text-left">
-                      {% if request.org and request.org_membership %}
+                      {% if request.org and request.org_membership or request.org and request.user.is_superuser %}
                         <p class="text-sm font-medium text-brand-deep-purple cursor-pointer">
                           {{ request.org.name }}
                         </p>
