@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import F, Q, Sum, TextChoices
 from django.urls import reverse
 from django.utils.timezone import now
+from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.opportunity.models import (
     CommCareApp,
@@ -142,6 +143,23 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             Row(
                 HTML("<div class='col-span-2'><h6 class='title-sm'>Invite Connect Workers</h6></div>"),
                 Row(Field("users", wrapper_class="w-full"), css_class="col-span-2"),
+                css_class="grid grid-cols-2 gap-4 p-6 card_bg",
+            ),
+            Row(
+                HTML(
+                    f"""
+                    <div class='col-span-2'>
+                        <h6 class='title-sm'>{_("Manage Credentials")}</h6>
+                        <span class='hint'>{_("Configure credential requirements for learning and delivery.")}</span>
+                    </div>
+                """
+                ),
+                Column(
+                    Field("learn_level"),
+                ),
+                Column(
+                    Field("delivery_level"),
+                ),
                 css_class="grid grid-cols-2 gap-4 p-6 card_bg",
             ),
             Row(Submit("submit", "Submit", css_class="button button-md primary-dark"), css_class="flex justify-end"),
