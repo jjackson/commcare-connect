@@ -1,5 +1,6 @@
 from collections import OrderedDict
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from commcare_connect.opportunity.api.serializers import (
@@ -30,7 +31,7 @@ class OpportunityDataExportSerializer(serializers.ModelSerializer):
         model = Opportunity
         fields = ["id", "name", "date_created", "organization", "end_date", "is_active", "program"]
 
-    def get_program(self, obj):
+    def get_program(self, obj) -> int:
         return obj.managedopportunity.program_id if obj.managed else None
 
 
@@ -64,6 +65,7 @@ class OpportunityUserDataSerializer(serializers.Serializer):
     date_claimed = serializers.DateField()
     claim_limits = serializers.SerializerMethodField()
 
+    @extend_schema_field(OpportunityClaimLimitSerializer.many_init())
     def get_claim_limits(self, obj):
         claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__opportunity_access=obj)
         data = OpportunityClaimLimitSerializer(claim_limits, many=True).data
@@ -98,7 +100,7 @@ class UserVisitDataSerialier(serializers.ModelSerializer):
             "deliver_unit_id",
         ]
 
-    def get_username(self, obj):
+    def get_username(self, obj) -> str:
         return obj.username
 
 
@@ -128,10 +130,10 @@ class CompletedWorkDataSerializer(serializers.ModelSerializer):
             "saved_org_payment_accrued_usd",
         ]
 
-    def get_username(self, obj):
+    def get_username(self, obj) -> str:
         return obj.username
 
-    def get_opportunity_id(self, obj):
+    def get_opportunity_id(self, obj) -> int:
         return obj.opportunity_id
 
 
@@ -158,10 +160,10 @@ class PaymentDataSerializer(serializers.ModelSerializer):
             "payment_operator",
         ]
 
-    def get_username(self, obj):
+    def get_username(self, obj) -> str:
         return obj.username
 
-    def get_opportunity_id(self, obj):
+    def get_opportunity_id(self, obj) -> int:
         return obj.opportunity_id
 
 
@@ -186,7 +188,7 @@ class AssessmentDataSerializer(serializers.ModelSerializer):
         model = Assessment
         fields = ["username", "app", "opportunity_id", "date", "score", "passing_score", "passed"]
 
-    def get_username(self, obj):
+    def get_username(self, obj) -> str:
         return obj.username
 
 
@@ -197,7 +199,7 @@ class CompletedModuleDataSerializer(serializers.ModelSerializer):
         model = CompletedModule
         fields = ["username", "module", "opportunity_id", "date", "duration"]
 
-    def get_username(self, obj):
+    def get_username(self, obj) -> str:
         return obj.username
 
 
