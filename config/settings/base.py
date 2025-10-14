@@ -187,6 +187,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "commcare_connect.users.context_processors.allauth_settings",
                 "commcare_connect.web.context_processors.page_settings",
+                "commcare_connect.web.context_processors.gtm_context",
             ],
         },
     }
@@ -204,6 +205,7 @@ FIXTURE_DIRS = (str(APPS_DIR / "fixtures"),)
 # ------------------------------------------------------------------------------
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
+CSRF_USE_SESSIONS = True
 X_FRAME_OPTIONS = "DENY"
 
 # EMAIL
@@ -379,5 +381,6 @@ OPEN_EXCHANGE_RATES_API_ID = env("OPEN_EXCHANGE_RATES_API_ID", default=None)
 
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth2_provider.Application"
 
+GTM_ID = env("GTM_ID", default="")
 GA_MEASUREMENT_ID = env("GA_MEASUREMENT_ID", default="")
 GA_API_SECRET = env("GA_API_SECRET", default="")
