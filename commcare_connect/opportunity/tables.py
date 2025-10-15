@@ -691,10 +691,14 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
         return self.render_worker_list_url_column(value=value, opp_id=record.id)
 
     def render_total_deliveries(self, value, record):
-        return self.render_worker_list_url_column(value=value, opp_id=record.id, sort="sort=-delivered")
+        return self.render_worker_list_url_column(
+            value=value, opp_id=record.id, url_slug="worker_deliver", sort="sort=-delivered"
+        )
 
     def render_verified_deliveries(self, value, record):
-        return self.render_worker_list_url_column(value=value, opp_id=record.id, sort="sort=-approved")
+        return self.render_worker_list_url_column(
+            value=value, opp_id=record.id, url_slug="worker_deliver", sort="sort=-approved"
+        )
 
     def render_worker_earnings(self, value, record):
         url = reverse("opportunity:worker_payments", args=(self.org_slug, record.id))
@@ -939,15 +943,15 @@ class UserInviteInfoColumn(UserInfoColumn):
             "verbose_name",
             header_with_tooltip(
                 label=_("Name"),
-                tooltip_text=_("Phone numbers will be displayed if a worker does not have a PersonalID account"),
+                tooltip_text=_("A blank value will be displayed if a worker does not have a PersonalID account"),
             ),
         )
         super().__init__(*args, **kwargs)
 
     def render(self, value, record):
-        if value:
+        if not value:
             return super().render(value, record.opportunity_access)
-        return record.phone_number
+        return "—"
 
 
 class SuspendedIndicatorColumn(tables.Column):
@@ -1020,6 +1024,7 @@ class WorkerStatusTable(tables.Table):
         accessor="opportunity_access__user",
         empty_values=(),
     )
+    phone_number = tables.Column(accessor="phone_number", verbose_name="Phone Number")
     status = StatusIndicatorColumn(orderable=False)
     invited_date = DMYTColumn(accessor="notification_date", verbose_name=_("Invited Date"))
     last_active = DMYTColumn(
@@ -1058,6 +1063,7 @@ class WorkerStatusTable(tables.Table):
             "index",
             "status",
             "user",
+            "phone_number",
             "invited_date",
             "last_active",
             "started_learn",
