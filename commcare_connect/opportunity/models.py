@@ -836,7 +836,7 @@ class CatchmentArea(models.Model):
         unique_together = ("site_code", "opportunity")
 
 
-class CredentialIssuer(models.Model):
+class CredentialConfiguration(models.Model):
     opportunity = models.ForeignKey(
         Opportunity,
         unique=True,
