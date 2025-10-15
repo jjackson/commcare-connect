@@ -557,7 +557,7 @@ class DateRanges(TextChoices):
 
 
 class VisitExportForm(forms.Form):
-    format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="xlsx")
+    format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="csv")
     date_range = forms.ChoiceField(choices=DateRanges.choices, initial=DateRanges.LAST_30_DAYS)
     status = forms.MultipleChoiceField(choices=[("all", "All")] + VisitValidationStatus.choices, initial=["all"])
     flatten_form_data = forms.BooleanField(initial=True, required=False)
@@ -589,7 +589,7 @@ class VisitExportForm(forms.Form):
 
 
 class ReviewVisitExportForm(forms.Form):
-    format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="xlsx")
+    format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="csv")
     date_range = forms.ChoiceField(choices=DateRanges.choices, initial=DateRanges.LAST_30_DAYS)
     status = forms.MultipleChoiceField(choices=[("all", "All")] + VisitReviewStatus.choices, initial=["all"])
 
@@ -615,7 +615,7 @@ class ReviewVisitExportForm(forms.Form):
 
 
 class PaymentExportForm(forms.Form):
-    format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="xlsx")
+    format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="csv")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -889,10 +889,6 @@ class SendMessageMobileUsersForm(forms.Form):
         required=False,
     )
     body = forms.CharField(widget=forms.Textarea)
-    message_type = forms.MultipleChoiceField(
-        choices=[("notification", "Push Notification"), ("sms", "SMS")],
-        widget=forms.CheckboxSelectMultiple,
-    )
 
     def __init__(self, *args, **kwargs):
         users = kwargs.pop("users", [])
@@ -903,7 +899,6 @@ class SendMessageMobileUsersForm(forms.Form):
             Field("selected_users"),
             Field("title"),
             Field("body"),
-            Field("message_type"),
             Submit(name="submit", value="Submit"),
         )
 

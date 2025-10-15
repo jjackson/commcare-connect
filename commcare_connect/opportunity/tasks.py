@@ -112,10 +112,7 @@ def invite_user(user_id, opportunity_access_id):
     invite_id = opportunity_access.invite_id
     location = reverse("users:accept_invite", args=(invite_id,))
     url = build_absolute_uri(None, location)
-    body = (
-        "You have been invited to a new job in Commcare Connect. Click the following "
-        f"link to share your information with the project and find out more {url}"
-    )
+    body = f"You have been invited to a job in Connect. Click the link to accept {url}"
     if not user.phone_number:
         return
     sms_status = send_sms(user.phone_number, body)
@@ -294,13 +291,6 @@ def send_push_notification_task(user_ids: list[int], title: str, body: str):
     usernames = list(User.objects.filter(id__in=user_ids).values_list("username", flat=True))
     message = Message(usernames, title=title, body=body)
     send_message(message)
-
-
-@celery_app.task()
-def send_sms_task(user_ids: list[int], body: str):
-    user_phone_numbers = User.objects.filter(id__in=user_ids).values_list("phone_number", flat=True)
-    for phone_number in user_phone_numbers:
-        send_sms(phone_number, body)
 
 
 @celery_app.task()
