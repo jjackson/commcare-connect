@@ -3,7 +3,7 @@ import datetime
 import pytest
 
 from commcare_connect.opportunity.forms import AddBudgetNewUsersForm, OpportunityChangeForm
-from commcare_connect.opportunity.models import CredentialIssuer, PaymentUnit
+from commcare_connect.opportunity.models import CredentialConfiguration, PaymentUnit
 from commcare_connect.opportunity.tests.factories import CommCareAppFactory, OpportunityFactory, PaymentUnitFactory
 from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
 
@@ -209,11 +209,11 @@ class TestOpportunityChangeForm:
         form.save()
 
         if learn_level or delivery_level:
-            credential_issuer = CredentialIssuer.objects.get(opportunity=valid_opportunity)
+            credential_issuer = CredentialConfiguration.objects.get(opportunity=valid_opportunity)
             assert credential_issuer.learn_level == (learn_level or None)
             assert credential_issuer.delivery_level == (delivery_level or None)
         else:
-            assert not CredentialIssuer.objects.filter(opportunity=valid_opportunity).exists()
+            assert not CredentialConfiguration.objects.filter(opportunity=valid_opportunity).exists()
 
     def test_invalid_credential_levels(self, valid_opportunity, base_form_data):
         data = base_form_data.copy()
