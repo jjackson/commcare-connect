@@ -13,7 +13,7 @@ from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.opportunity.models import (
     CommCareApp,
-    CredentialIssuer,
+    CredentialConfiguration,
     DeliverUnit,
     DeliverUnitFlagRules,
     ExchangeRate,
@@ -192,7 +192,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
     def add_credential_fields(self):
         credential_issuer = None
         if self.instance:
-            credential_issuer = CredentialIssuer.objects.filter(opportunity=self.instance).first()
+            credential_issuer = CredentialConfiguration.objects.filter(opportunity=self.instance).first()
 
         self.fields["learn_level"] = forms.ChoiceField(
             choices=[("", _("None"))] + LearnLevel.choices,
@@ -226,7 +226,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
         learn_level = self.cleaned_data.get("learn_level") or None
         delivery_level = self.cleaned_data.get("delivery_level") or None
         if learn_level or delivery_level:
-            CredentialIssuer.objects.update_or_create(
+            CredentialConfiguration.objects.update_or_create(
                 opportunity=instance,
                 defaults={
                     "learn_level": learn_level,
@@ -234,7 +234,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                 },
             )
         else:
-            CredentialIssuer.objects.filter(opportunity=instance).delete()
+            CredentialConfiguration.objects.filter(opportunity=instance).delete()
 
         return instance
 
