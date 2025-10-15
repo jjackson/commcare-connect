@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.utils.timezone import now
 from django.views import View
 
-from commcare_connect.conftest import MobileUserFactory, check_basic_permissions
+from commcare_connect.conftest import MobileUserFactory
 from commcare_connect.connect_id_client.main import fetch_user_counts
 from commcare_connect.opportunity.helpers import get_payment_report_data
 from commcare_connect.opportunity.models import CompletedWorkStatus, VisitValidationStatus
@@ -28,6 +28,7 @@ from commcare_connect.reports.helpers import get_table_data_for_year_month
 from commcare_connect.reports.views import _results_to_geojson
 from commcare_connect.users.tests.factories import UserFactory
 from commcare_connect.utils.datetime import get_month_series
+from commcare_connect.utils.tests import check_basic_permissions
 
 
 def get_month_range_start_end(months=1):

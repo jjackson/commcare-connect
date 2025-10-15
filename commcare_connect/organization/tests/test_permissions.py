@@ -3,11 +3,11 @@ from django.http import HttpResponse
 from django.urls import clear_url_caches, path, reverse
 from django.views import View
 
-from commcare_connect.conftest import check_basic_permissions
 from commcare_connect.opportunity.views import OrganizationUserMemberRoleMixin, OrganizationUserMixin
 from commcare_connect.organization.decorators import org_admin_required, org_member_required, org_viewer_required
 from commcare_connect.organization.urls import urlpatterns as org_url_patterns
 from commcare_connect.users.tests.factories import UserFactory
+from commcare_connect.utils.tests import check_basic_permissions
 
 
 class TestAllOrgAccessPermission:
