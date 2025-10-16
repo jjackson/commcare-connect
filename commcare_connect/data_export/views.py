@@ -118,12 +118,20 @@ class SingleOpportunityDataView(RetrieveAPIView, BaseDataExportView):
         return _get_opportunity_or_404(self.request.user, self.kwargs.get("opp_id"))
 
 
-class OpportunityUserDataView(BaseStreamingCSVExportView):
+class OpportunityScopedDataView(BaseStreamingCSVExportView):
+    def check_opportunity_permission(self, user, opp_id):
+        self.opportunity = _get_opportunity_or_404(user, opp_id)
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        self.check_opportunity_permission(request.user, self.kwargs.get("opp_id"))
+
+
+class OpportunityUserDataView(OpportunityScopedDataView):
     serializer_class = OpportunityUserDataSerializer
 
     def get_queryset(self, request, opp_id):
-        opportunity = _get_opportunity_or_404(request.user, opp_id)
-        return OpportunityAccess.objects.filter(opportunity=opportunity).annotate(
+        return OpportunityAccess.objects.filter(opportunity=self.opportunity).annotate(
             username=F("user__username"),
             phone=F("user__phone_number"),
             user_invite_status=F("userinvite__status"),
@@ -131,25 +139,23 @@ class OpportunityUserDataView(BaseStreamingCSVExportView):
         )
 
 
-class UserVisitDataView(BaseStreamingCSVExportView):
+class UserVisitDataView(OpportunityScopedDataView):
     serializer_class = UserVisitDataSerialier
 
     def get_queryset(self, request, opp_id):
-        opportunity = _get_opportunity_or_404(request.user, opp_id)
         return (
-            UserVisit.objects.filter(opportunity=opportunity)
+            UserVisit.objects.filter(opportunity=self.opportunity)
             .annotate(username=F("user__username"))
             .select_related("user")
         )
 
 
-class CompletedWorkDataView(BaseStreamingCSVExportView):
+class CompletedWorkDataView(OpportunityScopedDataView):
     serializer_class = CompletedWorkDataSerializer
 
     def get_queryset(self, request, opp_id):
-        opportunity = _get_opportunity_or_404(request.user, opp_id)
         return (
-            CompletedWork.objects.filter(opportunity_access__opportunity=opportunity)
+            CompletedWork.objects.filter(opportunity_access__opportunity=self.opportunity)
             .annotate(
                 username=F("opportunity_access__user__username"),
                 opportunity_id=F("opportunity_access__opportunity_id"),
@@ -158,20 +164,19 @@ class CompletedWorkDataView(BaseStreamingCSVExportView):
         )
 
 
-class PaymentDataView(BaseStreamingCSVExportView):
+class PaymentDataView(OpportunityScopedDataView):
     serializer_class = PaymentDataSerializer
 
     def get_queryset(self, request, opp_id):
-        opportunity = _get_opportunity_or_404(request.user, opp_id)
         return Payment.objects.filter(
-            Q(opportunity_access__opportunity=opportunity) | Q(invoice__opportunity=opportunity)
+            Q(opportunity_access__opportunity=self.opportunity) | Q(invoice__opportunity=self.opportunity)
         ).annotate(
             username=F("opportunity_access__user__username"),
             opportunity_id=F("opportunity_access__opportunity_id"),
         )
 
 
-class InvoiceDataView(BaseStreamingCSVExportView):
+class InvoiceDataView(OpportunityScopedDataView):
     serializer_class = InvoiceDataSerializer
 
     def get_queryset(self, request, opp_id):
@@ -179,22 +184,20 @@ class InvoiceDataView(BaseStreamingCSVExportView):
         return PaymentInvoice.objects.filter(opportunity=opportunity)
 
 
-class CompletedModuleDataView(BaseStreamingCSVExportView):
+class CompletedModuleDataView(OpportunityScopedDataView):
     serializer_class = CompletedModuleDataSerializer
 
     def get_queryset(self, request, opp_id):
-        opportunity = _get_opportunity_or_404(request.user, opp_id)
-        return CompletedModule.objects.filter(opportunity=opportunity).annotate(
+        return CompletedModule.objects.filter(opportunity=self.opportunity).annotate(
             username=F("opportunity_access__user__username"),
         )
 
 
-class AssessmentDataView(BaseStreamingCSVExportView):
+class AssessmentDataView(OpportunityScopedDataView):
     serializer_class = AssessmentDataSerializer
 
     def get_queryset(self, request, opp_id):
-        opportunity = _get_opportunity_or_404(request.user, opp_id)
-        return Assessment.objects.filter(opportunity=opportunity).annotate(
+        return Assessment.objects.filter(opportunity=self.opportunity).annotate(
             username=F("opportunity_access__user__username"),
         )
 
