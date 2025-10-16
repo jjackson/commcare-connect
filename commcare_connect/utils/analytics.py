@@ -67,5 +67,6 @@ def _get_ga_client_id(request):
 
 def _get_ga_session_id(request):
     session_id_cookie = request.COOKIES.get("_ga")
-    _, _, session_id, _ = session_id_cookie.split(".")
-    return session_id
+    if session_id_cookie:
+        return session_id_cookie.split(".")[2]
+    return
