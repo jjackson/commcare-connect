@@ -79,14 +79,13 @@ class BaseStreamingCSVExportView(BaseDataExportView):
 
 
 def _get_opportunity_or_404(user, opp_id):
-    opportunity = Opportunity.objects.filter(
-        Q(organization__memberships__user=user) | Q(managedopportunity__program__organization__memberships__user=user),
-        id=opp_id,
-    ).first()
-
-    if opportunity:
-        return opportunity
-    else:
+    try:
+        return Opportunity.objects.get(
+            Q(organization__memberships__user=user)
+            | Q(managedopportunity__program__organization__memberships__user=user),
+            id=opp_id,
+        )
+    except Opportunity.DoesNotExist:
         raise NotFound()
 
 
