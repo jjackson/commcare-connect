@@ -1,15 +1,13 @@
+import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
 import httpx
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 
 from config import celery_app
 
-
-class AnalyticsError(Exception):
-    pass
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -43,8 +41,13 @@ def send_event_task(client_id: str, events: list[Event]):
     measurement_id = settings.GA_MEASUREMENT_ID
     ga_api_secret = settings.GA_API_SECRET
 
-    if not measurement_id or not ga_api_secret:
-        raise ImproperlyConfigured("Missing GA_MEASUREMENT_ID or GA_API_SECRET environment variables.")
+    if not measurement_id:
+        logger.info("Please specify GA_MEASUREMENT_ID environment variable.")
+        return
+
+    if not ga_api_secret:
+        logger.info("Please specify GA_API_SECRET environment variable.")
+        return
 
     url = f"https://www.google-analytics.com/mp/collect?measurement_id={measurement_id}&api_secret={ga_api_secret}"
     response = httpx.post(url, json={"client_id": client_id, "events": events})
