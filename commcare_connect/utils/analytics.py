@@ -1,6 +1,7 @@
 import logging
 from dataclasses import asdict, dataclass
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 from django.conf import settings
@@ -48,7 +49,9 @@ def send_bulk_events_to_ga(request, events: list[Event]):
 def send_event_task(client_id: str, events: list[Event]):
     measurement_id = settings.GA_MEASUREMENT_ID
     ga_api_secret = settings.GA_API_SECRET
-    url = f"https://www.google-analytics.com/mp/collect?measurement_id={measurement_id}&api_secret={ga_api_secret}"
+    base_url = "https://www.google-analytics.com/mp/collect"
+    params = {"measurement_id": measurement_id, "api_secret": ga_api_secret}
+    url = f"{base_url}?{urlencode(params)}"
     response = httpx.post(url, json={"client_id": client_id, "events": events})
     response.raise_for_status()
     return response
