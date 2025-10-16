@@ -21,6 +21,14 @@ def send_event_to_ga(request, event: Event):
 
 
 def send_bulk_events_to_ga(request, events: list[Event]):
+    if not settings.GA_MEASUREMENT_ID:
+        logger.info("Please specify GA_MEASUREMENT_ID environment variable.")
+        return
+
+    if not settings.GA_API_SECRET:
+        logger.info("Please specify GA_API_SECRET environment variable.")
+        return
+
     client_id = _get_ga_client_id(request)
     session_id = _get_ga_session_id(request)
     is_dimagi = request.user.email.endswith("@dimagi.com")
@@ -40,15 +48,6 @@ def send_bulk_events_to_ga(request, events: list[Event]):
 def send_event_task(client_id: str, events: list[Event]):
     measurement_id = settings.GA_MEASUREMENT_ID
     ga_api_secret = settings.GA_API_SECRET
-
-    if not measurement_id:
-        logger.info("Please specify GA_MEASUREMENT_ID environment variable.")
-        return
-
-    if not ga_api_secret:
-        logger.info("Please specify GA_API_SECRET environment variable.")
-        return
-
     url = f"https://www.google-analytics.com/mp/collect?measurement_id={measurement_id}&api_secret={ga_api_secret}"
     response = httpx.post(url, json={"client_id": client_id, "events": events})
     response.raise_for_status()
