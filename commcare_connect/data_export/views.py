@@ -216,7 +216,7 @@ class ProgramOpportunityDataView(BaseStreamingCSVExportView):
         return (
             Opportunity.objects.filter(
                 managedopportunity__program=program_id,
-                managed_opportunity__program__organization__memberships__user=self.request.user,
+                managedopportunity__program__organization__memberships__user=self.request.user,
             )
             .select_related("learn_app", "deliver_app")
             .prefetch_related("paymentunit_set", "opportunityverificationflags")
