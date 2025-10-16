@@ -1,9 +1,11 @@
 from functools import wraps
 
 from django.http import Http404, HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 
 from .models import UserOrganizationMembership
+from commcare_connect.opportunity.models import Opportunity
 
 
 def _request_user_is_member(request):
@@ -55,5 +57,38 @@ def _get_decorated_function(view_func, permission_test_function):
             raise Http404
 
         return view_func(request, *args, **kwargs)
+
+    return _inner
+
+
+def opportunity_for_org_required(view_func):
+    """
+    Decorator that fetches the opportunity from URL parameters (opp_id and org_slug)
+    and attaches it to request.opportunity. Raises Http404 if the opportunity doesn't
+    exist or doesn't belong to the organization.
+
+    This decorator should be used after org permission decorators to ensure request.org is available.
+    """
+
+    @wraps(view_func)
+    def _inner(request, *args, **kwargs):
+        opp_id = kwargs.get("opp_id")
+        org_slug = kwargs.get("org_slug")
+
+        if not opp_id:
+            raise Http404("Opportunity ID not provided.")
+
+        if not org_slug:
+            raise Http404("Organization slug not provided.")
+
+        opp = get_object_or_404(Opportunity, id=opp_id)
+
+        if (opp.organization and opp.organization.slug == org_slug) or (
+            opp.managed and opp.managedopportunity.program.organization.slug == org_slug
+        ):
+            request.opportunity = opp
+            return view_func(request, *args, **kwargs)
+
+        raise Http404("Opportunity not found.")
 
     return _inner
