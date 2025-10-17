@@ -190,6 +190,11 @@
             <!-- Dynamic images from AJAX -->
             <template x-for="(image, index) in (currentVisit?.images || [])" :key="image.blob_id">
               <div class="relative flex-shrink-0">
+                <!-- Question ID -->
+                <div x-show="image.question_id" class="mb-1">
+                  <span class="inline-block px-2 py-0.5 bg-brand-indigo/10 text-brand-indigo text-xs font-medium rounded"
+                        x-text="image.question_id"></span>
+                </div>
                 <div class="mb-2">
                   <img :src="image.url"
                        :alt="`Visit image ${image.counter}`"
@@ -219,6 +224,14 @@
             <template x-if="!currentVisit?.images">
               {% for image in current_visit.images.all %}
               <div class="relative flex-shrink-0">
+                <!-- Question ID -->
+                {% if image.question_id %}
+                <div class="mb-1">
+                  <span class="inline-block px-2 py-0.5 bg-brand-indigo/10 text-brand-indigo text-xs font-medium rounded">
+                    {{ image.question_id }}
+                  </span>
+                </div>
+                {% endif %}
                 <div class="mb-2">
                   <img src="{% url 'audit:image' image.blob_id %}"
                        alt="Visit image {{ forloop.counter }}"

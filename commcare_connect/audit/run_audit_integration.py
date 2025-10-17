@@ -142,6 +142,16 @@ RUN_CONFIGS = {
         count_across_opp=10000,
         sample_percentage=3,
     ),
+    "troubleshoot_last2": AuditRunConfig(
+        name="Troubleshoot - Readers Top 1, Last 2 per FLW",
+        search_query="readers",
+        select_strategy="top_by_visits",
+        select_count=1,
+        audit_type="last_n_per_flw",
+        granularity="per_flw",
+        count_per_flw=2,
+        sample_percentage=100,
+    ),
 }
 
 
