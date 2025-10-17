@@ -124,6 +124,8 @@ class AuditDataLoader:
                                     "name": app_row.get("name", "Unknown App"),
                                     "cc_domain": app_row.get("cc_domain", ""),
                                     "hq_server": hq_server,
+                                    "organization": org,
+                                    "description": "",
                                 },
                             )
 
@@ -174,12 +176,17 @@ class AuditDataLoader:
             # Get or create CommCareApp
             app = None
             if du_data.get("cc_app_id") and hq_server:
+                # Get or create organization for audit data
+                org, _ = Organization.objects.get_or_create(slug="audit-org", defaults={"name": "Audit Organization"})
+
                 app, _ = CommCareApp.objects.get_or_create(
                     cc_app_id=du_data["cc_app_id"],
                     defaults={
                         "name": du_data.get("app_name") or f"App {du_data['cc_app_id']}",
                         "cc_domain": du_data.get("cc_domain", ""),
                         "hq_server": hq_server,
+                        "organization": org,
+                        "description": "",
                     },
                 )
 
@@ -477,6 +484,52 @@ class AuditDataLoader:
 
         return session
 
+    def _extract_question_id_for_attachment(self, form_data: dict, filename: str) -> str | None:
+        """
+        Extract the question ID that corresponds to an attachment filename.
+
+        CommCare form data structure has question IDs as keys, and filenames as values
+        for image/attachment questions. This recursively searches the form data to find
+        the matching question ID.
+
+        Args:
+            form_data: The form data dict (typically form["form"])
+            filename: The attachment filename to search for
+
+        Returns:
+            The question ID (key) if found, None otherwise
+        """
+
+        def search_dict(data, target_filename, path=""):
+            """Recursively search for filename in nested dict structure"""
+            if not isinstance(data, dict):
+                return None
+
+            for key, value in data.items():
+                # Skip metadata and special fields
+                if key in ["@xmlns", "@name", "@uiVersion", "@version", "meta", "#type"]:
+                    continue
+
+                current_path = f"{path}/{key}" if path else key
+
+                # Check if this value matches our filename
+                if isinstance(value, str) and value == target_filename:
+                    return current_path
+
+                # Recursively search nested dicts
+                if isinstance(value, dict):
+                    result = search_dict(value, target_filename, current_path)
+                    if result:
+                        return result
+
+            return None
+
+        # Try to find the filename in the form data
+        form_content = form_data.get("form", {})
+        question_path = search_dict(form_content, filename)
+
+        return question_path
+
     def download_attachments(self, visits: list[UserVisit], progress_tracker=None):
         """
         Synchronously download attachments for visits from CommCare.
@@ -642,6 +695,9 @@ class AuditDataLoader:
                             if BlobMeta.objects.filter(name=filename, parent_id=visit.xform_id).exists():
                                 continue
 
+                            # Extract question ID for this attachment
+                            question_id = self._extract_question_id_for_attachment(form, filename)
+
                             # Download from CommCare
                             response = extractor.session.get(attachment_url, timeout=30)
                             response.raise_for_status()
@@ -652,6 +708,7 @@ class AuditDataLoader:
                                 parent_id=visit.xform_id,
                                 content_length=len(response.content),
                                 content_type=content_type,
+                                question_id=question_id,
                             )
 
                             default_storage.save(str(blob_meta.blob_id), ContentFile(response.content, filename))
