@@ -949,7 +949,7 @@ class UserInviteInfoColumn(UserInfoColumn):
         super().__init__(*args, **kwargs)
 
     def render(self, value, record):
-        if not value:
+        if value:
             return super().render(value, record.opportunity_access)
         return "—"
 
