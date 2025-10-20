@@ -10,7 +10,9 @@ from django.db.models import F, Q, Sum, TextChoices
 from django.urls import reverse
 from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
+from waffle import switch_is_active
 
+from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.models import (
     CommCareApp,
     CredentialConfiguration,
@@ -99,8 +101,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.opportunity = self.instance
 
-        self.helper = FormHelper(self)
-        self.helper.layout = Layout(
+        layout_fields = [
             Row(
                 HTML(
                     f"""
@@ -155,25 +156,38 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                 Row(Field("users", wrapper_class="w-full"), css_class="col-span-2"),
                 css_class="grid grid-cols-2 gap-4 p-6 card_bg",
             ),
-            Row(
-                HTML(
-                    f"""
-                    <div class='col-span-2'>
-                        <h6 class='title-sm'>{_("Manage Credentials")}</h6>
-                        <span class='hint'>{_("Configure credential requirements for learning and delivery.")}</span>
-                    </div>
-                """
-                ),
-                Column(
-                    Field("learn_level"),
-                ),
-                Column(
-                    Field("delivery_level"),
-                ),
-                css_class="grid grid-cols-2 gap-4 p-6 card_bg",
-            ),
-            Row(Submit("submit", "Submit", css_class="button button-md primary-dark"), css_class="flex justify-end"),
+        ]
+
+        if switch_is_active(OPPORTUNITY_CREDENTIALS):
+            layout_fields.append(
+                Row(
+                    HTML(
+                        f"""
+                        <div class='col-span-2'>
+                            <h6 class='title-sm'>{_("Manage Credentials")}</h6>
+                            <span class='hint'>
+                                {_("Configure credential requirements for learning and delivery.")}
+                            </span>
+                        </div>
+                    """
+                    ),
+                    Column(
+                        Field("learn_level"),
+                    ),
+                    Column(
+                        Field("delivery_level"),
+                    ),
+                    css_class="grid grid-cols-2 gap-4 p-6 card_bg",
+                )
+            )
+            self.add_credential_fields()
+
+        layout_fields.append(
+            Row(Submit("submit", "Submit", css_class="button button-md primary-dark"), css_class="flex justify-end")
         )
+
+        self.helper = FormHelper(self)
+        self.helper.layout = Layout(*layout_fields)
 
         self.fields["additional_users"] = forms.IntegerField(
             required=False, help_text=_("Adds budget for additional users.")
@@ -183,7 +197,6 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             required=False,
             help_text=_("Extends opportunity end date for all users."),
         )
-        self.add_credential_fields()
         if self.instance:
             if self.instance.end_date:
                 self.initial["end_date"] = self.instance.end_date.isoformat()
@@ -223,6 +236,9 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
 
     def save(self, commit=True):
         instance = super().save(commit=commit)
+        if not switch_is_active(OPPORTUNITY_CREDENTIALS):
+            return instance
+
         learn_level = self.cleaned_data.get("learn_level") or None
         delivery_level = self.cleaned_data.get("delivery_level") or None
         if learn_level or delivery_level:

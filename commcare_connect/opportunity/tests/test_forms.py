@@ -1,7 +1,9 @@
 import datetime
 
 import pytest
+from waffle.testutils import override_switch
 
+from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.forms import AddBudgetNewUsersForm, OpportunityChangeForm
 from commcare_connect.opportunity.models import CredentialConfiguration, PaymentUnit
 from commcare_connect.opportunity.tests.factories import CommCareAppFactory, OpportunityFactory, PaymentUnitFactory
@@ -189,6 +191,7 @@ class TestOpportunityChangeForm:
         assert "users" in form.errors
         assert "Please finish setting up the opportunity before inviting users." in form.errors["users"]
 
+    @override_switch(OPPORTUNITY_CREDENTIALS, active=True)
     @pytest.mark.parametrize(
         "learn_level,delivery_level",
         [
@@ -215,6 +218,7 @@ class TestOpportunityChangeForm:
         else:
             assert not CredentialConfiguration.objects.filter(opportunity=valid_opportunity).exists()
 
+    @override_switch(OPPORTUNITY_CREDENTIALS, active=True)
     def test_invalid_credential_levels(self, valid_opportunity, base_form_data):
         data = base_form_data.copy()
         data["learn_level"] = "INVALID_LEVEL"
@@ -223,6 +227,16 @@ class TestOpportunityChangeForm:
         form = OpportunityChangeForm(data=data, instance=valid_opportunity)
         assert not form.is_valid()
         assert "learn_level" in form.errors or "delivery_level" in form.errors
+
+    def test_credential_switch(self, valid_opportunity):
+        form = OpportunityChangeForm(instance=valid_opportunity)
+        assert "learn_level" not in form.fields
+        assert "delivery_level" not in form.fields
+
+        with override_switch(OPPORTUNITY_CREDENTIALS, active=True):
+            form = OpportunityChangeForm(instance=valid_opportunity)
+            assert "learn_level" in form.fields
+            assert "delivery_level" in form.fields
 
 
 class TestAddBudgetNewUsersForm:
