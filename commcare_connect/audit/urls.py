@@ -9,11 +9,18 @@ urlpatterns = [
     path("", views.AuditSessionListView.as_view(), name="session_list"),
     path("sessions/<int:pk>/", views.AuditSessionDetailView.as_view(), name="session_detail"),
     path("sessions/<int:pk>/export/", views.AuditExportView.as_view(), name="session_export"),
+    path("sessions/<int:pk>/bulk-assessment/", views.BulkAssessmentView.as_view(), name="bulk_assessment"),
     path("export-all/", views.AuditExportAllView.as_view(), name="export_all"),
     # Audit creation wizard
     path("create/", views.AuditCreationWizardView.as_view(), name="creation_wizard"),
     # AJAX endpoints
     path("api/results/<int:session_id>/update/", views.AuditResultUpdateView.as_view(), name="result_update"),
+    path("api/assessment/<int:assessment_id>/update/", views.AssessmentUpdateView.as_view(), name="assessment_update"),
+    path(
+        "api/sessions/<int:session_id>/apply-results/",
+        views.ApplyAssessmentResultsView.as_view(),
+        name="apply_assessment_results",
+    ),
     path("api/sessions/<int:session_id>/complete/", views.AuditSessionCompleteView.as_view(), name="session_complete"),
     path(
         "api/sessions/<int:session_id>/uncomplete/",
@@ -34,6 +41,11 @@ urlpatterns = [
     # Database management
     path("api/database/stats/", views.DatabaseStatsAPIView.as_view(), name="database_stats"),
     path("api/database/reset/", views.DatabaseResetAPIView.as_view(), name="reset_database"),
+    path(
+        "api/database/download-missing-attachments/",
+        views.DownloadMissingAttachmentsAPIView.as_view(),
+        name="download_missing_attachments",
+    ),
     # Audit definition import/export
     path(
         "api/definition/<int:definition_id>/export/",

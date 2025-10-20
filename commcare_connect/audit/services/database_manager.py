@@ -7,7 +7,7 @@ This service handles database cleanup and management operations for the audit sy
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
-from commcare_connect.audit.models import AuditDefinition, AuditSession
+from commcare_connect.audit.models import Assessment, AuditDefinition, AuditImageNote, AuditResult, AuditSession
 from commcare_connect.opportunity.models import BlobMeta, CommCareApp, DeliverUnit, Opportunity, PaymentUnit, UserVisit
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
 
@@ -42,6 +42,9 @@ def reset_audit_database():
         "visits": UserVisit.objects.count(),
         "audit_definitions": AuditDefinition.objects.count(),
         "audit_sessions": AuditSession.objects.count(),
+        "audit_results": AuditResult.objects.count(),
+        "assessments": Assessment.objects.count(),
+        "image_notes": AuditImageNote.objects.count(),  # Will be 0 after migration
         "users": User.objects.filter(is_superuser=False, is_staff=False).count(),
         "attachments": BlobMeta.objects.count(),
     }
@@ -61,7 +64,11 @@ def reset_audit_database():
         # 2. Delete visits (removes FK to users)
         UserVisit.objects.all().delete()
 
-        # 3. Delete audit sessions and results
+        # 3. Delete audit sessions and all related data
+        # Note: These cascade from AuditSession, but we delete explicitly for clarity
+        Assessment.objects.all().delete()
+        AuditResult.objects.all().delete()
+        AuditImageNote.objects.all().delete()  # Legacy - deprecated
         AuditSession.objects.all().delete()
 
         # 4. Delete audit definitions (audit configurations and preview data)
@@ -110,4 +117,181 @@ def get_database_stats():
         "visits": UserVisit.objects.count(),
         "audit_definitions": AuditDefinition.objects.count(),
         "audit_sessions": AuditSession.objects.count(),
+        "audit_results": AuditResult.objects.count(),
+        "assessments": Assessment.objects.count(),
+        "attachments": BlobMeta.objects.count(),
     }
+
+
+def download_missing_attachments(progress_tracker=None):
+    """
+    Download missing attachments for all audit sessions.
+
+    This function reuses the same download logic as audit creation.
+    It:
+    1. Collects all visits from audit sessions
+    2. Uses AuditDataLoader.download_attachments() to download missing files
+    3. Regenerates assessments for affected sessions
+
+    Args:
+        progress_tracker: Optional ProgressTracker for reporting progress
+
+    Returns:
+        dict: Statistics about the download operation
+    """
+    import os
+
+    from commcare_connect.audit.management.extractors.connect_api_facade import ConnectAPIFacade
+    from commcare_connect.audit.services.assessment_generator import generate_assessments_for_session
+    from commcare_connect.audit.services.data_loader import AuditDataLoader
+
+    stats = {
+        "sessions_scanned": 0,
+        "visits_scanned": 0,
+        "attachments_downloaded": 0,
+        "sessions_regenerated": set(),
+        "errors": [],
+    }
+
+    # Check if CommCare credentials are available
+    if not os.getenv("COMMCARE_USERNAME") or not os.getenv("COMMCARE_API_KEY"):
+        error_msg = "CommCare credentials not configured (COMMCARE_USERNAME/COMMCARE_API_KEY)"
+        stats["errors"].append(error_msg)
+        if progress_tracker:
+            progress_tracker.error(error_msg)
+        return stats
+
+    try:
+        # Step 1: Collect all visits from audit sessions
+        if progress_tracker:
+            progress_tracker.update(0, 100, "Scanning audit sessions...", "loading", step_name="scanning")
+
+        sessions = AuditSession.objects.all().prefetch_related("visits")
+
+        if not sessions.exists():
+            error_msg = "No audit sessions found"
+            stats["errors"].append(error_msg)
+            if progress_tracker:
+                progress_tracker.error(error_msg)
+            return stats
+
+        print(f"[INFO] Scanning {sessions.count()} audit sessions for visits...")
+
+        # Collect all unique visits with their domain metadata
+        all_visits = []
+        for session in sessions:
+            stats["sessions_scanned"] += 1
+            visits = session.visits.all()
+
+            for visit in visits:
+                stats["visits_scanned"] += 1
+
+                # Set domain metadata on visit for download_attachments to use
+                # Try to get from opportunity first
+                if visit.opportunity and visit.opportunity.deliver_app:
+                    visit._temp_cc_domain = visit.opportunity.deliver_app.cc_domain
+                    visit._temp_cc_app_id = visit.opportunity.deliver_app.cc_app_id
+                elif session.domain != "unknown":
+                    # Fall back to session metadata
+                    visit._temp_cc_domain = session.domain
+                    visit._temp_cc_app_id = session.app_id
+
+                all_visits.append(visit)
+
+        # Deduplicate visits (same visit may be in multiple sessions)
+        unique_visits = list({v.id: v for v in all_visits}.values())
+
+        print(f"[INFO] Found {len(unique_visits)} unique visits across {stats['sessions_scanned']} sessions")
+
+        if progress_tracker:
+            progress_tracker.complete_step("scanning", f"Found {len(unique_visits)} visits")
+
+        # Step 2: Use AuditDataLoader to download attachments (same logic as creation)
+        if progress_tracker:
+            progress_tracker.update(
+                0, len(unique_visits) or 1, "Starting attachment download...", "downloading", step_name="attachments"
+            )
+
+        # Initialize facade and loader
+        facade = ConnectAPIFacade()
+        if not facade.authenticate():
+            error_msg = "Failed to authenticate with Superset data source"
+            stats["errors"].append(error_msg)
+            if progress_tracker:
+                progress_tracker.error(error_msg)
+            return stats
+
+        try:
+            loader = AuditDataLoader(facade=facade, dry_run=False)
+
+            # Track attachments before download
+            attachments_before = BlobMeta.objects.count()
+
+            # Download attachments - this handles deduplication, domain grouping, etc.
+            loader.download_attachments(unique_visits, progress_tracker=progress_tracker)
+
+            # Calculate how many were downloaded
+            attachments_after = BlobMeta.objects.count()
+            stats["attachments_downloaded"] = attachments_after - attachments_before
+
+            if progress_tracker:
+                progress_tracker.complete_step(
+                    "attachments", f"Downloaded {stats['attachments_downloaded']} attachments"
+                )
+
+        finally:
+            facade.close()
+
+        # Step 3: Regenerate assessments for all sessions
+        if progress_tracker:
+            progress_tracker.update(
+                0, stats["sessions_scanned"], "Regenerating assessments...", "processing", step_name="assessments"
+            )
+
+        print(f"[INFO] Regenerating assessments for {stats['sessions_scanned']} sessions...")
+        for idx, session in enumerate(sessions, 1):
+            try:
+                generate_assessments_for_session(session)
+                stats["sessions_regenerated"].add(session.id)
+
+                if progress_tracker and idx % 10 == 0:
+                    progress_tracker.update(
+                        idx,
+                        stats["sessions_scanned"],
+                        f"Regenerating assessments ({idx}/{stats['sessions_scanned']})...",
+                        "processing",
+                        step_name="assessments",
+                    )
+
+            except Exception as e:
+                error_msg = f"Failed to regenerate assessments for session {session.id}: {str(e)}"
+                print(f"[WARNING] {error_msg}")
+                stats["errors"].append(error_msg)
+
+        if progress_tracker:
+            progress_tracker.complete_step("assessments", f"Regenerated {len(stats['sessions_regenerated'])} sessions")
+
+        # Convert set to count for JSON serialization
+        stats["sessions_regenerated"] = len(stats["sessions_regenerated"])
+
+        print(f"[OK] Download complete: {stats['attachments_downloaded']} attachments downloaded")
+
+        if progress_tracker:
+            progress_tracker.complete("Download complete!", result_data={"stats": stats})
+
+        return stats
+
+    except Exception as e:
+        import traceback
+
+        error_msg = f"Error during download: {str(e)}"
+        error_details = traceback.format_exc()
+        print(f"[ERROR] {error_msg}")
+        print(error_details)
+
+        stats["errors"].append(error_msg)
+
+        if progress_tracker:
+            progress_tracker.error(error_msg, error_details)
+
+        return stats

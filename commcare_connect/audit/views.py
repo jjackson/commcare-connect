@@ -11,7 +11,7 @@ from django.views.generic import DetailView, TemplateView, View
 from django_tables2 import SingleTableView
 
 from commcare_connect.audit.management.extractors.connect_api_facade import ConnectAPIFacade
-from commcare_connect.audit.models import AuditResult, AuditSession
+from commcare_connect.audit.models import Assessment, AuditResult, AuditSession
 from commcare_connect.audit.services.audit_creator import create_audit_sessions, preview_audit_sessions
 from commcare_connect.audit.services.database_manager import get_database_stats, reset_audit_database
 from commcare_connect.audit.services.progress_tracker import ProgressTracker
@@ -67,18 +67,32 @@ class AuditSessionDetailView(LoginRequiredMixin, DetailView):
             current_visit = all_visits[visit_index]
             current_visit.audit_result = existing_results.get(current_visit.id)
 
-        # Progress information
-        audited_count = len(existing_results)
-        pending_count = total_visits - audited_count
+            # Attach assessments to images for easy template access
+            current_visit_images = []
+            if current_visit.audit_result:
+                assessments = Assessment.objects.filter(audit_result=current_visit.audit_result)
+                assessments_by_blob = {a.blob_id: a for a in assessments}
+
+                # Fetch images and attach assessments
+                for image in current_visit.images.all():
+                    image.assessment = assessments_by_blob.get(image.blob_id)
+                    current_visit_images.append(image)
+
+        # Progress information (based on assessed images, not visits)
+        from commcare_connect.audit.helpers import calculate_audit_progress
+
+        progress_percentage, assessed_count, total_assessments = calculate_audit_progress(session)
+        pending_count = total_assessments - assessed_count
 
         context.update(
             {
                 "current_visit": current_visit,
+                "current_visit_images": current_visit_images,
                 "visit_index": visit_index,
                 "total_visits": total_visits,
-                "audited_count": audited_count,
+                "audited_count": assessed_count,
                 "pending_count": pending_count,
-                "progress_percentage": round((audited_count / total_visits) * 100, 1) if total_visits > 0 else 0,
+                "progress_percentage": progress_percentage,
                 "has_previous": visit_index > 0,
                 "has_next": visit_index < total_visits - 1,
                 "previous_index": visit_index - 1 if visit_index > 0 else 0,
@@ -98,7 +112,6 @@ class AuditResultUpdateView(LoginRequiredMixin, View):
             visit_id = request.POST.get("visit_id")
             result = request.POST.get("result")
             notes = request.POST.get("notes", "")
-            image_notes_json = request.POST.get("image_notes", "{}")
             auto_advance = request.POST.get("auto_advance", "true") == "true"
             current_index = int(request.POST.get("current_index", 0))
 
@@ -112,21 +125,9 @@ class AuditResultUpdateView(LoginRequiredMixin, View):
                 audit_session=session, user_visit=visit, defaults={"result": result, "notes": notes}
             )
 
-            # Handle image notes
-            try:
-                image_notes = json.loads(image_notes_json)
-                # Clear existing image notes for this audit result
-                audit_result.image_notes.all().delete()
-                # Create new image notes
-                for blob_id, note_text in image_notes.items():
-                    if note_text.strip():  # Only save non-empty notes
-                        from .models import AuditImageNote
-
-                        AuditImageNote.objects.create(
-                            audit_result=audit_result, blob_id=blob_id, note=note_text.strip()
-                        )
-            except json.JSONDecodeError:
-                pass  # Ignore invalid JSON
+            # TODO: Update to use Assessment model instead of image_notes
+            # For now, we'll just save the result without individual image assessments
+            # Image notes handling will be reimplemented with Assessment model
 
             # Calculate updated progress using explicit visit set
             total_visits = session.visits.count()
@@ -227,20 +228,15 @@ class AuditExportView(LoginRequiredMixin, DetailView):
             "visit_results": [],
         }
 
-        # Build visit results with images and image notes
-        for result in session.results.select_related("user_visit__user").prefetch_related("image_notes").all():
-            # Get image notes keyed by blob_id for easy lookup
-            image_notes_dict = {note.blob_id: note.note for note in result.image_notes.all()}
-
-            # Build images list with notes
+        # Build visit results with images
+        # TODO: Include assessments in export
+        for result in session.results.select_related("user_visit__user").all():
+            # Build images list
             images = []
             for img in result.user_visit.images.all():
                 image_data = {
                     "filename": img.name,
                 }
-                # Add note if exists for this image
-                if img.blob_id in image_notes_dict:
-                    image_data["note"] = image_notes_dict[img.blob_id]
                 images.append(image_data)
 
             visit_result = {
@@ -285,20 +281,15 @@ class AuditExportAllView(LoginRequiredMixin, View):
         for session in completed_sessions:
             visit_results = []
 
-            # Build visit results with images and image notes
-            for result in session.results.select_related("user_visit__user").prefetch_related("image_notes").all():
-                # Get image notes keyed by blob_id for easy lookup
-                image_notes_dict = {note.blob_id: note.note for note in result.image_notes.all()}
-
-                # Build images list with notes
+            # Build visit results with images
+            # TODO: Include assessments in export
+            for result in session.results.select_related("user_visit__user").all():
+                # Build images list
                 images = []
                 for img in result.user_visit.images.all():
                     image_data = {
                         "filename": img.name,
                     }
-                    # Add note if exists for this image
-                    if img.blob_id in image_notes_dict:
-                        image_data["note"] = image_notes_dict[img.blob_id]
                     images.append(image_data)
 
                 visit_result = {
@@ -399,15 +390,18 @@ class AuditVisitDataView(LoginRequiredMixin, View):
             current_visit = all_visits[visit_index]
             current_visit.audit_result = existing_results.get(current_visit.id)
 
-        audited_count = len(existing_results)
+        # Calculate progress based on assessed images
+        from commcare_connect.audit.helpers import calculate_audit_progress
+
+        progress_percentage, assessed_count, total_assessments = calculate_audit_progress(session)
 
         # Prepare visit data
         visit_data = {
             "visit_index": visit_index,
             "total_visits": total_visits,
-            "audited_count": audited_count,
-            "pending_count": total_visits - audited_count,
-            "progress_percentage": round((audited_count / total_visits) * 100, 1) if total_visits > 0 else 0,
+            "audited_count": assessed_count,
+            "pending_count": total_assessments - assessed_count,
+            "progress_percentage": progress_percentage,
             "has_previous": visit_index > 0,
             "has_next": visit_index < total_visits - 1,
             "previous_index": visit_index - 1 if visit_index > 0 else 0,
@@ -415,13 +409,29 @@ class AuditVisitDataView(LoginRequiredMixin, View):
         }
 
         if current_visit:
-            # Get existing image notes if audit result exists
-            image_notes = {}
-            if hasattr(current_visit, "audit_result") and current_visit.audit_result:
-                from .models import AuditImageNote
+            # Get assessments for this visit's images
+            audit_result = existing_results.get(current_visit.id)
+            assessments_data = []
 
-                existing_image_notes = AuditImageNote.objects.filter(audit_result=current_visit.audit_result)
-                image_notes = {note.blob_id: note.note for note in existing_image_notes}
+            if audit_result:
+                assessments = Assessment.objects.filter(audit_result=audit_result).select_related("audit_result")
+                assessments_by_blob = {a.blob_id: a for a in assessments}
+
+                for idx, image in enumerate(current_visit.images.all()):
+                    assessment = assessments_by_blob.get(image.blob_id)
+                    if assessment:
+                        assessments_data.append(
+                            {
+                                "id": assessment.id,
+                                "blob_id": image.blob_id,
+                                "image_url": request.build_absolute_uri(f"/audit/image/{image.blob_id}/"),
+                                "question_id": assessment.question_id,
+                                "result": assessment.result,
+                                "notes": assessment.notes or "",
+                                "submitting": False,
+                                "noteOpen": False,
+                            }
+                        )
 
             visit_data.update(
                 {
@@ -436,7 +446,7 @@ class AuditVisitDataView(LoginRequiredMixin, View):
                     }
                     if hasattr(current_visit, "audit_result") and current_visit.audit_result
                     else None,
-                    "image_notes": image_notes,
+                    "assessments": assessments_data,
                     "images": [
                         {
                             "blob_id": image.blob_id,
@@ -791,6 +801,49 @@ class DatabaseResetAPIView(LoginRequiredMixin, View):
             return JsonResponse({"error": str(e), "traceback": traceback.format_exc()}, status=500)
 
 
+class DownloadMissingAttachmentsAPIView(LoginRequiredMixin, View):
+    """API endpoint for downloading missing attachments for all audit sessions"""
+
+    def post(self, request):
+        from commcare_connect.audit.services.database_manager import download_missing_attachments
+
+        try:
+            # Create progress tracker
+            progress_tracker = ProgressTracker()
+            task_id = progress_tracker.task_id
+
+            # Initialize progress with steps
+            progress_tracker.steps = [
+                {"name": "scanning", "message": "Scanning audit sessions...", "percentage": 0, "status": "pending"},
+                {"name": "attachments", "message": "Downloading attachments...", "percentage": 0, "status": "pending"},
+                {
+                    "name": "assessments",
+                    "message": "Regenerating assessments...",
+                    "percentage": 0,
+                    "status": "pending",
+                },
+            ]
+
+            # Start download in background thread
+            def run_download():
+                try:
+                    download_missing_attachments(progress_tracker=progress_tracker)
+                except Exception as e:
+                    import traceback
+
+                    progress_tracker.error(str(e), traceback.format_exc())
+
+            download_thread = threading.Thread(target=run_download, daemon=True)
+            download_thread.start()
+
+            return JsonResponse({"success": True, "task_id": task_id})
+
+        except Exception as e:
+            import traceback
+
+            return JsonResponse({"error": str(e), "traceback": traceback.format_exc()}, status=500)
+
+
 class AuditDefinitionExportView(LoginRequiredMixin, View):
     """Export an audit definition as JSON"""
 
@@ -833,3 +886,174 @@ class AuditDefinitionImportView(LoginRequiredMixin, View):
             import traceback
 
             return JsonResponse({"error": str(e), "traceback": traceback.format_exc()}, status=500)
+
+
+class BulkAssessmentView(LoginRequiredMixin, DetailView):
+    """Bulk assessment interface for rapid image review"""
+
+    model = AuditSession
+    template_name = "audit/bulk_assessment.html"
+    context_object_name = "session"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        session = self.get_object()
+
+        # Get filter parameters
+        question_id_filter = self.request.GET.get("question_id", "")
+        status_filter = self.request.GET.get("status", "all")  # all, pending, pass, fail
+
+        # Get all assessments for this session
+        assessments = (
+            Assessment.objects.filter(
+                audit_result__audit_session=session, assessment_type=Assessment.AssessmentType.IMAGE
+            )
+            .select_related("audit_result__user_visit")
+            .order_by("question_id", "assessed_at")
+        )
+
+        # Filter by question_id if specified
+        if question_id_filter:
+            assessments = assessments.filter(question_id=question_id_filter)
+
+        # Filter by status if specified
+        if status_filter == "pending":
+            assessments = assessments.filter(result__isnull=True)
+        elif status_filter == "pass":
+            assessments = assessments.filter(result="pass")
+        elif status_filter == "fail":
+            assessments = assessments.filter(result="fail")
+
+        # Get unique question_ids for filter dropdown
+        question_ids = (
+            Assessment.objects.filter(
+                audit_result__audit_session=session, assessment_type=Assessment.AssessmentType.IMAGE
+            )
+            .values_list("question_id", flat=True)
+            .distinct()
+            .order_by("question_id")
+        )
+
+        # Calculate statistics
+        all_assessments = Assessment.objects.filter(
+            audit_result__audit_session=session, assessment_type=Assessment.AssessmentType.IMAGE
+        ).select_related("audit_result__user_visit")
+
+        total_assessments = all_assessments.count()
+        pending_count = all_assessments.filter(result__isnull=True).count()
+        pass_count = all_assessments.filter(result="pass").count()
+        fail_count = all_assessments.filter(result="fail").count()
+
+        context.update(
+            {
+                "assessments": assessments,
+                "all_assessments": all_assessments,  # All assessments for visit summaries
+                "question_ids": question_ids,
+                "selected_question_id": question_id_filter,
+                "selected_status": status_filter,
+                "total_assessments": total_assessments,
+                "pending_count": pending_count,
+                "pass_count": pass_count,
+                "fail_count": fail_count,
+            }
+        )
+
+        return context
+
+
+class AssessmentUpdateView(LoginRequiredMixin, View):
+    """AJAX endpoint for updating individual assessments"""
+
+    def post(self, request, assessment_id):
+        try:
+            result = request.POST.get("result")  # 'pass', 'fail', or None/'' to clear
+            notes = request.POST.get("notes")  # Can be None if not provided
+
+            assessment = get_object_or_404(Assessment, id=assessment_id)
+
+            # Update assessment result if provided
+            if result in ["pass", "fail"]:
+                assessment.result = result
+                assessment.assessed_at = timezone.now()
+            elif result == "":  # Clear result
+                assessment.result = None
+                assessment.assessed_at = None
+
+            # Update notes if provided
+            if notes is not None:
+                assessment.notes = notes
+
+            assessment.save()
+
+            # Return updated statistics
+            session = assessment.audit_result.audit_session
+            stats = self._get_session_stats(session)
+
+            return JsonResponse(
+                {"success": True, "assessment_id": assessment_id, "result": assessment.result, "stats": stats}
+            )
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    def _get_session_stats(self, session):
+        """Calculate assessment statistics for a session"""
+        assessments = Assessment.objects.filter(
+            audit_result__audit_session=session, assessment_type=Assessment.AssessmentType.IMAGE
+        )
+
+        return {
+            "total": assessments.count(),
+            "pending": assessments.filter(result__isnull=True).count(),
+            "pass": assessments.filter(result="pass").count(),
+            "fail": assessments.filter(result="fail").count(),
+        }
+
+
+class ApplyAssessmentResultsView(LoginRequiredMixin, View):
+    """Apply assessment results to visit-level AuditResults"""
+
+    def post(self, request, session_id):
+        try:
+            session = get_object_or_404(AuditSession, id=session_id)
+
+            # Get all audit results for this session
+            audit_results = AuditResult.objects.filter(audit_session=session).prefetch_related("assessments")
+
+            updated_count = 0
+            visits_failed = 0
+            visits_passed = 0
+
+            for audit_result in audit_results:
+                # Check if any assessment failed
+                assessments = audit_result.assessments.all()
+                has_failure = assessments.filter(result="fail").exists()
+                all_assessed = not assessments.filter(result__isnull=True).exists()
+
+                old_result = audit_result.result
+
+                # Apply logic: if any assessment failed, fail the visit
+                if has_failure:
+                    audit_result.result = "fail"
+                    visits_failed += 1
+                elif all_assessed and assessments.exists():
+                    # All assessments passed
+                    audit_result.result = "pass"
+                    visits_passed += 1
+
+                if old_result != audit_result.result:
+                    updated_count += 1
+                    audit_result.save()
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "updated_count": updated_count,
+                    "visits_passed": visits_passed,
+                    "visits_failed": visits_failed,
+                    "message": f"Updated {updated_count} visit results based on assessments",
+                }
+            )
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)

@@ -319,6 +319,9 @@ commcare_connect/media/
 commcare_connect/static/bundles/
 webpack-stats.json
 
+# Test scripts with credentials
+commcare_connect/audit/tests/test_connect_staging_api.py
+
 # Elastic Beanstalk Files
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml

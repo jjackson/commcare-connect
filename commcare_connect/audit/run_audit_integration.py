@@ -24,6 +24,8 @@ Usage:
         baseline_100pct  - Search "readers", select top 2, no sampling (100%)
         sampling_50pct   - Search "readers", select top 2, 50% sampling
         sampling_25pct   - Search "readers", select top 2, 25% sampling
+        random_flws_50   - Search "readers", top 2, 2 random FLWs, last 50 per FLW
+        random_flws_all  - Search "readers", top 2, 5 random FLWs, ALL visits per FLW
 """
 
 import os
@@ -86,6 +88,10 @@ class AuditRunConfig:
     # --- Sampling ---
     # Control what percentage of matching visits to include
     sample_percentage: int = 100  # Percentage to sample (1-100, default 100 = no sampling)
+
+    # --- FLW Selection ---
+    # Control which FLWs to include in the audit
+    random_flw_count: int = None  # If set, randomly select N FLWs instead of all FLWs
 
     # --- Runtime Options ---
     auditor_username: str = "integration_test"  # Username of person running the test
@@ -151,6 +157,28 @@ RUN_CONFIGS = {
         granularity="per_flw",
         count_per_flw=2,
         sample_percentage=100,
+    ),
+    "random_flws_50": AuditRunConfig(
+        name="Random FLWs - Readers Top 2, 2 Random FLWs, Last 50 per FLW",
+        search_query="readers",
+        select_strategy="top_by_visits",
+        select_count=2,
+        audit_type="last_n_per_flw",
+        granularity="per_flw",
+        count_per_flw=50,
+        sample_percentage=100,
+        random_flw_count=2,  # Randomly select 2 FLWs
+    ),
+    "random_flws_all": AuditRunConfig(
+        name="Random FLWs - Readers Top 2, 5 Random FLWs, ALL Visits per FLW",
+        search_query="readers",
+        select_strategy="top_by_visits",
+        select_count=2,
+        audit_type="last_n_per_flw",
+        granularity="per_flw",
+        count_per_flw=99999,  # Large number to get all visits
+        sample_percentage=100,
+        random_flw_count=5,  # Randomly select 5 FLWs
     ),
 }
 
@@ -352,12 +380,33 @@ def create_audit(facade: ConnectAPIFacade, config: AuditRunConfig, preview_resul
     # Get the audit_definition from the preview result if available
     audit_definition = preview_result.audit_definition if preview_result else None
 
+    # Handle random FLW selection if configured
+    selected_flw_user_ids = None
+    if config.random_flw_count and config.granularity == "per_flw":
+        print(f"\n  Selecting {config.random_flw_count} random FLWs...")
+        import random
+
+        # Get all available FLWs
+        all_flws = facade.get_unique_flws_across_opportunities(config.opportunity_ids)
+        print(f"  Found {len(all_flws)} total FLWs")
+
+        if len(all_flws) <= config.random_flw_count:
+            print(f"  [WARNING] Only {len(all_flws)} FLWs available, using all")
+            selected_flw_user_ids = [flw["user_id"] for flw in all_flws]
+        else:
+            # Randomly select N FLWs
+            selected_flws = random.sample(all_flws, config.random_flw_count)
+            selected_flw_user_ids = [flw["user_id"] for flw in selected_flws]
+            print("  Selected FLWs:")
+            for flw in selected_flws:
+                print(f"    - {flw['username']} (ID: {flw['user_id']})")
+
     result = create_audit_sessions(
         facade=facade,
         opportunity_ids=config.opportunity_ids,
         criteria=criteria,
         auditor_username=config.auditor_username,
-        limit_flws=None,
+        selected_flw_user_ids=selected_flw_user_ids,
         audit_definition=audit_definition,
     )
 

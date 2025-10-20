@@ -494,6 +494,22 @@ def create_audit_sessions(
         if progress_tracker:
             progress_tracker.complete_step("attachments", "All attachments downloaded")
 
+        # Step 5: Generate assessments for all sessions (after attachments are downloaded)
+        print("[INFO] Generating assessments for all audit sessions...")
+        from commcare_connect.audit.services.assessment_generator import generate_assessments_for_session
+
+        total_assessments = 0
+        for session in created_sessions:
+            assessment_stats = generate_assessments_for_session(session)
+            total_assessments += assessment_stats["assessments_created"]
+            if progress_tracker:
+                progress_tracker.log(
+                    f"Session {session.id}: Generated {assessment_stats['assessments_created']} assessments "
+                    f"for {assessment_stats['images_processed']} images"
+                )
+
+        print(f"[OK] Generated {total_assessments} assessments across {len(created_sessions)} session(s)")
+
         # Complete progress tracking
         if progress_tracker:
             progress_tracker.update(100, 100, "Audit creation completed!", "complete")

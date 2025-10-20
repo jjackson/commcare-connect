@@ -284,16 +284,11 @@ class AuditSession(models.Model):
 
     @property
     def progress_percentage(self):
-        """Calculate audit progress as percentage"""
-        # Total visits is the explicit set of visits assigned to this session
-        total_visits = self.visits.count()
+        """Calculate audit progress as percentage based on assessed images"""
+        from commcare_connect.audit.helpers import calculate_audit_progress
 
-        if total_visits == 0:
-            return 0
-
-        # Audited visits are those with results
-        audited_visits = self.results.count()
-        return round((audited_visits / total_visits) * 100, 1)
+        percentage, _, _ = calculate_audit_progress(self)
+        return percentage
 
 
 # AuditVisit removed - using UserVisit directly for full production compatibility
@@ -325,8 +320,59 @@ class AuditResult(models.Model):
         return f"{self.user_visit} - {self.result}"
 
 
+class Assessment(models.Model):
+    """Individual assessment within an audit result (e.g., for a specific image)"""
+
+    class AssessmentType(models.TextChoices):
+        IMAGE = "image", _("Image Assessment")
+        # Future: FLAG, DATA_ELEMENT, etc.
+
+    class Result(models.TextChoices):
+        PASS = "pass", _("Pass")
+        FAIL = "fail", _("Fail")
+        # Future: NEEDS_REVIEW, etc.
+
+    audit_result = models.ForeignKey(AuditResult, on_delete=models.CASCADE, related_name="assessments")
+
+    assessment_type = models.CharField(
+        max_length=50, choices=AssessmentType.choices, help_text="Type of assessment (image, flag, data element, etc.)"
+    )
+
+    # For image assessments
+    blob_id = models.CharField(max_length=255, blank=True, help_text="Blob ID if this is an image assessment")
+    question_id = models.CharField(
+        max_length=255, blank=True, help_text="CommCare question ID associated with this assessment"
+    )
+
+    # Assessment result
+    result = models.CharField(
+        max_length=10,
+        choices=Result.choices,
+        null=True,
+        blank=True,
+        help_text="Assessment result (null = not yet assessed)",
+    )
+
+    notes = models.TextField(blank=True, help_text="Notes about this specific assessment")
+
+    # Future fields for other assessment types
+    config_data = models.JSONField(null=True, blank=True, help_text="Configuration data for this assessment type")
+
+    assessed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["question_id", "blob_id"]
+        indexes = [
+            models.Index(fields=["audit_result", "assessment_type"]),
+            models.Index(fields=["blob_id"]),
+        ]
+
+    def __str__(self):
+        return f"{self.assessment_type} - {self.result or 'pending'}"
+
+
 class AuditImageNote(models.Model):
-    """Notes for specific images within an audit result"""
+    """DEPRECATED: Notes for specific images within an audit result. Use Assessment model instead."""
 
     audit_result = models.ForeignKey(AuditResult, on_delete=models.CASCADE, related_name="image_notes")
     blob_id = models.CharField(max_length=255, help_text="The blob ID of the image this note refers to")

@@ -6,6 +6,36 @@ from django.db.models import Q
 from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 
 
+def calculate_audit_progress(audit_session):
+    """
+    Calculate the audit progress percentage based on assessed images.
+
+    Progress is determined by the number of assessments that have been reviewed
+    (have a non-null result) compared to the total number of assessments.
+
+    Args:
+        audit_session: AuditSession object
+
+    Returns:
+        Tuple of (percentage, assessed_count, total_count)
+    """
+    from commcare_connect.audit.models import Assessment
+
+    # Get all assessments for this audit session
+    assessments = Assessment.objects.filter(audit_result__audit_session=audit_session)
+    total_assessments = assessments.count()
+
+    if total_assessments == 0:
+        return 0.0, 0, 0
+
+    # Count assessments that have been reviewed (have a result)
+    assessed_count = assessments.exclude(result__isnull=True).count()
+
+    percentage = round((assessed_count / total_assessments) * 100, 1)
+
+    return percentage, assessed_count, total_assessments
+
+
 def get_approved_visits_for_audit(flw_user, opportunity, start_date, end_date):
     """
     Get UserVisit records that are approved and have images for auditing

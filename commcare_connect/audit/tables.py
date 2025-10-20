@@ -107,14 +107,26 @@ class AuditSessionTable(tables.Table):
         """Render progress percentage with counts"""
         formatted_value = f"{value:.1f}"
         total_visits = record.visits.count()
-        completed_visits = record.results.count()
+
+        # Count audited visits (where all assessments have been reviewed)
+        audited_visits = 0
+        for result in record.results.prefetch_related("assessments"):
+            assessments = result.assessments.all()
+            if assessments:
+                # Has assessments - check if all are reviewed
+                if all(assessment.result is not None for assessment in assessments):
+                    audited_visits += 1
+            else:
+                # No assessments (e.g., no images) - consider it audited
+                audited_visits += 1
+
         return format_html(
             '<div class="text-center">'
             '<div class="text-sm font-medium text-brand-deep-purple">{}%</div>'
             '<div class="text-xs text-gray-500">({} of {})</div>'
             "</div>",
             formatted_value,
-            completed_visits,
+            audited_visits,
             total_visits,
         )
 
@@ -144,8 +156,12 @@ class AuditSessionTable(tables.Table):
     def render_actions(self, record):
         """Render action buttons"""
         audit_url = reverse("audit:session_detail", kwargs={"pk": record.pk})
+        bulk_url = reverse("audit:bulk_assessment", kwargs={"pk": record.pk})
 
-        buttons = [format_html('<a href="{}" class="button button-sm primary-light">{}</a>', audit_url, _("Audit"))]
+        buttons = [
+            format_html('<a href="{}" class="button button-sm primary-light">{}</a>', audit_url, _("Single")),
+            format_html('<a href="{}" class="button button-sm outline-style">{}</a>', bulk_url, _("Bulk")),
+        ]
 
         if record.status == AuditSession.Status.COMPLETED:
             export_url = reverse("audit:session_export", kwargs={"pk": record.pk})
