@@ -214,6 +214,7 @@ class OpportunityList(OrganizationUserMixin, FilterMixin, SingleTableView):
     def get_table_data(self):
         org = self.request.org
         is_program_manager = org.program_manager
+        self.track_filter_usage()
         return OpportunityData(org, is_program_manager, self.get_filter_values()).get_data()
 
 
@@ -1934,6 +1935,7 @@ class WorkerDeliverView(BaseWorkerListView, FilterMixin):
         return context
 
     def get_table(self, opportunity, org_slug):
+        self.track_filter_usage()
         data = get_annotated_opportunity_access_deliver_status(opportunity, self.get_filter_values())
         table = WorkerDeliveryTable(data, org_slug=org_slug, opp_id=opportunity.id)
         RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
