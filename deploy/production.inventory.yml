@@ -7,7 +7,6 @@ webservers:
     celery0:
       ansible_host: i-0816b5db3a153135e
   vars:
-    ansible_user: ubuntu
     secrets_file: 'Ansible Secrets - Production'
     commcare_hq_url: 'https://www.commcarehq.org'
     deploy_environment: 'production'
