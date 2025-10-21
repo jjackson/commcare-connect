@@ -98,6 +98,18 @@
       selectedTab: '{{ request.GET.active_tab|default:"details" }}',
       showAddMemberModal: false,
       isHistoryAvailable: false,
+      selected: [],
+      selectAll: false,
+
+      toggleSelectAll() {
+        this.selectAll = !this.selectAll;
+        if (this.selectAll) {
+          this.selected = Array.from(document.querySelectorAll('input[name="row_select"]'))
+            .map(c => c.value);
+        } else {
+          this.selected = [];
+        }
+      },
 
       init() {
         this.updateUrl(this.selectedTab);
