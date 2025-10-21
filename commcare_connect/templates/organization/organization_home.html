@@ -3,6 +3,7 @@
 {% load crispy_forms_tags %}
 {% load django_tables2 %}
 {% block content %}
+{% load i18n %}
 
 <p class="my-5 text-sm max-w-screen-lg mx-auto font-medium text-brand-deep-purple">{{request.org.name}}</p>
 
@@ -28,8 +29,15 @@
 
     <!-- Options -->
       <div x-show="selectedTab === 'members'" class="flex items-center gap-x-4">
+        <button
+          class="button button-md bg-red-600 hover:bg-red-700 text-white"
+          :disabled="{% if request.org_membership.is_viewer %}true{% else %}selected.length === 0{% endif %}"
+        >
+          <i class="fa-solid fa-trash"></i>
+          {% trans 'Remove Member(s)' %}
+        </button>
         <button class="button button-md outline-style" @click="showAddMemberModal = true">
-          Add Members
+          {% trans 'Add Members' %}
         </button>
       </div>
   </div>
