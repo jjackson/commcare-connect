@@ -79,9 +79,18 @@ def add_members_form(request, org_slug):
 @api_view(["POST"])
 @org_admin_required
 def remove_members(request, org_slug):
-    # Todo
-    url = reverse("organization:home", args=(org_slug,)) + "?active_tab=members"
-    return redirect(url)
+    membership_ids = request.POST.getlist("membership_ids")
+    redirect_url = reverse("organization:home", args=(org_slug,)) + "?active_tab=members"
+
+    if str(request.org_membership.id) in membership_ids:
+        messages.error(request, message=gettext("You cannot remove yourself from the organization."))
+        return redirect(redirect_url)
+
+    if membership_ids:
+        UserOrganizationMembership.objects.filter(pk__in=membership_ids, organization__slug=org_slug).delete()
+        messages.success(request, message=gettext("Selected members have been removed from the organization."))
+
+    return redirect(redirect_url)
 
 
 @login_required
