@@ -76,6 +76,14 @@ def add_members_form(request, org_slug):
     return redirect(url)
 
 
+@api_view(["POST"])
+@org_admin_required
+def remove_members(request, org_slug):
+    # Todo
+    url = reverse("organization:home", args=(org_slug,)) + "?active_tab=members"
+    return redirect(url)
+
+
 @login_required
 def accept_invite(request, org_slug, invite_id):
     get_object_or_404(UserOrganizationMembership, invite_id=invite_id)
