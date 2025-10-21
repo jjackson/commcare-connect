@@ -305,7 +305,9 @@ class AuditResult(models.Model):
     user_visit = models.ForeignKey(
         "opportunity.UserVisit", on_delete=models.CASCADE, help_text="The UserVisit being audited"
     )
-    result = models.CharField(max_length=10, choices=Result.choices, help_text="Pass or fail for this visit")
+    result = models.CharField(
+        max_length=10, choices=Result.choices, null=True, blank=True, help_text="Pass or fail for this visit"
+    )
     notes = models.TextField(blank=True, help_text="Optional notes about why this visit failed")
     audited_at = models.DateTimeField(auto_now_add=True)
 
@@ -361,6 +363,7 @@ class Assessment(models.Model):
     assessed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+        unique_together = ["audit_result", "assessment_type", "blob_id"]
         ordering = ["question_id", "blob_id"]
         indexes = [
             models.Index(fields=["audit_result", "assessment_type"]),

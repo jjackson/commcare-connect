@@ -16,6 +16,7 @@ urlpatterns = [
     # AJAX endpoints
     path("api/results/<int:session_id>/update/", views.AuditResultUpdateView.as_view(), name="result_update"),
     path("api/assessment/<int:assessment_id>/update/", views.AssessmentUpdateView.as_view(), name="assessment_update"),
+    path("api/visit/<int:visit_id>/result/", views.VisitResultUpdateView.as_view(), name="visit_result_update"),
     path(
         "api/sessions/<int:session_id>/apply-results/",
         views.ApplyAssessmentResultsView.as_view(),

@@ -228,15 +228,28 @@ class AuditExportView(LoginRequiredMixin, DetailView):
             "visit_results": [],
         }
 
-        # Build visit results with images
-        # TODO: Include assessments in export
-        for result in session.results.select_related("user_visit__user").all():
-            # Build images list
+        # Build visit results with images and assessments
+        for result in session.results.select_related("user_visit__user").prefetch_related("assessments").all():
+            # Get assessments by blob_id for easy lookup
+            assessments_by_blob = {a.blob_id: a for a in result.assessments.all()}
+
+            # Build images list with assessment data
             images = []
             for img in result.user_visit.images.all():
+                assessment = assessments_by_blob.get(img.blob_id)
                 image_data = {
                     "filename": img.name,
+                    "blob_id": img.blob_id,
+                    "question_id": img.question_id,
                 }
+                # Include assessment data if it exists
+                if assessment:
+                    image_data["assessment"] = {
+                        "result": assessment.result,
+                        "notes": assessment.notes,
+                        "assessed_at": assessment.assessed_at.isoformat() if assessment.assessed_at else None,
+                        "assessment_type": assessment.assessment_type,
+                    }
                 images.append(image_data)
 
             visit_result = {
@@ -281,15 +294,28 @@ class AuditExportAllView(LoginRequiredMixin, View):
         for session in completed_sessions:
             visit_results = []
 
-            # Build visit results with images
-            # TODO: Include assessments in export
-            for result in session.results.select_related("user_visit__user").all():
-                # Build images list
+            # Build visit results with images and assessments
+            for result in session.results.select_related("user_visit__user").prefetch_related("assessments").all():
+                # Get assessments by blob_id for easy lookup
+                assessments_by_blob = {a.blob_id: a for a in result.assessments.all()}
+
+                # Build images list with assessment data
                 images = []
                 for img in result.user_visit.images.all():
+                    assessment = assessments_by_blob.get(img.blob_id)
                     image_data = {
                         "filename": img.name,
+                        "blob_id": img.blob_id,
+                        "question_id": img.question_id,
                     }
+                    # Include assessment data if it exists
+                    if assessment:
+                        image_data["assessment"] = {
+                            "result": assessment.result,
+                            "notes": assessment.notes,
+                            "assessed_at": assessment.assessed_at.isoformat() if assessment.assessed_at else None,
+                            "assessment_type": assessment.assessment_type,
+                        }
                     images.append(image_data)
 
                 visit_result = {
@@ -909,7 +935,7 @@ class BulkAssessmentView(LoginRequiredMixin, DetailView):
                 audit_result__audit_session=session, assessment_type=Assessment.AssessmentType.IMAGE
             )
             .select_related("audit_result__user_visit")
-            .order_by("question_id", "assessed_at")
+            .order_by("audit_result__user_visit__visit_date", "question_id")
         )
 
         # Filter by question_id if specified
@@ -935,9 +961,13 @@ class BulkAssessmentView(LoginRequiredMixin, DetailView):
         )
 
         # Calculate statistics
-        all_assessments = Assessment.objects.filter(
-            audit_result__audit_session=session, assessment_type=Assessment.AssessmentType.IMAGE
-        ).select_related("audit_result__user_visit")
+        all_assessments = (
+            Assessment.objects.filter(
+                audit_result__audit_session=session, assessment_type=Assessment.AssessmentType.IMAGE
+            )
+            .select_related("audit_result__user_visit")
+            .order_by("audit_result__user_visit__visit_date", "question_id")
+        )
 
         total_assessments = all_assessments.count()
         pending_count = all_assessments.filter(result__isnull=True).count()
@@ -1008,6 +1038,31 @@ class AssessmentUpdateView(LoginRequiredMixin, View):
             "pass": assessments.filter(result="pass").count(),
             "fail": assessments.filter(result="fail").count(),
         }
+
+
+class VisitResultUpdateView(LoginRequiredMixin, View):
+    """AJAX endpoint for updating visit-level result (AuditResult)"""
+
+    def post(self, request, visit_id):
+        try:
+            from commcare_connect.audit.models import AuditResult
+
+            result = request.POST.get("result")  # 'pass', 'fail', or '' to clear
+
+            # Allow empty string to clear the result
+            if result == "":
+                result = None
+            elif result not in ["pass", "fail"]:
+                return JsonResponse({"error": "Invalid result. Must be 'pass', 'fail', or empty to clear"}, status=400)
+
+            audit_result = get_object_or_404(AuditResult, user_visit_id=visit_id)
+            audit_result.result = result
+            audit_result.save()
+
+            return JsonResponse({"success": True, "visit_id": visit_id, "result": result})
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
 
 
 class ApplyAssessmentResultsView(LoginRequiredMixin, View):
