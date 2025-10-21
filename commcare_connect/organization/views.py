@@ -1,3 +1,5 @@
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
@@ -80,7 +82,9 @@ def add_members_form(request, org_slug):
 @org_admin_required
 def remove_members(request, org_slug):
     membership_ids = request.POST.getlist("membership_ids")
-    redirect_url = reverse("organization:home", args=(org_slug,)) + "?active_tab=members"
+    base_url = reverse("organization:home", args=(org_slug,))
+    query_params = urlencode({"active_tab": "members"})
+    redirect_url = f"{base_url}?{query_params}"
 
     if str(request.org_membership.id) in membership_ids:
         messages.error(request, message=gettext("You cannot remove yourself from the organization."))
