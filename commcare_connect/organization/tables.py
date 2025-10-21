@@ -25,6 +25,7 @@ class OrgMemberTable(tables.Table):
                 "class": "checkbox",
                 "value": lambda record: record.pk,
                 "id": lambda record: f"row_checkbox_{record.pk}",
+                ":disabled": lambda record: f"currentUserMembershipId === '{record.pk}'",
             },
         },
     )

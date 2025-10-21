@@ -84,12 +84,14 @@
       selected: [],
       selectAll: false,
       showConfirmRemoveMembershipModal: false,
+      currentUserMembershipId: '{{ request.org_membership.id }}',
 
       toggleSelectAll() {
         this.selectAll = !this.selectAll;
         if (this.selectAll) {
           this.selected = Array.from(document.querySelectorAll('input[name="row_select"]'))
-            .map(c => c.value);
+            .map(c => c.value)
+            .filter(c => c !== this.currentUserMembershipId);
         } else {
           this.selected = [];
         }
