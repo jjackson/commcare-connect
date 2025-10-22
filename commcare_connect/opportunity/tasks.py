@@ -450,6 +450,7 @@ def fetch_exchange_rates(date=None, currency=None):
         return ExchangeRate.objects.create(currency_code=currency, rate=rate, rate_date=date)
 
 
+@celery_app.task()
 def issue_user_credentials():
     query = CredentialConfiguration.objects.select_related("opportunity")
 
