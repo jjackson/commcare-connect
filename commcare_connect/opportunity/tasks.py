@@ -488,18 +488,12 @@ def get_delivery_user_credentials(credential_config):
         .filter(deliveries_count__gte=level_int)
         .values_list("opportunity_access__user_id", flat=True)
     )
-    return [
-        UserCredential(
-            **{
-                "user_id": user_id,
-                "credential_type": UserCredential.CredentialType.DELIVERY,
-                "level": credential_config.delivery_level,
-                "opportunity": credential_config.opportunity,
-                "delivery_type": credential_config.opportunity.delivery_type,
-            }
-        )
-        for user_id in users_earning_credentials
-    ]
+    return _parse_to_user_credential_models(
+        credential_config=credential_config,
+        users_earning_credentials=users_earning_credentials,
+        credential_type=UserCredential.CredentialType.DELIVERY,
+        level=credential_config.delivery_level,
+    )
 
 
 def get_learning_user_credentials(credential_config):
@@ -517,18 +511,12 @@ def get_learning_user_credentials(credential_config):
         .exclude(opportunity_access__user_id__in=user_ids_to_exclude)
         .values_list("opportunity_access__user_id", flat=True)
     )
-    return [
-        UserCredential(
-            **{
-                "user_id": user_id,
-                "credential_type": UserCredential.CredentialType.LEARN,
-                "level": credential_config.learn_level,
-                "opportunity": credential_config.opportunity,
-                "delivery_type": credential_config.opportunity.delivery_type,
-            }
-        )
-        for user_id in users_earning_credentials
-    ]
+    return _parse_to_user_credential_models(
+        credential_config=credential_config,
+        users_earning_credentials=users_earning_credentials,
+        credential_type=UserCredential.CredentialType.LEARN,
+        level=credential_config.learn_level,
+    )
 
 
 def _get_users_ids_to_exclude(opportunity, credential_type, level):
@@ -537,3 +525,18 @@ def _get_users_ids_to_exclude(opportunity, credential_type, level):
         credential_type=credential_type,
         level=level,
     ).values_list("user__id", flat=True)
+
+
+def _parse_to_user_credential_models(credential_config, users_earning_credentials, credential_type, level):
+    return [
+        UserCredential(
+            **{
+                "user_id": user_id,
+                "credential_type": credential_type,
+                "level": level,
+                "opportunity": credential_config.opportunity,
+                "delivery_type": credential_config.opportunity.delivery_type,
+            }
+        )
+        for user_id in users_earning_credentials
+    ]
