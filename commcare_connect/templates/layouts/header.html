@@ -72,12 +72,16 @@
                             {% endif %}
                         </li>
                         <li class="p-2 hover:bg-gray-100 rounded cursor-pointer text-left">
-                            <p class="text-brand-deep-purple"><a href="{% url 'account_email' %}">{% translate "Profile" %}</a></p>
+                            <a href="{% url 'account_email' %}">
+                              <p class="text-brand-deep-purple">{% translate "Profile" %}</p>
+                            </a>>
                         </li>
                         <li class="p-2 cursor-pointer">
+                          <a href="{% url 'account_logout' %}">
                             <div class="bg-brand-indigo text-white px-8 py-2 rounded-lg shadow-md hover:bg-blue-800 transition">
-                                <a href="{% url 'account_logout' %}">{% translate "Logout" %}</a>
+                              {% translate "Logout" %}
                             </div>
+                          </a>
                         </li>
                     </ul>
                 </div>
