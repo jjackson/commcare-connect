@@ -244,16 +244,11 @@ class CompletedWorkTable(tables.Table):
 
 class SuspendedUsersTable(tables.Table):
     display_name = columns.Column("Name of the User")
-    revoke_suspension = columns.LinkColumn(
-        "opportunity:revoke_user_suspension",
-        verbose_name="",
-        text="Revoke",
-        args=[utils.A("opportunity__organization__slug"), utils.A("opportunity__id"), utils.A("pk")],
-    )
+    revoke_suspension = columns.TemplateColumn("Revoke")
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "suspension_date", "suspension_reason")
+        fields = ("display_name", "suspension_date", "suspension_reason",  "revoke_suspension")
         orderable = False
         empty_text = "No suspended users."
 
@@ -268,7 +263,12 @@ class SuspendedUsersTable(tables.Table):
         page_url = reverse(
             "opportunity:suspended_users_list", args=(record.opportunity.organization.slug, record.opportunity_id)
         )
-        return format_html('<a class="btn btn-success" href="{}?next={}">Revoke</a>', revoke_url, page_url)
+        html = render_to_string(
+            "opportunity/partials/revoke_suspension.html",
+            {"revoke_url": revoke_url, "page_url": page_url},
+            request=self.context.request
+        )
+        return format_html(html)
 
 
 class CatchmentAreaTable(tables.Table):
