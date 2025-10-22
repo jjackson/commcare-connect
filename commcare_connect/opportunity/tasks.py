@@ -462,18 +462,7 @@ def issue_user_credentials():
         if credential_config.learn_level:
             user_credentials_data.extend(get_learning_user_credentials(credential_config))
 
-        UserCredential.objects.bulk_create(
-            [
-                UserCredential(
-                    user_id=data["user_id"],
-                    opportunity=credential_config.opportunity,
-                    delivery_type=credential_config.opportunity.delivery_type,
-                    credential_type=data["credential_type"],
-                    level=data["level"],
-                )
-                for data in user_credentials_data
-            ]
-        )
+        UserCredential.objects.bulk_create(user_credentials_data)
         # Todo: send to PersonalID for credential issuance
         # Ticket: CCCT-1725
 
@@ -486,7 +475,7 @@ def get_delivery_user_credentials(credential_config):
         credential_type=UserCredential.CredentialType.DELIVERY,
         level=credential_config.delivery_level,
     )
-    level_int = delivery_level_to_int(credential_config.level)
+    level_int = delivery_level_to_int(credential_config.delivery_level)
 
     users_earning_credentials = (
         CompletedWork.objects.filter(
@@ -499,14 +488,17 @@ def get_delivery_user_credentials(credential_config):
         .filter(deliveries_count__gte=level_int)
         .values_list("opportunity_access__user_id", flat=True)
     )
-
     return [
-        {
-            "user_id": user_visit.user.id,
-            "credential_type": UserCredential.CredentialType.DELIVERY,
-            "level": credential_config.delivery_level,
-        }
-        for user_visit in users_earning_credentials
+        UserCredential(
+            **{
+                "user_id": user_id,
+                "credential_type": UserCredential.CredentialType.DELIVERY,
+                "level": credential_config.delivery_level,
+                "opportunity": credential_config.opportunity,
+                "delivery_type": credential_config.opportunity.delivery_type,
+            }
+        )
+        for user_id in users_earning_credentials
     ]
 
 
@@ -525,13 +517,16 @@ def get_learning_user_credentials(credential_config):
         .exclude(opportunity_access__user_id__in=user_ids_to_exclude)
         .values_list("opportunity_access__user_id", flat=True)
     )
-
     return [
-        {
-            "user_id": user_id,
-            "credential_type": UserCredential.CredentialType.LEARN,
-            "level": credential_config.learn_level,
-        }
+        UserCredential(
+            **{
+                "user_id": user_id,
+                "credential_type": UserCredential.CredentialType.LEARN,
+                "level": credential_config.learn_level,
+                "opportunity": credential_config.opportunity,
+                "delivery_type": credential_config.opportunity.delivery_type,
+            }
+        )
         for user_id in users_earning_credentials
     ]
 

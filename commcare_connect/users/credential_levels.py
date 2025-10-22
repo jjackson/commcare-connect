@@ -15,5 +15,5 @@ class DeliveryLevel(models.TextChoices):
     ONE_THOUSAND = "1000_DELIVERIES", _("1000 Deliveries")
 
 
-def delivery_level_to_int(level: DeliveryLevel) -> int:
-    return int(level.value.split("_")[0])
+def delivery_level_to_int(level: str) -> int:
+    return int(level.split("_")[0])
