@@ -543,8 +543,8 @@ def issue_credentials_to_users():
     users_credential_qs = (
         UserCredential.objects.filter(issued_on__isnull=True)
         .values("credential_type", "level", "opportunity__id", "delivery_type__name")
-        .annotate(usernames=ArrayAgg("user__username"))
-        .annotate(credential_ids=ArrayAgg("id"))
+        .annotate(usernames=ArrayAgg("user__username", distinct=True))
+        .annotate(credential_ids=ArrayAgg("id", distinct=True))
         .order_by("credential_type", "level", "opportunity__id", "delivery_type__name")
     )
 
@@ -583,7 +583,6 @@ def submit_credentials(credential_id_sets_index, credentials_items: list[dict]):
     success_indices = submit_credentials_to_connect(credentials_items)
 
     successful_credential_ids = list(chain.from_iterable(credential_id_sets_index[i] for i in success_indices))
-
     UserCredential.objects.filter(id__in=successful_credential_ids).update(issued_on=now())
 
 
