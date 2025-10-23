@@ -81,6 +81,20 @@ def fetch_user_counts() -> dict[str, int]:
     return data
 
 
+def submit_credentials_to_connect(credentials_items: list[dict]):
+    # payload = {
+    #     "credentials": {
+    #         "usernames": ["username1"...],
+    #         "title": "Passed learning assessment for CHC",
+    #         "type": "LEARN", // LEARN or DELIVER
+    #         "level":"1K_DELIVERIES",
+    #         "slug": "opp_id",
+    #         "opportunity_id": "opp_id"
+    #     }
+    # }
+    pass
+
+
 def get_user_otp(phone_number):
     try:
         response = _make_request(GET, "/users/generate_manual_otp", params={"phone_number": phone_number})
