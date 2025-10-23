@@ -6,4 +6,5 @@ from .main import (  # noqa: F401
     filter_users,
     send_message,
     send_message_bulk,
+    submit_credentials_to_connect,
 )
