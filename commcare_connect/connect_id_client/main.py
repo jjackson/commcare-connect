@@ -54,6 +54,12 @@ def add_credential(organization: Organization, credential: str, users: list[str]
     return
 
 
+def add_credentials(credentials_items: list[dict]):
+    json = {"credentials": credentials_items}
+    response = _make_request(POST, "/users/add_credential", json=json, timeout=30)
+    return response.json()["success"]
+
+
 def fetch_credentials(org_slug=None):
     # this view no longer exists in it's current form
     # in connectid. we can add it back once the new design
@@ -79,20 +85,6 @@ def fetch_user_counts() -> dict[str, int]:
     response = _make_request(GET, "/users/fetch_user_counts")
     data = response.json()
     return data
-
-
-def submit_credentials_to_connect(credentials_items: list[dict]):
-    # payload = {
-    #     "credentials": {
-    #         "usernames": ["username1"...],
-    #         "title": "Passed learning assessment for CHC",
-    #         "type": "LEARN", // LEARN or DELIVER
-    #         "level":"1K_DELIVERIES",
-    #         "slug": "opp_id",
-    #         "opportunity_id": "opp_id"
-    #     }
-    # }
-    pass
 
 
 def get_user_otp(phone_number):

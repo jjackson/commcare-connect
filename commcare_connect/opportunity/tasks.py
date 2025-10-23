@@ -19,12 +19,7 @@ from django.utils.translation import gettext
 from tablib import Dataset
 
 from commcare_connect.cache import quickcache
-from commcare_connect.connect_id_client import (
-    fetch_users,
-    send_message,
-    send_message_bulk,
-    submit_credentials_to_connect,
-)
+from commcare_connect.connect_id_client import add_credentials, fetch_users, send_message, send_message_bulk
 from commcare_connect.connect_id_client.models import ConnectIdUser, Message
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
 from commcare_connect.opportunity.export import (
@@ -588,7 +583,7 @@ def get_unissued_user_credentials_queryset():
 
 
 def submit_credentials(index_to_credential_ids_set_mapper, credentials_items: list[dict]):
-    success_indices = submit_credentials_to_connect(credentials_items)
+    success_indices = add_credentials(credentials_items)
 
     successful_credential_ids = list(
         chain.from_iterable(index_to_credential_ids_set_mapper[i] for i in success_indices)

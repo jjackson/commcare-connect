@@ -409,8 +409,8 @@ class TestSubmitCredentials:
         assert opp_delivery_payload_item["level"] == DeliveryLevel.FIFTY
         assert opp_delivery_payload_item["opportunity_id"] == opportunity.id
 
-    @mock.patch("commcare_connect.opportunity.tasks.submit_credentials_to_connect")
-    def test_credentials_submitted_and_issued(self, mock_submit_credentials_to_connect, opportunity):
+    @mock.patch("commcare_connect.opportunity.tasks.add_credentials")
+    def test_credentials_submitted_and_issued(self, mock_add_credentials, opportunity):
         UserCredentialFactory.create_batch(
             3,
             issued_on=None,
@@ -428,7 +428,7 @@ class TestSubmitCredentials:
         assert UserCredential.objects.filter(issued_on__isnull=True).count() == 6
 
         # All credentials will be "successfully" submitted, hence return all payload indices
-        mock_submit_credentials_to_connect.return_value = [0, 1, 2, 3]
+        mock_add_credentials.return_value = [0, 1, 2, 3]
         issue_credentials_to_users()
 
         assert UserCredential.objects.filter(issued_on__isnull=False).count() == 6
