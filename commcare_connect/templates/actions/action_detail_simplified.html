@@ -1,0 +1,348 @@
+{% extends 'base.html' %}
+{% load static i18n %}
+
+{% block content %}
+<div class="h-screen flex flex-col bg-gray-50" x-data="simplifiedActionInterface()">
+  <!-- Top Navigation Bar -->
+  <div class="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-4">
+      <a href="{% url 'actions:list' %}" class="text-gray-600 hover:text-gray-900 transition-colors">
+        <i class="fa-solid fa-arrow-left"></i>
+      </a>
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-mono text-gray-500">#{{ action.id }}</span>
+        <span class="text-gray-300">|</span>
+        <span class="text-sm text-gray-900 font-medium">{{ action.flw_name }}</span>
+      </div>
+    </div>
+
+    <!-- Simple Actions -->
+    <div class="flex items-center gap-2">
+      <a href="{% url 'actions:detail' action.id %}" class="text-xs text-purple-600 hover:text-purple-800">
+        <i class="fa-solid fa-lightbulb mr-1"></i> Enhanced View
+      </a>
+    </div>
+  </div>
+
+  <!-- Main Content: Split View -->
+  <div class="flex-1 flex overflow-hidden">
+
+    <!-- Left Sidebar: User Context (Simplified) -->
+    <div class="w-80 bg-white border-r border-gray-200 flex flex-col">
+      <!-- FLW Profile Card -->
+      <div class="p-4 border-b border-gray-200">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-12 h-12 rounded-full bg-gradient-to-br from-brand-indigo to-purple-600 text-white flex items-center justify-center text-lg font-bold">
+            {{ action.flw_name|slice:":1"|upper }}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-gray-900 truncate">{{ action.flw_name }}</div>
+            <div class="text-xs text-gray-500 truncate">{{ action.flw_username }}</div>
+          </div>
+        </div>
+        <!-- Simplified Stats -->
+        <div class="grid grid-cols-2 gap-2 text-center">
+          <div class="p-2 bg-gray-50 rounded">
+            <div class="text-lg font-bold text-gray-900">3</div>
+            <div class="text-xs text-gray-600">Total Issues</div>
+          </div>
+          <div class="p-2 bg-green-50 rounded">
+            <div class="text-lg font-bold text-green-600">2</div>
+            <div class="text-xs text-gray-600">Resolved</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Past Issues (Simplified, Collapsible) -->
+      <div class="flex-1 overflow-y-auto">
+        <div class="p-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+          <div class="text-xs font-semibold text-gray-700 uppercase tracking-wider">Past Issues</div>
+          <button @click="showPastIssues = !showPastIssues" class="text-xs text-gray-600 hover:text-gray-900">
+            <span x-show="!showPastIssues">Show</span>
+            <span x-show="showPastIssues">Hide</span>
+          </button>
+        </div>
+
+        <div x-show="showPastIssues" x-collapse>
+          {% for history_item in action.flw_history %}
+          <div class="p-3 border-b border-gray-200 hover:bg-gray-50">
+            <div class="flex items-start justify-between mb-1">
+              <span class="text-xs text-gray-500">{{ history_item.date|date:"M d, Y" }}</span>
+              <span class="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                <i class="fa-solid fa-check text-xxs"></i> Resolved
+              </span>
+            </div>
+            <div class="text-sm text-gray-700">{{ history_item.issue }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+
+      <!-- Workflow Status Bar (Simplified, More Visual) -->
+      <div class="bg-white border-b border-gray-200 px-6 py-4">
+        <div class="flex items-center justify-between mb-3">
+          <h1 class="text-xl font-bold text-gray-900">Action #{{ action.id }}</h1>
+          <div class="flex items-center gap-3">
+            <span class="text-sm text-gray-600">
+              {{ action.opportunity|truncatewords:5 }}
+            </span>
+            {% if action.priority == "high" %}
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+              High Priority
+            </span>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Visual Workflow Progress Bar -->
+        <div class="relative">
+          <!-- Progress Track -->
+          <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-500"
+                 style="width: {% if action.status == 'open' %}25%{% elif action.status == 'nm_review' %}50%{% elif action.status == 'pm_review' %}75%{% else %}100%{% endif %}">
+            </div>
+          </div>
+
+          <!-- Stage Markers -->
+          <div class="flex justify-between mt-3">
+            <div class="text-center" style="width: 25%;">
+              <div class="w-8 h-8 rounded-full mx-auto mb-1 flex items-center justify-center
+                          {% if action.status == 'open' %}bg-blue-500 text-white ring-4 ring-blue-200{% else %}bg-gray-300 text-gray-600{% endif %}">
+                {% if action.status == 'open' %}<i class="fa-solid fa-folder-open text-xs"></i>{% else %}<i class="fa-solid fa-check text-xs"></i>{% endif %}
+              </div>
+              <div class="text-xs {% if action.status == 'open' %}font-semibold text-blue-700{% else %}text-gray-500{% endif %}">
+                Open
+              </div>
+            </div>
+
+            <div class="text-center" style="width: 25%;">
+              <div class="w-8 h-8 rounded-full mx-auto mb-1 flex items-center justify-center
+                          {% if action.status == 'nm_review' %}bg-purple-500 text-white ring-4 ring-purple-200{% elif action.status in 'pm_review,resolved,closed' %}bg-gray-400 text-white{% else %}bg-gray-200 text-gray-500{% endif %}">
+                {% if action.status == 'nm_review' %}<i class="fa-solid fa-user-check text-xs"></i>{% elif action.status in 'pm_review,resolved,closed' %}<i class="fa-solid fa-check text-xs"></i>{% else %}2{% endif %}
+              </div>
+              <div class="text-xs {% if action.status == 'nm_review' %}font-semibold text-purple-700{% else %}text-gray-500{% endif %}">
+                NM Review
+              </div>
+            </div>
+
+            <div class="text-center" style="width: 25%;">
+              <div class="w-8 h-8 rounded-full mx-auto mb-1 flex items-center justify-center
+                          {% if action.status == 'pm_review' %}bg-orange-500 text-white ring-4 ring-orange-200{% elif action.status in 'resolved,closed' %}bg-gray-400 text-white{% else %}bg-gray-200 text-gray-500{% endif %}">
+                {% if action.status == 'pm_review' %}<i class="fa-solid fa-clipboard-check text-xs"></i>{% elif action.status in 'resolved,closed' %}<i class="fa-solid fa-check text-xs"></i>{% else %}3{% endif %}
+              </div>
+              <div class="text-xs {% if action.status == 'pm_review' %}font-semibold text-orange-700{% else %}text-gray-500{% endif %}">
+                PM Review
+              </div>
+            </div>
+
+            <div class="text-center" style="width: 25%;">
+              <div class="w-8 h-8 rounded-full mx-auto mb-1 flex items-center justify-center
+                          {% if action.status in 'resolved,closed' %}bg-green-500 text-white ring-4 ring-green-200{% else %}bg-gray-200 text-gray-500{% endif %}">
+                {% if action.status in 'resolved,closed' %}<i class="fa-solid fa-check-circle text-xs"></i>{% else %}4{% endif %}
+              </div>
+              <div class="text-xs {% if action.status in 'resolved,closed' %}font-semibold text-green-700{% else %}text-gray-500{% endif %}">
+                Resolved
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scrollable Content -->
+      <div class="flex-1 overflow-y-auto p-6">
+
+        <!-- Quick Summary Card (New!) -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div class="flex items-start gap-3">
+            <i class="fa-solid fa-info-circle text-blue-600 text-lg mt-0.5"></i>
+            <div class="flex-1">
+              <div class="font-medium text-blue-900 mb-1">What Happened</div>
+              <div class="text-sm text-blue-800">
+                {% if action.action_type == "warning" %}
+                Quality issues detected in audit. Warning sent to worker and Network Manager notified.
+                {% else %}
+                Serious quality issues detected. Worker temporarily deactivated pending Network Manager review.
+                {% endif %}
+              </div>
+              <div class="text-xs text-blue-600 mt-2">
+                Created {{ action.created|timesince }} ago by {{ action.created_by }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity Timeline (Simplified) -->
+        <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-gray-900">Activity Timeline</h3>
+            <button @click="showSystemEvents = !showSystemEvents" class="text-xs text-gray-600 hover:text-gray-900">
+              <span x-show="showSystemEvents">Hide</span>
+              <span x-show="!showSystemEvents">Show</span>
+              system events
+            </button>
+          </div>
+
+          <div class="p-4">
+            <!-- Quick Comment Input -->
+            <div class="mb-6 pb-6 border-b border-gray-200">
+              <div class="flex gap-3">
+                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-gray-400 to-gray-600 text-white flex items-center justify-center text-sm font-medium flex-shrink-0">
+                  You
+                </div>
+                <div class="flex-1">
+                  <textarea
+                    x-model="newComment"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-indigo focus:border-transparent resize-none"
+                    rows="2"
+                    placeholder="Add a comment..."></textarea>
+                  <div class="flex justify-end mt-2">
+                    <button @click="postComment()"
+                            :disabled="!newComment.trim()"
+                            :class="newComment.trim() ? 'bg-brand-indigo hover:bg-brand-deep-purple text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'"
+                            class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors">
+                      Post Comment
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Timeline Events (Grouped and Simplified) -->
+            <div class="space-y-4">
+              {% for item in action.timeline %}
+              <!-- Determine if this is a key event (human action/decision) -->
+              {% if "Comment" in item.action or "Reactivation" in item.action or "Acknowledged" in item.action %}
+                <!-- KEY EVENTS: Human interactions - more prominent -->
+                <div class="flex gap-3 p-3 bg-gradient-to-r from-blue-50 to-transparent rounded-lg border-l-4 border-blue-500">
+                  <div class="flex-shrink-0">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center bg-blue-100 text-blue-600">
+                      <i class="fa-solid {{ item.icon }}"></i>
+                    </div>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-start justify-between mb-1">
+                      <div class="font-medium text-gray-900">{{ item.action }}</div>
+                      <span class="text-xs text-gray-500 whitespace-nowrap ml-2">
+                        {{ item.timestamp|timesince }} ago
+                      </span>
+                    </div>
+                    <div class="text-sm text-gray-600 mb-1">by {{ item.actor }}</div>
+                    <p class="text-sm text-gray-800 leading-relaxed">{{ item.description }}</p>
+                  </div>
+                </div>
+              {% else %}
+                <!-- SYSTEM EVENTS: Collapsible, less prominent -->
+                <div x-show="showSystemEvents" class="flex gap-3 opacity-75">
+                  <div class="flex-shrink-0">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center
+                                {% if item.color == 'red' %}bg-red-100 text-red-600
+                                {% elif item.color == 'green' %}bg-green-100 text-green-600
+                                {% elif item.color == 'orange' %}bg-orange-100 text-orange-600
+                                {% else %}bg-gray-100 text-gray-600{% endif %}">
+                      <i class="fa-solid {{ item.icon }} text-xs"></i>
+                    </div>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-start justify-between">
+                      <div class="text-sm font-medium text-gray-700">{{ item.action }}</div>
+                      <span class="text-xs text-gray-500 whitespace-nowrap ml-2">
+                        {{ item.timestamp|timesince }} ago
+                      </span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-1">{{ item.description }}</p>
+                  </div>
+                </div>
+              {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Details Section (Simplified, Always Visible) -->
+        <div class="mt-6 bg-white rounded-lg border border-gray-200 p-4">
+          <h3 class="text-sm font-semibold text-gray-900 mb-3">Details</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <div class="text-xs text-gray-600 mb-1">Action Type</div>
+              <div class="text-sm font-medium text-gray-900">
+                {% if action.action_type == "warning" %}
+                <i class="fa-solid fa-exclamation-triangle text-yellow-600 mr-1"></i> Warning
+                {% else %}
+                <i class="fa-solid fa-ban text-red-600 mr-1"></i> Deactivation
+                {% endif %}
+              </div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-600 mb-1">Assigned To</div>
+              <div class="text-sm font-medium text-gray-900">{{ action.assigned_to|slice:"-15:" }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-600 mb-1">Source</div>
+              <div class="text-sm font-medium text-gray-900">
+                Audit Session
+                <a href="/audit/session/{{ action.audit_session_id }}/"
+                   class="text-brand-indigo hover:underline">
+                  #{{ action.audit_session_id }} <i class="fa-solid fa-external-link-alt text-xs"></i>
+                </a>
+              </div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-600 mb-1">Created</div>
+              <div class="text-sm font-medium text-gray-900">
+                {{ action.created|date:"M d, Y h:i A" }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div x-show="showToast"
+       x-transition:enter="transition ease-out duration-300 transform"
+       x-transition:enter-start="translate-y-2 opacity-0"
+       x-transition:enter-end="translate-y-0 opacity-100"
+       class="fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50">
+    <i class="fa-solid fa-check-circle text-green-400"></i>
+    <span x-text="toastMessage"></span>
+  </div>
+</div>
+{% endblock %}
+
+{% block inline_javascript %}
+<script>
+  function simplifiedActionInterface() {
+    return {
+      newComment: '',
+      showSystemEvents: false,  // Hide system events by default
+      showPastIssues: false,    // Hide past issues by default
+      showToast: false,
+      toastMessage: '',
+
+      init() {
+        // No keyboard shortcuts for simplicity
+      },
+
+      postComment() {
+        if (!this.newComment.trim()) return;
+        this.showToastMessage('Comment posted successfully');
+        this.newComment = '';
+      },
+
+      showToastMessage(message) {
+        this.toastMessage = message;
+        this.showToast = true;
+        setTimeout(() => {
+          this.showToast = false;
+        }, 3000);
+      }
+    }
+  }
+</script>
+{% endblock %}

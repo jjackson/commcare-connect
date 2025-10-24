@@ -1,0 +1,259 @@
+{% extends 'base.html' %}
+{% load static i18n %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-6">
+  <!-- Navigation and Prototype Info -->
+  <div class="mb-4">
+    <div class="flex items-center justify-between">
+      <div>
+        <a href="{% url 'actions:list' %}" class="text-sm text-brand-indigo hover:text-brand-deep-purple transition-colors">
+          <i class="fa-solid fa-arrow-left mr-1"></i> Back to Actions List
+        </a>
+      </div>
+      <div class="flex gap-2">
+        <a href="{% url 'actions:detail_cards' action.id %}"
+           class="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors">
+          <i class="fa-solid fa-th-large mr-1"></i> Cards View
+        </a>
+        <a href="{% url 'actions:detail_split' action.id %}"
+           class="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors">
+          <i class="fa-solid fa-columns mr-1"></i> Split View
+        </a>
+      </div>
+    </div>
+    <div class="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+      <div class="flex items-start gap-2">
+        <i class="fa-solid fa-info-circle text-blue-600 mt-0.5"></i>
+        <div>
+          <div class="text-sm font-medium text-blue-900">Prototype: {{ prototype_name }}</div>
+          <div class="text-xs text-blue-700">{{ prototype_description }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Header -->
+  <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <div class="flex items-start justify-between mb-4">
+      <div class="flex-1">
+        <div class="flex items-center gap-3 mb-2">
+          <h1 class="text-2xl font-bold text-gray-900">Action #{{ action.id }}</h1>
+          {% if action.status == "open" %}
+          <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+            <i class="fa-solid fa-folder-open mr-1"></i> Open
+          </span>
+          {% elif action.status == "nm_review" %}
+          <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
+            <i class="fa-solid fa-user-check mr-1"></i> NM Review
+          </span>
+          {% elif action.status == "pm_review" %}
+          <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800">
+            <i class="fa-solid fa-clipboard-check mr-1"></i> PM Review
+          </span>
+          {% elif action.status == "resolved" %}
+          <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+            <i class="fa-solid fa-check-circle mr-1"></i> Resolved
+          </span>
+          {% else %}
+          <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+            <i class="fa-solid fa-times-circle mr-1"></i> Closed
+          </span>
+          {% endif %}
+
+          {% if action.priority == "high" %}
+          <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-700">
+            <i class="fa-solid fa-arrow-up mr-1"></i> High Priority
+          </span>
+          {% elif action.priority == "medium" %}
+          <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-700">
+            <i class="fa-solid fa-minus mr-1"></i> Medium Priority
+          </span>
+          {% else %}
+          <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-700">
+            <i class="fa-solid fa-arrow-down mr-1"></i> Low Priority
+          </span>
+          {% endif %}
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mt-4 text-sm">
+          <div>
+            <span class="text-gray-600">FLW:</span>
+            <span class="font-medium text-gray-900 ml-1">{{ action.flw_name }}</span>
+            <div class="text-xs text-gray-500">{{ action.flw_username }}</div>
+          </div>
+          <div>
+            <span class="text-gray-600">Opportunity:</span>
+            <span class="font-medium text-gray-900 ml-1">{{ action.opportunity }}</span>
+          </div>
+          <div>
+            <span class="text-gray-600">Action Type:</span>
+            {% if action.action_type == "warning" %}
+            <span class="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+              <i class="fa-solid fa-exclamation-triangle mr-1"></i> Warning
+            </span>
+            {% else %}
+            <span class="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+              <i class="fa-solid fa-ban mr-1"></i> Deactivation
+            </span>
+            {% endif %}
+          </div>
+          <div>
+            <span class="text-gray-600">Assigned To:</span>
+            <span class="font-medium text-gray-900 ml-1">{{ action.assigned_to }}</span>
+          </div>
+          <div>
+            <span class="text-gray-600">Created By:</span>
+            <span class="font-medium text-gray-900 ml-1">{{ action.created_by }}</span>
+          </div>
+          <div>
+            <span class="text-gray-600">Source:</span>
+            <span class="font-medium text-gray-900 ml-1">{{ action.source|upper }}</span>
+            {% if action.audit_session_id %}
+            <a href="/audit/session/{{ action.audit_session_id }}/" class="text-xs text-brand-indigo hover:underline ml-1">
+              (Session #{{ action.audit_session_id }})
+            </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="flex flex-col gap-2 ml-6">
+        <button class="px-4 py-2 text-sm bg-brand-indigo hover:bg-brand-deep-purple text-white rounded transition-colors">
+          <i class="fa-solid fa-comment mr-1"></i> Add Comment
+        </button>
+        <button class="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors">
+          <i class="fa-solid fa-exchange-alt mr-1"></i> Change Status
+        </button>
+        <button class="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors">
+          <i class="fa-solid fa-user-plus mr-1"></i> Reassign
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline Section -->
+  <div class="bg-white rounded-lg shadow-sm p-6">
+    <h2 class="text-lg font-semibold text-gray-900 mb-6">Activity Timeline</h2>
+
+    <div class="relative">
+      <!-- Vertical line -->
+      <div class="absolute left-8 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+
+      <!-- Timeline items -->
+      <div class="space-y-6">
+        {% for item in action.timeline %}
+        <div class="relative flex gap-4">
+          <!-- Icon -->
+          <div class="flex-shrink-0 w-16 flex justify-center">
+            <div class="relative z-10 flex items-center justify-center w-10 h-10 rounded-full
+                        {% if item.color == 'blue' %}bg-blue-100 text-blue-600
+                        {% elif item.color == 'green' %}bg-green-100 text-green-600
+                        {% elif item.color == 'orange' %}bg-orange-100 text-orange-600
+                        {% elif item.color == 'red' %}bg-red-100 text-red-600
+                        {% else %}bg-gray-100 text-gray-600{% endif %}">
+              <i class="fa-solid {{ item.icon }}"></i>
+            </div>
+          </div>
+
+          <!-- Content -->
+          <div class="flex-1 bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <div class="flex items-start justify-between mb-2">
+              <div>
+                <div class="font-medium text-gray-900">{{ item.action }}</div>
+                <div class="text-sm text-gray-600">{{ item.actor }}</div>
+              </div>
+              <div class="text-xs text-gray-500">
+                {{ item.timestamp|date:"M d, Y" }} at {{ item.timestamp|date:"h:i A" }}
+              </div>
+            </div>
+            <div class="text-sm text-gray-700">
+              {{ item.description }}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Add Comment Form -->
+    <div class="mt-8 pt-6 border-t border-gray-200">
+      <h3 class="text-sm font-medium text-gray-900 mb-3">Add New Comment</h3>
+      <div class="flex gap-3">
+        <textarea
+          class="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-brand-indigo focus:border-brand-indigo"
+          rows="3"
+          placeholder="Enter your comment or update..."></textarea>
+        <button class="px-4 py-2 h-fit bg-brand-indigo hover:bg-brand-deep-purple text-white rounded transition-colors text-sm">
+          <i class="fa-solid fa-paper-plane mr-1"></i> Post
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLW History Section -->
+  <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
+    <h2 class="text-lg font-semibold text-gray-900 mb-4">Previous Actions for {{ action.flw_name }}</h2>
+
+    {% if action.flw_history %}
+    <div class="space-y-3">
+      {% for history_item in action.flw_history %}
+      <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+        <div class="flex items-center gap-3">
+          <span class="text-sm font-medium text-gray-900">#{{ history_item.id }}</span>
+          <span class="text-xs text-gray-500">{{ history_item.date|date:"M d, Y" }}</span>
+          {% if history_item.action_type == "warning" %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+            Warning
+          </span>
+          {% else %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+            Deactivation
+          </span>
+          {% endif %}
+          <span class="text-sm text-gray-700">{{ history_item.issue }}</span>
+        </div>
+        <div>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            {{ history_item.status|title }}
+          </span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-8 text-gray-500">
+      <i class="fa-solid fa-inbox text-3xl mb-2 block text-gray-300"></i>
+      No previous actions found for this FLW.
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Notification Details -->
+  <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
+    <h2 class="text-lg font-semibold text-gray-900 mb-4">Notification Sent</h2>
+
+    <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+      <div class="grid grid-cols-2 gap-3 mb-4 text-sm">
+        <div>
+          <span class="text-gray-600">To:</span>
+          <span class="font-medium text-gray-900 ml-1">{{ action.notification.recipient }}</span>
+        </div>
+        <div>
+          <span class="text-gray-600">Sent:</span>
+          <span class="font-medium text-gray-900 ml-1">{{ action.notification.sent_at|date:"M d, Y h:i A" }}</span>
+        </div>
+      </div>
+      <div class="mb-2">
+        <span class="text-xs font-medium text-gray-700 uppercase">Subject:</span>
+        <div class="text-sm font-medium text-gray-900 mt-1">{{ action.notification.subject }}</div>
+      </div>
+      <div>
+        <span class="text-xs font-medium text-gray-700 uppercase">Message:</span>
+        <div class="text-sm text-gray-700 mt-1 whitespace-pre-line">{{ action.notification.message }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

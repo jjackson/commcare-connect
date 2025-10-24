@@ -1,0 +1,294 @@
+{% extends 'base.html' %}
+{% load static i18n %}
+
+{% block content %}
+<div class="max-w-full mx-auto px-4" x-data="actionsListInterface()">
+  <!-- Header and Stats -->
+  <div class="flex gap-4 h-32 items-center p-4 profile-bg bg-brand-indigo rounded-2xl mb-4">
+    <!-- Page Info -->
+    <div class="flex flex-col justify-center text-white min-w-0 flex-shrink-0" style="width: 300px;">
+      <h1 class="text-2xl font-bold mb-1">Task Tracker</h1>
+      <p class="text-sm opacity-90">Manage FLW actions and interventions</p>
+      <p class="text-xs opacity-75">General action tracking system</p>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg">
+      <div class="flex justify-between items-center">
+        <div class="text-2xl font-medium">{{ stats.total }}</div>
+        <div class="hidden lg:block"><i class="fa-solid fa-list-check text-xl"></i></div>
+      </div>
+      <div class="pt-4 text-sm flex items-center justify-between">
+        <span>Total Actions</span>
+      </div>
+    </div>
+
+    <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg">
+      <div class="flex justify-between items-center">
+        <div class="text-2xl font-medium">{{ stats.unassigned }}</div>
+        <div class="hidden lg:block"><i class="fa-solid fa-inbox text-xl"></i></div>
+      </div>
+      <div class="pt-4 text-sm flex items-center justify-between">
+        <span>Unassigned</span>
+      </div>
+    </div>
+
+    <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg">
+      <div class="flex justify-between items-center">
+        <div class="text-2xl font-medium">{{ stats.network_manager }}</div>
+        <div class="hidden lg:block"><i class="fa-solid fa-user-check text-xl"></i></div>
+      </div>
+      <div class="pt-4 text-sm flex items-center justify-between">
+        <span>Network Manager</span>
+      </div>
+    </div>
+
+    <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg">
+      <div class="flex justify-between items-center">
+        <div class="text-2xl font-medium">{{ stats.program_manager }}</div>
+        <div class="hidden lg:block"><i class="fa-solid fa-clipboard-check text-xl"></i></div>
+      </div>
+      <div class="pt-4 text-sm flex items-center justify-between">
+        <span>Program Manager</span>
+      </div>
+    </div>
+
+    <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg">
+      <div class="flex justify-between items-center">
+        <div class="text-2xl font-medium text-yellow-300">{{ stats.action_underway }}</div>
+        <div class="hidden lg:block"><i class="fa-solid fa-cog text-xl"></i></div>
+      </div>
+      <div class="pt-4 text-sm flex items-center justify-between">
+        <span>Action Underway</span>
+      </div>
+    </div>
+
+    <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg">
+      <div class="flex justify-between items-center">
+        <div class="text-2xl font-medium text-green-300">{{ stats.resolved }}</div>
+        <div class="hidden lg:block"><i class="fa-solid fa-check-circle text-xl"></i></div>
+      </div>
+      <div class="pt-4 text-sm flex items-center justify-between">
+        <span>Resolved</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters and Controls -->
+  <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
+    <div class="flex flex-wrap gap-4 items-center justify-between">
+      <!-- Left side: Filters -->
+      <div class="flex flex-wrap gap-4 items-center">
+        <!-- Status Filter -->
+        <div>
+          <label for="status-filter" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+          <select id="status-filter"
+                  name="status"
+                  x-model="selectedStatus"
+                  @change="applyFilters()"
+                  class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-brand-indigo focus:border-brand-indigo">
+            <option value="all">All Statuses</option>
+            {% for status in statuses %}
+            <option value="{{ status }}" {% if status == selected_status %}selected{% endif %}>
+              {{ status|title }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Search -->
+        <div>
+          <label for="search-filter" class="block text-sm font-medium text-gray-700 mb-1">Search FLW</label>
+          <input type="text"
+                 id="search-filter"
+                 x-model="searchQuery"
+                 @input="applySearch()"
+                 placeholder="Search by name..."
+                 class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-brand-indigo focus:border-brand-indigo">
+        </div>
+      </div>
+
+      <!-- Right side: Actions -->
+      <div class="flex gap-2">
+        <button @click="clearFilters()"
+                class="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors">
+          <i class="fa-solid fa-filter-circle-xmark mr-1"></i> Clear Filters
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions Table -->
+  <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Task ID
+            </th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              FLW Name
+            </th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Opportunity
+            </th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Status
+            </th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Priority
+            </th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Created
+            </th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Assigned To
+            </th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Actions
+            </th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {% for action in actions %}
+          <tr class="hover:bg-gray-50 transition-colors">
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-brand-indigo">
+              #{{ action.id }}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-sm font-medium text-gray-900">{{ action.flw_name }}</div>
+              <div class="text-xs text-gray-500">{{ action.flw_username }}</div>
+            </td>
+            <td class="px-6 py-4">
+              <div class="text-sm text-gray-900 max-w-xs truncate">{{ action.opportunity }}</div>
+              <div class="text-xs text-gray-500">Source: {{ action.source }}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              {% if action.status == "unassigned" %}
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                Unassigned
+              </span>
+              {% elif action.status == "program_manager" %}
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                Program Manager
+              </span>
+              {% elif action.status == "network_manager" %}
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                Network Manager
+              </span>
+              {% elif action.status == "action_underway" %}
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                Action Underway
+              </span>
+              {% elif action.status == "resolved" %}
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                Resolved
+              </span>
+              {% else %}
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                {{ action.status|title }}
+              </span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              {% if action.priority == "high" %}
+              <span class="text-xs font-medium text-red-600">
+                <i class="fa-solid fa-arrow-up"></i> High
+              </span>
+              {% elif action.priority == "medium" %}
+              <span class="text-xs font-medium text-yellow-600">
+                <i class="fa-solid fa-minus"></i> Medium
+              </span>
+              {% else %}
+              <span class="text-xs font-medium text-green-600">
+                <i class="fa-solid fa-arrow-down"></i> Low
+              </span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {{ action.created|date:"M d, Y" }}
+              <div class="text-xs text-gray-400">{{ action.created|date:"h:i A" }}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {{ action.assigned_to|truncatewords:3 }}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm">
+              <div class="flex gap-2 items-center">
+                <a href="{% url 'actions:detail' action.id %}"
+                   class="inline-flex items-center px-3 py-1.5 text-sm bg-brand-indigo hover:bg-brand-deep-purple text-white rounded transition-colors font-medium">
+                  View
+                </a>
+                <div class="flex gap-1 opacity-60 hover:opacity-100 transition-opacity">
+                  <a href="{% url 'actions:detail_timeline' action.id %}"
+                     class="inline-flex items-center px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
+                     title="Timeline View">
+                    <i class="fa-solid fa-stream"></i>
+                  </a>
+                  <a href="{% url 'actions:detail_cards' action.id %}"
+                     class="inline-flex items-center px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
+                     title="Cards View">
+                    <i class="fa-solid fa-th-large"></i>
+                  </a>
+                  <a href="{% url 'actions:detail_split' action.id %}"
+                     class="inline-flex items-center px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
+                     title="Split View">
+                    <i class="fa-solid fa-columns"></i>
+                  </a>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="9" class="px-6 py-12 text-center text-gray-500">
+              <i class="fa-solid fa-inbox text-4xl mb-2 block text-gray-300"></i>
+              No actions found matching your filters.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Summary Footer -->
+  <div class="mt-4 text-sm text-gray-600 text-center">
+    Showing {{ actions|length }} of {{ stats.total }} action ticket{{ stats.total|pluralize }}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function actionsListInterface() {
+    return {
+      selectedStatus: '{{ selected_status }}',
+      selectedActionType: '{{ selected_action_type }}',
+      searchQuery: '',
+
+      applyFilters() {
+        const params = new URLSearchParams();
+        if (this.selectedStatus && this.selectedStatus !== 'all') {
+          params.append('status', this.selectedStatus);
+        }
+        if (this.selectedActionType && this.selectedActionType !== 'all') {
+          params.append('action_type', this.selectedActionType);
+        }
+        window.location.href = '{% url "actions:list" %}?' + params.toString();
+      },
+
+      applySearch() {
+        // In a real implementation, this would filter the table dynamically
+        // For now, just log it
+        console.log('Searching for:', this.searchQuery);
+      },
+
+      clearFilters() {
+        window.location.href = '{% url "actions:list" %}';
+      }
+    }
+  }
+</script>
+{% endblock %}

@@ -1066,9 +1066,11 @@ function assessmentWidget(assessmentId, initialResult, initialNotes) {
 
         if (data.success) {
           // Update parent assessments array for reactivity
-          const parentAssessment = this.$root.assessments.find(a => a.id === this.assessmentId);
-          if (parentAssessment) {
-            parentAssessment.notes = this.notes;
+          if (this.$root && this.$root.assessments) {
+            const parentAssessment = this.$root.assessments.find(a => a.id === this.assessmentId);
+            if (parentAssessment) {
+              parentAssessment.notes = this.notes;
+            }
           }
         } else {
           alert('Error saving notes: ' + (data.error || 'Unknown error'));
