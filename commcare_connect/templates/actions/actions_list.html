@@ -214,29 +214,10 @@
               {{ action.assigned_to|truncatewords:3 }}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm">
-              <div class="flex gap-2 items-center">
-                <a href="{% url 'actions:detail' action.id %}"
-                   class="inline-flex items-center px-3 py-1.5 text-sm bg-brand-indigo hover:bg-brand-deep-purple text-white rounded transition-colors font-medium">
-                  View
-                </a>
-                <div class="flex gap-1 opacity-60 hover:opacity-100 transition-opacity">
-                  <a href="{% url 'actions:detail_timeline' action.id %}"
-                     class="inline-flex items-center px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
-                     title="Timeline View">
-                    <i class="fa-solid fa-stream"></i>
-                  </a>
-                  <a href="{% url 'actions:detail_cards' action.id %}"
-                     class="inline-flex items-center px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
-                     title="Cards View">
-                    <i class="fa-solid fa-th-large"></i>
-                  </a>
-                  <a href="{% url 'actions:detail_split' action.id %}"
-                     class="inline-flex items-center px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
-                     title="Split View">
-                    <i class="fa-solid fa-columns"></i>
-                  </a>
-                </div>
-              </div>
+              <a href="{% url 'actions:detail' action.id %}"
+                 class="inline-flex items-center px-3 py-1.5 text-sm bg-brand-indigo hover:bg-brand-deep-purple text-white rounded transition-colors font-medium">
+                View
+              </a>
             </td>
           </tr>
           {% empty %}
