@@ -638,45 +638,6 @@ def actions_list(request):
     return render(request, "actions/actions_list.html", context)
 
 
-def action_detail_timeline(request, action_id):
-    """Prototype 1: Timeline-based layout showing chronological activity."""
-    action = get_mock_action_detail(action_id)
-
-    context = {
-        "action": action,
-        "prototype_name": "Timeline View",
-        "prototype_description": "Chronological activity feed showing all actions in order",
-    }
-
-    return render(request, "actions/action_detail_timeline.html", context)
-
-
-def action_detail_cards(request, action_id):
-    """Prototype 2: Card-based workflow layout with separate sections."""
-    action = get_mock_action_detail(action_id)
-
-    context = {
-        "action": action,
-        "prototype_name": "Cards View",
-        "prototype_description": "Card-based layout with separate sections for different aspects",
-    }
-
-    return render(request, "actions/action_detail_cards.html", context)
-
-
-def action_detail_split(request, action_id):
-    """Prototype 3: Split-panel layout with history sidebar."""
-    action = get_mock_action_detail(action_id)
-
-    context = {
-        "action": action,
-        "prototype_name": "Split Panel View",
-        "prototype_description": "Side-by-side view with user history and current ticket details",
-    }
-
-    return render(request, "actions/action_detail_split.html", context)
-
-
 def action_detail_streamlined(request, action_id):
     """Streamlined View: Action-focused interface for assigning and contacting."""
     action = get_mock_action_detail(action_id)
@@ -688,29 +649,3 @@ def action_detail_streamlined(request, action_id):
     }
 
     return render(request, "actions/action_detail_streamlined.html", context)
-
-
-def action_detail_simplified(request, action_id):
-    """Simplified View: Clean, beginner-friendly interface focused on clarity."""
-    action = get_mock_action_detail(action_id)
-
-    context = {
-        "action": action,
-        "prototype_name": "Simplified View",
-        "prototype_description": "Clean and easy to understand for users new to ticketing systems",
-    }
-
-    return render(request, "actions/action_detail_simplified.html", context)
-
-
-def action_detail_enhanced(request, action_id):
-    """Enhanced Prototype: Modern ticketing UI with best practices from Linear, Jira, Zendesk."""
-    action = get_mock_action_detail(action_id)
-
-    context = {
-        "action": action,
-        "prototype_name": "Enhanced Modern UI",
-        "prototype_description": "Combines best practices: inline editing, keyboard shortcuts, smart workflows",
-    }
-
-    return render(request, "actions/action_detail_enhanced.html", context)
