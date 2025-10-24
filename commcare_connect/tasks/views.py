@@ -4,9 +4,9 @@ from django.shortcuts import render
 from django.utils import timezone
 
 
-def get_mock_actions():
-    """Generate comprehensive mock action ticket data."""
-    # Set base_date to 2 days ago so all actions appear recent
+def get_mock_tasks():
+    """Generate comprehensive mock task ticket data."""
+    # Set base_date to 2 days ago so all tasks appear recent
     base_date = timezone.now() - timedelta(days=2)
 
     return [
@@ -223,14 +223,14 @@ def get_mock_actions():
     ]
 
 
-def get_mock_action_detail(action_id):
-    """Get detailed mock data for a specific action ticket."""
-    actions = get_mock_actions()
-    action = next((a for a in actions if a["id"] == action_id), None)
+def get_mock_task_detail(task_id):
+    """Get detailed mock data for a specific task ticket."""
+    tasks = get_mock_tasks()
+    task = next((t for t in tasks if t["id"] == task_id), None)
 
-    if not action:
-        # Return a default action for demo purposes
-        action = actions[0]
+    if not task:
+        # Return a default task for demo purposes
+        task = tasks[0]
 
     # Add detailed timeline/history with richer scenarios for first few tickets
     now = timezone.now()
@@ -249,13 +249,13 @@ def get_mock_action_detail(action_id):
                         "actor": "AI Assistant",
                         "timestamp": now - timedelta(hours=6),
                         "message": (
-                            f"Hello {action['flw_name']}! Thank you for completing the Image Capture "
+                            f"Hello {task['flw_name']}! Thank you for completing the Image Capture "
                             "Learn module. I see you scored 95% - great work! Do you have any "
                             "follow-up questions after the training?"
                         ),
                     },
                     {
-                        "actor": action["flw_name"],
+                        "actor": task["flw_name"],
                         "timestamp": now - timedelta(hours=6),
                         "message": (
                             "Yes, one question - when I take the photo, should the person be smiling "
@@ -276,16 +276,16 @@ def get_mock_action_detail(action_id):
             },
             {
                 "timestamp": now - timedelta(hours=24),
-                "actor": action["flw_name"],
+                "actor": task["flw_name"],
                 "action": "Learning Completed",
                 "description": "Completed Image Capture learning module (Score: 95%) - Duration: 18 minutes",
                 "icon": "fa-check-circle",
                 "color": "green",
-                "display_name": action["flw_name"],
+                "display_name": task["flw_name"],
             },
             {
                 "timestamp": now - timedelta(hours=48),
-                "actor": action["created_by"],
+                "actor": task["created_by"],
                 "action": "Learning Assigned",
                 "description": (
                     "Connect Learn module assigned: Image Capture - Review proper photography "
@@ -293,13 +293,13 @@ def get_mock_action_detail(action_id):
                 ),
                 "icon": "fa-graduation-cap",
                 "color": "blue",
-                "display_name": action["created_by"].split(" - ", 1)[1]
-                if " - " in action["created_by"]
-                else action["created_by"],
+                "display_name": task["created_by"].split(" - ", 1)[1]
+                if " - " in task["created_by"]
+                else task["created_by"],
             },
             {
                 "timestamp": now - timedelta(hours=60),
-                "actor": action["assigned_to"],
+                "actor": task["assigned_to"],
                 "action": "Commented",
                 "description": (
                     "I reviewed the submitted photos. Most 'glasses on face' shots are taken at "
@@ -309,22 +309,22 @@ def get_mock_action_detail(action_id):
                 ),
                 "icon": "fa-comment",
                 "color": "gray",
-                "display_name": action["assigned_to"].split(" - ", 1)[1]
-                if " - " in action["assigned_to"]
-                else action["assigned_to"],
+                "display_name": task["assigned_to"].split(" - ", 1)[1]
+                if " - " in task["assigned_to"]
+                else task["assigned_to"],
             },
         ],
         1002: [  # Warning with quick FLW response
             {
-                "timestamp": action["created"],
-                "actor": action["created_by"],
+                "timestamp": task["created"],
+                "actor": task["created_by"],
                 "action": "Created",
                 "description": "Action ticket created - minor quality issues detected in audit",
                 "icon": "fa-plus-circle",
                 "color": "blue",
             },
             {
-                "timestamp": action["created"] + timedelta(minutes=5),
+                "timestamp": task["created"] + timedelta(minutes=5),
                 "actor": "System",
                 "action": "Warning Sent",
                 "description": "Warning notification sent to FLW via SMS and email",
@@ -332,20 +332,20 @@ def get_mock_action_detail(action_id):
                 "color": "green",
             },
             {
-                "timestamp": action["created"] + timedelta(minutes=8),
+                "timestamp": task["created"] + timedelta(minutes=8),
                 "actor": "System",
                 "action": "Notification Sent",
                 "description": (
                     f"Network Manager "
-                    f"{action['assigned_to'].split(' - ')[1] if ' - ' in action['assigned_to'] else 'assigned'} "
+                    f"{task['assigned_to'].split(' - ')[1] if ' - ' in task['assigned_to'] else 'assigned'} "
                     f"notified"
                 ),
                 "icon": "fa-bell",
                 "color": "green",
             },
             {
-                "timestamp": action["created"] + timedelta(minutes=45),
-                "actor": action["flw_name"],
+                "timestamp": task["created"] + timedelta(minutes=45),
+                "actor": task["flw_name"],
                 "action": "FLW Acknowledged",
                 "description": (
                     "FLW responded via SMS: 'Understood, will be more careful with photo quality. " "Thank you.'"
@@ -354,8 +354,8 @@ def get_mock_action_detail(action_id):
                 "color": "green",
             },
             {
-                "timestamp": action["created"] + timedelta(hours=1),
-                "actor": action["assigned_to"],
+                "timestamp": task["created"] + timedelta(hours=1),
+                "actor": task["assigned_to"],
                 "action": "Commented",
                 "description": (
                     "FLW has acknowledged and seems receptive. This is their first warning this "
@@ -365,8 +365,8 @@ def get_mock_action_detail(action_id):
                 "color": "gray",
             },
             {
-                "timestamp": action["created"] + timedelta(hours=1, minutes=5),
-                "actor": action["assigned_to"],
+                "timestamp": task["created"] + timedelta(hours=1, minutes=5),
+                "actor": task["assigned_to"],
                 "action": "Status Changed",
                 "description": "Status changed to Resolved",
                 "icon": "fa-exchange-alt",
@@ -375,15 +375,15 @@ def get_mock_action_detail(action_id):
         ],
         1003: [  # Escalated case with delays
             {
-                "timestamp": action["created"],
-                "actor": action["created_by"],
+                "timestamp": task["created"],
+                "actor": task["created_by"],
                 "action": "Created",
                 "description": "Action ticket created - pattern of recurring issues detected",
                 "icon": "fa-plus-circle",
                 "color": "blue",
             },
             {
-                "timestamp": action["created"] + timedelta(minutes=3),
+                "timestamp": task["created"] + timedelta(minutes=3),
                 "actor": "System",
                 "action": "Pattern Detected",
                 "description": "This is the 3rd action ticket for this FLW in 30 days - auto-escalated",
@@ -391,7 +391,7 @@ def get_mock_action_detail(action_id):
                 "color": "red",
             },
             {
-                "timestamp": action["created"] + timedelta(minutes=5),
+                "timestamp": task["created"] + timedelta(minutes=5),
                 "actor": "System",
                 "action": "Deactivation",
                 "description": "User temporarily deactivated due to repeated violations",
@@ -399,20 +399,20 @@ def get_mock_action_detail(action_id):
                 "color": "red",
             },
             {
-                "timestamp": action["created"] + timedelta(minutes=10),
+                "timestamp": task["created"] + timedelta(minutes=10),
                 "actor": "System",
                 "action": "Notification Sent",
                 "description": (
                     f"Network Manager "
-                    f"{action['assigned_to'].split(' - ')[1] if ' - ' in action['assigned_to'] else 'assigned'} "
+                    f"{task['assigned_to'].split(' - ')[1] if ' - ' in task['assigned_to'] else 'assigned'} "
                     f"notified with escalation flag"
                 ),
                 "icon": "fa-bell",
                 "color": "orange",
             },
             {
-                "timestamp": action["created"] + timedelta(hours=3),
-                "actor": action["assigned_to"],
+                "timestamp": task["created"] + timedelta(hours=3),
+                "actor": task["assigned_to"],
                 "action": "Commented",
                 "description": (
                     "I've attempted to reach the FLW multiple times today but no response. This is "
@@ -422,8 +422,8 @@ def get_mock_action_detail(action_id):
                 "color": "gray",
             },
             {
-                "timestamp": action["created"] + timedelta(days=1),
-                "actor": action["assigned_to"],
+                "timestamp": task["created"] + timedelta(days=1),
+                "actor": task["assigned_to"],
                 "action": "Commented",
                 "description": (
                     "Finally connected. FLW dealing with family emergency. However, quality issues "
@@ -433,8 +433,8 @@ def get_mock_action_detail(action_id):
                 "color": "gray",
             },
             {
-                "timestamp": action["created"] + timedelta(days=1, minutes=5),
-                "actor": action["assigned_to"],
+                "timestamp": task["created"] + timedelta(days=1, minutes=5),
+                "actor": task["assigned_to"],
                 "action": "Status Changed",
                 "description": "Status changed to NM Review - awaiting training completion",
                 "icon": "fa-exchange-alt",
@@ -444,44 +444,44 @@ def get_mock_action_detail(action_id):
     }
 
     # Use scenario-specific timeline or default timeline
-    if action["id"] in timeline_scenarios:
-        action["timeline"] = timeline_scenarios[action["id"]]
+    if task["id"] in timeline_scenarios:
+        task["timeline"] = timeline_scenarios[task["id"]]
         # Add display_name for each timeline item
-        for item in action["timeline"]:
+        for item in task["timeline"]:
             if " - " in item["actor"]:
                 item["display_name"] = item["actor"].split(" - ", 1)[1]
             else:
                 item["display_name"] = item["actor"]
     else:
         # Default timeline for other tickets
-        action["timeline"] = [
+        task["timeline"] = [
             {
-                "timestamp": action["created"],
-                "actor": action["created_by"],
+                "timestamp": task["created"],
+                "actor": task["created_by"],
                 "action": "Created",
                 "description": "Action ticket created due to audit failure",
                 "icon": "fa-plus-circle",
                 "color": "blue",
             },
             {
-                "timestamp": action["created"] + timedelta(minutes=5),
+                "timestamp": task["created"] + timedelta(minutes=5),
                 "actor": "System",
                 "action": "Notification Sent",
                 "description": (
                     "Warning notification sent to FLW"
-                    if action["action_type"] == "warning"
+                    if task["action_type"] == "warning"
                     else "User deactivated from opportunity"
                 ),
                 "icon": "fa-envelope",
                 "color": "green",
             },
             {
-                "timestamp": action["created"] + timedelta(minutes=10),
+                "timestamp": task["created"] + timedelta(minutes=10),
                 "actor": "System",
                 "action": "Notification Sent",
                 "description": (
                     f"Network Manager "
-                    f"{action['assigned_to'].split(' - ')[1] if ' - ' in action['assigned_to'] else 'assigned'} "
+                    f"{task['assigned_to'].split(' - ')[1] if ' - ' in task['assigned_to'] else 'assigned'} "
                     f"notified"
                 ),
                 "icon": "fa-bell",
@@ -489,11 +489,11 @@ def get_mock_action_detail(action_id):
             },
         ]
 
-        if action["status"] in ["nm_review", "pm_review", "resolved", "closed"]:
-            action["timeline"].append(
+        if task["status"] in ["nm_review", "pm_review", "resolved", "closed"]:
+            task["timeline"].append(
                 {
-                    "timestamp": action["created"] + timedelta(hours=2),
-                    "actor": action["assigned_to"],
+                    "timestamp": task["created"] + timedelta(hours=2),
+                    "actor": task["assigned_to"],
                     "action": "Commented",
                     "description": (
                         "I've reviewed this case with the FLW. They acknowledged the issue and "
@@ -504,11 +504,11 @@ def get_mock_action_detail(action_id):
                 }
             )
 
-        if action["status"] in ["pm_review", "resolved", "closed"]:
-            action["timeline"].append(
+        if task["status"] in ["pm_review", "resolved", "closed"]:
+            task["timeline"].append(
                 {
-                    "timestamp": action["created"] + timedelta(days=1),
-                    "actor": action["assigned_to"],
+                    "timestamp": task["created"] + timedelta(days=1),
+                    "actor": task["assigned_to"],
                     "action": "Status Changed",
                     "description": "Status changed to PM Review",
                     "icon": "fa-exchange-alt",
@@ -516,11 +516,11 @@ def get_mock_action_detail(action_id):
                 }
             )
 
-        if action["status"] in ["resolved", "closed"]:
-            action["timeline"].append(
+        if task["status"] in ["resolved", "closed"]:
+            task["timeline"].append(
                 {
-                    "timestamp": action["created"] + timedelta(days=1, hours=3),
-                    "actor": action["created_by"],
+                    "timestamp": task["created"] + timedelta(days=1, hours=3),
+                    "actor": task["created_by"],
                     "action": "Resolved",
                     "description": "Issue resolved. FLW has been retrained and is now compliant.",
                     "icon": "fa-check-circle",
@@ -529,35 +529,35 @@ def get_mock_action_detail(action_id):
             )
 
         # Add display_name for default timeline items
-        for item in action["timeline"]:
+        for item in task["timeline"]:
             if " - " in item["actor"]:
                 item["display_name"] = item["actor"].split(" - ", 1)[1]
             else:
                 item["display_name"] = item["actor"]
 
     # Add FLW history (previous tickets) - customize for action 1001
-    if action["id"] == 1001:
-        action["flw_history"] = [
+    if task["id"] == 1001:
+        task["flw_history"] = [
             {
-                "id": action["id"] - 100,
-                "date": action["created"] - timedelta(days=60),
+                "id": task["id"] - 100,
+                "date": task["created"] - timedelta(days=60),
                 "action_type": "warning",
                 "status": "resolved",
                 "issue": "Incomplete beneficiary information in forms",
             },
         ]
     else:
-        action["flw_history"] = [
+        task["flw_history"] = [
             {
-                "id": action["id"] - 100,
-                "date": action["created"] - timedelta(days=45),
+                "id": task["id"] - 100,
+                "date": task["created"] - timedelta(days=45),
                 "action_type": "warning",
                 "status": "resolved",
                 "issue": "Photo quality issues",
             },
             {
-                "id": action["id"] - 200,
-                "date": action["created"] - timedelta(days=90),
+                "id": task["id"] - 200,
+                "date": task["created"] - timedelta(days=90),
                 "action_type": "warning",
                 "status": "resolved",
                 "issue": "Incomplete form submissions",
@@ -565,51 +565,51 @@ def get_mock_action_detail(action_id):
         ]
 
     # Add notification details
-    if action["action_type"] == "warning":
-        action["notification"] = {
-            "recipient": action["flw_name"],
+    if task["action_type"] == "warning":
+        task["notification"] = {
+            "recipient": task["flw_name"],
             "subject": "Quality Assurance Notice - Action Required",
             "message": (
-                f"Dear {action['flw_name']},\n\n"
+                f"Dear {task['flw_name']},\n\n"
                 f"Our quality assurance team has identified areas for improvement in your recent "
-                f"work on {action['opportunity']}. Please review the audit session details and "
+                f"work on {task['opportunity']}. Please review the audit session details and "
                 f"ensure compliance with program standards.\n\n"
-                f"Audit Session: #{action['audit_session_id']}\n\n"
+                f"Audit Session: #{task['audit_session_id']}\n\n"
                 f"Best regards,\nProgram Management Team"
             ),
-            "sent_at": action["created"] + timedelta(minutes=5),
+            "sent_at": task["created"] + timedelta(minutes=5),
         }
     else:
-        action["notification"] = {
-            "recipient": action["flw_name"],
+        task["notification"] = {
+            "recipient": task["flw_name"],
             "subject": "Account Status Update - Temporary Deactivation",
             "message": (
-                f"Dear {action['flw_name']},\n\n"
-                f"Due to quality assurance findings, your access to {action['opportunity']} has "
+                f"Dear {task['flw_name']},\n\n"
+                f"Due to quality assurance findings, your access to {task['opportunity']} has "
                 f"been temporarily suspended pending review. Your Network Manager has been "
                 f"notified and will be in touch.\n\n"
-                f"Audit Session: #{action['audit_session_id']}\n\n"
+                f"Audit Session: #{task['audit_session_id']}\n\n"
                 f"For questions, please contact your Network Manager.\n\n"
                 f"Best regards,\nProgram Management Team"
             ),
-            "sent_at": action["created"] + timedelta(minutes=5),
+            "sent_at": task["created"] + timedelta(minutes=5),
         }
 
-    return action
+    return task
 
 
-def actions_list(request):
-    """Display list of all action tickets with filtering."""
-    actions = get_mock_actions()
+def tasks_list(request):
+    """Display list of all task tickets with filtering."""
+    tasks = get_mock_tasks()
 
     # Calculate statistics
     stats = {
-        "total": len(actions),
-        "unassigned": len([a for a in actions if a["status"] == "unassigned"]),
-        "network_manager": len([a for a in actions if a["status"] == "network_manager"]),
-        "program_manager": len([a for a in actions if a["status"] == "program_manager"]),
-        "action_underway": len([a for a in actions if a["status"] == "action_underway"]),
-        "resolved": len([a for a in actions if a["status"] == "resolved"]),
+        "total": len(tasks),
+        "unassigned": len([t for t in tasks if t["status"] == "unassigned"]),
+        "network_manager": len([t for t in tasks if t["status"] == "network_manager"]),
+        "program_manager": len([t for t in tasks if t["status"] == "program_manager"]),
+        "action_underway": len([t for t in tasks if t["status"] == "action_underway"]),
+        "resolved": len([t for t in tasks if t["status"] == "resolved"]),
     }
 
     # Get filter parameters
@@ -618,16 +618,16 @@ def actions_list(request):
 
     # Apply filters
     if status_filter != "all":
-        actions = [a for a in actions if a["status"] == status_filter]
+        tasks = [t for t in tasks if t["status"] == status_filter]
     if action_type_filter != "all":
-        actions = [a for a in actions if a["action_type"] == action_type_filter]
+        tasks = [t for t in tasks if t["action_type"] == action_type_filter]
 
     # Get unique values for filter dropdowns
-    statuses = sorted({a["status"] for a in get_mock_actions()})
-    action_types = sorted({a["action_type"] for a in get_mock_actions()})
+    statuses = sorted({t["status"] for t in get_mock_tasks()})
+    action_types = sorted({t["action_type"] for t in get_mock_tasks()})
 
     context = {
-        "actions": actions,
+        "tasks": tasks,
         "stats": stats,
         "statuses": statuses,
         "action_types": action_types,
@@ -635,17 +635,17 @@ def actions_list(request):
         "selected_action_type": action_type_filter,
     }
 
-    return render(request, "actions/actions_list.html", context)
+    return render(request, "tasks/tasks_list.html", context)
 
 
-def action_detail_streamlined(request, action_id):
-    """Streamlined View: Action-focused interface for assigning and contacting."""
-    action = get_mock_action_detail(action_id)
+def task_detail_streamlined(request, task_id):
+    """Streamlined View: Task-focused interface for assigning and contacting."""
+    task = get_mock_task_detail(task_id)
 
     context = {
-        "action": action,
+        "task": task,
         "prototype_name": "Streamlined View",
-        "prototype_description": "Simple action-focused interface: assign or contact",
+        "prototype_description": "Simple task-focused interface: assign or contact",
     }
 
-    return render(request, "actions/action_detail_streamlined.html", context)
+    return render(request, "tasks/task_detail_streamlined.html", context)

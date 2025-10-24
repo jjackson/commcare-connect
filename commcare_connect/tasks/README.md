@@ -1,14 +1,14 @@
-# Actions App - Prototype Documentation
+# Tasks App - Prototype Documentation
 
 ## Overview
 
-The Actions app is a prototype system for tracking and managing actions taken against Field-Level Workers (FLWs) based on various triggers (currently audit failures, but designed to support other sources like compliance issues, performance flags, or manual interventions).
+The Tasks app is a prototype system for tracking and managing actions taken against Field-Level Workers (FLWs) based on various triggers (currently audit failures, but designed to support other sources like compliance issues, performance flags, or manual interventions).
 
 **Status:** PROTOTYPE - No database models implemented yet. All data is mocked for UI exploration.
 
 ## ⭐ Streamlined View (Default)
 
-**URL:** `/actions/<id>/` (default "View" button)
+**URL:** `/tasks/<id>/` (default "View" button)
 
 The **Streamlined View** is an action-focused inbox designed for quick decisions. No complex workflows—just **assign or contact** in 2 clicks.
 
@@ -29,7 +29,7 @@ The **Streamlined View** is an action-focused inbox designed for quick decisions
 
 ## Enhanced View (Alternative)
 
-**URL:** `/actions/<id>/enhanced/`
+**URL:** `/tasks/<id>/enhanced/`
 
 The **Enhanced Modern UI** incorporates best practices from leading ticketing systems (Linear, Jira, Zendesk). Available for power users who prefer more features.
 
@@ -71,17 +71,17 @@ Actions flow through these states:
 
 ## URL Structure
 
-- `/actions/` - Main list view with filtering and statistics
-- `/actions/<id>/` - **Streamlined view (default) - action-focused**
-- `/actions/<id>/v2/` - Simplified view with progress bar
-- `/actions/<id>/enhanced/` - Enhanced modern UI with advanced features
-- `/actions/<id>/timeline/` - Timeline-based prototype
-- `/actions/<id>/cards/` - Card-based workflow prototype
-- `/actions/<id>/split/` - Split-panel with history sidebar prototype
+- `/tasks/` - Main list view with filtering and statistics
+- `/tasks/<id>/` - **Streamlined view (default) - action-focused**
+- `/tasks/<id>/v2/` - Simplified view with progress bar
+- `/tasks/<id>/enhanced/` - Enhanced modern UI with advanced features
+- `/tasks/<id>/timeline/` - Timeline-based prototype
+- `/tasks/<id>/cards/` - Card-based workflow prototype
+- `/tasks/<id>/split/` - Split-panel with history sidebar prototype
 
 ## View Descriptions
 
-### ⭐ Streamlined View (`/actions/<id>/`) - DEFAULT
+### ⭐ Streamlined View (`/tasks/<id>/`) - DEFAULT
 
 **Focus:** Action-first interface for getting things done
 
@@ -98,7 +98,7 @@ Actions flow through these states:
 
 **Best For:** Low-volume usage, quick decisions, users who need to assign or contact. No training needed.
 
-### Simplified View (`/actions/<id>/v2/`)
+### Simplified View (`/tasks/<id>/v2/`)
 
 **Focus:** Clarity with visual workflow
 
@@ -112,7 +112,7 @@ Actions flow through these states:
 
 **Best For:** Understanding workflow progression, visual learners.
 
-### Enhanced View (`/actions/<id>/enhanced/`) - POWER USERS
+### Enhanced View (`/tasks/<id>/enhanced/`) - POWER USERS
 
 **Focus:** Modern ticketing best practices
 
@@ -130,7 +130,7 @@ Actions flow through these states:
 
 ## Original Prototype Descriptions
 
-### 1. Timeline View (`/actions/<id>/timeline/`)
+### 1. Timeline View (`/tasks/<id>/timeline/`)
 
 **Focus:** Chronological activity feed
 
@@ -144,7 +144,7 @@ Actions flow through these states:
 
 **Best For:** Users who think in terms of "what happened when" and want a clear audit trail.
 
-### 2. Cards View (`/actions/<id>/cards/`)
+### 2. Cards View (`/tasks/<id>/cards/`)
 
 **Focus:** Modular, task-oriented layout
 
@@ -163,7 +163,7 @@ Actions flow through these states:
 
 **Best For:** Users who want to see all relevant information at once and prefer to navigate between different aspects visually.
 
-### 3. Split Panel View (`/actions/<id>/split/`)
+### 3. Split Panel View (`/tasks/<id>/split/`)
 
 **Focus:** Historical context alongside current details
 
@@ -211,14 +211,14 @@ All templates follow existing CommCare Connect patterns:
 ## Files
 
 ```
-commcare_connect/actions/
+commcare_connect/tasks/
 ├── __init__.py
 ├── apps.py              # App configuration
 ├── urls.py              # URL routing
 ├── views.py             # Mock views with sample data
 └── README.md            # This file
 
-commcare_connect/templates/actions/
+commcare_connect/templates/tasks/
 ├── actions_list.html                  # Main list page
 ├── action_detail_streamlined.html     # ⭐ Streamlined view (default)
 ├── action_detail_simplified.html      # Simplified view with progress bar
@@ -263,7 +263,7 @@ commcare_connect/templates/actions/
 ## Testing the Prototypes
 
 1. Start the development server: `python manage.py runserver`
-2. Navigate to `/actions/`
+2. Navigate to `/tasks/`
 3. Click the prototype icons (stream/cards/columns) to view different layouts
 4. Use filters to see different subsets of actions
 5. Gather feedback on which approach works best for your workflows

@@ -6,13 +6,13 @@
   <!-- Simple Top Bar -->
   <div class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
     <div class="flex items-center gap-3">
-      <a href="{% url 'actions:list' %}" class="text-gray-600 hover:text-gray-900">
+      <a href="{% url 'tasks:list' %}" class="text-gray-600 hover:text-gray-900">
         <i class="fa-solid fa-arrow-left"></i> Back to Actions
       </a>
     </div>
     <div class="flex items-center gap-2">
-      <span class="text-xs text-gray-500">Action #{{ action.id }}</span>
-      <a href="{% url 'actions:detail' action.id %}" class="text-xs text-purple-600 hover:text-purple-800">
+      <span class="text-xs text-gray-500">Action #{{ task.id }}</span>
+      <a href="{% url 'tasks:detail' task.id %}" class="text-xs text-purple-600 hover:text-purple-800">
         <i class="fa-solid fa-eye mr-1"></i> Alternate View
       </a>
     </div>
@@ -28,12 +28,12 @@
           <div class="flex items-start justify-between">
             <div class="flex items-center gap-4">
               <div class="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold">
-                {{ action.flw_name|slice:":1"|upper }}
+                {{ task.flw_name|slice:":1"|upper }}
               </div>
               <div>
-                <h1 class="text-2xl font-bold mb-1">{{ action.flw_name }}</h1>
-                <div class="text-sm opacity-90">{{ action.flw_username }}</div>
-                <div class="text-sm opacity-75 mt-1">{{ action.opportunity }}</div>
+                <h1 class="text-2xl font-bold mb-1">{{ task.flw_name }}</h1>
+                <div class="text-sm opacity-90">{{ task.flw_username }}</div>
+                <div class="text-sm opacity-75 mt-1">{{ task.opportunity }}</div>
               </div>
             </div>
             <div class="flex items-center gap-3">
@@ -44,7 +44,7 @@
                 Previous Issues (1)
               </button>
 
-              {% if action.action_type == "warning" %}
+              {% if task.action_type == "warning" %}
               <span class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-yellow-400 text-yellow-900 font-medium">
                 <i class="fa-solid fa-exclamation-triangle mr-1"></i> Warning Issued
               </span>
@@ -64,8 +64,8 @@
                class="mt-4 bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
             <div class="text-sm font-medium mb-2">Past 90 Days</div>
             <div class="space-y-2">
-              {% for issue in action.flw_history %}
-              <a href="{% url 'actions:detail' issue.id %}"
+              {% for issue in task.flw_history %}
+              <a href="{% url 'tasks:detail' issue.id %}"
                  class="flex items-center justify-between p-2 bg-white/10 hover:bg-white/20 rounded text-sm transition-colors">
                 <div class="flex items-center gap-2">
                   <i class="fa-solid fa-circle-check text-green-300"></i>
@@ -82,20 +82,20 @@
       <div class="px-6 py-5 border-b border-gray-200">
         <h2 class="text-lg font-semibold text-gray-900 mb-2">What Happened</h2>
         <p class="text-gray-700 mb-3">
-          {% if action.id == 1001 %}
+          {% if task.id == 1001 %}
           Photo quality issues detected during audit. The "glasses on face" images were not taken from the proper angle. Photos must be head-on, from shoulders up, to properly verify glasses fit. A warning has been sent to the worker and they have been assigned the Image Capture learning module.
-          {% elif action.action_type == "warning" %}
+          {% elif task.action_type == "warning" %}
           Quality issues were detected in their work during an audit. A warning notification has been sent to the worker.
           {% else %}
           Serious quality issues were detected during an audit. The worker has been temporarily deactivated from this opportunity.
           {% endif %}
         </p>
         <div class="flex items-center gap-4 text-sm text-gray-600">
-          <span><i class="fa-solid fa-calendar mr-1"></i> {{ action.created|date:"M d, Y" }}</span>
-          <span><i class="fa-solid fa-clock mr-1"></i> {{ action.created|timesince }} ago</span>
-          <a href="/audit/session/{{ action.audit_session_id }}/"
+          <span><i class="fa-solid fa-calendar mr-1"></i> {{ task.created|date:"M d, Y" }}</span>
+          <span><i class="fa-solid fa-clock mr-1"></i> {{ task.created|timesince }} ago</span>
+          <a href="/audit/session/{{ task.audit_session_id }}/"
              class="text-brand-indigo hover:underline">
-            <i class="fa-solid fa-file-alt mr-1"></i> View Audit Report #{{ action.audit_session_id }}
+            <i class="fa-solid fa-file-alt mr-1"></i> View Audit Report #{{ task.audit_session_id }}
           </a>
         </div>
       </div>
@@ -199,7 +199,7 @@
       <div class="p-6">
         <!-- Timeline (Human Events + Learning) -->
         <div class="space-y-4">
-          {% for item in action.timeline %}
+          {% for item in task.timeline %}
           {% if "Comment" in item.action or "Learning" in item.action or "AI Conversation" in item.action or "Reactivation" in item.action or "Acknowledged" in item.action or "Created" in item.action %}
 
           {% if "AI Conversation" in item.action %}
@@ -266,19 +266,19 @@
           <!-- Regular timeline item -->
           <div class="flex gap-4 p-4 {% if 'Learning Completed' in item.action or 'Acknowledged' in item.action %}border-l-4 border-green-400 bg-green-50{% else %}bg-gray-50{% endif %} rounded-lg border border-gray-200">
             <div class="flex-shrink-0">
-              <div class="w-10 h-10 rounded-full flex items-center justify-center {% if 'Learning Completed' in item.action or 'Acknowledged' in item.action %}bg-green-100 text-green-600{% elif 'Learning Assigned' in item.action %}bg-blue-100 text-blue-600{% elif item.actor == action.flw_name %}bg-green-100 text-green-600{% else %}bg-gray-100 text-gray-600{% endif %}">
+              <div class="w-10 h-10 rounded-full flex items-center justify-center {% if 'Learning Completed' in item.action or 'Acknowledged' in item.action %}bg-green-100 text-green-600{% elif 'Learning Assigned' in item.action %}bg-blue-100 text-blue-600{% elif item.actor == task.flw_name %}bg-green-100 text-green-600{% else %}bg-gray-100 text-gray-600{% endif %}">
                 <i class="fa-solid {% if 'Learning Assigned' in item.action %}fa-graduation-cap{% elif 'Learning Completed' in item.action %}fa-check-circle{% else %}fa-comment{% endif %}"></i>
               </div>
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-start justify-between mb-1">
                 <div class="flex items-center gap-2">
-                  {% if "Program Manager" in item.actor or item.actor == action.created_by %}
+                  {% if "Program Manager" in item.actor or item.actor == task.created_by %}
                   <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style="background-color: #dbeafe; color: #1e40af;">
                     Program Manager
                   </span>
                   <span class="font-medium text-gray-900">{{ item.display_name }}</span>
-                  {% elif "Network Manager" in item.actor or item.actor == action.assigned_to %}
+                  {% elif "Network Manager" in item.actor or item.actor == task.assigned_to %}
                   <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style="background-color: #e9d5ff; color: #6b21a8;">
                     Network Manager
                   </span>
@@ -357,7 +357,7 @@
           <i class="fa-solid fa-times"></i>
         </button>
       </div>
-      <p class="text-sm text-gray-600 mb-4">Select an AI agent to reach out to {{ action.flw_name }} to discuss this issue and guide them toward a resolution.</p>
+      <p class="text-sm text-gray-600 mb-4">Select an AI agent to reach out to {{ task.flw_name }} to discuss this issue and guide them toward a resolution.</p>
 
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -416,7 +416,7 @@
           <i class="fa-solid fa-times"></i>
         </button>
       </div>
-      <p class="text-sm text-gray-600 mb-4">Select one or more learning modules to assign to {{ action.flw_name }}:</p>
+      <p class="text-sm text-gray-600 mb-4">Select one or more learning modules to assign to {{ task.flw_name }}:</p>
 
       <div class="space-y-2 mb-4">
         <label class="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
