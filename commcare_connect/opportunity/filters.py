@@ -4,7 +4,6 @@ from django import forms
 
 from commcare_connect.opportunity.models import OpportunityAccess
 from commcare_connect.program.models import Program
-from commcare_connect.utils.analytics import Event, send_event_to_ga
 
 
 class FilterMixin:
@@ -49,21 +48,17 @@ class FilterMixin:
             return {name: f.form.cleaned_data.get(name) for name in f.filters.keys()}
         return {}
 
-    def track_filter_usage(self):
+    def get_filter_usage_data(self):
         values = self.get_filter_values()
         applied = [k for k, v in values.items() if v not in (None, "", [])]
         if not applied:
-            return
+            return None
 
-        event = Event(
-            name="filters_applied",
-            params={
-                "filters": applied,
-                "filter_count": len(applied),
-                "page_path": self.request.path,
-            },
-        )
-        send_event_to_ga(self.request, event)
+        return {
+            "filters": applied,
+            "filter_count": len(applied),
+            "page_path": self.request.path,
+        }
 
     def filters_applied_count(self):
         return len([v for v in self.get_filter_values().values() if v not in (None, "", [])])
@@ -72,6 +67,7 @@ class FilterMixin:
         return {
             "filter_form": self.get_filter_form(),
             "filters_applied_count": self.filters_applied_count(),
+            "filter_usage_data": self.get_filter_usage_data(),
         }
 
 
