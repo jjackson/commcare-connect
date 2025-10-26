@@ -6,7 +6,6 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     OpportunityVerificationFlags,
     UserVisit,
-    VisitReviewStatus,
     VisitValidationStatus,
 )
 from commcare_connect.program.models import Program
@@ -156,12 +155,10 @@ class UserVisitFilterSet(django_filters.FilterSet):
     )
     status = django_filters.MultipleChoiceFilter(
         label="Visit Status",
-        choices=VisitValidationStatus.choices,
-        widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-    )
-    review_status = django_filters.MultipleChoiceFilter(
-        label="Review Status",
-        choices=VisitReviewStatus.choices,
+        choices=[
+            (c.value, c.label)
+            for c in [VisitValidationStatus.over_limit, VisitValidationStatus.duplicate, VisitValidationStatus.trial]
+        ],
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
     )
     flagged = YesNoFilter(label="Flagged")
@@ -174,7 +171,7 @@ class UserVisitFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = UserVisit
-        fields = ["user", "visit_date", "status", "review_status", "flagged", "flags"]
+        fields = ["user", "visit_date", "status", "flagged", "flags"]
         form = CSRFExemptForm
 
     def __init__(self, *args, **kwargs):
