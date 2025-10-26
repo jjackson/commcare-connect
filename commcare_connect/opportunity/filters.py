@@ -2,8 +2,9 @@ import django_filters
 from crispy_forms.helper import FormHelper
 from django import forms
 
-from commcare_connect.opportunity.models import OpportunityAccess
+from commcare_connect.opportunity.models import OpportunityAccess, UserVisit, VisitReviewStatus, VisitValidationStatus
 from commcare_connect.program.models import Program
+from commcare_connect.users.models import User
 
 
 class FilterMixin:
@@ -131,3 +132,46 @@ class OpportunityListFilterSet(django_filters.FilterSet):
                 self.filters["program"].extra["choices"] = [(p.slug, p.name) for p in user_programs]
             else:
                 del self.filters["program"]
+
+
+class UserVisitFilterSet(django_filters.FilterSet):
+    user = django_filters.ChoiceFilter(
+        label="Worker",
+        choices=[],
+        empty_label="All",
+        widget=forms.Select(attrs={"data-tomselect": "1"}),
+    )
+    visit_date = django_filters.DateFilter(
+        label="Visit Date",
+        field_name="visit_date",
+        lookup_expr="date",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    status = django_filters.MultipleChoiceFilter(
+        label="Visit Status",
+        choices=VisitValidationStatus.choices,
+        widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
+    )
+    review_status = django_filters.MultipleChoiceFilter(
+        label="Review Status",
+        choices=VisitReviewStatus.choices,
+        widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
+    )
+    flagged = YesNoFilter(label="Flagged")
+
+    class Meta:
+        model = UserVisit
+        fields = ["user", "visit_date", "status", "review_status", "flagged"]
+        form = CSRFExemptForm
+
+    def __init__(self, *args, **kwargs):
+        opportunity = kwargs.pop("opportunity", None)
+        super().__init__(*args, **kwargs)
+
+        if opportunity:
+            user_filter = self.filters["user"]
+            user_queryset = (
+                User.objects.filter(opportunityaccess__opportunity=opportunity).distinct().order_by("name", "username")
+            )
+            user_choices = [(str(user.id), f"{user.name} ({user.username})") for user in user_queryset]
+            user_filter.extra["choices"] = user_choices
