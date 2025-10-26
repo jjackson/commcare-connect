@@ -636,6 +636,12 @@ class VisitReviewStatus(models.TextChoices):
 
 class UserVisitQuerySet(models.QuerySet):
     def with_any_flags(self, flags):
+        from commcare_connect.utils.flags import Flags
+
+        # flags should be a subset of Flags
+        allowed_flags = {flag.value for flag in Flags}
+        flags = list(set(flags) & allowed_flags)
+
         if not flags:
             return self
 

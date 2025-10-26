@@ -131,7 +131,6 @@ def test_access_visit_count(opportunity: Opportunity):
         ([Flags.DUPLICATE.value, Flags.GPS.value], {"duplicate", "gps"}),
         ([], {"duplicate", "gps", "clean"}),
     ],
-    ids=["single_flag", "multiple_flags", "no_flags"],
 )
 def test_uservisit_queryset_with_any_flags(query_flags, expected_keys):
     visits = {

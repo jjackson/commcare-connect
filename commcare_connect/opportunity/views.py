@@ -1425,24 +1425,20 @@ def user_visit_verification(request, org_slug, opp_id):
         filtered_queryset = filter_set.qs
         selected_user_id_raw = cleaned_data.get("user")
         selected_user_id = int(selected_user_id_raw) if selected_user_id_raw else None
+        selected_flags = set(cleaned_data.get("flags") or [])
     else:
         filters_applied_count = 0
         filtered_queryset = base_queryset
         selected_user_id = None
-
-    selected_opportunity_access = None
-    if selected_user_id:
-        selected_opportunity_access = (
-            OpportunityAccess.objects.filter(opportunity=opportunity, user_id=selected_user_id)
-            .select_related("user")
-            .first()
-        )
+        selected_flags = set()
 
     user_visit_counts = get_user_visit_counts(opportunity, filtered_queryset)
     visits = filtered_queryset.filter(flagged=True, flag_reason__isnull=False)
     flagged_info = defaultdict(lambda: {"name": "", "approved": 0, "pending": 0, "rejected": 0})
     for visit in visits:
         for flag, _description in visit.flag_reason.get("flags", []):
+            if selected_flags and flag not in selected_flags:
+                continue
             flag_label = FlagLabels.get_label(flag)
             if visit.status == VisitValidationStatus.approved:
                 if opportunity.managed and visit.review_created_on is not None:
@@ -1459,6 +1455,13 @@ def user_visit_verification(request, org_slug, opp_id):
             flagged_info[flag_label]["name"] = flag_label
     flagged_info = flagged_info.values()
 
+    selected_opportunity_access = None
+    if selected_user_id:
+        selected_opportunity_access = (
+            OpportunityAccess.objects.filter(opportunity=opportunity, user_id=selected_user_id)
+            .select_related("user")
+            .first()
+        )
     access_filter = Q(opportunity=opportunity)
     if selected_opportunity_access:
         access_filter &= Q(id=selected_opportunity_access.id)
