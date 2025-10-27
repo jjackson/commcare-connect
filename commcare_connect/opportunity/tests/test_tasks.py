@@ -226,7 +226,7 @@ class TestIssueCredentialsTask:
 @pytest.mark.django_db
 class TestGetLearningUserCredentials:
     def test_no_credentials_issued_yet(self, opportunity):
-        cred_config = CredentialConfigurationFactory(
+        CredentialConfigurationFactory(
             opportunity=opportunity,
             learn_level=LearnLevel.LEARN_PASSED,
         )
@@ -237,7 +237,9 @@ class TestGetLearningUserCredentials:
 
         AssessmentFactory(opportunity_access=access, opportunity=opportunity, passed=True)
 
-        users_earning_creds = get_learning_user_credentials(cred_config)
+        users_earning_creds = get_learning_user_credentials(
+            Opportunity.objects.filter(id=opportunity.id), LearnLevel.LEARN_PASSED
+        )
         assert len(users_earning_creds) == 1
 
         cred_to_be_issued = users_earning_creds[0]
@@ -248,7 +250,7 @@ class TestGetLearningUserCredentials:
         assert cred_to_be_issued.delivery_type == opportunity.delivery_type
 
     def test_existing_credential_users_skipped(self, opportunity):
-        cred_config = CredentialConfigurationFactory(
+        CredentialConfigurationFactory(
             opportunity=opportunity,
             learn_level=LearnLevel.LEARN_PASSED,
         )
@@ -267,7 +269,8 @@ class TestGetLearningUserCredentials:
         )
         assert UserCredential.objects.count() == 1
 
-        users_earning_creds = get_learning_user_credentials(cred_config)
+        opp_query = Opportunity.objects.filter(id=opportunity.id)
+        users_earning_creds = get_learning_user_credentials(opp_query, LearnLevel.LEARN_PASSED)
         assert len(users_earning_creds) == 0
 
         access2 = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
@@ -282,7 +285,7 @@ class TestGetLearningUserCredentials:
 
         AssessmentFactory(opportunity_access=access3, opportunity=opportunity, passed=False)
 
-        users_earning_creds = get_learning_user_credentials(cred_config)
+        users_earning_creds = get_learning_user_credentials(opp_query, LearnLevel.LEARN_PASSED)
         assert len(users_earning_creds) == 1
         assert users_earning_creds[0].user_id == access2.user.id
 
@@ -305,7 +308,9 @@ class TestGetDeliveryUserCredentials:
         # Refresh from db to convert enum to string value
         cred_config.refresh_from_db()
 
-        users_earning_creds = get_delivery_user_credentials(cred_config)
+        users_earning_creds = get_delivery_user_credentials(
+            Opportunity.objects.filter(id=opportunity.id), DeliveryLevel.FIFTY
+        )
         assert len(users_earning_creds) == 1
 
         cred_to_be_issued = users_earning_creds[0]
@@ -333,12 +338,13 @@ class TestGetDeliveryUserCredentials:
         )
         assert UserCredential.objects.count() == 1
 
-        users_earning_creds = get_delivery_user_credentials(cred_config)
+        opp_query = Opportunity.objects.filter(id=opportunity.id)
+        users_earning_creds = get_delivery_user_credentials(opp_query, DeliveryLevel.FIFTY)
         assert len(users_earning_creds) == 0
 
         access2 = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
         CompletedWorkFactory.create_batch(50, opportunity_access=access2, status=CompletedWorkStatus.approved)
 
-        users_earning_creds = get_delivery_user_credentials(cred_config)
+        users_earning_creds = get_delivery_user_credentials(opp_query, DeliveryLevel.FIFTY)
         assert len(users_earning_creds) == 1
         assert users_earning_creds[0].user_id == access2.user.id
