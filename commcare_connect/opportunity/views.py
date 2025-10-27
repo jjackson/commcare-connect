@@ -1029,17 +1029,14 @@ def delete_form_json_rule(request, org_slug=None, opp_id=None, pk=None):
     return HttpResponse(status=200)
 
 
-class OpportunityCompletedWorkTable(OrganizationUserMixin, SingleTableView):
+class OpportunityCompletedWorkTable(OrganizationUserMixin, OpportunityObjectMixin, SingleTableView):
     model = CompletedWork
     paginate_by = 25
     table_class = CompletedWorkTable
     template_name = "tables/single_table.html"
 
     def get_queryset(self):
-        opportunity_id = self.kwargs["opp_id"]
-        org_slug = self.kwargs["org_slug"]
-        opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
-        access_objects = OpportunityAccess.objects.filter(opportunity=opportunity)
+        access_objects = OpportunityAccess.objects.filter(opportunity=self.get_opportunity())
         return list(
             filter(lambda cw: cw.completed, CompletedWork.objects.filter(opportunity_access__in=access_objects))
         )
@@ -1559,7 +1556,7 @@ def get_user_visit_counts(opportunity_access_id: int, date=None):
     return user_visit_counts
 
 
-class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
+class VisitVerificationTableView(OrganizationUserMixin, OpportunityObjectMixin, SingleTableView):
     model = UserVisit
     table_class = UserVisitVerificationTable
     template_name = "opportunity/user_visit_verification_table.html"
@@ -1665,9 +1662,8 @@ class VisitVerificationTableView(OrganizationUserMixin, SingleTableView):
         return context
 
     def get_queryset(self):
-        self.opportunity = get_opportunity_or_404(self.kwargs["opp_id"], self.kwargs["org_slug"])
         self.opportunity_access = get_object_or_404(
-            OpportunityAccess, opportunity=self.opportunity, pk=self.kwargs["pk"]
+            OpportunityAccess, opportunity=self.get_opportunity(), pk=self.kwargs["pk"]
         )
 
         self.filter_status = self.request.GET.get("filter_status")
@@ -2113,16 +2109,13 @@ def deliver_unit_table(request, org_slug=None, opp_id=None):
     )
 
 
-class OpportunityPaymentUnitTableView(OrganizationUserMixin, OrgContextSingleTableView):
+class OpportunityPaymentUnitTableView(OrganizationUserMixin, OpportunityObjectMixin, OrgContextSingleTableView):
     model = PaymentUnit
     table_class = PaymentUnitTable
     template_name = "tables/single_table.html"
 
     def get_queryset(self):
-        opportunity_id = self.kwargs["opp_id"]
-        org_slug = self.kwargs["org_slug"]
-        self.opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
-        return PaymentUnit.objects.filter(opportunity=self.opportunity).prefetch_related("deliver_units")
+        return PaymentUnit.objects.filter(opportunity=self.get_opportunity()).prefetch_related("deliver_units")
 
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
