@@ -545,18 +545,18 @@ def issue_credentials_to_users():
         }
 
     unissued_credentials_qs = get_unissued_user_credentials_queryset()
-    payload_size_counter = 0
+    index_in_chunk = 0
     credentials_payload_items = []
     index_to_credential_ids_set_mapper = {}
 
-    for index, users_credential in enumerate(unissued_credentials_qs.iterator(chunk_size=MAX_CREDENTIALS_PER_REQUEST)):
-        payload_size_counter += 1
-        index_to_credential_ids_set_mapper[index] = users_credential["credential_ids"]
+    for users_credential in unissued_credentials_qs.iterator(chunk_size=MAX_CREDENTIALS_PER_REQUEST):
+        index_to_credential_ids_set_mapper[index_in_chunk] = users_credential["credential_ids"]
         credentials_payload_items.append(parse_credential_payload_item(users_credential))
+        index_in_chunk += 1
 
-        if payload_size_counter >= MAX_CREDENTIALS_PER_REQUEST:
+        if index_in_chunk >= MAX_CREDENTIALS_PER_REQUEST:
             submit_credentials(index_to_credential_ids_set_mapper, credentials_payload_items)
-            payload_size_counter = 0
+            index_in_chunk = 0
             credentials_payload_items = []
             index_to_credential_ids_set_mapper = {}
 
