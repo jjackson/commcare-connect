@@ -57,6 +57,7 @@ class User(AbstractUser):
             ("otp_access", "Allow fetching OTPs for Connect users"),
             ("kpi_report_access", "Allow access to KPI reports"),
             ("all_org_access", "Allow admin access to all organizations"),
+            ("view_commcarehq_form_link", "Can view CommCareHQ form link"),
         ]
 
     def __str__(self):

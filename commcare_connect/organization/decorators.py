@@ -1,7 +1,6 @@
 from functools import wraps
 
-from django.core.exceptions import PermissionDenied
-from django.http import HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
 
 from commcare_connect.utils.permission_const import ALL_ORG_ACCESS
@@ -55,7 +54,7 @@ def _get_decorated_function(view_func, permission_test_function):
             return HttpResponseRedirect("{}?next={}".format(reverse("account_login"), request.path))
 
         if not permission_test_function(request):
-            raise PermissionDenied()
+            raise Http404()
 
         return view_func(request, *args, **kwargs)
 

@@ -2,7 +2,7 @@ from django.contrib.auth.models import Permission
 from django.test import Client
 
 
-def check_basic_permissions(user, url, permission_codename):
+def check_basic_permissions(user, url, permission_codename, status_code=403):
     client = Client()
 
     # Anonymous → redirect
@@ -13,7 +13,7 @@ def check_basic_permissions(user, url, permission_codename):
     # Logged-in without permission → forbidden
     client.force_login(user)
     response = client.get(url)
-    assert response.status_code == 403
+    assert response.status_code == status_code
     client.logout()
 
     # With permission → allowed
