@@ -50,4 +50,4 @@ class TestAllOrgAccessPermission:
     @pytest.mark.parametrize("url_name", ["admin_fbv", "viewer_fbv", "member_fbv", "member_cbv", "viewer_cbv"])
     def test_permissions(self, url_name, organization):
         url = reverse(f"organization:{url_name}", args=(organization.slug,))
-        check_basic_permissions(UserFactory(), url, "all_org_access")
+        check_basic_permissions(UserFactory(), url, "all_org_access", 404)
