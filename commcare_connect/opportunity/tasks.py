@@ -12,7 +12,7 @@ from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, F, OuterRef, Q, Subquery
 from django.urls import reverse
 from django.utils.timezone import now
 from django.utils.translation import gettext
@@ -52,6 +52,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.utils.completed_work import update_status
+from commcare_connect.users.credential_levels import DeliveryLevel, LearnLevel
 from commcare_connect.users.models import User, UserCredential
 from commcare_connect.utils.celery import set_task_progress
 from commcare_connect.utils.datetime import is_date_before
@@ -456,71 +457,86 @@ def fetch_exchange_rates(date=None, currency=None):
 
 @celery_app.task()
 def issue_user_credentials():
-    query = CredentialConfiguration.objects.select_related("opportunity")
+    all_cred_levels = DeliveryLevel.choices + LearnLevel.choices
+    user_credentials_data = []
+    for cred_level, _ in all_cred_levels:
+        cred_level_opportunity_ids = CredentialConfiguration.objects.filter(
+            Q(learn_level=cred_level) | Q(delivery_level=cred_level)
+        ).values_list("opportunity_id", flat=True)
 
-    for credential_config in query.iterator(chunk_size=100):
-        user_credentials_data = []
-        if credential_config.delivery_level:
+        if cred_level in DeliveryLevel.values:
             user_credentials_data.extend(
-                get_delivery_user_credentials(credential_config),
+                get_delivery_user_credentials(cred_level_opportunity_ids, cred_level),
             )
-        if credential_config.learn_level:
-            user_credentials_data.extend(get_learning_user_credentials(credential_config))
+        else:
+            user_credentials_data.extend(
+                get_learning_user_credentials(cred_level_opportunity_ids, cred_level),
+            )
 
-        UserCredential.objects.bulk_create(user_credentials_data)
+        UserCredential.objects.bulk_create(user_credentials_data, batch_size=100)
+        user_credentials_data = []
 
     issue_credentials_to_users.delay()
 
 
-def get_delivery_user_credentials(credential_config):
-    from commcare_connect.users.credential_levels import delivery_level_to_int
+def get_delivery_user_credentials(opportunities, credential_level):
+    level_int = UserCredential.delivery_level_num(credential_level, UserCredential.CredentialType.DELIVERY)
+    if not level_int:
+        return []
 
-    user_ids_to_exclude = _get_users_ids_to_exclude(
-        opportunity=credential_config.opportunity,
+    user_credentials_to_exclude = UserCredential.objects.filter(
+        opportunity=OuterRef("opportunity_access__opportunity"),
         credential_type=UserCredential.CredentialType.DELIVERY,
-        level=credential_config.delivery_level,
-    )
-    level_int = delivery_level_to_int(credential_config.delivery_level)
+        level=credential_level,
+    ).values_list("user_id", flat=True)
 
     users_earning_credentials = (
         CompletedWork.objects.filter(
-            opportunity_access__opportunity=credential_config.opportunity,
+            opportunity_access__opportunity__id__in=opportunities,
             status=CompletedWorkStatus.approved,
         )
-        .exclude(opportunity_access__user_id__in=user_ids_to_exclude)
+        .exclude(opportunity_access__user_id__in=Subquery(user_credentials_to_exclude))
         .values("opportunity_access__user_id")
         .annotate(deliveries_count=Count("opportunity_access__user_id"))
         .filter(deliveries_count__gte=level_int)
-        .values_list("opportunity_access__user_id", flat=True)
+        .annotate(
+            opportunity_id=F("opportunity_access__opportunity_id"),
+            delivery_type_id=F("opportunity_access__opportunity__delivery_type_id"),
+            cred_user_id=F("opportunity_access__user_id"),
+        )
+        .values("cred_user_id", "opportunity_id", "delivery_type_id")
     )
+
     return _parse_to_user_credential_models(
-        credential_config=credential_config,
-        users_earning_credentials=users_earning_credentials,
+        credentials_users=users_earning_credentials,
         credential_type=UserCredential.CredentialType.DELIVERY,
-        level=credential_config.delivery_level,
+        level=credential_level,
     )
 
 
-def get_learning_user_credentials(credential_config):
-    user_ids_to_exclude = _get_users_ids_to_exclude(
-        opportunity=credential_config.opportunity,
+def get_learning_user_credentials(opportunities, credential_level):
+    user_credentials_to_exclude = UserCredential.objects.filter(
+        opportunity_id=OuterRef("opportunity_id"),
         credential_type=UserCredential.CredentialType.LEARN,
-        level=credential_config.learn_level,
-    )
+        level=credential_level,
+    ).values_list("user_id", flat=True)
 
     users_earning_credentials = (
         Assessment.objects.filter(
-            opportunity=credential_config.opportunity,
+            opportunity_id__in=opportunities,
             passed=True,
         )
-        .exclude(opportunity_access__user_id__in=user_ids_to_exclude)
-        .values_list("opportunity_access__user_id", flat=True)
+        .exclude(opportunity_access__user_id__in=Subquery(user_credentials_to_exclude))
+        .annotate(
+            delivery_type_id=F("opportunity__delivery_type_id"),
+            cred_user_id=F("opportunity_access__user_id"),
+        )
+        .values("cred_user_id", "opportunity_id", "delivery_type_id")
     )
     return _parse_to_user_credential_models(
-        credential_config=credential_config,
-        users_earning_credentials=users_earning_credentials,
+        credentials_users=users_earning_credentials,
         credential_type=UserCredential.CredentialType.LEARN,
-        level=credential_config.learn_level,
+        level=credential_level,
     )
 
 
@@ -591,24 +607,16 @@ def submit_credentials(index_to_credential_ids_set_mapper, credentials_items: li
     UserCredential.objects.filter(id__in=successful_credential_ids).update(issued_on=now())
 
 
-def _get_users_ids_to_exclude(opportunity, credential_type, level):
-    return UserCredential.objects.filter(
-        opportunity=opportunity,
-        credential_type=credential_type,
-        level=level,
-    ).values_list("user__id", flat=True)
-
-
-def _parse_to_user_credential_models(credential_config, users_earning_credentials, credential_type, level):
+def _parse_to_user_credential_models(credentials_users, credential_type, level):
     return [
         UserCredential(
             **{
-                "user_id": user_id,
+                "user_id": cred_user["cred_user_id"],
                 "credential_type": credential_type,
                 "level": level,
-                "opportunity": credential_config.opportunity,
-                "delivery_type": credential_config.opportunity.delivery_type,
+                "opportunity_id": cred_user["opportunity_id"],
+                "delivery_type_id": cred_user["delivery_type_id"],
             }
         )
-        for user_id in users_earning_credentials
+        for cred_user in credentials_users
     ]
