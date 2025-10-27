@@ -96,11 +96,11 @@ class UserCredential(models.Model):
     class Meta:
         unique_together = ("user", "opportunity", "credential_type")
 
-    @property
-    def delivery_level_num(self):
-        if self.credential_type == self.CredentialType.LEARN:
+    @classmethod
+    def delivery_level_num(cls, level: str, credential_type: str) -> int | None:
+        if credential_type == cls.CredentialType.LEARN:
             return None
-        return int(self.level.split("_")[0])
+        return int(level.split("_")[0])
 
     @property
     def title(self):
