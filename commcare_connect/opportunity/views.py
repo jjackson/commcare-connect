@@ -1505,7 +1505,7 @@ def user_visit_verification(request, org_slug, opp_id):
                 "title": "Connect Workers",
                 "url": reverse("opportunity:worker_deliver", args=(org_slug, opp_id)),
             },
-            {"title": "Visit Verification", "url": request.path},
+            {"title": "Visits", "url": request.path},
         ]
     )
 
