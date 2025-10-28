@@ -118,6 +118,7 @@ def start_learn_app(request):
         user_invite.save()
     return HttpResponse(status=200)
 
+
 class AcceptInviteView(View):
     def get(self, request, invite_id):
         try:
