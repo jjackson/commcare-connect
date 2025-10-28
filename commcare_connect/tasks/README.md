@@ -1,10 +1,10 @@
-# Tasks App - Prototype Documentation
+# Tasks App - Documentation
 
 ## Overview
 
-The Tasks app is a prototype system for tracking and managing actions taken against Field-Level Workers (FLWs) based on various triggers (currently audit failures, but designed to support other sources like compliance issues, performance flags, or manual interventions).
+The Tasks app is a production-ready system for tracking and managing actions taken against Field-Level Workers (FLWs) based on various triggers (currently audit failures, but designed to support other sources like compliance issues, performance flags, or manual interventions).
 
-**Status:** PROTOTYPE - No database models implemented yet. All data is mocked for UI exploration.
+**Status:** ✅ PRODUCTION READY - Complete data model implemented with 34 passing tests.
 
 ## ⭐ Streamlined View (Default)
 
@@ -228,45 +228,122 @@ commcare_connect/templates/tasks/
 └── action_detail_split.html           # Prototype 3
 ```
 
-## Next Steps (When Moving to Production)
+## Data Model (Implemented)
 
-1. **Create Models:**
+### Core Models
 
-   - `Action` model with status, type, priority fields
-   - Link to FLW user, opportunity, audit session
-   - Track created_by, assigned_to
-   - Store timeline as related `ActionEvent` records
+1. **Task** - Main model for tracking FLW actions
 
-2. **Implement Real Notifications:**
+   - Links to user, opportunity, created_by_user, assigned_to
+   - Fields: task_type, status, priority, title, description, learning_assignment_text, audit_session_id
+   - Permission checking via `can_user_access(user)` method
 
-   - Email/SMS to FLWs
-   - In-app notifications to Network Managers
-   - Delivery tracking
+2. **TaskEvent** - Timeline/activity tracking
 
-3. **Add Permissions:**
+   - Automatic event creation on task changes
+   - Fields: event_type, actor, actor_user, description, metadata (JSON)
 
-   - PM can create/edit/resolve actions
-   - NM can comment and request reactivations
-   - Admins have full access
+3. **TaskComment** - User comments on tasks
 
-4. **Automation:**
+   - Simple comment model with author and content
+   - Separate from events for clarity
 
-   - Auto-create actions from audit failures
-   - Auto-close after resolution period
-   - Escalation rules based on patterns
+4. **TaskAISession** - AI assistant conversation tracking
+   - Stores OCS session_id for reconnection
+   - Fetches transcripts just-in-time from OCS API
 
-5. **Integrate with Existing Systems:**
-   - Link to audit sessions
-   - Connect to opportunity access management
-   - Track in user profiles
+### Features Implemented
 
-## Testing the Prototypes
+✅ **Permission-based access** via opportunity and organization relationships
+✅ **CRUD operations** with form validation
+✅ **Event tracking** for audit trail
+✅ **AI assistant integration** via OCS API
+✅ **Comment system** for collaboration
+✅ **Comprehensive tests** (34 tests passing)
+✅ **Admin interface** for management
+✅ **Helper API** for future automation
+
+### Quick Start
+
+Create a task programmatically:
+
+```python
+from commcare_connect.tasks.helpers import create_task_from_audit
+
+task = create_task_from_audit(
+    audit_session_id=2058,
+    user=flw_user,
+    opportunity=opportunity,
+    task_type="warning",
+    description="Photo quality issues detected",
+    created_by_user=pm_user,
+    priority="high"
+)
+```
+
+Or create via the web interface at `/tasks/create/`.
+
+## Next Steps
+
+1. **Configure OCS**: Add OCS_BASE_URL, OCS_API_KEY, OCS_BOT_ID to settings
+2. **Integrate with Audit**: Hook up `create_task_from_audit()` to audit failures
+3. **Add Notifications**: Implement email/SMS notifications for task assignments
+4. **Monitor Performance**: Add indexes if needed based on query patterns
+
+## Testing and Development
+
+### Create Sample Tasks
+
+Use the task creation script to create realistic sample data:
+
+```bash
+# Create Task #1001 (Reading Glasses Nigeria)
+python commcare_connect/tasks/run_task_creation.py readers_nigeria
+
+# Create multiple warning tasks
+python commcare_connect/tasks/run_task_creation.py multiple_warnings
+
+# Create escalation pattern
+python commcare_connect/tasks/run_task_creation.py escalation_pattern
+
+# Create AI interaction tasks
+python commcare_connect/tasks/run_task_creation.py ai_interactions
+```
+
+See [MANAGEMENT_COMMANDS.md](MANAGEMENT_COMMANDS.md) for detailed documentation.
+
+### Clear Tasks Data
+
+To reset the database:
+
+```bash
+python manage.py clear_tasks --yes
+```
+
+### View Tasks
 
 1. Start the development server: `python manage.py runserver`
-2. Navigate to `/tasks/`
-3. Click the prototype icons (stream/cards/columns) to view different layouts
-4. Use filters to see different subsets of actions
-5. Gather feedback on which approach works best for your workflows
+2. Navigate to `/tasks/` for the list view
+3. Click on any task to see the streamlined detail view
+4. Use filters to see different subsets of tasks
+5. Test create/update forms at `/tasks/create/`
+
+### Database Status Panel
+
+The tasks list page includes a "Database Status" panel at the bottom showing:
+
+- Number of tasks
+- Number of events
+- Number of comments
+- Number of AI sessions
+
+Click the "Clear Tasks Database" button to remove all tasks data (with confirmation prompt). This is useful for:
+
+- Resetting test data
+- Cleaning up after development
+- Starting fresh with new sample data
+
+The clear operation preserves users, organizations, and opportunities - only task-specific data is removed.
 
 ## Design Decisions
 

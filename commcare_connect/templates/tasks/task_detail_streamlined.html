@@ -204,8 +204,8 @@
 
           {% if "AI Conversation" in item.action %}
           <!-- AI Conversation (Expandable) -->
-          <div class="border-l-4 border-green-400 bg-green-50 rounded-lg">
-            <button @click="showAIConversation = !showAIConversation"
+          <div class="border-l-4 border-green-400 bg-green-50 rounded-lg" x-data="aiConversationHandler({% if item.session_id %}'{{ item.session_id }}'{% else %}null{% endif %}, [])">
+            <button @click="expanded = !expanded"
                     class="w-full flex gap-4 p-4 text-left hover:bg-green-100 transition-colors">
               <div class="flex-shrink-0">
                 <div class="w-10 h-10 rounded-full flex items-center justify-center bg-green-100 text-green-600">
@@ -218,6 +218,9 @@
                     <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style="background-color: #d1fae5; color: #065f46;">
                       AI Assistant
                     </span>
+                    {% if item.session_id %}
+                    <span class="text-xs text-gray-500">{{ item.session_id }}</span>
+                    {% endif %}
                   </div>
                   <span class="text-xs text-gray-500 whitespace-nowrap ml-2">
                     {{ item.timestamp|timesince }} ago
@@ -225,41 +228,100 @@
                 </div>
                 <div class="text-sm text-gray-600 mb-1">
                   {{ item.action }}
-                  <i class="fa-solid ml-1" :class="showAIConversation ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                  <i class="fa-solid ml-1" :class="expanded ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                 </div>
                 <p class="text-sm text-gray-800">{{ item.description }}</p>
               </div>
             </button>
 
-            <div x-show="showAIConversation" class="px-4 pb-4 space-y-3">
-              {% if item.conversation %}
-              {% for msg in item.conversation %}
-              <div class="flex gap-3">
-                {% if msg.actor == "AI Assistant" %}
-                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-green-200 flex items-center justify-center text-green-700">
-                  <i class="fa-solid fa-robot text-xs"></i>
-                </div>
-                <div class="flex-1 bg-white rounded-lg p-3 border border-green-200 shadow-sm">
-                  <div class="text-xs text-gray-500 mb-1">AI Assistant • {{ msg.timestamp|timesince }} ago</div>
-                  <p class="text-sm text-gray-800">{{ msg.message }}</p>
-                </div>
-                {% else %}
-                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-700">
-                  <i class="fa-solid fa-user text-xs"></i>
-                </div>
-                <div class="flex-1 bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-                  <div class="text-xs text-gray-500 mb-1">{{ msg.actor }} • {{ msg.timestamp|timesince }} ago</div>
-                  <p class="text-sm text-gray-800">{{ msg.message }}</p>
-                </div>
-                {% endif %}
+            <div x-show="expanded" class="px-4 pb-4 space-y-3">
+
+              {% if not item.session_id %}
+              <!-- Form to add session ID -->
+              <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 class="text-sm font-semibold text-blue-900 mb-3">
+                  <i class="fa-solid fa-link mr-2"></i>
+                  Link OCS Session
+                </h4>
+                <form @submit.prevent="submitSessionId()">
+                  <div class="space-y-3">
+                    <div>
+                      <label class="block text-xs font-medium text-gray-700 mb-1">
+                        OCS Session ID
+                      </label>
+                      <input
+                        type="text"
+                        x-model="sessionIdInput"
+                        placeholder="e.g., ocs-session-1234"
+                        class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md transition-colors"
+                      :disabled="loading"
+                    >
+                      <i class="fa-solid fa-plus mr-2"></i>
+                      <span x-text="loading ? 'Linking...' : 'Link Session'"></span>
+                    </button>
+                  </div>
+                </form>
+
+                <p class="text-xs text-gray-600 mt-3">
+                  <i class="fa-solid fa-info-circle mr-1"></i>
+                  Find the session ID in the OCS dashboard, then enter it here to view the conversation.
+                </p>
               </div>
-              {% endfor %}
+              {% else %}
+
+              <!-- Loading State -->
+              <div x-show="loading" class="text-center py-8 text-gray-500">
+                <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+                <p class="text-sm">Loading conversation from OCS...</p>
+              </div>
+
+              <!-- Error State -->
+              <div x-show="error" class="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
+                <i class="fa-solid fa-exclamation-triangle mr-2"></i>
+                <span x-text="error"></span>
+              </div>
+
+              <!-- Conversation Display -->
+              <div x-show="!loading && !error && messages.length > 0" class="space-y-3">
+                <template x-for="msg in messages" :key="msg.timestamp">
+                  <div class="flex gap-3">
+                    <div
+                      :class="msg.actor.includes('AI') ? 'bg-green-200 text-green-700' : 'bg-gray-200 text-gray-700'"
+                      class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center">
+                      <i :class="msg.actor.includes('AI') ? 'fa-solid fa-robot' : 'fa-solid fa-user'" class="text-xs"></i>
+                    </div>
+                    <div
+                      :class="msg.actor.includes('AI') ? 'border-green-200' : 'border-gray-200'"
+                      class="flex-1 bg-white rounded-lg p-3 border shadow-sm">
+                      <div class="text-xs text-gray-500 mb-1">
+                        <span x-text="msg.actor"></span>
+                        <span x-show="msg.timestamp"> • </span>
+                        <span x-text="formatTimestamp(msg.timestamp)"></span>
+                      </div>
+                      <p class="text-sm text-gray-800" x-text="msg.message"></p>
+                    </div>
+                  </div>
+                </template>
+              </div>
+
+              <!-- No messages state -->
+              <div x-show="!loading && !error && messages.length === 0" class="text-center py-4 text-gray-500 text-sm">
+                <i class="fa-solid fa-comments text-2xl mb-2 text-gray-300"></i>
+                <p>No conversation messages found</p>
+              </div>
+
+              <div x-show="!loading && !error && messages.length > 0" class="pt-2 border-t border-green-200 text-xs text-gray-600 flex items-center gap-2">
+                <i class="fa-solid fa-check-circle text-green-600"></i>
+                <span>Conversation completed • Issue documented</span>
+              </div>
               {% endif %}
 
-              <div class="pt-2 border-t border-green-200 text-xs text-gray-600 flex items-center gap-2">
-                <i class="fa-solid fa-check-circle text-green-600"></i>
-                <span>Conversation completed • Issue documented • Network Manager notified</span>
-              </div>
             </div>
           </div>
           {% else %}
@@ -273,19 +335,16 @@
             <div class="flex-1 min-w-0">
               <div class="flex items-start justify-between mb-1">
                 <div class="flex items-center gap-2">
-                  {% if "Program Manager" in item.actor or item.actor == task.created_by %}
+                  {% if item.actor_role == "program_manager" %}
                   <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style="background-color: #dbeafe; color: #1e40af;">
                     Program Manager
                   </span>
-                  <span class="font-medium text-gray-900">{{ item.display_name }}</span>
-                  {% elif "Network Manager" in item.actor or item.actor == task.assigned_to %}
+                  {% elif item.actor_role == "network_manager" %}
                   <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style="background-color: #e9d5ff; color: #6b21a8;">
                     Network Manager
                   </span>
-                  <span class="font-medium text-gray-900">{{ item.display_name }}</span>
-                  {% else %}
-                  <span class="font-medium text-gray-900">{{ item.display_name }}</span>
                   {% endif %}
+                  <span class="font-medium text-gray-900">{{ item.display_name }}</span>
                 </div>
                 <span class="text-xs text-gray-500 whitespace-nowrap ml-2">
                   {{ item.timestamp|timesince }} ago
@@ -357,46 +416,79 @@
           <i class="fa-solid fa-times"></i>
         </button>
       </div>
-      <p class="text-sm text-gray-600 mb-4">Select an AI agent to reach out to {{ task.flw_name }} to discuss this issue and guide them toward a resolution.</p>
+      <p class="text-sm text-gray-600 mb-4">Configure and initiate an AI assistant conversation with {{ task.flw_name }}.</p>
 
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700 mb-2">
-          Select Agent
+          Participant ID (UUID)
+          <span class="text-red-500">*</span>
         </label>
-        <select x-model="selectedAgent"
+        <input type="text"
+               x-model="aiParams.identifier"
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+               placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000">
+        <p class="text-xs text-gray-500 mt-1">Unique identifier for the participant (CommCare Connect UUID)</p>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+          Bot ID (Experiment UUID)
+          <span class="text-red-500">*</span>
+        </label>
+        <input type="text"
+               x-model="aiParams.experiment"
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+               placeholder="e.g., 123e4567-e89b-12d3-a456-426614174000">
+        <p class="text-xs text-gray-500 mt-1">The experiment/bot ID to use from OCS</p>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+          Platform
+          <span class="text-red-500">*</span>
+        </label>
+        <select x-model="aiParams.platform"
                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent">
-          <option value="Opportunity Support Bot">Opportunity Support Bot</option>
-          <option value="One Question Per Week">One Question Per Week</option>
+          <option value="commcare_connect">CommCare Connect</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="telegram">Telegram</option>
+          <option value="api">API</option>
+          <option value="web">Web</option>
+          <option value="slack">Slack</option>
+          <option value="facebook">Facebook Messenger</option>
+          <option value="sureadhere">SureAdhere</option>
         </select>
       </div>
 
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700 mb-2">
-          Channel
-        </label>
-        <select x-model="selectedChannel"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent">
-          <option value="WhatsApp">WhatsApp</option>
-          <option value="Connect Messaging">Connect Messaging</option>
-        </select>
-      </div>
-
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-2">
-          AI Prompt
+          Prompt Instructions (for AI only)
+          <span class="text-red-500">*</span>
         </label>
         <textarea
-          x-model="aiPrompt"
+          x-model="aiParams.prompt_text"
           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
           rows="4"
-          placeholder="Customize the AI assistant's initial message and guidance..."></textarea>
+          placeholder="Instructions for the bot - the user won't see this text..."></textarea>
+        <p class="text-xs text-gray-500 mt-1">These instructions are sent to the LLM - the end user never sees this</p>
       </div>
+
+      <div class="mb-4">
+        <label class="flex items-center">
+          <input type="checkbox"
+                 x-model="aiParams.start_new_session"
+                 class="rounded border-gray-300 text-green-600 focus:ring-green-500">
+          <span class="ml-2 text-sm text-gray-700">Start new session (ignore existing conversation)</span>
+        </label>
+      </div>
+
       <div class="flex gap-3">
-        <button @click="showAI = false" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+        <button @click="showAI = false" :disabled="aiLoading" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
           Cancel
         </button>
-        <button @click="initiateAI()" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-          <i class="fa-solid fa-robot mr-2"></i> Initiate AI
+        <button @click="initiateAI()" :disabled="aiLoading" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
+          <i class="fa-solid mr-2" :class="aiLoading ? 'fa-spinner fa-spin' : 'fa-robot'"></i>
+          <span x-text="aiLoading ? 'Initiating...' : 'Initiate AI'"></span>
         </button>
       </div>
     </div>
@@ -550,6 +642,22 @@
 
 {% block inline_javascript %}
 <script>
+  // Helper function to get CSRF token from cookies
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
   function streamlinedActionInterface() {
     return {
       newComment: '',
@@ -565,9 +673,14 @@
       resolveNote: '',
       selectedModules: [],
       learningNote: '',
-      selectedAgent: 'Opportunity Support Bot',
-      selectedChannel: 'WhatsApp',
-      aiPrompt: '',
+      aiParams: {
+        identifier: '',
+        experiment: '',
+        platform: 'commcare_connect',
+        prompt_text: '',
+        start_new_session: false
+      },
+      aiLoading: false,
       showToast: false,
       toastMessage: '',
 
@@ -602,10 +715,43 @@
         // In real implementation, would make API call
       },
 
-      initiateAI() {
-        this.showToastMessage('AI Assistant conversation initiated');
-        this.showAI = false;
-        // In real implementation, would trigger AI conversation
+      async initiateAI() {
+        // Validate required fields
+        if (!this.aiParams.identifier || !this.aiParams.experiment || !this.aiParams.prompt_text) {
+          this.showToastMessage('Please fill in all required fields');
+          return;
+        }
+
+        this.aiLoading = true;
+
+        try {
+          const response = await fetch('{% url "tasks:ai_initiate" task.id %}', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify(this.aiParams)
+          });
+
+          const data = await response.json();
+
+          if (response.ok && data.success) {
+            this.showToastMessage('AI Assistant conversation initiated successfully!');
+            this.showAI = false;
+            // Reload page to show new AI conversation event
+            setTimeout(() => window.location.reload(), 1500);
+          } else {
+            this.aiLoading = false;
+            const errorMsg = data.error || 'Failed to initiate AI';
+            console.error('AI initiation failed:', errorMsg);
+            this.showToastMessage('Error: ' + errorMsg);
+          }
+        } catch (error) {
+          console.error('AI initiation error:', error);
+          this.aiLoading = false;
+          this.showToastMessage('Failed to initiate AI. Check console for details.');
+        }
       },
 
       assignLearning() {
@@ -642,6 +788,106 @@
         setTimeout(() => {
           this.showToast = false;
         }, 3000);
+      }
+    }
+  }
+
+  function aiConversationHandler(sessionId, cachedConversation) {
+    return {
+      expanded: false,
+      loading: false,
+      error: null,
+      messages: Array.isArray(cachedConversation) ? cachedConversation : [],
+      sessionIdInput: '',
+      hasSessionId: sessionId !== null,
+
+      async init() {
+        // If we have a session ID but no cached conversation, load it
+        if (this.hasSessionId && this.messages.length === 0) {
+          await this.loadConversation();
+        }
+      },
+
+      getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+          const cookies = document.cookie.split(';');
+          for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+              cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+              break;
+            }
+          }
+        }
+        return cookieValue;
+      },
+
+      async submitSessionId() {
+        if (!this.sessionIdInput.trim()) return;
+
+        this.loading = true;
+        this.error = null;
+
+        try {
+          const formData = new FormData();
+          formData.append('session_id', this.sessionIdInput.trim());
+
+          const response = await fetch('{% url "tasks:add_ai_session" task.id %}', {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': this.getCookie('csrftoken')
+            },
+            body: formData
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            // Reload the page to show the linked session
+            window.location.reload();
+          } else {
+            this.error = data.error || 'Failed to link session';
+          }
+        } catch (error) {
+          console.error('Error linking session:', error);
+          this.error = 'Network error. Please try again.';
+        } finally {
+          this.loading = false;
+        }
+      },
+
+      async loadConversation() {
+        this.loading = true;
+        this.error = null;
+
+        try {
+          const response = await fetch('{% url "tasks:ai_transcript" task.id %}');
+          const data = await response.json();
+
+          if (data.success) {
+            this.messages = data.messages || [];
+          } else {
+            this.error = data.error || 'Failed to load conversation';
+          }
+        } catch (error) {
+          console.error('Error loading conversation:', error);
+          this.error = 'Network error loading conversation';
+        } finally {
+          this.loading = false;
+        }
+      },
+
+      formatTimestamp(timestamp) {
+        if (!timestamp) return '';
+        const date = new Date(timestamp);
+        return date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
       }
     }
   }

@@ -1,651 +1,682 @@
-from datetime import timedelta
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.db.models import Q
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
+from django.utils.decorators import method_decorator
+from django.views import View
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
-from django.shortcuts import render
-from django.utils import timezone
-
-
-def get_mock_tasks():
-    """Generate comprehensive mock task ticket data."""
-    # Set base_date to 2 days ago so all tasks appear recent
-    base_date = timezone.now() - timedelta(days=2)
-
-    return [
-        {
-            "id": 1001,
-            "flw_name": "Amina Okafor",
-            "flw_username": "amina.okafor@example.com",
-            "opportunity": "Reading Glasses Distribution - Nigeria",
-            "action_type": "warning",
-            "status": "unassigned",
-            "created": base_date,
-            "assigned_to": "Chidinma Adewale",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2059,
-            "source": "audit_failure",
-            "priority": "medium",
-        },
-        {
-            "id": 1002,
-            "flw_name": "David Martinez",
-            "flw_username": "david.martinez@example.com",
-            "opportunity": "Education Assessment 2025",
-            "action_type": "deactivation",
-            "status": "network_manager",
-            "created": base_date - timedelta(days=2),
-            "assigned_to": "Robert Brown",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2055,
-            "source": "audit_failure",
-            "priority": "high",
-        },
-        {
-            "id": 1003,
-            "flw_name": "Emily Chen",
-            "flw_username": "emily.chen@example.com",
-            "opportunity": "Health Survey Q4 2025",
-            "action_type": "warning",
-            "status": "resolved",
-            "created": base_date - timedelta(days=5),
-            "assigned_to": "Jane Smith",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2061,
-            "source": "audit_failure",
-            "priority": "low",
-        },
-        {
-            "id": 1004,
-            "flw_name": "Michael Williams",
-            "flw_username": "michael.williams@example.com",
-            "opportunity": "Community Outreach Program",
-            "action_type": "deactivation",
-            "status": "program_manager",
-            "created": base_date - timedelta(days=1),
-            "assigned_to": "Sarah Lee",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2058,
-            "source": "audit_failure",
-            "priority": "high",
-        },
-        {
-            "id": 1005,
-            "flw_name": "Jennifer Davis",
-            "flw_username": "jennifer.davis@example.com",
-            "opportunity": "Health Survey Q4 2025",
-            "action_type": "warning",
-            "status": "unassigned",
-            "created": base_date - timedelta(hours=3),
-            "assigned_to": "Jane Smith",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2062,
-            "source": "audit_failure",
-            "priority": "medium",
-        },
-        {
-            "id": 1006,
-            "flw_name": "James Anderson",
-            "flw_username": "james.anderson@example.com",
-            "opportunity": "Education Assessment 2025",
-            "action_type": "warning",
-            "status": "resolved",
-            "created": base_date - timedelta(days=7),
-            "assigned_to": "Robert Brown",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2050,
-            "source": "audit_failure",
-            "priority": "low",
-        },
-        {
-            "id": 1007,
-            "flw_name": "Maria Garcia",
-            "flw_username": "maria.garcia@example.com",
-            "opportunity": "Health Survey Q4 2025",
-            "action_type": "deactivation",
-            "status": "network_manager",
-            "created": base_date - timedelta(days=3),
-            "assigned_to": "Jane Smith",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2056,
-            "source": "audit_failure",
-            "priority": "high",
-        },
-        {
-            "id": 1008,
-            "flw_name": "Robert Taylor",
-            "flw_username": "robert.taylor@example.com",
-            "opportunity": "Community Outreach Program",
-            "action_type": "warning",
-            "status": "action_underway",
-            "created": base_date - timedelta(hours=12),
-            "assigned_to": "Sarah Lee",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2063,
-            "source": "audit_failure",
-            "priority": "medium",
-        },
-        {
-            "id": 1009,
-            "flw_name": "Linda Miller",
-            "flw_username": "linda.miller@example.com",
-            "opportunity": "Education Assessment 2025",
-            "action_type": "deactivation",
-            "status": "resolved",
-            "created": base_date - timedelta(days=10),
-            "assigned_to": "Robert Brown",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2045,
-            "source": "audit_failure",
-            "priority": "high",
-        },
-        {
-            "id": 1010,
-            "flw_name": "Christopher Lee",
-            "flw_username": "christopher.lee@example.com",
-            "opportunity": "Health Survey Q4 2025",
-            "action_type": "warning",
-            "status": "program_manager",
-            "created": base_date - timedelta(days=1, hours=6),
-            "assigned_to": "Jane Smith",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2057,
-            "source": "audit_failure",
-            "priority": "medium",
-        },
-        {
-            "id": 1011,
-            "flw_name": "Patricia Wilson",
-            "flw_username": "patricia.wilson@example.com",
-            "opportunity": "Community Outreach Program",
-            "action_type": "deactivation",
-            "status": "network_manager",
-            "created": base_date - timedelta(days=4),
-            "assigned_to": "Sarah Lee",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2053,
-            "source": "audit_failure",
-            "priority": "high",
-        },
-        {
-            "id": 1012,
-            "flw_name": "Daniel Martinez",
-            "flw_username": "daniel.martinez@example.com",
-            "opportunity": "Health Survey Q4 2025",
-            "action_type": "warning",
-            "status": "resolved",
-            "created": base_date - timedelta(days=8),
-            "assigned_to": "Jane Smith",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2048,
-            "source": "audit_failure",
-            "priority": "low",
-        },
-        {
-            "id": 1013,
-            "flw_name": "Nancy Rodriguez",
-            "flw_username": "nancy.rodriguez@example.com",
-            "opportunity": "Education Assessment 2025",
-            "action_type": "warning",
-            "status": "unassigned",
-            "created": base_date - timedelta(hours=8),
-            "assigned_to": "Robert Brown",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2064,
-            "source": "audit_failure",
-            "priority": "medium",
-        },
-        {
-            "id": 1014,
-            "flw_name": "Steven White",
-            "flw_username": "steven.white@example.com",
-            "opportunity": "Health Survey Q4 2025",
-            "action_type": "deactivation",
-            "status": "resolved",
-            "created": base_date - timedelta(days=6),
-            "assigned_to": "Jane Smith",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2051,
-            "source": "audit_failure",
-            "priority": "high",
-        },
-        {
-            "id": 1015,
-            "flw_name": "Karen Thompson",
-            "flw_username": "karen.thompson@example.com",
-            "opportunity": "Community Outreach Program",
-            "action_type": "warning",
-            "status": "action_underway",
-            "created": base_date - timedelta(hours=2),
-            "assigned_to": "Sarah Lee",
-            "created_by": "PM - Michael Chen",
-            "audit_session_id": 2065,
-            "source": "audit_failure",
-            "priority": "low",
-        },
-    ]
+from commcare_connect.tasks.forms import TaskCommentForm, TaskCreateForm, TaskQuickUpdateForm, TaskUpdateForm
+from commcare_connect.tasks.helpers import get_user_tasks_queryset, user_can_access_task
+from commcare_connect.tasks.models import Task, TaskAISession, TaskEvent, TaskEventType
+from commcare_connect.tasks.ocs_client import OCSClientError, get_transcript, trigger_bot
 
 
-def get_mock_task_detail(task_id):
-    """Get detailed mock data for a specific task ticket."""
-    tasks = get_mock_tasks()
-    task = next((t for t in tasks if t["id"] == task_id), None)
+class TaskAccessMixin(UserPassesTestMixin):
+    """Mixin to check if user can access a task."""
 
-    if not task:
-        # Return a default task for demo purposes
-        task = tasks[0]
+    def test_func(self):
+        task = self.get_object()
+        return user_can_access_task(self.request.user, task)
 
-    # Add detailed timeline/history with richer scenarios for first few tickets
-    now = timezone.now()
-    timeline_scenarios = {
-        1001: [  # Reading glasses photo quality issue - Last 3 days, newest to oldest
-            {
-                "timestamp": now - timedelta(hours=6),
-                "actor": "AI Assistant",
-                "action": "AI Conversation",
-                "description": "SMS conversation with worker about training follow-up",
-                "icon": "fa-robot",
-                "color": "green",
-                "display_name": "AI Assistant",
-                "conversation": [
-                    {
-                        "actor": "AI Assistant",
-                        "timestamp": now - timedelta(hours=6),
-                        "message": (
-                            f"Hello {task['flw_name']}! Thank you for completing the Image Capture "
-                            "Learn module. I see you scored 95% - great work! Do you have any "
-                            "follow-up questions after the training?"
-                        ),
-                    },
-                    {
-                        "actor": task["flw_name"],
-                        "timestamp": now - timedelta(hours=6),
-                        "message": (
-                            "Yes, one question - when I take the photo, should the person be smiling "
-                            "or have a neutral expression? The module didn't specify."
-                        ),
-                    },
-                    {
-                        "actor": "AI Assistant",
-                        "timestamp": now - timedelta(hours=6),
-                        "message": (
-                            "Great question! A neutral expression is preferred so we can clearly see "
-                            "how the glasses fit on the face. Smiling can slightly change facial "
-                            "features. Natural, relaxed expression works best for verification. "
-                            "You're ready to go!"
-                        ),
-                    },
-                ],
-            },
-            {
-                "timestamp": now - timedelta(hours=24),
-                "actor": task["flw_name"],
-                "action": "Learning Completed",
-                "description": "Completed Image Capture learning module (Score: 95%) - Duration: 18 minutes",
-                "icon": "fa-check-circle",
-                "color": "green",
-                "display_name": task["flw_name"],
-            },
-            {
-                "timestamp": now - timedelta(hours=48),
-                "actor": task["created_by"],
-                "action": "Learning Assigned",
-                "description": (
-                    "Connect Learn module assigned: Image Capture - Review proper photography "
-                    "techniques for glasses fitting documentation"
-                ),
-                "icon": "fa-graduation-cap",
-                "color": "blue",
-                "display_name": task["created_by"].split(" - ", 1)[1]
-                if " - " in task["created_by"]
-                else task["created_by"],
-            },
-            {
-                "timestamp": now - timedelta(hours=60),
-                "actor": task["assigned_to"],
-                "action": "Commented",
-                "description": (
-                    "I reviewed the submitted photos. Most 'glasses on face' shots are taken at "
-                    "an angle or from too far away. The worker needs to ensure photos are head-on "
-                    "from shoulders up to properly verify the glasses fit. I've assigned Learning "
-                    "for the Image Capture module."
-                ),
-                "icon": "fa-comment",
-                "color": "gray",
-                "display_name": task["assigned_to"].split(" - ", 1)[1]
-                if " - " in task["assigned_to"]
-                else task["assigned_to"],
-            },
-        ],
-        1002: [  # Warning with quick FLW response
-            {
-                "timestamp": task["created"],
-                "actor": task["created_by"],
-                "action": "Created",
-                "description": "Action ticket created - minor quality issues detected in audit",
-                "icon": "fa-plus-circle",
-                "color": "blue",
-            },
-            {
-                "timestamp": task["created"] + timedelta(minutes=5),
-                "actor": "System",
-                "action": "Warning Sent",
-                "description": "Warning notification sent to FLW via SMS and email",
-                "icon": "fa-envelope",
-                "color": "green",
-            },
-            {
-                "timestamp": task["created"] + timedelta(minutes=8),
-                "actor": "System",
-                "action": "Notification Sent",
-                "description": (
-                    f"Network Manager "
-                    f"{task['assigned_to'].split(' - ')[1] if ' - ' in task['assigned_to'] else 'assigned'} "
-                    f"notified"
-                ),
-                "icon": "fa-bell",
-                "color": "green",
-            },
-            {
-                "timestamp": task["created"] + timedelta(minutes=45),
-                "actor": task["flw_name"],
-                "action": "FLW Acknowledged",
-                "description": (
-                    "FLW responded via SMS: 'Understood, will be more careful with photo quality. " "Thank you.'"
-                ),
-                "icon": "fa-check",
-                "color": "green",
-            },
-            {
-                "timestamp": task["created"] + timedelta(hours=1),
-                "actor": task["assigned_to"],
-                "action": "Commented",
-                "description": (
-                    "FLW has acknowledged and seems receptive. This is their first warning this "
-                    "quarter. Will monitor but no further action needed."
-                ),
-                "icon": "fa-comment",
-                "color": "gray",
-            },
-            {
-                "timestamp": task["created"] + timedelta(hours=1, minutes=5),
-                "actor": task["assigned_to"],
-                "action": "Status Changed",
-                "description": "Status changed to Resolved",
-                "icon": "fa-exchange-alt",
-                "color": "green",
-            },
-        ],
-        1003: [  # Escalated case with delays
-            {
-                "timestamp": task["created"],
-                "actor": task["created_by"],
-                "action": "Created",
-                "description": "Action ticket created - pattern of recurring issues detected",
-                "icon": "fa-plus-circle",
-                "color": "blue",
-            },
-            {
-                "timestamp": task["created"] + timedelta(minutes=3),
-                "actor": "System",
-                "action": "Pattern Detected",
-                "description": "This is the 3rd action ticket for this FLW in 30 days - auto-escalated",
-                "icon": "fa-exclamation-circle",
-                "color": "red",
-            },
-            {
-                "timestamp": task["created"] + timedelta(minutes=5),
-                "actor": "System",
-                "action": "Deactivation",
-                "description": "User temporarily deactivated due to repeated violations",
-                "icon": "fa-ban",
-                "color": "red",
-            },
-            {
-                "timestamp": task["created"] + timedelta(minutes=10),
-                "actor": "System",
-                "action": "Notification Sent",
-                "description": (
-                    f"Network Manager "
-                    f"{task['assigned_to'].split(' - ')[1] if ' - ' in task['assigned_to'] else 'assigned'} "
-                    f"notified with escalation flag"
-                ),
-                "icon": "fa-bell",
-                "color": "orange",
-            },
-            {
-                "timestamp": task["created"] + timedelta(hours=3),
-                "actor": task["assigned_to"],
-                "action": "Commented",
-                "description": (
-                    "I've attempted to reach the FLW multiple times today but no response. This is "
-                    "concerning given the pattern. Will try again tomorrow."
-                ),
-                "icon": "fa-comment",
-                "color": "gray",
-            },
-            {
-                "timestamp": task["created"] + timedelta(days=1),
-                "actor": task["assigned_to"],
-                "action": "Commented",
-                "description": (
-                    "Finally connected. FLW dealing with family emergency. However, quality issues "
-                    "predate this. We've scheduled a video call next week to review procedures in detail."
-                ),
-                "icon": "fa-comment",
-                "color": "gray",
-            },
-            {
-                "timestamp": task["created"] + timedelta(days=1, minutes=5),
-                "actor": task["assigned_to"],
-                "action": "Status Changed",
-                "description": "Status changed to NM Review - awaiting training completion",
-                "icon": "fa-exchange-alt",
-                "color": "purple",
-            },
-        ],
-    }
 
-    # Use scenario-specific timeline or default timeline
-    if task["id"] in timeline_scenarios:
-        task["timeline"] = timeline_scenarios[task["id"]]
-        # Add display_name for each timeline item
-        for item in task["timeline"]:
-            if " - " in item["actor"]:
-                item["display_name"] = item["actor"].split(" - ", 1)[1]
-            else:
-                item["display_name"] = item["actor"]
-    else:
-        # Default timeline for other tickets
-        task["timeline"] = [
-            {
-                "timestamp": task["created"],
-                "actor": task["created_by"],
-                "action": "Created",
-                "description": "Action ticket created due to audit failure",
-                "icon": "fa-plus-circle",
-                "color": "blue",
-            },
-            {
-                "timestamp": task["created"] + timedelta(minutes=5),
-                "actor": "System",
-                "action": "Notification Sent",
-                "description": (
-                    "Warning notification sent to FLW"
-                    if task["action_type"] == "warning"
-                    else "User deactivated from opportunity"
-                ),
-                "icon": "fa-envelope",
-                "color": "green",
-            },
-            {
-                "timestamp": task["created"] + timedelta(minutes=10),
-                "actor": "System",
-                "action": "Notification Sent",
-                "description": (
-                    f"Network Manager "
-                    f"{task['assigned_to'].split(' - ')[1] if ' - ' in task['assigned_to'] else 'assigned'} "
-                    f"notified"
-                ),
-                "icon": "fa-bell",
-                "color": "green",
-            },
-        ]
+class TaskListView(LoginRequiredMixin, ListView):
+    """List view for tasks with filtering and statistics."""
 
-        if task["status"] in ["nm_review", "pm_review", "resolved", "closed"]:
-            task["timeline"].append(
-                {
-                    "timestamp": task["created"] + timedelta(hours=2),
-                    "actor": task["assigned_to"],
-                    "action": "Commented",
-                    "description": (
-                        "I've reviewed this case with the FLW. They acknowledged the issue and "
-                        "committed to following proper procedures."
-                    ),
-                    "icon": "fa-comment",
-                    "color": "gray",
-                }
+    model = Task
+    template_name = "tasks/tasks_list.html"
+    context_object_name = "tasks"
+    paginate_by = 50
+
+    def get_queryset(self):
+        """Get tasks the user can access with filtering."""
+        queryset = get_user_tasks_queryset(self.request.user)
+
+        # Apply filters from GET parameters
+        status_filter = self.request.GET.get("status")
+        if status_filter and status_filter != "all":
+            queryset = queryset.filter(status=status_filter)
+
+        action_type_filter = self.request.GET.get("action_type")
+        if action_type_filter and action_type_filter != "all":
+            queryset = queryset.filter(task_type=action_type_filter)
+
+        search_query = self.request.GET.get("search")
+        if search_query:
+            queryset = queryset.filter(
+                Q(user__name__icontains=search_query)
+                | Q(user__email__icontains=search_query)
+                | Q(title__icontains=search_query)
+                | Q(description__icontains=search_query)
             )
 
-        if task["status"] in ["pm_review", "resolved", "closed"]:
-            task["timeline"].append(
-                {
-                    "timestamp": task["created"] + timedelta(days=1),
-                    "actor": task["assigned_to"],
-                    "action": "Status Changed",
-                    "description": "Status changed to PM Review",
-                    "icon": "fa-exchange-alt",
-                    "color": "orange",
-                }
-            )
+        # Optimize queries
+        queryset = queryset.select_related("user", "opportunity", "assigned_to")
 
-        if task["status"] in ["resolved", "closed"]:
-            task["timeline"].append(
-                {
-                    "timestamp": task["created"] + timedelta(days=1, hours=3),
-                    "actor": task["created_by"],
-                    "action": "Resolved",
-                    "description": "Issue resolved. FLW has been retrained and is now compliant.",
-                    "icon": "fa-check-circle",
-                    "color": "green",
-                }
-            )
+        return queryset
 
-        # Add display_name for default timeline items
-        for item in task["timeline"]:
-            if " - " in item["actor"]:
-                item["display_name"] = item["actor"].split(" - ", 1)[1]
-            else:
-                item["display_name"] = item["actor"]
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
 
-    # Add FLW history (previous tickets) - customize for action 1001
-    if task["id"] == 1001:
-        task["flw_history"] = [
-            {
-                "id": task["id"] - 100,
-                "date": task["created"] - timedelta(days=60),
-                "action_type": "warning",
-                "status": "resolved",
-                "issue": "Incomplete beneficiary information in forms",
-            },
-        ]
-    else:
-        task["flw_history"] = [
-            {
-                "id": task["id"] - 100,
-                "date": task["created"] - timedelta(days=45),
-                "action_type": "warning",
-                "status": "resolved",
-                "issue": "Photo quality issues",
-            },
-            {
-                "id": task["id"] - 200,
-                "date": task["created"] - timedelta(days=90),
-                "action_type": "warning",
-                "status": "resolved",
-                "issue": "Incomplete form submissions",
-            },
-        ]
+        # Get all tasks for stats (before filtering)
+        all_tasks = get_user_tasks_queryset(self.request.user)
 
-    # Add notification details
-    if task["action_type"] == "warning":
-        task["notification"] = {
-            "recipient": task["flw_name"],
-            "subject": "Quality Assurance Notice - Action Required",
-            "message": (
-                f"Dear {task['flw_name']},\n\n"
-                f"Our quality assurance team has identified areas for improvement in your recent "
-                f"work on {task['opportunity']}. Please review the audit session details and "
-                f"ensure compliance with program standards.\n\n"
-                f"Audit Session: #{task['audit_session_id']}\n\n"
-                f"Best regards,\nProgram Management Team"
-            ),
-            "sent_at": task["created"] + timedelta(minutes=5),
-        }
-    else:
-        task["notification"] = {
-            "recipient": task["flw_name"],
-            "subject": "Account Status Update - Temporary Deactivation",
-            "message": (
-                f"Dear {task['flw_name']},\n\n"
-                f"Due to quality assurance findings, your access to {task['opportunity']} has "
-                f"been temporarily suspended pending review. Your Network Manager has been "
-                f"notified and will be in touch.\n\n"
-                f"Audit Session: #{task['audit_session_id']}\n\n"
-                f"For questions, please contact your Network Manager.\n\n"
-                f"Best regards,\nProgram Management Team"
-            ),
-            "sent_at": task["created"] + timedelta(minutes=5),
+        # Calculate statistics
+        stats = {
+            "total": all_tasks.count(),
+            "unassigned": all_tasks.filter(status="unassigned").count(),
+            "network_manager": all_tasks.filter(status="network_manager").count(),
+            "program_manager": all_tasks.filter(status="program_manager").count(),
+            "action_underway": all_tasks.filter(status="action_underway").count(),
+            "resolved": all_tasks.filter(status="resolved").count(),
         }
 
-    return task
+        # Get unique values for filter dropdowns
+        statuses = Task._meta.get_field("status").choices
+        action_types = Task._meta.get_field("task_type").choices
+
+        context.update(
+            {
+                "stats": stats,
+                "statuses": [choice[0] for choice in statuses],
+                "action_types": [choice[0] for choice in action_types],
+                "selected_status": self.request.GET.get("status", "all"),
+                "selected_action_type": self.request.GET.get("action_type", "all"),
+            }
+        )
+
+        return context
 
 
-def tasks_list(request):
-    """Display list of all task tickets with filtering."""
-    tasks = get_mock_tasks()
+class TaskDetailView(LoginRequiredMixin, TaskAccessMixin, DetailView):
+    """Detail view for a single task."""
 
-    # Calculate statistics
-    stats = {
-        "total": len(tasks),
-        "unassigned": len([t for t in tasks if t["status"] == "unassigned"]),
-        "network_manager": len([t for t in tasks if t["status"] == "network_manager"]),
-        "program_manager": len([t for t in tasks if t["status"] == "program_manager"]),
-        "action_underway": len([t for t in tasks if t["status"] == "action_underway"]),
-        "resolved": len([t for t in tasks if t["status"] == "resolved"]),
-    }
+    model = Task
+    template_name = "tasks/task_detail_streamlined.html"
+    context_object_name = "task"
+    pk_url_kwarg = "task_id"
 
-    # Get filter parameters
-    status_filter = request.GET.get("status", "all")
-    action_type_filter = request.GET.get("action_type", "all")
+    def get_queryset(self):
+        """Optimize query with related objects."""
+        return (
+            Task.objects.select_related("user", "opportunity", "assigned_to", "created_by_user")
+            .prefetch_related("events", "comments__author", "ai_sessions")
+            .all()
+        )
 
-    # Apply filters
-    if status_filter != "all":
-        tasks = [t for t in tasks if t["status"] == status_filter]
-    if action_type_filter != "all":
-        tasks = [t for t in tasks if t["action_type"] == action_type_filter]
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
 
-    # Get unique values for filter dropdowns
-    statuses = sorted({t["status"] for t in get_mock_tasks()})
-    action_types = sorted({t["action_type"] for t in get_mock_tasks()})
+        task = self.object
 
-    context = {
-        "tasks": tasks,
-        "stats": stats,
-        "statuses": statuses,
-        "action_types": action_types,
-        "selected_status": status_filter,
-        "selected_action_type": action_type_filter,
-    }
+        # Prepare timeline data (events and comments combined)
+        timeline = []
 
-    return render(request, "tasks/tasks_list.html", context)
+        # Add events to timeline
+        for event in task.events.all():
+            timeline_item = {
+                "timestamp": event.date_created,
+                "actor": event.actor,
+                "action": event.get_event_type_display(),
+                "description": event.description,
+                "icon": self._get_event_icon(event.event_type),
+                "color": self._get_event_color(event.event_type),
+                "display_name": event.actor,
+                "type": "event",
+            }
+
+            # Add role badge if actor is PM or NM
+            if event.actor_user:
+                if hasattr(event.actor_user, "memberships"):
+                    memberships = event.actor_user.memberships.all()
+                    for membership in memberships:
+                        if membership.is_admin:
+                            if membership.is_program_manager:
+                                timeline_item["actor_role"] = "program_manager"
+                                break
+                            else:
+                                timeline_item["actor_role"] = "network_manager"
+                                break
+
+            # If this is an AI conversation event, include session info
+            if event.event_type == TaskEventType.AI_CONVERSATION:
+                ai_session = task.ai_sessions.first()  # Get the most recent AI session
+                if ai_session:
+                    timeline_item["session_id"] = ai_session.ocs_session_id
+                    timeline_item["session_status"] = ai_session.status
+                    # Include cached conversation if available
+                    if ai_session.session_metadata and "conversation" in ai_session.session_metadata:
+                        timeline_item["conversation"] = ai_session.session_metadata["conversation"]
+
+            timeline.append(timeline_item)
+
+        # Add comments to timeline
+        for comment in task.comments.all():
+            comment_item = {
+                "timestamp": comment.date_created,
+                "actor": comment.author.name,
+                "action": "Commented",
+                "description": comment.content,
+                "icon": "fa-comment",
+                "color": "gray",
+                "display_name": comment.author.name,
+                "type": "comment",
+            }
+
+            # Add role badge if commenter is PM or NM
+            if hasattr(comment.author, "memberships"):
+                memberships = comment.author.memberships.all()
+                for membership in memberships:
+                    if membership.is_admin:
+                        if membership.is_program_manager:
+                            comment_item["actor_role"] = "program_manager"
+                            break
+                        else:
+                            comment_item["actor_role"] = "network_manager"
+                            break
+
+            timeline.append(comment_item)
+
+        # Sort timeline by timestamp (newest first)
+        timeline.sort(key=lambda x: x["timestamp"], reverse=True)
+
+        # Get FLW history (past tasks for the same user)
+        flw_history = (
+            Task.objects.filter(user=task.user)
+            .exclude(id=task.id)
+            .order_by("-date_created")[:5]
+            .values("id", "date_created", "task_type", "status", "title")
+        )
+
+        context.update(
+            {
+                "task": {
+                    **task.__dict__,
+                    "flw_name": task.user.name,
+                    "flw_username": task.user.email,
+                    "opportunity": task.opportunity.name,
+                    "action_type": task.task_type,
+                    "created": task.date_created,
+                    "timeline": timeline,
+                    "flw_history": list(flw_history),
+                },
+                "comment_form": TaskCommentForm(),
+                "update_form": TaskUpdateForm(instance=task),
+            }
+        )
+
+        return context
+
+    def _get_event_icon(self, event_type):
+        """Get FontAwesome icon for event type."""
+        icon_map = {
+            "created": "fa-plus-circle",
+            "status_changed": "fa-exchange-alt",
+            "assigned": "fa-user-check",
+            "commented": "fa-comment",
+            "learning_assigned": "fa-graduation-cap",
+            "learning_completed": "fa-check-circle",
+            "ai_conversation": "fa-robot",
+            "notification_sent": "fa-envelope",
+            "flw_acknowledged": "fa-check",
+            "pattern_detected": "fa-exclamation-circle",
+        }
+        return icon_map.get(event_type, "fa-circle")
+
+    def _get_event_color(self, event_type):
+        """Get color for event type."""
+        color_map = {
+            "created": "blue",
+            "status_changed": "purple",
+            "assigned": "indigo",
+            "commented": "gray",
+            "learning_assigned": "blue",
+            "learning_completed": "green",
+            "ai_conversation": "green",
+            "notification_sent": "green",
+            "flw_acknowledged": "green",
+            "pattern_detected": "red",
+        }
+        return color_map.get(event_type, "gray")
 
 
-def task_detail_streamlined(request, task_id):
-    """Streamlined View: Task-focused interface for assigning and contacting."""
-    task = get_mock_task_detail(task_id)
+class TaskCreateView(LoginRequiredMixin, CreateView):
+    """Create a new task."""
 
-    context = {
-        "task": task,
-        "prototype_name": "Streamlined View",
-        "prototype_description": "Simple task-focused interface: assign or contact",
-    }
+    model = Task
+    form_class = TaskCreateForm
+    template_name = "tasks/task_form.html"
 
-    return render(request, "tasks/task_detail_streamlined.html", context)
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        # Set created_by_user
+        form.instance.created_by_user = self.request.user
+        form.instance.created_by = self.request.user.email
+        form.instance.modified_by = self.request.user.email
+
+        response = super().form_valid(form)
+
+        # Create initial event
+        TaskEvent.objects.create(
+            task=self.object,
+            event_type=TaskEventType.CREATED,
+            actor=self.request.user.name,
+            actor_user=self.request.user,
+            description=f"Task created by {self.request.user.name}",
+            created_by=self.request.user.email,
+            modified_by=self.request.user.email,
+        )
+
+        messages.success(self.request, f"Task #{self.object.id} created successfully.")
+        return response
+
+    def get_success_url(self):
+        return reverse("tasks:detail", kwargs={"task_id": self.object.id})
+
+
+class TaskUpdateView(LoginRequiredMixin, TaskAccessMixin, UpdateView):
+    """Update an existing task."""
+
+    model = Task
+    form_class = TaskUpdateForm
+    template_name = "tasks/task_form.html"
+    pk_url_kwarg = "task_id"
+
+    def form_valid(self, form):
+        # Track what changed
+        changes = []
+        old_instance = Task.objects.get(pk=self.object.pk)
+
+        if old_instance.status != form.instance.status:
+            changes.append(
+                f"Status changed from {old_instance.get_status_display()} to {form.instance.get_status_display()}"
+            )
+
+        if old_instance.priority != form.instance.priority:
+            old_priority = old_instance.get_priority_display()
+            new_priority = form.instance.get_priority_display()
+            changes.append(f"Priority changed from {old_priority} to {new_priority}")
+
+        if old_instance.assigned_to != form.instance.assigned_to:
+            old_name = old_instance.assigned_to.name if old_instance.assigned_to else "Unassigned"
+            new_name = form.instance.assigned_to.name if form.instance.assigned_to else "Unassigned"
+            changes.append(f"Assigned to changed from {old_name} to {new_name}")
+
+        form.instance.modified_by = self.request.user.email
+        response = super().form_valid(form)
+
+        # Create events for changes
+        for change in changes:
+            TaskEvent.objects.create(
+                task=self.object,
+                event_type=TaskEventType.STATUS_CHANGED if "Status" in change else TaskEventType.ASSIGNED,
+                actor=self.request.user.name,
+                actor_user=self.request.user,
+                description=change,
+                created_by=self.request.user.email,
+                modified_by=self.request.user.email,
+            )
+
+        messages.success(self.request, "Task updated successfully.")
+        return response
+
+    def get_success_url(self):
+        return reverse("tasks:detail", kwargs={"task_id": self.object.id})
+
+
+@login_required
+@require_POST
+def task_add_comment(request, task_id):
+    """Add a comment to a task."""
+    task = get_object_or_404(Task, id=task_id)
+
+    if not user_can_access_task(request.user, task):
+        return JsonResponse({"error": "Access denied"}, status=403)
+
+    form = TaskCommentForm(request.POST)
+    if form.is_valid():
+        comment = form.save(commit=False)
+        comment.task = task
+        comment.author = request.user
+        comment.created_by = request.user.email
+        comment.modified_by = request.user.email
+        comment.save()
+
+        # Create event
+        TaskEvent.objects.create(
+            task=task,
+            event_type=TaskEventType.COMMENTED,
+            actor=request.user.name,
+            actor_user=request.user,
+            description=comment.content,
+            created_by=request.user.email,
+            modified_by=request.user.email,
+        )
+
+        # Return JSON for AJAX
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse(
+                {
+                    "success": True,
+                    "comment": {
+                        "id": comment.id,
+                        "author": comment.author.name,
+                        "content": comment.content,
+                        "date": comment.date_created.isoformat(),
+                    },
+                }
+            )
+
+        messages.success(request, "Comment added successfully.")
+        return redirect("tasks:detail", task_id=task_id)
+
+    return JsonResponse({"error": "Invalid form data"}, status=400)
+
+
+@login_required
+@csrf_exempt
+@require_POST
+def task_initiate_ai(request, task_id):
+    """Initiate an AI assistant conversation for a task."""
+    task = get_object_or_404(Task, id=task_id)
+
+    if not user_can_access_task(request.user, task):
+        return JsonResponse({"error": "Access denied"}, status=403)
+
+    try:
+        # Parse request body
+        import json
+
+        body = json.loads(request.body)
+
+        # Extract parameters from request
+        identifier = body.get("identifier", "").strip()
+        experiment = body.get("experiment", "").strip()
+        platform = body.get("platform", "commcare_connect")
+        prompt_text = body.get("prompt_text", "").strip()
+        start_new_session = body.get("start_new_session", False)
+
+        # Validate required fields
+        if not identifier:
+            return JsonResponse({"error": "Participant ID is required"}, status=400)
+        if not experiment:
+            return JsonResponse({"error": "Bot ID (experiment) is required"}, status=400)
+        if not prompt_text:
+            return JsonResponse({"error": "Prompt instructions are required"}, status=400)
+
+        # Prepare session data to link back to Connect
+        session_data = {
+            "task_id": str(task.id),
+            "task_type": task.task_type,
+            "opportunity_id": str(task.opportunity.id),
+            "opportunity_name": task.opportunity.name,
+            "flw_user_id": str(task.user.id),
+            "flw_name": task.user.name,
+            "created_by": request.user.email,
+        }
+
+        # Trigger bot with OCS using manual parameters
+        trigger_bot(
+            identifier=identifier,
+            platform=platform,
+            bot_id=experiment,
+            prompt_text=prompt_text,
+            start_new_session=start_new_session,
+            session_data=session_data,
+        )
+
+        # The OCS API returns empty on success, so we need to query for the session
+        # For now, we'll create the session record without a session_id
+        # The user will need to manually link it later
+        TaskAISession.objects.create(
+            task=task,
+            ocs_session_id="",  # Will be filled in later manually
+            status="initiated",
+            session_metadata={
+                "parameters": {
+                    "identifier": identifier,
+                    "experiment": experiment,
+                    "platform": platform,
+                    "prompt_text": prompt_text,
+                    "start_new_session": start_new_session,
+                },
+                "session_data": session_data,
+            },
+            created_by=request.user.email,
+            modified_by=request.user.email,
+        )
+
+        # Create event
+        TaskEvent.objects.create(
+            task=task,
+            event_type=TaskEventType.AI_CONVERSATION,
+            actor=request.user.name,
+            actor_user=request.user,
+            description=f"AI assistant conversation initiated (Platform: {platform}, Bot: {experiment})",
+            created_by=request.user.email,
+            modified_by=request.user.email,
+            metadata={
+                "platform": platform,
+                "bot_id": experiment,
+                "identifier": identifier,
+            },
+        )
+
+        message = "AI conversation initiated successfully. You can manually link the session ID once available."
+        return JsonResponse({"success": True, "message": message})
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON in request body"}, status=400)
+    except OCSClientError as e:
+        return JsonResponse({"error": f"OCS API error: {str(e)}"}, status=500)
+    except Exception as e:
+        return JsonResponse({"error": f"Unexpected error: {str(e)}"}, status=500)
+
+
+@login_required
+@csrf_exempt
+@require_POST
+def task_add_ai_session(request, task_id):
+    """Manually add OCS session ID to a task."""
+    task = get_object_or_404(Task, id=task_id)
+
+    if not user_can_access_task(request.user, task):
+        return JsonResponse({"error": "Access denied"}, status=403)
+
+    session_id = request.POST.get("session_id", "").strip()
+
+    if not session_id:
+        return JsonResponse({"success": False, "error": "Session ID is required"}, status=400)
+
+    # Create or update AI session
+    ai_session, created = TaskAISession.objects.update_or_create(
+        task=task,
+        defaults={
+            "ocs_session_id": session_id,
+            "status": "completed",
+            "created_by": request.user.email,
+            "modified_by": request.user.email,
+        },
+    )
+
+    # Update existing AI conversation event with session ID, or create new one
+    ai_event = task.events.filter(event_type=TaskEventType.AI_CONVERSATION).first()
+    if ai_event:
+        # Update existing event with session ID info
+        ai_event.description = f"{ai_event.description} (Session: {session_id})"
+        ai_event.modified_by = request.user.email
+        ai_event.save(update_fields=["description", "modified_by", "date_modified"])
+    else:
+        # Create new event if none exists
+        TaskEvent.objects.create(
+            task=task,
+            event_type=TaskEventType.AI_CONVERSATION,
+            actor=request.user.name,
+            description=f"AI assistant session linked: {session_id}",
+            created_by=request.user.email,
+            modified_by=request.user.email,
+        )
+
+    return JsonResponse({"success": True, "session_id": session_id, "created": created})
+
+
+@login_required
+def task_ai_transcript(request, task_id):
+    """Fetch AI conversation transcript from OCS."""
+    task = get_object_or_404(Task, id=task_id)
+
+    if not user_can_access_task(request.user, task):
+        return JsonResponse({"error": "Access denied"}, status=403)
+
+    # Get AI session for this task
+    ai_session = task.ai_sessions.first()
+
+    if not ai_session:
+        return JsonResponse({"success": False, "error": "No AI session found for this task"}, status=404)
+
+    # Check if we have cached conversation
+    if ai_session.session_metadata and "conversation" in ai_session.session_metadata:
+        # Transform OCS format to UI format
+        messages = []
+        for msg in ai_session.session_metadata["conversation"]:
+            messages.append(
+                {
+                    "actor": "AI Assistant" if msg.get("role") == "assistant" else task.user.name,
+                    "message": msg.get("content", ""),
+                    "timestamp": msg.get("created_at", ""),
+                }
+            )
+
+        return JsonResponse(
+            {"success": True, "session_id": ai_session.ocs_session_id, "messages": messages, "cached": True}
+        )
+
+    # Fetch from OCS
+    try:
+        transcript = get_transcript(ai_session.ocs_session_id)
+
+        # Cache the conversation if successful
+        if isinstance(transcript, dict) and transcript.get("messages"):
+            ai_session.session_metadata = {"conversation": transcript["messages"]}
+            ai_session.save(update_fields=["session_metadata"])
+
+            # Transform OCS format to UI format
+            messages = []
+            for msg in transcript["messages"]:
+                messages.append(
+                    {
+                        "actor": "AI Assistant" if msg.get("role") == "assistant" else task.user.name,
+                        "message": msg.get("content", ""),
+                        "timestamp": msg.get("created_at", ""),
+                    }
+                )
+
+            return JsonResponse(
+                {"success": True, "session_id": ai_session.ocs_session_id, "messages": messages, "cached": False}
+            )
+        else:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "session_id": ai_session.ocs_session_id,
+                    "transcript": transcript,
+                }
+            )
+
+    except OCSClientError as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def task_quick_update(request, task_id):
+    """Quick update for status/assignment via AJAX."""
+    task = get_object_or_404(Task, id=task_id)
+
+    if not user_can_access_task(request.user, task):
+        return JsonResponse({"error": "Access denied"}, status=403)
+
+    form = TaskQuickUpdateForm(request.POST)
+    if form.is_valid():
+        changes = []
+
+        if form.cleaned_data.get("status"):
+            old_status = task.status
+            task.status = form.cleaned_data["status"]
+            if old_status != task.status:
+                changes.append(f"Status changed to {task.get_status_display()}")
+
+        if form.cleaned_data.get("priority"):
+            old_priority = task.priority
+            task.priority = form.cleaned_data["priority"]
+            if old_priority != task.priority:
+                changes.append(f"Priority changed to {task.get_priority_display()}")
+
+        if form.cleaned_data.get("assigned_to"):
+            old_assigned = task.assigned_to
+            task.assigned_to = form.cleaned_data["assigned_to"]
+            if old_assigned != task.assigned_to:
+                changes.append(f"Assigned to {task.assigned_to.name}")
+
+        task.modified_by = request.user.email
+        task.save()
+
+        # Create events
+        for change in changes:
+            TaskEvent.objects.create(
+                task=task,
+                event_type=TaskEventType.STATUS_CHANGED,
+                actor=request.user.name,
+                actor_user=request.user,
+                description=change,
+                created_by=request.user.email,
+                modified_by=request.user.email,
+            )
+
+        return JsonResponse({"success": True, "changes": changes})
+
+    return JsonResponse({"error": "Invalid form data"}, status=400)
+
+
+# Database management API views
+class DatabaseStatsAPIView(LoginRequiredMixin, View):
+    """API endpoint for getting database statistics."""
+
+    def get(self, request):
+        from commcare_connect.tasks.database_manager import get_database_stats
+
+        try:
+            stats = get_database_stats()
+            return JsonResponse({"success": True, "stats": stats})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class DatabaseResetAPIView(LoginRequiredMixin, View):
+    """API endpoint for resetting tasks-related database tables."""
+
+    def post(self, request):
+        from commcare_connect.tasks.database_manager import reset_tasks_database
+
+        try:
+            deleted = reset_tasks_database()
+            return JsonResponse({"success": True, "deleted": deleted})
+        except Exception as e:
+            import traceback
+
+            return JsonResponse({"error": str(e), "traceback": traceback.format_exc()}, status=500)
+
+
+# Keep the old view names for backward compatibility during transition
+tasks_list = TaskListView.as_view()
+task_detail_streamlined = TaskDetailView.as_view()
