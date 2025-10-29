@@ -122,11 +122,14 @@ def start_learn_app(request):
 class AcceptInviteView(View):
     def get(self, request, invite_id):
         try:
-            OpportunityAccess.objects.get(invite_id=invite_id)
+            access = OpportunityAccess.objects.get(invite_id=invite_id)
         except OpportunityAccess.DoesNotExist:
             return HttpResponse("This link is invalid. Please try again", status=404)
         get_token(request)
-        return render(request, "users/accept_invite_confirm.html")
+        context = {
+            "opportunity_name": access.opportunity.name,
+        }
+        return render(request, "users/accept_invite_confirm.html", context=context)
 
     def post(self, request, invite_id):
         try:
