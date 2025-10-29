@@ -655,7 +655,14 @@ class AddBudgetExistingUsersForm(forms.Form):
         widget=forms.NumberInput(attrs={"x-model": "additionalVisits"}), required=False
     )
     end_date = forms.DateField(
-        widget=forms.DateInput(attrs={"type": "date", "class": "form-input", "x-model": "end_date"}),
+        widget=forms.DateInput(
+            attrs={
+                "type": "date",
+                "class": "form-input",
+                "x-model": "end_date",
+                "min": datetime.date.today().strftime("%Y-%m-%d"),
+            }
+        ),
         label="Extended Opportunity End date",
         required=False,
     )
@@ -680,6 +687,12 @@ class AddBudgetExistingUsersForm(forms.Form):
             self.budget_increase = self._validate_budget(selected_users, additional_visits)
 
         return cleaned_data
+
+    def clean_end_date(self):
+        end_date = self.cleaned_data.get("end_date")
+        if end_date and end_date < datetime.date.today():
+            raise forms.ValidationError("End date cannot be in the past.")
+        return end_date
 
     def _validate_budget(self, selected_users, additional_visits):
         claims = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
@@ -897,6 +910,15 @@ class PaymentUnitForm(forms.ModelForm):
                 if payment_unit.parent_payment_unit_id and payment_unit.parent_payment_unit_id == self.instance.pk:
                     payment_units_initial.append(payment_unit.pk)
             self.fields["payment_units"].initial = payment_units_initial
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get("start_date")
+        end_date = cleaned_data.get("end_date")
+        if start_date and end_date and end_date < start_date:
+            raise ValidationError({"end_date": "End date cannot be earlier than start date."})
+
+        return cleaned_data
 
 
 class SendMessageMobileUsersForm(forms.Form):
