@@ -1613,7 +1613,7 @@ class VisitVerificationTableView(OrganizationUserMixin, OpportunityObjectMixin, 
                 }
             ]
 
-            if self.opportunity.managed:
+            if self.get_opportunity().managed:
                 dynamic_tabs = [
                     {
                         "name": "pending_review",
@@ -2118,10 +2118,12 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, OpportunityObjectMi
         kwargs["org_slug"] = self.request.org.slug
         program_manager = self.request.is_opportunity_pm
         kwargs["can_edit"] = (
-            not self.opportunity.managed and self.request.org_membership and not self.request.org_membership.is_viewer
+            not self.get_opportunity().managed
+            and self.request.org_membership
+            and not self.request.org_membership.is_viewer
         ) or program_manager
-        if self.opportunity.managed:
-            kwargs["org_pay_per_visit"] = self.opportunity.org_pay_per_visit
+        if self.get_opportunity().managed:
+            kwargs["org_pay_per_visit"] = self.get_opportunity().org_pay_per_visit
         return kwargs
 
 
