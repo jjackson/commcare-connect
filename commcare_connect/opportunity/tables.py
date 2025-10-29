@@ -263,12 +263,11 @@ class SuspendedUsersTable(tables.Table):
         page_url = reverse(
             "opportunity:suspended_users_list", args=(record.opportunity.organization.slug, record.opportunity_id)
         )
-        html = render_to_string(
+        return render_to_string(
             "opportunity/partials/revoke_suspension.html",
             {"revoke_url": revoke_url, "page_url": page_url},
             request=self.context.request,
         )
-        return format_html(html)
 
 
 class CatchmentAreaTable(tables.Table):
