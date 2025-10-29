@@ -1088,7 +1088,7 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
 @org_member_required
 @opportunity_for_org_required
 def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
-    access = get_object_or_404(OpportunityAccess, opportunity=request.oppurtunity, id=pk)
+    access = get_object_or_404(OpportunityAccess, opportunity=request.opportunity, id=pk)
     access.suspended = False
     access.save()
     remove_opportunity_access_cache(access.user, access.opportunity)
