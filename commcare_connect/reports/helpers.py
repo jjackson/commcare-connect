@@ -6,7 +6,7 @@ from django.db import models
 from django.db.models.functions import Coalesce, ExtractDay, TruncMonth
 from django.utils.timezone import now
 
-from commcare_connect.connect_id_client import fetch_user_counts
+from commcare_connect.connect_id_client import fetch_non_invited_user_signup_dates, fetch_user_counts
 from commcare_connect.opportunity.models import (
     CompletedWork,
     CompletedWorkStatus,
@@ -58,6 +58,11 @@ def get_eligible_user_counts_cumulative():
         visit_data_dict[month_group] = len(users)
         seen_users.update(users)
     return _get_cumulative_count(visit_data_dict)
+
+
+def get_non_preregistered_user_counts_cumulative():
+    result = fetch_non_invited_user_signup_dates()
+    return _get_cumulative_count(result)
 
 
 def get_table_data_for_year_month(
@@ -215,12 +220,15 @@ def get_table_data_for_year_month(
 
     connectid_user_count = get_connectid_user_counts_cumulative()
     total_eligible_user_counts = get_eligible_user_counts_cumulative()
+    non_preregistered_user_counts = get_non_preregistered_user_counts_cumulative()
+
     for group_key in visit_data_dict.keys():
         month_group = group_key[0]
         visit_data_dict[group_key].update(
             {
                 "connectid_users": connectid_user_count.get(month_group, 0),
                 "total_eligible_users": total_eligible_user_counts.get(month_group, 0),
+                "non_preregistered_users": non_preregistered_user_counts.get(month_group, 0),
             }
         )
     return list(visit_data_dict.values())
