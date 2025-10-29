@@ -57,17 +57,3 @@ def _get_decorated_function(view_func, permission_test_function):
         return view_func(request, *args, **kwargs)
 
     return _inner
-
-
-class OrganizationUserMixin:
-    """Mixin version of org_viewer_required decorator"""
-
-    def dispatch(self, request, *args, **kwargs):
-        return _get_decorated_function(super().dispatch(request, *args, **kwargs), _request_user_is_viewer)
-
-
-class OrganizationUserMemberRoleMixin:
-    """Mixin version of org_member_required decorator"""
-
-    def dispatch(self, request, *args, **kwargs):
-        return _get_decorated_function(super().dispatch(request, *args, **kwargs), _request_user_is_member)
