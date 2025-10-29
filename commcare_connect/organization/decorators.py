@@ -72,10 +72,7 @@ def opportunity_for_org_required(view_func):
     """
 
     @wraps(view_func)
-    def _inner(request, *args, **kwargs):
-        opp_id = kwargs.get("opp_id")
-        org_slug = kwargs.get("org_slug")
-
+    def _inner(request, org_slug, opp_id, *args, **kwargs):
         if not opp_id:
             raise Http404("Opportunity ID not provided.")
 
@@ -88,7 +85,7 @@ def opportunity_for_org_required(view_func):
             opp.managed and opp.managedopportunity.program.organization.slug == org_slug
         ):
             request.opportunity = opp
-            return view_func(request, *args, **kwargs)
+            return view_func(request, org_slug, opp_id, *args, **kwargs)
 
         raise Http404("Opportunity not found.")
 
