@@ -62,7 +62,7 @@ def _get_decorated_function(view_func, permission_test_function):
     return _inner
 
 
-def opportunity_for_org_required(view_func):
+def opportunity_required(view_func):
     """
     Decorator that fetches the opportunity from URL parameters (opp_id and org_slug)
     and attaches it to request.opportunity. Raises Http404 if the opportunity doesn't
@@ -89,5 +89,5 @@ def opportunity_for_org_required(view_func):
 
         raise Http404("Opportunity not found.")
 
-    _inner._has_opportunity_for_org_required_decorator = True
+    _inner._has_opportunity_required_decorator = True
     return _inner
