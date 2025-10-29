@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.utils.timezone import now
 
 from commcare_connect.conftest import MobileUserFactory
-from commcare_connect.connect_id_client.main import fetch_non_invited_user_signup_dates, fetch_user_counts
+from commcare_connect.connect_id_client.main import fetch_user_counts
 from commcare_connect.opportunity.helpers import get_payment_report_data
 from commcare_connect.opportunity.models import CompletedWorkStatus, VisitValidationStatus
 from commcare_connect.opportunity.tests.factories import (
@@ -82,7 +82,6 @@ def test_get_table_data_for_year_month(from_date, to_date, httpx_mock):
                 PaymentFactory(invoice=other_inv, date_paid=today, amount_usd=100)
 
     fetch_user_counts.clear()
-    fetch_non_invited_user_signup_dates.clear()
     httpx_mock.add_response(
         method="GET",
         json=connectid_user_counts,
