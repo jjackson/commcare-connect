@@ -81,7 +81,6 @@ def fetch_user_counts() -> dict[str, int]:
     return data
 
 
-@quickcache(vary_on=[], timeout=60 * 60)
 def fetch_non_invited_user_signup_dates() -> dict[str, int]:
     response = _make_request(GET, "/users/fetch_non_invited_user_signups")
     data = response.json()
