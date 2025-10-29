@@ -8,6 +8,7 @@ class AdminReportTable(tables.Table):
     delivery_type_name = columns.Column(verbose_name="Delivery Type", empty_values=("All"))
     connectid_users = columns.Column(verbose_name="ConnectID Accounts")
     total_eligible_users = columns.Column(verbose_name="Total Active Users")
+    non_preregistered_users = columns.Column(verbose_name="Non-Preregistered Users")
     users = SumColumn(verbose_name="Active Users")
     avg_time_to_payment = columns.Column(verbose_name="Average Time to Payment")
     max_time_to_payment = columns.Column(verbose_name="Max Time to Payment")
