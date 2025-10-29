@@ -598,7 +598,7 @@ def get_worker_learn_table_data(opportunity):
     return queryset
 
 
-def get_opportunity_delivery_progress(opp_id, org):
+def get_opportunity_delivery_progress(opp_id):
     today = now().replace(hour=0, minute=0, second=0, microsecond=0)
     three_days_ago = today - timedelta(days=3)
     yesterday = today - timedelta(days=1)
@@ -692,7 +692,7 @@ def get_opportunity_delivery_progress(opp_id, org):
         output_field=DateTimeField(),
     )
 
-    annotated_opportunity = Opportunity.objects.filter(id=opp_id, organization=org).annotate(
+    annotated_opportunity = Opportunity.objects.filter(id=opp_id).annotate(
         inactive_workers=inactive_workers_subquery(three_days_ago),
         deliveries_from_yesterday=deliveries_from_yesterday_sq(),
         accrued_since_yesterday=accrued_since_yesterday_sq,
@@ -713,9 +713,9 @@ def get_opportunity_delivery_progress(opp_id, org):
     return annotated_opportunity.first()
 
 
-def get_opportunity_worker_progress(opp_id, org):
+def get_opportunity_worker_progress(opp_id):
     return (
-        Opportunity.objects.filter(id=opp_id, organization=org)
+        Opportunity.objects.filter(id=opp_id)
         .annotate(
             total_deliveries=get_deliveries_count_subquery(),
             approved_deliveries=get_deliveries_count_subquery(CompletedWorkStatus.approved),
@@ -728,7 +728,7 @@ def get_opportunity_worker_progress(opp_id, org):
     )
 
 
-def get_opportunity_funnel_progress(opp_id, org):
+def get_opportunity_funnel_progress(opp_id):
     claimed_job_subquery = Coalesce(
         Subquery(
             OpportunityClaim.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"))
@@ -774,7 +774,7 @@ def get_opportunity_funnel_progress(opp_id, org):
     )
 
     return (
-        Opportunity.objects.filter(id=opp_id, organization=org)
+        Opportunity.objects.filter(id=opp_id)
         .annotate(
             workers_invited=workers_invited_subquery(),
             pending_invites=pending_invites_subquery(),

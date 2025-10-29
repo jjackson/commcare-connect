@@ -2128,7 +2128,7 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, OpportunityObjectMi
 @org_viewer_required
 @opportunity_for_org_required
 def opportunity_funnel_progress(request, org_slug, opp_id):
-    result = get_opportunity_funnel_progress(opp_id, request.org)
+    result = get_opportunity_funnel_progress(opp_id)
 
     accepted = result.workers_invited - result.pending_invites
 
@@ -2192,7 +2192,7 @@ def opportunity_funnel_progress(request, org_slug, opp_id):
 @org_viewer_required
 @opportunity_for_org_required
 def opportunity_worker_progress(request, org_slug, opp_id):
-    result = get_opportunity_worker_progress(opp_id, request.org)
+    result = get_opportunity_worker_progress(opp_id)
 
     def safe_percent(numerator, denominator):
         percent = (numerator / denominator) * 100 if denominator else 0
@@ -2279,7 +2279,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
 
     opportunity = get_opportunity_or_404(opp_id, org_slug)
 
-    stats = get_opportunity_delivery_progress(opportunity.id, request.org)
+    stats = get_opportunity_delivery_progress(opportunity.id)
 
     worker_list_url = reverse("opportunity:worker_list", args=(org_slug, opp_id))
     status_url = f"{worker_list_url}?{urlencode({'sort': '-last_active'})}"
