@@ -470,7 +470,13 @@ class OpportunityData:
 
         pending_approvals_sq = Subquery(
             CompletedWork.objects.filter(
-                opportunity_access__opportunity_id=OuterRef("pk"), uservisit__status=VisitValidationStatus.pending
+                opportunity_access__opportunity_id=OuterRef("pk"),
+            )
+            .filter(
+                Q(uservisit__status=VisitValidationStatus.pending)  # NM reviews
+                | Q(
+                    uservisit__review_status=VisitReviewStatus.pending, uservisit__review_created_on__isnull=False
+                ),  # PM reviews
             )
             .values("opportunity_access__opportunity_id")
             .annotate(count=Count("id", distinct=True))
