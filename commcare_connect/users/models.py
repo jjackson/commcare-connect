@@ -91,7 +91,7 @@ class UserCredential(models.Model):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     opportunity = models.ForeignKey("opportunity.Opportunity", on_delete=models.CASCADE)
-    delivery_type = models.ForeignKey("opportunity.DeliveryType", on_delete=models.CASCADE)
+    delivery_type = models.ForeignKey("opportunity.DeliveryType", on_delete=models.CASCADE, null=True, blank=True)
     created_on = models.DateTimeField(auto_now_add=True)
     issued_on = models.DateTimeField(null=True, blank=True)
     credential_type = models.CharField(
@@ -114,8 +114,15 @@ class UserCredential(models.Model):
 
     @property
     def title(self):
+        credential_earned_for = self.opportunity.name
+
+        # Some opportunities may not have a delivery type associated
+        if self.delivery_type:
+            credential_earned_for = self.delivery_type.name
+
         if self.credential_type == self.CredentialType.LEARN:
-            return _("Passed learning assessment for {delivery_type}").format(delivery_type=self.delivery_type.name)
-        return _("Completed {delivery_level_num} deliveries for {delivery_type}").format(
-            delivery_level_num=self.delivery_level_num, delivery_type=self.delivery_type.name
+            return _("Passed learning assessment for {earned_for}").format(earned_for=credential_earned_for)
+
+        return _("Completed {delivery_level_num} deliveries for {earned_for}").format(
+            delivery_level_num=self.delivery_level_num, earned_for=credential_earned_for
         )
