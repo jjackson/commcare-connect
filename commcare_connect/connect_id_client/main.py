@@ -81,12 +81,6 @@ def fetch_user_counts() -> dict[str, int]:
     return data
 
 
-def fetch_non_invited_user_signup_dates() -> dict[str, int]:
-    response = _make_request(GET, "/users/fetch_non_invited_user_signups")
-    data = response.json()
-    return data
-
-
 def get_user_otp(phone_number):
     try:
         response = _make_request(GET, "/users/generate_manual_otp", params={"phone_number": phone_number})

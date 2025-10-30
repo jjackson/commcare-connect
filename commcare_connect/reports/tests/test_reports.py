@@ -84,7 +84,7 @@ def test_get_table_data_for_year_month(from_date, to_date, httpx_mock):
     fetch_user_counts.clear()
     httpx_mock.add_response(
         method="GET",
-        json=connectid_user_counts,
+        json={"total_users": connectid_user_counts, "non_invited_users": connectid_user_counts},
     )
     data = get_table_data_for_year_month(from_date=from_date, to_date=to_date)
 
