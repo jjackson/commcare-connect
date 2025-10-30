@@ -124,5 +124,6 @@ class UserCredential(models.Model):
             return _("Passed learning assessment for {earned_for}").format(earned_for=credential_earned_for)
 
         return _("Completed {delivery_level_num} deliveries for {earned_for}").format(
-            delivery_level_num=self.delivery_level_num, earned_for=credential_earned_for
+            delivery_level_num=self.__class__.delivery_level_num(self.level, self.credential_type),
+            earned_for=credential_earned_for,
         )
