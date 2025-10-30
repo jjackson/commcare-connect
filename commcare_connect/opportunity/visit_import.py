@@ -68,8 +68,8 @@ class InvalidValueError(RowDataError):
 class VisitImportStatus:
     seen_visits: set[str]
     missing_visits: set[str]
-    approved_count: int
-    rejected_count: int
+    approved_count: int = 0
+    rejected_count: int = 0
 
     def __len__(self):
         return len(self.seen_visits)
