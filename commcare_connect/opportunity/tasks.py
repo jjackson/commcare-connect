@@ -47,7 +47,7 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.opportunity.utils.completed_work import update_status
 from commcare_connect.users.models import User
-from commcare_connect.utils.analytics import Event, GATrackingInfo, send_event_task
+from commcare_connect.utils.analytics import Event, GATrackingInfo, _serialize_events, send_event_task
 from commcare_connect.utils.celery import set_task_progress
 from commcare_connect.utils.datetime import is_date_before
 from commcare_connect.utils.sms import send_sms
@@ -407,7 +407,7 @@ def bulk_update_visit_status_task(
             ]
             for event in events:
                 event.add_tracking_info(tracking_info)
-            send_event_task(tracking_info.client_id, events)
+            send_event_task.delay(tracking_info.client_id, _serialize_events(events))
     except ImportException as e:
         messages = [f"Visit status import failed: {e}"] + getattr(e, "invalid_rows", [])
 
