@@ -111,7 +111,8 @@ class UserCredentialIssuer:
                 "title": UserCredential.get_title(
                     credential_type=users_credential["credential_type"],
                     level=users_credential["level"],
-                    delivery_type_name=users_credential["delivery_type__name"],
+                    delivery_type_name=users_credential["delivery_type__name"]
+                    or users_credential["opportunity__name"],
                 ),
                 "type": users_credential["credential_type"],
                 "level": users_credential["level"],
@@ -150,10 +151,10 @@ class UserCredentialIssuer:
         """
         return (
             UserCredential.objects.filter(issued_on__isnull=True)
-            .values("credential_type", "level", "opportunity__id", "delivery_type__name")
+            .values("credential_type", "level", "opportunity__id", "opportunity__name", "delivery_type__name")
             .annotate(usernames=ArrayAgg("user__username", distinct=True))
             .annotate(credential_ids=ArrayAgg("id", distinct=True))
-            .order_by("credential_type", "level", "opportunity__id", "delivery_type__name")
+            .order_by("credential_type", "level", "opportunity__id", "opportunity__name", "delivery_type__name")
         )
 
     @classmethod
@@ -165,7 +166,7 @@ class UserCredentialIssuer:
                     "credential_type": credential_type,
                     "level": level,
                     "opportunity_id": cred_user["opportunity_id"],
-                    "delivery_type_id": cred_user["delivery_type_id"],
+                    "delivery_type_id": cred_user.get("delivery_type_id", None),
                 }
             )
             for cred_user in credentials_users
