@@ -79,7 +79,6 @@ def send_event_task(client_id: str, events: list[Event]):
     url = f"{base_url}?{urlencode(params)}"
     response = httpx.post(url, json={"client_id": client_id, "events": events})
     response.raise_for_status()
-    return response
 
 
 def _serialize_events(events: list[Event]):
