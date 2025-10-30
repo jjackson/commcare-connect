@@ -142,7 +142,7 @@ from commcare_connect.organization.decorators import (
 from commcare_connect.program.models import ManagedOpportunity
 from commcare_connect.program.utils import is_program_manager
 from commcare_connect.users.models import User
-from commcare_connect.utils.analytics import send_event_to_ga
+from commcare_connect.utils.analytics import Event, send_event_to_ga
 from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.flags import FlagLabels, Flags
@@ -873,7 +873,7 @@ def approve_visits(request, org_slug, opp_id):
     )
     if visits:
         update_payment_accrued(opportunity=visits[0].opportunity, users=[visits[0].user], incremental=True)
-    send_event_to_ga(request, "bulk_approve_confirm", {"updated": approved_count, "total": len(visit_ids)})
+    send_event_to_ga(request, Event("bulk_approve_confirm", {"updated": approved_count, "total": len(visit_ids)}))
 
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
@@ -894,7 +894,7 @@ def reject_visits(request, org_slug=None, opp_id=None):
         visit = UserVisit.objects.get(id=visit_ids[0])
         update_payment_accrued(opportunity=opp, users=[visit.user])
 
-    send_event_to_ga(request, "bulk_reject_confirm", {"updated": updated_count, "total": len(visit_ids)})
+    send_event_to_ga(request, Event("bulk_reject_confirm", {"updated": updated_count, "total": len(visit_ids)}))
 
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
