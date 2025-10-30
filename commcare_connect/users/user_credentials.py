@@ -98,7 +98,7 @@ class UserCredentialIssuer:
                     "credential_type": credential_type,
                     "level": level,
                     "opportunity_id": cred_user["opportunity_id"],
-                    "delivery_type_id": cred_user["delivery_type_id"],
+                    "delivery_type_id": cred_user.get("delivery_type_id", None),
                 }
             )
             for cred_user in credentials_users
