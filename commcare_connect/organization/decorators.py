@@ -2,6 +2,7 @@ from functools import wraps
 
 from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 
 from commcare_connect.utils.permission_const import ALL_ORG_ACCESS
 
@@ -64,12 +65,14 @@ def _get_decorated_function(view_func, permission_test_function):
 class OrganizationUserMixin:
     """Mixin version of org_viewer_required decorator"""
 
+    @method_decorator(org_viewer_required)
     def dispatch(self, request, *args, **kwargs):
-        return _get_decorated_function(super().dispatch(request, *args, **kwargs), _request_user_is_viewer)
+        return super().dispatch(request, *args, **kwargs)
 
 
 class OrganizationUserMemberRoleMixin:
     """Mixin version of org_member_required decorator"""
 
+    @method_decorator(org_member_required)
     def dispatch(self, request, *args, **kwargs):
-        return _get_decorated_function(super().dispatch(request, *args, **kwargs), _request_user_is_member)
+        return super().dispatch(request, *args, **kwargs)
