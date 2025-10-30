@@ -2,6 +2,7 @@ from functools import wraps
 
 from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 
 from .models import UserOrganizationMembership
 
@@ -57,3 +58,19 @@ def _get_decorated_function(view_func, permission_test_function):
         return view_func(request, *args, **kwargs)
 
     return _inner
+
+
+class OrganizationUserMixin:
+    """Mixin version of org_viewer_required decorator"""
+
+    @method_decorator(org_viewer_required)
+    def dispatch(self, request, *args, **kwargs):
+        return super().dispatch(request, *args, **kwargs)
+
+
+class OrganizationUserMemberRoleMixin:
+    """Mixin version of org_member_required decorator"""
+
+    @method_decorator(org_member_required)
+    def dispatch(self, request, *args, **kwargs):
+        return super().dispatch(request, *args, **kwargs)
