@@ -1,15 +1,14 @@
+import logging
 from dataclasses import asdict, dataclass
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 
 from config import celery_app
 
-
-class AnalyticsError(Exception):
-    pass
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -23,6 +22,14 @@ def send_event_to_ga(request, event: Event):
 
 
 def send_bulk_events_to_ga(request, events: list[Event]):
+    if not settings.GA_MEASUREMENT_ID:
+        logger.info("Please specify GA_MEASUREMENT_ID environment variable.")
+        return
+
+    if not settings.GA_API_SECRET:
+        logger.info("Please specify GA_API_SECRET environment variable.")
+        return
+
     client_id = _get_ga_client_id(request)
     session_id = _get_ga_session_id(request)
     is_dimagi = request.user.email.endswith("@dimagi.com")
@@ -42,11 +49,9 @@ def send_bulk_events_to_ga(request, events: list[Event]):
 def send_event_task(client_id: str, events: list[Event]):
     measurement_id = settings.GA_MEASUREMENT_ID
     ga_api_secret = settings.GA_API_SECRET
-
-    if not measurement_id or not ga_api_secret:
-        raise ImproperlyConfigured("Missing GA_MEASUREMENT_ID or GA_API_SECRET environment variables.")
-
-    url = f"https://www.google-analytics.com/mp/collect?measurement_id={measurement_id}&api_secret={ga_api_secret}"
+    base_url = "https://www.google-analytics.com/mp/collect"
+    params = {"measurement_id": measurement_id, "api_secret": ga_api_secret}
+    url = f"{base_url}?{urlencode(params)}"
     response = httpx.post(url, json={"client_id": client_id, "events": events})
     response.raise_for_status()
     return response
@@ -64,5 +69,6 @@ def _get_ga_client_id(request):
 
 def _get_ga_session_id(request):
     session_id_cookie = request.COOKIES.get("_ga")
-    _, _, session_id, _ = session_id_cookie.split(".")
-    return session_id
+    if session_id_cookie:
+        return session_id_cookie.split(".")[2]
+    return
