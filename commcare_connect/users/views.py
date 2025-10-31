@@ -149,12 +149,11 @@ class AcceptInviteView(View):
                 )
             )
 
-        with transaction.atomic():
-            o.accepted = True
-            o.save()
-            user_invite = UserInvite.objects.get(opportunity_access=o)
-            user_invite.status = UserInviteStatus.accepted
-            user_invite.save()
+        o.accepted = True
+        o.save()
+        user_invite = UserInvite.objects.get(opportunity_access=o)
+        user_invite.status = UserInviteStatus.accepted
+        user_invite.save()
         return HttpResponse(
             _(
                 "Thank you for accepting the invitation. Open your CommCare Connect App to "
