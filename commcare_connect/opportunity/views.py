@@ -2267,9 +2267,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
         "text_color": "!text-orange-500",
     }
 
-    opportunity = get_opportunity_or_404(opp_id, org_slug)
-
-    stats = get_opportunity_delivery_progress(opportunity.id)
+    stats = get_opportunity_delivery_progress(request.opportunity.id)
 
     worker_list_url = reverse("opportunity:worker_list", args=(org_slug, opp_id))
     status_url = f"{worker_list_url}?{urlencode({'sort': '-last_active'})}"
@@ -2297,7 +2295,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
         },
     ]
 
-    if opportunity.managed:
+    if request.opportunity.managed:
         deliveries_panels.append(
             {
                 "icon": "fa-clipboard-list",
@@ -2347,7 +2345,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "panels": deliveries_panels,
         },
         {
-            "title": f"Worker Payments ({opportunity.currency})",
+            "title": f"Worker Payments ({request.opportunity.currency})",
             "sub_heading": "Last Payment",
             "value": stats.recent_payment or "--",
             "panels": [
