@@ -127,10 +127,13 @@ class AcceptInviteView(View):
         except OpportunityAccess.DoesNotExist:
             return HttpResponse("This link is invalid. Please try again", status=404)
         get_token(request)
-        context = {
-            "opportunity_name": access.opportunity.name,
-        }
-        return render(request, "users/accept_invite_confirm.html", context=context)
+        return render(
+            request,
+            "users/accept_invite_confirm.html",
+            context={
+                "opportunity_name": access.opportunity.name,
+            },
+        )
 
     def post(self, request, invite_id):
         try:
