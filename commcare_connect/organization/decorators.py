@@ -69,8 +69,6 @@ def opportunity_required(view_func):
     Decorator that fetches the opportunity from URL parameters (opp_id and org_slug)
     and attaches it to request.opportunity. Raises Http404 if the opportunity doesn't
     exist or doesn't belong to the organization.
-
-    This decorator should be used after org permission decorators to ensure request.org is available.
     """
 
     @wraps(view_func)
