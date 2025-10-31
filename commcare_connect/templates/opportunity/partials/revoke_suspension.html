@@ -1,6 +1,8 @@
-<form
+{% load i18n %}
+
+<button
   hx-post="{{ revoke_url }}"
   hx-vals='{"next": "{{ request.path }}"}'
->
-  <button type="submit" class="button button-sm primary-light">Revoke</button>
-</form>
+  class="button button-sm primary-light">
+  {% translate "Revoke" %}
+</button>
