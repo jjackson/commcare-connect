@@ -103,7 +103,4 @@ def _get_ga_session_id(request):
 
 
 def _is_dimagi_user(request):
-    is_dimagi = False
-    if request.user and request.user.email:
-        is_dimagi = request.user.email.endswith("@dimagi.com")
-    return is_dimagi
+    return getattr(request.user, "email", "").endswith("@dimagi.com")
