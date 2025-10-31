@@ -1048,8 +1048,7 @@ def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
     access.suspended = False
     access.save()
     remove_opportunity_access_cache(access.user, access.opportunity)
-    next = request.POST.get("next", "/")
-    return redirect(next)
+    return HttpResponse(headers={"HX-Redirect": request.POST.get("next", "/")})
 
 
 @org_member_required
