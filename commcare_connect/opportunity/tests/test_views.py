@@ -518,7 +518,7 @@ class TestResendUserInvites:
 def test_views_use_opportunity_decorator_or_mixin():
     """
     Ensure all views in the opportunity module use the
-    @opportunity_for_org_required decorator or the OpportunityObjectMixin,
+    @opportunity_required decorator or the OpportunityObjectMixin,
     except explicitly excluded ones.
     The purpose of this test is to prevent new views from being
     added without the necessary authorization checks.
@@ -614,9 +614,9 @@ def test_views_use_opportunity_decorator_or_mixin():
     if missing_function_decorator:
         errors.extend(
             [
-                "The following function-based views are missing the `opportunity_for_org_required` decorator:",
+                "The following function-based views are missing the `opportunity_required` decorator:",
                 *[f"  - {v['name']} ({v['function_name']}) at URL: {v['url']}" for v in missing_function_decorator],
-                "All function-based views that operate on opportunities must use `opportunity_for_org_required` "
+                "All function-based views that operate on opportunities must use `opportunity_required` "
                 "decorator. If this view is intentionally excluded, "
                 "please add it to the exclusion list (in variable `function_excluded`) in this test.",
             ]
