@@ -1073,6 +1073,7 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
     return redirect("opportunity:user_visits_list", org_slug, opp_id, pk)
 
 
+@require_POST
 @org_member_required
 @opportunity_required
 def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
@@ -1080,8 +1081,7 @@ def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
     access.suspended = False
     access.save()
     remove_opportunity_access_cache(access.user, access.opportunity)
-    next = request.GET.get("next", "/")
-    return redirect(next)
+    return HttpResponse(headers={"HX-Redirect": request.POST.get("next", "/")})
 
 
 @org_member_required
@@ -1412,6 +1412,7 @@ def resend_user_invites(request, org_slug, opp_id):
     return HttpResponse(headers={"HX-Redirect": redirect_url})
 
 
+@require_POST
 @opportunity_required
 def sync_deliver_units(request, org_slug, opp_id):
     status = HTTPStatus.OK
@@ -2302,8 +2303,10 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                 "name": "Services Delivered",
                 "status": "Pending PM Review",
                 "url": f"{delivery_url}?{urlencode({'review_pending': 'True'})}",
-                "value": header_with_tooltip(stats.visits_pending_for_pm_review, "Flagged and pending review with PM"),
-                "incr": stats.visits_pending_for_pm_review_since_yesterday,
+                "value": header_with_tooltip(
+                    stats.deliveries_pending_for_pm_review, "Flagged and pending review with PM"
+                ),
+                "incr": stats.deliveries_pending_for_pm_review_since_yesterday,
             }
         )
 
