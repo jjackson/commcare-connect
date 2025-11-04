@@ -32,7 +32,7 @@ class UserCredentialIssuer:
                     cls.get_learning_user_credentials(cred_level_opportunity_ids, cred_level),
                 )
 
-            UserCredential.objects.bulk_create(user_credentials_data, batch_size=100)
+            UserCredential.objects.bulk_create(user_credentials_data, batch_size=100, ignore_conflicts=True)
             user_credentials_data = []
 
         # Decouple the PersonalID submission to a celery task

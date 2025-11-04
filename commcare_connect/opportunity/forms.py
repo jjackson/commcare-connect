@@ -147,7 +147,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                 Column(
                     Field("end_date"),
                 ),
-                Column(Field("currency"), Field("additional_users")),
+                Column(Field("currency")),
                 css_class="grid grid-cols-2 gap-4 p-6 card_bg",
             ),
             Row(
@@ -188,9 +188,6 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
         self.helper = FormHelper(self)
         self.helper.layout = Layout(*layout_fields)
 
-        self.fields["additional_users"] = forms.IntegerField(
-            required=False, help_text=_("Adds budget for additional users.")
-        )
         self.fields["end_date"] = forms.DateField(
             widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
             required=False,
@@ -751,6 +748,7 @@ class AddBudgetNewUsersForm(forms.Form):
         )
 
         self.fields["total_budget"].initial = self.opportunity.total_budget
+        self.fields["total_budget"].label += f" ({self.opportunity.currency})"
 
         self.fields["add_users"].widget.attrs.update(
             {
