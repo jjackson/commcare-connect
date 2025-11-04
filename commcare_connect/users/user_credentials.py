@@ -55,6 +55,7 @@ class UserCredentialIssuer:
                 cred_user_id=F("opportunity_access__user_id"),
             )
             .values("cred_user_id", "opportunity_id", "delivery_type_id")
+            .distinct()
         )
 
         return cls._parse_to_user_credential_models(
@@ -82,6 +83,7 @@ class UserCredentialIssuer:
                 cred_user_id=F("opportunity_access__user_id"),
             )
             .values("cred_user_id", "opportunity_id", "delivery_type_id")
+            .distinct()
         )
         return cls._parse_to_user_credential_models(
             credentials_users=users_earning_credentials,
