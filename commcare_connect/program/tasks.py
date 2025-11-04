@@ -13,20 +13,15 @@ from config import celery_app
 def send_program_invite_applied_email(application_id):
     application = ProgramApplication.objects.select_related("program", "organization").get(pk=application_id)
     pm_org = application.program.organization
-    recipient_emails = UserOrganizationMembership.objects.filter(organization=pm_org).values_list(
-        "user__email", flat=True
-    )
-    recipient_emails = [email for email in recipient_emails if email]
+    recipient_emails = _get_membership_users_emails(pm_org)
     if not recipient_emails:
         return
-
-    program_url = build_absolute_uri(None, reverse("program:home", kwargs={"org_slug": pm_org.slug}))
 
     subject = f"Network Manager Applied for Program: {application.program.name}"
 
     context = {
         "application": application,
-        "program_url": program_url,
+        "program_url": _get_program_home_url(pm_org.slug),
     }
 
     message = render_to_string("program/email/program_invite_applied.txt", context)
@@ -39,3 +34,39 @@ def send_program_invite_applied_email(application_id):
         from_email=settings.DEFAULT_FROM_EMAIL,
         html_message=html_message,
     )
+
+
+@celery_app.task()
+def send_program_invite_email(application_id):
+    application = ProgramApplication.objects.select_related("program", "organization").get(pk=application_id)
+    nm_org = application.organization
+    recipient_emails = _get_membership_users_emails(nm_org)
+    if not recipient_emails:
+        return
+
+    subject = f"Invitation to Program: {application.program.name}"
+    context = {
+        "application": application,
+        "program_url": _get_program_home_url(nm_org.slug),
+    }
+    message = render_to_string("program/email/program_invite_notification.txt", context)
+    html_message = render_to_string("program/email/program_invite_notification.html", context)
+
+    send_mail(
+        subject=subject,
+        message=message,
+        recipient_list=recipient_emails,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        html_message=html_message,
+    )
+
+
+def _get_membership_users_emails(organization):
+    recipient_emails = UserOrganizationMembership.objects.filter(organization=organization).values_list(
+        "user__email", flat=True
+    )
+    return [email for email in recipient_emails if email]
+
+
+def _get_program_home_url(org_slug):
+    return build_absolute_uri(None, reverse("program:home", kwargs={"org_slug": org_slug}))
