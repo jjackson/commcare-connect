@@ -36,7 +36,7 @@ class OpportunityDataExportSerializer(serializers.ModelSerializer):
         return obj.managedopportunity.program_id if obj.managed else None
 
     def get_visit_count(self, obj) -> int:
-        return obj.uservisit_set.count()
+        return getattr(obj, "visit_count", 0)
 
 
 class OrganizationDataExportSerializer(serializers.ModelSerializer):
