@@ -514,6 +514,22 @@ class TestResendUserInvites:
         assert response.headers["HX-Redirect"] == self.expected_redirect
         mock_update_and_send.assert_called_once_with(mock_user, self.opportunity.id)
 
+    @mock.patch("commcare_connect.opportunity.views.update_user_and_send_invite")
+    @mock.patch("commcare_connect.opportunity.views.fetch_users")
+    def test_org_member_can_resend_invite(self, mock_fetch_users, mock_update_and_send, org_user_member):
+        mock_user = ConnectIdUser(
+            name="New User",
+            username="newuser",
+            phone_number=self.not_found_invite.phone_number,
+        )
+        mock_fetch_users.return_value = [mock_user]
+
+        self.client.force_login(org_user_member)
+        response = self.client.post(self.url, data={"user_invite_ids": [self.not_found_invite.id]})
+
+        assert response.status_code == 200
+        assert response.headers["HX-Redirect"] == self.expected_redirect
+
 
 def test_views_use_opportunity_decorator_or_mixin():
     """
