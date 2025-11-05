@@ -11,7 +11,7 @@ from config import celery_app
 
 @celery_app.task()
 def send_program_invite_applied_email(application_id):
-    application = ProgramApplication.objects.get(pk=application_id)
+    application = ProgramApplication.objects.select_related("program", "organization").get(pk=application_id)
     pm_org = application.program.organization
     recipient_emails = UserOrganizationMembership.objects.filter(organization=pm_org).values_list(
         "user__email", flat=True
