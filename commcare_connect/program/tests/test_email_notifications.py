@@ -3,8 +3,12 @@ from unittest.mock import patch
 import pytest
 
 from commcare_connect.program.models import ProgramApplicationStatus
-from commcare_connect.program.tasks import send_program_invite_applied_email, send_program_invite_email
-from commcare_connect.program.tests.factories import ProgramApplicationFactory
+from commcare_connect.program.tasks import (
+    send_opportunity_created_email,
+    send_program_invite_applied_email,
+    send_program_invite_email,
+)
+from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramApplicationFactory
 from commcare_connect.users.tests.factories import ProgramManagerOrgWithUsersFactory
 
 
@@ -46,4 +50,20 @@ def test_send_program_invited_notification(mock_send_mail):
     assert mock_send_mail.called
     call_kwargs = mock_send_mail.call_args[1]
     for membership in program_application.organization.memberships.all():
+        assert membership.user.email in call_kwargs["recipient_list"]
+
+
+@pytest.mark.django_db
+@patch("commcare_connect.program.tasks.send_mail")
+def test_send_opportunity_created_notification(mock_send_mail):
+    nm_org = ProgramManagerOrgWithUsersFactory()
+    managed_opportunity = ManagedOpportunityFactory(
+        organization=nm_org,
+    )
+
+    send_opportunity_created_email(managed_opportunity.id)
+
+    assert mock_send_mail.called
+    call_kwargs = mock_send_mail.call_args[1]
+    for membership in nm_org.memberships.all():
         assert membership.user.email in call_kwargs["recipient_list"]
