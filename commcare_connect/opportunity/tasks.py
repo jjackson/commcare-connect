@@ -236,7 +236,7 @@ def _get_learn_message(access: OpportunityAccess):
                 "opportunity_id": str(access.opportunity.id),
                 "title": gettext(f"Resume your learning journey for {access.opportunity.name}"),
                 "body": gettext(
-                    f"You have not completed your learning for {access.opportunity.name}."
+                    f"You have not completed your learning for {access.opportunity.name}. "
                     "Please complete the learning modules to start delivering visits."
                 ),
             },
@@ -257,7 +257,7 @@ def _get_deliver_message(access: OpportunityAccess):
             "opportunity_id": str(access.opportunity.id),
             "title": gettext(f"Resume your job for {access.opportunity.name}"),
             "body": gettext(
-                f"You have not completed your delivery visits for {access.opportunity.name}."
+                f"You have not completed your delivery visits for {access.opportunity.name}. "
                 "To maximise your payout complete all the required service delivery."
             ),
         },
@@ -277,7 +277,7 @@ def send_payment_notification(opportunity_id: int, payment_ids: list[int]):
                     "opportunity_id": str(opportunity.id),
                     "title": gettext("Payment received"),
                     "body": gettext(
-                        "You have received a payment of"
+                        "You have received a payment of "
                         f"{opportunity.currency} {payment.amount} for {opportunity.name}.",
                     ),
                     "payment_id": str(payment.id),
