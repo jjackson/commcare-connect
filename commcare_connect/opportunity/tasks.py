@@ -290,7 +290,8 @@ def send_payment_notification(opportunity_id: int, payment_ids: list[int]):
 @celery_app.task()
 def send_push_notification_task(user_ids: list[int], title: str, body: str):
     usernames = list(User.objects.filter(id__in=user_ids).values_list("username", flat=True))
-    message = Message(usernames, title=title, body=body)
+    data = {"title": title, "body": body}
+    message = Message(usernames, data=data)
     send_message(message)
 
 
