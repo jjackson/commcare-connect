@@ -1349,7 +1349,7 @@ def delete_user_invites(request, org_slug, opp_id):
     return HttpResponse(headers={"HX-Redirect": redirect_url})
 
 
-@org_admin_required
+@org_member_required
 @require_POST
 @opportunity_required
 def resend_user_invites(request, org_slug, opp_id):
