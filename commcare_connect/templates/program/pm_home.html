@@ -43,7 +43,7 @@
                     {% csrf_token %}
                     <div class="flex flex-col gap-2 py-4">
                       <label for="organization" class="title-sm">{% translate "Organization" %}</label>
-                      <select id="organization" name="organization" required data-tomselect>
+                      <select id="organization" name="organization" required data-tomselect data-tomselect:no-remove-button>
                         {% for org in organizations %}
                           <option value="{{ org.slug }}">{{ org.name }}</option>
                         {% endfor %}
