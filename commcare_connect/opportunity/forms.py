@@ -575,6 +575,8 @@ class OpportunityInitUpdateForm(OpportunityInitForm):
 
         if self.managed_opp and self.cleaned_data.get("organization"):
             opportunity.organization = self.cleaned_data.get("organization")
+        if not self.managed_opp:
+            opportunity.currency = self.cleaned_data["currency"].upper()
 
         created_by = opportunity.created_by or self.user.email
         hq_server = self.cleaned_data["hq_server"]
@@ -594,9 +596,7 @@ class OpportunityInitUpdateForm(OpportunityInitForm):
             update_existing=True,
         )
 
-        opportunity.currency = self.cleaned_data["currency"].upper()
         opportunity.modified_by = self.user.email
-
         opportunity.api_key, _ = HQApiKey.objects.get_or_create(
             id=self.cleaned_data["api_key"],
             defaults={
