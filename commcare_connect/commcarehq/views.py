@@ -5,12 +5,14 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils.html import format_html
+from django.views.decorators.http import require_GET
 
 from commcare_connect.opportunity.models import HQApiKey, Opportunity
 from commcare_connect.utils.commcarehq_api import get_applications_for_user_by_domain, get_domains_for_user
 
 
 # used for loading domain dropdown
+@require_GET
 @login_required
 def get_domains(request):
     hq_server = request.GET.get("hq_server")
@@ -28,6 +30,7 @@ def get_domains(request):
 
 
 # used for loading learn_app and deliver_app dropdowns
+@require_GET
 @login_required
 def get_application(request):
     hq_server = request.GET.get("hq_server")
@@ -42,7 +45,7 @@ def get_application(request):
     active_opps = Opportunity.objects.filter(
         Q(learn_app__cc_domain=domain) | Q(deliver_app__cc_domain=domain),
         active=True,
-        end_date__lt=datetime.date.today(),
+        end_date__gte=datetime.date.today(),
     ).select_related("learn_app", "deliver_app")
     existing_apps = set()
     for opp in active_opps:
