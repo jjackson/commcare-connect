@@ -126,12 +126,8 @@ def invite_user(user_id, opportunity_access_id):
     )
     message = Message(
         usernames=[user.username],
-        title=gettext(
-            f"You have been invited to a CommCare Connect opportunity - {opportunity_access.opportunity.name}"
-        ),
-        body=gettext(
-            f"You have been invited to a new job in Commcare Connect - {opportunity_access.opportunity.name}"
-        ),
+        title=gettext(f"You have been invited to a Connect opportunity - {opportunity_access.opportunity.name}"),
+        body=gettext(f"You have been invited to a new job in Connect - {opportunity_access.opportunity.name}"),
         data={
             "action": "ccc_opportunity_summary_page",
             "opportunity_id": str(opportunity_access.opportunity.id),
