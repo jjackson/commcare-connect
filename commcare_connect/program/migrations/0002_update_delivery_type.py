@@ -8,11 +8,9 @@ def update_delivery_type(apps, schema_editor):
     ManagedOpportunity = apps.get_model('program', 'ManagedOpportunity')
 
     for program in Program.objects.all():
-        opps = ManagedOpportunity.objects.filter(program=program)
-
-        for opp in opps:
-            opp.delivery_type = program.delivery_type
-            opp.save(update_fields=['delivery_type'])
+        ManagedOpportunity.objects.filter(
+            program=program
+        ).update(delivery_type=program.delivery_type)
 
 
 
