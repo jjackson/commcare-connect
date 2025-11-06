@@ -188,6 +188,8 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(*layout_fields)
+        if self.opportunity.managed:
+            self.fields["delivery_type"].disabled = True
 
         self.fields["end_date"] = forms.DateField(
             widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
