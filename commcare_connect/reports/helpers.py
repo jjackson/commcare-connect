@@ -40,7 +40,7 @@ def get_connectid_user_counts_cumulative():
     return _get_cumulative_count(total_user_counts), _get_cumulative_count(non_invited_user_counts)
 
 
-def get_eligible_user_counts_cumulative(delivery_type):
+def get_eligible_user_counts_cumulative(delivery_type=None):
     qs = CompletedWork.objects.filter(
         status=CompletedWorkStatus.approved,
         saved_approved_count__gt=0,
