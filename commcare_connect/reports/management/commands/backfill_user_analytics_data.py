@@ -1,5 +1,5 @@
 from django.core.management import BaseCommand
-from django.db.models import Case, Count, F, Max, Min, Q, Sum, When
+from django.db.models import Case, Count, DateTimeField, F, Max, Min, Q, Sum, When
 from django.db.models.lookups import GreaterThanOrEqual
 
 from commcare_connect.opportunity.models import CompletedWorkStatus, OpportunityAccess
@@ -24,14 +24,8 @@ class Command(BaseCommand):
                 has_accepted_opp=Max("invited_date"),
                 has_started_learning=Max("date_learn_started"),
                 has_completed_learning=Max("completed_learn_date"),
-                has_completed_assessment=Case(
-                    When(
-                        Q(user__assessments__opportunity=F("opportunity"), user__assessments__passed=True),
-                        then=Max("user__assessments__date"),
-                    ),
-                    default=None,
-                ),
-                has_claimed_job=Max("opportunityclaim__date_claimed"),
+                has_completed_assessment=Max("assessment__date", filter=Q(assessment__passed=True)),
+                has_claimed_job=F("opportunityclaim__date_claimed"),
                 has_started_job=Min("completedwork__date_created"),
                 has_paid=Max("payment__date_paid"),
                 has_completed_opp=Case(
@@ -40,6 +34,7 @@ class Command(BaseCommand):
                         then=Max("completedwork__status_modified_date"),
                     ),
                     default=None,
+                    output_field=DateTimeField(),
                 ),
             )
             .values(
