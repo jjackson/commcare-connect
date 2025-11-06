@@ -16,12 +16,14 @@ class Command(BaseCommand):
             OpportunityAccess.objects.filter(user__in=users)
             .annotate(
                 max_total=Sum("opportunity__paymentunit__max_total"),
-                max_total_done=Count("completedwork__id", Q(completedwork__status=CompletedWorkStatus.approved.value)),
+                max_total_done=Count(
+                    "completedwork__id", filter=Q(completedwork__status=CompletedWorkStatus.approved.value)
+                ),
             )
             .values("user_id")
             .annotate(
                 total=Count("id", distinct=True),
-                accepted_count=Count("id", Q(accepted=True), distinct=True),
+                accepted_count=Count("id", filter=Q(accepted=True), distinct=True),
                 completed_count=Sum(
                     Case(
                         When(Q(GreaterThanOrEqual("max_total_done", "max_total"), accepted=True), then=Value(1)),
