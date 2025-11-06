@@ -571,22 +571,75 @@ class DateRanges(TextChoices):
 
 class VisitExportForm(forms.Form):
     format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="csv")
-    date_range = forms.ChoiceField(choices=DateRanges.choices, initial=DateRanges.LAST_30_DAYS)
-    status = forms.MultipleChoiceField(choices=[("all", "All")] + VisitValidationStatus.choices, initial=["all"])
+    from_date = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    to_date = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date"}),
+        required=False,
+        initial=datetime.date.today().strftime("%Y-%m-%d"),
+    )
+    #  status = forms.MultipleChoiceField(choices=[("all", "All")] + VisitValidationStatus.choices, initial=["all"])
+    status = forms.ChoiceField(
+        choices=[("all", "All")] + VisitValidationStatus.choices,
+        initial="all",
+        widget=forms.Select(
+            attrs={
+                "hx-trigger": "change",
+                "hx-target": "#visit-count-warning",
+                "hx-include": "closest form",
+            }
+        ),
+    )
     flatten_form_data = forms.BooleanField(initial=True, required=False)
 
     def __init__(self, *args, **kwargs):
+        self.opportunity = kwargs.pop("opportunity")
         super().__init__(*args, **kwargs)
+
+        hx_url = reverse(
+            "opportunity:visit_export_count", args=(self.opportunity.organization.slug, self.opportunity.id)
+        )
+
+        for field_name in ["from_date", "to_date"]:
+            self.fields[field_name].widget.attrs.update(
+                {
+                    "max": datetime.date.today().strftime("%Y-%m-%d"),
+                    "hx-get": hx_url,
+                    "hx-trigger": "change",
+                    "hx-target": "#visit-count-warning",
+                    "hx-include": "closest form",
+                }
+            )
+
+        self.fields["status"].widget.attrs.update(
+            {
+                "hx-get": hx_url,
+                "hx-trigger": "change",
+                "hx-target": "#visit-count-warning",
+                "hx-include": "closest form",
+            }
+        )
+
         self.helper = FormHelper(self)
+
         self.helper.layout = Layout(
             Row(
                 Field("format"),
-                Field("date_range"),
+                Row(
+                    Field("from_date"),
+                    Field("to_date"),
+                    css_class="grid grid-cols-2 gap-6",
+                ),
                 Field("status"),
                 Field(
                     "flatten_form_data",
                     css_class=CHECKBOX_CLASS,
                     wrapper_class="flex p-4 justify-between rounded-lg bg-gray-100",
+                ),
+                Div(
+                    css_id="visit-count-warning",
+                    css_class="text-sm text-center",
                 ),
                 css_class="flex flex-col",
             ),
@@ -625,6 +678,15 @@ class ReviewVisitExportForm(forms.Form):
             return []
 
         return [VisitReviewStatus(status) for status in statuses]
+
+    def clean(self):
+        cleaned = super().clean()
+        from_date = cleaned.get("from_date")
+        to_date = cleaned.get("to_date")
+
+        if from_date and to_date and from_date > to_date:
+            raise forms.ValidationError("Start date cannot be after end date.")
+        return cleaned
 
 
 class PaymentExportForm(forms.Form):
