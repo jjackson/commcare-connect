@@ -149,6 +149,8 @@ from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.flags import FlagLabels, Flags
 from commcare_connect.utils.tables import get_duration_min, get_validated_page_size
 
+EXPORT_ROW_LIMIT = 10_000
+
 
 def get_opportunity_or_404(pk, org_slug):
     opp = get_object_or_404(Opportunity, id=pk)
@@ -390,7 +392,7 @@ class OpportunityDashboard(OpportunityObjectMixin, OrganizationUserMixin, Detail
 @org_member_required
 @opportunity_required
 def export_user_visits(request, org_slug, opp_id):
-    form = VisitExportForm(data=request.POST)
+    form = VisitExportForm(data=request.POST, opportunity=request.opportunity)
     if not form.is_valid():
         messages.error(request, form.errors)
         return redirect("opportunity:worker_list", request.org.slug, opp_id)
@@ -1949,7 +1951,7 @@ class WorkerDeliverView(BaseWorkerListView, FilterMixin):
 
     def get_extra_context(self, opportunity, org_slug):
         context = {
-            "visit_export_form": VisitExportForm(),
+            "visit_export_form": VisitExportForm(opportunity=opportunity),
             "review_visit_export_form": ReviewVisitExportForm(),
             "import_export_delivery_urls": {
                 "export_url_for_pm": reverse(
@@ -2458,3 +2460,27 @@ def add_api_key(request, org_slug):
         api_key.save()
         form = HQApiKeyCreateForm(auto_id="api_key_form_id_for_%s")
     return HttpResponse(render_crispy_form(form))
+
+
+@login_required
+@require_GET
+@org_member_required
+@opportunity_required
+def visit_export_count(request, org_slug, opp_id):
+    from_date = request.GET.get("from_date")
+    to_date = request.GET.get("to_date" or datetime.date.today)
+    status = request.GET.get("status", None)
+
+    visits = UserVisit.objects.filter(opportunity_id=opp_id, visit_date__gte=from_date, visit_date__lte=to_date)
+
+    if status in VisitValidationStatus:
+        visits = visits.filter(status=status)
+
+    count = visits.count()
+
+    if count > EXPORT_ROW_LIMIT:
+        html = f"""<div class='text-red-600 mb-3'>You have selected {count} visits.
+        The limit is {EXPORT_ROW_LIMIT}. Please narrow your filters.</div>"""
+    else:
+        html = f"<div class='text-green-600 mb-3'>{count} visits selected.</div>"
+    return HttpResponse(html)
