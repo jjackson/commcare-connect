@@ -1091,9 +1091,11 @@ class PaymentInvoiceForm(forms.ModelForm):
 
     class Meta:
         model = PaymentInvoice
-        fields = ("amount", "date", "invoice_number", "service_delivery")
+        fields = ("title", "amount", "date", "invoice_number", "start_date", "end_date", "notes", "service_delivery")
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "end_date": forms.DateInput(attrs={"type": "date"}),
             "amount": forms.NumberInput(attrs={"min": "0"}),
         }
 
@@ -1135,8 +1137,18 @@ class PaymentInvoiceForm(forms.ModelForm):
                 ),
                 Field(
                     "service_delivery",
-                    css_class=CHECKBOX_CLASS,
-                    wrapper_class="flex p-4 justify-between rounded-lg bg-gray-100",
+                    **{
+                        "css_class": CHECKBOX_CLASS,
+                        "wrapper_class": "flex p-4 justify-between rounded-lg bg-gray-100",
+                        "x-model": "serviceDeliverySelected",
+                    },
+                ),
+                Div(
+                    Field("title"),
+                    Field("start_date"),
+                    Field("end_date"),
+                    Field("notes"),
+                    **{"x-show": "serviceDeliverySelected"},
                 ),
                 css_class="flex flex-col",
             ),
@@ -1173,6 +1185,12 @@ class PaymentInvoiceForm(forms.ModelForm):
         else:
             cleaned_data["amount"] = amount
             cleaned_data["amount_usd"] = round(amount / exchange_rate.rate, 2)
+
+        if not self.cleaned_data["service_delivery"]:
+            cleaned_data["title"] = None
+            cleaned_data["start_date"] = None
+            cleaned_data["end_date"] = None
+            cleaned_data["notes"] = None
 
         return cleaned_data
 
