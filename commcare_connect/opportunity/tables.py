@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext as _
-from django_tables2 import columns, utils
+from django_tables2 import columns
 
 from commcare_connect.opportunity.models import (
     CatchmentArea,
@@ -245,16 +245,11 @@ class CompletedWorkTable(tables.Table):
 
 class SuspendedUsersTable(tables.Table):
     display_name = columns.Column("Name of the User")
-    revoke_suspension = columns.LinkColumn(
-        "opportunity:revoke_user_suspension",
-        verbose_name="",
-        text="Revoke",
-        args=[utils.A("opportunity__organization__slug"), utils.A("opportunity__id"), utils.A("pk")],
-    )
+    revoke_suspension = columns.TemplateColumn("Revoke")
 
     class Meta:
         model = OpportunityAccess
-        fields = ("display_name", "suspension_date", "suspension_reason")
+        fields = ("display_name", "suspension_date", "suspension_reason", "revoke_suspension")
         orderable = False
         empty_text = "No suspended users."
 
@@ -269,7 +264,11 @@ class SuspendedUsersTable(tables.Table):
         page_url = reverse(
             "opportunity:suspended_users_list", args=(record.opportunity.organization.slug, record.opportunity_id)
         )
-        return format_html('<a class="btn btn-success" href="{}?next={}">Revoke</a>', revoke_url, page_url)
+        return render_to_string(
+            "opportunity/partials/revoke_suspension.html",
+            {"revoke_url": revoke_url, "page_url": page_url},
+            request=self.context.request,
+        )
 
 
 class CatchmentAreaTable(tables.Table):
@@ -948,7 +947,7 @@ class UserInviteInfoColumn(UserInfoColumn):
             "verbose_name",
             header_with_tooltip(
                 label=_("Name"),
-                tooltip_text=_("Phone numbers will be displayed if a worker does not have a PersonalID account"),
+                tooltip_text=_("A blank value will be displayed if a worker does not have a PersonalID account"),
             ),
         )
         super().__init__(*args, **kwargs)
@@ -956,7 +955,7 @@ class UserInviteInfoColumn(UserInfoColumn):
     def render(self, value, record):
         if value:
             return super().render(value, record.opportunity_access)
-        return record.phone_number
+        return "—"
 
 
 class SuspendedIndicatorColumn(tables.Column):
@@ -1029,6 +1028,7 @@ class WorkerStatusTable(tables.Table):
         accessor="opportunity_access__user",
         empty_values=(),
     )
+    phone_number = tables.Column(accessor="phone_number", verbose_name="Phone Number")
     status = StatusIndicatorColumn(orderable=False)
     invited_date = DMYTColumn(accessor="notification_date", verbose_name=_("Invited Date"))
     last_active = DMYTColumn(
@@ -1067,6 +1067,7 @@ class WorkerStatusTable(tables.Table):
             "index",
             "status",
             "user",
+            "phone_number",
             "invited_date",
             "last_active",
             "started_learn",
