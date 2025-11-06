@@ -939,7 +939,7 @@ class PaymentUnitForm(forms.ModelForm):
 
 class SendMessageMobileUsersForm(forms.Form):
     title = forms.CharField(
-        empty_value="Notification from CommCare Connect",
+        empty_value="Notification from Connect",
         required=False,
     )
     body = forms.CharField(widget=forms.Textarea)
