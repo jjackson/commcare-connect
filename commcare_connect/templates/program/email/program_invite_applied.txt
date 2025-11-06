@@ -1,6 +1,6 @@
 Hi,
 
-A new Network Manager has applied for an invitation.
+A new Network Manager has applied for a program.
 
 Network Manager: '{{ application.organization.name }}'
 Program: '{{ application.program.name }}'
