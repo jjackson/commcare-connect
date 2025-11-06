@@ -4,12 +4,12 @@ import TomSelect from 'tom-select';
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-tomselect]').forEach((el) => {
     el.removeAttribute('class');
-    let plugings = [];
+    let plugins = [];
     if (!el.hasAttribute('data-tomselect:no-remove-button')) {
-      plugings.push('remove_button');
+      plugins.push('remove_button');
     }
     new TomSelect(el, {
-      plugins: plugings,
+      plugins: plugins,
     });
   });
 });
