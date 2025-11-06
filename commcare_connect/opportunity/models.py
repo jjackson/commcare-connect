@@ -473,6 +473,10 @@ class PaymentInvoice(models.Model):
     invoice_number = models.CharField(max_length=50)
     service_delivery = models.BooleanField(default=True)
     exchange_rate = models.ForeignKey(ExchangeRate, on_delete=models.DO_NOTHING, null=True)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    title = models.CharField(max_length=255, null=True, blank=True)
+    notes = models.TextField(null=True, blank=True)
 
     class Meta:
         unique_together = ("opportunity", "invoice_number")
