@@ -22,7 +22,7 @@ def send_program_invite_applied_email(application_id):
 
     program_url = build_absolute_uri(None, reverse("program:home", kwargs={"org_slug": pm_org.slug}))
 
-    subject = f"Network Manager Applied for Program Invitation: {application.program.name}"
+    subject = f"Network Manager Applied for Program: {application.program.name}"
 
     context = {
         "application": application,
