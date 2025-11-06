@@ -5,7 +5,7 @@
 <div class="table-container flex flex-col gap-2 mb-1">
   {% block table %}
   <div class="w-full overflow-x-auto overflow-y-auto block max-h-[70vh]">
-    <table class="base-table relative" {% render_attrs table.attrs %}>
+    <table class="base-table" {% render_attrs table.attrs %}>
       {% block table.thead %}
       {% if table.show_header %}
       <thead {{ table.attrs.thead.as_html }}>
