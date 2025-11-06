@@ -10,7 +10,7 @@ from commcare_connect.users.tests.factories import ProgramManagerOrgWithUsersFac
 
 @pytest.mark.django_db
 @patch("commcare_connect.program.tasks.send_mail")
-def test_send_program_invite_accepted_notification(mock_send_mail):
+def test_send_program_invite_applied_notification(mock_send_mail):
     pm_org = ProgramManagerOrgWithUsersFactory()
     program_application = ProgramApplicationFactory(
         status=ProgramApplicationStatus.APPLIED,
