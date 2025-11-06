@@ -42,10 +42,7 @@ class Command(BaseCommand):
                 has_started_job=Min("completedwork__date_created"),
                 has_paid=Max("payment__date_paid"),
                 has_completed_opp=Case(
-                    When(
-                        GreaterThanOrEqual("max_total_done", "max_total"),
-                        then=Max("completedwork__status_modified_date"),
-                    ),
+                    When(Q(completed_count__gte=1), then=Max("completedwork__status_modified_date")),
                     default=None,
                     output_field=DateTimeField(),
                 ),
@@ -60,10 +57,7 @@ class Command(BaseCommand):
                     output_field=DateTimeField(),
                 ),
                 has_completed_multiple_opps=Case(
-                    When(
-                        Q(completed_count__gt=1),
-                        then=Max("completedwork__status_modified_date"),
-                    ),
+                    When(Q(completed_count__gt=1), then=Max("completedwork__status_modified_date")),
                     default=None,
                     output_field=DateTimeField(),
                 ),
