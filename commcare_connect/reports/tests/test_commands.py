@@ -65,6 +65,9 @@ def test_backfill_user_analytics_data(db):
     assert analytics_data.has_started_job == completed_work.date_created
     assert analytics_data.has_paid == datetime.datetime(2023, 1, 7, tzinfo=timezone.utc)
     assert analytics_data.has_completed_opp == completed_work.status_modified_date
+    assert analytics_data.has_offered_multiple_opps is None
+    assert analytics_data.has_accepted_multiple_opps is None
+    assert analytics_data.has_completed_multiple_opps is None
 
 
 def test_backfill_user_analytics_data_multiple_opps(db):
