@@ -5,6 +5,7 @@ from commcare_connect.users.models import User
 
 class UserAnalyticsData(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
+    has_opp_invite = models.DateTimeField(null=True)
     has_accepted_opp = models.DateTimeField(null=True)
     has_started_learning = models.DateTimeField(null=True)
     has_completed_learning = models.DateTimeField(null=True)
