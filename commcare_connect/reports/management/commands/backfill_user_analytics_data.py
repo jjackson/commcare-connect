@@ -21,11 +21,12 @@ class Command(BaseCommand):
                 max_total_done=Count("completedwork__id", Q(completedwork__status=CompletedWorkStatus.approved.value)),
             )
             .annotate(
-                has_accepted_opp=Max("invited_date"),
+                has_opp_invite=Max("invited_date"),
+                has_accepted_opp=Max("invited_date", filter=Q(accepted=True)),
                 has_started_learning=Max("date_learn_started"),
                 has_completed_learning=Max("completed_learn_date"),
                 has_completed_assessment=Max("assessment__date", filter=Q(assessment__passed=True)),
-                has_claimed_job=F("opportunityclaim__date_claimed"),
+                has_claimed_job=Max("opportunityclaim__date_claimed"),
                 has_started_job=Min("completedwork__date_created"),
                 has_paid=Max("payment__date_paid"),
                 has_completed_opp=Case(
@@ -39,6 +40,7 @@ class Command(BaseCommand):
             )
             .values(
                 "user_id",
+                "has_opp_invite",
                 "has_accepted_opp",
                 "has_started_learning",
                 "has_completed_learning",
@@ -84,6 +86,7 @@ class Command(BaseCommand):
             to_create,
             update_conflicts=True,
             update_fields=[
+                "has_opp_invite",
                 "has_accepted_opp",
                 "has_started_learning",
                 "has_completed_learning",
