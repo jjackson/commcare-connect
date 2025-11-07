@@ -1,0 +1,181 @@
+name: Deploy to AWS Labs
+
+on:
+  # Manual trigger with options
+  workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: 'Run database migrations before deployment'
+        type: boolean
+        required: true
+        default: false
+
+  # Optionally enable auto-deploy on push
+  # Uncomment and customize branches to enable:
+  # push:
+  #   branches:
+  #     - main
+  #     - staging
+  #     - 'feature/*'
+
+env:
+  AWS_REGION: us-east-1
+  ECS_CLUSTER: labs-jj-cluster
+  ECS_WEB_SERVICE: labs-jj-web
+  ECS_WORKER_SERVICE: labs-jj-worker
+  ECR_REPOSITORY: labs-jj-commcare-connect
+  ECR_REGISTRY: 858923557655.dkr.ecr.us-east-1.amazonaws.com
+
+jobs:
+  deploy:
+    name: Deploy to Fargate
+    runs-on: ubuntu-latest
+
+    # Required for OIDC authentication
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.ECR_REPOSITORY }}:latest .
+          docker tag ${{ env.ECR_REPOSITORY }}:latest \
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+          docker tag ${{ env.ECR_REPOSITORY }}:latest \
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+      - name: Push image to Amazon ECR
+        run: |
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+      - name: Run database migrations
+        if: ${{ github.event.inputs.run_migrations == 'true' }}
+        run: |
+          echo "🔄 Running database migrations..."
+
+          # Get the latest task definition
+          TASK_DEF_ARN=$(aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_WEB_SERVICE }} \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "Using task definition: $TASK_DEF_ARN"
+
+          # Run migration task
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --task-definition $TASK_DEF_ARN \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[subnet-06646effb09be2f42],securityGroups=[sg-0666a5ed512c97d9d],assignPublicIp=ENABLED}" \
+            --overrides '{"containerOverrides":[{"name":"web","command":["/start_migrate"]}]}' \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Migration task started: $TASK_ARN"
+          echo "Waiting for migration to complete..."
+
+          # Wait for task to complete
+          aws ecs wait tasks-stopped \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --tasks $TASK_ARN
+
+          # Check exit code
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" == "0" ]; then
+            echo "✅ Migrations completed successfully"
+          else
+            echo "❌ Migrations failed with exit code: $EXIT_CODE"
+            echo "Check CloudWatch Logs: https://console.aws.amazon.com/cloudwatch/home?region=${{ env.AWS_REGION }}#logsV2:log-groups/log-group/%2Fecs%2F${{ env.ECS_WEB_SERVICE }}"
+            exit 1
+          fi
+
+      - name: Deploy web service
+        run: |
+          echo "🚀 Deploying web service..."
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_WEB_SERVICE }} \
+            --force-new-deployment \
+            --output text
+
+      - name: Deploy worker service
+        run: |
+          echo "🚀 Deploying worker service..."
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_WORKER_SERVICE }} \
+            --force-new-deployment \
+            --output text
+
+      - name: Wait for services to stabilize
+        run: |
+          echo "⏳ Waiting for services to reach steady state (this may take 2-3 minutes)..."
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_WEB_SERVICE }} ${{ env.ECS_WORKER_SERVICE }}
+          echo "✅ Services are stable"
+
+      - name: Get public IP
+        id: get-ip
+        run: |
+          TASK_ARN=$(aws ecs list-tasks \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service-name ${{ env.ECS_WEB_SERVICE }} \
+            --query 'taskArns[0]' \
+            --output text)
+
+          ENI_ID=$(aws ecs describe-tasks \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' \
+            --output text)
+
+          PUBLIC_IP=$(aws ec2 describe-network-interfaces \
+            --network-interface-ids $ENI_ID \
+            --query 'NetworkInterfaces[0].Association.PublicIp' \
+            --output text)
+
+          echo "public_ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
+          echo "Public IP: $PUBLIC_IP"
+
+      - name: Deployment summary
+        run: |
+          echo "=========================================="
+          echo "✅ Deployment Complete!"
+          echo "=========================================="
+          echo ""
+          echo "🌐 Application URL: http://${{ steps.get-ip.outputs.public_ip }}:8000/"
+          echo "🔐 Login URL:       http://${{ steps.get-ip.outputs.public_ip }}:8000/accounts/login/"
+          echo ""
+          echo "📦 Deployed Branch: ${{ github.ref_name }}"
+          echo "🔖 Commit SHA:      ${{ github.sha }}"
+          echo "📊 ECS Cluster:     ${{ env.ECS_CLUSTER }}"
+          echo "🖥️  Web Service:     ${{ env.ECS_WEB_SERVICE }}"
+          echo "⚙️  Worker Service:  ${{ env.ECS_WORKER_SERVICE }}"
+          echo ""
+          echo "🔍 View logs:"
+          echo "   Web:    https://console.aws.amazon.com/cloudwatch/home?region=${{ env.AWS_REGION }}#logsV2:log-groups/log-group/%2Fecs%2F${{ env.ECS_WEB_SERVICE }}"
+          echo "   Worker: https://console.aws.amazon.com/cloudwatch/home?region=${{ env.AWS_REGION }}#logsV2:log-groups/log-group/%2Fecs%2F${{ env.ECS_WORKER_SERVICE }}"
+          echo ""
+          echo "⚠️  Note: IP will change on task restart"
+          echo "=========================================="

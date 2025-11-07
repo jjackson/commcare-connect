@@ -773,6 +773,12 @@ class BlobMeta(models.Model):
     blob_id = models.CharField(max_length=255, default=uuid4)
     content_length = models.IntegerField()
     content_type = models.CharField(max_length=255, null=True)
+    question_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="CommCare form question ID that this attachment belongs to",
+    )
 
     class Meta:
         unique_together = [
