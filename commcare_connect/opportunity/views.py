@@ -2468,7 +2468,7 @@ def add_api_key(request, org_slug):
 @opportunity_required
 def visit_export_count(request, org_slug, opp_id):
     from_date = request.GET.get("from_date")
-    to_date = request.GET.get("to_date" or datetime.date.today)
+    to_date = request.GET.get("to_date", datetime.date.today)
     status = request.GET.get("status", None)
 
     visits = UserVisit.objects.filter(opportunity_id=opp_id, visit_date__gte=from_date, visit_date__lte=to_date)
@@ -2478,9 +2478,33 @@ def visit_export_count(request, org_slug, opp_id):
 
     count = visits.count()
 
+    message_class = "text-green-600"
+    message = f"{count:,} visits match your filters."
+    button_disabled = ""
+
     if count > EXPORT_ROW_LIMIT:
-        html = f"""<div class='text-red-600 mb-3'>You have selected {count} visits.
-        The limit is {EXPORT_ROW_LIMIT}. Please narrow your filters.</div>"""
-    else:
-        html = f"<div class='text-green-600 mb-3'>{count} visits selected.</div>"
+        button_disabled = "disabled"
+        message = (
+            f"You have {count} visits matching your filters. "
+            f"The maximum export limit is {EXPORT_ROW_LIMIT}. Please narrow your filters."
+        )
+        message_class = "text-red-600"
+
+    html = format_html(
+        """
+        <div class='{message_class} mb-3'>{message}</div>
+        <button id="export-submit-btn"
+                type="submit"
+                {button_disabled}
+                class="button button-md primary-dark"
+                hx-swap-oob="true">
+            <i class="bi bi-filetype-xls"></i>
+            Export
+        </button>
+        """,
+        message_class=message_class,
+        message=message,
+        button_disabled=button_disabled,
+    )
+
     return HttpResponse(html)
