@@ -579,7 +579,6 @@ class VisitExportForm(forms.Form):
         required=False,
         initial=datetime.date.today().strftime("%Y-%m-%d"),
     )
-    #  status = forms.MultipleChoiceField(choices=[("all", "All")] + VisitValidationStatus.choices, initial=["all"])
     status = forms.ChoiceField(
         choices=[("all", "All")] + VisitValidationStatus.choices,
         initial="all",
