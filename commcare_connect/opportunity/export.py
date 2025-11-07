@@ -94,11 +94,11 @@ class UserVisitExporter:
             row.append(json.dumps(form_json))
         return row
 
-    def get_dataset(self, date_range: DateRanges, status: list[VisitValidationStatus]) -> Dataset:
+    def get_dataset(self, from_date, to_date, status: list[VisitValidationStatus]) -> Dataset:
         """Get dataset of all user visits for an opportunity."""
-        user_visits = UserVisit.objects.filter(opportunity=self.opportunity)
-        if date_range.get_cutoff_date():
-            user_visits = user_visits.filter(visit_date__gte=date_range.get_cutoff_date())
+        user_visits = UserVisit.objects.filter(
+            opportunity=self.opportunity, visit_date__gte=from_date, visit_date__lte=to_date
+        )
         if status and "all" not in status:
             user_visits = user_visits.filter(status__in=status)
         user_visits = user_visits.order_by("visit_date")

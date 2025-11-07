@@ -398,10 +398,11 @@ def export_user_visits(request, org_slug, opp_id):
         return redirect("opportunity:worker_list", request.org.slug, opp_id)
 
     export_format = form.cleaned_data["format"]
-    date_range = DateRanges(form.cleaned_data["date_range"])
+    from_date = form.cleaned_data["from_date"]
+    to_date = form.cleaned_data["to_date"]
     status = form.cleaned_data["status"]
     flatten = form.cleaned_data["flatten_form_data"]
-    result = generate_visit_export.delay(opp_id, date_range, status, export_format, flatten)
+    result = generate_visit_export.delay(opp_id, from_date, to_date, status, export_format, flatten)
     redirect_url = reverse("opportunity:worker_deliver", args=(request.org.slug, opp_id))
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 
