@@ -111,6 +111,8 @@ class Command(BaseCommand):
                 "has_completed_multiple_opps",
                 "has_offered_multiple_opps",
                 "has_accepted_multiple_opps",
+                "has_viewed_work_history",
+                "has_sent_message",
             ],
             unique_fields=["user_id"],
         )
