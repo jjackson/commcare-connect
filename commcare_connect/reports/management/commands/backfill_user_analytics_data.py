@@ -1,7 +1,10 @@
+from collections import defaultdict
+
 from django.core.management import BaseCommand
 from django.db.models import Case, Count, DateTimeField, IntegerField, Max, Min, Q, Sum, Value, When
 from django.db.models.lookups import GreaterThanOrEqual
 
+from commcare_connect.connect_id_client.main import fetch_user_analytics
 from commcare_connect.opportunity.models import CompletedWorkStatus, OpportunityAccess
 from commcare_connect.reports.models import UserAnalyticsData
 from commcare_connect.users.models import User
@@ -12,6 +15,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         users = User.objects.filter(username__isnull=False, email__isnull=True)
+        personalid_analytics_data = fetch_user_analytics([user.username for user in users])
         access_objects = (
             OpportunityAccess.objects.filter(user__in=users)
             .annotate(
@@ -63,6 +67,7 @@ class Command(BaseCommand):
                 ),
             )
             .values(
+                "user__username",
                 "user_id",
                 "has_opp_invite",
                 "has_accepted_opp",
@@ -79,8 +84,19 @@ class Command(BaseCommand):
             )
         )
 
+        user_data_map = defaultdict(lambda: {})
+        for data in access_objects:
+            username = data.pop("user__username")
+            if username is not None:
+                user_data_map[username].update(data)
+
+        for data in personalid_analytics_data:
+            username = data.pop("username")
+            if username is not None:
+                user_data_map[username].update(data)
+
         UserAnalyticsData.objects.bulk_create(
-            [UserAnalyticsData(**data) for data in access_objects],
+            [UserAnalyticsData(**data) for data in user_data_map.values()],
             update_conflicts=True,
             update_fields=[
                 "has_opp_invite",
