@@ -17,7 +17,20 @@ from commcare_connect.reports.models import UserAnalyticsData
 from commcare_connect.users.tests.factories import UserFactory
 
 
-def test_backfill_user_analytics_data(db):
+def test_backfill_user_analytics_data(db, httpx_mock):
+    httpx_mock.add_response(
+        match_json={"usernames": ["test"]},
+        method="POST",
+        json={
+            "data": [
+                {
+                    "username": "test",
+                    "has_viewed_work_history": True,
+                    "has_sent_message": str(datetime.datetime(2023, 1, 1, tzinfo=timezone.utc)),
+                }
+            ]
+        },
+    )
     user = UserFactory(username="test", email=None)
     opportunity = OpportunityFactory()
     payment_unit = PaymentUnitFactory(opportunity=opportunity, max_total=1)
@@ -68,9 +81,24 @@ def test_backfill_user_analytics_data(db):
     assert analytics_data.has_offered_multiple_opps is None
     assert analytics_data.has_accepted_multiple_opps is None
     assert analytics_data.has_completed_multiple_opps is None
+    assert analytics_data.has_viewed_work_history
+    assert analytics_data.has_sent_message == datetime.datetime(2023, 1, 1, tzinfo=timezone.utc)
 
 
-def test_backfill_user_analytics_data_multiple_opps(db):
+def test_backfill_user_analytics_data_multiple_opps(db, httpx_mock):
+    httpx_mock.add_response(
+        match_json={"usernames": ["test"]},
+        method="POST",
+        json={
+            "data": [
+                {
+                    "username": "test",
+                    "has_viewed_work_history": False,
+                    "has_sent_message": None,
+                }
+            ]
+        },
+    )
     user = UserFactory(username="test", email=None)
     for idx, opportunity in enumerate(OpportunityFactory.create_batch(2)):
         payment_unit = PaymentUnitFactory(opportunity=opportunity, max_total=1)
@@ -127,3 +155,5 @@ def test_backfill_user_analytics_data_multiple_opps(db):
     assert analytics_data.has_offered_multiple_opps == access.invited_date
     assert analytics_data.has_accepted_multiple_opps == access.invited_date
     assert analytics_data.has_completed_multiple_opps == completed_work.status_modified_date
+    assert not analytics_data.has_viewed_work_history
+    assert analytics_data.has_sent_message is None
