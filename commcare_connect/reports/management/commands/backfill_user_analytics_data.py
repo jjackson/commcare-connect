@@ -56,7 +56,7 @@ class Command(BaseCommand):
                     output_field=DateTimeField(),
                 ),
                 has_accepted_multiple_opps=Case(
-                    When(Q(accepted_count__gt=1), then=Max("invited_date")),
+                    When(Q(accepted_count__gt=1), then=Max("invited_date", filter=Q(accepted=True))),
                     default=None,
                     output_field=DateTimeField(),
                 ),
