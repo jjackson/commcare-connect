@@ -81,6 +81,12 @@ def fetch_user_counts() -> dict[str, int]:
     return data
 
 
+def fetch_user_analytics(usernames: list[str]) -> list[dict]:
+    response = _make_request(POST, "/users/fetch_user_analytics", json={"usernames": usernames})
+    data = response.json()
+    return data.get("data")
+
+
 def get_user_otp(phone_number):
     try:
         response = _make_request(GET, "/users/generate_manual_otp", params={"phone_number": phone_number})
