@@ -67,15 +67,11 @@ jobs:
       - name: Run database migrations
         if: ${{ github.event.inputs.run_migrations == 'true' }}
         run: |
-          echo "🔄 Running database migrations..."
-
           # Get the latest task definition
           TASK_DEF_ARN=$(aws ecs describe-task-definition \
             --task-definition ${{ env.ECS_WEB_SERVICE }} \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
-
-          echo "Using task definition: $TASK_DEF_ARN"
 
           # Run migration task
           TASK_ARN=$(aws ecs run-task \
@@ -87,8 +83,7 @@ jobs:
             --query 'tasks[0].taskArn' \
             --output text)
 
-          echo "Migration task started: $TASK_ARN"
-          echo "Waiting for migration to complete..."
+          echo "Migration task: $TASK_ARN"
 
           # Wait for task to complete
           aws ecs wait tasks-stopped \
@@ -112,7 +107,6 @@ jobs:
 
       - name: Deploy web service
         run: |
-          echo "🚀 Deploying web service..."
           aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
             --service ${{ env.ECS_WEB_SERVICE }} \
@@ -121,7 +115,6 @@ jobs:
 
       - name: Deploy worker service
         run: |
-          echo "🚀 Deploying worker service..."
           aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
             --service ${{ env.ECS_WORKER_SERVICE }} \
@@ -130,11 +123,9 @@ jobs:
 
       - name: Wait for services to stabilize
         run: |
-          echo "⏳ Waiting for services to reach steady state (this may take 2-3 minutes)..."
           aws ecs wait services-stable \
             --cluster ${{ env.ECS_CLUSTER }} \
             --services ${{ env.ECS_WEB_SERVICE }} ${{ env.ECS_WORKER_SERVICE }}
-          echo "✅ Services are stable"
 
       - name: Deployment summary
         run: |
