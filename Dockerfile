@@ -45,8 +45,8 @@ RUN pip install --no-index --find-links=/wheels \
 WORKDIR /app
 
 COPY ./docker/* /
-RUN chmod +x /entrypoint /start*
-RUN chown django /entrypoint /start*
+RUN chmod +x /entrypoint /start* /migrate
+RUN chown django /entrypoint /start* /migrate
 
 COPY --chown=django:django . /app
 
