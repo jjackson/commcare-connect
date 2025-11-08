@@ -40,9 +40,9 @@ FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Afri
 
 CHECKBOX_CLASS = "simple-toggle"
 
-DOMAIN_PLACEHOLDER_CHOICE = (None, "Select an API key to load domains.")
-APP_PLACEHOLDER_CHOICE = (None, "Select an Application")
-API_KEY_PLACEHOLDER_CHOICE = (None, "Select a HQ Server to load API Keys.")
+DOMAIN_PLACEHOLDER_CHOICE = ("", "Select an API key to load domains.")
+APP_PLACEHOLDER_CHOICE = ("", "Select an Application")
+API_KEY_PLACEHOLDER_CHOICE = ("", "Select a HQ Server to load API Keys.")
 
 
 class HQApiKeyCreateForm(forms.ModelForm):
