@@ -95,12 +95,13 @@ class ConnectAPIFacade:
     Supports both Superset warehouse and OAuth-based API access to connect.dimagi.com.
     """
 
-    def __init__(self, user=None, use_production_api: bool = False):
+    def __init__(self, user=None, request=None, use_production_api: bool = False):
         """
         Initialize the facade.
 
         Args:
             user: Django User object (for OAuth token retrieval). If provided, will attempt API access.
+            request: HttpRequest object (required in labs mode to access session)
             use_production_api: Legacy parameter (deprecated in favor of user parameter)
         """
         self.oauth_token = None
@@ -115,7 +116,7 @@ class ConnectAPIFacade:
             from commcare_connect.audit.helpers import get_connect_oauth_token
 
             try:
-                self.oauth_token = get_connect_oauth_token(user)
+                self.oauth_token = get_connect_oauth_token(user, request=request)
                 if self.oauth_token:
                     self.has_oauth_token = True
                     self.production_url = settings.CONNECT_PRODUCTION_URL.rstrip("/")
