@@ -571,8 +571,7 @@ class OpportunityInitUpdateForm(OpportunityInitForm):
         return cleaned_data
 
     def save(self, commit=True):
-        opportunity = super().save(commit=False)
-
+        opportunity = self.instance
         if self.managed_opp and self.cleaned_data.get("organization"):
             opportunity.organization = self.cleaned_data.get("organization")
         if not self.managed_opp:
