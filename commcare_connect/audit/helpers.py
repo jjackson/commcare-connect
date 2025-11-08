@@ -183,7 +183,7 @@ def validate_audit_session_data(flw_user, opportunity, start_date, end_date):
     return True, None, visit_count
 
 
-def get_connect_oauth_token(user):
+def get_connect_oauth_token(user, request=None):
     """
     Get OAuth token for Connect production instance.
 
@@ -191,7 +191,8 @@ def get_connect_oauth_token(user):
     This token is used for making API requests to connect.dimagi.com.
 
     Args:
-        user: Django User object
+        user: Django User object (or LabsUser in labs mode)
+        request: HttpRequest object (required in labs mode to access session)
 
     Returns:
         String token if valid, None if no token exists
@@ -199,7 +200,18 @@ def get_connect_oauth_token(user):
     Raises:
         Exception: If token refresh fails
     """
-    # Check if user has a Connect social account
+    # In labs mode, get token from session
+    if getattr(settings, "IS_LABS_ENVIRONMENT", False):
+        if not request:
+            return None
+        labs_oauth = request.session.get("labs_oauth", {})
+        # Check if token is expired
+        expires_at = labs_oauth.get("expires_at", 0)
+        if timezone.now().timestamp() < expires_at:
+            return labs_oauth.get("access_token")
+        return None
+
+    # Normal mode: Check if user has a Connect social account
     try:
         social_account = SocialAccount.objects.get(user=user, provider="connect")
     except SocialAccount.DoesNotExist:

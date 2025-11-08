@@ -36,16 +36,34 @@ class AuditListView(LoginRequiredMixin, SingleTableView):
         context = super().get_context_data(**kwargs)
 
         # Check for Connect OAuth token
-        from allauth.socialaccount.models import SocialAccount, SocialToken
+        from django.conf import settings
 
-        try:
-            social_account = SocialAccount.objects.get(user=self.request.user, provider="connect")
-            social_token = SocialToken.objects.get(account=social_account)
-            context["has_connect_token"] = True
-            context["token_expires_at"] = social_token.expires_at
-        except (SocialAccount.DoesNotExist, SocialToken.DoesNotExist):
-            context["has_connect_token"] = False
-            context["token_expires_at"] = None
+        # In labs mode, OAuth token is in session
+        if getattr(settings, "IS_LABS_ENVIRONMENT", False):
+            labs_oauth = self.request.session.get("labs_oauth", {})
+            context["has_connect_token"] = bool(labs_oauth.get("access_token"))
+            if labs_oauth.get("expires_at"):
+                import datetime
+
+                from django.utils import timezone
+
+                context["token_expires_at"] = datetime.datetime.fromtimestamp(
+                    labs_oauth["expires_at"], tz=timezone.get_current_timezone()
+                )
+            else:
+                context["token_expires_at"] = None
+        else:
+            # Normal mode: check database for SocialAccount
+            from allauth.socialaccount.models import SocialAccount, SocialToken
+
+            try:
+                social_account = SocialAccount.objects.get(user=self.request.user, provider="connect")
+                social_token = SocialToken.objects.get(account=social_account)
+                context["has_connect_token"] = True
+                context["token_expires_at"] = social_token.expires_at
+            except (SocialAccount.DoesNotExist, SocialToken.DoesNotExist):
+                context["has_connect_token"] = False
+                context["token_expires_at"] = None
 
         return context
 
@@ -524,7 +542,7 @@ class ProgramSearchAPIView(LoginRequiredMixin, View):
         print(f"[VIEW DEBUG] query='{query}', limit={limit}")
         print(f"[VIEW DEBUG] user={request.user}")
 
-        facade = ConnectAPIFacade(user=request.user)
+        facade = ConnectAPIFacade(user=request.user, request=request)
         print("[VIEW DEBUG] facade created")
 
         facade.authenticate()
@@ -574,7 +592,7 @@ class ProgramOpportunitiesAPIView(LoginRequiredMixin, View):
 
     def get(self, request, program_id):
         try:
-            facade = ConnectAPIFacade(user=request.user)
+            facade = ConnectAPIFacade(user=request.user, request=request)
             if not facade.authenticate():
                 return JsonResponse({"error": "Failed to authenticate with data source"}, status=500)
 
@@ -701,14 +719,16 @@ class AuditPreviewAPIView(LoginRequiredMixin, View):
 class AuditCreateAPIView(LoginRequiredMixin, View):
     """API endpoint for creating audit sessions and loading data"""
 
-    def _run_audit_creation_in_background(self, task_id, opportunity_ids, criteria, auditor_username, user=None):
+    def _run_audit_creation_in_background(
+        self, task_id, opportunity_ids, criteria, auditor_username, user=None, request=None
+    ):
         """Run audit creation in a background thread"""
         progress_tracker = ProgressTracker(task_id=task_id)
         facade = None
 
         try:
             # Initialize and authenticate facade
-            facade = ConnectAPIFacade(user=user)
+            facade = ConnectAPIFacade(user=user, request=request)
             if not facade.authenticate():
                 progress_tracker.error("Failed to authenticate with data source")
                 return
@@ -769,7 +789,7 @@ class AuditCreateAPIView(LoginRequiredMixin, View):
             # Start the audit creation in a background thread
             thread = threading.Thread(
                 target=self._run_audit_creation_in_background,
-                args=(progress_tracker.task_id, opportunity_ids, criteria, auditor_username, request.user),
+                args=(progress_tracker.task_id, opportunity_ids, criteria, auditor_username, request.user, request),
                 daemon=True,
             )
             thread.start()
