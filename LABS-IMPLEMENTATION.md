@@ -91,6 +91,15 @@ git checkout -b jj/my-feature
 │                         Internet                             │
 └────────────────────────┬────────────────────────────────────┘
                          │
+                       HTTPS
+                         │
+              ┌──────────▼──────────┐
+              │  Application Load   │
+              │  Balancer (ALB)     │
+              │  labs.connect.      │
+              │  dimagi.com          │
+              └──────────┬──────────┘
+                         │
                     Port 8000
                          │
 ┌────────────────────────▼────────────────────────────────────┐
@@ -99,14 +108,13 @@ git checkout -b jj/my-feature
 │  │  ECS Fargate     │         │  ECS Fargate     │         │
 │  │  Web Task        │         │  Worker Task     │         │
 │  │  (Gunicorn)      │         │  (Celery)        │         │
-│  │  Public IP       │         │  Public IP       │         │
 │  └────────┬─────────┘         └─────────┬────────┘         │
 │           │                              │                   │
 │           └──────────────┬───────────────┘                   │
 │                          │                                   │
 │           ┌──────────────▼───────────────┐                  │
 │           │   Security Group             │                  │
-│           │   - HTTP: 8000 (inbound)     │                  │
+│           │   - HTTP: 8000 (from ALB)    │                  │
 │           │   - PostgreSQL: 5432         │                  │
 │           │   - Redis: 6379              │                  │
 │           └──────────────┬───────────────┘                  │
@@ -123,7 +131,7 @@ git checkout -b jj/my-feature
 
 ### Key Design Decisions
 
-1. **No Application Load Balancer (ALB)**: Tasks get public IPs directly, reducing cost by ~$16/month
+1. **Application Load Balancer (ALB)**: Provides stable HTTPS endpoint at labs.connect.dimagi.com
 2. **No NAT Gateway**: Tasks run in public subnets with direct internet access, saving ~$32/month
 3. **Managed Databases**: RDS and ElastiCache handle OS patching, backups, and security updates
 4. **Fargate Launch Type**: AWS manages the underlying compute, eliminating EC2 management
@@ -221,7 +229,7 @@ The deployment workflow:
 4. **Run Migrations** (optional): One-off Fargate task with `/migrate` command
 5. **Deploy Services**: Updates web and worker services with new image
 6. **Wait for Stability**: Ensures services reach steady state
-7. **Get Public IP**: Retrieves and displays current web task IP
+7. **Deployment Summary**: Displays application URL (https://labs.connect.dimagi.com/)
 
 ### Authentication
 
@@ -316,21 +324,6 @@ aws logs tail /ecs/labs-jj-worker --follow --profile labs
 **Or via AWS Console:**
 
 - CloudWatch → Log groups → `/ecs/labs-jj-web` or `/ecs/labs-jj-worker`
-
-### Get Current Public IP
-
-```bash
-# Get web task ARN
-TASK_ARN=$(aws ecs list-tasks --cluster labs-jj-cluster --service-name labs-jj-web --query 'taskArns[0]' --output text --profile labs)
-
-# Get network interface ID
-ENI_ID=$(aws ecs describe-tasks --cluster labs-jj-cluster --tasks $TASK_ARN --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text --profile labs)
-
-# Get public IP
-aws ec2 describe-network-interfaces --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Association.PublicIp' --output text --profile labs
-```
-
-**Note**: Public IP changes every time tasks restart
 
 ### Rollback
 
