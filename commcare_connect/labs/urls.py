@@ -10,4 +10,5 @@ urlpatterns = [
     path("callback/", oauth_views.labs_oauth_callback, name="oauth_callback"),
     path("logout/", oauth_views.labs_logout, name="logout"),
     path("status/", oauth_views.labs_status, name="status"),
+    path("dashboard/", oauth_views.labs_dashboard, name="dashboard"),
 ]

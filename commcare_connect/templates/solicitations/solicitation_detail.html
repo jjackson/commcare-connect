@@ -63,27 +63,18 @@
         <!-- Key Information Row -->
         <div class="bg-neutral-100 rounded-lg w-full px-5 py-4">
             <div class="flex gap-2 w-full items-center justify-between flex-wrap">
-                <div class="flex gap-2 items-start">
-                    <div class="infocard-dark">
-                        <i class="fa-solid fa-building"></i>
-                        <div>
-                            <h6>Program</h6>
-                            <p>{{ solicitation.program.name }}</p>
+                {% if solicitation.program_name %}
+                    <div class="flex gap-2 items-start">
+                        <div class="infocard-dark">
+                            <i class="fa-solid fa-building"></i>
+                            <div>
+                                <h6>Program</h6>
+                                <p>{{ solicitation.program_name }}</p>
+                            </div>
                         </div>
                     </div>
-                </div>
+                {% endif %}
 
-                <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
-
-                <div class="flex gap-2 items-start">
-                    <div class="infocard-dark">
-                        <i class="fa-solid fa-location-dot"></i>
-                        <div>
-                            <h6>Target Population</h6>
-                            <p>{{ solicitation.target_population }}</p>
-                        </div>
-                    </div>
-                </div>
 
                 {% if solicitation.estimated_scale %}
                     <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
@@ -106,7 +97,7 @@
                         <i class="fa-solid fa-clock"></i>
                         <div>
                             <h6>Application Deadline</h6>
-                            <p>{{ solicitation.application_deadline|date:"M j, Y" }}</p>
+                            <p>{{ solicitation.application_deadline|date:"M j, Y"|default:"No deadline set" }}</p>
                         </div>
                     </div>
                 </div>
@@ -152,7 +143,11 @@
         <div>
             <h2 class="card_title mb-4">Scope of Work</h2>
             <div class="card_description leading-relaxed">
-                {{ solicitation.scope_of_work|linebreaks }}
+                {% if solicitation.scope_of_work %}
+                    {{ solicitation.scope_of_work|linebreaks }}
+                {% else %}
+                    <p class="text-gray-500 italic">Not specified</p>
+                {% endif %}
             </div>
         </div>
 
@@ -183,11 +178,15 @@
             <div class="card_description mb-4">
                 Contact the program team for more information about this opportunity.
             </div>
-            <a href="mailto:{{ solicitation.program.organization.name|slugify }}@commcareconnect.org"
-               class="button button-md outline-style">
-                <i class="fa-solid fa-envelope mr-2"></i>
-                Get in Touch
-            </a>
+            {% if solicitation.contact_email and '@' in solicitation.contact_email and solicitation.contact_email != '@commcareconnect.org' %}
+                <a href="mailto:{{ solicitation.contact_email }}"
+                   class="button button-md outline-style">
+                    <i class="fa-solid fa-envelope mr-2"></i>
+                    Get in Touch
+                </a>
+            {% else %}
+                <p class="text-gray-500 italic">Contact information not provided</p>
+            {% endif %}
         </div>
     </div>
 {% endblock %}

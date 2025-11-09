@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-6">
+  <h1 class="text-3xl font-bold mb-4">Labs Dashboard</h1>
+
+  <div class="bg-white shadow rounded-lg p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-2">User Info</h2>
+    <p><strong>Username:</strong> {{ user.username }}</p>
+    <p><strong>Email:</strong> {{ user.email }}</p>
+    <p><strong>Name:</strong> {{ user.get_full_name }}</p>
+    <a href="{% url 'labs:logout' %}" class="text-blue-600 hover:underline">Logout to refresh data</a>
+  </div>
+
+  <div class="bg-white shadow rounded-lg p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4">Organizations ({{ user.organizations|length }})</h2>
+    {% if user.organizations %}
+      <ul class="space-y-2">
+        {% for org in user.organizations %}
+        <li class="border-b pb-2">
+          <strong>{{ org.name }}</strong> ({{ org.slug }})
+          - <a href="{{ connect_url }}/a/{{ org.slug }}/" target="_blank" class="text-blue-600 hover:underline">View in Production →</a>
+        </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-gray-600">No organizations found. Try logging out and back in.</p>
+    {% endif %}
+  </div>
+
+  <div class="bg-white shadow rounded-lg p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4">Programs ({{ user.programs|length }})</h2>
+    {% if user.programs %}
+      <ul class="space-y-2">
+        {% for program in user.programs %}
+        <li class="border-b pb-2">
+          <strong>{{ program.name }}</strong> (ID: {{ program.id }})
+          <br>
+          <span class="text-gray-600">Org: {{ program.organization }} | Currency: {{ program.currency }}</span>
+          - <a href="{{ connect_url }}/a/{{ program.organization }}/program/{{ program.id }}/" target="_blank" class="text-blue-600 hover:underline">View in Production →</a>
+        </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-gray-600">No programs found.</p>
+    {% endif %}
+  </div>
+
+  <div class="bg-white shadow rounded-lg p-6">
+    <h2 class="text-xl font-semibold mb-4">Opportunities ({{ user.opportunities|length }})</h2>
+    {% if user.opportunities %}
+      <ul class="space-y-2">
+        {% for opp in user.opportunities %}
+        <li class="border-b pb-2">
+          <strong>{{ opp.name }}</strong> (ID: {{ opp.id }})
+          <br>
+          <span class="text-gray-600">
+            Org: {{ opp.organization }} |
+            Program: {{ opp.program }} |
+            Active: {{ opp.is_active|yesno:"Yes,No" }}
+          </span>
+          - <a href="{{ connect_url }}/a/{{ opp.organization }}/opportunity/{{ opp.id }}/" target="_blank" class="text-blue-600 hover:underline">View in Production →</a>
+        </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-gray-600">No opportunities found.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

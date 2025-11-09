@@ -1,66 +1,48 @@
 from django.urls import path
 
 from .views import (
+    LabsHomeView,
+    ManageSolicitationsListView,
+    MyResponsesListView,
     SolicitationCreateOrUpdate,
     SolicitationDetailView,
     SolicitationListView,
     SolicitationResponseCreateOrUpdate,
     SolicitationResponseDetailView,
-    SolicitationResponseDraftListView,
     SolicitationResponseReviewCreateOrUpdate,
-    SolicitationResponseSuccessView,
-    SolicitationResponseTableView,
-    UnifiedSolicitationDashboard,
-    delete_attachment,
-    save_draft_ajax,
-    upload_attachment,
+    SolicitationResponsesListView,
 )
 
 app_name = "solicitations"
 
 urlpatterns = [
-    # Public URLs (no authentication required)
-    path("", SolicitationListView.as_view(), name="list"),
-    path("eoi/", SolicitationListView.as_view(), {"type": "eoi"}, name="eoi_list"),
-    path("rfp/", SolicitationListView.as_view(), {"type": "rfp"}, name="rfp_list"),
-    path("s/<int:pk>/", SolicitationDetailView.as_view(), name="detail"),
-    # dashboards
-    path("admin-overview/", UnifiedSolicitationDashboard.as_view(), name="admin_overview"),
-    path("dashboard/", UnifiedSolicitationDashboard.as_view(), name="dashboard"),
-    # Authenticated response submission
-    path("s/<int:solicitation_pk>/respond/", SolicitationResponseCreateOrUpdate.as_view(), name="respond"),
-    path("response/<int:pk>/edit/", SolicitationResponseCreateOrUpdate.as_view(), name="user_response_edit"),
-    path("response/<int:pk>/success/", SolicitationResponseSuccessView.as_view(), name="response_success"),
-    # User response management
-    path("response/<int:pk>/", SolicitationResponseDetailView.as_view(), name="user_response_detail"),
-    # Draft management
-    path("drafts/", SolicitationResponseDraftListView.as_view(), name="draft_list"),
-    path("s/<int:pk>/save-draft/", save_draft_ajax, name="save_draft"),
-    # File management
-    path("s/<int:pk>/upload-attachment/", upload_attachment, name="upload_attachment"),
-    path("s/<int:pk>/delete-attachment/<int:attachment_id>/", delete_attachment, name="delete_attachment"),
-    # Program management URLs (moved from program app)
-    path("program/<int:pk>/", UnifiedSolicitationDashboard.as_view(), name="program_dashboard"),
+    # Labs Home - NEW
+    path("", LabsHomeView.as_view(), name="home"),
+    # Program Manager URLs - NEW
+    path("manage/", ManageSolicitationsListView.as_view(), name="manage_list"),
+    path("create/", SolicitationCreateOrUpdate.as_view(), name="create"),
+    path("solicitation/<int:pk>/edit/", SolicitationCreateOrUpdate.as_view(), name="edit"),
     path(
-        "program/<int:pk>/solicitations/<int:solicitation_pk>/responses/",
-        SolicitationResponseTableView.as_view(),
-        name="program_response_list",
+        "solicitation/<int:solicitation_pk>/responses/",
+        SolicitationResponsesListView.as_view(),
+        name="solicitation_responses",
     ),
-    # CONSOLIDATED REVIEW VIEW (PRIMARY)
+    # Public browsing URLs - NEW
+    path("opportunities/", SolicitationListView.as_view(), name="list"),
+    path("opportunities/eoi/", SolicitationListView.as_view(), {"type": "eoi"}, name="eoi_list"),
+    path("opportunities/rfp/", SolicitationListView.as_view(), {"type": "rfp"}, name="rfp_list"),
+    path("opportunities/<int:pk>/", SolicitationDetailView.as_view(), name="detail"),
+    # Organization response URLs - NEW
+    path("responses/", MyResponsesListView.as_view(), name="my_responses"),
+    path("opportunities/<int:solicitation_pk>/respond/", SolicitationResponseCreateOrUpdate.as_view(), name="respond"),
+    path("response/<int:pk>/", SolicitationResponseDetailView.as_view(), name="response_detail"),
+    path("response/<int:pk>/edit/", SolicitationResponseCreateOrUpdate.as_view(), name="response_edit"),
+    # Review URLs - NEW
     path(
-        "program/<int:pk>/solicitations/response/<int:response_pk>/review/",
-        SolicitationResponseReviewCreateOrUpdate.as_view(),
-        name="program_response_review",
+        "response/<int:response_pk>/review/", SolicitationResponseReviewCreateOrUpdate.as_view(), name="review_create"
     ),
-    # CONSOLIDATED VIEWS (PRIMARY)
-    path(
-        "program/<int:program_pk>/solicitations/create/",
-        SolicitationCreateOrUpdate.as_view(),
-        name="program_solicitation_create",
-    ),
-    path(
-        "program/<int:program_pk>/solicitations/<int:pk>/edit/",
-        SolicitationCreateOrUpdate.as_view(),
-        name="program_solicitation_edit",
-    ),
+    # Helper URLs (AJAX, file management) - Disabled for now
+    # path("s/<int:pk>/save-draft/", save_draft_ajax, name="save_draft"),
+    # path("s/<int:pk>/upload-attachment/", upload_attachment, name="upload_attachment"),
+    # path("s/<int:pk>/delete-attachment/<int:attachment_id>/", delete_attachment, name="delete_attachment"),
 ]

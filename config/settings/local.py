@@ -54,7 +54,10 @@ AUTHENTICATION_BACKENDS = [
 INSTALLED_APPS = INSTALLED_APPS + ["commcare_connect.labs"]  # noqa: F405
 
 # Add labs middleware after standard auth (keep both for local dev/admin)
+# Remove production OrganizationMiddleware and add labs-specific version
 MIDDLEWARE = list(MIDDLEWARE)  # noqa: F405
 _auth_idx = MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddleware")
+MIDDLEWARE.remove("commcare_connect.users.middleware.OrganizationMiddleware")  # Remove production middleware
 MIDDLEWARE.insert(_auth_idx + 1, "commcare_connect.labs.middleware.LabsAuthenticationMiddleware")
 MIDDLEWARE.insert(_auth_idx + 2, "commcare_connect.labs.middleware.LabsURLWhitelistMiddleware")
+MIDDLEWARE.insert(_auth_idx + 3, "commcare_connect.labs.organization_middleware.LabsOrganizationMiddleware")

@@ -38,11 +38,11 @@
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div class="flex items-center text-sm text-gray-600">
                             <i class="fa-solid fa-building mr-2 text-gray-400"></i>
-                            <span>{{ response.organization.name }}</span>
+                            <span>{{ response.organization_name }}</span>
                         </div>
                         <div class="flex items-center text-sm text-gray-600">
                             <i class="fa-solid fa-user mr-2 text-gray-400"></i>
-                            <span>{{ response.submitted_by.get_full_name}} ({{ response.submitted_by.email }})</span>
+                            <span>{{ response.submitted_by_name }}{% if response.submitted_by_email %} ({{ response.submitted_by_email }}){% endif %}</span>
                         </div>
                         <div class="flex items-center text-sm text-gray-600">
                             <i class="fa-solid fa-calendar mr-2 text-gray-400"></i>
@@ -59,7 +59,7 @@
                             Edit Response
                         </a>
                     {% else %}
-                        <a href="/solicitations/s/{{ solicitation.pk }}/"
+                        <a href="{% url 'solicitations:detail' pk=solicitation.pk %}"
                            class="button button-md outline-style">
                             <i class="fa-solid fa-arrow-left mr-2"></i>
                             Back to Solicitation
@@ -70,14 +70,13 @@
         </div>
 
         <div>
-            <!-- Organization Overview -->
-            {% include "solicitations/components/organization_overview.html" with organization=response.organization %}
-
             <!-- Response Answers -->
             {% include "solicitations/components/response_answers.html" with section_title="Your Answers" %}
 
             <!-- File Attachments -->
-            {% include "solicitations/components/file_attachments.html" %}
+            {% if response.attachments and response.attachments|length > 0 %}
+                {% include "solicitations/components/file_attachments.html" %}
+            {% endif %}
 
         </div>
     </div>

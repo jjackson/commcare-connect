@@ -84,15 +84,12 @@
                     <!-- Card Body -->
                     <div class="mb-4">
                         <div class="space-y-2 text-sm text-gray-600">
-                            <div class="flex items-center gap-2">
-                                <i class="fa-solid fa-location-dot text-gray-400"></i>
-                                <span>{{ solicitation.target_population }}</span>
-                            </div>
-
-                            <div class="flex items-center gap-2">
-                                <i class="fa-solid fa-building text-gray-400"></i>
-                                <span>{{ solicitation.program.organization.name }}</span>
-                            </div>
+                            {% if solicitation.program_name %}
+                                <div class="flex items-center gap-2">
+                                    <i class="fa-solid fa-building text-gray-400"></i>
+                                    <span>{{ solicitation.program_name }}</span>
+                                </div>
+                            {% endif %}
 
                             {% if solicitation.estimated_scale %}
                                 <div class="flex items-center gap-2">
@@ -107,8 +104,12 @@
                     <div class="pt-4 border-t border-gray-100">
                         <div class="flex items-center justify-between">
                             <div class="text-sm text-gray-600">
-                                <span class="font-medium">Deadline:</span>
-                                {{ solicitation.application_deadline|date:"M d, Y" }}
+                                {% if solicitation.application_deadline %}
+                                    <span class="font-medium">Deadline:</span>
+                                    {{ solicitation.application_deadline|date:"M d, Y" }}
+                                {% else %}
+                                    <span class="font-medium text-gray-400">No deadline set</span>
+                                {% endif %}
                             </div>
                             <a href="{% url 'solicitations:detail' solicitation.pk %}"
                                class="button button-sm primary-dark">

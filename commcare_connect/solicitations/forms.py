@@ -2,20 +2,29 @@ from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Column, Div, Field, Layout
 from django import forms
 from django.core.exceptions import ValidationError
-from django.forms import ModelForm
 from django.utils.translation import gettext_lazy as _
-
-from .helpers import process_question_form_data
-from .models import Solicitation, SolicitationQuestion, SolicitationResponse, SolicitationReview
 
 
 class SolicitationResponseForm(forms.Form):
     """
-    Dynamic form for responding to solicitations
-    Fields are generated based on SolicitationQuestion instances
+    Dynamic form for responding to solicitations.
+    Fields are generated based on solicitation questions from JSON data.
     """
 
-    # Remove the old single file field - we'll handle multiple files differently
+    # Organization selection field (will be populated in __init__)
+    organization_id = forms.ChoiceField(
+        label="Responding Organization",
+        required=True,
+        help_text="Select which organization you are responding on behalf of",
+        widget=forms.Select(
+            attrs={
+                "class": (
+                    "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none "
+                    "focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                )
+            }
+        ),
+    )
 
     def __init__(self, solicitation, user, is_draft_save=False, instance=None, *args, **kwargs):
         # Extract instance from kwargs since Form doesn't handle it automatically
@@ -25,63 +34,115 @@ class SolicitationResponseForm(forms.Form):
         self.user = user
         self.is_draft_save = is_draft_save
 
+        # Import here to avoid circular dependency
+        from .experiment_helpers import get_responses_for_solicitation
+
+        # Get existing responses for this solicitation
+        existing_responses = get_responses_for_solicitation(solicitation)
+        existing_org_slugs = {resp.organization_id for resp in existing_responses if resp.organization_id}
+
+        # Populate organization choices from user's OAuth data
+        # Use slug as the identifier (no local database lookup needed)
+        org_choices = []
+        if hasattr(user, "organizations"):
+            orgs = user.organizations  # Returns list of {'slug': '...', 'name': '...'}
+            for org_data in orgs:
+                slug = org_data.get("slug")
+                name = org_data.get("name", slug)
+                if slug:
+                    # Indicate if this org already has a response
+                    if slug in existing_org_slugs:
+                        display_name = f"{name} (Already responded - will edit)"
+                    else:
+                        display_name = name
+                    org_choices.append((slug, display_name))
+
+        if not org_choices:
+            org_choices = [("", "No organizations available")]
+
+        self.fields["organization_id"].choices = org_choices
+
+        # Pre-select organization if editing existing response
+        if instance and hasattr(instance, "organization_id"):
+            self.fields["organization_id"].initial = instance.organization_id
+
         # Dynamically add fields based on solicitation questions
-        questions = SolicitationQuestion.objects.filter(solicitation=solicitation).order_by("order")
+        # For ExperimentRecord-based solicitations, questions are in JSON
+        questions = solicitation.questions if hasattr(solicitation, "questions") else []
 
         for question in questions:
-            field_name = f"question_{question.id}"
+            # Support both dict (JSON) and model object access
+            q_id = question.get("id") if isinstance(question, dict) else question.id
+            q_text = question.get("question_text") if isinstance(question, dict) else question.question_text
+            q_type = question.get("question_type") if isinstance(question, dict) else question.question_type
+            q_required = question.get("is_required", True) if isinstance(question, dict) else question.is_required
+            q_options = question.get("options", []) if isinstance(question, dict) else getattr(question, "options", [])
+
+            field_name = f"question_{q_id}"
 
             # For drafts, never require fields. For submission, use question's requirement
-            field_required = question.is_required and not is_draft_save
+            field_required = q_required and not is_draft_save
 
-            if question.question_type == "text":
+            # CSS classes for form fields
+            input_classes = (
+                "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none "
+                "focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+            )
+
+            if q_type in ["text", "short_text"]:
                 field = forms.CharField(
-                    label=question.question_text,
+                    label=q_text,
                     required=field_required,
                     max_length=500,
+                    widget=forms.TextInput(attrs={"class": input_classes}),
                 )
-            elif question.question_type == "textarea":
+            elif q_type in ["textarea", "long_text"]:
                 field = forms.CharField(
-                    label=question.question_text,
+                    label=q_text,
                     required=field_required,
-                    widget=forms.Textarea(attrs={"rows": 4}),
+                    widget=forms.Textarea(attrs={"rows": 4, "class": input_classes}),
                 )
-            elif question.question_type == "number":
+            elif q_type == "number":
                 field = forms.IntegerField(
-                    label=question.question_text,
+                    label=q_text,
                     required=field_required,
+                    widget=forms.NumberInput(attrs={"class": input_classes}),
                 )
-            elif question.question_type == "file":
+            elif q_type in ["file", "file_upload"]:
                 # File fields are never required (as per user request)
                 field = forms.FileField(
-                    label=question.question_text,
+                    label=q_text,
                     required=False,
+                    widget=forms.FileInput(attrs={"class": input_classes}),
                 )
-            elif question.question_type == "multiple_choice":
+            elif q_type == "multiple_choice":
                 choices = [("", "Select an option...")]  # Add empty choice for optional fields
-                if question.options:
-                    for option in question.options:
+                if q_options:
+                    for option in q_options:
                         choices.append((option, option))
                 field = forms.ChoiceField(
-                    label=question.question_text,
+                    label=q_text,
                     required=field_required,
                     choices=choices,
+                    widget=forms.Select(attrs={"class": input_classes}),
                 )
             else:
                 # Default to text field
                 field = forms.CharField(
-                    label=question.question_text,
+                    label=q_text,
                     required=field_required,
+                    widget=forms.TextInput(attrs={"class": input_classes}),
                 )
 
             self.fields[field_name] = field
 
-        # Populate form fields with existing draft data if available
+        # Populate form fields with existing response data if available
         if self.instance and self.instance.pk and self.instance.responses:
             for question in questions:
-                field_name = f"question_{question.id}"
-                if field_name in self.fields and question.question_text in self.instance.responses:
-                    saved_value = self.instance.responses[question.question_text]
+                q_id = question.get("id") if isinstance(question, dict) else question.id
+                field_name = f"question_{q_id}"
+                if field_name in self.fields and field_name in self.instance.responses:
+                    saved_value = self.instance.responses[field_name]
                     # Set initial value regardless of whether it's empty or not
                     self.fields[field_name].initial = saved_value or ""
 
@@ -95,7 +156,8 @@ class SolicitationResponseForm(forms.Form):
         # Create dynamic layout based on questions
         layout_fields = []
         for question in questions:
-            field_name = f"question_{question.id}"
+            q_id = question.get("id") if isinstance(question, dict) else question.id
+            field_name = f"question_{q_id}"
             if field_name in self.fields:
                 layout_fields.append(
                     Div(Field(field_name, wrapper_class="border border-gray-200 rounded-lg p-6"), css_class="mb-4")
@@ -141,137 +203,166 @@ class SolicitationResponseForm(forms.Form):
     def clean(self):
         cleaned_data = super().clean()
 
-        # Validate user has organization membership
-        if not self.user.memberships.exists():
-            raise ValidationError(_("You must be a member of an organization to submit responses."))
+        # Validate organization was selected
+        org_id = cleaned_data.get("organization_id")
+        if not org_id or org_id == "":
+            raise ValidationError(_("You must select an organization to respond on behalf of."))
 
         return cleaned_data
 
-    def save(self, commit=True):
-        # Create or update the response instance
-        if self.instance:
-            response = self.instance
-        else:
-            response = SolicitationResponse()
 
-        response.solicitation = self.solicitation
-        response.submitted_by = self.user
-
-        # Get user's primary organization
-        user_org = self.user.memberships.first().organization
-        response.organization = user_org
-
-        # Use helper function to process question form data
-        responses_data = process_question_form_data(self.cleaned_data, self.is_draft_save)
-
-        # Set the responses data
-        response.responses = responses_data
-
-        if commit:
-            response.save()
-
-        return response
-
-
-class SolicitationForm(ModelForm):
+class SolicitationForm(forms.Form):
     """
-    Form for creating and editing solicitations (EOIs/RFPs)
+    Form for creating/editing solicitations - works with ExperimentRecord JSON storage
     """
 
-    class Meta:
-        model = Solicitation
-        fields = [
-            "title",
-            "description",
-            "solicitation_type",
-            "expected_start_date",
-            "expected_end_date",
-            "application_deadline",
-            "status",
-            "is_publicly_listed",
-        ]
-        widgets = {
-            "title": forms.TextInput(
-                attrs={
-                    "class": (
-                        "w-full px-3 py-2 border border-gray-300 rounded-md "
-                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                    ),
-                    "placeholder": "Enter solicitation title...",
-                }
-            ),
-            "description": forms.Textarea(
-                attrs={
-                    "class": (
-                        "w-full px-3 py-2 border border-gray-300 rounded-md "
-                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                    ),
-                    "rows": 6,
-                    "placeholder": "Describe the solicitation, its objectives, and requirements...",
-                }
-            ),
-            "solicitation_type": forms.Select(
-                attrs={
-                    "class": (
-                        "w-full px-3 py-2 border border-gray-300 rounded-md "
-                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                    )
-                }
-            ),
-            "expected_start_date": forms.DateInput(
-                attrs={
-                    "class": (
-                        "w-full px-3 py-2 border border-gray-300 rounded-md "
-                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                    ),
-                    "type": "date",
-                }
-            ),
-            "expected_end_date": forms.DateInput(
-                attrs={
-                    "class": (
-                        "w-full px-3 py-2 border border-gray-300 rounded-md "
-                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                    ),
-                    "type": "date",
-                }
-            ),
-            "application_deadline": forms.DateInput(
-                attrs={
-                    "class": (
-                        "w-full px-3 py-2 border border-gray-300 rounded-md "
-                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                    ),
-                    "type": "date",
-                }
-            ),
-            "status": forms.Select(
-                attrs={
-                    "class": (
-                        "w-full px-3 py-2 border border-gray-300 rounded-md "
-                        "focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                    )
-                }
-            ),
-            "is_publicly_listed": forms.CheckboxInput(attrs={"class": "simple-checkbox"}),
-        }
+    # Define all fields
+    program = forms.ChoiceField(
+        required=True,
+        label="Program",
+        widget=forms.Select(
+            attrs={
+                "class": (
+                    "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none "
+                    "focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                ),
+                "data-searchable": "true",  # For potential JS enhancement
+            }
+        ),
+        help_text="Select which program this solicitation is for",
+    )
 
-    def __init__(self, program=None, *args, **kwargs):
+    title = forms.CharField(
+        max_length=255,
+        required=True,
+        label="Solicitation Title",
+        widget=forms.TextInput(
+            attrs={
+                "class": (
+                    "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none "
+                    "focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                ),
+                "placeholder": "Enter solicitation title...",
+            }
+        ),
+    )
+
+    description = forms.CharField(
+        required=True,
+        label="Description",
+        widget=forms.Textarea(
+            attrs={
+                "class": (
+                    "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none "
+                    "focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                ),
+                "rows": 6,
+                "placeholder": "Describe the solicitation, its objectives, and requirements...",
+            }
+        ),
+        help_text="Provide a detailed description of the solicitation",
+    )
+
+    solicitation_type = forms.ChoiceField(
+        choices=[("eoi", "Expression of Interest (EOI)"), ("rfp", "Request for Proposal (RFP)")],
+        required=True,
+        label="Type",
+        widget=forms.Select(
+            attrs={
+                "class": (
+                    "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none "
+                    "focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                )
+            }
+        ),
+    )
+
+    status = forms.ChoiceField(
+        choices=[("draft", "Draft"), ("active", "Active"), ("closed", "Closed")],
+        required=True,
+        label="Status",
+        widget=forms.Select(
+            attrs={
+                "class": (
+                    "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none "
+                    "focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                )
+            }
+        ),
+    )
+
+    is_publicly_listed = forms.BooleanField(
+        required=False,
+        label="Publicly Listed",
+        widget=forms.CheckboxInput(attrs={"class": "simple-checkbox"}),
+        help_text="Check to make this solicitation visible in public listings",
+    )
+
+    application_deadline = forms.DateField(
+        required=True,
+        label="Application Deadline",
+        widget=forms.DateInput(
+            attrs={
+                "class": (
+                    "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none "
+                    "focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                ),
+                "type": "date",
+            }
+        ),
+    )
+
+    expected_start_date = forms.DateField(
+        required=False,
+        label="Expected Start Date",
+        widget=forms.DateInput(
+            attrs={
+                "class": (
+                    "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none "
+                    "focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                ),
+                "type": "date",
+            }
+        ),
+    )
+
+    expected_end_date = forms.DateField(
+        required=False,
+        label="Expected End Date",
+        widget=forms.DateInput(
+            attrs={
+                "class": (
+                    "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none "
+                    "focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                ),
+                "type": "date",
+            }
+        ),
+    )
+
+    def __init__(self, user=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.program = program
 
-        # Add help text (labels are now automatically populated from model verbose_name)
-        self.fields["description"].help_text = "Provide a detailed description of the solicitation"
-        self.fields["is_publicly_listed"].help_text = "Check to make this solicitation visible in public listings"
+        # Populate program choices from user's OAuth data
+        program_choices = [("", "Select a program...")]
+        if user and hasattr(user, "programs"):
+            for prog in user.programs:
+                prog_id = prog.get("id")
+                prog_name = prog.get("name", f"Program {prog_id}")
+                if prog_id:
+                    program_choices.append((str(prog_id), prog_name))
+
+        self.fields["program"].choices = program_choices
 
         # Setup crispy forms
         self.helper = FormHelper(self)
         self.helper.form_class = "space-y-8"
         self.helper.form_id = "solicitation-form"
         self.helper.form_method = "post"
+        self.helper.form_tag = False  # Template handles form tag
 
         self.helper.layout = Layout(
-            # Hidden field for questions data
+            # Hidden field for questions data (Alpine.js will populate this)
             HTML('<input type="hidden" name="questions_data" id="questions-data" value="">'),
             # Basic Information Section
             Div(
@@ -280,6 +371,8 @@ class SolicitationForm(ModelForm):
                     '<i class="fa-solid fa-info-circle mr-2"></i>Basic Information</h2>'
                 ),
                 Div(
+                    # Program selection (full width)
+                    Field("program", wrapper_class="mb-6"),
                     # Title (full width)
                     Field("title", wrapper_class="mb-6"),
                     # Row 2: Type, Status, and Visibility
@@ -304,9 +397,6 @@ class SolicitationForm(ModelForm):
             ),
         )
 
-        # Don't render submit buttons - let template handle them
-        self.helper.form_tag = False
-
     def clean(self):
         cleaned_data = super().clean()
 
@@ -323,34 +413,11 @@ class SolicitationForm(ModelForm):
 
         return cleaned_data
 
-    def save(self, commit=True):
-        solicitation = super().save(commit=False)
 
-        if self.program:
-            solicitation.program = self.program
-
-        # Set default values for fields we're no longer collecting in the form
-        if not solicitation.target_population:
-            solicitation.target_population = "To be determined"
-        if not solicitation.scope_of_work:
-            solicitation.scope_of_work = "Details will be provided through application questions"
-        if not solicitation.estimated_scale:
-            solicitation.estimated_scale = "To be determined"
-
-        if commit:
-            solicitation.save()
-
-        return solicitation
-
-
-class SolicitationReviewForm(forms.ModelForm):
+class SolicitationReviewForm(forms.Form):
     """
-    Form for reviewing solicitation responses
+    Form for reviewing solicitation responses - works with ExperimentRecord JSON storage
     """
-
-    class Meta:
-        model = SolicitationReview
-        fields = ["score", "notes", "tags", "recommendation"]
 
     score = forms.IntegerField(
         label="Score (1-100)",
@@ -359,37 +426,45 @@ class SolicitationReviewForm(forms.ModelForm):
         required=False,
         widget=forms.NumberInput(attrs={"placeholder": "Enter score 1-100"}),
     )
+
     notes = forms.CharField(
         label="Review Notes",
         widget=forms.Textarea(attrs={"rows": 4, "placeholder": "Add your review notes..."}),
         required=False,
         help_text="Provide detailed feedback about this response",
     )
+
     tags = forms.CharField(
         label="Tags",
         required=False,
         widget=forms.TextInput(attrs={"placeholder": "e.g., strong-technical, needs-clarification"}),
         help_text="Add comma-separated tags to categorize this response",
     )
+
     recommendation = forms.ChoiceField(
         label="Recommendation",
-        choices=SolicitationReview.Recommendation.choices,
+        choices=[
+            ("", "-- Select --"),
+            ("approved", "Approved"),
+            ("rejected", "Rejected"),
+            ("needs_revision", "Needs Revision"),
+            ("under_review", "Under Review"),
+        ],
         required=False,
         help_text="Your overall recommendation for this response",
     )
 
-    def __init__(self, response=None, reviewer=None, *args, **kwargs):
-        # Store context for potential use
-        self.response = response
-        self.reviewer = reviewer
+    def __init__(self, *args, **kwargs):
+        # Extract instance from kwargs since Form doesn't handle it
+        instance = kwargs.pop("instance", None)
         super().__init__(*args, **kwargs)
 
-        # Pre-populate fields if editing existing review
-        if self.instance:
-            self.fields["score"].initial = self.instance.score
-            self.fields["notes"].initial = self.instance.notes
-            self.fields["tags"].initial = self.instance.tags
-            self.fields["recommendation"].initial = self.instance.recommendation
+        # Populate fields from instance if editing existing review
+        if instance and hasattr(instance, "data"):
+            self.fields["score"].initial = instance.data.get("score")
+            self.fields["notes"].initial = instance.data.get("notes")
+            self.fields["tags"].initial = instance.data.get("tags", "")
+            self.fields["recommendation"].initial = instance.data.get("recommendation")
 
         # Setup crispy forms
         self.helper = FormHelper(self)
@@ -399,7 +474,7 @@ class SolicitationReviewForm(forms.ModelForm):
 
         self.helper.layout = Layout(
             Div(
-                HTML('<h2 class="text-xl font-semibold text-brand-deep-purple mb-6">' "Your Review</h2>"),
+                HTML('<h2 class="text-xl font-semibold text-brand-deep-purple mb-6">Your Review</h2>'),
                 # First row - Review Notes (full width)
                 Field("notes", wrapper_class="mb-6"),
                 # Second row - Score, Recommendation, and Tags (three columns)
