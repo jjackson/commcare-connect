@@ -60,6 +60,11 @@
         <span class="relative z-20">Go to Tasks</span>
       </a>
 
+      <a href="/solicitations/" class="button button-md primary-dark w-full px-6 py-3">
+        <i class="fa-solid fa-file-contract mr-2"></i>
+        <span class="relative z-20">Go to Solicitations</span>
+      </a>
+
       <form method="post" action="{% url 'labs:logout' %}" class="w-full">
         {% csrf_token %}
         <button type="submit" class="button button-md outline-style w-full px-6 py-3">

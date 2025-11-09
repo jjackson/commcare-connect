@@ -197,12 +197,47 @@ Update ECS task definition to inject secrets:
 }
 ```
 
+## Data Access Architecture
+
+Labs projects use a standardized data access pattern that prepares for production API integration:
+
+```
+Views → Helpers → Data Access Layer → ExperimentRecordAPI → Database
+```
+
+**Key Resources:**
+
+- **[DATA_ACCESS_GUIDE.md](DATA_ACCESS_GUIDE.md)** - Complete implementation guide
+- **[DATA_ACCESS_QUICKSTART.md](DATA_ACCESS_QUICKSTART.md)** - Quick reference
+- **Example Implementation:** `commcare_connect/solicitations/` app
+
+**Benefits:**
+
+- Easy transition to production APIs
+- Type-safe proxy models
+- Consistent patterns across labs projects
+- No direct database queries in views
+
+**Quick Example:**
+
+```python
+# Use helper functions in views
+from my_app.experiment_helpers import get_records
+
+class MyListView(ListView):
+    def get_queryset(self):
+        return get_records(program_id=self.kwargs['program_id'])
+```
+
+See the guides above for complete setup instructions.
+
 ## Future Enhancements
 
 - Multiple OAuth scopes for data storage APIs
 - Refresh token support for automatic renewal
 - Redis-based sessions for zero DB storage
 - Token refresh before expiration
+- HTTP API client in ExperimentRecordAPI (when production APIs available)
 
 ## Files Created
 

@@ -20,6 +20,8 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
+from .api_helpers import fetch_user_organization_data
+
 logger = logging.getLogger(__name__)
 
 
@@ -199,6 +201,9 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
     expires_in = token_json.get("expires_in", 1209600)  # Default 2 weeks
     expires_at = timezone.now() + datetime.timedelta(seconds=expires_in)
 
+    # Fetch organization data from production API
+    org_data = fetch_user_organization_data(access_token)
+
     # Store OAuth data in session (NO database writes)
     request.session["labs_oauth"] = {
         "access_token": access_token,
@@ -211,6 +216,7 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
             "first_name": profile_data.get("first_name", ""),
             "last_name": profile_data.get("last_name", ""),
         },
+        "organization_data": org_data or {},  # Store empty dict if API fails
     }
 
     # Clean up temporary session keys
@@ -269,3 +275,20 @@ def labs_status(request: HttpRequest) -> HttpResponse:
     }
 
     return render(request, "labs/status.html", context)
+
+
+def labs_dashboard(request: HttpRequest) -> HttpResponse:
+    """
+    Display user's organization, program, and opportunity access.
+
+    Shows data from session with links back to production Connect.
+    """
+    if not request.user.is_authenticated:
+        return redirect("labs:login")
+
+    context = {
+        "user": request.user,
+        "connect_url": settings.CONNECT_PRODUCTION_URL,
+    }
+
+    return render(request, "labs/dashboard.html", context)

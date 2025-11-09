@@ -41,7 +41,7 @@ class LabsAuthenticationMiddleware:
             if timezone.now().timestamp() < expires_at:
                 # Token valid, populate request.user with transient LabsUser
                 try:
-                    request.user = LabsUser(labs_oauth["user_profile"])
+                    request.user = LabsUser(labs_oauth)
                 except (KeyError, TypeError) as e:
                     # Invalid session data, clear it
                     logger.warning(f"Invalid session data structure: {str(e)}")
@@ -70,6 +70,7 @@ class LabsURLWhitelistMiddleware:
     WHITELISTED_PREFIXES = [
         "/audit/",
         "/tasks/",
+        "/solicitations/",
         "/labs/",
         "/static/",
         "/media/",
@@ -96,6 +97,10 @@ class LabsURLWhitelistMiddleware:
 
         # Check if path is whitelisted
         is_whitelisted = any(path.startswith(prefix) for prefix in self.WHITELISTED_PREFIXES)
+
+        # Also check for organization-specific solicitations URLs (e.g., /a/<org>/solicitations/)
+        if not is_whitelisted and "/solicitations/" in path:
+            is_whitelisted = True
 
         if not is_whitelisted:
             # Redirect to production Connect

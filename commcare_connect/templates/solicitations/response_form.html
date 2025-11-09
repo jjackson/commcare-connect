@@ -71,27 +71,17 @@
                 <!-- Key Information Row -->
                 <div class="bg-neutral-100 rounded-lg w-full px-5 py-4">
                     <div class="flex gap-2 w-full items-center justify-between flex-wrap">
-                        <div class="flex gap-2 items-start">
-                            <div class="infocard-dark">
-                                <i class="fa-solid fa-building"></i>
-                                <div>
-                                    <h6>Program</h6>
-                                    <p>{{ solicitation.program.name }}</p>
+                        {% if solicitation.program_name %}
+                            <div class="flex gap-2 items-start">
+                                <div class="infocard-dark">
+                                    <i class="fa-solid fa-building"></i>
+                                    <div>
+                                        <h6>Program</h6>
+                                        <p>{{ solicitation.program_name }}</p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-
-                        <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
-
-                        <div class="flex gap-2 items-start">
-                            <div class="infocard-dark">
-                                <i class="fa-solid fa-location-dot"></i>
-                                <div>
-                                    <h6>Target Population</h6>
-                                    <p>{{ solicitation.target_population }}</p>
-                                </div>
-                            </div>
-                        </div>
+                        {% endif %}
 
                         {% if solicitation.estimated_scale %}
                             <div class="w-0.5 h-10 bg-slate-200 bg-opacity-30"></div>
@@ -156,12 +146,22 @@
                         <i class="fa-solid fa-building mr-2"></i>
                         Organization Information
                     </h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        <div>
-                            <span class="font-medium text-gray-700">Organization:</span>
-                            <span class="ml-2">{{ user.memberships.first.organization.name }}</span>
+                    <div class="space-y-4">
+                        <!-- Organization Selection Dropdown -->
+                        <div class="form-group">
+                            <label for="id_organization_id" class="form-label">{{ form.organization_id.label }}</label>
+                            {{ form.organization_id }}
+                            {% if form.organization_id.help_text %}
+                                <p class="text-sm text-gray-600 mt-1">{{ form.organization_id.help_text }}</p>
+                            {% endif %}
+                            {% if form.organization_id.errors %}
+                                <div class="text-red-600 text-sm mt-1">
+                                    {{ form.organization_id.errors }}
+                                </div>
+                            {% endif %}
                         </div>
-                        <div>
+
+                        <div class="text-sm">
                             <span class="font-medium text-gray-700">Submitted by:</span>
                             <span class="ml-2">{{ user.get_full_name }} ({{ user.email }})</span>
                         </div>
@@ -170,13 +170,34 @@
 
                 <!-- Dynamic Questions -->
                 {% if questions %}
-                    {% crispy form %}
+                    <div class="bg-white rounded-lg p-6">
+                        <h4 class="text-lg font-medium text-brand-deep-purple mb-3">
+                            <i class="fa-solid fa-clipboard-question mr-2"></i>
+                            Application Questions
+                        </h4>
+                        {% for field in form %}
+                            {% if field.name != 'organization_id' %}
+                                <div class="mb-4">
+                                    {{ field.label_tag }}
+                                    {{ field }}
+                                    {% if field.help_text %}
+                                        <p class="text-sm text-gray-600 mt-1">{{ field.help_text }}</p>
+                                    {% endif %}
+                                    {% if field.errors %}
+                                        <div class="text-red-600 text-sm mt-1">
+                                            {{ field.errors }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
                 {% endif %}
 
                 <!-- Form Actions -->
                 <div class="flex items-center justify-between pt-6 border-t border-gray-200">
                     <div class="flex items-center gap-4">
-                        <a href="/solicitations/s/{{ solicitation.pk }}/"
+                        <a href="{% url 'solicitations:detail' pk=solicitation.pk %}"
                            class="button button-md outline-style">
                             <i class="fa-solid fa-arrow-left mr-2"></i>
                             Back to Solicitation
@@ -208,7 +229,8 @@
             </form>
         </div>
 
-        <!-- File Attachments Section (Outside Main Form) -->
+        <!-- File Attachments Section (Outside Main Form) - DISABLED FOR LABS -->
+        {% comment %}
         <div class="bg-white rounded-xl shadow-sm p-8">
             <h4 class="text-lg font-medium text-brand-deep-purple mb-3">
                 <i class="fa-solid fa-paperclip mr-2"></i>
@@ -270,6 +292,7 @@
                 </div>
             {% endif %}
         </div>
+        {% endcomment %}
     </div>
 
     <!-- Notification Area -->
@@ -343,6 +366,10 @@ function responseFormHandler() {
         },
 
         async autoSave() {
+            // AUTO-SAVE DISABLED FOR LABS - Use Save Draft button instead
+            console.log('Auto-save disabled for labs');
+            return;
+            {% comment %}
             const data = this.collectFormData();
 
             try {
@@ -364,6 +391,7 @@ function responseFormHandler() {
             } catch (error) {
                 console.error('Auto-save error:', error);
             }
+            {% endcomment %}
         },
 
         handleSubmit(e) {
@@ -405,6 +433,21 @@ function responseFormHandler() {
 // Register Alpine.js component
 document.addEventListener('alpine:init', () => {
     Alpine.data('responseFormHandler', responseFormHandler);
+});
+
+// Handle organization dropdown change to load existing response
+document.addEventListener('DOMContentLoaded', function() {
+    const orgSelect = document.querySelector('select[name="organization_id"]');
+    if (orgSelect) {
+        orgSelect.addEventListener('change', function() {
+            const selectedOrg = this.value;
+            if (selectedOrg) {
+                // Reload page with org parameter to load existing response
+                const currentUrl = window.location.href.split('?')[0];
+                window.location.href = currentUrl + '?org=' + encodeURIComponent(selectedOrg);
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

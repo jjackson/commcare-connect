@@ -4,12 +4,19 @@
 <header class="fixed top-0 left-16 right-0 bg-gray-100 z-30">
     <div class="flex items-center justify-between w-full px-4 py-2">
         <!-- Left Section: Module Name -->
-        <h1 class="text-lg text-brand-deep-purple font-medium">{{ header_title|default:"CommCare Connect" }}</h1>
+        <h1 class="text-lg text-brand-deep-purple font-medium">
+            {% if request.user.is_labs_user %}
+                {{ header_title|default:"Connect Labs" }}
+            {% else %}
+                {{ header_title|default:"CommCare Connect" }}
+            {% endif %}
+        </h1>
 
         {% if request.user.is_authenticated %}
         <!-- Right Section: Org, Profile Dropdown -->
         <div class="flex items-center gap-x-2">
-            <!-- Organization selector -->
+            <!-- Organization selector (hidden in labs mode) -->
+            {% if not request.user.is_labs_user %}
             <div x-data="{ open: false }" @click.away="open = false" class="relative mx-8">
                 <button @click="open = !open" class="flex items-center gap-2 focus:outline-none">
                     <div class="text-left">
@@ -53,6 +60,7 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
 
             <!-- User Profile -->
             <div x-data="{ open: false }" @click.away="open = false" class="relative">
