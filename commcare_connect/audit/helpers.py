@@ -1,11 +1,6 @@
 """
 Helper functions for the audit application
 """
-import datetime
-
-import httpx
-from allauth.socialaccount.models import SocialAccount, SocialApp, SocialToken
-from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
 
@@ -185,78 +180,26 @@ def validate_audit_session_data(flw_user, opportunity, start_date, end_date):
 
 def get_connect_oauth_token(user, request=None):
     """
-    Get OAuth token for Connect production instance.
+    Get OAuth token for Connect production instance from labs session.
 
-    Retrieves the stored OAuth token for the user and refreshes it if expired.
-    This token is used for making API requests to connect.dimagi.com.
+    Audit is a labs-only project and uses the labs OAuth infrastructure.
+    Token is stored in the session by labs OAuth middleware.
 
     Args:
-        user: Django User object (or LabsUser in labs mode)
-        request: HttpRequest object (required in labs mode to access session)
+        user: LabsUser object (from labs middleware)
+        request: HttpRequest object (required to access session)
 
     Returns:
-        String token if valid, None if no token exists
-
-    Raises:
-        Exception: If token refresh fails
+        String token if valid, None if no token exists or expired
     """
-    # In labs mode, get token from session
-    if getattr(settings, "IS_LABS_ENVIRONMENT", False):
-        if not request:
-            return None
-        labs_oauth = request.session.get("labs_oauth", {})
-        # Check if token is expired
-        expires_at = labs_oauth.get("expires_at", 0)
-        if timezone.now().timestamp() < expires_at:
-            return labs_oauth.get("access_token")
+    if not request:
         return None
 
-    # Normal mode: Check if user has a Connect social account
-    try:
-        social_account = SocialAccount.objects.get(user=user, provider="connect")
-    except SocialAccount.DoesNotExist:
-        return None
-
-    # Get the associated token
-    try:
-        social_token = SocialToken.objects.get(account=social_account)
-    except SocialToken.DoesNotExist:
-        return None
+    labs_oauth = request.session.get("labs_oauth", {})
 
     # Check if token is expired
-    if social_token.expires_at and social_token.expires_at > timezone.now():
-        # Token is still valid
-        return social_token.token
+    expires_at = labs_oauth.get("expires_at", 0)
+    if timezone.now().timestamp() < expires_at:
+        return labs_oauth.get("access_token")
 
-    # Token is expired, attempt to refresh
-    social_app = SocialApp.objects.filter(provider="connect").first()
-    if not social_app:
-        raise ValueError("Connect OAuth application not configured in SocialApp")
-
-    # Attempt to refresh the token
-    response = httpx.post(
-        f"{settings.CONNECT_PRODUCTION_URL}/o/token/",
-        data={
-            "grant_type": "refresh_token",
-            "client_id": social_app.client_id,
-            "client_secret": social_app.secret,
-            "refresh_token": social_token.token_secret,
-        },
-        timeout=10,
-    )
-
-    if response.status_code != 200:
-        raise Exception(f"Failed to refresh Connect OAuth token: {response.text}")
-
-    data = response.json()
-    if data.get("access_token"):
-        social_token.token = data["access_token"]
-        if data.get("refresh_token"):
-            social_token.token_secret = data["refresh_token"]
-        # Set expiration (typically 2 weeks = 1209600 seconds)
-        expires_in = data.get("expires_in", 1209600)
-        social_token.expires_at = timezone.now() + datetime.timedelta(seconds=expires_in)
-        social_token.save()
-        return social_token.token
-
-    raise Exception("No access token in refresh response")
+    return None

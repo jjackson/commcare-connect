@@ -2,9 +2,19 @@
 
 ## Overview
 
-The Tasks app is a production-ready system for tracking and managing actions taken against Field-Level Workers (FLWs) based on various triggers (currently audit failures, but designed to support other sources like compliance issues, performance flags, or manual interventions).
+The Tasks app is a labs experiment for tracking and managing actions taken against Field-Level Workers (FLWs) based on various triggers (currently audit failures, but designed to support other sources like compliance issues, performance flags, or manual interventions).
 
-**Status:** ✅ PRODUCTION READY - Complete data model implemented with 34 passing tests.
+**Status:** ✅ LABS EXPERIMENT - Now using ExperimentRecord pattern with OAuth-based API access.
+
+**Implementation:** This app now uses the ExperimentRecord-based architecture (same as audit and solicitations apps). See `EXPERIMENT_IMPLEMENTATION.md` for detailed technical documentation.
+
+**Key Changes:**
+
+- Uses ExperimentRecord for JSON-based storage instead of Django ORM models
+- OAuth-based API access via Connect production APIs
+- No local permission checks (OAuth API is source of truth)
+- Events, comments, and AI sessions stored as nested JSON
+- Old Django ORM code preserved in `*_old.py` files for reference only
 
 ## ⭐ Streamlined View (Default)
 
@@ -208,87 +218,210 @@ All templates follow existing CommCare Connect patterns:
 - Stats cards layout from `audit/bulk_assessment.html`
 - Table patterns from `opportunity/opportunities_list.html`
 
+## Architecture
+
+### ExperimentRecord Pattern
+
+This app uses the ExperimentRecord pattern for data storage:
+
+- **TaskRecord** proxy model provides convenient access to JSON data
+- **TaskDataAccess** layer wraps ExperimentRecordAPI and ConnectAPIFacade
+- All task data stored in single JSON field with nested events/comments/AI sessions
+- OAuth-based access control (no local permission checks)
+
+### Data Flow
+
+1. User creates task → TaskRecord stored in ExperimentRecord table
+2. User adds event/comment → Nested in task.data JSON, single DB write
+3. User queries tasks → OAuth API enforces access control
+4. User gets opportunities/FLWs → Fetched from Connect API via OAuth
+
 ## Files
+
+### Active Implementation (ExperimentRecord-based)
 
 ```
 commcare_connect/tasks/
-├── __init__.py
-├── apps.py              # App configuration
-├── urls.py              # URL routing
-├── views.py             # Mock views with sample data
-└── README.md            # This file
-
-commcare_connect/templates/tasks/
-├── actions_list.html                  # Main list page
-├── action_detail_streamlined.html     # ⭐ Streamlined view (default)
-├── action_detail_simplified.html      # Simplified view with progress bar
-├── action_detail_enhanced.html        # Enhanced modern UI
-├── action_detail_timeline.html        # Prototype 1
-├── action_detail_cards.html           # Prototype 2
-└── action_detail_split.html           # Prototype 3
+├── experiment_models.py              # TaskRecord proxy model
+├── data_access.py                    # TaskDataAccess layer
+├── views.py                          # ExperimentRecord-based views
+├── helpers.py                        # Simplified helper functions
+├── urls.py                           # URL routing (points to new views)
+├── run_experiment_task_integration.py # Integration test
+├── EXPERIMENT_IMPLEMENTATION.md      # Technical documentation
+└── README.md                         # This file
 ```
 
-## Data Model (Implemented)
+### Reference Only (Old Django ORM code)
 
-### Core Models
+```
+commcare_connect/tasks/
+├── models_old.py          # Old Django models (not used)
+├── views_old.py           # Old views (not accessible)
+├── forms_old.py           # Old forms (not used)
+└── helpers_old.py         # Old helpers (not used)
+```
 
-1. **Task** - Main model for tracking FLW actions
+### Templates (Reused with new backend)
 
-   - Links to user, opportunity, created_by_user, assigned_to
-   - Fields: task_type, status, priority, title, description, learning_assignment_text, audit_session_id
-   - Permission checking via `can_user_access(user)` method
+```
+commcare_connect/templates/tasks/
+├── tasks_list.html                   # Main list page
+├── task_detail_streamlined.html      # ⭐ Streamlined view (default)
+├── task_creation_wizard.html         # Creation wizard
+└── (other prototype templates)       # Various UI experiments
+```
 
-2. **TaskEvent** - Timeline/activity tracking
+## Data Model (ExperimentRecord-based)
 
-   - Automatic event creation on task changes
-   - Fields: event_type, actor, actor_user, description, metadata (JSON)
+### Core Structure
 
-3. **TaskComment** - User comments on tasks
+**TaskRecord** - Single ExperimentRecord with nested JSON data:
 
-   - Simple comment model with author and content
-   - Separate from events for clarity
+- Fields: user_id, opportunity_id, task_type, status, priority, title, description
+- Nested arrays: events[], comments[], ai_sessions[]
+- All data stored in single `data` JSON field
+- No separate tables for events/comments/AI sessions
 
-4. **TaskAISession** - AI assistant conversation tracking
-   - Stores OCS session_id for reconnection
-   - Fetches transcripts just-in-time from OCS API
+### Data Structure
+
+```json
+{
+  "user_id": 123,
+  "opportunity_id": 456,
+  "task_type": "warning",
+  "status": "unassigned",
+  "priority": "medium",
+  "title": "Task Title",
+  "description": "Task Description",
+  "events": [
+    {
+      "event_type": "created",
+      "actor": "John Doe",
+      "actor_user_id": 100,
+      "description": "Task created",
+      "timestamp": "2024-11-10T12:00:00",
+      "metadata": {}
+    }
+  ],
+  "comments": [
+    {
+      "author_id": 100,
+      "author_name": "John Doe",
+      "content": "Comment text",
+      "timestamp": "2024-11-10T12:05:00"
+    }
+  ],
+  "ai_sessions": [
+    {
+      "ocs_session_id": "session-123",
+      "status": "completed",
+      "timestamp": "2024-11-10T12:10:00",
+      "metadata": {}
+    }
+  ]
+}
+```
 
 ### Features Implemented
 
-✅ **Permission-based access** via opportunity and organization relationships
-✅ **CRUD operations** with form validation
-✅ **Event tracking** for audit trail
+✅ **OAuth-based access control** (no local permission checks)
+✅ **CRUD operations** via TaskDataAccess layer
+✅ **Event tracking** for audit trail (nested JSON)
 ✅ **AI assistant integration** via OCS API
-✅ **Comment system** for collaboration
-✅ **Comprehensive tests** (34 tests passing)
-✅ **Admin interface** for management
-✅ **Helper API** for future automation
+✅ **Comment system** for collaboration (nested JSON)
+✅ **Connect API integration** for opportunities/FLWs
+✅ **Integration test** for full workflow
+✅ **Helper API** for automation (create_task_from_audit)
 
 ### Quick Start
 
-Create a task programmatically:
+Create a task programmatically using the new ExperimentRecord pattern:
 
 ```python
 from commcare_connect.tasks.helpers import create_task_from_audit
 
+# Create task from audit trigger
 task = create_task_from_audit(
     audit_session_id=2058,
-    user=flw_user,
-    opportunity=opportunity,
+    user_id=123,  # FLW user ID
+    opportunity_id=456,  # Opportunity ID
     task_type="warning",
     description="Photo quality issues detected",
-    created_by_user=pm_user,
-    priority="high"
+    created_by_id=100,  # PM user ID
+    priority="high",
+    title="Photo Quality Issue",
 )
+```
+
+Or use TaskDataAccess directly:
+
+```python
+from commcare_connect.tasks.data_access import TaskDataAccess
+
+data_access = TaskDataAccess(user=request.user, request=request)
+
+task = data_access.create_task(
+    user_id=123,
+    opportunity_id=456,
+    created_by_id=100,
+    task_type="warning",
+    priority="high",
+    title="Photo Quality Issue",
+    description="Photos show poor lighting",
+    creator_name="Program Manager",
+)
+
+# Add event
+data_access.add_event(
+    task,
+    event_type="pattern_detected",
+    actor="System",
+    actor_user_id=100,
+    description="3rd quality issue in 2 weeks",
+)
+
+# Add comment
+data_access.add_comment(
+    task,
+    author_id=100,
+    author_name="PM Name",
+    content="Following up with Network Manager",
+)
+
+data_access.close()
 ```
 
 Or create via the web interface at `/tasks/create/`.
 
+## Testing
+
+### Run Integration Test
+
+```bash
+# Get OAuth token
+python manage.py get_cli_token
+
+# Run integration test
+python commcare_connect/tasks/run_experiment_task_integration.py
+```
+
+The test will create a task, add events/comments, update status, and verify the data structure.
+
 ## Next Steps
 
-1. **Configure OCS**: Add OCS_BASE_URL, OCS_API_KEY, OCS_BOT_ID to settings
-2. **Integrate with Audit**: Hook up `create_task_from_audit()` to audit failures
-3. **Add Notifications**: Implement email/SMS notifications for task assignments
-4. **Monitor Performance**: Add indexes if needed based on query patterns
+1. **Test the new implementation**: Run integration test and manual testing
+2. **Configure OCS**: Add OCS_BASE_URL, OCS_API_KEY, OCS_BOT_ID to settings for AI assistant
+3. **Integrate with Audit**: Hook up `create_task_from_audit()` to audit failures
+4. **Delete old code**: Once confirmed working, delete `*_old.py` files
+5. **Monitor Performance**: Add indexes if needed based on query patterns
+
+## Technical Documentation
+
+For detailed technical documentation about the ExperimentRecord implementation, see:
+
+- **`EXPERIMENT_IMPLEMENTATION.md`** - Complete implementation details, architecture, data flow
+- **`run_experiment_task_integration.py`** - Integration test showing complete workflow
 
 ## Testing and Development
 

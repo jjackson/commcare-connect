@@ -522,7 +522,7 @@
     </div>
 
     <!-- Update Preview Button -->
-    <div class="flex justify-center mt-6 gap-3">
+    <div class="flex justify-center mt-6">
       <button
         @click="updatePreview()"
         :disabled="!isAuditCriteriaValid() || updating"
@@ -530,139 +530,86 @@
         <i class="fa-solid fa-refresh" :class="{'fa-spin': updating}"></i>
         <span x-text="updating ? 'Updating...' : 'Update Preview'"></span>
       </button>
-      <button
-        @click="exportAuditDefinition()"
-        :disabled="!auditDefinitionId"
-        class="px-6 py-2 bg-white text-brand-indigo border border-brand-indigo rounded-md hover:bg-brand-indigo/5 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
-        <i class="fa-solid fa-download"></i>
-        <span>Export Definition</span>
-      </button>
     </div>
+
   </div>
 
   <!-- Step 4: Preview Results -->
   <div x-show="previewResults.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
       <i class="fa-solid fa-eye mr-2"></i>
-      Step 4: Preview Audit Scope
+      Step 4: Preview - Select FLWs to Audit
     </h2>
 
-    <div class="space-y-6">
-      <template x-for="result in previewResults" :key="result.opportunity_id">
-        <div class="border border-gray-200 rounded-lg">
-          <!-- Opportunity Header -->
-          <div class="bg-gray-50 px-4 py-3 border-b border-gray-200 rounded-t-lg">
-            <div class="flex items-center justify-between">
-              <h3 class="font-medium text-brand-deep-purple" x-text="result.opportunity_name"></h3>
-              <span class="text-sm text-gray-500">ID: <span x-text="result.opportunity_id"></span></span>
-            </div>
-            <div class="mt-2 flex items-center gap-6 text-sm">
-              <span class="text-blue-600">
-                <i class="fa-solid fa-users mr-1"></i>
-                <span x-text="result.total_flws"></span> FLWs
-              </span>
-              <span class="text-green-600">
-                <i class="fa-solid fa-chart-line mr-1"></i>
-                <span x-text="result.total_visits"></span> Total Visits
-              </span>
-              <span class="text-purple-600">
-                <i class="fa-solid fa-calculator mr-1"></i>
-                <span x-text="result.avg_visits_per_flw"></span> Avg per FLW
-              </span>
-              <span class="text-gray-500">
-                <i class="fa-solid fa-calendar mr-1"></i>
-                <span x-text="result.date_range"></span>
-              </span>
-            </div>
-          </div>
+    <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+      <div class="flex items-center gap-4 text-sm">
+        <span class="text-blue-600 font-medium">
+          <i class="fa-solid fa-users mr-1"></i>
+          <span x-text="previewResults.length"></span> FLWs
+        </span>
+        <span class="text-green-600 font-medium">
+          <i class="fa-solid fa-chart-line mr-1"></i>
+          <span x-text="previewResults.reduce((sum, flw) => sum + flw.visit_count, 0)"></span> Total Visits
+        </span>
+      </div>
+    </div>
 
-          <!-- FLW Details Table -->
-          <div class="p-4">
-            <template x-if="result.flws && result.flws.length > 0">
-              <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                  <thead class="bg-gray-50">
-                    <tr>
-                      <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
-                        <input type="checkbox" @change="toggleAllFlws(result)" :checked="areAllFlwsSelected(result)" class="h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300 rounded">
-                      </th>
-                      <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        FLW Name
-                      </th>
-                      <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Connect ID
-                      </th>
-                      <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Visits in Audit
-                      </th>
-                      <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Date Range
-                      </th>
-                      <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Prior Audits
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody class="bg-white divide-y divide-gray-200">
-                    <template x-for="flw in result.flws" :key="flw.connect_id">
-                      <tr class="hover:bg-gray-50">
-                        <td class="px-2 py-2 text-center whitespace-nowrap">
-                          <input type="checkbox" :checked="isFlwSelected(flw)" @change="toggleFlwSelection(flw)" class="h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300 rounded">
-                        </td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
-                          <span x-text="flw.name"></span>
-                        </td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          <span x-text="flw.connect_id || flw.user_id"></span>
-                        </td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
-                          <span x-text="flw.visit_count"></span>
-                        </td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                          <template x-if="flw.earliest_visit && flw.latest_visit">
-                            <span>
-                              <span x-text="formatDate(flw.earliest_visit)"></span> -
-                              <span x-text="formatDate(flw.latest_visit)"></span>
-                            </span>
-                          </template>
-                        </td>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                          <template x-if="flw.prior_audit_tags && flw.prior_audit_tags.length > 0">
-                            <div class="flex flex-wrap gap-1">
-                              <template x-for="tag in flw.prior_audit_tags" :key="tag">
-                                <span class="inline-flex px-2 py-1 text-xs rounded bg-purple-50 text-purple-700" x-text="tag"></span>
-                              </template>
-                            </div>
-                          </template>
-                          <template x-if="!flw.prior_audit_tags || flw.prior_audit_tags.length === 0">
-                            <span class="text-gray-400 text-xs">None</span>
-                          </template>
-                        </td>
-                      </tr>
-                    </template>
-                  </tbody>
-                </table>
-              </div>
-                    </template>
-
-            <!-- Loading state for FLW details -->
-            <template x-if="!result.flws">
-              <div class="text-center py-4 text-gray-500">
-                <i class="fa-solid fa-spinner fa-spin mr-2"></i>
-                Loading FLW details...
-              </div>
-            </template>
-          </div>
-        </div>
-      </template>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+              <input type="checkbox" @change="toggleAllFlws()" :checked="areAllFlwsSelected()" class="h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300 rounded">
+            </th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              FLW Name
+            </th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Connect ID
+            </th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Visits in Audit
+            </th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Date Range
+            </th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <template x-for="flw in previewResults" :key="flw.user_id">
+            <tr class="hover:bg-gray-50">
+              <td class="px-2 py-2 text-center whitespace-nowrap">
+                <input type="checkbox" :checked="isFlwSelected(flw)" @change="toggleFlwSelection(flw)" class="h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300 rounded">
+              </td>
+              <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                <span x-text="flw.name"></span>
+              </td>
+              <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                <span x-text="flw.connect_id || flw.user_id"></span>
+              </td>
+              <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                <span x-text="flw.visit_count"></span>
+              </td>
+              <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                <template x-if="flw.earliest_visit && flw.latest_visit">
+                  <span>
+                    <span x-text="formatDate(flw.earliest_visit)"></span> -
+                    <span x-text="formatDate(flw.latest_visit)"></span>
+                  </span>
+                </template>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
     </div>
   </div>
 
-  <!-- Audit Metadata and Action Buttons -->
-  <div x-show="selectedOpportunities.length > 0 && previewResults.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+  <!-- Step 5: Audit Metadata and Action Buttons -->
+  <div x-show="selectedOpportunities.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
       <i class="fa-solid fa-tag mr-2"></i>
-      Step 4: Audit Metadata
+      Step 5: Audit Metadata & Creation
     </h2>
 
     <div class="grid grid-cols-2 gap-4 mb-6">
@@ -699,10 +646,10 @@
       </button>
       <button
         @click="createAuditSession()"
-        :disabled="!previewResults.length || creating || updating"
+        :disabled="!isAuditCriteriaValid() || creating"
         class="px-4 py-2 bg-brand-indigo text-white rounded-md hover:bg-brand-indigo/90 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
-        <i class="fa-solid fa-plus" :class="{'fa-spin': creating || updating}"></i>
-        <span x-text="creating ? 'Creating...' : (updating ? 'Loading...' : 'Create Audit Session')"></span>
+        <i class="fa-solid fa-plus" :class="{'fa-spin': creating}"></i>
+        <span x-text="creating ? 'Creating...' : 'Create Audit Session'"></span>
       </button>
     </div>
   </div>
@@ -903,7 +850,7 @@ function auditCreationPage() {
 
       this.searching = true;
 
-      const response = await fetch(`{% url "audit:program_search" %}?q=${encodeURIComponent(this.searchQuery)}&limit=20`);
+      const response = await fetch(`{% url "audit:program_search" %}?q=${encodeURIComponent(this.searchQuery)}`);
       const data = await response.json();
 
       if (data.success) {
@@ -963,33 +910,22 @@ function auditCreationPage() {
       }
     },
 
-    toggleAllFlws(result) {
-      if (!result.flws || result.flws.length === 0) return;
+    toggleAllFlws() {
+      if (!this.previewResults || this.previewResults.length === 0) return;
 
-      const allSelected = this.areAllFlwsSelected(result);
+      const allSelected = this.areAllFlwsSelected();
       if (allSelected) {
-        // Deselect all FLWs in this result
-        result.flws.forEach(flw => {
-          const userId = flw.user_id || flw.connect_id;
-          const index = this.selectedFlwUserIds.indexOf(userId);
-          if (index >= 0) {
-            this.selectedFlwUserIds.splice(index, 1);
-          }
-        });
+        // Deselect all FLWs
+        this.selectedFlwUserIds = [];
       } else {
-        // Select all FLWs in this result
-        result.flws.forEach(flw => {
-          const userId = flw.user_id || flw.connect_id;
-          if (!this.selectedFlwUserIds.includes(userId)) {
-            this.selectedFlwUserIds.push(userId);
-          }
-        });
+        // Select all FLWs
+        this.selectedFlwUserIds = this.previewResults.map(flw => flw.user_id || flw.connect_id);
       }
     },
 
-    areAllFlwsSelected(result) {
-      if (!result.flws || result.flws.length === 0) return false;
-      return result.flws.every(flw =>
+    areAllFlwsSelected() {
+      if (!this.previewResults || this.previewResults.length === 0) return false;
+      return this.previewResults.every(flw =>
         this.selectedFlwUserIds.includes(flw.user_id || flw.connect_id)
       );
     },
@@ -1048,7 +984,7 @@ function auditCreationPage() {
       ];
     },
 
-    // Update preview with FLW counts and progress tracking
+    // Update preview - synchronous API call
     async updatePreview() {
       if (!this.isAuditCriteriaValid() || this.selectedOpportunities.length === 0) {
         return;
@@ -1056,9 +992,7 @@ function auditCreationPage() {
 
       this.updating = true;
       this.previewResults = [];
-      this.auditDefinitionId = null;  // Clear previous audit definition
-      this.initPreviewProgress();
-      this.showProgressModal = true;
+      this.auditDefinitionId = null;
 
       try {
         const payload = {
@@ -1066,7 +1000,6 @@ function auditCreationPage() {
           criteria: this.auditCriteria
         };
 
-        // Start the preview generation in background thread
         const response = await fetch('{% url "audit:preview_audit" %}', {
           method: 'POST',
           headers: {
@@ -1078,22 +1011,33 @@ function auditCreationPage() {
 
         const data = await response.json();
 
-        if (!data.success || !data.task_id) {
-          this.progressError = data.error || 'Failed to start preview generation';
-          this.progressStage = 'error';
+        if (!data.success) {
+          alert(data.error || 'Failed to generate preview');
           this.updating = false;
           return;
         }
 
-        this.progressTaskId = data.task_id;
+        // Preview data received - populate FLW results
+        const preview = data.preview;
+        console.log('Preview received:', preview);
 
-        // Start polling for progress
-        this.progressPollInterval = setInterval(() => this.pollProgress(), 500);
+        if (!preview.flws || preview.flws.length === 0) {
+          alert('No visits found matching the criteria. Try adjusting the date range or audit type.');
+          this.previewResults = [];
+          this.selectedFlwUserIds = [];
+        } else {
+          // Populate preview results with FLW data
+          this.previewResults = preview.flws;
+
+          // Auto-select all FLWs by default
+          this.selectedFlwUserIds = preview.flws.map(flw => flw.user_id || flw.connect_id);
+        }
+
+        this.updating = false;
 
       } catch (error) {
         console.error('Preview error:', error);
-        this.progressError = 'Failed to generate preview. Please try again.';
-        this.progressStage = 'error';
+        alert('Failed to generate preview. Please try again.');
         this.updating = false;
       }
     },
@@ -1237,28 +1181,33 @@ function auditCreationPage() {
       }
     },
 
-    // Create audit session with progress tracking
+    // Create audit session - synchronous API call
     async createAuditSession() {
-      if (!this.previewResults.length) {
+      if (!this.selectedOpportunities.length || !this.isAuditCriteriaValid()) {
+        alert('Please select opportunities and configure valid audit criteria');
         return;
       }
 
       this.creating = true;
-      this.initCreationProgress();
-      this.showProgressModal = true;
 
       try {
         const payload = {
           opportunities: this.selectedOpportunities.map(o => o.id),
-          criteria: this.auditCriteria,
-          audit_definition_id: this.auditDefinitionId,
-          preview: this.previewResults,
-          selected_flw_user_ids: this.selectedFlwUserIds.length > 0 ? this.selectedFlwUserIds : null,
-          audit_title: this.auditTitle,
-          audit_tag: this.auditTag
+          criteria: {
+            audit_type: this.auditCriteria.type,
+            granularity: this.auditCriteria.granularity,
+            sample_percentage: this.auditCriteria.samplePercentage,
+            startDate: this.auditCriteria.startDate,
+            endDate: this.auditCriteria.endDate,
+            countPerFlw: this.auditCriteria.countPerFlw,
+            countPerOpp: this.auditCriteria.countPerOpp,
+            countAcrossAll: this.auditCriteria.countAcrossAll,
+            title: this.auditTitle,
+            tag: this.auditTag,
+            selected_flw_user_ids: this.selectedFlwUserIds  // Include FLW selections
+          }
         };
 
-        // Start the audit creation in background thread
         const response = await fetch('{% url "audit:create_session" %}', {
           method: 'POST',
           headers: {
@@ -1270,22 +1219,19 @@ function auditCreationPage() {
 
         const data = await response.json();
 
-        if (!data.success || !data.task_id) {
-          this.progressError = data.error || 'Failed to start audit creation';
-          this.progressStage = 'error';
+        if (!data.success) {
+          alert(data.error || 'Failed to create audit session');
+          this.creating = false;
           return;
         }
 
-        this.progressTaskId = data.task_id;
-
-        // Start polling for progress
-        this.progressPollInterval = setInterval(() => this.pollProgress(), 500);
+        // Redirect to the audit session page
+        window.location.href = data.redirect_url;
 
       } catch (error) {
         console.error('Creation error:', error);
-        this.progressError = 'Failed to create audit session. Please try again.';
-        this.progressStage = 'error';
-        this.stopProgressPolling();
+        alert('Failed to create audit session. Please try again.');
+        this.creating = false;
       }
     },
 

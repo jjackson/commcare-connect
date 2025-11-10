@@ -47,7 +47,7 @@ class LabsUser:
         self.is_authenticated: bool = True
         self.is_active: bool = True
         self.is_staff: bool = True  # Staff for admin access
-        self.is_superuser: bool = True  # Superuser for labs testing (bypasses permission checks)
+        self.is_superuser: bool = False  # OAuth API is source of truth for permissions
         self.is_anonymous: bool = False
         self.is_labs_user: bool = True  # Flag to identify labs users in templates
 
