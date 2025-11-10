@@ -1191,6 +1191,11 @@ class PaymentInvoiceForm(forms.ModelForm):
             cleaned_data["start_date"] = None
             cleaned_data["end_date"] = None
             cleaned_data["notes"] = None
+        else:
+            start_date = cleaned_data.get("start_date")
+            end_date = cleaned_data.get("end_date")
+            if start_date and end_date and end_date < start_date:
+                raise ValidationError({"end_date": "End date cannot be earlier than start date."})
 
         return cleaned_data
 
