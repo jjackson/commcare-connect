@@ -611,25 +611,19 @@ class VisitExportForm(forms.Form):
 
             visit_count_url = f"{visit_count_url}?{urlencode({'review_export': 'true'})}"
 
+        hx_attrs = {
+            "hx-get": visit_count_url,
+            "hx-trigger": "change",
+            "hx-target": "#visit-count-warning",
+            "hx-include": "closest form",
+        }
+
         for field_name in ["from_date", "to_date"]:
             self.fields[field_name].widget.attrs.update(
-                {
-                    "max": datetime.date.today().strftime("%Y-%m-%d"),
-                    "hx-get": visit_count_url,
-                    "hx-trigger": "change",
-                    "hx-target": "#visit-count-warning",
-                    "hx-include": "closest form",
-                }
+                {"max": datetime.date.today().strftime("%Y-%m-%d"), **hx_attrs}
             )
 
-        self.fields["status"].widget.attrs.update(
-            {
-                "hx-get": visit_count_url,
-                "hx-trigger": "change",
-                "hx-target": "#visit-count-warning",
-                "hx-include": "closest form",
-            }
-        )
+        self.fields["status"].widget.attrs.update(hx_attrs)
 
         self.helper = FormHelper(self)
 
