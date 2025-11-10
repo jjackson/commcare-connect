@@ -304,7 +304,7 @@ def test_export_catchment_area_table_data(opportunity: Opportunity):
 @pytest.mark.parametrize(
     ("from_date", "to_date", "expected_count", "review_status"),
     [
-        (now() - timedelta(days=10), now(), 25, [VisitReviewStatus.pending.value]),
+        (now() - timedelta(days=10), now(), 20, [VisitReviewStatus.pending.value]),
         (
             now() - timedelta(days=3),
             now(),
@@ -325,13 +325,13 @@ def test_export_user_visit_review_data(organization, from_date, to_date, expecte
     opp = ManagedOpportunityFactory(organization=organization)
     now_time = now()
     UserVisitFactory.create_batch(
-        20, opportunity=opp, review_created_on=now_time - timedelta(days=3), status=VisitReviewStatus.pending
+        20, opportunity=opp, review_created_on=now_time - timedelta(days=3), review_status=VisitReviewStatus.pending
     )
     UserVisitFactory.create_batch(
-        5, opportunity=opp, review_created_on=now_time - timedelta(days=10), status=VisitReviewStatus.agree
+        5, opportunity=opp, review_created_on=now_time - timedelta(days=10), review_status=VisitReviewStatus.agree
     )
     UserVisitFactory.create_batch(
-        15, opportunity=opp, review_created_on=now_time - timedelta(days=15), status=VisitReviewStatus.disagree
+        15, opportunity=opp, review_created_on=now_time - timedelta(days=15), review_status=VisitReviewStatus.disagree
     )
 
     dataset = export_user_visit_review_data(opp, from_date, to_date, review_status)
