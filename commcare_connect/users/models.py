@@ -107,7 +107,7 @@ class UserCredential(models.Model):
     )
 
     class Meta:
-        unique_together = ("user", "opportunity", "credential_type")
+        unique_together = ("user", "opportunity", "credential_type", "level")
 
     @classmethod
     def delivery_level_num(cls, level: str, credential_type: str) -> int | None:
