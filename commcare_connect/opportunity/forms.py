@@ -1,5 +1,6 @@
 import datetime
 import json
+from decimal import Decimal
 
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Column, Div, Field, Fieldset, Layout, Row, Submit
@@ -1082,73 +1083,110 @@ class FormJsonValidationRulesForm(forms.ModelForm):
 
 
 class PaymentInvoiceForm(forms.ModelForm):
-    usd_currency = forms.BooleanField(
+    local_amount = forms.CharField(
+        label="Amount (Local currency)",
+        widget=forms.NumberInput(attrs={"placeholder": "0.00"}),
+        help_text=_("Local currency is determined by the opportunity."),
+    )
+    amount_usd = forms.CharField(
+        label="Amount (USD)",
+        widget=forms.NumberInput(attrs={"placeholder": "0.00"}),
         required=False,
-        initial=False,
-        label="USD Currency",
-        widget=forms.CheckboxInput(),
+    )
+    invoice_type = forms.CharField(
+        required=True,
+        label="Invoice Type",
+        widget=forms.Select(
+            choices=[
+                ("service_delivery", _("Service Delivery")),
+                ("custom", _("Custom")),
+            ],
+        ),
     )
 
     class Meta:
         model = PaymentInvoice
-        fields = ("title", "amount", "date", "invoice_number", "start_date", "end_date", "notes", "service_delivery")
+        fields = ("title", "date", "invoice_number", "start_date", "end_date", "notes")
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "start_date": forms.DateInput(attrs={"type": "date"}),
             "end_date": forms.DateInput(attrs={"type": "date"}),
-            "amount": forms.NumberInput(attrs={"min": "0"}),
+            "notes": forms.Textarea(
+                attrs={"rows": 3, "placeholder": _("Describe service delivery details, references, or notes...")}
+            ),
+            "invoice_number": forms.TextInput(attrs={"placeholder": _("Auto-generated on save")}),
+            "title": forms.TextInput(attrs={"placeholder": _("e.g. October Services")}),
         }
+        labels = {
+            "title": _("Invoice title"),
+            "invoice_number": _("Invoice ID"),
+            "date": _("Generation date"),
+            "notes": _("Service Delivery Notes"),
+        }
+        help_texts = {"invoice_number": _("This value is system-generated and is unique.")}
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
         super().__init__(*args, **kwargs)
 
-        self.fields["usd_currency"].widget.attrs.update(
-            {
-                "x-ref": "currencyToggle",
-                "x-on:change": "currency = $event.target.checked; convert(true)",
-            }
-        )
+        self.fields["date"].initial = str(datetime.date.today())
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
-            Row(
-                Field(
-                    "date",
-                    **{
-                        "x-ref": "date",
-                        "x-on:change": "convert()",
-                    },
-                ),
-                Field(
-                    "amount",
-                    label=f"Amount ({self.opportunity.currency})",
-                    **{
-                        "x-ref": "amount",
-                        "x-on:input.debounce.300ms": "convert()",
-                    },
-                ),
-                Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
-                Field("invoice_number"),
-                Field(
-                    "usd_currency",
-                    css_class=CHECKBOX_CLASS,
-                    wrapper_class="flex p-4 justify-between rounded-lg bg-gray-100",
-                ),
-                Field(
-                    "service_delivery",
-                    **{
-                        "css_class": CHECKBOX_CLASS,
-                        "wrapper_class": "flex p-4 justify-between rounded-lg bg-gray-100",
-                        "x-model": "serviceDeliverySelected",
-                    },
+            Div(
+                Div(
+                    Field("invoice_number"),
+                    Field(
+                        "invoice_type",
+                        **{
+                            "x-model": "invoiceType",
+                        },
+                    ),
+                    css_class="grid grid-cols-2 gap-4",
                 ),
                 Div(
-                    Field("title"),
-                    Field("start_date"),
-                    Field("end_date"),
+                    Div(
+                        Field("title"),
+                        **{"x-show": "serviceDeliverySelected()"},
+                    ),
+                    Field(
+                        "date",
+                        **{
+                            "x-ref": "date",
+                            "x-on:change": "convert()",
+                        },
+                    ),
+                    css_class="grid grid-cols-2 gap-4",
+                ),
+                Div(
+                    Div(
+                        Field(
+                            "local_amount",
+                            label=f"Amount ({self.opportunity.currency})",
+                            **{
+                                "x-ref": "amount",
+                                "x-on:input.debounce.300ms": "convert()",
+                            },
+                        ),
+                        Field("amount_usd"),
+                        css_class="grid grid-cols-2 gap-4",
+                    ),
+                    Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
+                    css_class="flex flex-col",
+                ),
+                Div(
+                    Field(
+                        "start_date",
+                    ),
+                    Field(
+                        "end_date",
+                    ),
+                    **{"x-show": "serviceDeliverySelected()"},
+                    css_class="grid grid-cols-2 gap-4",
+                ),
+                Div(
                     Field("notes"),
-                    **{"x-show": "serviceDeliverySelected"},
+                    **{"x-show": "serviceDeliverySelected()"},
                 ),
                 css_class="flex flex-col",
             ),
@@ -1166,11 +1204,10 @@ class PaymentInvoiceForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        amount = cleaned_data.get("amount")
-        usd_currency = cleaned_data.get("usd_currency")
+        local_amount = cleaned_data.get("local_amount")
         date = cleaned_data.get("date")
 
-        if amount is None or date is None:
+        if local_amount is None or date is None:
             return cleaned_data  # Let individual field errors handle missing values
 
         exchange_rate = ExchangeRate.latest_exchange_rate(self.opportunity.currency, date)
@@ -1178,15 +1215,9 @@ class PaymentInvoiceForm(forms.ModelForm):
             raise ValidationError("Exchange rate not available for selected date.")
 
         cleaned_data["exchange_rate"] = exchange_rate
+        cleaned_data["amount_usd"] = round(Decimal(local_amount) / exchange_rate.rate, 2)
 
-        if usd_currency:
-            cleaned_data["amount_usd"] = amount
-            cleaned_data["amount"] = round(amount * exchange_rate.rate, 2)
-        else:
-            cleaned_data["amount"] = amount
-            cleaned_data["amount_usd"] = round(amount / exchange_rate.rate, 2)
-
-        if not self.cleaned_data["service_delivery"]:
+        if not self.cleaned_data["invoice_type"] == "service_delivery":
             cleaned_data["title"] = None
             cleaned_data["start_date"] = None
             cleaned_data["end_date"] = None
@@ -1203,6 +1234,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         instance = super().save(commit=False)
         instance.opportunity = self.opportunity
         instance.amount_usd = self.cleaned_data["amount_usd"]
+        instance.amount = self.cleaned_data["local_amount"]
         instance.exchange_rate = self.cleaned_data["exchange_rate"]
 
         if commit:
