@@ -1,5 +1,6 @@
 from itertools import chain
 
+import sentry_sdk
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.db.models import Count, F, OuterRef, Q, Subquery
 from django.utils.timezone import now
@@ -175,9 +176,19 @@ class UserCredentialIssuer:
         ]
 
     def _submit_credentials_to_personal_id(index_to_credential_ids_set_mapper, credentials_items: list[dict]):
-        success_indices = add_credentials_on_personalid(credentials_items)
+        result = add_credentials_on_personalid(credentials_items)
+        success_indices = result.get("success", [])
+        failed_indices = result.get("failed", [])
 
-        successful_credential_ids = list(
-            chain.from_iterable(index_to_credential_ids_set_mapper[i] for i in success_indices)
-        )
-        UserCredential.objects.filter(id__in=successful_credential_ids).update(issued_on=now())
+        if success_indices:
+            successful_credential_ids = list(
+                chain.from_iterable(index_to_credential_ids_set_mapper[i] for i in success_indices)
+            )
+            UserCredential.objects.filter(id__in=successful_credential_ids).update(issued_on=now())
+
+        if failed_indices:
+            failed_credential_ids = list(
+                chain.from_iterable(index_to_credential_ids_set_mapper[i] for i in failed_indices)
+            )
+            message = f"Failed to issue credentials for UserCredential IDs: {failed_credential_ids}"
+            sentry_sdk.capture_message(message=message, level="error")
