@@ -664,32 +664,6 @@ class VisitExportForm(forms.Form):
         return [VisitValidationStatus(status) for status in statuses]
 
 
-class ReviewVisitExportForm(forms.Form):
-    format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="csv")
-    date_range = forms.ChoiceField(choices=DateRanges.choices, initial=DateRanges.LAST_30_DAYS)
-    status = forms.MultipleChoiceField(choices=[("all", "All")] + VisitReviewStatus.choices, initial=["all"])
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.helper = FormHelper(self)
-        self.helper.layout = Layout(
-            Row(
-                Field("format"),
-                Field("date_range"),
-                Field("status"),
-                css_class="flex flex-col",
-            ),
-        )
-        self.helper.form_tag = False
-
-    def clean_status(self):
-        statuses = self.cleaned_data["status"]
-        if not statuses or "all" in statuses:
-            return []
-
-        return [VisitReviewStatus(status) for status in statuses]
-
-
 class PaymentExportForm(forms.Form):
     format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="csv")
 
