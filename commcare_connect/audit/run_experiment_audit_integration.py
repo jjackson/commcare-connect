@@ -54,6 +54,20 @@ TEST_CONFIGS = {
         audit_type="last_n_across_all",
         count_across_all=10,
     ),
+    "opp385": TestConfig(
+        name="Opp 385 - Last 10 per FLW",
+        search_query="385",
+        select_count=1,
+        audit_type="last_n_per_flw",
+        count_per_flw=10,
+    ),
+    "opp385_across": TestConfig(
+        name="Opp 385 - Last 10 Across All (workaround for missing user_id)",
+        search_query="385",
+        select_count=1,
+        audit_type="last_n_across_all",
+        count_across_all=10,
+    ),
 }
 
 
@@ -80,8 +94,6 @@ def test_experiment_audit_flow(config_name="fastest"):
     print("\n[1] Initializing data access...")
     try:
         import os
-
-        from django.conf import settings
 
         from commcare_connect.audit.data_access import AuditDataAccess
 
@@ -142,8 +154,9 @@ def test_experiment_audit_flow(config_name="fastest"):
         for opp in opportunities:
             print(f"     - {opp.get('id')}: {opp.get('name')}")
 
-        # Step 3: Preview audit - get visit IDs
-        print("\n[3] Previewing audit...")
+        # Step 3: Get visit IDs (preview/validate)
+        print("\n[3] Getting visit IDs (preview)...")
+        print("[INFO] API endpoint testing done via browser (Labs middleware interferes with test client)")
 
         # Build criteria from config
         criteria = {
@@ -160,9 +173,36 @@ def test_experiment_audit_flow(config_name="fastest"):
         # Get all opportunity IDs
         opportunity_ids = [opp.get("id") for opp in opportunities]
 
+        # First, let's check raw visit data from API
+        print("\n[DEBUG] Checking raw visit data from API...")
+        for opp_id in opportunity_ids:
+            raw_visits = data_access._fetch_visits_for_opportunity(opp_id)
+            print(f"     Opportunity {opp_id}: {len(raw_visits)} raw visits from API")
+            if raw_visits:
+                # Check user_id distribution
+                with_user_id = [v for v in raw_visits if v.get("user_id")]
+                without_user_id = [v for v in raw_visits if not v.get("user_id")]
+                print(f"     - Visits with user_id: {len(with_user_id)}")
+                print(f"     - Visits without user_id: {len(without_user_id)}")
+
+                sample = raw_visits[0]
+                print(f"     Sample visit keys: {list(sample.keys())}")
+                print(
+                    f"     Sample visit: id={sample.get('id')}, "
+                    f"user_id={sample.get('user_id')}, visit_date={sample.get('visit_date')}"
+                )
+
+                if with_user_id:
+                    sample_with_user = with_user_id[0]
+                    print(
+                        f"     Sample WITH user_id: id={sample_with_user.get('id')}, "
+                        f"user_id={sample_with_user.get('user_id')}, "
+                        f"visit_date={sample_with_user.get('visit_date')}"
+                    )
+
         try:
             visit_ids = data_access.get_visit_ids_for_audit(
-                opportunity_ids=opportunity_ids, audit_type=criteria["audit_type"], criteria=criteria
+                opportunity_ids=opportunity_ids, audit_type=config.audit_type, criteria=criteria
             )
         except Exception as e:
             print(f"[ERROR] Could not fetch visit IDs: {e}")

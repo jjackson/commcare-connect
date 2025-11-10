@@ -75,6 +75,7 @@ class LabsURLWhitelistMiddleware:
         "/static/",
         "/media/",
         "/admin/",
+        "/__debug__/",  # Django Debug Toolbar
     ]
 
     def __init__(self, get_response):

@@ -12,12 +12,12 @@ Usage:
 import os
 import sys
 
+import httpx
+
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
-import httpx
-
-from commcare_connect.labs.oauth_cli import get_oauth_token, load_token_from_file, save_token_to_file
+from commcare_connect.labs.oauth_cli import get_oauth_token, load_token_from_file, save_token_to_file  # noqa: E402
 
 
 def main():
@@ -72,7 +72,7 @@ def main():
         response.raise_for_status()
         data = response.json()
 
-        print(f"\n✓ Successfully fetched data!")
+        print("\n✓ Successfully fetched data!")
         print(f"\nOrganizations: {len(data.get('organizations', []))}")
         print(f"Programs: {len(data.get('programs', []))}")
         print(f"Opportunities: {len(data.get('opportunities', []))}")
@@ -80,7 +80,7 @@ def main():
         # Print first organization as example
         if data.get("organizations"):
             org = data["organizations"][0]
-            print(f"\nExample Organization:")
+            print("\nExample Organization:")
             print(f"  Name: {org.get('name')}")
             print(f"  Slug: {org.get('slug')}")
             print(f"  ID: {org.get('id')}")

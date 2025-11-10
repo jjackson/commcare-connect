@@ -1,107 +1,67 @@
-from django.db import models
+"""
+Helper functions for tasks using ExperimentRecord-based TaskRecord model.
 
-from commcare_connect.opportunity.models import OpportunityAccess
-from commcare_connect.tasks.models import Task
+Simplified helpers that use TaskDataAccess instead of Django ORM.
+OAuth API is the source of truth for permissions - no local checks needed.
+"""
 
-
-def user_can_access_task(user, task):
-    """
-    Check if a user can access a specific task.
-
-    Access is granted if:
-    - User is a superuser
-    - User has access to the task's opportunity (via OpportunityAccess)
-    - User is a member of the task's opportunity's organization
-    """
-    if user.is_superuser:
-        return True
-
-    # Check if user has opportunity access
-    if OpportunityAccess.objects.filter(opportunity=task.opportunity, user=user).exists():
-        return True
-
-    # Check if user is part of the organization
-    if user.memberships.filter(organization=task.opportunity.organization).exists():
-        return True
-
-    return False
+from commcare_connect.tasks.data_access import TaskDataAccess
 
 
 def get_user_tasks_queryset(user):
     """
-    Get a filtered queryset of tasks the user can access.
+    Get filtered queryset of tasks user can access via OAuth.
 
-    Includes tasks from:
-    - Opportunities the user has access to
-    - Opportunities from organizations the user is a member of
+    Args:
+        user: Django User or LabsUser instance
+
+    Returns:
+        QuerySet of TaskRecord instances (OAuth enforces access)
     """
-    if user.is_superuser:
-        return Task.objects.all()
-
-    # Get opportunities the user has access to via OpportunityAccess
-    # or via organization membership
-    from commcare_connect.opportunity.models import Opportunity
-
-    accessible_opportunity_ids = OpportunityAccess.objects.filter(user=user).values_list("opportunity_id", flat=True)
-
-    # Get organization IDs where user is a member
-    org_ids = user.memberships.values_list("organization_id", flat=True)
-    org_opportunity_ids = Opportunity.objects.filter(organization_id__in=org_ids).values_list("id", flat=True)
-
-    # Combine both querysets
-    queryset = Task.objects.filter(
-        models.Q(opportunity_id__in=accessible_opportunity_ids) | models.Q(opportunity_id__in=org_opportunity_ids)
-    ).distinct()
-
-    return queryset
+    data_access = TaskDataAccess(user=user)
+    return data_access.get_tasks()
 
 
-def create_task_from_audit(audit_session_id, user, opportunity, task_type, description, created_by_user, **kwargs):
+def create_task_from_audit(
+    audit_session_id: int,
+    user_id: int,
+    opportunity_id: int,
+    task_type: str,
+    description: str,
+    created_by_id: int,
+    **kwargs,
+):
     """
-    Create a task from an audit failure or other trigger.
+    Create task from audit trigger.
 
-    This is a clean API for future automation.
+    This is a clean API for future automation when audit failures
+    automatically create tasks.
 
     Args:
         audit_session_id: ID of the audit session that triggered this task
-        user: The FLW user this task is about
-        opportunity: The opportunity this task relates to
+        user_id: The FLW user ID this task is about
+        opportunity_id: The opportunity ID this task relates to
         task_type: Type of task (warning/deactivation)
         description: Description of what happened
-        created_by_user: User creating the task (or system user)
-        **kwargs: Additional fields (priority, assigned_to, etc.)
+        created_by_id: User ID creating the task (or system user)
+        **kwargs: Additional fields (priority, assigned_to_id, title, status, etc.)
 
     Returns:
-        The created Task instance
+        The created TaskRecord instance
     """
-    from commcare_connect.tasks.models import TaskEvent, TaskEventType
+    data_access = TaskDataAccess()
 
-    # Create the task
-    task = Task.objects.create(
-        user=user,
-        opportunity=opportunity,
+    return data_access.create_task(
+        user_id=user_id,
+        opportunity_id=opportunity_id,
+        created_by_id=created_by_id,
         task_type=task_type,
         description=description,
         audit_session_id=audit_session_id,
-        created_by_user=created_by_user,
-        created_by=created_by_user.email if created_by_user else "system",
-        modified_by=created_by_user.email if created_by_user else "system",
-        title=kwargs.get("title", f"{task_type.title()} for {user.name}"),
+        title=kwargs.get("title", f"{task_type.title()} for user {user_id}"),
         priority=kwargs.get("priority", "medium"),
         status=kwargs.get("status", "unassigned"),
-        assigned_to=kwargs.get("assigned_to"),
+        assigned_to_id=kwargs.get("assigned_to_id"),
+        learning_assignment_text=kwargs.get("learning_assignment_text", ""),
+        creator_name=kwargs.get("creator_name", f"User {created_by_id}"),
     )
-
-    # Create initial event
-    TaskEvent.objects.create(
-        task=task,
-        event_type=TaskEventType.CREATED,
-        actor=created_by_user.name if created_by_user else "System",
-        actor_user=created_by_user,
-        description=f"Task created from audit session #{audit_session_id}",
-        created_by=created_by_user.email if created_by_user else "system",
-        modified_by=created_by_user.email if created_by_user else "system",
-        metadata={"audit_session_id": audit_session_id},
-    )
-
-    return task

@@ -9,19 +9,29 @@ Templates are reused from the existing audit views for consistency.
 """
 
 import json
-import threading
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.urls import reverse_lazy
 from django.utils import timezone
-from django.views.generic import DetailView, View
+from django.views.generic import DetailView, TemplateView, View
 from django_tables2 import SingleTableView
 
 from commcare_connect.audit.data_access import AuditDataAccess
 from commcare_connect.audit.experiment_models import AuditSessionRecord
 from commcare_connect.audit.services.progress_tracker import ProgressTracker
 from commcare_connect.audit.tables import AuditTable
+
+
+class ExperimentAuditCreateView(LoginRequiredMixin, TemplateView):
+    """Audit creation wizard interface (experiment-based)"""
+
+    template_name = "audit/audit_creation_wizard.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_title"] = "Create New Audit Session"
+        return context
 
 
 class ExperimentAuditListView(LoginRequiredMixin, SingleTableView):
@@ -36,7 +46,7 @@ class ExperimentAuditListView(LoginRequiredMixin, SingleTableView):
         # Get AuditSessionRecords from ExperimentRecords
         data_access = AuditDataAccess(request=self.request)
         try:
-            return data_access.get_audit_sessions().order_by("-created_at")
+            return data_access.get_audit_sessions().order_by("-date_created")
         finally:
             data_access.close()
 
@@ -142,7 +152,10 @@ class ExperimentAuditDetailView(LoginRequiredMixin, DetailView):
                                 image_data = {
                                     "blob_id": blob_id,
                                     "question_id": blob_info.get("question_id"),
-                                    "url": f"/audit/experiment/image/{blob_id}/?xform_id={visit_data['xform_id']}&domain={cc_domain}",
+                                    "url": (
+                                        f"/audit/experiment/image/{blob_id}/"
+                                        f"?xform_id={visit_data['xform_id']}&domain={cc_domain}"
+                                    ),
                                     "result": assessment.get("result"),
                                     "notes": assessment.get("notes", ""),
                                     "name": blob_info.get("filename"),
@@ -390,77 +403,10 @@ class ExperimentAuditImageView(LoginRequiredMixin, View):
 
 
 class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
-    """API endpoint for creating experiment-based audit sessions"""
-
-    def _run_audit_creation_in_background(self, task_id, opportunity_ids, criteria, auditor_id, request=None):
-        """Run audit creation in a background thread"""
-        progress_tracker = ProgressTracker(task_id=task_id)
-        data_access = None
-
-        try:
-            # Initialize data access
-            data_access = AuditDataAccess(request=request)
-
-            progress_tracker.update(1, 5, "Fetching visit data from Connect API...", "loading")
-
-            # Get visit IDs based on criteria
-            audit_type = criteria.get("audit_type", "date_range")
-            visit_ids = data_access.get_visit_ids_for_audit(
-                opportunity_ids=opportunity_ids, audit_type=audit_type, criteria=criteria
-            )
-
-            if not visit_ids:
-                progress_tracker.error("No visits found matching criteria")
-                return
-
-            progress_tracker.update(2, 5, f"Found {len(visit_ids)} visits", "loading")
-
-            # Create template
-            template = data_access.create_audit_template(
-                user_id=auditor_id,
-                opportunity_ids=opportunity_ids,
-                audit_type=audit_type,
-                granularity=criteria.get("granularity", "combined"),
-                criteria=criteria,
-                preview_data=[],
-            )
-
-            progress_tracker.update(3, 5, "Creating audit session...", "loading")
-
-            # Create session
-            session = data_access.create_audit_session(
-                template_id=template.id,
-                auditor_id=auditor_id,
-                visit_ids=visit_ids,
-                title=criteria.get("title", f"Audit {timezone.now().strftime('%Y-%m-%d')}"),
-                tag=criteria.get("tag", ""),
-                opportunity_id=opportunity_ids[0] if opportunity_ids else None,
-            )
-
-            progress_tracker.update(4, 5, "Finalizing...", "loading")
-
-            # Determine redirect URL
-            redirect_url = reverse_lazy("audit:experiment_session_detail", kwargs={"pk": session.pk})
-
-            # Mark as complete
-            progress_tracker.complete(
-                "Audit created successfully!",
-                result_data={
-                    "redirect_url": str(redirect_url),
-                    "audits_created": 1,
-                    "stats": {"total_visits": len(visit_ids)},
-                },
-            )
-
-        except Exception as e:
-            import traceback
-
-            progress_tracker.error(str(e), traceback.format_exc())
-        finally:
-            if data_access:
-                data_access.close()
+    """API endpoint for creating experiment-based audit sessions - synchronous"""
 
     def post(self, request):
+        data_access = None
         try:
             data = json.loads(request.body)
             opportunity_ids = data.get("opportunities", [])
@@ -472,24 +418,71 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
             # Get auditor user ID
             auditor_id = request.user.id
 
-            # Initialize progress tracker
-            progress_tracker = ProgressTracker()
-            progress_tracker.update(0, 5, "Starting audit creation...", "initializing")
+            # Initialize data access
+            data_access = AuditDataAccess(request=request)
 
-            # Start the audit creation in a background thread
-            thread = threading.Thread(
-                target=self._run_audit_creation_in_background,
-                args=(progress_tracker.task_id, opportunity_ids, criteria, auditor_id, request),
-                daemon=True,
+            # Extract and normalize criteria
+            audit_type = criteria.get("type", criteria.get("audit_type", "date_range"))
+
+            # Map frontend camelCase to backend snake_case
+            normalized_criteria = {
+                "audit_type": audit_type,
+                "start_date": criteria.get("startDate"),
+                "end_date": criteria.get("endDate"),
+                "count_per_flw": criteria.get("countPerFlw", 10),
+                "count_per_opp": criteria.get("countPerOpp", 10),
+                "count_across_all": criteria.get("countAcrossAll", 100),
+                "sample_percentage": criteria.get("sample_percentage", criteria.get("samplePercentage", 100)),
+                "selected_flw_user_ids": criteria.get("selected_flw_user_ids", []),
+            }
+
+            # Get visit IDs based on criteria
+            visit_ids = data_access.get_visit_ids_for_audit(
+                opportunity_ids=opportunity_ids, audit_type=audit_type, criteria=normalized_criteria
             )
-            thread.start()
 
-            # Return task_id immediately so client can start polling
+            # Filter by selected FLW user IDs if provided
+            selected_flw_user_ids = normalized_criteria.get("selected_flw_user_ids", [])
+            if selected_flw_user_ids and visit_ids:
+                # Fetch visits and filter by user_id
+                filtered_visit_ids = []
+                for opp_id in opportunity_ids:
+                    visits = data_access.get_visits_batch(visit_ids, opp_id)
+                    filtered_visit_ids.extend([v["id"] for v in visits if v.get("user_id") in selected_flw_user_ids])
+                visit_ids = filtered_visit_ids
+
+            if not visit_ids:
+                return JsonResponse({"error": "No visits found matching criteria"}, status=400)
+
+            # Create template
+            template = data_access.create_audit_template(
+                user_id=auditor_id,
+                opportunity_ids=opportunity_ids,
+                audit_type=audit_type,
+                granularity=criteria.get("granularity", "combined"),
+                criteria=criteria,
+                preview_data=[],
+            )
+
+            # Create session
+            session = data_access.create_audit_session(
+                template_id=template.id,
+                auditor_id=auditor_id,
+                visit_ids=visit_ids,
+                title=criteria.get("title", f"Audit {timezone.now().strftime('%Y-%m-%d')}"),
+                tag=criteria.get("tag", ""),
+                opportunity_id=opportunity_ids[0] if opportunity_ids else None,
+            )
+
+            # Determine redirect URL
+            redirect_url = reverse_lazy("audit:session_detail", kwargs={"pk": session.pk})
+
             return JsonResponse(
                 {
                     "success": True,
-                    "task_id": progress_tracker.task_id,
-                    "message": "Audit creation started",
+                    "redirect_url": str(redirect_url),
+                    "session_id": session.id,
+                    "stats": {"total_visits": len(visit_ids)},
                 }
             )
 
@@ -498,12 +491,83 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
 
             print(f"[ERROR] {traceback.format_exc()}")
             return JsonResponse({"error": str(e)}, status=500)
+        finally:
+            if data_access:
+                data_access.close()
+
+
+class ExperimentOpportunitySearchAPIView(LoginRequiredMixin, View):
+    """API endpoint for searching opportunities (experiment-based)"""
+
+    def get(self, request):
+        query = request.GET.get("q", "").strip()
+        limit = int(request.GET.get("limit", 1000))  # Default to 1000, no max limit
+
+        data_access = AuditDataAccess(request=request)
+        try:
+            opportunities = data_access.search_opportunities(query, limit)
+
+            # Convert to JSON-serializable format
+            opportunities_data = [
+                {
+                    "id": opp.get("id"),
+                    "name": opp.get("name"),
+                    "description": opp.get("description", ""),
+                    "organization_name": opp.get("organization_name", ""),
+                    "program_name": opp.get("program_name", ""),
+                    "visit_count": opp.get("total_visits", 0),
+                    "start_date": opp.get("start_date"),
+                    "end_date": opp.get("end_date"),
+                    "active": opp.get("active", True),
+                    "is_test": opp.get("is_test", False),
+                }
+                for opp in opportunities
+            ]
+
+            return JsonResponse({"success": True, "opportunities": opportunities_data})
+
+        except Exception as e:
+            import traceback
+
+            print(f"[ERROR] {traceback.format_exc()}")
+            return JsonResponse({"success": False, "error": str(e), "opportunities": []}, status=500)
+        finally:
+            data_access.close()
+
+
+class ExperimentAuditProgressAPIView(LoginRequiredMixin, View):
+    """API endpoint for polling audit creation progress (experiment-based)"""
+
+    def get(self, request):
+        task_id = request.GET.get("task_id")
+        if not task_id:
+            return JsonResponse({"error": "Missing task_id"}, status=400)
+
+        progress_tracker = ProgressTracker(task_id=task_id)
+        progress_data = progress_tracker.get_progress()
+
+        if progress_data is None:
+            return JsonResponse({"error": "Task not found"}, status=404)
+
+        return JsonResponse(progress_data)
+
+    def delete(self, request):
+        """Cancel an in-progress audit creation"""
+        task_id = request.GET.get("task_id")
+        if not task_id:
+            return JsonResponse({"error": "Missing task_id"}, status=400)
+
+        progress_tracker = ProgressTracker(task_id=task_id)
+        progress_tracker.cancel()
+
+        return JsonResponse({"success": True, "message": "Cancellation requested"})
 
 
 class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
-    """API endpoint for previewing audit sessions (experiment-based)"""
+    """API endpoint for previewing audit sessions (experiment-based) - synchronous"""
 
     def post(self, request):
+        data_access = None
         try:
             data = json.loads(request.body)
             opportunity_ids = data.get("opportunities", [])
@@ -515,27 +579,92 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
             # Initialize data access
             data_access = AuditDataAccess(request=request)
 
-            try:
-                # Get visit IDs based on criteria
-                audit_type = criteria.get("audit_type", "date_range")
-                visit_ids = data_access.get_visit_ids_for_audit(
-                    opportunity_ids=opportunity_ids, audit_type=audit_type, criteria=criteria
+            # Extract and normalize criteria
+            audit_type = criteria.get("type", criteria.get("audit_type", "date_range"))
+
+            # Map frontend camelCase to backend snake_case
+            normalized_criteria = {
+                "audit_type": audit_type,
+                "start_date": criteria.get("startDate"),
+                "end_date": criteria.get("endDate"),
+                "count_per_flw": criteria.get("countPerFlw", 10),
+                "count_per_opp": criteria.get("countPerOpp", 10),
+                "count_across_all": criteria.get("countAcrossAll", 100),
+                "sample_percentage": criteria.get("sample_percentage", criteria.get("samplePercentage", 100)),
+            }
+
+            # Get visit IDs based on criteria
+            visit_ids = data_access.get_visit_ids_for_audit(
+                opportunity_ids=opportunity_ids, audit_type=audit_type, criteria=normalized_criteria
+            )
+
+            # Fetch detailed visit data and group by FLW
+            flw_data = {}
+            for opp_id in opportunity_ids:
+                visits = data_access.get_visits_batch(visit_ids, opp_id)
+
+                for visit in visits:
+                    user_id = visit.get("user_id")
+                    if not user_id:
+                        continue
+
+                    if user_id not in flw_data:
+                        flw_data[user_id] = {
+                            "user_id": user_id,
+                            "name": visit.get("user_name", "Unknown"),
+                            "connect_id": user_id,
+                            "visit_count": 0,
+                            "visits": [],
+                            "opportunity_id": opp_id,
+                            "opportunity_name": visit.get("opportunity_name", ""),
+                        }
+
+                    flw_data[user_id]["visit_count"] += 1
+                    flw_data[user_id]["visits"].append(
+                        {
+                            "id": visit.get("id"),
+                            "visit_date": visit.get("visit_date"),
+                        }
+                    )
+
+            # Calculate date ranges and format for frontend
+            preview_results = []
+            for user_id, flw in flw_data.items():
+                # Sort visits by date
+                visits = sorted(flw["visits"], key=lambda v: v["visit_date"])
+                earliest = visits[0]["visit_date"] if visits else None
+                latest = visits[-1]["visit_date"] if visits else None
+
+                preview_results.append(
+                    {
+                        "user_id": user_id,
+                        "name": flw["name"],
+                        "connect_id": flw["connect_id"],
+                        "visit_count": flw["visit_count"],
+                        "earliest_visit": earliest,
+                        "latest_visit": latest,
+                        "opportunity_id": flw["opportunity_id"],
+                        "opportunity_name": flw["opportunity_name"],
+                        "prior_audit_tags": [],  # TODO: Fetch from audit history
+                    }
                 )
 
-                # Build preview data
-                preview_data = {
-                    "total_visits": len(visit_ids),
-                    "opportunities": len(opportunity_ids),
-                    "audit_type": audit_type,
+            return JsonResponse(
+                {
+                    "success": True,
+                    "preview": {
+                        "total_visits": len(visit_ids),
+                        "total_flws": len(preview_results),
+                        "flws": preview_results,
+                    },
                 }
-
-                return JsonResponse({"success": True, "preview": preview_data})
-
-            finally:
-                data_access.close()
+            )
 
         except Exception as e:
             import traceback
 
             print(f"[ERROR] {traceback.format_exc()}")
             return JsonResponse({"error": str(e)}, status=500)
+        finally:
+            if data_access:
+                data_access.close()

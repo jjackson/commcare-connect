@@ -21,11 +21,6 @@
           <i class="fa-solid fa-flask mr-2"></i>
           Labs Status
         </a>
-        {% else %}
-        <a href="{% url 'audit:connect_oauth_login' %}?next=/audit/" class="button button-sm outline-style text-blue-600 hover:bg-blue-50 border-blue-300 hover:border-blue-400">
-          <i class="fa-solid fa-key mr-2"></i>
-          Get Connect OAuth Token
-        </a>
         {% endif %}
         <a class="button button-md outline-style" href="{% url 'audit:export_all' %}">
           <i class="fa-solid fa-download mr-2"></i>
