@@ -1,6 +1,6 @@
 from django.urls import path
 
-from commcare_connect.audit import oauth_views, views
+from commcare_connect.audit import experiment_views, oauth_views, views
 
 app_name = "audit"
 
@@ -8,7 +8,34 @@ urlpatterns = [
     # OAuth endpoints for Connect production
     path("oauth/connect/login/", oauth_views.oauth2_login, name="connect_oauth_login"),
     path("oauth/connect/callback/", oauth_views.oauth2_callback, name="connect_oauth_callback"),
-    # Audit management
+    # Experiment-based audit routes (parallel implementation)
+    path("experiment/", experiment_views.ExperimentAuditListView.as_view(), name="experiment_session_list"),
+    path(
+        "experiment/<int:pk>/", experiment_views.ExperimentAuditDetailView.as_view(), name="experiment_session_detail"
+    ),
+    path("experiment/api/create/", experiment_views.ExperimentAuditCreateAPIView.as_view(), name="experiment_create"),
+    path(
+        "experiment/api/preview/", experiment_views.ExperimentAuditPreviewAPIView.as_view(), name="experiment_preview"
+    ),
+    path(
+        "experiment/api/<int:session_id>/result/update/",
+        experiment_views.ExperimentAuditResultUpdateView.as_view(),
+        name="experiment_result_update",
+    ),
+    path(
+        "experiment/api/<int:session_id>/assessment/update/",
+        experiment_views.ExperimentAssessmentUpdateView.as_view(),
+        name="experiment_assessment_update",
+    ),
+    path(
+        "experiment/api/<int:session_id>/complete/",
+        experiment_views.ExperimentAuditCompleteView.as_view(),
+        name="experiment_complete",
+    ),
+    path(
+        "experiment/image/<str:blob_id>/", experiment_views.ExperimentAuditImageView.as_view(), name="experiment_image"
+    ),
+    # Original audit management routes
     path("", views.AuditListView.as_view(), name="session_list"),
     path("sessions/<int:pk>/", views.AuditDetailView.as_view(), name="session_detail"),
     path("sessions/<int:pk>/export/", views.AuditExportView.as_view(), name="session_export"),

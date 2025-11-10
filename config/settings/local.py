@@ -39,6 +39,14 @@ IS_LABS_ENVIRONMENT = True
 # OAuth configuration
 LABS_OAUTH_SCOPES = ["export"]
 
+# CLI OAuth Configuration (for get_cli_token management command)
+# Register a "Public" OAuth application at your production instance with:
+# - Redirect URI: http://localhost:8765/callback
+# - Authorization grant type: Authorization code
+# - Client type: Public
+CLI_OAUTH_CLIENT_ID = env("CLI_OAUTH_CLIENT_ID", default="")
+CLI_OAUTH_CLIENT_SECRET = env("CLI_OAUTH_CLIENT_SECRET", default="")  # Not needed for public clients
+
 # Disable local registration
 ACCOUNT_ALLOW_REGISTRATION = False
 
