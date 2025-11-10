@@ -361,6 +361,7 @@ class TestPaymentInvoiceForm:
         assert invoice.start_date is None
         assert invoice.end_date is None
         assert invoice.notes is None
+        assert invoice.title is None
 
     def test_service_delivery_form(self, valid_opportunity):
         ExchangeRateFactory()
