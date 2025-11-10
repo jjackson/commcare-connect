@@ -1,5 +1,6 @@
 import datetime
 import json
+from urllib.parse import urlencode
 
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Column, Div, Field, Fieldset, Layout, Row, Submit
@@ -594,17 +595,27 @@ class VisitExportForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
+        self.review_export = kwargs.pop("review_export", False)
         super().__init__(*args, **kwargs)
 
-        hx_url = reverse(
+        visit_count_url = reverse(
             "opportunity:visit_export_count", args=(self.opportunity.organization.slug, self.opportunity.id)
         )
+
+        # if export is for review update the status and url
+        if self.review_export:
+            status_choices = [("all", "All")] + (
+                VisitReviewStatus.choices if self.review_export else VisitValidationStatus.choices
+            )
+            self.fields["status"].choices = status_choices
+
+            visit_count_url = f"{visit_count_url}?{urlencode({'review_export': 'true'})}"
 
         for field_name in ["from_date", "to_date"]:
             self.fields[field_name].widget.attrs.update(
                 {
                     "max": datetime.date.today().strftime("%Y-%m-%d"),
-                    "hx-get": hx_url,
+                    "hx-get": visit_count_url,
                     "hx-trigger": "change",
                     "hx-target": "#visit-count-warning",
                     "hx-include": "closest form",
@@ -613,7 +624,7 @@ class VisitExportForm(forms.Form):
 
         self.fields["status"].widget.attrs.update(
             {
-                "hx-get": hx_url,
+                "hx-get": visit_count_url,
                 "hx-trigger": "change",
                 "hx-target": "#visit-count-warning",
                 "hx-include": "closest form",
@@ -677,15 +688,6 @@ class ReviewVisitExportForm(forms.Form):
             return []
 
         return [VisitReviewStatus(status) for status in statuses]
-
-    def clean(self):
-        cleaned = super().clean()
-        from_date = cleaned.get("from_date")
-        to_date = cleaned.get("to_date")
-
-        if from_date and to_date and from_date > to_date:
-            raise forms.ValidationError("Start date cannot be after end date.")
-        return cleaned
 
 
 class PaymentExportForm(forms.Form):
