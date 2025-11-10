@@ -41,7 +41,6 @@ from commcare_connect.opportunity.filters import DeliverFilterSet, FilterMixin, 
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     AddBudgetNewUsersForm,
-    DateRanges,
     DeliverUnitFlagsForm,
     FormJsonValidationRulesForm,
     HQApiKeyCreateForm,
@@ -53,7 +52,6 @@ from commcare_connect.opportunity.forms import (
     PaymentExportForm,
     PaymentInvoiceForm,
     PaymentUnitForm,
-    ReviewVisitExportForm,
     SendMessageMobileUsersForm,
     VisitExportForm,
 )
@@ -410,17 +408,18 @@ def export_user_visits(request, org_slug, opp_id):
 @org_member_required
 @opportunity_required
 def review_visit_export(request, org_slug, opp_id):
-    form = ReviewVisitExportForm(data=request.POST)
+    form = VisitExportForm(data=request.POST, opportunity=request.opportunity, review_export=True)
     redirect_url = reverse("opportunity:worker_deliver", args=(org_slug, opp_id))
     if not form.is_valid():
         messages.error(request, form.errors)
         return redirect(redirect_url)
 
     export_format = form.cleaned_data["format"]
-    date_range = DateRanges(form.cleaned_data["date_range"])
+    from_date = form.cleaned_data["from_date"]
+    to_date = form.cleaned_data["to_date"]
     status = form.cleaned_data["status"]
 
-    result = generate_review_visit_export.delay(opp_id, date_range, status, export_format)
+    result = generate_review_visit_export.delay(opp_id, from_date, to_date, status, export_format)
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 
 
@@ -1953,7 +1952,7 @@ class WorkerDeliverView(BaseWorkerListView, FilterMixin):
     def get_extra_context(self, opportunity, org_slug):
         context = {
             "visit_export_form": VisitExportForm(opportunity=opportunity),
-            "review_visit_export_form": ReviewVisitExportForm(),
+            "review_visit_export_form": VisitExportForm(opportunity=opportunity, review_export=True),
             "import_export_delivery_urls": {
                 "export_url_for_pm": reverse(
                     "opportunity:review_visit_export",
@@ -2469,13 +2468,22 @@ def add_api_key(request, org_slug):
 @opportunity_required
 def visit_export_count(request, org_slug, opp_id):
     from_date = request.GET.get("from_date")
+    if not from_date:
+        return HttpResponse({"error": "Please select a From Date first."}, status=400)
+
     to_date = request.GET.get("to_date", datetime.date.today)
     status = request.GET.get("status", None)
+    review_export = request.GET.get("review_export") == "true"
 
     visits = UserVisit.objects.filter(opportunity_id=opp_id, visit_date__gte=from_date, visit_date__lte=to_date)
 
-    if status in VisitValidationStatus:
-        visits = visits.filter(status=status)
+    if review_export:
+        visits = visits.filter(review_created_on__isnull=False)
+        if status in VisitReviewStatus:
+            visits = visits.filter(review_status=status)
+    else:
+        if status in VisitValidationStatus:
+            visits = visits.filter(status=status)
 
     count = visits.count()
 

@@ -7,7 +7,6 @@ from django.utils.encoding import force_str
 from flatten_dict import flatten as flatten_json
 from tablib import Dataset
 
-from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.helpers import (
     get_annotated_opportunity_access,
     get_annotated_opportunity_access_deliver_status,
@@ -119,11 +118,14 @@ class UserVisitExporter:
 
 
 def export_user_visit_review_data(
-    opportunity: Opportunity, date_range: DateRanges, status: list[VisitReviewStatus]
+    opportunity: Opportunity, from_date, to_date, status: list[VisitReviewStatus]
 ) -> Dataset:
-    user_visits = UserVisit.objects.filter(opportunity=opportunity, review_created_on__isnull=False)
-    if date_range.get_cutoff_date():
-        user_visits = user_visits.filter(review_created_on__gte=date_range.get_cutoff_date())
+    user_visits = UserVisit.objects.filter(
+        opportunity=opportunity,
+        review_created_on__isnull=False,
+        review_created_on__gte=from_date,
+        review_created_on__lte=to_date,
+    )
     if status and "all" not in status:
         user_visits = user_visits.filter(review_status__in=status)
     user_visits = user_visits.order_by("visit_date")
