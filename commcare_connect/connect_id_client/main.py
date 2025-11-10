@@ -57,7 +57,7 @@ def add_credential(organization: Organization, credential: str, users: list[str]
 def add_credentials(credentials_items: list[dict]):
     json = {"credentials": credentials_items}
     response = _make_request(POST, "/users/add_credential", json=json, timeout=30)
-    return response.json()["success"]
+    return response.json()
 
 
 def fetch_credentials(org_slug=None):

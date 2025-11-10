@@ -278,7 +278,7 @@ class TestUserCredentialIssuer:
         assert UserCredential.objects.filter(issued_on__isnull=True).count() == 6
 
         # All credentials will be "successfully" submitted, hence return all payload indices
-        mock_add_credentials_on_personalid.return_value = [0, 1, 2, 3]
+        mock_add_credentials_on_personalid.return_value = {"success": [0, 1, 2, 3], "failed": []}
         UserCredentialIssuer.issue_credentials_to_users()
 
         assert UserCredential.objects.filter(issued_on__isnull=False).count() == 6
