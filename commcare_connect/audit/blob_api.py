@@ -21,19 +21,29 @@ class BlobMetadataAPI:
     from CommCare HQ APIs.
     """
 
-    def __init__(self, commcare_username: str | None = None, commcare_api_key: str | None = None):
+    def __init__(
+        self,
+        commcare_username: str | None = None,
+        commcare_api_key: str | None = None,
+        oauth_token: str | None = None,
+    ):
         """
         Initialize the BlobMetadataAPI.
 
         Args:
             commcare_username: CommCare username (defaults to COMMCARE_USERNAME env var)
             commcare_api_key: CommCare API key (defaults to COMMCARE_API_KEY env var)
+            oauth_token: OAuth access token (preferred over username/api_key)
         """
+        self.oauth_token = oauth_token
         self.username = commcare_username or os.getenv("COMMCARE_USERNAME")
         self.api_key = commcare_api_key or os.getenv("COMMCARE_API_KEY")
 
-        if not self.username or not self.api_key:
-            raise ValueError("CommCare credentials required (COMMCARE_USERNAME, COMMCARE_API_KEY)")
+        # Require either OAuth token or username/API key
+        if not self.oauth_token and (not self.username or not self.api_key):
+            raise ValueError(
+                "CommCare credentials required: either oauth_token or (COMMCARE_USERNAME, COMMCARE_API_KEY)"
+            )
 
     def get_blob_metadata_for_visit(self, xform_id: str, cc_domain: str) -> dict[str, dict[str, Any]]:
         """
@@ -54,8 +64,11 @@ class BlobMetadataAPI:
                 }
             }
         """
-        # Initialize CommCare extractor
-        extractor = CommCareExtractor(domain=cc_domain, username=self.username, api_key=self.api_key)
+        # Initialize CommCare extractor with OAuth token if available
+        if self.oauth_token:
+            extractor = CommCareExtractor(domain=cc_domain, oauth_token=self.oauth_token)
+        else:
+            extractor = CommCareExtractor(domain=cc_domain, username=self.username, api_key=self.api_key)
 
         try:
             # Fetch the form by ID using the direct form URL pattern

@@ -71,6 +71,10 @@ class ExperimentAuditListView(LoginRequiredMixin, SingleTableView):
                 )
             else:
                 context["token_expires_at"] = None
+
+            # Check for CommCare OAuth token
+            commcare_oauth = self.request.session.get("commcare_oauth", {})
+            context["has_commcare_token"] = bool(commcare_oauth.get("access_token"))
         else:
             # Normal mode: check database for SocialAccount
             from allauth.socialaccount.models import SocialAccount, SocialToken
@@ -83,6 +87,9 @@ class ExperimentAuditListView(LoginRequiredMixin, SingleTableView):
             except (SocialAccount.DoesNotExist, SocialToken.DoesNotExist):
                 context["has_connect_token"] = False
                 context["token_expires_at"] = None
+
+            # In normal mode, CommCare OAuth not supported yet
+            context["has_commcare_token"] = False
 
         return context
 
