@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0083_add_question_id_to_blobmeta"),
+        ("opportunity", "0083_credentialconfiguration"),
         ("tasks", "0001_initial"),
     ]
 
