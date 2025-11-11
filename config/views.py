@@ -1,4 +1,9 @@
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
+
+
+def health_check(request):
+    """Simple health check endpoint for load balancers"""
+    return HttpResponse("OK", status=200)
 
 
 def assetlinks_json(request):

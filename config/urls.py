@@ -14,6 +14,7 @@ from . import views
 urlpatterns = [
     path("", TemplateView.as_view(template_name="pages/home.html"), name="home"),
     path("about/", TemplateView.as_view(template_name="pages/about.html"), name="about"),
+    path("health/", views.health_check, name="health_check"),
     path(".well-known/assetlinks.json", views.assetlinks_json, name="assetlinks_json"),
     path("o/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     # User management
