@@ -63,8 +63,15 @@ class AuditDataAccess:
         # Initialize experiment API for state management
         self.experiment_api = ExperimentRecordAPI()
 
-        # Initialize blob API for CommCare integration
-        self.blob_api = BlobMetadataAPI()
+        # Lazy-initialize blob API for CommCare integration (only when needed)
+        self._blob_api = None
+
+    @property
+    def blob_api(self):
+        """Lazy-load BlobMetadataAPI only when needed for CommCare API calls."""
+        if self._blob_api is None:
+            self._blob_api = BlobMetadataAPI()
+        return self._blob_api
 
     def close(self):
         """Close HTTP client."""
