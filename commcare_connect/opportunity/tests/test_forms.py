@@ -328,9 +328,14 @@ class TestPaymentInvoiceForm:
             opportunity=valid_opportunity,
             data={
                 "invoice_number": "INV-001",
-                "amount": 100.0,
                 "date": "2025-11-06",
                 "usd_currency": False,
+                "local_amount": 100.0,
+                "start_date": None,
+                "end_date": None,
+                "notes": "",
+                "title": "",
+                "invoice_type": "custom",
             },
         )
         assert form.is_valid()
@@ -345,10 +350,10 @@ class TestPaymentInvoiceForm:
             opportunity=valid_opportunity,
             data={
                 "invoice_number": "INV-001",
-                "amount": 100.0,
                 "date": "2025-11-06",
                 "usd_currency": False,
-                "service_delivery": False,
+                "local_amount": 100.0,
+                "invoice_type": "custom",
                 "title": "Consulting Services Invoice",
                 "start_date": "2025-10-01",
                 "end_date": "2025-10-31",
@@ -370,10 +375,10 @@ class TestPaymentInvoiceForm:
             opportunity=valid_opportunity,
             data={
                 "invoice_number": "INV-001",
-                "amount": 100.0,
+                "local_amount": 100.0,
                 "date": "2025-11-06",
                 "usd_currency": False,
-                "service_delivery": True,
+                "invoice_type": "service_delivery",
                 "title": "Consulting Services Invoice",
                 "start_date": "2025-10-01",
                 "end_date": "2025-10-31",

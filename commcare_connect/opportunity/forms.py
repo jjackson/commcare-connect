@@ -1217,7 +1217,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         cleaned_data["exchange_rate"] = exchange_rate
         cleaned_data["amount_usd"] = round(Decimal(local_amount) / exchange_rate.rate, 2)
 
-        if not self.cleaned_data["invoice_type"] == "service_delivery":
+        if not self.is_service_delivery:
             cleaned_data["title"] = None
             cleaned_data["start_date"] = None
             cleaned_data["end_date"] = None
@@ -1234,9 +1234,14 @@ class PaymentInvoiceForm(forms.ModelForm):
         instance = super().save(commit=False)
         instance.opportunity = self.opportunity
         instance.amount_usd = self.cleaned_data["amount_usd"]
-        instance.amount = self.cleaned_data["local_amount"]
+        instance.amount = Decimal(self.cleaned_data["local_amount"])
         instance.exchange_rate = self.cleaned_data["exchange_rate"]
+        instance.service_delivery = self.is_service_delivery
 
         if commit:
             instance.save()
         return instance
+
+    @property
+    def is_service_delivery(self):
+        return self.cleaned_data.get("invoice_type") == "service_delivery"
