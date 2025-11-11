@@ -19,7 +19,13 @@ import requests
 class CommCareExtractor:
     """Simple CommCare data extraction class."""
 
-    def __init__(self, domain: str, username: str | None = None, api_key: str | None = None):
+    def __init__(
+        self,
+        domain: str,
+        username: str | None = None,
+        api_key: str | None = None,
+        oauth_token: str | None = None,
+    ):
         """
         Initialize the CommCare extractor.
 
@@ -27,24 +33,26 @@ class CommCareExtractor:
             domain: CommCare domain/project space name (required)
             username: API username (defaults to COMMCARE_USERNAME env var)
             api_key: API key (defaults to COMMCARE_API_KEY env var)
+            oauth_token: OAuth access token (preferred over username/api_key)
         """
         # Domain is required parameter
         if not domain:
             raise ValueError("Domain is required")
         self.domain = domain
 
-        # Credentials from parameters or environment
+        # OAuth token or credentials from parameters or environment
+        self.oauth_token = oauth_token
         self.username = username or os.getenv("COMMCARE_USERNAME")
         self.api_key = api_key or os.getenv("COMMCARE_API_KEY")
 
-        # Validate credentials
-        if not self.username or not self.api_key:
+        # Validate that we have either OAuth token or username/API key
+        if not self.oauth_token and (not self.username or not self.api_key):
             missing = []
             if not self.username:
                 missing.append("COMMCARE_USERNAME")
             if not self.api_key:
                 missing.append("COMMCARE_API_KEY")
-            raise ValueError(f"Missing required credentials: {', '.join(missing)}")
+            raise ValueError(f"Missing required credentials: either oauth_token or {', '.join(missing)}")
 
         # API configuration
         self.base_url = f"https://www.commcarehq.org/a/{self.domain}/api/v0.5"
@@ -53,7 +61,12 @@ class CommCareExtractor:
 
         # Session management
         self.session = requests.Session()
-        self.session.auth = (self.username, self.api_key)
+        if self.oauth_token:
+            # Use OAuth Bearer token
+            self.session.headers.update({"Authorization": f"Bearer {self.oauth_token}"})
+        else:
+            # Use HTTP Basic Auth
+            self.session.auth = (self.username, self.api_key)
 
     def get_forms(
         self,

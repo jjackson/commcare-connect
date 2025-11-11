@@ -39,6 +39,9 @@ class AuditDataAccess:
             access_token: OAuth token for Connect production APIs
             request: HttpRequest object (for extracting token in labs mode)
         """
+        # Store request for later use (e.g., getting CommCare OAuth token)
+        self.request = request
+
         # Get OAuth token from labs session
         if not access_token and request:
             from django.utils import timezone
@@ -70,7 +73,18 @@ class AuditDataAccess:
     def blob_api(self):
         """Lazy-load BlobMetadataAPI only when needed for CommCare API calls."""
         if self._blob_api is None:
-            self._blob_api = BlobMetadataAPI()
+            # Try to get CommCare OAuth token from session
+            oauth_token = None
+            if self.request:
+                from django.utils import timezone
+
+                commcare_oauth = self.request.session.get("commcare_oauth", {})
+                expires_at = commcare_oauth.get("expires_at", 0)
+                if timezone.now().timestamp() < expires_at:
+                    oauth_token = commcare_oauth.get("access_token")
+
+            # Initialize BlobMetadataAPI with OAuth token if available
+            self._blob_api = BlobMetadataAPI(oauth_token=oauth_token)
         return self._blob_api
 
     def close(self):
