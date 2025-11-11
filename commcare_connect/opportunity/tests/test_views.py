@@ -522,7 +522,9 @@ class TestResendUserInvites:
 
     @mock.patch("commcare_connect.opportunity.views.update_user_and_send_invite")
     @mock.patch("commcare_connect.opportunity.views.fetch_users")
-    def test_org_member_can_resend_invite(self, mock_fetch_users, mock_update_and_send, org_user_member):
+    def test_org_member_can_resend_invite(
+        self, mock_fetch_users, mock_update_and_send, mock_send_event, org_user_member
+    ):
         mock_user = ConnectIdUser(
             name="New User",
             username="newuser",
