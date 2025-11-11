@@ -1,10 +1,12 @@
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
 from django.utils.translation import gettext
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django_tables2 import RequestConfig
 from rest_framework.decorators import api_view
 
@@ -76,6 +78,25 @@ def add_members_form(request, org_slug):
     return redirect(url)
 
 
+@api_view(["POST"])
+@org_admin_required
+def remove_members(request, org_slug):
+    membership_ids = request.POST.getlist("membership_ids")
+    base_url = reverse("organization:home", args=(org_slug,))
+    query_params = urlencode({"active_tab": "members"})
+    redirect_url = f"{base_url}?{query_params}"
+
+    if str(request.org_membership.id) in membership_ids:
+        messages.error(request, message=gettext("You cannot remove yourself from the organization."))
+        return redirect(redirect_url)
+
+    if membership_ids:
+        UserOrganizationMembership.objects.filter(pk__in=membership_ids, organization__slug=org_slug).delete()
+        messages.success(request, message=gettext("Selected members have been removed from the organization."))
+
+    return redirect(redirect_url)
+
+
 @login_required
 def accept_invite(request, org_slug, invite_id):
     get_object_or_404(UserOrganizationMembership, invite_id=invite_id)
@@ -100,6 +121,7 @@ def add_credential_view(request, org_slug):
     return redirect("organization:home", org_slug)
 
 
+@require_GET
 @org_admin_required
 def org_member_table(request, org_slug=None):
     members = UserOrganizationMembership.objects.filter(organization=request.org)
