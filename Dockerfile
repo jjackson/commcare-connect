@@ -5,7 +5,8 @@ RUN apt-get update \
 COPY ./requirements /requirements
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /wheels \
     -r /requirements/base.txt \
-    -r /requirements/production.txt
+    -r /requirements/production.txt \
+    -r /requirements/labs.txt
 
 FROM node:18-bullseye AS build-node
 #RUN apt-get update && apt-get -y install curl
@@ -39,6 +40,7 @@ COPY ./requirements /requirements
 RUN pip install --no-index --find-links=/wheels \
     -r /requirements/base.txt \
     -r /requirements/production.txt \
+    -r /requirements/labs.txt \
     && rm -rf /wheels \
     && rm -rf /root/.cache/pip/*
 
