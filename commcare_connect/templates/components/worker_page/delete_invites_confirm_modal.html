@@ -28,7 +28,7 @@
         </div>
 
         <div class="flex justify-end gap-2 pt-4">
-            <button id="ga-delete-invites-cancel-btn" type="button" class="button button-md outline-style" @click="{{ modal_name }} = false">
+            <button type="button" class="ga-delete-invites-cancel-btn button button-md outline-style" @click="{{ modal_name }} = false">
                 {% trans 'Cancel' %}
             </button>
             <form hx-post="{% url 'opportunity:delete_user_invites' org_slug=request.org.slug opp_id=opportunity.pk %}"
