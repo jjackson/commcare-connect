@@ -1,5 +1,16 @@
 {% extends 'program/program_base.html' %}
 {% load i18n %}
+{% load static %}
+
+{% block css %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'bundles/css/tomselect.css' %}">
+{% endblock %}
+
+{% block javascript %}
+  {{ block.super }}
+  <script src="{% static 'bundles/js/tomselect-bundle.js' %}" defer></script>
+{% endblock javascript %}
 
 {% block inner %}
 <div x-data="{showProgramEditModal: false}">
@@ -23,7 +34,7 @@
               <div x-cloak x-show="showInviteModal" x-transition.opacity class="modal-backdrop" >
                 <div @click.away="showInviteModal = false" x-transition class="modal">
                   <div class="header">
-                    <h2 class="title">{% translate "Invite Organizations" %}</h2>
+                    <h2 class="title">{% translate "Invite Organization" %}</h2>
                     <button @click="showInviteModal = false" class="button-icon" aria-label="Close">
                       <i class="fa-solid fa-xmark text-xl"></i>
                     </button>
@@ -32,7 +43,7 @@
                     {% csrf_token %}
                     <div class="flex flex-col gap-2 py-4">
                       <label for="organization" class="title-sm">{% translate "Organization" %}</label>
-                      <select id="organization" name="organization" required class="base-dropdown">
+                      <select id="organization" name="organization" required data-tomselect data-tomselect:no-remove-button>
                         {% for org in organizations %}
                           <option value="{{ org.slug }}">{{ org.name }}</option>
                         {% endfor %}
@@ -48,6 +59,7 @@
               </div>
             </div>
           </div>
+          {% with applications=program.programapplication_set.all %}
           <div class="flex justify-between xl:items-center items-start xl:flex-row flex-col gap-2">
             <!-- program info -->
             <div class="flex flex-col md:flex-row md:items-center items-start lg:gap-6 gap-3">
@@ -84,10 +96,13 @@
             </div>
 
             <!-- button -->
-            <button class="button button-md outline-style" @click="showOpp = !showOpp">
-              <span class="relative z-20" x-text="showOpp ? 'Hide Status' : 'View Status'"></span>
-              <i class="fa-solid text-xs" :class="showOpp ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
-            </button>
+
+            {% if applications %}
+              <button class="button button-md outline-style" @click="showOpp = !showOpp">
+                <span class="relative z-20" x-text="showOpp ? 'Hide Status' : 'View Status'"></span>
+                <i class="fa-solid text-xs" :class="showOpp ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+              </button>
+            {% endif %}
 
           </div>
           <!-- progress -->
@@ -118,7 +133,7 @@
           </div>
 
           <div class="flex flex-col gap-y-4" x-cloak x-show="showOpp">
-          {% for application in program.programapplication_set.all %}
+          {% for application in applications %}
             <div class="relative flex flex-col gap-5 p-6 bg-white rounded-xl border border-gray-200">
               <div class="flex justify-between w-full">
                 <div class="flex flex-col gap-2 w-full">
@@ -180,6 +195,7 @@
             </div>
           {% endfor %}
           </div>
+          {% endwith %}
       </div>
     {% endfor %}
   </div>
