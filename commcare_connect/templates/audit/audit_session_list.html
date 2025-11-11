@@ -1,6 +1,12 @@
 {% extends 'base.html' %}
 {% load render_table from django_tables2 %}
 {% load i18n %}
+{% load static %}
+
+{% block css %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'django_tables2/themes/paleblue/css/screen.css' %}" />
+{% endblock css %}
 
 {% block content %}
 {% csrf_token %}
