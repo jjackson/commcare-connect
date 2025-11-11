@@ -1,0 +1,193 @@
+import django_tables2 as tables
+from django.urls import reverse
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+from django.utils.translation import gettext as _
+
+from commcare_connect.audit.experiment_models import AuditSessionRecord
+from commcare_connect.utils.tables import DMYTColumn, IndexColumn
+
+
+class AuditTable(tables.Table):
+    """Styled table for displaying experiment-based audit sessions."""
+
+    index = IndexColumn()
+
+    title = tables.Column(
+        verbose_name=_("Title"),
+        attrs={
+            "td": {
+                "class": "text-sm text-brand-deep-purple font-medium whitespace-normal break-words",
+            }
+        },
+    )
+
+    status = tables.Column(
+        verbose_name=_("Status"),
+        orderable=True,
+        attrs={"td": {"class": "whitespace-nowrap"}},
+    )
+
+    overall_result = tables.Column(
+        verbose_name=_("Result"),
+        orderable=True,
+        attrs={"td": {"class": "whitespace-nowrap"}},
+    )
+
+    visit_count = tables.Column(
+        verbose_name=_("Visits"),
+        accessor="visit_ids",
+        orderable=False,
+        attrs={"td": {"class": "text-sm text-gray-600 text-center"}},
+    )
+
+    progress = tables.Column(
+        verbose_name=_("Progress"),
+        accessor="visit_results",
+        orderable=False,
+        attrs={"td": {"class": "text-center"}},
+        empty_values=(),
+    )
+
+    date_created = DMYTColumn(
+        verbose_name=_("Created"),
+        attrs={"td": {"class": "text-sm text-gray-500 whitespace-nowrap"}},
+    )
+
+    actions = tables.Column(
+        verbose_name="",
+        orderable=False,
+        empty_values=(),
+        attrs={"td": {"class": "text-right whitespace-nowrap"}},
+    )
+
+    class Meta:
+        model = AuditSessionRecord
+        fields = (
+            "index",
+            "title",
+            "status",
+            "overall_result",
+            "visit_count",
+            "progress",
+            "date_created",
+            "actions",
+        )
+        sequence = fields
+        order_by = ("-date_created",)
+        attrs = {
+            "class": "base-table",
+        }
+        empty_text = _("No audit sessions yet. Create your first audit to get started.")
+
+    def render_title(self, value, record):
+        """Display title with optional tag and identifier details."""
+        if not value:
+            value = _("Untitled Audit")
+
+        tag = record.tag
+        subtitle_parts = []
+
+        if tag:
+            subtitle_parts.append(_("Tag: {tag}").format(tag=tag))
+
+        if record.opportunity_id:
+            subtitle_parts.append(_("Opportunity #{opp_id}").format(opp_id=record.opportunity_id))
+
+        subtitle = " · ".join(subtitle_parts)
+
+        if subtitle:
+            return format_html(
+                '<div class="flex flex-col">'
+                '<span class="text-sm font-semibold text-brand-deep-purple">{}</span>'
+                '<span class="text-xs text-gray-500">{}</span>'
+                "</div>",
+                value,
+                subtitle,
+            )
+
+        return value
+
+    def render_status(self, value, record):
+        """Render status as a badge."""
+        status_map = {
+            "completed": ("badge badge-sm bg-green-50 text-green-700", _("Completed")),
+            "in_progress": ("badge badge-sm bg-orange-50 text-orange-700", _("In Progress")),
+        }
+
+        badge_class, text = status_map.get(value, ("badge badge-sm bg-slate-100 text-slate-700", value or "-"))
+        return format_html('<span class="{}">{}</span>', badge_class, text)
+
+    def render_overall_result(self, value, record):
+        """Render overall result badge."""
+        if not value:
+            return "-"
+
+        value_lower = value.lower()
+        if value_lower == "pass":
+            badge_class = "badge badge-sm bg-green-50 text-green-700"
+            icon = '<i class="fa-solid fa-thumbs-up mr-1"></i>'
+            text = _("Pass")
+        elif value_lower == "fail":
+            badge_class = "badge badge-sm bg-red-50 text-red-700"
+            icon = '<i class="fa-solid fa-thumbs-down mr-1"></i>'
+            text = _("Fail")
+        else:
+            badge_class = "badge badge-sm bg-slate-100 text-slate-700"
+            icon = ""
+            text = value
+
+        return format_html('<span class="{}">{}{}</span>', badge_class, mark_safe(icon), text)
+
+    def render_visit_count(self, value, record):
+        """Display visit count."""
+        count = len(value or [])
+        return format_html('<span class="text-sm font-medium text-brand-indigo">{}</span>', count)
+
+    def render_progress(self, value, record):
+        """Display progress percentage based on assessments."""
+        visit_ids = record.visit_ids or []
+        visit_results = record.visit_results or {}
+
+        total_visits = len(visit_ids)
+        audited_count = 0
+
+        for visit_id in visit_ids:
+            visit_key = str(visit_id)
+            visit_data = visit_results.get(visit_key)
+            if visit_data and visit_data.get("result") in {"pass", "fail"}:
+                audited_count += 1
+
+        percentage = round((audited_count / total_visits) * 100, 1) if total_visits else 0
+
+        percentage_str = f"{percentage:.1f}"
+
+        return format_html(
+            '<div class="text-center">'
+            '<div class="text-sm font-medium text-brand-deep-purple">{}%</div>'
+            '<div class="text-xs text-gray-500">({} of {})</div>'
+            "</div>",
+            percentage_str,
+            audited_count,
+            total_visits,
+        )
+
+    def render_actions(self, record):
+        """Render action buttons for the audit session."""
+        session_url = reverse("audit:session_detail", kwargs={"pk": record.pk})
+
+        button_label = _("Review") if record.status == "completed" else _("Resume")
+        bulk_url = reverse("audit:bulk_assessment", kwargs={"pk": record.pk})
+        return format_html(
+            '<div class="flex gap-2 justify-end">'
+            '<a href="{}" class="button button-sm outline-style">'
+            '<i class="fa-solid fa-layer-group mr-1"></i>{}</a>'
+            '<a href="{}" class="button button-sm primary-light">'
+            '<i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>{}'
+            "</a>"
+            "</div>",
+            bulk_url,
+            _("Bulk"),
+            session_url,
+            button_label,
+        )

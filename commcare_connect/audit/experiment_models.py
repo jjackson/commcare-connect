@@ -127,7 +127,13 @@ class AuditSessionRecord(ExperimentRecord):
         return self.data.get("visit_results", {}).get(str(visit_id))
 
     def set_visit_result(
-        self, visit_id: int, xform_id: str, result: str, notes: str, user_id: int, opportunity_id: int
+        self,
+        visit_id: int,
+        xform_id: str,
+        result: str | None,
+        notes: str,
+        user_id: int,
+        opportunity_id: int,
     ):
         """
         Set/update result for a visit using UserVisit ID as key.
@@ -155,6 +161,19 @@ class AuditSessionRecord(ExperimentRecord):
             "assessments": existing.get("assessments", {}),
         }
 
+    def clear_visit_result(self, visit_id: int):
+        """
+        Clear the stored result for a visit without losing assessments.
+
+        Args:
+            visit_id: UserVisit ID from Connect
+        """
+        visit_key = str(visit_id)
+        visit_data = self.data.get("visit_results", {}).get(visit_key)
+        if visit_data:
+            visit_data["result"] = None
+            visit_data["notes"] = ""
+
     def get_assessments(self, visit_id: int) -> dict:
         """
         Get all assessments for a visit by UserVisit ID.
@@ -167,7 +186,7 @@ class AuditSessionRecord(ExperimentRecord):
         """
         return self.data.get("visit_results", {}).get(str(visit_id), {}).get("assessments", {})
 
-    def set_assessment(self, visit_id: int, blob_id: str, question_id: str, result: str, notes: str):
+    def set_assessment(self, visit_id: int, blob_id: str, question_id: str, result: str | None, notes: str):
         """
         Set/update assessment for an image.
 
@@ -196,6 +215,19 @@ class AuditSessionRecord(ExperimentRecord):
             "result": result,
             "notes": notes,
         }
+
+    def clear_assessment(self, visit_id: int, blob_id: str):
+        """
+        Remove an assessment entry for an image.
+
+        Args:
+            visit_id: UserVisit ID from Connect
+            blob_id: Blob ID
+        """
+        visit_key = str(visit_id)
+        visit_result = self.data.get("visit_results", {}).get(visit_key)
+        if visit_result and "assessments" in visit_result:
+            visit_result["assessments"].pop(blob_id, None)
 
     def get_progress_stats(self) -> dict:
         """
