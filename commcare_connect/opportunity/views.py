@@ -1302,7 +1302,7 @@ def delete_user_invites(request, org_slug, opp_id):
         name="user_invites_deleted",
         params={
             GA_CUSTOM_DIMENSIONS.TOTAL.value: len(invite_ids),
-            GA_CUSTOM_DIMENSIONS.SUCCESS.value: deleted_count,
+            GA_CUSTOM_DIMENSIONS.SUCCESS_COUNT.value: deleted_count,
         },
     )
     send_event_to_ga(request, event)
@@ -1365,7 +1365,7 @@ def resend_user_invites(request, org_slug, opp_id):
         name="user_invites_resent",
         params={
             GA_CUSTOM_DIMENSIONS.TOTAL.value: len(invite_ids),
-            GA_CUSTOM_DIMENSIONS.SUCCESS.value: resent_count,
+            GA_CUSTOM_DIMENSIONS.SUCCESS_COUNT.value: resent_count,
         },
     )
     send_event_to_ga(request, event)

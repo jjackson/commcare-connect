@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class GA_CUSTOM_DIMENSIONS(Enum):
     IS_DIMAGI = "isDimagi"
     TOTAL = "total"
-    SUCCESS = "success"
+    SUCCESS_COUNT = "success_count"
 
 
 @dataclass
