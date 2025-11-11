@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ("opportunity", "0084_merge_20251028_1339"),
+        ("opportunity", "0083_credentialconfiguration"),
     ]
 
     operations = [

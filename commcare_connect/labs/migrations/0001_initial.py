@@ -11,8 +11,8 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('organization', '0007_remove_userorganizationmembership_accepted'),
-        ('program', '0002_alter_program_description'),
-        ('opportunity', '0083_alter_uservisit_location'),
+        ('program', '0002_update_delivery_type'),
+        ('opportunity', '0083_credentialconfiguration'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

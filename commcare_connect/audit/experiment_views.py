@@ -534,14 +534,11 @@ class ExperimentOpportunitySearchAPIView(LoginRequiredMixin, View):
                 {
                     "id": opp.get("id"),
                     "name": opp.get("name"),
-                    "description": opp.get("description", ""),
-                    "organization_name": opp.get("organization_name", ""),
-                    "program_name": opp.get("program_name", ""),
-                    "visit_count": opp.get("total_visits", 0),
-                    "start_date": opp.get("start_date"),
+                    "organization_name": opp.get("organization", ""),  # API returns slug only
+                    "program_name": "",  # API returns program ID only, not name
+                    "visit_count": opp.get("visit_count", 0),
                     "end_date": opp.get("end_date"),
-                    "active": opp.get("active", True),
-                    "is_test": opp.get("is_test", False),
+                    "active": opp.get("is_active", True),  # API field is is_active
                 }
                 for opp in opportunities
             ]
