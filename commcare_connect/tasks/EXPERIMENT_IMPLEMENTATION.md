@@ -4,6 +4,8 @@
 
 Successfully converted the tasks app from Django ORM models to the ExperimentRecord-based labs pattern, aligning with the audit and solicitations implementations. This provides OAuth-based API access and makes tasks a proper labs experiment.
 
+**Key Design Decision:** Username is the primary unique identifier for users in Connect, not user_id. The Connect data export API (`/export/opportunity/<id>/user_data/`) provides username but not user_id, so all task operations use username as the main identifier.
+
 ## What Was Implemented
 
 ### 1. Proxy Models (`tasks/experiment_models.py`)
@@ -25,6 +27,7 @@ Created TaskRecord proxy model for convenient access to ExperimentRecord data:
 
 ```json
 {
+  "username": "user123",
   "user_id": 123,
   "opportunity_id": 456,
   "task_type": "warning",
@@ -73,11 +76,13 @@ Main data access class that wraps ExperimentRecordAPI and integrates with Connec
 
 **TaskDataAccess class:**
 
-- Constructor: `__init__(user=None, request=None)` - for OAuth token extraction
+- Constructor: `__init__(user=None, request=None, access_token=None)` - for OAuth token extraction
 - Task CRUD:
-  - `create_task(user_id, opportunity_id, created_by_id, **kwargs)` → TaskRecord
+  - `create_task(username, opportunity_id, created_by_id, user_id=None, **kwargs)` → TaskRecord
+    - **username** is the primary identifier (always available from Connect API)
+    - **user_id** is optional (not available from /export/ endpoints)
   - `get_task(task_id)` → TaskRecord | None
-  - `get_tasks(user_id, opportunity_id, status, assigned_to_id)` → QuerySet
+  - `get_tasks(username, user_id, opportunity_id, status, assigned_to_id)` → QuerySet
   - `save_task(task_record)` → TaskRecord
 - Task operations:
   - `add_event(task, event_type, actor, actor_user_id, description, **kwargs)`
@@ -85,10 +90,12 @@ Main data access class that wraps ExperimentRecordAPI and integrates with Connec
   - `add_ai_session(task, ocs_session_id, **kwargs)`
   - `update_status(task, new_status, actor, actor_user_id)`
   - `assign_task(task, assigned_to_id, actor, actor_user_id)`
-- Connect API integration (via ConnectAPIFacade):
+- Connect API integration (via OAuth httpx client):
   - `search_opportunities(query, limit)` → list
   - `get_opportunity_details(opportunity_id)` → dict
-  - `get_field_workers(opportunity_id)` → list
+  - `get_users_from_opportunity(opportunity_id)` → list[dict]
+    - Uses `/export/opportunity/<id>/user_data/` endpoint
+    - Returns usernames (user_id not available from this API)
 
 ### 3. Views (`tasks/views.py`)
 

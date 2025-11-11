@@ -402,113 +402,6 @@
     </div>
   </div>
 
-  <!-- Initiate AI Assistant Modal -->
-  <div x-show="showAI"
-       x-transition:enter="transition ease-out duration-200"
-       x-transition:enter-start="opacity-0"
-       x-transition:enter-end="opacity-100"
-       @click.away="showAI = false"
-       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-    <div @click.stop class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold text-gray-900">Initiate AI Assistant</h3>
-        <button @click="showAI = false" class="text-gray-400 hover:text-gray-600">
-          <i class="fa-solid fa-times"></i>
-        </button>
-      </div>
-      <p class="text-sm text-gray-600 mb-4">Configure and initiate an AI assistant conversation with {{ task.flw_name }}.</p>
-
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-2">
-          Participant ID (UUID)
-          <span class="text-red-500">*</span>
-        </label>
-        <input type="text"
-               x-model="aiParams.identifier"
-               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-               placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000">
-        <p class="text-xs text-gray-500 mt-1">Unique identifier for the participant (CommCare Connect UUID)</p>
-      </div>
-
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-2">
-          Bot ID (Experiment UUID)
-          <span class="text-red-500">*</span>
-        </label>
-        <input type="text"
-               x-model="aiParams.experiment"
-               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-               placeholder="e.g., 123e4567-e89b-12d3-a456-426614174000">
-        <p class="text-xs text-gray-500 mt-1">The experiment/bot ID to use from OCS</p>
-      </div>
-
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-2">
-          Platform
-          <span class="text-red-500">*</span>
-        </label>
-        <select x-model="aiParams.platform"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent">
-          <option value="commcare_connect">CommCare Connect</option>
-          <option value="whatsapp">WhatsApp</option>
-          <option value="telegram">Telegram</option>
-          <option value="api">API</option>
-          <option value="web">Web</option>
-          <option value="slack">Slack</option>
-          <option value="facebook">Facebook Messenger</option>
-          <option value="sureadhere">SureAdhere</option>
-        </select>
-      </div>
-
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-2">
-          Prompt Instructions (for AI only)
-          <span class="text-red-500">*</span>
-        </label>
-        <textarea
-          x-model="aiParams.prompt_text"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
-          rows="4"
-          placeholder="Instructions for the bot - the user won't see this text..."></textarea>
-        <p class="text-xs text-gray-500 mt-1">These instructions are sent to the LLM - the end user never sees this</p>
-      </div>
-
-      <div class="mb-4">
-        <label class="flex items-center">
-          <input type="checkbox"
-                 x-model="aiParams.start_new_session"
-                 class="rounded border-gray-300 text-green-600 focus:ring-green-500">
-          <span class="ml-2 text-sm text-gray-700">Start new session (ignore existing conversation)</span>
-        </label>
-      </div>
-
-      <!-- Progress Feedback -->
-      <div x-show="aiProgress.show" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-        <div class="flex items-start gap-3">
-          <div class="flex-shrink-0 mt-0.5">
-            <i class="fa-solid fa-spinner fa-spin text-blue-600" x-show="aiProgress.status === 'triggering' || aiProgress.status === 'polling'"></i>
-            <i class="fa-solid fa-check-circle text-green-600" x-show="aiProgress.status === 'success'"></i>
-            <i class="fa-solid fa-exclamation-triangle text-yellow-600" x-show="aiProgress.status === 'partial'"></i>
-          </div>
-          <div class="flex-1 text-sm">
-            <div class="font-medium text-gray-900" x-text="aiProgress.message"></div>
-            <div x-show="aiProgress.detail" class="text-xs text-gray-600 mt-1" x-text="aiProgress.detail"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="flex gap-3">
-        <button @click="cancelAI()" :disabled="aiLoading && aiProgress.status === 'triggering'" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
-          <span x-text="aiLoading ? 'Close' : 'Cancel'"></span>
-        </button>
-        <button @click="initiateAI()" :disabled="aiLoading" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
-          <i class="fa-solid mr-2" :class="aiLoading ? 'fa-spinner fa-spin' : 'fa-robot'"></i>
-          <span x-text="aiLoading ? 'Initiating...' : 'Initiate AI'"></span>
-        </button>
-      </div>
-    </div>
-  </div>
-
   <!-- Assign Learning Modal -->
   <div x-show="showLearning"
        x-transition:enter="transition ease-out duration-200"
@@ -643,6 +536,113 @@
     </div>
   </div>
 
+  <!-- Initiate AI Assistant Modal -->
+  <div x-show="showAI"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       @click.away="showAI = false"
+       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div @click.stop class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">Initiate AI Assistant</h3>
+        <button @click="showAI = false" class="text-gray-400 hover:text-gray-600">
+          <i class="fa-solid fa-times"></i>
+        </button>
+      </div>
+      <p class="text-sm text-gray-600 mb-4">Configure and initiate an AI assistant conversation with {{ task.flw_name }}.</p>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+          Participant ID (UUID)
+          <span class="text-red-500">*</span>
+        </label>
+        <input type="text"
+               x-model="aiParams.identifier"
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+               placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000">
+        <p class="text-xs text-gray-500 mt-1">Unique identifier for the participant (CommCare Connect UUID)</p>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+          Bot ID (Experiment UUID)
+          <span class="text-red-500">*</span>
+        </label>
+        <input type="text"
+               x-model="aiParams.experiment"
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+               placeholder="e.g., 123e4567-e89b-12d3-a456-426614174000">
+        <p class="text-xs text-gray-500 mt-1">The experiment/bot ID to use from OCS</p>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+          Platform
+          <span class="text-red-500">*</span>
+        </label>
+        <select x-model="aiParams.platform"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent">
+          <option value="commcare_connect">CommCare Connect</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="telegram">Telegram</option>
+          <option value="api">API</option>
+          <option value="web">Web</option>
+          <option value="slack">Slack</option>
+          <option value="facebook">Facebook Messenger</option>
+          <option value="sureadhere">SureAdhere</option>
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-2">
+          Prompt Instructions (for AI only)
+          <span class="text-red-500">*</span>
+        </label>
+        <textarea
+          x-model="aiParams.prompt_text"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+          rows="4"
+          placeholder="Instructions for the bot - the user won't see this text..."></textarea>
+        <p class="text-xs text-gray-500 mt-1">These instructions are sent to the LLM - the end user never sees this</p>
+      </div>
+
+      <div class="mb-4">
+        <label class="flex items-center">
+          <input type="checkbox"
+                 x-model="aiParams.start_new_session"
+                 class="rounded border-gray-300 text-green-600 focus:ring-green-500">
+          <span class="ml-2 text-sm text-gray-700">Start new session (ignore existing conversation)</span>
+        </label>
+      </div>
+
+      <!-- Progress Feedback -->
+      <div x-show="aiProgress.show" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+        <div class="flex items-start gap-3">
+          <div class="flex-shrink-0 mt-0.5">
+            <i class="fa-solid fa-spinner fa-spin text-blue-600" x-show="aiProgress.status === 'triggering' || aiProgress.status === 'polling'"></i>
+            <i class="fa-solid fa-check-circle text-green-600" x-show="aiProgress.status === 'success'"></i>
+            <i class="fa-solid fa-exclamation-triangle text-yellow-600" x-show="aiProgress.status === 'partial'"></i>
+          </div>
+          <div class="flex-1 text-sm">
+            <div class="font-medium text-gray-900" x-text="aiProgress.message"></div>
+            <div x-show="aiProgress.detail" class="text-xs text-gray-600 mt-1" x-text="aiProgress.detail"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button @click="cancelAI()" :disabled="aiLoading && aiProgress.status === 'triggering'" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
+          <span x-text="aiLoading ? 'Close' : 'Cancel'"></span>
+        </button>
+        <button @click="initiateAI()" :disabled="aiLoading" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
+          <i class="fa-solid mr-2" :class="aiLoading ? 'fa-spinner fa-spin' : 'fa-robot'"></i>
+          <span x-text="aiLoading ? 'Initiating...' : 'Initiate AI'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div x-show="showToast"
        x-transition:enter="transition ease-out duration-300 transform"
@@ -716,12 +716,6 @@
         this.showAssign = true;
       },
 
-      showAIModal() {
-        // Pre-populate with the username for this task's user
-        this.aiParams.identifier = '{{ task.flw_username }}';
-        this.showAI = true;
-      },
-
       showLearningModal() {
         this.selectedModules = [];
         this.learningNote = '';
@@ -733,10 +727,10 @@
         this.showResolve = true;
       },
 
-      confirmAssign() {
-        this.showToastMessage('Assigned to ' + this.assignTo);
-        this.showAssign = false;
-        // In real implementation, would make API call
+      showAIModal() {
+        // Pre-populate with the username for this task's user
+        this.aiParams.identifier = '{{ task.flw_username }}';
+        this.showAI = true;
       },
 
       cancelAI() {
@@ -749,48 +743,26 @@
         this.aiProgress.show = false;
       },
 
-      async pollForSessionId(taskId, taskAiSessionId, maxAttempts = 10) {
-        let attempts = 0;
+      confirmAssign() {
+        this.showToastMessage('Assigned to ' + this.assignTo);
+        this.showAssign = false;
+        // In real implementation, would make API call
+      },
 
-        return new Promise((resolve) => {
-          this.aiPollingInterval = setInterval(async () => {
-            attempts++;
+      assignLearning() {
+        if (this.selectedModules.length === 0) {
+          this.showToastMessage('Please select at least one module');
+          return;
+        }
+        this.showToastMessage(`Assigned ${this.selectedModules.length} learning module(s)`);
+        this.showLearning = false;
+        // In real implementation, would make API call
+      },
 
-            this.aiProgress.status = 'polling';
-            this.aiProgress.message = 'Retrieving session ID...';
-            this.aiProgress.detail = `Attempt ${attempts} of ${maxAttempts}`;
-
-            try {
-              const response = await fetch(`/tasks/${taskId}/ai/sessions/?session_id=${taskAiSessionId}`, {
-                method: 'GET',
-                headers: {
-                  'X-CSRFToken': getCookie('csrftoken')
-                }
-              });
-
-              if (response.ok) {
-                const data = await response.json();
-                if (data.sessions && data.sessions.length > 0) {
-                  const latestSession = data.sessions[0];
-                  if (latestSession.ocs_session_id) {
-                    clearInterval(this.aiPollingInterval);
-                    this.aiPollingInterval = null;
-                    resolve({ success: true, sessionId: latestSession.ocs_session_id });
-                    return;
-                  }
-                }
-              }
-            } catch (error) {
-              console.error('Error polling for session:', error);
-            }
-
-            if (attempts >= maxAttempts) {
-              clearInterval(this.aiPollingInterval);
-              this.aiPollingInterval = null;
-              resolve({ success: false });
-            }
-          }, 1000); // Poll every 1 second
-        });
+      confirmResolve() {
+        this.showToastMessage('Action marked as resolved');
+        this.showResolve = false;
+        // In real implementation, would update status
       },
 
       async initiateAI() {
@@ -821,43 +793,12 @@
           if (response.ok && data.success) {
             this.aiProgress.status = 'success';
             this.aiProgress.message = 'Conversation triggered successfully!';
-            this.aiProgress.detail = 'Now retrieving session ID...';
+            this.aiProgress.detail = data.message || 'AI conversation has been initiated';
 
-            // If we got session_id immediately, great!
-            if (data.session_id) {
-              this.aiProgress.status = 'success';
-              this.aiProgress.message = 'Session created successfully!';
-              this.aiProgress.detail = `Session ID: ${data.session_id}`;
-
-              setTimeout(() => {
-                this.showToastMessage('AI Assistant conversation initiated successfully!');
-                window.location.reload();
-              }, 2000);
-            } else {
-              // Poll for session_id using the specific TaskAISession ID
-              const result = await this.pollForSessionId({{ task.id }}, data.task_ai_session_id, 10);
-
-              if (result.success) {
-                this.aiProgress.status = 'success';
-                this.aiProgress.message = 'Session created successfully!';
-                this.aiProgress.detail = `Session ID: ${result.sessionId}`;
-
-                setTimeout(() => {
-                  this.showToastMessage('AI Assistant conversation initiated successfully!');
-                  window.location.reload();
-                }, 2000);
-              } else {
-                this.aiProgress.status = 'partial';
-                this.aiProgress.message = 'Conversation initiated, but session ID not yet available';
-                this.aiProgress.detail = 'The session may still be processing. Check back in a moment.';
-                this.aiLoading = false;
-
-                setTimeout(() => {
-                  this.showToastMessage('AI conversation initiated. Session ID pending.');
-                  window.location.reload();
-                }, 3000);
-              }
-            }
+            setTimeout(() => {
+              this.showToastMessage('AI conversation initiated. Session ID pending.');
+              window.location.reload();
+            }, 3000);
           } else {
             this.aiLoading = false;
             this.aiProgress.show = false;
@@ -871,22 +812,6 @@
           this.aiProgress.show = false;
           this.showToastMessage('Failed to initiate AI. Check console for details.');
         }
-      },
-
-      assignLearning() {
-        if (this.selectedModules.length === 0) {
-          this.showToastMessage('Please select at least one module');
-          return;
-        }
-        this.showToastMessage(`Assigned ${this.selectedModules.length} learning module(s)`);
-        this.showLearning = false;
-        // In real implementation, would make API call
-      },
-
-      confirmResolve() {
-        this.showToastMessage('Action marked as resolved');
-        this.showResolve = false;
-        // In real implementation, would update status
       },
 
       postComment() {

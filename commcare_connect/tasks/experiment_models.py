@@ -17,15 +17,13 @@ class TaskRecord(ExperimentRecord):
         proxy = True
 
     # Properties for convenient access to task data
-    @property
-    def user_id(self):
-        """ID of the FLW user this task is about."""
-        return self.data.get("user_id")
+    # Note: user_id and opportunity_id are database fields on ExperimentRecord parent model
+    # They are set when creating the record and used for indexing/querying
 
     @property
-    def opportunity_id(self):
-        """ID of the opportunity this task is associated with."""
-        return self.data.get("opportunity_id")
+    def username(self):
+        """Username of the FLW this task is about (primary identifier in Connect)."""
+        return self.data.get("username")
 
     @property
     def task_type(self):

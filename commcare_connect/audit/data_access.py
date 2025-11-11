@@ -39,11 +39,14 @@ class AuditDataAccess:
             access_token: OAuth token for Connect production APIs
             request: HttpRequest object (for extracting token in labs mode)
         """
-        # Get OAuth token
+        # Get OAuth token from labs session
         if not access_token and request:
-            from commcare_connect.audit.helpers import get_connect_oauth_token
+            from django.utils import timezone
 
-            access_token = get_connect_oauth_token(request.user, request)
+            labs_oauth = request.session.get("labs_oauth", {})
+            expires_at = labs_oauth.get("expires_at", 0)
+            if timezone.now().timestamp() < expires_at:
+                access_token = labs_oauth.get("access_token")
 
         if not access_token:
             raise ValueError("OAuth access token required for audit data access")
@@ -322,9 +325,12 @@ class AuditDataAccess:
                 df = df[df["visit_date"].dt.date <= pd.to_datetime(end_date).date()]
 
         elif audit_type == "last_n_per_flw":
+            # TODO: Check with team whether to use user_id or username as primary identifier
+            # Currently using username since it's unique and always populated in the API
+            # If we switch to user_id, we need to ensure it's populated in the export API
             count_per_flw = criteria.get("count_per_flw", 10)
             df = df.sort_values("visit_date", ascending=False)
-            df = df.groupby("user_id").head(count_per_flw)
+            df = df.groupby("username", dropna=False).head(count_per_flw)
 
         elif audit_type == "last_n_per_opp":
             count_per_opp = criteria.get("count_per_opp", 10)
