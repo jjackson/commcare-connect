@@ -327,7 +327,6 @@ class TestPaymentInvoiceForm:
         form = PaymentInvoiceForm(
             opportunity=valid_opportunity,
             data={
-                "invoice_number": "INV-001",
                 "date": "2025-11-06",
                 "usd_currency": False,
                 "local_amount": 100.0,
@@ -340,7 +339,7 @@ class TestPaymentInvoiceForm:
         )
         assert form.is_valid()
         invoice = form.save()
-        assert invoice.invoice_number == "INV-001"
+        assert invoice.invoice_number
         assert invoice.amount == 100.0
 
     def test_non_service_delivery_form(self, valid_opportunity):

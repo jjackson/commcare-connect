@@ -1,5 +1,6 @@
 import datetime
 import json
+import uuid
 from decimal import Decimal
 
 from crispy_forms.helper import FormHelper
@@ -1095,13 +1096,18 @@ class PaymentInvoiceForm(forms.ModelForm):
     )
     invoice_type = forms.CharField(
         required=True,
-        label="Invoice Type",
+        label=_("Invoice Type"),
         widget=forms.Select(
             choices=[
                 ("service_delivery", _("Service Delivery")),
                 ("custom", _("Custom")),
             ],
         ),
+    )
+    invoice_number = forms.CharField(
+        label=_("Invoice ID"),
+        required=False,
+        widget=forms.TextInput(attrs={"placeholder": _("Auto-generated on save")}),
     )
 
     class Meta:
@@ -1114,12 +1120,10 @@ class PaymentInvoiceForm(forms.ModelForm):
             "notes": forms.Textarea(
                 attrs={"rows": 3, "placeholder": _("Describe service delivery details, references, or notes...")}
             ),
-            "invoice_number": forms.TextInput(attrs={"placeholder": _("Auto-generated on save")}),
             "title": forms.TextInput(attrs={"placeholder": _("e.g. October Services")}),
         }
         labels = {
             "title": _("Invoice title"),
-            "invoice_number": _("Invoice ID"),
             "date": _("Generation date"),
             "notes": _("Service Delivery Notes"),
         }
@@ -1129,6 +1133,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         self.opportunity = kwargs.pop("opportunity")
         super().__init__(*args, **kwargs)
 
+        self.fields["invoice_number"].initial = self.generate_invoice_number()
         self.fields["date"].initial = str(datetime.date.today())
 
         self.helper = FormHelper(self)
@@ -1193,8 +1198,15 @@ class PaymentInvoiceForm(forms.ModelForm):
         )
         self.helper.form_tag = False
 
+    def generate_invoice_number(self):
+        return uuid.uuid4().hex[:10].upper()
+
     def clean_invoice_number(self):
         invoice_number = self.cleaned_data["invoice_number"]
+
+        if not invoice_number:
+            invoice_number = self.generate_invoice_number()
+
         if PaymentInvoice.objects.filter(opportunity=self.opportunity, invoice_number=invoice_number).exists():
             raise ValidationError(
                 f'Invoice "{invoice_number}" already exists',
