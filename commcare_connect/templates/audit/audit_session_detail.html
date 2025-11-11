@@ -19,12 +19,6 @@
            class="px-2 py-1 text-xs bg-white/20 hover:bg-white/30 text-white rounded transition-colors">
           <i class="fa-solid fa-images mr-1"></i>Bulk Assessment
         </a>
-        {% if session.status == 'completed' %}
-        <a href="{% url 'audit:session_export' session.pk %}"
-           class="px-2 py-1 text-xs bg-white/20 hover:bg-white/30 text-white rounded transition-colors">
-          Export
-        </a>
-        {% endif %}
       </div>
     </div>
     <!-- Visit Counter Card -->
@@ -291,10 +285,10 @@
             <!-- Image -->
             <div class="relative bg-gray-100"
                  :style="`height: ${widgetSize}px`">
-              <img src="{% url 'audit:image' image.blob_id %}"
+              <img src="{% url 'audit:audit_image' image.blob_id %}"
                    alt="Assessment image"
                    class="w-full h-full object-contain cursor-pointer"
-                   @click="openImageModal('{% url 'audit:image' image.blob_id %}')">
+                   @click="openImageModal('{% url 'audit:audit_image' image.blob_id %}')">
 
               <!-- Status Badge -->
               <div class="absolute top-2 right-2 flex gap-1">
@@ -772,7 +766,7 @@ function auditInterface() {
           formData.append('image_notes', imageNotesJson);
           formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
-        const response = await fetch('{% url "audit:result_update" session.id %}', {
+        const response = await fetch('{% url "audit:audit_result_update" session.id %}', {
           method: 'POST',
           body: formData
         });
@@ -942,7 +936,7 @@ function auditInterface() {
                 formData.append('kpi_notes', this.kpiNotes);
                 formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
-                const response = await fetch('{% url "audit:session_complete" session.id %}', {
+        const response = await fetch('{% url "audit:audit_complete" session.id %}', {
                   method: 'POST',
                   body: formData
                 });
@@ -976,7 +970,7 @@ function auditInterface() {
                 const formData = new FormData();
                 formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
-                const response = await fetch('{% url "audit:session_uncomplete" session.id %}', {
+        const response = await fetch('{% url "audit:audit_uncomplete" session.id %}', {
                   method: 'POST',
                   body: formData
                 });

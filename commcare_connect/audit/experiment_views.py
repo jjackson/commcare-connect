@@ -9,32 +9,19 @@ Templates are reused from the existing audit views for consistency.
 """
 
 import json
+from collections import defaultdict
 
-import django_tables2 as tables
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import FileResponse, HttpResponse, JsonResponse
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.generic import DetailView, TemplateView, View
 from django_tables2 import SingleTableView
 
 from commcare_connect.audit.data_access import AuditDataAccess
 from commcare_connect.audit.experiment_models import AuditSessionRecord
-
-
-class AuditTable(tables.Table):
-    """Simple table for displaying audit sessions"""
-
-    id = tables.Column(verbose_name="ID")
-    title = tables.Column(verbose_name="Title")
-    status = tables.Column(verbose_name="Status")
-    date_created = tables.DateTimeColumn(verbose_name="Created", format="Y-m-d H:i")
-
-    class Meta:
-        model = AuditSessionRecord
-        template_name = "django_tables2/bootstrap4.html"
-        fields = ("id", "title", "status", "date_created")
-        attrs = {"class": "table table-striped"}
+from commcare_connect.audit.tables import AuditTable
 
 
 class ExperimentAuditCreateView(LoginRequiredMixin, TemplateView):
@@ -210,6 +197,32 @@ class ExperimentAuditDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
+class ExperimentBulkAssessmentView(LoginRequiredMixin, DetailView):
+    """Bulk assessment interface for experiment-based audit sessions."""
+
+    model = AuditSessionRecord
+    template_name = "audit/bulk_assessment.html"
+    context_object_name = "session"
+
+    def get_queryset(self):
+        return AuditSessionRecord.objects.filter(experiment="audit", type="AuditSession")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        question_filter = self.request.GET.get("question_id", "").strip()
+        status_filter = self.request.GET.get("status", "all").strip().lower() or "all"
+
+        context.update(
+            {
+                "selected_question_id": question_filter,
+                "selected_status": status_filter,
+                "bulk_data_url": reverse("audit:bulk_assessment_data", kwargs={"session_id": context["session"].pk}),
+            }
+        )
+
+        return context
+
+
 class ExperimentAuditResultUpdateView(LoginRequiredMixin, View):
     """AJAX endpoint for updating audit results (experiment-based)"""
 
@@ -230,7 +243,7 @@ class ExperimentAuditResultUpdateView(LoginRequiredMixin, View):
                 auto_advance = request.POST.get("auto_advance", "true") == "true"
                 current_index = int(request.POST.get("current_index", 0))
 
-                if not visit_id or result not in ["pass", "fail"]:
+                if result not in ["pass", "fail", "", None]:
                     return JsonResponse({"error": "Invalid data"}, status=400)
 
                 # Get xform_id and other data from visit
@@ -238,15 +251,18 @@ class ExperimentAuditResultUpdateView(LoginRequiredMixin, View):
                 if not visit_data:
                     return JsonResponse({"error": "Visit not found"}, status=404)
 
-                # Update visit result in session
-                session.set_visit_result(
-                    visit_id=visit_id,
-                    xform_id=visit_data["xform_id"],
-                    result=result,
-                    notes=notes,
-                    user_id=visit_data.get("user_id", 0),
-                    opportunity_id=visit_data.get("opportunity_id", session.opportunity_id),
-                )
+                if result in ["pass", "fail"]:
+                    # Update visit result in session
+                    session.set_visit_result(
+                        visit_id=visit_id,
+                        xform_id=visit_data["xform_id"],
+                        result=result,
+                        notes=notes,
+                        user_id=visit_data.get("user_id", 0),
+                        opportunity_id=visit_data.get("opportunity_id", session.opportunity_id),
+                    )
+                else:
+                    session.clear_visit_result(visit_id=visit_id)
 
                 # Save session
                 session = data_access.save_audit_session(session)
@@ -262,6 +278,7 @@ class ExperimentAuditResultUpdateView(LoginRequiredMixin, View):
                 return JsonResponse(
                     {
                         "success": True,
+                        "result": result if result else "",
                         "progress_percentage": progress_percentage,
                         "audited_count": audited_count,
                         "total_visits": total_visits,
@@ -278,6 +295,131 @@ class ExperimentAuditResultUpdateView(LoginRequiredMixin, View):
 
             print(f"[ERROR] {traceback.format_exc()}")
             return JsonResponse({"error": str(e)}, status=500)
+
+
+class ExperimentAuditVisitDataView(LoginRequiredMixin, View):
+    """Fetch visit data for dynamic navigation within the audit detail view."""
+
+    def get(self, request, session_id):
+        data_access = AuditDataAccess(request=request)
+        try:
+            session = data_access.get_audit_session(session_id)
+            if not session:
+                return JsonResponse({"error": "Session not found"}, status=404)
+
+            visit_ids = session.visit_ids or []
+            total_visits = len(visit_ids)
+
+            try:
+                visit_index = int(request.GET.get("visit", 1)) - 1
+            except (TypeError, ValueError):
+                visit_index = 0
+
+            if total_visits == 0:
+                progress_stats = session.get_progress_stats()
+                return JsonResponse(
+                    {
+                        "visit_index": 0,
+                        "total_visits": 0,
+                        "audited_count": progress_stats["assessed"],
+                        "pending_count": progress_stats["total"] - progress_stats["assessed"],
+                        "progress_percentage": progress_stats["percentage"],
+                        "has_previous": False,
+                        "has_next": False,
+                        "previous_index": 0,
+                        "next_index": 0,
+                        "assessments": [],
+                    }
+                )
+
+            visit_index = max(0, min(visit_index, total_visits - 1))
+            visit_id = visit_ids[visit_index]
+            opportunity_id = session.opportunity_id
+
+            visit_data = data_access.get_visit_data(visit_id, opportunity_id=opportunity_id)
+
+            try:
+                opportunity_details = data_access.get_opportunity_details(opportunity_id) if opportunity_id else None
+                cc_domain = opportunity_details.get("cc_domain") if opportunity_details else None
+            except Exception:
+                cc_domain = None
+
+            blob_metadata = {}
+            if cc_domain and visit_data and visit_data.get("xform_id"):
+                try:
+                    blob_metadata = data_access.get_blob_metadata_for_visit(visit_data["xform_id"], cc_domain)
+                except Exception:
+                    blob_metadata = {}
+
+            assessments_map = session.get_assessments(visit_id)
+
+            def build_image_url(blob_id: str) -> str:
+                url = reverse("audit:audit_image", kwargs={"blob_id": blob_id})
+                if cc_domain and visit_data and visit_data.get("xform_id"):
+                    url = f"{url}?xform_id={visit_data['xform_id']}&domain={cc_domain}"
+                return url
+
+            assessments = []
+            for blob_id, metadata in blob_metadata.items():
+                assessment_data = assessments_map.get(blob_id, {})
+                assessments.append(
+                    {
+                        "id": f"{visit_id}:{blob_id}",
+                        "blob_id": blob_id,
+                        "question_id": metadata.get("question_id") or "",
+                        "filename": metadata.get("filename") or "",
+                        "image_url": build_image_url(blob_id),
+                        "result": assessment_data.get("result"),
+                        "notes": assessment_data.get("notes", ""),
+                    }
+                )
+
+            for blob_id, assessment_data in assessments_map.items():
+                if blob_id in blob_metadata:
+                    continue
+                assessments.append(
+                    {
+                        "id": f"{visit_id}:{blob_id}",
+                        "blob_id": blob_id,
+                        "question_id": assessment_data.get("question_id") or "",
+                        "filename": "",
+                        "image_url": build_image_url(blob_id),
+                        "result": assessment_data.get("result"),
+                        "notes": assessment_data.get("notes", ""),
+                    }
+                )
+
+            progress_stats = session.get_progress_stats()
+            visit_result = session.get_visit_result(visit_id) or {}
+
+            response_data = {
+                "visit_index": visit_index,
+                "total_visits": total_visits,
+                "audited_count": progress_stats["assessed"],
+                "pending_count": progress_stats["total"] - progress_stats["assessed"],
+                "progress_percentage": progress_stats["percentage"],
+                "has_previous": visit_index > 0,
+                "has_next": visit_index < total_visits - 1,
+                "previous_index": visit_index - 1 if visit_index > 0 else 0,
+                "next_index": visit_index + 1 if visit_index < total_visits - 1 else visit_index,
+                "visit_id": visit_id,
+                "visit_date": visit_data.get("visit_date") if visit_data else None,
+                "entity_name": visit_data.get("entity_name") if visit_data else "",
+                "location": visit_data.get("location") if visit_data else "",
+                "image_count": len(assessments),
+                "audit_result": visit_result or {"result": None, "notes": ""},
+                "assessments": assessments,
+            }
+
+            return JsonResponse(response_data)
+
+        except Exception as e:
+            import traceback
+
+            print(f"[ERROR] {traceback.format_exc()}")
+            return JsonResponse({"error": str(e)}, status=500)
+        finally:
+            data_access.close()
 
 
 class ExperimentAssessmentUpdateView(LoginRequiredMixin, View):
@@ -300,13 +442,16 @@ class ExperimentAssessmentUpdateView(LoginRequiredMixin, View):
                 result = request.POST.get("result")
                 notes = request.POST.get("notes", "")
 
-                if not visit_id or not blob_id or result not in ["pass", "fail"]:
+                if not visit_id or not blob_id or result not in ["pass", "fail", "", None]:
                     return JsonResponse({"error": "Invalid data"}, status=400)
 
                 # Update assessment in session
-                session.set_assessment(
-                    visit_id=visit_id, blob_id=blob_id, question_id=question_id, result=result, notes=notes
-                )
+                if result in ["pass", "fail"] or notes:
+                    session.set_assessment(
+                        visit_id=visit_id, blob_id=blob_id, question_id=question_id, result=result, notes=notes
+                    )
+                else:
+                    session.clear_assessment(visit_id=visit_id, blob_id=blob_id)
 
                 # Save session
                 session = data_access.save_audit_session(session)
@@ -317,6 +462,7 @@ class ExperimentAssessmentUpdateView(LoginRequiredMixin, View):
                 return JsonResponse(
                     {
                         "success": True,
+                        "result": result if result else "",
                         "progress_percentage": progress_stats["percentage"],
                         "assessed_count": progress_stats["assessed"],
                         "total_assessments": progress_stats["total"],
@@ -358,6 +504,8 @@ class ExperimentAuditCompleteView(LoginRequiredMixin, View):
                 session = data_access.complete_audit_session(
                     session=session, overall_result=overall_result, notes=notes, kpi_notes=kpi_notes
                 )
+                session.data["completed_at"] = timezone.now().isoformat()
+                session = data_access.save_audit_session(session)
 
                 return JsonResponse({"success": True})
 
@@ -366,6 +514,321 @@ class ExperimentAuditCompleteView(LoginRequiredMixin, View):
 
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
+
+
+class ExperimentAuditUncompleteView(LoginRequiredMixin, View):
+    """Reopen a completed experiment-based audit session."""
+
+    def post(self, request, session_id):
+        data_access = AuditDataAccess(request=request)
+        try:
+            session = data_access.get_audit_session(session_id)
+            if not session:
+                return JsonResponse({"error": "Session not found"}, status=404)
+
+            session.data["status"] = "in_progress"
+            session.data["completed_at"] = None
+
+            session = data_access.save_audit_session(session)
+            return JsonResponse({"success": True})
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+        finally:
+            data_access.close()
+
+
+class ExperimentApplyAssessmentResultsView(LoginRequiredMixin, View):
+    """Apply image assessment outcomes to visit-level results."""
+
+    def post(self, request, session_id):
+        data_access = AuditDataAccess(request=request)
+        try:
+            session = data_access.get_audit_session(session_id)
+            if not session:
+                return JsonResponse({"error": "Session not found"}, status=404)
+
+            opportunity_id = session.opportunity_id
+            updated_count = 0
+            visits_passed = 0
+            visits_failed = 0
+
+            for visit_id in session.visit_ids or []:
+                assessments = session.get_assessments(visit_id)
+                if not assessments:
+                    continue
+
+                has_failure = any(a.get("result") == "fail" for a in assessments.values())
+                all_assessed = all(a.get("result") in {"pass", "fail"} for a in assessments.values())
+
+                visit_result = session.get_visit_result(visit_id) or {}
+                current_result = visit_result.get("result")
+
+                new_result = None
+                if has_failure:
+                    new_result = "fail"
+                    visits_failed += 1
+                elif all_assessed:
+                    new_result = "pass"
+                    visits_passed += 1
+
+                if new_result and new_result != current_result:
+                    visit_data = data_access.get_visit_data(visit_id, opportunity_id=opportunity_id)
+                    if not visit_data:
+                        continue
+
+                    session.set_visit_result(
+                        visit_id=visit_id,
+                        xform_id=visit_data.get("xform_id", ""),
+                        result=new_result,
+                        notes=visit_result.get("notes", ""),
+                        user_id=visit_data.get("user_id", 0),
+                        opportunity_id=visit_data.get("opportunity_id", opportunity_id),
+                    )
+                    updated_count += 1
+
+            session = data_access.save_audit_session(session)
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "updated_count": updated_count,
+                    "visits_passed": visits_passed,
+                    "visits_failed": visits_failed,
+                }
+            )
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+        finally:
+            data_access.close()
+
+
+class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
+    """Return bulk assessment data asynchronously."""
+
+    def get(self, request, session_id):
+        data_access = AuditDataAccess(request=request)
+        try:
+            session = data_access.get_audit_session(session_id)
+            if not session:
+                return JsonResponse({"error": "Session not found"}, status=404)
+
+            question_filter = request.GET.get("question_id", "").strip()
+            status_filter = request.GET.get("status", "all").strip().lower() or "all"
+
+            visit_ids = session.visit_ids or []
+            opportunity_id = session.opportunity_id
+            cc_domain = None
+            primary_opportunity = ""
+            earliest_visit = None
+            latest_visit = None
+
+            if opportunity_id:
+                try:
+                    opportunity_details = data_access.get_opportunity_details(opportunity_id)
+                    cc_domain = opportunity_details.get("cc_domain") if opportunity_details else None
+                    primary_opportunity = opportunity_details.get("name") if opportunity_details else ""
+                except Exception:
+                    cc_domain = None
+
+            question_ids = set()
+            visit_result_map: dict[str, str] = {}
+            all_assessments: list[dict] = []
+            bulk_primary_username = ""
+
+            for visit_id in visit_ids:
+                try:
+                    visit_data = data_access.get_visit_data(visit_id, opportunity_id=opportunity_id)
+                except Exception:
+                    visit_data = None
+
+                if not visit_data:
+                    continue
+
+                username = visit_data.get("username") or visit_data.get("user_login") or ""
+                if not bulk_primary_username and username:
+                    bulk_primary_username = username
+
+                visit_date_raw = visit_data.get("visit_date")
+                visit_date_dt = parse_datetime(visit_date_raw) if visit_date_raw else None
+                if visit_date_dt and timezone.is_naive(visit_date_dt):
+                    visit_date_dt = timezone.make_aware(visit_date_dt, timezone.utc)
+                visit_date_local = timezone.localtime(visit_date_dt) if visit_date_dt else None
+                visit_date_display = visit_date_local.strftime("%b %d, %H:%M") if visit_date_local else ""
+                visit_date_sort = visit_date_local.isoformat() if visit_date_local else ""
+
+                if visit_date_local:
+                    if earliest_visit is None or visit_date_local < earliest_visit:
+                        earliest_visit = visit_date_local
+                    if latest_visit is None or visit_date_local > latest_visit:
+                        latest_visit = visit_date_local
+
+                xform_id = visit_data.get("xform_id")
+                entity_name = visit_data.get("entity_name") or "No Entity"
+
+                visit_result_entry = session.get_visit_result(visit_id) or {}
+                visit_result_value = visit_result_entry.get("result")
+                if visit_result_value:
+                    visit_result_map[str(visit_id)] = visit_result_value
+
+                assessments_map = session.get_assessments(visit_id)
+                seen_blob_ids = set()
+
+                blob_metadata = {}
+                if cc_domain and xform_id:
+                    try:
+                        blob_metadata = data_access.get_blob_metadata_for_visit(xform_id, cc_domain)
+                    except Exception:
+                        blob_metadata = {}
+
+                def build_image_url(blob_id: str) -> str:
+                    url = reverse("audit:audit_image", kwargs={"blob_id": blob_id})
+                    if cc_domain and xform_id:
+                        url = f"{url}?xform_id={xform_id}&domain={cc_domain}"
+                    return url
+
+                for blob_id, metadata in blob_metadata.items():
+                    question_id = metadata.get("question_id") or ""
+                    question_ids.add(question_id)
+                    assessment_data = assessments_map.get(blob_id, {})
+                    result_value = assessment_data.get("result") or ""
+                    status_value = result_value if result_value in {"pass", "fail"} else "pending"
+
+                    all_assessments.append(
+                        {
+                            "id": f"{visit_id}:{blob_id}",
+                            "visit_id": visit_id,
+                            "blob_id": blob_id,
+                            "question_id": question_id,
+                            "filename": metadata.get("filename") or "",
+                            "result": result_value,
+                            "notes": assessment_data.get("notes", ""),
+                            "status": status_value,
+                            "image_url": build_image_url(blob_id),
+                            "visit_date": visit_date_display,
+                            "visit_date_sort": visit_date_sort,
+                            "entity_name": entity_name,
+                            "username": username,
+                        }
+                    )
+                    seen_blob_ids.add(blob_id)
+
+                for blob_id, assessment_data in assessments_map.items():
+                    if blob_id in seen_blob_ids:
+                        continue
+                    question_id = assessment_data.get("question_id") or ""
+                    question_ids.add(question_id)
+                    result_value = assessment_data.get("result") or ""
+                    status_value = result_value if result_value in {"pass", "fail"} else "pending"
+
+                    all_assessments.append(
+                        {
+                            "id": f"{visit_id}:{blob_id}",
+                            "visit_id": visit_id,
+                            "blob_id": blob_id,
+                            "question_id": question_id,
+                            "filename": "",
+                            "result": result_value,
+                            "notes": assessment_data.get("notes", ""),
+                            "status": status_value,
+                            "image_url": build_image_url(blob_id),
+                            "visit_date": visit_date_display,
+                            "visit_date_sort": visit_date_sort,
+                            "entity_name": entity_name,
+                            "username": username,
+                        }
+                    )
+
+            filtered_assessments = [
+                assessment
+                for assessment in all_assessments
+                if (not question_filter or assessment["question_id"] == question_filter)
+                and (status_filter == "all" or assessment["status"] == status_filter)
+            ]
+
+            total_assessments = len(all_assessments)
+            pass_count = sum(1 for a in all_assessments if a["status"] == "pass")
+            fail_count = sum(1 for a in all_assessments if a["status"] == "fail")
+            pending_count = total_assessments - pass_count - fail_count
+
+            visit_summaries_map: dict[int, dict] = defaultdict(
+                lambda: {
+                    "visit_id": None,
+                    "visit_date": "",
+                    "visit_date_sort": "",
+                    "username": "",
+                    "entity_name": "",
+                    "assessments": [],
+                }
+            )
+
+            for assessment in all_assessments:
+                summary = visit_summaries_map[assessment["visit_id"]]
+                summary["visit_id"] = assessment["visit_id"]
+                summary["visit_date"] = assessment["visit_date"]
+                summary["visit_date_sort"] = assessment["visit_date_sort"]
+                summary["username"] = assessment["username"]
+                summary["entity_name"] = assessment["entity_name"]
+                summary["assessments"].append(assessment)
+
+            visit_summaries = []
+            for summary in visit_summaries_map.values():
+                assessments = summary["assessments"]
+                total = len(assessments)
+                passed = sum(1 for a in assessments if a["status"] == "pass")
+                failed = sum(1 for a in assessments if a["status"] == "fail")
+                pending = total - passed - failed
+
+                suggested_result = None
+                if failed > 0:
+                    suggested_result = "fail"
+                elif total > 0 and pending == 0:
+                    suggested_result = "pass"
+
+                visit_summaries.append(
+                    {
+                        "visit_id": summary["visit_id"],
+                        "visit_date": summary["visit_date"],
+                        "username": summary["username"],
+                        "entity_name": summary["entity_name"],
+                        "total_assessments": total,
+                        "passed_count": passed,
+                        "failed_count": failed,
+                        "pending_count": pending,
+                        "suggested_result": suggested_result,
+                        "visit_date_sort": summary["visit_date_sort"],
+                    }
+                )
+
+            visit_summaries.sort(key=lambda item: item["visit_date_sort"] or "")
+            start_date_display = earliest_visit.strftime("%b %d, %Y") if earliest_visit else ""
+            end_date_display = latest_visit.strftime("%b %d, %Y") if latest_visit else ""
+
+            response_data = {
+                "assessments": filtered_assessments,
+                "question_ids": sorted(q for q in question_ids if q),
+                "total_assessments": total_assessments,
+                "pending_count": pending_count,
+                "pass_count": pass_count,
+                "fail_count": fail_count,
+                "visit_summaries": visit_summaries,
+                "bulk_primary_username": bulk_primary_username,
+                "bulk_opportunity_name": primary_opportunity,
+                "bulk_start_date": start_date_display,
+                "bulk_end_date": end_date_display,
+                "visit_results": visit_result_map,
+            }
+
+            return JsonResponse(response_data)
+
+        except Exception as e:
+            import traceback
+
+            print(f"[ERROR] {traceback.format_exc()}")
+            return JsonResponse({"error": str(e)}, status=500)
+        finally:
+            data_access.close()
 
 
 class ExperimentAuditImageView(LoginRequiredMixin, View):

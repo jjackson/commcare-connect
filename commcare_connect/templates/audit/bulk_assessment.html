@@ -8,8 +8,10 @@
     <!-- Session Info -->
     <div class="flex flex-col justify-center text-white min-w-0 flex-shrink-0" style="width: 300px;">
       <h1 class="text-xl font-bold mb-1">Bulk Assessment</h1>
-      <p class="text-sm opacity-90 truncate">{{ session.flw_username }} • {{ session.opportunity_name }}</p>
-      <p class="text-xs opacity-75">{{ session.start_date }} to {{ session.end_date }}</p>
+      <p class="text-sm opacity-90 truncate"
+         x-text="(bulkPrimaryUsername || bulkOpportunityName) ? [bulkPrimaryUsername, bulkOpportunityName].filter(Boolean).join(' - ') : (loading ? 'Loading...' : 'N/A')"></p>
+      <p class="text-xs opacity-75"
+         x-text="(bulkStartDate && bulkEndDate) ? bulkStartDate + ' to ' + bulkEndDate : (loading ? 'Loading...' : '')"></p>
       <div class="flex gap-2 mt-2">
         <a href="{% url 'audit:session_detail' session.pk %}"
            class="px-2 py-1 text-xs bg-white/20 hover:bg-white/30 text-white rounded transition-colors">
@@ -21,7 +23,7 @@
     <!-- Statistics Cards -->
     <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg">
       <div class="flex justify-between items-center">
-        <div class="text-2xl font-medium">{{ total_assessments }}</div>
+        <div class="text-2xl font-medium" x-text="loading ? '…' : stats.total"></div>
         <div class="hidden lg:block"><i class="fa-solid fa-images text-xl"></i></div>
       </div>
       <div class="pt-4 text-sm flex items-center justify-between">
@@ -31,7 +33,7 @@
 
     <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg">
       <div class="flex justify-between items-center">
-        <div class="text-2xl font-medium" x-text="stats.pending">{{ pending_count }}</div>
+        <div class="text-2xl font-medium" x-text="loading ? '…' : stats.pending"></div>
         <div class="hidden lg:block"><i class="fa-solid fa-clock text-xl"></i></div>
       </div>
       <div class="pt-4 text-sm flex items-center justify-between">
@@ -41,7 +43,7 @@
 
     <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg">
       <div class="flex justify-between items-center">
-        <div class="text-2xl font-medium text-green-300" x-text="stats.pass">{{ pass_count }}</div>
+        <div class="text-2xl font-medium" :class="loading ? 'text-white/70' : 'text-green-300'" x-text="loading ? '…' : stats.pass"></div>
         <div class="hidden lg:block"><i class="fa-solid fa-check text-xl"></i></div>
       </div>
       <div class="pt-4 text-sm flex items-center justify-between">
@@ -51,7 +53,7 @@
 
     <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg">
       <div class="flex justify-between items-center">
-        <div class="text-2xl font-medium text-red-300" x-text="stats.fail">{{ fail_count }}</div>
+        <div class="text-2xl font-medium" :class="loading ? 'text-white/70' : 'text-red-300'" x-text="loading ? '…' : stats.fail"></div>
         <div class="hidden lg:block"><i class="fa-solid fa-times text-xl"></i></div>
       </div>
       <div class="pt-4 text-sm flex items-center justify-between">
@@ -60,47 +62,86 @@
     </div>
   </div>
 
+  <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between"
+       x-show="loading">
+    <div class="flex items-center gap-2 text-blue-700">
+      <i class="fa-solid fa-spinner fa-spin"></i>
+      <span>Loading bulk assessment data...</span>
+    </div>
+    <button @click="cancelLoading"
+            x-show="controller"
+            class="px-3 py-2 text-sm font-medium text-blue-700 border border-blue-300 rounded hover:bg-blue-100 transition-colors">
+      Cancel
+    </button>
+  </div>
+
+  <div class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center justify-between"
+       x-show="loadCancelled">
+    <div class="text-sm text-yellow-800">
+      Data load cancelled.
+    </div>
+    <div class="flex gap-2">
+      <button @click="resumeLoading"
+              class="px-3 py-2 text-sm font-medium text-yellow-800 border border-yellow-300 rounded hover:bg-yellow-100 transition-colors">
+        Resume
+      </button>
+    </div>
+  </div>
+
+  <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between"
+       x-show="loadError">
+    <div class="text-sm text-red-800" x-text="loadError"></div>
+    <button @click="resumeLoading"
+            class="px-3 py-2 text-sm font-medium text-red-800 border border-red-300 rounded hover:bg-red-100 transition-colors">
+      Retry
+    </button>
+  </div>
+
   <!-- Filters and Controls -->
   <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
     <div class="flex flex-wrap gap-4 items-center justify-between">
-      <!-- Left side: Filters -->
       <div class="flex flex-wrap gap-4 items-center">
-        <!-- Question ID Filter -->
         <div>
           <label for="question-id-filter" class="block text-sm font-medium text-gray-700 mb-1">Assessment Type</label>
           <select id="question-id-filter"
                   x-model="selectedQuestionId"
                   @change="applyFilters()"
-                  class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-brand-indigo focus:border-brand-indigo">
+                  :disabled="loading"
+                  class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-brand-indigo focus:border-brand-indigo disabled:bg-gray-100">
             <option value="">All Types</option>
-            {% for question_id in question_ids %}
-            <option value="{{ question_id }}" {% if question_id == selected_question_id %}selected{% endif %}>
-              {{ question_id }}
-            </option>
-            {% endfor %}
+            <template x-for="questionId in questionIds" :key="questionId">
+              <option :value="questionId" x-text="questionId"></option>
+            </template>
           </select>
         </div>
-
-        <!-- Status Filter -->
         <div>
           <label for="status-filter" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
           <select id="status-filter"
                   x-model="selectedStatus"
                   @change="applyFilters()"
-                  class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-brand-indigo focus:border-brand-indigo">
-            <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All</option>
-            <option value="pending" {% if selected_status == 'pending' %}selected{% endif %}>Pending</option>
-            <option value="pass" {% if selected_status == 'pass' %}selected{% endif %}>Passed</option>
-            <option value="fail" {% if selected_status == 'fail' %}selected{% endif %}>Failed</option>
+                  :disabled="loading"
+                  class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-brand-indigo focus:border-brand-indigo disabled:bg-gray-100">
+            <option value="all">All</option>
+            <option value="pending">Pending</option>
+            <option value="pass">Passed</option>
+            <option value="fail">Failed</option>
           </select>
         </div>
-
-        <!-- Showing count -->
         <div class="text-sm text-gray-600">
-          Showing <span class="font-semibold">{{ assessments|length }}</span> assessment(s)
+          <template x-if="loading">
+            <span>Loading assessments…</span>
+          </template>
+          <template x-if="loadCancelled">
+            <span>Load cancelled.</span>
+          </template>
+          <template x-if="loadError">
+            <span class="text-red-600" x-text="loadError"></span>
+          </template>
+          <template x-if="!loading && !loadCancelled && !loadError">
+            <span>Showing <span class="font-semibold" x-text="assessments.length"></span> assessment(s)</span>
+          </template>
         </div>
-
-        <!-- Image Size Slider -->
         <div class="flex items-center gap-2">
           <label for="widget-size" class="text-sm font-medium text-gray-700 whitespace-nowrap">Size:</label>
           <input type="range"
@@ -114,23 +155,19 @@
           <span class="text-sm text-gray-600 w-12" x-text="widgetSize + 'px'"></span>
         </div>
       </div>
-
-      <!-- Right side: Bulk Actions -->
       <div class="flex gap-2 items-center flex-wrap">
         <button @click="passAllPending()"
-                :disabled="bulkProcessing"
+                :disabled="loading || bulkProcessing"
                 class="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50">
           <i class="fa-solid fa-check mr-1"></i>Pass All Pending
         </button>
-
         <button @click="failAllPending()"
-                :disabled="bulkProcessing"
+                :disabled="loading || bulkProcessing"
                 class="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium disabled:opacity-50">
           <i class="fa-solid fa-times mr-1"></i>Fail All Pending
         </button>
-
         <button @click="clearAllAssessments()"
-                :disabled="bulkProcessing"
+                :disabled="loading || bulkProcessing"
                 class="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium disabled:opacity-50">
           <i class="fa-solid fa-eraser mr-1"></i>Clear All Assessments
         </button>
@@ -139,170 +176,168 @@
   </div>
 
   <!-- Assessment Grid -->
-  <div class="grid gap-4 mb-8"
-       :style="`grid-template-columns: repeat(auto-fill, minmax(${widgetSize}px, 1fr))`">
-    {% for assessment in assessments %}
-    <div class="assessment-widget bg-white rounded-lg shadow-sm border-2 hover:shadow-md transition-shadow"
-         :class="{
-           'border-green-500': assessments[{{ forloop.counter0 }}].result === 'pass',
-           'border-red-500': assessments[{{ forloop.counter0 }}].result === 'fail',
-           'border-gray-200': !assessments[{{ forloop.counter0 }}].result
-         }"
-         x-data="assessmentWidget({{ assessment.id }}, '{{ assessment.result|default:'' }}', `{{ assessment.notes|escapejs }}`)"
-         @keydown.window="handleKeydown($event, {{ assessment.id }})">
-
-      <!-- Image -->
-      <div class="relative bg-gray-100"
-           :style="`height: ${$root.widgetSize}px`">
-        <img src="{% url 'audit:image' assessment.blob_id %}"
-             alt="Assessment image"
-             class="w-full h-full object-contain"
-             loading="lazy">
-
-        <!-- Status Badge -->
-        <div class="absolute top-2 right-2"
-             x-show="result"
-             x-transition>
-          <span class="px-2 py-1 rounded text-xs font-bold text-white"
-                :class="{
-                  'bg-green-600': result === 'pass',
-                  'bg-red-600': result === 'fail'
-                }">
-            <span x-show="result === 'pass'"><i class="fa-solid fa-check mr-1"></i>PASS</span>
-            <span x-show="result === 'fail'"><i class="fa-solid fa-times mr-1"></i>FAIL</span>
-          </span>
+  <template x-if="!loading && !loadCancelled && !loadError">
+    <div class="grid gap-4 mb-8"
+         :style="`grid-template-columns: repeat(auto-fill, minmax(${widgetSize}px, 1fr))`">
+      <template x-if="assessments.length === 0">
+        <div class="col-span-full text-center py-12 text-gray-500">
+          <i class="fa-solid fa-images text-4xl mb-4"></i>
+          <p>No assessments match the current filters.</p>
         </div>
-      </div>
-
-      <!-- Controls and Info -->
-      <div class="p-3">
-        <!-- Metadata -->
-        <div class="text-xs text-gray-600 mb-2">
-          <div class="truncate">
-            <i class="fa-solid fa-calendar mr-1"></i>{{ assessment.audit_result.user_visit.visit_date|date:"M d, H:i" }}
+      </template>
+      <template x-for="assessment in assessments" :key="assessment.id">
+        <div class="assessment-widget bg-white rounded-lg shadow-sm border-2 hover:shadow-md transition-shadow"
+             :class="{
+               'border-green-500': assessment.result === 'pass',
+               'border-red-500': assessment.result === 'fail',
+               'border-gray-200': !assessment.result
+             }"
+             x-data="assessmentWidget(assessment.id, assessment.result || '', assessment.notes || '', assessment.visit_id, assessment.blob_id, assessment.question_id || '')"
+             @keydown.window="handleKeydown($event, assessment.id)">
+          <div class="relative bg-gray-100"
+               :style="`height: ${$root.widgetSize}px`">
+            <img :src="assessment.image_url"
+                 alt="Assessment image"
+                 class="w-full h-full object-contain"
+                 loading="lazy">
+            <div class="absolute top-2 right-2"
+                 x-show="result"
+                 x-transition>
+              <span class="px-2 py-1 rounded text-xs font-bold text-white"
+                    :class="{
+                      'bg-green-600': result === 'pass',
+                      'bg-red-600': result === 'fail'
+                    }">
+                <span x-show="result === 'pass'"><i class="fa-solid fa-check mr-1"></i>PASS</span>
+                <span x-show="result === 'fail'"><i class="fa-solid fa-times mr-1"></i>FAIL</span>
+              </span>
+            </div>
           </div>
-          <div class="truncate">
-            <i class="fa-solid fa-map-marker-alt mr-1"></i>{{ assessment.audit_result.user_visit.entity_name|default:"No Entity" }}
-          </div>
-        </div>
-
-        <!-- Pass/Fail Buttons -->
-        <div class="flex gap-2 mb-2">
-          <button @click="updateResult(result === 'pass' ? '' : 'pass')"
-                  :disabled="saving"
-                  :class="{
-                    'bg-green-600 text-white': result === 'pass',
-                    'bg-gray-100 text-gray-700 hover:bg-green-50': result !== 'pass'
-                  }"
-                  class="flex-1 py-2 px-3 rounded text-sm font-medium transition-colors disabled:opacity-50">
-            <i class="fa-solid fa-check mr-1"></i>Pass
-          </button>
-          <button @click="updateResult(result === 'fail' ? '' : 'fail')"
-                  :disabled="saving"
-                  :class="{
-                    'bg-red-600 text-white': result === 'fail',
-                    'bg-gray-100 text-gray-700 hover:bg-red-50': result !== 'fail'
-                  }"
-                  class="flex-1 py-2 px-3 rounded text-sm font-medium transition-colors disabled:opacity-50">
-            <i class="fa-solid fa-times mr-1"></i>Fail
-          </button>
-        </div>
-
-        <!-- Notes (Collapsible) -->
-        <div x-data="{ showNotes: false }">
-          <button @click="showNotes = !showNotes"
-                  class="text-xs text-brand-indigo hover:text-brand-deep-purple mb-1">
-            <i class="fa-solid fa-sticky-note mr-1"></i>
-            <span x-text="showNotes ? 'Hide Notes' : 'Add Notes'"></span>
-          </button>
-          <div x-show="showNotes"
-               x-transition
-               class="mt-1">
-            <textarea x-model="notes"
-                      @blur="saveNotes()"
+          <div class="p-3">
+            <div class="text-xs text-gray-600 mb-2">
+              <div class="truncate">
+                <i class="fa-solid fa-calendar mr-1"></i><span x-text="assessment.visit_date"></span>
+              </div>
+              <div class="truncate">
+                <i class="fa-solid fa-map-marker-alt mr-1"></i><span x-text="assessment.entity_name || 'No Entity'"></span>
+              </div>
+              <div class="truncate" x-show="assessment.question_id">
+                <i class="fa-solid fa-tag mr-1"></i><span x-text="assessment.question_id"></span>
+              </div>
+            </div>
+            <div class="flex gap-2 mb-2">
+              <button @click="updateResult(result === 'pass' ? '' : 'pass')"
                       :disabled="saving"
-                      placeholder="Enter notes..."
-                      class="w-full border border-gray-300 rounded px-2 py-1 text-sm resize-none disabled:opacity-50"
-                      rows="2"></textarea>
+                      :class="{
+                        'bg-green-600 text-white': result === 'pass',
+                        'bg-gray-100 text-gray-700 hover:bg-green-50': result !== 'pass'
+                      }"
+                      class="flex-1 py-2 px-3 rounded text-sm font-medium transition-colors disabled:opacity-50">
+                <i class="fa-solid fa-check mr-1"></i>Pass
+              </button>
+              <button @click="updateResult(result === 'fail' ? '' : 'fail')"
+                      :disabled="saving"
+                      :class="{
+                        'bg-red-600 text-white': result === 'fail',
+                        'bg-gray-100 text-gray-700 hover:bg-red-50': result !== 'fail'
+                      }"
+                      class="flex-1 py-2 px-3 rounded text-sm font-medium transition-colors disabled:opacity-50">
+                <i class="fa-solid fa-times mr-1"></i>Fail
+              </button>
+            </div>
+            <div x-data="{ showNotes: false }">
+              <button @click="showNotes = !showNotes"
+                      class="text-xs text-brand-indigo hover:text-brand-deep-purple mb-1">
+                <i class="fa-solid fa-sticky-note mr-1"></i>
+                <span x-text="showNotes ? 'Hide Notes' : 'Add Notes'"></span>
+              </button>
+              <div x-show="showNotes"
+                   x-transition
+                   class="mt-1">
+                <textarea x-model="notes"
+                          @blur="saveNotes()"
+                          :disabled="saving"
+                          placeholder="Enter notes..."
+                          class="w-full border border-gray-300 rounded px-2 py-1 text-sm resize-none disabled:opacity-50"
+                          rows="2"></textarea>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </template>
     </div>
-    {% empty %}
-    <div class="col-span-full text-center py-12 text-gray-500">
-      <i class="fa-solid fa-images text-4xl mb-4"></i>
-      <p>No assessments match the current filters.</p>
-    </div>
-    {% endfor %}
-  </div>
+  </template>
 
   <!-- Visit Summary Table -->
-  <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
-    <h2 class="text-lg font-bold text-gray-900 mb-4">
-      <i class="fa-solid fa-list-check mr-2 text-brand-indigo"></i>Visit-Level Summary
-    </h2>
-    <div class="overflow-x-auto">
-      <table class="table table-bordered mb-0 w-full text-sm">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Visit</th>
-            <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Assessments</th>
-            <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Passed</th>
-            <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Failed</th>
-            <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Pending</th>
-            <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Result</th>
-          </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-          <template x-for="visit in visitSummaries" :key="visit.visit_id">
+  <template x-if="!loading && !loadCancelled && !loadError && visitSummaries.length > 0">
+    <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
+      <h2 class="text-lg font-bold text-gray-900 mb-4">
+        <i class="fa-solid fa-list-check mr-2 text-brand-indigo"></i>Visit-Level Summary
+      </h2>
+      <div class="overflow-x-auto">
+        <table class="table table-bordered mb-0 w-full text-sm">
+          <thead class="bg-gray-50">
             <tr>
-              <td class="px-4 py-3">
-                <div class="text-sm font-medium text-gray-900" x-text="visit.user_name"></div>
-                <div class="text-xs text-gray-500" x-text="visit.visit_date"></div>
-              </td>
-              <td class="px-4 py-3 text-center">
-                <span class="text-sm font-medium" x-text="visit.total_assessments"></span>
-              </td>
-              <td class="px-4 py-3 text-center">
-                <span class="text-sm font-medium text-green-600" x-text="visit.passed_count"></span>
-              </td>
-              <td class="px-4 py-3 text-center">
-                <span class="text-sm font-medium text-red-600" x-text="visit.failed_count"></span>
-              </td>
-              <td class="px-4 py-3 text-center">
-                <span class="text-sm font-medium text-gray-600" x-text="visit.pending_count"></span>
-              </td>
-              <td class="px-4 py-3 text-center">
-                <div class="flex gap-2 justify-center">
-                  <button @click="setVisitResult(visit.visit_id, 'pass')"
-                          :disabled="visit.bulkProcessing"
-                          :class="{
-                            'bg-green-600 text-white': visitResults[visit.visit_id] === 'pass' || (!visitResults[visit.visit_id] && visit.suggested_result === 'pass'),
-                            'bg-green-50 text-green-700 hover:bg-green-100 border border-green-300': visitResults[visit.visit_id] !== 'pass' && (visitResults[visit.visit_id] || visit.suggested_result !== 'pass')
-                          }"
-                          class="px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50">
-                    <i class="fa-solid fa-check mr-1"></i>Pass
-                  </button>
-                  <button @click="setVisitResult(visit.visit_id, 'fail')"
-                          :disabled="visit.bulkProcessing"
-                          :class="{
-                            'bg-red-600 text-white': visitResults[visit.visit_id] === 'fail' || (!visitResults[visit.visit_id] && visit.suggested_result === 'fail'),
-                            'bg-red-50 text-red-700 hover:bg-red-100 border border-red-300': visitResults[visit.visit_id] !== 'fail' && (visitResults[visit.visit_id] || visit.suggested_result !== 'fail')
-                          }"
-                          class="px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50">
-                    <i class="fa-solid fa-times mr-1"></i>Fail
-                  </button>
-                </div>
-              </td>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Visit</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Assessments</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Passed</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Failed</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Pending</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Result</th>
             </tr>
-          </template>
-        </tbody>
-      </table>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <template x-for="visit in visitSummaries" :key="visit.visit_id">
+              <tr>
+                <td class="px-4 py-3">
+                  <div class="text-sm font-medium text-gray-900" x-text="visit.username"></div>
+                  <div class="text-xs text-gray-500" x-text="visit.visit_date"></div>
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <span class="text-sm font-medium" x-text="visit.total_assessments"></span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <span class="text-sm font-medium text-green-600" x-text="visit.passed_count"></span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <span class="text-sm font-medium text-red-600" x-text="visit.failed_count"></span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <span class="text-sm font-medium text-gray-600" x-text="visit.pending_count"></span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <div class="flex gap-2 justify-center">
+                    <button @click="setVisitResult(visit.visit_id, 'pass')"
+                            :disabled="loading || bulkProcessing"
+                            :class="{
+                              'bg-green-600 text-white': visitResults[visit.visit_id] === 'pass' || (!visitResults[visit.visit_id] && visit.suggested_result === 'pass'),
+                              'bg-green-50 text-green-700 hover:bg-green-100 border border-green-300': visitResults[visit.visit_id] !== 'pass' && (visitResults[visit.visit_id] || visit.suggested_result !== 'pass')
+                            }"
+                            class="px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50">
+                      <i class="fa-solid fa-check mr-1"></i>Pass
+                    </button>
+                    <button @click="setVisitResult(visit.visit_id, 'fail')"
+                            :disabled="loading || bulkProcessing"
+                            :class="{
+                              'bg-red-600 text-white': visitResults[visit.visit_id] === 'fail' || (!visitResults[visit.visit_id] && visit.suggested_result === 'fail'),
+                              'bg-red-50 text-red-700 hover:bg-red-100 border border-red-300': visitResults[visit.visit_id] !== 'fail' && (visitResults[visit.visit_id] || visit.suggested_result !== 'fail')
+                            }"
+                            class="px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50">
+                      <i class="fa-solid fa-times mr-1"></i>Fail
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
+  </template>
 
   <!-- Complete Audit Section -->
-  <div class="bg-white rounded-lg shadow-sm mb-4">
+  <div class="bg-white rounded-lg shadow-sm mb-4"
+       x-show="!loading && !loadCancelled && !loadError">
     <div class="p-6">
       <h2 class="text-xl font-bold text-brand-deep-purple mb-4 flex items-center gap-2">
         <i class="fa-solid fa-flag-checkered"></i>
@@ -319,7 +354,7 @@
               <h3 class="text-lg font-semibold text-green-800">Audit Completed</h3>
             </div>
             <p class="text-sm text-green-700">
-              Completed on {{ session.completed_at|date:"M d, Y \a\t H:i" }}
+              Completed on {{ session.completed_at|date:"M d, Y \\a\\t H:i" }}
             </p>
             {% if session.overall_result %}
             <div class="mt-2">
@@ -492,600 +527,500 @@
 <script>
 function bulkAssessmentInterface() {
   return {
-    // Filters
     selectedQuestionId: '{{ selected_question_id }}',
     selectedStatus: '{{ selected_status }}',
-
-    // Widget settings
     widgetSize: 300,
-
-    // Statistics
     stats: {
-      total: {{ total_assessments }},
-      pending: {{ pending_count }},
-      pass: {{ pass_count }},
-      fail: {{ fail_count }}
+      total: 0,
+      pending: 0,
+      pass: 0,
+      fail: 0,
     },
-
-    // All assessments (unfiltered, for visit summaries)
-    allAssessments: [
-      {% for assessment in all_assessments %}
-      {
-        id: {{ assessment.id }},
-        result: '{{ assessment.result|default:'' }}',
-        notes: `{{ assessment.notes|escapejs }}`,
-        visit_id: {{ assessment.audit_result.user_visit.id }},
-        visit_date: '{{ assessment.audit_result.user_visit.visit_date|date:"M d, H:i" }}',
-        visit_date_sort: '{{ assessment.audit_result.user_visit.visit_date|date:"Y-m-d H:i:s" }}',
-        user_name: '{{ assessment.audit_result.user_visit.user_login }}'
-      }{% if not forloop.last %},{% endif %}
-      {% endfor %}
-    ],
-
-    // Filtered assessments (for display in widgets)
-    assessments: [
-      {% for assessment in assessments %}
-      {
-        id: {{ assessment.id }},
-        result: '{{ assessment.result|default:'' }}',
-        notes: `{{ assessment.notes|escapejs }}`,
-        visit_id: {{ assessment.audit_result.user_visit.id }},
-        visit_date: '{{ assessment.audit_result.user_visit.visit_date|date:"M d, H:i" }}',
-        visit_date_sort: '{{ assessment.audit_result.user_visit.visit_date|date:"Y-m-d H:i:s" }}',
-        user_name: '{{ assessment.audit_result.user_visit.user_login }}'
-      }{% if not forloop.last %},{% endif %}
-      {% endfor %}
-    ],
-
-    // Bulk processing state
+    assessmentUpdateUrl: '{% url "audit:audit_assessment_update" session.pk %}',
+    resultUpdateUrl: '{% url "audit:audit_result_update" session.pk %}',
+    applyResultsUrl: '{% url "audit:apply_assessment_results" session.pk %}',
+    completeUrl: '{% url "audit:audit_complete" session.pk %}',
+    uncompleteUrl: '{% url "audit:audit_uncomplete" session.pk %}',
+    bulkDataUrl: '{{ bulk_data_url }}',
+    csrfToken: '',
+    loading: true,
+    loadCancelled: false,
+    loadError: null,
+    controller: null,
     bulkProcessing: false,
-
-    // Modal state
     showApplyModal: false,
     showSuccessModal: false,
     applyingResults: false,
     applyResultMessage: '',
-
-    // Completion state
     overallResult: '',
     completionNotes: '',
     kpiNotes: '',
     submittingCompletion: false,
-
-    // Visit-level results (visit_id -> 'pass' or 'fail')
+    allAssessments: [],
+    assessments: [],
+    questionIds: [],
+    bulkPrimaryUsername: '',
+    bulkOpportunityName: '',
+    bulkStartDate: '',
+    bulkEndDate: '',
     visitResults: {},
-
     init() {
-      // Restore widget size from localStorage
       const savedSize = localStorage.getItem('bulkAssessmentWidgetSize');
       if (savedSize) {
-        this.widgetSize = parseInt(savedSize);
+        const parsed = parseInt(savedSize, 10);
+        if (!Number.isNaN(parsed)) {
+          this.widgetSize = parsed;
+        }
       }
-      // Force a re-render by updating the DOM
-      this.$nextTick(() => {
-        console.log('Widget size initialized:', this.widgetSize);
-      });
-
-      // Listen for assessment updates from individual widgets
+      const tokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
+      this.csrfToken = tokenInput ? tokenInput.value : '';
+      this.updateUrlParams();
+      this.fetchData();
       window.addEventListener('assessment-updated', (event) => {
-        if (event.detail) {
-          // Update stats
-          if (event.detail.stats) {
-            this.stats = event.detail.stats;
+        if (!event.detail || event.detail.assessmentId === undefined) {
+          return;
+        }
+        const normalized = event.detail.result || '';
+        const updateEntry = (item) => {
+          if (item) {
+            item.result = normalized;
+            item.status = normalized || 'pending';
           }
-          // Update allAssessments array for visit summaries
-          if (event.detail.assessmentId !== undefined) {
-            const allAssessment = this.allAssessments.find(a => a.id === event.detail.assessmentId);
-            if (allAssessment) {
-              allAssessment.result = event.detail.result || '';
-            }
-          }
-        }
-      });
-    },
-
-    // Computed property for visit-level summaries
-    get visitSummaries() {
-      const visitMap = {};
-
-      // Group ALL assessments by visit (not just filtered ones)
-      this.allAssessments.forEach(assessment => {
-        if (!visitMap[assessment.visit_id]) {
-          visitMap[assessment.visit_id] = {
-            visit_id: assessment.visit_id,
-            visit_date: assessment.visit_date,
-            user_name: assessment.user_name,
-            assessments: [],
-            bulkProcessing: false
-          };
-        }
-        visitMap[assessment.visit_id].assessments.push(assessment);
-      });
-
-      // Calculate statistics for each visit
-      const summaries = Object.values(visitMap).map(visit => {
-        const total = visit.assessments.length;
-        const passed = visit.assessments.filter(a => a.result === 'pass').length;
-        const failed = visit.assessments.filter(a => a.result === 'fail').length;
-        const pending = total - passed - failed;
-
-        // Determine suggested result based on assessment states
-        let suggested_result = null;
-        if (failed > 0) {
-          suggested_result = 'fail';  // Any failure = fail
-        } else if (passed === total && total > 0) {
-          suggested_result = 'pass';  // All pass = pass
-        }
-
-        return {
-          ...visit,
-          total_assessments: total,
-          passed_count: passed,
-          failed_count: failed,
-          pending_count: pending,
-          suggested_result: suggested_result
         };
-      });
-
-      // Sort by visit date (oldest first, matching assessment widget order)
-      // Use visit_date_sort (ISO format) for proper chronological sorting
-      return summaries.sort((a, b) => {
-        const dateA = a.assessments[0]?.visit_date_sort || '';
-        const dateB = b.assessments[0]?.visit_date_sort || '';
-        return dateA.localeCompare(dateB);
+        updateEntry(this.allAssessments.find((a) => a.id === event.detail.assessmentId));
+        updateEntry(this.assessments.find((a) => a.id === event.detail.assessmentId));
+        this.recalculateStats();
       });
     },
-
-    applyFilters() {
-      const params = new URLSearchParams();
+    updateUrlParams() {
+      const url = new URL(window.location);
       if (this.selectedQuestionId) {
-        params.set('question_id', this.selectedQuestionId);
+        url.searchParams.set('question_id', this.selectedQuestionId);
+      } else {
+        url.searchParams.delete('question_id');
       }
-      if (this.selectedStatus !== 'all') {
-        params.set('status', this.selectedStatus);
+      if (this.selectedStatus && this.selectedStatus !== 'all') {
+        url.searchParams.set('status', this.selectedStatus);
+      } else {
+        url.searchParams.delete('status');
       }
-      window.location.href = `?${params.toString()}`;
+      window.history.replaceState({}, '', url);
     },
-
+    async fetchData() {
+      if (this.controller) {
+        this.controller.abort();
+      }
+      this.loading = true;
+      this.loadCancelled = false;
+      this.loadError = null;
+      const url = new URL(this.bulkDataUrl, window.location.origin);
+      if (this.selectedQuestionId) {
+        url.searchParams.set('question_id', this.selectedQuestionId);
+      }
+      if (this.selectedStatus && this.selectedStatus !== 'all') {
+        url.searchParams.set('status', this.selectedStatus);
+      }
+      this.controller = new AbortController();
+      try {
+        const response = await fetch(url.toString(), { signal: this.controller.signal });
+        const data = await response.json();
+        if (!response.ok || data.error) {
+          throw new Error(data.error || 'Failed to load bulk assessment data');
+        }
+        this.bulkPrimaryUsername = data.bulk_primary_username || '';
+        this.bulkOpportunityName = data.bulk_opportunity_name || '';
+        this.bulkStartDate = data.bulk_start_date || '';
+        this.bulkEndDate = data.bulk_end_date || '';
+        this.questionIds = data.question_ids || [];
+        this.visitResults = data.visit_results || {};
+        this.allAssessments = data.assessments || [];
+        this.assessments = [...this.allAssessments];
+        this.recalculateStats();
+        this.loading = false;
+        this.controller = null;
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          if (!this.loading) {
+            this.loadCancelled = true;
+          }
+        } else {
+          console.error('Bulk data load failed:', error);
+          this.loadError = error.message || 'Failed to load bulk assessment data.';
+        }
+        this.loading = false;
+        this.controller = null;
+      }
+    },
+    cancelLoading() {
+      if (this.controller) {
+        this.controller.abort();
+      }
+      this.loadCancelled = true;
+      this.loadError = null;
+    },
+    resumeLoading() {
+      if (this.loading) {
+        return;
+      }
+      this.loadCancelled = false;
+      this.loadError = null;
+      this.fetchData();
+    },
+    applyFilters() {
+      this.updateUrlParams();
+      this.fetchData();
+    },
     updateWidgetSize() {
       localStorage.setItem('bulkAssessmentWidgetSize', this.widgetSize);
     },
-
+    get visitSummaries() {
+      const visitMap = {};
+      this.allAssessments.forEach((assessment) => {
+        const visitId = assessment.visit_id;
+        if (!visitMap[visitId]) {
+          visitMap[visitId] = {
+            visit_id: visitId,
+            visit_date: assessment.visit_date,
+            visit_date_sort: assessment.visit_date_sort,
+            username: assessment.username,
+            entity_name: assessment.entity_name,
+            assessments: [],
+          };
+        }
+        visitMap[visitId].assessments.push(assessment);
+      });
+      return Object.values(visitMap)
+        .map((visit) => {
+          const total = visit.assessments.length;
+          const passed = visit.assessments.filter((a) => a.result === 'pass').length;
+          const failed = visit.assessments.filter((a) => a.result === 'fail').length;
+          const pending = total - passed - failed;
+          let suggested = null;
+          if (failed > 0) {
+            suggested = 'fail';
+          } else if (total > 0 && pending === 0) {
+            suggested = 'pass';
+          }
+          return {
+            visit_id: visit.visit_id,
+            visit_date: visit.visit_date,
+            visit_date_sort: visit.visit_date_sort,
+            username: visit.username,
+            entity_name: visit.entity_name,
+            total_assessments: total,
+            passed_count: passed,
+            failed_count: failed,
+            pending_count: pending,
+            suggested_result: suggested,
+          };
+        })
+        .sort((a, b) => (a.visit_date_sort || '').localeCompare(b.visit_date_sort || ''));
+    },
+    recalculateStats() {
+      const total = this.allAssessments.length;
+      const passCount = this.allAssessments.filter((a) => a.result === 'pass').length;
+      const failCount = this.allAssessments.filter((a) => a.result === 'fail').length;
+      const pendingCount = total - passCount - failCount;
+      this.stats = {
+        total,
+        pending: pendingCount,
+        pass: passCount,
+        fail: failCount,
+      };
+    },
+    async updateAssessmentEntry(assessmentId, visitId, blobId, questionId, resultValue, notesValue) {
+      const formData = new FormData();
+      formData.append('visit_id', visitId);
+      formData.append('blob_id', blobId);
+      formData.append('question_id', questionId || '');
+      formData.append('result', resultValue ?? '');
+      formData.append('notes', notesValue ?? '');
+      formData.append('csrfmiddlewaretoken', this.csrfToken);
+      const response = await fetch(this.assessmentUpdateUrl, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to update assessment');
+      }
+      const normalized = data.result || '';
+      const updateEntry = (entry) => {
+        if (entry) {
+          entry.result = normalized;
+          entry.notes = notesValue ?? entry.notes;
+          entry.status = normalized || 'pending';
+        }
+      };
+      updateEntry(this.allAssessments.find((a) => a.id === assessmentId));
+      updateEntry(this.assessments.find((a) => a.id === assessmentId));
+      this.recalculateStats();
+      window.dispatchEvent(new CustomEvent('assessment-updated', {
+        detail: {
+          assessmentId,
+          result: normalized,
+        },
+      }));
+      return normalized;
+    },
     async passAllPending() {
-      if (this.bulkProcessing) return;
-
-      // Only select assessments that are truly pending (no result set)
-      const pendingAssessments = this.allAssessments.filter(a => !a.result || a.result === '');
+      if (this.loading || this.bulkProcessing) {
+        return;
+      }
+      const pendingAssessments = this.allAssessments.filter((a) => !a.result || a.result === '');
       if (pendingAssessments.length === 0) {
         return;
       }
-
       if (!confirm(`Pass ${pendingAssessments.length} pending assessment(s)?`)) {
         return;
       }
-
       this.bulkProcessing = true;
-      let successCount = 0;
-      let errorCount = 0;
-
       for (const assessment of pendingAssessments) {
         try {
-          const formData = new FormData();
-          formData.append('result', 'pass');
-          formData.append('notes', assessment.notes);
-          formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-          const response = await fetch(`/audit/api/assessment/${assessment.id}/update/`, {
-            method: 'POST',
-            body: formData
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            // Update in allAssessments (assessment is already a reference from allAssessments)
-            assessment.result = 'pass';
-            // Also update in the filtered assessments array if this assessment is in it
-            const filteredAssessment = this.assessments.find(a => a.id === assessment.id);
-            if (filteredAssessment) {
-              filteredAssessment.result = 'pass';
-            }
-            successCount++;
-            // Update global stats
-            if (data.stats) {
-              this.stats = data.stats;
-            }
-            // Dispatch event so widgets can update
-            window.dispatchEvent(new CustomEvent('bulk-assessment-updated', {
-              detail: {
-                assessmentId: assessment.id,
-                result: 'pass'
-              }
-            }));
-          } else {
-            errorCount++;
-          }
+          await this.updateAssessmentEntry(
+            assessment.id,
+            assessment.visit_id,
+            assessment.blob_id,
+            assessment.question_id,
+            'pass',
+            assessment.notes,
+          );
+          window.dispatchEvent(new CustomEvent('bulk-assessment-updated', {
+            detail: {
+              assessmentId: assessment.id,
+              result: 'pass',
+            },
+          }));
         } catch (error) {
           console.error('Error updating assessment:', error);
-          errorCount++;
         }
       }
-
       this.bulkProcessing = false;
-      // Force reactivity by updating the entire assessments arrays
-      this.assessments = [...this.assessments];
-      this.allAssessments = [...this.allAssessments];
     },
-
     async failAllPending() {
-      if (this.bulkProcessing) return;
-
-      // Only select assessments that are truly pending (no result set)
-      const pendingAssessments = this.allAssessments.filter(a => !a.result || a.result === '');
+      if (this.loading || this.bulkProcessing) {
+        return;
+      }
+      const pendingAssessments = this.allAssessments.filter((a) => !a.result || a.result === '');
       if (pendingAssessments.length === 0) {
         return;
       }
-
       if (!confirm(`Fail ${pendingAssessments.length} pending assessment(s)?`)) {
         return;
       }
-
       this.bulkProcessing = true;
-      let successCount = 0;
-      let errorCount = 0;
-
       for (const assessment of pendingAssessments) {
         try {
-          const formData = new FormData();
-          formData.append('result', 'fail');
-          formData.append('notes', assessment.notes);
-          formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-          const response = await fetch(`/audit/api/assessment/${assessment.id}/update/`, {
-            method: 'POST',
-            body: formData
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            // Update in allAssessments (assessment is already a reference from allAssessments)
-            assessment.result = 'fail';
-            // Also update in the filtered assessments array if this assessment is in it
-            const filteredAssessment = this.assessments.find(a => a.id === assessment.id);
-            if (filteredAssessment) {
-              filteredAssessment.result = 'fail';
-            }
-            successCount++;
-            // Update global stats
-            if (data.stats) {
-              this.stats = data.stats;
-            }
-            // Dispatch event so widgets can update
-            window.dispatchEvent(new CustomEvent('bulk-assessment-updated', {
-              detail: {
-                assessmentId: assessment.id,
-                result: 'fail'
-              }
-            }));
-          } else {
-            errorCount++;
-          }
+          await this.updateAssessmentEntry(
+            assessment.id,
+            assessment.visit_id,
+            assessment.blob_id,
+            assessment.question_id,
+            'fail',
+            assessment.notes,
+          );
+          window.dispatchEvent(new CustomEvent('bulk-assessment-updated', {
+            detail: {
+              assessmentId: assessment.id,
+              result: 'fail',
+            },
+          }));
         } catch (error) {
           console.error('Error updating assessment:', error);
-          errorCount++;
         }
       }
-
       this.bulkProcessing = false;
-      // Force reactivity by updating the entire assessments arrays
-      this.assessments = [...this.assessments];
-      this.allAssessments = [...this.allAssessments];
     },
-
     async clearAllAssessments() {
-      if (this.bulkProcessing) return;
-
-      // Count how many assessments have results (from all assessments, not just filtered)
-      const assessedCount = this.allAssessments.filter(a => a.result && a.result !== '').length;
-      if (assessedCount === 0) {
+      if (this.loading || this.bulkProcessing) {
         return;
       }
-
-      if (!confirm(`Clear all ${assessedCount} assessment result(s)? This will reset them to pending.`)) {
+      const assessedAssessments = this.allAssessments.filter((a) => a.result && a.result !== '');
+      if (assessedAssessments.length === 0) {
         return;
       }
-
+      if (!confirm(`Clear all ${assessedAssessments.length} assessment result(s)? This will reset them to pending.`)) {
+        return;
+      }
       this.bulkProcessing = true;
-      let successCount = 0;
-      let errorCount = 0;
-
-      // Only process assessments that have results (from all assessments, not just filtered)
-      const assessedAssessments = this.allAssessments.filter(a => a.result && a.result !== '');
-
       for (const assessment of assessedAssessments) {
         try {
-          const formData = new FormData();
-          formData.append('result', '');  // Empty string to clear
-          formData.append('notes', assessment.notes);
-          formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-          const response = await fetch(`/audit/api/assessment/${assessment.id}/update/`, {
-            method: 'POST',
-            body: formData
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            // Update in allAssessments (assessment is already a reference from allAssessments)
-            assessment.result = '';
-            // Also update in the filtered assessments array if this assessment is in it
-            const filteredAssessment = this.assessments.find(a => a.id === assessment.id);
-            if (filteredAssessment) {
-              filteredAssessment.result = '';
-            }
-            successCount++;
-            // Update global stats
-            if (data.stats) {
-              this.stats = data.stats;
-            }
-            // Dispatch event so widgets can update
-            window.dispatchEvent(new CustomEvent('bulk-assessment-updated', {
-              detail: {
-                assessmentId: assessment.id,
-                result: ''
-              }
-            }));
-          } else {
-            errorCount++;
-          }
+          await this.updateAssessmentEntry(
+            assessment.id,
+            assessment.visit_id,
+            assessment.blob_id,
+            assessment.question_id,
+            '',
+            assessment.notes,
+          );
+          window.dispatchEvent(new CustomEvent('bulk-assessment-updated', {
+            detail: {
+              assessmentId: assessment.id,
+              result: '',
+            },
+          }));
         } catch (error) {
           console.error('Error clearing assessment:', error);
-          errorCount++;
         }
       }
-
       this.bulkProcessing = false;
-      // Force reactivity by updating the entire assessments arrays
-      this.assessments = [...this.assessments];
-      this.allAssessments = [...this.allAssessments];
     },
-
     async setVisitResult(visitId, result) {
+      if (this.loading) {
+        return;
+      }
       try {
-        // Toggle behavior: if already set to this result, clear it
         const currentResult = this.visitResults[visitId];
-        const newResult = (currentResult === result) ? '' : result;
-
+        const newResult = currentResult === result ? '' : result;
         const formData = new FormData();
-        formData.append('result', newResult);
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-        const response = await fetch(`/audit/api/visit/${visitId}/result/`, {
+        formData.append('visit_id', visitId);
+        formData.append('result', newResult || '');
+        formData.append('auto_advance', 'false');
+        formData.append('current_index', '0');
+        formData.append('csrfmiddlewaretoken', this.csrfToken);
+        const response = await fetch(this.resultUpdateUrl, {
           method: 'POST',
-          body: formData
+          body: formData,
         });
-
         const data = await response.json();
-
-        if (data.success) {
-          // Store or clear the visit-level result for UI display
-          if (newResult) {
-            this.visitResults[visitId] = newResult;
-            console.log(`Visit ${visitId} result updated to ${newResult}`);
-          } else {
-            delete this.visitResults[visitId];
-            console.log(`Visit ${visitId} result cleared`);
-          }
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Failed to update visit result');
+        }
+        if (newResult) {
+          this.visitResults[visitId] = newResult;
         } else {
-          alert('Error updating visit result: ' + (data.error || 'Unknown error'));
+          delete this.visitResults[visitId];
         }
       } catch (error) {
-        console.error('Error updating visit result:', error);
         alert('Error updating visit result: ' + error.message);
       }
     },
-
     async applyResults() {
+      if (this.loading) {
+        return;
+      }
       this.applyingResults = true;
-
       try {
         const formData = new FormData();
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-        const response = await fetch('{% url "audit:apply_assessment_results" session.pk %}', {
+        formData.append('csrfmiddlewaretoken', this.csrfToken);
+        const response = await fetch(this.applyResultsUrl, {
           method: 'POST',
-          body: formData
+          body: formData,
         });
-
         const data = await response.json();
-
-        if (data.success) {
-          this.applyResultMessage = `${data.visits_passed} visits passed, ${data.visits_failed} visits failed. ${data.updated_count} visit(s) updated.`;
-          this.showApplyModal = false;
-          this.showSuccessModal = true;
-        } else {
-          alert('Error applying results: ' + (data.error || 'Unknown error'));
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Failed to apply assessment results');
         }
+        this.applyResultMessage = `${data.updated_count} visit(s) updated. ${data.visits_passed} passed, ${data.visits_failed} failed.`;
+        this.showApplyModal = false;
+        this.showSuccessModal = true;
+        await this.fetchData();
       } catch (error) {
-        console.error('Error:', error);
         alert('Error applying results: ' + error.message);
       } finally {
         this.applyingResults = false;
       }
     },
-
-    // Complete audit session
     async completeAudit() {
       if (!this.overallResult || this.submittingCompletion) return;
-
       this.submittingCompletion = true;
-
       try {
         const formData = new FormData();
         formData.append('overall_result', this.overallResult);
         formData.append('notes', this.completionNotes);
         formData.append('kpi_notes', this.kpiNotes);
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-        const response = await fetch('{% url "audit:session_complete" session.id %}', {
+        formData.append('csrfmiddlewaretoken', this.csrfToken);
+        const response = await fetch(this.completeUrl, {
           method: 'POST',
-          body: formData
+          body: formData,
         });
-
         const data = await response.json();
-
-        if (data.success) {
-          // Reload page to show completed status
-          window.location.reload();
-        } else {
-          alert('Error completing audit: ' + data.error);
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Failed to complete audit');
         }
+        window.location.reload();
       } catch (error) {
         alert('Error completing audit: ' + error.message);
       } finally {
         this.submittingCompletion = false;
       }
     },
-
-    // Uncomplete (reopen) audit session
     async uncompleteAudit() {
       if (this.submittingCompletion) return;
-
       if (!confirm('Are you sure you want to reopen this audit? It will be marked as in progress.')) {
         return;
       }
-
       this.submittingCompletion = true;
-
       try {
         const formData = new FormData();
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-        const response = await fetch('{% url "audit:session_uncomplete" session.id %}', {
+        formData.append('csrfmiddlewaretoken', this.csrfToken);
+        const response = await fetch(this.uncompleteUrl, {
           method: 'POST',
-          body: formData
+          body: formData,
         });
-
         const data = await response.json();
-
-        if (data.success) {
-          // Reload page to show in-progress status
-          window.location.reload();
-        } else {
-          alert('Error reopening audit: ' + data.error);
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Failed to reopen audit');
         }
+        window.location.reload();
       } catch (error) {
         alert('Error reopening audit: ' + error.message);
       } finally {
         this.submittingCompletion = false;
       }
-    }
+    },
   };
 }
-
-function assessmentWidget(assessmentId, initialResult, initialNotes) {
+function assessmentWidget(assessmentId, initialResult, initialNotes, visitId, blobId, questionId) {
   return {
-    assessmentId: assessmentId,
+    assessmentId,
+    visitId,
+    blobId,
+    questionId,
     result: initialResult,
     notes: initialNotes,
     saving: false,
-
-    init() {
-      // Listen for bulk assessment updates
-      window.addEventListener('bulk-assessment-updated', (event) => {
-        if (event.detail && event.detail.assessmentId === this.assessmentId) {
-          // Update this widget's state when bulk operation updates this assessment
-          this.result = event.detail.result || '';
-        }
-      });
-    },
-
     async updateResult(newResult) {
       if (this.saving) return;
-
       this.saving = true;
       const oldResult = this.result;
-      this.result = newResult;
-
       try {
-        const formData = new FormData();
-        formData.append('result', newResult);
-        formData.append('notes', this.notes);
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-        const response = await fetch(`/audit/api/assessment/${this.assessmentId}/update/`, {
-          method: 'POST',
-          body: formData
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          this.result = data.result || '';
-          // Trigger a custom event to update parent stats and allAssessments
-          window.dispatchEvent(new CustomEvent('assessment-updated', {
-            detail: {
-              stats: data.stats,
-              assessmentId: this.assessmentId,
-              result: data.result || ''
-            }
-          }));
-        } else {
-          // Revert on error
-          this.result = oldResult;
-          alert('Error updating assessment: ' + (data.error || 'Unknown error'));
-        }
+        const normalized = await this.$root.updateAssessmentEntry(
+          this.assessmentId,
+          this.visitId,
+          this.blobId,
+          this.questionId,
+          newResult,
+          this.notes,
+        );
+        this.result = normalized;
       } catch (error) {
-        console.error('Error:', error);
-        this.result = oldResult;
         alert('Error updating assessment: ' + error.message);
+        this.result = oldResult;
       } finally {
         this.saving = false;
       }
     },
-
     async saveNotes() {
       if (this.saving) return;
-
       this.saving = true;
-
       try {
-        const formData = new FormData();
-        formData.append('result', this.result);
-        formData.append('notes', this.notes);
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-        const response = await fetch(`/audit/api/assessment/${this.assessmentId}/update/`, {
-          method: 'POST',
-          body: formData
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          // Update parent assessments array for reactivity
-          if (this.$root && this.$root.assessments) {
-            const parentAssessment = this.$root.assessments.find(a => a.id === this.assessmentId);
-            if (parentAssessment) {
-              parentAssessment.notes = this.notes;
-            }
-          }
-        } else {
-          alert('Error saving notes: ' + (data.error || 'Unknown error'));
-        }
+        await this.$root.updateAssessmentEntry(
+          this.assessmentId,
+          this.visitId,
+          this.blobId,
+          this.questionId,
+          this.result,
+          this.notes,
+        );
       } catch (error) {
-        console.error('Error:', error);
         alert('Error saving notes: ' + error.message);
       } finally {
         this.saving = false;
       }
     },
-
     handleKeydown(event, currentId) {
       if (this.assessmentId !== currentId || event.target.tagName === 'TEXTAREA') return;
-
       if (event.key === 'p' || event.key === 'P') {
         event.preventDefault();
         this.updateResult('pass');
@@ -1093,7 +1028,7 @@ function assessmentWidget(assessmentId, initialResult, initialNotes) {
         event.preventDefault();
         this.updateResult('fail');
       }
-    }
+    },
   };
 }
 </script>
