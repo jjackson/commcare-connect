@@ -15,8 +15,6 @@ urlpatterns = [
     path("", TemplateView.as_view(template_name="pages/home.html"), name="home"),
     path("about/", TemplateView.as_view(template_name="pages/about.html"), name="about"),
     path(".well-known/assetlinks.json", views.assetlinks_json, name="assetlinks_json"),
-    # Django Admin, use {% url 'admin:index' %}
-    path(settings.ADMIN_URL, admin.site.urls),
     path("o/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     # User management
     path("users/", include("commcare_connect.users.urls", namespace="users")),
@@ -38,6 +36,10 @@ urlpatterns = [
     path("hq/", include("commcare_connect.commcarehq.urls", namespace="commcarehq")),
     path("export/", include("commcare_connect.data_export.urls", namespace="data_export")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Django Admin (conditionally include if admin app is installed)
+if "django.contrib.admin" in settings.INSTALLED_APPS:
+    urlpatterns.insert(0, path(settings.ADMIN_URL, admin.site.urls))
 
 # API URLS
 urlpatterns += [
