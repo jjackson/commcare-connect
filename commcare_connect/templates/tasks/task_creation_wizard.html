@@ -454,11 +454,11 @@ function taskCreationPage() {
 
       this.loadingFieldWorkers = true;
       try {
-        const response = await fetch(`/tasks/api/opportunities/${this.selectedOpportunity.id}/field-workers/`);
+        const response = await fetch(`/tasks/opportunities/${this.selectedOpportunity.id}/workers/`);
         const data = await response.json();
 
         if (data.success) {
-          this.fieldWorkers = data.field_workers;
+          this.fieldWorkers = data.workers;
           this.fieldWorkersLoaded = true;
         } else {
           this.error = data.error || 'Failed to load field workers';

@@ -162,10 +162,9 @@ def test_experiment_task_flow():
     # Step 7: Create a task
     print("\n[7] Creating a task...")
     try:
-        # Note: user_id is not available from the data_export API, using None
-        # In production, we'd need to fetch this from another source or add it to the export API
+        # Username is the primary identifier in Connect
         task = data_access.create_task(
-            user_id=None,  # Not available from /export/opportunity/<id>/user_data/
+            username=selected_user["username"],
             opportunity_id=selected_opp["id"],
             created_by_id=oauth_user.id,
             task_type="warning",
@@ -174,11 +173,12 @@ def test_experiment_task_flow():
             description="Photos submitted show poor lighting and framing. Follow-up required.",
             learning_assignment_text="Please review the photo quality guidelines module.",
             creator_name=oauth_user.username,
+            # user_id not available from /export/opportunity/<id>/user_data/ API
         )
 
         print(f"[OK] Task created: #{task.id}")
+        print(f"    - Username: {task.username} (primary identifier)")
         print(f"    - User ID: {task.user_id} (not available from API)")
-        print(f"    - Username: {selected_user['username']}")
         print(f"    - Opportunity ID: {task.opportunity_id}")
         print(f"    - Type: {task.task_type}")
         print(f"    - Status: {task.status}")
@@ -277,6 +277,7 @@ def test_experiment_task_flow():
     print("\n[13] Verifying JSON data structure...")
     try:
         print(f"[OK] Task data keys: {list(task.data.keys())}")
+        print(f"    - username: {task.username} (primary identifier)")
         print(f"    - user_id: {task.user_id}")
         print(f"    - opportunity_id: {task.opportunity_id}")
         print(f"    - task_type: {task.task_type}")
@@ -333,9 +334,9 @@ def test_experiment_task_flow():
         network_tasks = data_access.get_tasks(status="network_manager")
         print(f"[OK] Found {network_tasks.count()} tasks with status 'network_manager'")
 
-        # Query by user_id (None for this test since not available from API)
-        user_tasks = data_access.get_tasks(user_id=None)
-        print(f"[OK] Found {user_tasks.count()} tasks with user_id=None")
+        # Query by username (primary identifier)
+        user_tasks = data_access.get_tasks(username=selected_user["username"])
+        print(f"[OK] Found {user_tasks.count()} tasks for username {selected_user['username']}")
 
     except Exception as e:
         print(f"[ERROR] Failed to query tasks: {e}")

@@ -10,6 +10,7 @@ Templates are reused from the existing audit views for consistency.
 
 import json
 
+import django_tables2 as tables
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.urls import reverse_lazy
@@ -19,8 +20,21 @@ from django_tables2 import SingleTableView
 
 from commcare_connect.audit.data_access import AuditDataAccess
 from commcare_connect.audit.experiment_models import AuditSessionRecord
-from commcare_connect.audit.services.progress_tracker import ProgressTracker
-from commcare_connect.audit.tables import AuditTable
+
+
+class AuditTable(tables.Table):
+    """Simple table for displaying audit sessions"""
+
+    id = tables.Column(verbose_name="ID")
+    title = tables.Column(verbose_name="Title")
+    status = tables.Column(verbose_name="Status")
+    date_created = tables.DateTimeColumn(verbose_name="Created", format="Y-m-d H:i")
+
+    class Meta:
+        model = AuditSessionRecord
+        template_name = "django_tables2/bootstrap4.html"
+        fields = ("id", "title", "status", "date_created")
+        attrs = {"class": "table table-striped"}
 
 
 class ExperimentAuditCreateView(LoginRequiredMixin, TemplateView):
@@ -441,14 +455,22 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 opportunity_ids=opportunity_ids, audit_type=audit_type, criteria=normalized_criteria
             )
 
-            # Filter by selected FLW user IDs if provided
+            # Filter by selected FLW identifiers if provided
+            # TODO: Check with team whether to use user_id or username as primary identifier
+            # Currently using username as primary, with user_id fallback
             selected_flw_user_ids = normalized_criteria.get("selected_flw_user_ids", [])
             if selected_flw_user_ids and visit_ids:
-                # Fetch visits and filter by user_id
+                # Fetch visits and filter by username (or user_id as fallback)
                 filtered_visit_ids = []
                 for opp_id in opportunity_ids:
                     visits = data_access.get_visits_batch(visit_ids, opp_id)
-                    filtered_visit_ids.extend([v["id"] for v in visits if v.get("user_id") in selected_flw_user_ids])
+                    filtered_visit_ids.extend(
+                        [
+                            v["id"]
+                            for v in visits
+                            if v.get("username") in selected_flw_user_ids or v.get("user_id") in selected_flw_user_ids
+                        ]
+                    )
                 visit_ids = filtered_visit_ids
 
             if not visit_ids:
@@ -536,20 +558,26 @@ class ExperimentOpportunitySearchAPIView(LoginRequiredMixin, View):
 
 
 class ExperimentAuditProgressAPIView(LoginRequiredMixin, View):
-    """API endpoint for polling audit creation progress (experiment-based)"""
+    """API endpoint for polling audit creation progress (experiment-based)
+
+    Note: Progress tracking was removed with old service layer.
+    This endpoint is kept for API compatibility but returns minimal data.
+    """
 
     def get(self, request):
         task_id = request.GET.get("task_id")
         if not task_id:
             return JsonResponse({"error": "Missing task_id"}, status=400)
 
-        progress_tracker = ProgressTracker(task_id=task_id)
-        progress_data = progress_tracker.get_progress()
-
-        if progress_data is None:
-            return JsonResponse({"error": "Task not found"}, status=404)
-
-        return JsonResponse(progress_data)
+        # Return simple progress data (old ProgressTracker service was removed)
+        return JsonResponse(
+            {
+                "task_id": task_id,
+                "status": "complete",
+                "progress": 100,
+                "message": "Progress tracking unavailable in experiment implementation",
+            }
+        )
 
     def delete(self, request):
         """Cancel an in-progress audit creation"""
@@ -557,10 +585,8 @@ class ExperimentAuditProgressAPIView(LoginRequiredMixin, View):
         if not task_id:
             return JsonResponse({"error": "Missing task_id"}, status=400)
 
-        progress_tracker = ProgressTracker(task_id=task_id)
-        progress_tracker.cancel()
-
-        return JsonResponse({"success": True, "message": "Cancellation requested"})
+        # Old ProgressTracker was removed - return success for compatibility
+        return JsonResponse({"success": True, "message": "Cancellation not supported in experiment implementation"})
 
 
 class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
@@ -599,28 +625,31 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
             )
 
             # Fetch detailed visit data and group by FLW
+            # TODO: Check with team whether to use user_id or username as primary identifier
+            # Currently using username since it's unique and always populated
             flw_data = {}
             for opp_id in opportunity_ids:
                 visits = data_access.get_visits_batch(visit_ids, opp_id)
 
                 for visit in visits:
-                    user_id = visit.get("user_id")
-                    if not user_id:
+                    # Use username as primary identifier
+                    username = visit.get("username")
+                    if not username:
                         continue
 
-                    if user_id not in flw_data:
-                        flw_data[user_id] = {
-                            "user_id": user_id,
-                            "name": visit.get("user_name", "Unknown"),
-                            "connect_id": user_id,
+                    if username not in flw_data:
+                        flw_data[username] = {
+                            "user_id": visit.get("user_id"),  # May be None
+                            "name": username,
+                            "connect_id": username,
                             "visit_count": 0,
                             "visits": [],
                             "opportunity_id": opp_id,
                             "opportunity_name": visit.get("opportunity_name", ""),
                         }
 
-                    flw_data[user_id]["visit_count"] += 1
-                    flw_data[user_id]["visits"].append(
+                    flw_data[username]["visit_count"] += 1
+                    flw_data[username]["visits"].append(
                         {
                             "id": visit.get("id"),
                             "visit_date": visit.get("visit_date"),
@@ -629,7 +658,7 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
 
             # Calculate date ranges and format for frontend
             preview_results = []
-            for user_id, flw in flw_data.items():
+            for username, flw in flw_data.items():
                 # Sort visits by date
                 visits = sorted(flw["visits"], key=lambda v: v["visit_date"])
                 earliest = visits[0]["visit_date"] if visits else None
@@ -637,7 +666,8 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
 
                 preview_results.append(
                     {
-                        "user_id": user_id,
+                        "user_id": flw["user_id"],  # May be None
+                        "username": username,
                         "name": flw["name"],
                         "connect_id": flw["connect_id"],
                         "visit_count": flw["visit_count"],

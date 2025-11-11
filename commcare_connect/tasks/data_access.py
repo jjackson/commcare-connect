@@ -76,32 +76,35 @@ class TaskDataAccess:
 
     def create_task(
         self,
-        user_id: int,
+        username: str,
         opportunity_id: int,
         created_by_id: int,
         task_type: str = "warning",
         priority: str = "medium",
         title: str = "",
         description: str = "",
+        user_id: int | None = None,
         **kwargs,
     ) -> TaskRecord:
         """
         Create a new task.
 
         Args:
-            user_id: FLW user ID this task is about
+            username: FLW username (primary identifier in Connect)
             opportunity_id: Opportunity ID this task relates to
             created_by_id: User ID who created this task
             task_type: Type of task (warning, deactivation)
             priority: Priority (low, medium, high)
             title: Task title
             description: Task description
+            user_id: FLW user ID (optional, may not be available from API)
             **kwargs: Additional fields (learning_assignment_text, audit_session_id, assigned_to_id, status)
 
         Returns:
             TaskRecord instance with initial "created" event
         """
         data = {
+            "username": username,
             "user_id": user_id,
             "opportunity_id": opportunity_id,
             "created_by_id": created_by_id,
@@ -160,6 +163,7 @@ class TaskDataAccess:
 
     def get_tasks(
         self,
+        username: str | None = None,
         user_id: int | None = None,
         opportunity_id: int | None = None,
         status: str | None = None,
@@ -169,7 +173,8 @@ class TaskDataAccess:
         Query tasks with filters.
 
         Args:
-            user_id: Filter by FLW user ID
+            username: Filter by FLW username (primary identifier)
+            user_id: Filter by FLW user ID (if available)
             opportunity_id: Filter by opportunity ID
             status: Filter by status
             assigned_to_id: Filter by assigned user ID
@@ -178,6 +183,8 @@ class TaskDataAccess:
             QuerySet of TaskRecord instances
         """
         data_filters = {}
+        if username:
+            data_filters["username"] = username
         if status:
             data_filters["status"] = status
         if assigned_to_id:
