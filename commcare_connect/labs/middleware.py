@@ -91,6 +91,10 @@ class LabsURLWhitelistMiddleware:
         path = request.path
         logger.debug(f"Labs middleware checking path: {path}, authenticated: {request.user.is_authenticated}")
 
+        # Special case: health check endpoint (for load balancer)
+        if path == "/health/":
+            return self.get_response(request)
+
         # Special case: root path redirects to labs login
         if path == "/":
             logger.debug("Redirecting root path to labs login")
