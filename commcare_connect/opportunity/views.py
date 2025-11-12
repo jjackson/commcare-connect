@@ -19,6 +19,7 @@ from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -125,6 +126,7 @@ from commcare_connect.opportunity.tasks import (
     send_push_notification_task,
     update_user_and_send_invite,
 )
+from commcare_connect.opportunity.utils.completed_work import get_uninvoiced_visit_items
 from commcare_connect.opportunity.visit_import import (
     ImportException,
     bulk_update_catchments,
@@ -2458,3 +2460,22 @@ def add_api_key(request, org_slug):
         api_key.save()
         form = HQApiKeyCreateForm(auto_id="api_key_form_id_for_%s")
     return HttpResponse(render_crispy_form(form))
+
+
+@require_POST
+@opportunity_required
+def invoice_items(request, *args, **kwargs):
+    start_date_str = request.POST.get("start_date")
+    end_date_str = request.POST.get("end_date")
+
+    start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else None
+    end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else None
+
+    line_items = get_uninvoiced_visit_items(request.opportunity, start_date, end_date)
+
+    html = render_to_string(
+        "opportunity/partials/invoice_line_items.html",
+        {"line_items": line_items},
+        request=request,
+    )
+    return HttpResponse(html)

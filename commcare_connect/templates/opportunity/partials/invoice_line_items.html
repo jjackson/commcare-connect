@@ -1,0 +1,30 @@
+<table class="table text-xs">
+    <thead>
+        <tr>
+            <th>Month</th>
+            <th>Payment Unit</th>
+            <th>Number Approved</th>
+            <th>Amount per Unit</th>
+            <th>Total Amount (Local)</th>
+            <th>Exchange Rate</th>
+            <th>Total Amount (USD)</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in line_items %}
+        <tr>
+            <td>{{ item.month|date:"F Y" }}</td>
+            <td>{{ item.payment_unit_name }}</td>
+            <td>{{ item.number_approved }}</td>
+            <td>{{ item.amount_per_unit }}</td>
+            <td>{{ item.total_amount_local }}</td>
+            <td>{{ item.exchange_rate }}</td>
+            <td>{{ item.total_amount_usd }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="7">No invoice items found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

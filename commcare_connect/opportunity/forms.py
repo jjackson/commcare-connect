@@ -1180,14 +1180,27 @@ class PaymentInvoiceForm(forms.ModelForm):
                     css_class="flex flex-col",
                 ),
                 Div(
-                    Field(
-                        "start_date",
+                    Div(
+                        Field(
+                            "start_date",
+                            **{
+                                "x-on:change": "fetchInvoiceLineItems()",
+                                "x-model": "startDate",
+                            },
+                        ),
+                        Field(
+                            "end_date",
+                            **{"x-on:change": "fetchInvoiceLineItems()", "x-model": "endDate"},
+                        ),
+                        **{"x-show": "serviceDeliverySelected()"},
+                        css_class="grid grid-cols-2 gap-4",
                     ),
-                    Field(
-                        "end_date",
+                    Div(
+                        css_id="invoice-line-items-wrapper",
+                        css_class="space-y-1 text-sm text-gray-500 mb-4",
+                        **{"x-show": "serviceDeliverySelected()"},
                     ),
-                    **{"x-show": "serviceDeliverySelected()"},
-                    css_class="grid grid-cols-2 gap-4",
+                    css_class="flex flex-col",
                 ),
                 Div(
                     Field("notes"),
