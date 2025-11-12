@@ -1086,7 +1086,7 @@ class FormJsonValidationRulesForm(forms.ModelForm):
 
 
 class PaymentInvoiceForm(forms.ModelForm):
-    local_amount = forms.CharField(
+    amount = forms.CharField(
         label="Amount (Local currency)",
         widget=forms.NumberInput(attrs={"placeholder": "0.00"}),
         help_text=_("Local currency is determined by the opportunity."),
@@ -1114,7 +1114,7 @@ class PaymentInvoiceForm(forms.ModelForm):
 
     class Meta:
         model = PaymentInvoice
-        fields = ("title", "date", "invoice_number", "start_date", "end_date", "notes")
+        fields = ("title", "date", "invoice_number", "start_date", "end_date", "notes", "amount", "amount_usd")
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "start_date": forms.DateInput(attrs={"type": "date"}),
@@ -1137,7 +1137,7 @@ class PaymentInvoiceForm(forms.ModelForm):
 
         self.fields["invoice_number"].initial = self.generate_invoice_number()
         self.fields["date"].initial = str(datetime.date.today())
-        self.fields["start_date"].initial = str(self.get_earliest_uninvoiced_date().date())
+        self.fields["start_date"].initial = str(self.get_earliest_uninvoiced_date())
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
@@ -1170,20 +1170,20 @@ class PaymentInvoiceForm(forms.ModelForm):
                 Div(
                     Div(
                         Field(
-                            "local_amount",
+                            "amount",
                             label=f"Amount ({self.opportunity.currency})",
                             **{
                                 "x-model": "amount",
                                 "x-ref": "amount",
                                 "x-on:input.debounce.300ms": "convert()",
-                                ":disabled": "serviceDeliverySelected()",
+                                ":readonly": "serviceDeliverySelected()",
                             },
                         ),
                         Field(
                             "amount_usd",
                             **{
                                 "x-model": "usdAmount",
-                                ":disabled": "serviceDeliverySelected()",
+                                ":readonly": "serviceDeliverySelected()",
                             },
                         ),
                         css_class="grid grid-cols-2 gap-4",
@@ -1226,11 +1226,15 @@ class PaymentInvoiceForm(forms.ModelForm):
         self.helper.form_tag = False
 
     def get_earliest_uninvoiced_date(self):
-        return (
+        date = (
             CompletedWork.objects.filter(invoice__isnull=True, opportunity_access__opportunity=self.opportunity)
             .aggregate(earliest_date=Min("date_created"))
-            .get("earliest_date", self.opportunity.start_date)
+            .get("earliest_date")
         )
+        if not date:
+            return self.opportunity.start_date
+
+        return date.date()
 
     def generate_invoice_number(self):
         return uuid.uuid4().hex[:10].upper()
@@ -1250,7 +1254,7 @@ class PaymentInvoiceForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        local_amount = cleaned_data.get("local_amount")
+        local_amount = cleaned_data.get("amount")
         date = cleaned_data.get("date")
 
         if local_amount is None or date is None:
@@ -1286,7 +1290,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         instance = super().save(commit=False)
         instance.opportunity = self.opportunity
         instance.amount_usd = self.cleaned_data["amount_usd"]
-        instance.amount = Decimal(self.cleaned_data["local_amount"])
+        instance.amount = Decimal(self.cleaned_data["amount"])
         instance.exchange_rate = self.cleaned_data["exchange_rate"]
         instance.service_delivery = self.is_service_delivery
 
