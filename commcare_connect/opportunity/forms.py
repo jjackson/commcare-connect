@@ -8,7 +8,7 @@ from crispy_forms.layout import HTML, Column, Div, Field, Fieldset, Layout, Row,
 from dateutil.relativedelta import relativedelta
 from django import forms
 from django.core.exceptions import ValidationError
-from django.db.models import F, Q, Sum, TextChoices
+from django.db.models import F, Min, Q, Sum, TextChoices
 from django.urls import reverse
 from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
@@ -17,6 +17,7 @@ from waffle import switch_is_active
 from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.models import (
     CommCareApp,
+    CompletedWork,
     CredentialConfiguration,
     DeliverUnit,
     DeliverUnitFlagRules,
@@ -1136,6 +1137,7 @@ class PaymentInvoiceForm(forms.ModelForm):
 
         self.fields["invoice_number"].initial = self.generate_invoice_number()
         self.fields["date"].initial = str(datetime.date.today())
+        self.fields["start_date"].initial = str(self.get_earliest_uninvoiced_date().date())
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
@@ -1223,6 +1225,13 @@ class PaymentInvoiceForm(forms.ModelForm):
         )
         self.helper.form_tag = False
 
+    def get_earliest_uninvoiced_date(self):
+        return (
+            CompletedWork.objects.filter(invoice__isnull=True, opportunity_access__opportunity=self.opportunity)
+            .aggregate(earliest_date=Min("date_created"))
+            .get("earliest_date", self.opportunity.start_date)
+        )
+
     def generate_invoice_number(self):
         return uuid.uuid4().hex[:10].upper()
 
@@ -1277,7 +1286,8 @@ class PaymentInvoiceForm(forms.ModelForm):
 
         if commit:
             instance.save()
-            link_invoice_to_completed_works(instance, start_date=instance.start_date, end_date=instance.end_date)
+            if self.is_service_delivery:
+                link_invoice_to_completed_works(instance, start_date=instance.start_date, end_date=instance.end_date)
 
         return instance
 
