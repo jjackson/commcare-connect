@@ -1,4 +1,5 @@
 import datetime
+import json
 import sys
 from collections import Counter, defaultdict
 from datetime import timedelta
@@ -16,7 +17,7 @@ from django.core.files.storage import default_storage, storages
 from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -2465,17 +2466,27 @@ def add_api_key(request, org_slug):
 @require_POST
 @opportunity_required
 def invoice_items(request, *args, **kwargs):
-    start_date_str = request.POST.get("start_date")
-    end_date_str = request.POST.get("end_date")
+    body = json.loads(request.body)
+    start_date_str = body.get("start_date")
+    end_date_str = body.get("end_date")
 
     start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else None
     end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else None
 
     line_items = get_uninvoiced_visit_items(request.opportunity, start_date, end_date)
+    total_local_amount = sum(item["total_amount_local"] for item in line_items)
+    total_usd_amount = sum(item["total_amount_usd"] for item in line_items)
 
     html = render_to_string(
         "opportunity/partials/invoice_line_items.html",
         {"line_items": line_items},
         request=request,
     )
-    return HttpResponse(html)
+
+    return JsonResponse(
+        {
+            "line_items_table_html": html,
+            "total_amount": total_local_amount,
+            "total_usd_amount": total_usd_amount,
+        }
+    )

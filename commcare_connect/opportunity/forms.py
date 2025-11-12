@@ -1145,6 +1145,7 @@ class PaymentInvoiceForm(forms.ModelForm):
                         "invoice_type",
                         **{
                             "x-model": "invoiceType",
+                            "x-on:change": "resetServiceDeliveryFields()",
                         },
                     ),
                     css_class="grid grid-cols-2 gap-4",
@@ -1169,11 +1170,19 @@ class PaymentInvoiceForm(forms.ModelForm):
                             "local_amount",
                             label=f"Amount ({self.opportunity.currency})",
                             **{
+                                "x-model": "amount",
                                 "x-ref": "amount",
                                 "x-on:input.debounce.300ms": "convert()",
+                                ":disabled": "serviceDeliverySelected()",
                             },
                         ),
-                        Field("amount_usd"),
+                        Field(
+                            "amount_usd",
+                            **{
+                                "x-model": "usdAmount",
+                                ":disabled": "serviceDeliverySelected()",
+                            },
+                        ),
                         css_class="grid grid-cols-2 gap-4",
                     ),
                     Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
