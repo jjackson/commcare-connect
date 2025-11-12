@@ -19,6 +19,11 @@
         {% for org in user.organizations %}
         <li class="border-b pb-2">
           <strong>{{ org.name }}</strong> ({{ org.slug }})
+          {% if org.program_manager %}
+            <span class="inline-block bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded-full font-semibold">Program Manager</span>
+          {% else %}
+            <span class="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-semibold">Network Manager</span>
+          {% endif %}
           - <a href="{{ connect_url }}/a/{{ org.slug }}/" target="_blank" class="text-blue-600 hover:underline">View in Production →</a>
         </li>
         {% endfor %}
