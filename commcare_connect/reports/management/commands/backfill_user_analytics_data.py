@@ -1,7 +1,8 @@
 from collections import defaultdict
+from itertools import chain
 
 from django.core.management import BaseCommand
-from django.db.models import Case, Count, DateTimeField, IntegerField, Max, Min, Q, Sum, Value, When
+from django.db.models import Case, Count, DateTimeField, F, IntegerField, Max, Min, Q, Sum, Value, When
 from django.db.models.lookups import GreaterThanOrEqual
 
 from commcare_connect.connect_id_client.main import fetch_user_analytics
@@ -14,10 +15,13 @@ class Command(BaseCommand):
     help = "Backfills User Analytics Data"
 
     def handle(self, *args, **options):
-        users = User.objects.filter(username__isnull=False, email__isnull=True)
-        personalid_analytics_data = fetch_user_analytics([user.username for user in users])
+        users = User.objects.filter(username__isnull=False, email__isnull=True, is_active=True).values_list(
+            "id", "username"
+        )
+        personalid_analytics_data = fetch_user_analytics()
+
         access_objects = (
-            OpportunityAccess.objects.filter(user__in=users)
+            OpportunityAccess.objects.filter(user_id__in=[user_id for user_id, _ in users])
             .annotate(
                 max_total=Sum("opportunity__paymentunit__max_total"),
                 max_total_done=Count(
@@ -37,6 +41,7 @@ class Command(BaseCommand):
                 ),
             )
             .annotate(
+                username=F("user__username"),
                 has_opp_invite=Max("invited_date"),
                 has_accepted_opp=Max("invited_date", filter=Q(accepted=True)),
                 has_started_learning=Max("date_learn_started"),
@@ -67,7 +72,7 @@ class Command(BaseCommand):
                 ),
             )
             .values(
-                "user__username",
+                "username",
                 "user_id",
                 "has_opp_invite",
                 "has_accepted_opp",
@@ -85,13 +90,12 @@ class Command(BaseCommand):
         )
 
         user_data_map = defaultdict(lambda: {})
-        for data in access_objects:
-            username = data.pop("user__username")
-            if username is not None:
-                user_data_map[username].update(data)
 
-        for data in personalid_analytics_data:
-            username = data.pop("username")
+        for user_id, username in users:
+            user_data_map[username] = {"user_id": user_id, "username": username}
+
+        for data in chain(access_objects, personalid_analytics_data):
+            username = data.get("username")
             if username is not None:
                 user_data_map[username].update(data)
 
@@ -114,5 +118,6 @@ class Command(BaseCommand):
                 "has_viewed_work_history",
                 "has_sent_message",
             ],
-            unique_fields=["user_id"],
+            unique_fields=["username"],
+            batch_size=500,
         )
