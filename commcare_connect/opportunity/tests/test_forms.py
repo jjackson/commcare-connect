@@ -335,6 +335,7 @@ class TestPaymentInvoiceForm:
         assert form.fields["invoice_number"].initial
         assert form.fields["date"].initial == str(datetime.date.today())
         assert form.fields["start_date"].initial == str(valid_opportunity.start_date)
+        assert form.fields["end_date"].initial == str(datetime.date.today())
 
     def test_start_date_equal_to_first_uninvoiced_completed_work_date(self, valid_opportunity):
         cw = CompletedWorkFactory(
