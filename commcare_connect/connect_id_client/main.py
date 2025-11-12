@@ -10,7 +10,6 @@ from commcare_connect.connect_id_client.models import (
     MessagingBulkResponse,
     MessagingResponse,
 )
-from commcare_connect.organization.models import Organization
 
 GET = "GET"
 POST = "POST"
@@ -41,17 +40,6 @@ def send_message_bulk(messages: list[Message]) -> MessagingBulkResponse:
     response = _make_request(POST, "/messaging/send_bulk/", json=json, timeout=30)
     data = response.json()
     return MessagingBulkResponse.build(**data)
-
-
-def add_credential(organization: Organization, credential: str, users: list[str]):
-    json = {
-        "users": users,
-        "organization": organization.slug,
-        "organization_name": organization.name,
-        "credential": credential,
-    }
-    _make_request(POST, "/users/add_credential", json=json, timeout=30)
-    return
 
 
 def add_credentials(credentials_items: list[dict]):
