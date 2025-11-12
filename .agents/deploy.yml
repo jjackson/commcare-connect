@@ -10,7 +10,7 @@ instructions: |
   ## Deployment Architecture
   - **Environment**: AWS ECS Fargate (labs-jj-cluster)
   - **Deployment Method**: GitHub Actions workflow (manual trigger)
-  - **Repository**: dimagi/commcare-connect
+  - **Repository**: jjackson/commcare-connect (your fork)
   - **Branch**: labs-main usually, but use the branch name that is being worked on.
   - **URL**: https://labs.connect.dimagi.com
 
@@ -33,13 +33,13 @@ instructions: |
   ```bash
   # Deploy WITHOUT migrations (most common)
   gh workflow run deploy-labs.yml \
-    --repo dimagi/commcare-connect \
+    --repo jjackson/commcare-connect \
     --ref labs-main \
     --field run_migrations=false
 
   # Deploy WITH migrations (if models changed)
   gh workflow run deploy-labs.yml \
-    --repo dimagi/commcare-connect \
+    --repo jjackson/commcare-connect \
     --ref labs-main \
     --field run_migrations=true
   ```
@@ -47,23 +47,23 @@ instructions: |
   ### Step 3: Monitor Deployment
   ```bash
   # Watch deployment progress
-  gh run watch --repo dimagi/commcare-connect
+  gh run watch --repo jjackson/commcare-connect
 
   # List recent runs
-  gh run list --repo dimagi/commcare-connect --workflow=deploy-labs.yml --limit 5
+  gh run list --repo jjackson/commcare-connect --workflow=deploy-labs.yml --limit 5
 
   # View specific run
-  gh run view <run-id> --repo dimagi/commcare-connect --log
+  gh run view <run-id> --repo jjackson/commcare-connect --log
   ```
 
   ## Important Notes
 
-  1. **Code Location**: The workflow runs from `dimagi/commcare-connect:labs-main`, NOT from the fork
+  1. **Code Location**: The workflow runs from `jjackson/commcare-connect:labs-main` (your fork)
   2. **Fork vs Origin**:
-     - `fork` remote = `jjackson/commcare-connect` (developer's fork)
-     - `origin` remote = `dimagi/commcare-connect` (main repo)
+     - `fork` remote = `jjackson/commcare-connect` (your fork)
+     - `origin` remote = `dimagi/commcare-connect` (upstream main repo, for reference only)
   3. **Migrations**: Only set `run_migrations=true` if you've modified database models
-  4. **Permissions**: User needs workflow trigger permissions on main repo
+  4. **Permissions**: User needs workflow trigger permissions on their fork
 
   ## When to Run Migrations
   Set `run_migrations=true` if changes include:
@@ -91,7 +91,7 @@ instructions: |
   - May need to create PR instead of direct trigger
 
   ### Deployment fails
-  1. Check logs: `gh run view <run-id> --repo dimagi/commcare-connect --log`
+  1. Check logs: `gh run view <run-id> --repo jjackson/commcare-connect --log`
   2. Common issues:
      - Docker build failures (check Dockerfile)
      - Migration failures (check model changes)
@@ -112,16 +112,16 @@ instructions: |
   gh auth status
 
   # View current workflow runs
-  gh run list --repo dimagi/commcare-connect --workflow=deploy-labs.yml
+  gh run list --repo jjackson/commcare-connect --workflow=deploy-labs.yml
 
   # Cancel a running deployment
-  gh run cancel <run-id> --repo dimagi/commcare-connect
+  gh run cancel <run-id> --repo jjackson/commcare-connect
 
   # Rerun failed deployment
-  gh run rerun <run-id> --repo dimagi/commcare-connect
+  gh run rerun <run-id> --repo jjackson/commcare-connect
 
   # Open workflow in browser
-  gh workflow view deploy-labs.yml --repo dimagi/commcare-connect --web
+  gh workflow view deploy-labs.yml --repo jjackson/commcare-connect --web
   ```
 
   ## Pre-Deployment Checklist
@@ -131,12 +131,12 @@ instructions: |
   - [ ] All tests pass (`pytest`)
   - [ ] No linter errors (`pre-commit run --all-files`)
   - [ ] Changes don't require migrations (or set migrations=true)
-  - [ ] Code is in `dimagi/commcare-connect:labs-main` (not just fork)
+  - [ ] Code is in `jjackson/commcare-connect:labs-main` (your fork)
 
   ## Post-Deployment Verification
 
   After deployment:
-  - [ ] Check deployment completed: `gh run list --repo dimagi/commcare-connect --workflow=deploy-labs.yml --limit 1`
+  - [ ] Check deployment completed: `gh run list --repo jjackson/commcare-connect --workflow=deploy-labs.yml --limit 1`
   - [ ] Test changes at https://labs.connect.dimagi.com
   - [ ] Check CloudWatch logs if issues occur
   - [ ] Verify services are running in AWS ECS Console
@@ -147,13 +147,13 @@ instructions: |
   ```bash
   # Find last successful deployment
   gh run list \
-    --repo dimagi/commcare-connect \
+    --repo jjackson/commcare-connect \
     --workflow=deploy-labs.yml \
     --status=success \
     --limit 1
 
   # Rerun that deployment
-  gh run rerun <previous-successful-run-id> --repo dimagi/commcare-connect
+  gh run rerun <previous-successful-run-id> --repo jjackson/commcare-connect
   ```
 
 files:
