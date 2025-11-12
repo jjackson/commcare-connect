@@ -14,14 +14,17 @@ def create_periodic_task(apps, schema_editor):
         month_of_year="*",
     )
     PeriodicTask.objects.update_or_create(
-        crontab=schedule,
         name="issue_user_credentials",
-        task="commcare_connect.opportunity.tasks.issue_user_credentials",
+        defaults={
+            "task": "commcare_connect.opportunity.tasks.issue_user_credentials",
+            "crontab": schedule,
+            "interval": None,
+        },
     )
 
 
 def delete_periodic_task(apps, schema_editor):
-    PeriodicTask.objects.get(
+    PeriodicTask.objects.filter(
         name="issue_user_credentials",
         task="commcare_connect.opportunity.tasks.issue_user_credentials",
     ).delete()
