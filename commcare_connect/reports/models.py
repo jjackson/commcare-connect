@@ -4,7 +4,12 @@ from commcare_connect.users.models import User
 
 
 class UserAnalyticsData(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    username = models.CharField(unique=True)
+    # user can be null in cases where a user is only registered on PersonalID
+    # and is not a Connect User, the username field can be used as the
+    # user identifier in those cases.
+    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True)
+
     has_opp_invite = models.DateTimeField(null=True)
     has_accepted_opp = models.DateTimeField(null=True)
     has_started_learning = models.DateTimeField(null=True)
