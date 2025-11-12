@@ -74,6 +74,8 @@
       open: false,
       currency: false,
       invoiceType: 'service_delivery',
+      startDate: null,
+      endDate: null,
 
       serviceDeliverySelected() {
         return this.invoiceType === 'service_delivery';
@@ -108,6 +110,26 @@
             if (newAmount) {
               this.$refs.amount.value = newAmount;
             }
+          }
+        });
+      },
+
+      fetchInvoiceLineItems() {
+        if (!this.startDate || !this.endDate) return;
+
+        document.getElementById('invoice-line-items-wrapper').innerHTML = `
+          <div class="flex items-center justify-center p-4">
+            <i class="fa-solid fa-spinner fa-spin mr-1"></i>
+            Loading invoice items...
+          </div>
+        `;
+
+        htmx.ajax('POST', '{% url "opportunity:invoice_items" org_slug=request.org.slug opp_id=opportunity.id %}', {
+          target: '#invoice-line-items-wrapper',
+          swap: 'innerHTML',
+          values: {
+            start_date: this.startDate,
+            end_date: this.endDate
           }
         });
       }
