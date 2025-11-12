@@ -79,6 +79,10 @@
       amount: null,
       usdAmount: null,
 
+      init() {
+        this.resetLineItemsContainer();
+      },
+
       serviceDeliverySelected() {
         return this.invoiceType === 'service_delivery';
       },
@@ -122,8 +126,16 @@
           this.endDate = null;
           this.amount = null;
           this.usdAmount = null;
-          document.getElementById('invoice-line-items-wrapper').innerHTML = '';
+          this.resetLineItemsContainer();
         }
+      },
+
+      resetLineItemsContainer() {
+        document.getElementById('invoice-line-items-wrapper').innerHTML = `
+          <div class="text-sm text-gray-500">
+            {% translate "Select start and end dates for invoice items." %}
+          </div>
+        `;
       },
 
       fetchInvoiceLineItems() {
@@ -132,7 +144,6 @@
         document.getElementById('invoice-line-items-wrapper').innerHTML = `
           <div class="flex items-center justify-center p-4">
             <i class="fa-solid fa-spinner fa-spin mr-1"></i>
-            Loading invoice items...
           </div>
         `;
 
