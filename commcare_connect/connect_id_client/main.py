@@ -81,8 +81,8 @@ def fetch_user_counts() -> dict[str, int]:
     return data
 
 
-def fetch_user_analytics(usernames: list[str]) -> list[dict]:
-    response = _make_request(POST, "/users/fetch_user_analytics", json={"usernames": usernames})
+def fetch_user_analytics() -> list[dict]:
+    response = _make_request(GET, "/users/fetch_user_analytics")
     data = response.json()
     return data.get("data", [])
 
