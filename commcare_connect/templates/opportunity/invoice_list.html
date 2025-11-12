@@ -75,12 +75,14 @@
       currency: false,
       invoiceType: 'service_delivery',
       startDate: '{{  form.start_date.value|default:"" }}',
-      endDate: null,
+      endDate: '{{  form.end_date.value|default:"" }}',
       amount: null,
       usdAmount: null,
 
       init() {
-        this.resetLineItemsContainer();
+        if (this.serviceDeliverySelected) {
+          this.fetchInvoiceLineItems();
+        }
       },
 
       serviceDeliverySelected() {

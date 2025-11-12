@@ -1138,6 +1138,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         self.fields["invoice_number"].initial = self.generate_invoice_number()
         self.fields["date"].initial = str(datetime.date.today())
         self.fields["start_date"].initial = str(self.get_earliest_uninvoiced_date())
+        self.fields["end_date"].initial = str(datetime.date.today())
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
