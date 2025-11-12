@@ -11,7 +11,7 @@ instructions: |
   - **Environment**: AWS ECS Fargate (labs-jj-cluster)
   - **Deployment Method**: GitHub Actions workflow (manual trigger)
   - **Repository**: dimagi/commcare-connect
-  - **Branch**: labs-main
+  - **Branch**: labs-main usually, but use the branch name that is being worked on.
   - **URL**: https://labs.connect.dimagi.com
 
   ## Standard Deployment Process
