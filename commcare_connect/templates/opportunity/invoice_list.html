@@ -6,7 +6,7 @@
 {% block top_buttons %}
     {{ block.super }}
     {% if not request.is_opportunity_pm %}
-<div x-data="invoiceModal()"
+    <div x-data="invoiceModal()"
       @keydown.escape.window="closeModal()"
       id="invoiceModal"
     >
@@ -24,7 +24,7 @@
           @click.away="closeModal()"
           x-show="open"
           x-transition
-          class="modal"
+          class="modal !max-w-5xl"
           role="dialog"
           aria-labelledby="invoiceModalLabel">
           <div class="modal-content">
