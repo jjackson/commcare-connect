@@ -468,4 +468,4 @@ def issue_user_credentials():
 
 @celery_app.task()
 def submit_credentials_to_personalid_task():
-    UserCredentialIssuer.issue_credentials_to_users()
+    UserCredentialIssuer.submit_user_credentials()

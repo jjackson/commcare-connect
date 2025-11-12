@@ -201,7 +201,7 @@ class TestUserCredentialIssuer:
     @mock.patch.object(UserCredentialIssuer, "_submit_credentials_to_personal_id")
     def test_no_credentials_to_submit(self, mock_submit_credentials_to_personal_id):
         UserCredentialFactory(issued_on=now())
-        UserCredentialIssuer.issue_credentials_to_users()
+        UserCredentialIssuer.submit_user_credentials()
         mock_submit_credentials_to_personal_id.assert_not_called()
 
     @mock.patch.object(UserCredentialIssuer, "_submit_credentials_to_personal_id")
@@ -227,7 +227,7 @@ class TestUserCredentialIssuer:
         # Make sure usernames are populated
         User.objects.all().update(username=F("email"))
 
-        UserCredentialIssuer.issue_credentials_to_users()
+        UserCredentialIssuer.submit_user_credentials()
 
         assert mock_submit_credentials_to_personal_id.called
         assert mock_submit_credentials_to_personal_id.call_count == 1
@@ -279,6 +279,6 @@ class TestUserCredentialIssuer:
 
         # All credentials will be "successfully" submitted, hence return all payload indices
         mock_add_credentials_on_personalid.return_value = {"success": [0, 1, 2, 3], "failed": []}
-        UserCredentialIssuer.issue_credentials_to_users()
+        UserCredentialIssuer.submit_user_credentials()
 
         assert UserCredential.objects.filter(issued_on__isnull=False).count() == 6

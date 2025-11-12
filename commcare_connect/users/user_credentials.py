@@ -103,7 +103,7 @@ class UserCredentialIssuer:
         )
 
     @classmethod
-    def issue_credentials_to_users(cls):
+    def submit_user_credentials(cls):
         """
         Issue user credentials to PersonalID for all users who have not been issued credentials.
         """
