@@ -77,7 +77,9 @@ class UserCredentialIssuer:
                 opportunity_id__in=opportunities,
                 passed=True,
             )
-            .exclude(opportunity_access__user_id__in=Subquery(user_credentials_to_exclude))
+            .exclude(
+                opportunity_access__isnull=False, opportunity_access__user_id__in=Subquery(user_credentials_to_exclude)
+            )
             .annotate(
                 delivery_type_id=F("opportunity__delivery_type_id"),
                 cred_user_id=F("opportunity_access__user_id"),
