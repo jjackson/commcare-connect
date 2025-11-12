@@ -1125,7 +1125,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         labels = {
             "title": _("Invoice title"),
             "date": _("Generation date"),
-            "notes": _("Service Delivery Notes"),
+            "notes": "",
         }
         help_texts = {"invoice_number": _("This value is system-generated and is unique.")}
 
@@ -1192,18 +1192,20 @@ class PaymentInvoiceForm(forms.ModelForm):
                             "end_date",
                             **{"x-on:change": "fetchInvoiceLineItems()", "x-model": "endDate"},
                         ),
-                        **{"x-show": "serviceDeliverySelected()"},
                         css_class="grid grid-cols-2 gap-4",
                     ),
-                    Div(
-                        css_id="invoice-line-items-wrapper",
-                        css_class="space-y-1 text-sm text-gray-500 mb-4",
-                        **{"x-show": "serviceDeliverySelected()"},
+                    Fieldset(
+                        "Line Items",
+                        Div(
+                            css_id="invoice-line-items-wrapper",
+                            css_class="space-y-1 text-sm text-gray-500 mb-4",
+                        ),
+                    ),
+                    Fieldset(
+                        "Service Delivery Details",
+                        Field("notes"),
                     ),
                     css_class="flex flex-col",
-                ),
-                Div(
-                    Field("notes"),
                     **{"x-show": "serviceDeliverySelected()"},
                 ),
                 css_class="flex flex-col",

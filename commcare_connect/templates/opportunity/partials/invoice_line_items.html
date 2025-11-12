@@ -1,4 +1,4 @@
-<table class="table text-xs">
+<table class="table-auto w-full">
     <thead>
         <tr>
             <th>Month</th>
@@ -12,7 +12,7 @@
     </thead>
     <tbody>
         {% for item in line_items %}
-        <tr>
+        <tr class="text-center">
             <td>{{ item.month|date:"F Y" }}</td>
             <td>{{ item.payment_unit_name }}</td>
             <td>{{ item.number_approved }}</td>
