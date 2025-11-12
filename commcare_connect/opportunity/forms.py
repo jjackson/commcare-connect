@@ -33,6 +33,7 @@ from commcare_connect.opportunity.models import (
     VisitReviewStatus,
     VisitValidationStatus,
 )
+from commcare_connect.opportunity.utils.completed_work import link_invoice_to_completed_works
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import ManagedOpportunity
 from commcare_connect.users.credential_levels import DeliveryLevel, LearnLevel
@@ -1276,6 +1277,8 @@ class PaymentInvoiceForm(forms.ModelForm):
 
         if commit:
             instance.save()
+            link_invoice_to_completed_works(instance, start_date=instance.start_date, end_date=instance.end_date)
+
         return instance
 
     @property
