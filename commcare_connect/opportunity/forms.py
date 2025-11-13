@@ -1164,6 +1164,7 @@ class PaymentInvoiceForm(forms.ModelForm):
                         **{
                             "x-ref": "date",
                             "x-on:change": "convert()",
+                            ":readonly": "serviceDeliverySelected()",
                         },
                     ),
                     css_class="grid grid-cols-2 gap-4",
