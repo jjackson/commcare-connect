@@ -220,10 +220,10 @@ class LabsRecordDataView(OpportunityDataExportView, ListCreateAPIView):
 
     def get_queryset(self, request, opp_id):
         filters = {}
-        # do not allow user to override opportunity filter
-        request.query_params.pop("opportunity")
-        for f in request.query_params.keys():
-            filters[f] = request.query_params[f]
+        query_params = request.query_params.copy()
+        query_params.pop("opportunity", None)
+        for key, value in query_params.items():
+            filters[key] = value
         return LabsRecord.objects.filter(opportunity=self.opportunity, **filters).annotate(
             username=F("user__username"),
         )
