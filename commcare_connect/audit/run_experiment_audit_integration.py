@@ -129,7 +129,9 @@ def test_experiment_audit_flow(config_name="fastest"):
                 return
 
         # Initialize data access with token
-        data_access = AuditDataAccess(access_token=access_token)
+        from commcare_connect.labs.config import LABS_DEFAULT_OPPORTUNITY_ID
+
+        data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPPORTUNITY_ID, access_token=access_token)
         print("[OK] Data access initialized successfully")
 
     except Exception as e:
