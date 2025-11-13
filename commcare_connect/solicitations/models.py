@@ -1,21 +1,18 @@
 """
-Proxy models for ExperimentRecord.
+Proxy models for LocalLabsRecord.
 
-These proxy models provide convenient access to ExperimentRecord data
-without creating additional database tables. They work seamlessly with
-django-tables2 and provide clean property access to JSON data.
+These proxy models provide convenient access to LocalLabsRecord data
+for solicitations. LocalLabsRecord is a transient Python object
+that deserializes production API responses - no database storage.
 """
 
 from datetime import datetime
 
-from commcare_connect.labs.models import ExperimentRecord
+from commcare_connect.labs.models import LocalLabsRecord
 
 
-class SolicitationRecord(ExperimentRecord):
-    """Proxy model for Solicitation-type ExperimentRecords."""
-
-    class Meta:
-        proxy = True
+class SolicitationRecord(LocalLabsRecord):
+    """Proxy model for Solicitation-type LocalLabsRecords."""
 
     # Properties for convenient access
     @property
@@ -104,11 +101,8 @@ class SolicitationRecord(ExperimentRecord):
         return type_map.get(self.solicitation_type, self.solicitation_type)
 
 
-class ResponseRecord(ExperimentRecord):
-    """Proxy model for SolicitationResponse-type ExperimentRecords."""
-
-    class Meta:
-        proxy = True
+class ResponseRecord(LocalLabsRecord):
+    """Proxy model for SolicitationResponse-type LocalLabsRecords."""
 
     @property
     def responses(self):
@@ -160,11 +154,8 @@ class ResponseRecord(ExperimentRecord):
         return self.response_status == "submitted"
 
 
-class ReviewRecord(ExperimentRecord):
-    """Proxy model for SolicitationReview-type ExperimentRecords."""
-
-    class Meta:
-        proxy = True
+class ReviewRecord(LocalLabsRecord):
+    """Proxy model for SolicitationReview-type LocalLabsRecords."""
 
     @property
     def score(self):

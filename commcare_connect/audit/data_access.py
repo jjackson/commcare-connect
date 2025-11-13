@@ -1,13 +1,13 @@
 """
 Data Access Layer for Audit.
 
-This layer wraps the generic ExperimentRecordAPI to provide audit-specific
-data access methods. It handles:
+This layer uses LabsRecordAPIClient to interact with production LabsRecord API.
+It handles:
 1. Fetching visit/user/opportunity data dynamically from Connect OAuth APIs
-2. Managing audit state in ExperimentRecords (templates, sessions)
+2. Managing audit state via production API (templates, sessions)
 3. Simulating blob metadata availability via CommCare HQ
 
-This is an API-first architecture with no local data syncing.
+This is a pure API client with no local database storage.
 """
 
 import os
@@ -17,28 +17,35 @@ from typing import Any
 import httpx
 import pandas as pd
 from django.conf import settings
-from django.db.models import QuerySet
 from django.http import HttpRequest
 
 from commcare_connect.audit.blob_api import BlobMetadataAPI
-from commcare_connect.audit.experiment_models import AuditSessionRecord, AuditTemplateRecord
-from commcare_connect.labs.api_helpers import ExperimentRecordAPI
+from commcare_connect.audit.models import AuditSessionRecord, AuditTemplateRecord
+from commcare_connect.labs.api_client import LabsRecordAPIClient
 
 
 class AuditDataAccess:
     """
-    Data access layer for audit that uses ExperimentRecordAPI for state
+    Data access layer for audit that uses LabsRecordAPIClient for state
     and fetches visit data dynamically from Connect OAuth APIs.
     """
 
-    def __init__(self, access_token: str | None = None, request: HttpRequest | None = None):
+    def __init__(
+        self,
+        opportunity_id: int,
+        access_token: str | None = None,
+        request: HttpRequest | None = None,
+    ):
         """
         Initialize the audit data access layer.
 
         Args:
+            opportunity_id: Primary opportunity ID for this audit context
             access_token: OAuth token for Connect production APIs
             request: HttpRequest object (for extracting token in labs mode)
         """
+        self.opportunity_id = opportunity_id
+
         # Store request for later use (e.g., getting CommCare OAuth token)
         self.request = request
 
@@ -63,8 +70,8 @@ class AuditDataAccess:
             timeout=120.0,
         )
 
-        # Initialize experiment API for state management
-        self.experiment_api = ExperimentRecordAPI()
+        # Initialize Labs API client for state management
+        self.labs_api = LabsRecordAPIClient(access_token, opportunity_id)
 
         # Lazy-initialize blob API for CommCare integration (only when needed)
         self._blob_api = None
@@ -125,15 +132,15 @@ class AuditDataAccess:
             **criteria,  # Unpack all criteria fields
         }
 
-        record = self.experiment_api.create_record(
+        # Note: username lookup would be needed here if user_id is provided
+        # For now, Labs users are identified by request.user.username
+        record = self.labs_api.create_record(
             experiment="audit",
             type="AuditTemplate",
             data=data,
-            user_id=user_id,
+            username=None,  # Could pass request.user.username if available
         )
 
-        # Cast to AuditTemplateRecord proxy model
-        record.__class__ = AuditTemplateRecord
         return record
 
     def get_audit_template(self, template_id: int) -> AuditTemplateRecord | None:
@@ -146,27 +153,20 @@ class AuditDataAccess:
         Returns:
             AuditTemplateRecord or None
         """
-        record = self.experiment_api.get_record_by_id(record_id=template_id, experiment="audit", type="AuditTemplate")
+        record = self.labs_api.get_record_by_id(record_id=template_id, experiment="audit", type="AuditTemplate")
+        return record
 
-        if record:
-            record.__class__ = AuditTemplateRecord
-            return record
-        return None
-
-    def get_audit_templates(self, user_id: int | None = None) -> QuerySet[AuditTemplateRecord]:
+    def get_audit_templates(self, username: str | None = None) -> list[AuditTemplateRecord]:
         """
         Query audit templates.
 
         Args:
-            user_id: Filter by creator user ID
+            username: Filter by creator username
 
         Returns:
-            QuerySet of AuditTemplateRecord instances
+            List of AuditTemplateRecord instances
         """
-        qs = self.experiment_api.get_records(experiment="audit", type="AuditTemplate", user_id=user_id)
-
-        # Cast to AuditTemplateRecord proxy model
-        return AuditTemplateRecord.objects.filter(pk__in=qs.values_list("pk", flat=True))
+        return self.labs_api.get_records(experiment="audit", type="AuditTemplate", username=username)
 
     # Session Methods
 
@@ -204,17 +204,15 @@ class AuditDataAccess:
             "visit_results": {},  # Initialize empty
         }
 
-        record = self.experiment_api.create_record(
+        # Note: auditor username should be passed from request.user
+        record = self.labs_api.create_record(
             experiment="audit",
             type="AuditSession",
             data=data,
-            parent_id=template_id,
-            user_id=auditor_id,
-            opportunity_id=opportunity_id,
+            labs_record_id=template_id,
+            username=None,  # Should pass request.user.username if available
         )
 
-        # Cast to AuditSessionRecord proxy model
-        record.__class__ = AuditSessionRecord
         return record
 
     def get_audit_session(self, session_id: int) -> AuditSessionRecord | None:
@@ -227,39 +225,31 @@ class AuditDataAccess:
         Returns:
             AuditSessionRecord or None
         """
-        record = self.experiment_api.get_record_by_id(record_id=session_id, experiment="audit", type="AuditSession")
+        record = self.labs_api.get_record_by_id(record_id=session_id, experiment="audit", type="AuditSession")
+        return record
 
-        if record:
-            record.__class__ = AuditSessionRecord
-            return record
-        return None
-
-    def get_audit_sessions(
-        self, auditor_id: int | None = None, status: str | None = None
-    ) -> QuerySet[AuditSessionRecord]:
+    def get_audit_sessions(self, username: str | None = None, status: str | None = None) -> list[AuditSessionRecord]:
         """
         Query audit sessions.
 
         Args:
-            auditor_id: Filter by auditor user ID
+            username: Filter by auditor username
             status: Filter by status (in_progress, completed)
 
         Returns:
-            QuerySet of AuditSessionRecord instances
+            List of AuditSessionRecord instances
         """
-        data_filters = {}
+        # Pass status as data filter
+        kwargs = {}
         if status:
-            data_filters["status"] = status
+            kwargs["status"] = status
 
-        qs = self.experiment_api.get_records(
+        return self.labs_api.get_records(
             experiment="audit",
             type="AuditSession",
-            user_id=auditor_id,
-            data_filters=data_filters if data_filters else None,
+            username=username,
+            **kwargs,
         )
-
-        # Cast to AuditSessionRecord proxy model
-        return AuditSessionRecord.objects.filter(pk__in=qs.values_list("pk", flat=True))
 
     def save_audit_session(self, session: AuditSessionRecord) -> AuditSessionRecord:
         """
@@ -271,10 +261,7 @@ class AuditDataAccess:
         Returns:
             Updated AuditSessionRecord
         """
-        updated_record = self.experiment_api.update_record(record_id=session.id, data=session.data)
-
-        # Cast to AuditSessionRecord
-        updated_record.__class__ = AuditSessionRecord
+        updated_record = self.labs_api.update_record(record_id=session.id, data=session.data)
         return updated_record
 
     def complete_audit_session(

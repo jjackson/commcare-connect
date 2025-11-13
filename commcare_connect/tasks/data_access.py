@@ -1,39 +1,46 @@
 """
 Data Access Layer for Tasks.
 
-This layer wraps the generic ExperimentRecordAPI to provide task-specific
-data access methods. It handles:
-1. Managing task state in ExperimentRecords
+This layer uses LabsRecordAPIClient to interact with production LabsRecord API.
+It handles:
+1. Managing task state via production API
 2. Fetching opportunity/user data dynamically from Connect OAuth APIs
 3. Task operations (add events, comments, AI sessions)
 
-This is an API-first architecture with OAuth-based access control.
+This is a pure API client with no local database storage.
 """
 
 import httpx
 from django.conf import settings
-from django.db.models import QuerySet
 from django.http import HttpRequest
 
-from commcare_connect.labs.api_helpers import ExperimentRecordAPI
-from commcare_connect.tasks.experiment_models import TaskRecord
+from commcare_connect.labs.api_client import LabsRecordAPIClient
+from commcare_connect.tasks.models import TaskRecord
 
 
 class TaskDataAccess:
     """
-    Data access layer for tasks that uses ExperimentRecordAPI for state
-    and ConnectAPIFacade for fetching opportunity/user data via OAuth APIs.
+    Data access layer for tasks that uses LabsRecordAPIClient for state
+    and fetches opportunity/user data via OAuth APIs.
     """
 
-    def __init__(self, user=None, request: HttpRequest | None = None, access_token: str | None = None):
+    def __init__(
+        self,
+        opportunity_id: int,
+        user=None,
+        request: HttpRequest | None = None,
+        access_token: str | None = None,
+    ):
         """
         Initialize the task data access layer.
 
         Args:
+            opportunity_id: Primary opportunity ID for tasks
             user: Django User object (for OAuth token extraction)
             request: HttpRequest object (for extracting token in labs mode)
             access_token: OAuth token for Connect production APIs
         """
+        self.opportunity_id = opportunity_id
         self.user = user
         self.request = request
 
@@ -64,8 +71,8 @@ class TaskDataAccess:
             timeout=120.0,
         )
 
-        # Initialize experiment API for state management
-        self.experiment_api = ExperimentRecordAPI()
+        # Initialize Labs API client for state management
+        self.labs_api = LabsRecordAPIClient(access_token, opportunity_id)
 
     def close(self):
         """Close HTTP client."""
@@ -121,16 +128,12 @@ class TaskDataAccess:
             "ai_sessions": [],
         }
 
-        record = self.experiment_api.create_record(
+        record = self.labs_api.create_record(
             experiment="tasks",
             type="Task",
             data=data,
-            user_id=user_id,
-            opportunity_id=opportunity_id,
+            username=username,  # Use username not user_id
         )
-
-        # Cast to TaskRecord proxy model
-        record.__class__ = TaskRecord
 
         # Add initial "created" event
         creator_name = kwargs.get("creator_name", f"User {created_by_id}")
@@ -140,9 +143,8 @@ class TaskDataAccess:
             actor_user_id=created_by_id,
             description=f"Task created by {creator_name}",
         )
-        record.save()
-
-        return record
+        # Save changes via API
+        return self.labs_api.update_record(record.id, record.data)
 
     def get_task(self, task_id: int) -> TaskRecord | None:
         """
@@ -154,56 +156,43 @@ class TaskDataAccess:
         Returns:
             TaskRecord or None if not found
         """
-        record = self.experiment_api.get_record_by_id(record_id=task_id, experiment="tasks", type="Task")
-
-        if record:
-            record.__class__ = TaskRecord
-            return record
-        return None
+        return self.labs_api.get_record_by_id(record_id=task_id, experiment="tasks", type="Task")
 
     def get_tasks(
         self,
         username: str | None = None,
-        user_id: int | None = None,
-        opportunity_id: int | None = None,
         status: str | None = None,
         assigned_to_id: int | None = None,
-    ) -> QuerySet[TaskRecord]:
+    ) -> list[TaskRecord]:
         """
         Query tasks with filters.
 
         Args:
-            username: Filter by FLW username (primary identifier)
-            user_id: Filter by FLW user ID (if available)
-            opportunity_id: Filter by opportunity ID
+            username: Filter by FLW username (from data field, not parent username)
             status: Filter by status
             assigned_to_id: Filter by assigned user ID
 
         Returns:
-            QuerySet of TaskRecord instances
+            List of TaskRecord instances
         """
-        data_filters = {}
-        if username:
-            data_filters["username"] = username
+        # Pass filters as kwargs for data filters
+        kwargs = {}
         if status:
-            data_filters["status"] = status
+            kwargs["status"] = status
         if assigned_to_id:
-            data_filters["assigned_to_id"] = assigned_to_id
+            kwargs["assigned_to_id"] = assigned_to_id
+        if username:
+            kwargs["username"] = username
 
-        qs = self.experiment_api.get_records(
+        return self.labs_api.get_records(
             experiment="tasks",
             type="Task",
-            user_id=user_id,
-            opportunity_id=opportunity_id,
-            data_filters=data_filters if data_filters else None,
+            **kwargs,
         )
-
-        # Cast to TaskRecord proxy model
-        return TaskRecord.objects.filter(pk__in=qs.values_list("pk", flat=True))
 
     def save_task(self, task_record: TaskRecord) -> TaskRecord:
         """
-        Save a task record.
+        Save a task record via API.
 
         Args:
             task_record: TaskRecord instance to save
@@ -211,8 +200,7 @@ class TaskDataAccess:
         Returns:
             Saved TaskRecord instance
         """
-        task_record.save()
-        return task_record
+        return self.labs_api.update_record(task_record.id, task_record.data)
 
     # Task Operation Methods
 
@@ -240,8 +228,7 @@ class TaskDataAccess:
             Updated TaskRecord
         """
         task.add_event(event_type, actor, actor_user_id, description, **kwargs)
-        task.save()
-        return task
+        return self.labs_api.update_record(task.id, task.data)
 
     def add_comment(self, task: TaskRecord, author_id: int, author_name: str, content: str) -> TaskRecord:
         """
@@ -257,8 +244,7 @@ class TaskDataAccess:
             Updated TaskRecord
         """
         task.add_comment(author_id, author_name, content)
-        task.save()
-        return task
+        return self.labs_api.update_record(task.id, task.data)
 
     def add_ai_session(self, task: TaskRecord, ocs_session_id: str, **kwargs) -> TaskRecord:
         """
@@ -273,8 +259,7 @@ class TaskDataAccess:
             Updated TaskRecord
         """
         task.add_ai_session(ocs_session_id, **kwargs)
-        task.save()
-        return task
+        return self.labs_api.update_record(task.id, task.data)
 
     def update_status(self, task: TaskRecord, new_status: str, actor: str, actor_user_id: int) -> TaskRecord:
         """
@@ -300,8 +285,7 @@ class TaskDataAccess:
             description=f"Status changed from {old_status} to {new_status}",
         )
 
-        task.save()
-        return task
+        return self.labs_api.update_record(task.id, task.data)
 
     def assign_task(self, task: TaskRecord, assigned_to_id: int | None, actor: str, actor_user_id: int) -> TaskRecord:
         """
@@ -331,8 +315,7 @@ class TaskDataAccess:
             description=description,
         )
 
-        task.save()
-        return task
+        return self.labs_api.update_record(task.id, task.data)
 
     # Connect API Integration Methods
 

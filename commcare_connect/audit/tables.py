@@ -4,7 +4,6 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext as _
 
-from commcare_connect.audit.experiment_models import AuditSessionRecord
 from commcare_connect.utils.tables import DMYTColumn, IndexColumn
 
 
@@ -62,7 +61,8 @@ class AuditTable(tables.Table):
     )
 
     class Meta:
-        model = AuditSessionRecord
+        # Note: AuditSessionRecord is not a Django model, it's a Python class
+        # So we don't specify model= here
         fields = (
             "index",
             "title",

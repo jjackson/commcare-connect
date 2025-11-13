@@ -7,10 +7,6 @@ Never saved to database - initialized from session data only.
 
 from typing import Any
 
-from django.db import models
-
-from commcare_connect.utils.db import BaseModel
-
 
 def _get_empty_memberships():
     """Return empty queryset for memberships.
@@ -103,39 +99,58 @@ class LabsUser:
         raise NotImplementedError("LabsUser cannot be deleted from database")
 
 
-class ExperimentRecord(BaseModel):
+class LocalLabsRecord:
+    """Transient object for Labs API responses. Never saved to database.
+
+    This class mimics production LabsRecord but is not a Django model.
+    It's instantiated from production API responses and provides typed access
+    to record data.
     """
-    Generic experiment record storage for labs features.
 
-    Stores production IDs as integers (no ForeignKeys) to work with OAuth data.
-    When this moves to production API, ForeignKeys can be added there.
-    """
+    def __init__(self, api_data: dict[str, Any]) -> None:
+        """Initialize from production API response.
 
-    experiment = models.TextField(help_text="Experiment name (e.g., 'solicitations', 'audit')")
-    type = models.CharField(max_length=50, help_text="Record type (e.g., 'Solicitation', 'SolicitationResponse')")
+        Args:
+            api_data: Response data from /export/opportunity/{opp_id}/labs_record/ API
+        """
+        self.id: int = api_data["id"]
+        self.experiment: str = api_data["experiment"]
+        self.type: str = api_data["type"]
+        self.data: dict = api_data["data"]
+        self.username: str | None = api_data.get("username")  # Primary user identifier (not user_id)
+        self.opportunity_id: int = api_data["opportunity_id"]
+        self.organization_id: str | None = api_data.get("organization_id")
+        self.program_id: int | None = api_data.get("program_id")  # Coming soon - being added to production API
+        self.labs_record_id: int | None = api_data.get("labs_record_id")  # Parent reference
 
-    # Store production IDs as integers (no ForeignKeys for labs)
-    user_id = models.IntegerField(null=True, blank=True, help_text="Production user ID")
-    opportunity_id = models.IntegerField(null=True, blank=True, help_text="Production opportunity ID")
-    organization_id = models.CharField(
-        max_length=255, null=True, blank=True, help_text="Production organization slug or ID"
-    )
-    program_id = models.IntegerField(null=True, blank=True, help_text="Production program ID")
+    def __str__(self) -> str:
+        return f"{self.experiment}:{self.type}:{self.id}"
 
-    # Self-referential link for hierarchies (e.g., Response -> Solicitation, Review -> Response)
-    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.CASCADE, related_name="children")
+    def __repr__(self) -> str:
+        return f"<LocalLabsRecord: {self}>"
 
-    # JSON data storage - store all the actual content here
-    data = models.JSONField(default=dict, help_text="JSON storage for record content")
+    def to_api_dict(self) -> dict[str, Any]:
+        """Serialize for API POST/PUT requests.
 
-    class Meta:
-        indexes = [
-            models.Index(fields=["experiment", "type"]),
-            models.Index(fields=["experiment", "type", "parent"]),
-            models.Index(fields=["program_id"]),
-            models.Index(fields=["organization_id"]),
-        ]
-        ordering = ["-date_created"]
+        Returns:
+            Dict suitable for posting to production API
+        """
+        return {
+            "id": self.id,
+            "experiment": self.experiment,
+            "type": self.type,
+            "data": self.data,
+            "username": self.username,
+            "program_id": self.program_id,  # Will be supported shortly
+            "labs_record_id": self.labs_record_id,
+            # opportunity_id set by API endpoint URL
+            # organization_id inferred from username in production
+        }
 
-    def __str__(self):
-        return f"{self.experiment}:{self.type}:{self.pk}"
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Prevent saving to database."""
+        raise NotImplementedError("LocalLabsRecord cannot be saved. Use LabsRecordAPIClient instead.")
+
+    def delete(self, *args: Any, **kwargs: Any) -> None:
+        """Prevent deletion from database."""
+        raise NotImplementedError("LocalLabsRecord cannot be deleted. Use LabsRecordAPIClient instead.")

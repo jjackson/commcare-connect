@@ -26,19 +26,19 @@ class SolicitationResponseForm(forms.Form):
         ),
     )
 
-    def __init__(self, solicitation, user, is_draft_save=False, instance=None, *args, **kwargs):
+    def __init__(self, solicitation, user, is_draft_save=False, instance=None, data_access=None, *args, **kwargs):
         # Extract instance from kwargs since Form doesn't handle it automatically
         self.instance = instance
         super().__init__(*args, **kwargs)
         self.solicitation = solicitation
         self.user = user
         self.is_draft_save = is_draft_save
-
-        # Import here to avoid circular dependency
-        from .experiment_helpers import get_responses_for_solicitation
+        self.data_access = data_access
 
         # Get existing responses for this solicitation
-        existing_responses = get_responses_for_solicitation(solicitation)
+        existing_responses = []
+        if data_access:
+            existing_responses = data_access.get_responses_for_solicitation(solicitation_record=solicitation)
         existing_org_slugs = {resp.organization_id for resp in existing_responses if resp.organization_id}
 
         # Populate organization choices from user's OAuth data

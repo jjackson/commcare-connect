@@ -40,15 +40,21 @@ def fetch_user_organization_data(access_token: str) -> dict | None:
 
 class ExperimentRecordAPI:
     """
-    Generic API helper for ExperimentRecord CRUD operations.
+    DEPRECATED: This class has been replaced by LabsRecordAPIClient.
 
-    This class simulates how labs projects will interact with production APIs.
-    Currently uses direct database queries, but the interface is designed to
-    make transitioning to real API calls straightforward.
+    ExperimentRecord model has been removed. Use LabsRecordAPIClient instead,
+    which calls the production LabsRecord API.
 
-    Returns untyped ExperimentRecord instances - experiment-specific code
-    should cast these to appropriate proxy models.
+    See: commcare_connect.labs.api_client.LabsRecordAPIClient
+    See: commcare_connect/labs/MIGRATION_STATUS.md
     """
+
+    def __init__(self):
+        raise DeprecationWarning(
+            "ExperimentRecordAPI is deprecated. ExperimentRecord model has been removed. "
+            "Use LabsRecordAPIClient instead, which calls the production LabsRecord API. "
+            "See commcare_connect/labs/MIGRATION_STATUS.md for migration guide."
+        )
 
     def get_records(
         self,

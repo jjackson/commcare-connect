@@ -1,18 +1,16 @@
 """
-Proxy models for Audit ExperimentRecords.
+Proxy models for Audit LocalLabsRecords.
 
-These proxy models provide convenient access to ExperimentRecord data
-for the audit workflow, following the Solicitations pattern.
+These proxy models provide convenient access to LocalLabsRecord data
+for the audit workflow. LocalLabsRecord is a transient Python object
+that deserializes production API responses - no database storage.
 """
 
-from commcare_connect.labs.models import ExperimentRecord
+from commcare_connect.labs.models import LocalLabsRecord
 
 
-class AuditTemplateRecord(ExperimentRecord):
-    """Proxy model for AuditTemplate-type ExperimentRecords."""
-
-    class Meta:
-        proxy = True
+class AuditTemplateRecord(LocalLabsRecord):
+    """Proxy model for AuditTemplate-type LocalLabsRecords."""
 
     # Properties for convenient access to template configuration
     @property
@@ -66,11 +64,8 @@ class AuditTemplateRecord(ExperimentRecord):
         return self.data.get("preview_data", [])
 
 
-class AuditSessionRecord(ExperimentRecord):
-    """Proxy model for AuditSession-type ExperimentRecords with nested visit results."""
-
-    class Meta:
-        proxy = True
+class AuditSessionRecord(LocalLabsRecord):
+    """Proxy model for AuditSession-type LocalLabsRecords with nested visit results."""
 
     # Properties for convenient access
     @property

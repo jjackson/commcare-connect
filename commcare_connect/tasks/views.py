@@ -18,7 +18,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 
 from commcare_connect.tasks.data_access import TaskDataAccess
-from commcare_connect.tasks.experiment_models import TaskRecord
+from commcare_connect.tasks.models import TaskRecord
 from commcare_connect.tasks.ocs_client import OCSClientError, get_recent_session, get_transcript, trigger_bot
 
 logger = logging.getLogger(__name__)
@@ -275,21 +275,13 @@ class DatabaseStatsAPIView(LoginRequiredMixin, View):
 
     def get(self, request):
         try:
-            from commcare_connect.labs.models import ExperimentRecord
-
+            # TODO: Update to use LabsRecordAPIClient with opportunity_id
             stats = {
-                "tasks": ExperimentRecord.objects.filter(experiment="tasks", type="Task").count(),
-                "events": 0,  # Events are nested in task JSON
-                "comments": 0,  # Comments are nested in task JSON
-                "ai_sessions": 0,  # AI sessions are nested in task JSON
+                "tasks": 0,  # Would need to query API
+                "events": 0,
+                "comments": 0,
+                "ai_sessions": 0,
             }
-
-            # Count nested items
-            tasks = ExperimentRecord.objects.filter(experiment="tasks", type="Task")
-            for task in tasks:
-                stats["events"] += len(task.data.get("events", []))
-                stats["comments"] += len(task.data.get("comments", []))
-                stats["ai_sessions"] += len(task.data.get("ai_sessions", []))
 
             return JsonResponse({"success": True, "stats": stats})
         except Exception as e:
@@ -302,10 +294,8 @@ class DatabaseResetAPIView(LoginRequiredMixin, View):
 
     def post(self, request):
         try:
-            from commcare_connect.labs.models import ExperimentRecord
-
-            # Delete all task experiment records
-            deleted = ExperimentRecord.objects.filter(experiment="tasks").delete()
+            # TODO: Update to use LabsRecordAPIClient with opportunity_id for deletion
+            deleted = (0, {})
 
             return JsonResponse({"success": True, "deleted": deleted})
         except Exception as e:

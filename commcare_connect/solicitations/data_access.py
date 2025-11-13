@@ -1,30 +1,34 @@
 """
 Data Access Layer for Solicitations.
 
-This layer wraps the generic ExperimentRecordAPI to provide solicitations-specific
-data access methods. It handles casting ExperimentRecords to typed proxy models
+This layer uses LabsRecordAPIClient to interact with production LabsRecord API.
+It handles casting API responses to typed proxy models
 (SolicitationRecord, ResponseRecord, ReviewRecord).
 
-This abstraction prepares for eventual production API integration.
+This is a pure API client with no local database storage.
 """
 
-from django.db.models import QuerySet
-
-from commcare_connect.labs.api_helpers import ExperimentRecordAPI
-from commcare_connect.solicitations.experiment_models import ResponseRecord, ReviewRecord, SolicitationRecord
-from commcare_connect.users.models import User
+from commcare_connect.labs.api_client import LabsRecordAPIClient
+from commcare_connect.solicitations.models import ResponseRecord, ReviewRecord, SolicitationRecord
 
 
 class SolicitationDataAccess:
     """
-    Data access layer for solicitations that uses ExperimentRecordAPI.
+    Data access layer for solicitations that uses LabsRecordAPIClient.
 
     This class provides solicitation-specific methods and handles casting
-    untyped ExperimentRecords to appropriate proxy model types.
+    API responses to appropriate proxy model types.
     """
 
-    def __init__(self):
-        self.api = ExperimentRecordAPI()
+    def __init__(self, opportunity_id: int, access_token: str):
+        """Initialize solicitations data access.
+
+        Args:
+            opportunity_id: Opportunity ID for API scoping
+            access_token: OAuth Bearer token for production API
+        """
+        self.opportunity_id = opportunity_id
+        self.labs_api = LabsRecordAPIClient(access_token, opportunity_id)
 
     def get_solicitations(
         self,
@@ -32,7 +36,7 @@ class SolicitationDataAccess:
         status: str | None = None,
         solicitation_type: str | None = None,
         is_publicly_listed: bool | None = None,
-    ) -> QuerySet[SolicitationRecord]:
+    ) -> list[SolicitationRecord]:
         """
         Query for solicitation records with optional filters.
 
@@ -43,27 +47,24 @@ class SolicitationDataAccess:
             is_publicly_listed: Filter by public listing status
 
         Returns:
-            QuerySet of SolicitationRecord instances
+            List of SolicitationRecord instances
         """
-        # Build data_filters for JSON field queries
-        data_filters = {}
+        # Build kwargs for data field filters
+        kwargs = {}
         if status:
-            data_filters["status"] = status
+            kwargs["status"] = status
         if solicitation_type:
-            data_filters["solicitation_type"] = solicitation_type
+            kwargs["solicitation_type"] = solicitation_type
         if is_publicly_listed is not None:
-            data_filters["is_publicly_listed"] = is_publicly_listed
+            kwargs["is_publicly_listed"] = is_publicly_listed
 
-        # Get ExperimentRecords from API
-        qs = self.api.get_records(
+        # Get records from API
+        return self.labs_api.get_records(
             experiment="solicitations",
             type="Solicitation",
             program_id=program_id,
-            data_filters=data_filters if data_filters else None,
+            **kwargs,
         )
-
-        # Cast to SolicitationRecord proxy model by re-querying with the proxy model manager
-        return SolicitationRecord.objects.filter(pk__in=qs.values_list("pk", flat=True))
 
     def get_solicitation_by_id(self, solicitation_id: int) -> SolicitationRecord | None:
         """
@@ -75,45 +76,33 @@ class SolicitationDataAccess:
         Returns:
             SolicitationRecord instance or None
         """
-        record = self.api.get_record_by_id(record_id=solicitation_id, experiment="solicitations", type="Solicitation")
+        return self.labs_api.get_record_by_id(
+            record_id=solicitation_id, experiment="solicitations", type="Solicitation"
+        )
 
-        if record:
-            # Cast to SolicitationRecord proxy model
-            record.__class__ = SolicitationRecord
-            return record
-        return None
-
-    def create_solicitation(
-        self, program_id: int, organization_id: str | None, user_id: int, data_dict: dict
-    ) -> SolicitationRecord:
+    def create_solicitation(self, program_id: int, username: str, data_dict: dict) -> SolicitationRecord:
         """
-        Create a new solicitation ExperimentRecord.
+        Create a new solicitation via production API.
 
         Args:
             program_id: Production program ID
-            organization_id: Production organization ID/slug
-            user_id: Production user ID who created this
+            username: Username who created this
             data_dict: Dictionary containing solicitation data
 
         Returns:
             SolicitationRecord instance
         """
-        record = self.api.create_record(
+        return self.labs_api.create_record(
             experiment="solicitations",
             type="Solicitation",
             data=data_dict,
             program_id=program_id,
-            organization_id=organization_id,
-            user_id=user_id,
+            username=username,
         )
-
-        # Cast to SolicitationRecord proxy model
-        record.__class__ = SolicitationRecord
-        return record
 
     def get_responses_for_solicitation(
         self, solicitation_record: SolicitationRecord, status: str | None = None
-    ) -> QuerySet[ResponseRecord]:
+    ) -> list[ResponseRecord]:
         """
         Get all responses for a solicitation.
 
@@ -122,27 +111,24 @@ class SolicitationDataAccess:
             status: Optional status filter ('draft', 'submitted')
 
         Returns:
-            QuerySet of ResponseRecord instances
+            List of ResponseRecord instances
         """
-        data_filters = {}
+        kwargs = {}
         if status:
-            data_filters["status"] = status
+            kwargs["status"] = status
 
-        qs = self.api.get_records(
+        return self.labs_api.get_records(
             experiment="solicitations",
             type="SolicitationResponse",
-            parent_id=solicitation_record.id,
-            data_filters=data_filters if data_filters else None,
+            labs_record_id=solicitation_record.id,
+            **kwargs,
         )
-
-        # Cast to ResponseRecord proxy model by re-querying with the proxy model manager
-        return ResponseRecord.objects.filter(pk__in=qs.values_list("pk", flat=True))
 
     def get_response_for_solicitation(
         self,
         solicitation_record: SolicitationRecord,
         organization_id: str,
-        user_id: int | None = None,
+        username: str | None = None,
         status: str | None = None,
     ) -> ResponseRecord | None:
         """
@@ -151,28 +137,26 @@ class SolicitationDataAccess:
         Args:
             solicitation_record: Solicitation to find response for
             organization_id: Organization slug/ID that submitted the response
-            user_id: Optional user ID filter
+            username: Optional username filter
             status: Optional status filter ('draft', 'submitted')
 
         Returns:
             ResponseRecord instance or None
         """
-        data_filters = {}
+        kwargs = {}
         if status:
-            data_filters["status"] = status
+            kwargs["status"] = status
 
-        qs = self.api.get_records(
+        records = self.labs_api.get_records(
             experiment="solicitations",
             type="SolicitationResponse",
-            parent_id=solicitation_record.id,
+            labs_record_id=solicitation_record.id,
             organization_id=organization_id,
-            user_id=user_id,
-            data_filters=data_filters if data_filters else None,
+            username=username,
+            **kwargs,
         )
 
-        # Cast to ResponseRecord and return first
-        typed_qs = ResponseRecord.objects.filter(pk__in=qs.values_list("pk", flat=True))
-        return typed_qs.first()
+        return records[0] if records else None
 
     def get_response_by_id(self, response_id: int) -> ResponseRecord | None:
         """
@@ -184,96 +168,75 @@ class SolicitationDataAccess:
         Returns:
             ResponseRecord instance or None
         """
-        record = self.api.get_record_by_id(
+        return self.labs_api.get_record_by_id(
             record_id=response_id, experiment="solicitations", type="SolicitationResponse"
         )
 
-        if record:
-            # Cast to ResponseRecord proxy model
-            record.__class__ = ResponseRecord
-            return record
-        return None
-
     def create_response(
-        self, solicitation_record: SolicitationRecord, organization_id: str, user_id: int, data_dict: dict
+        self, solicitation_record: SolicitationRecord, username: str, data_dict: dict
     ) -> ResponseRecord:
         """
-        Create a new response ExperimentRecord.
+        Create a new response via production API.
 
         Args:
             solicitation_record: Solicitation being responded to
-            organization_id: Production organization ID/slug submitting the response
-            user_id: Production user ID submitting the response
+            username: Username submitting the response
             data_dict: Dictionary containing response data
 
         Returns:
             ResponseRecord instance
         """
-        record = self.api.create_record(
+        return self.labs_api.create_record(
             experiment="solicitations",
             type="SolicitationResponse",
             data=data_dict,
-            parent_id=solicitation_record.id,
-            organization_id=organization_id,
-            user_id=user_id,
+            labs_record_id=solicitation_record.id,
+            username=username,
             program_id=solicitation_record.program_id,
         )
 
-        # Cast to ResponseRecord proxy model
-        record.__class__ = ResponseRecord
-        return record
-
-    def get_review_by_user(self, response_record: ResponseRecord, user: User) -> ReviewRecord | None:
+    def get_review_by_user(self, response_record: ResponseRecord, username: str) -> ReviewRecord | None:
         """
         Get a specific user's review of a response.
 
         Args:
             response_record: Response to find review for
-            user: User who created the review
+            username: Username who created the review
 
         Returns:
             ReviewRecord instance or None
         """
-        qs = self.api.get_records(
+        records = self.labs_api.get_records(
             experiment="solicitations",
             type="SolicitationReview",
-            parent_id=response_record.id,
-            user_id=user.id,
+            labs_record_id=response_record.id,
+            username=username,
         )
 
-        # Cast to ReviewRecord and return first
-        typed_qs = ReviewRecord.objects.filter(pk__in=qs.values_list("pk", flat=True))
-        return typed_qs.first()
+        return records[0] if records else None
 
-    def create_review(self, response_record: ResponseRecord, reviewer_id: int, data_dict: dict) -> ReviewRecord:
+    def create_review(self, response_record: ResponseRecord, reviewer_username: str, data_dict: dict) -> ReviewRecord:
         """
-        Create a new review ExperimentRecord.
+        Create a new review via production API.
 
         Args:
             response_record: Response being reviewed
-            reviewer_id: Production user ID of reviewer
+            reviewer_username: Username of reviewer
             data_dict: Dictionary containing review data
 
         Returns:
             ReviewRecord instance
         """
-        record = self.api.create_record(
+        return self.labs_api.create_record(
             experiment="solicitations",
             type="SolicitationReview",
             data=data_dict,
-            parent_id=response_record.id,
-            user_id=reviewer_id,
-            organization_id=response_record.organization_id,
+            labs_record_id=response_record.id,
+            username=reviewer_username,
             program_id=response_record.program_id,
         )
 
-        # Cast to ReviewRecord proxy model
-        record.__class__ = ReviewRecord
-        return record
-
-    def get_responses_for_organization(
-        self, organization_id: str, status: str | None = None
-    ) -> QuerySet[ResponseRecord]:
+    def get_responses_for_organization(self, organization_id: str, status: str | None = None) -> list[ResponseRecord]:
         """
         Get all responses submitted by an organization.
 
@@ -282,18 +245,15 @@ class SolicitationDataAccess:
             status: Optional status filter ('draft', 'submitted')
 
         Returns:
-            QuerySet of ResponseRecord instances
+            List of ResponseRecord instances
         """
-        data_filters = {}
+        kwargs = {}
         if status:
-            data_filters["status"] = status
+            kwargs["status"] = status
 
-        qs = self.api.get_records(
+        return self.labs_api.get_records(
             experiment="solicitations",
             type="SolicitationResponse",
             organization_id=organization_id,
-            data_filters=data_filters if data_filters else None,
+            **kwargs,
         )
-
-        # Cast to ResponseRecord proxy model by re-querying with the proxy model manager
-        return ResponseRecord.objects.filter(pk__in=qs.values_list("pk", flat=True))
