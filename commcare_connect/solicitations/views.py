@@ -11,7 +11,8 @@ from django.utils import timezone
 from django.views.generic import DetailView, ListView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from .config import SOLICITATION_DEFAULT_OPPORTUNITY_ID
+from commcare_connect.labs.config import LABS_DEFAULT_OPPORTUNITY_ID as SOLICITATION_DEFAULT_OPPORTUNITY_ID
+
 from .data_access import SolicitationDataAccess
 from .forms import SolicitationForm, SolicitationResponseForm, SolicitationReviewForm
 from .models import ResponseRecord, ReviewRecord, SolicitationRecord
