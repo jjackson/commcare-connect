@@ -12,11 +12,6 @@ DEPLOY_ENVIRONMENT = "labs"
 
 # OAuth configuration
 LABS_OAUTH_SCOPES = ["export"]  # Expandable: ["export", "labs_data_storage"]
-
-# Labs apps configuration
-# TEMPORARY: Hardcoded opportunity_id for all Labs apps (audit, tasks, solicitations)
-LABS_DEFAULT_OPPORTUNITY_ID = 1  # TODO: Update this to your desired opportunity ID
-
 # Disable local registration
 ACCOUNT_ALLOW_REGISTRATION = False
 
@@ -47,3 +42,7 @@ MIDDLEWARE.insert(_auth_idx + 2, "commcare_connect.labs.organization_middleware.
 COMMCARE_HQ_URL = env("COMMCARE_HQ_URL", default="https://www.commcarehq.org")  # noqa: F405
 COMMCARE_OAUTH_CLIENT_ID = env("COMMCARE_OAUTH_CLIENT_ID", default="")  # noqa: F405
 COMMCARE_OAUTH_CLIENT_SECRET = env("COMMCARE_OAUTH_CLIENT_SECRET", default="")  # noqa: F405
+
+# Labs apps configuration
+# TEMPORARY: Hardcoded opportunity_id for all Labs apps (audit, tasks, solicitations)
+LABS_DEFAULT_OPPORTUNITY_ID = 764
