@@ -854,3 +854,32 @@ class CredentialConfiguration(models.Model):
         max_length=32,
         choices=DeliveryLevel.choices,
     )
+
+
+class LabsRecord(models.Model):
+    experiment = models.TextField()
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="experiment_records",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="experiment_records",
+    )
+    opportunity = models.ForeignKey(
+        Opportunity,
+        on_delete=models.CASCADE,
+        related_name="experiment_records",
+    )
+    labs_record = models.ForeignKey(
+        "LabsRecord",
+        on_delete=models.CASCADE,
+        related_name="experiment_records",
+    )
+    type = models.CharField(max_length=255)
+    data = models.JSONField()
+
+    def __str__(self):
+        return f"ExperimentRecord({self.user}, {self.organization}, {self.opportunity}, {self.experiment})"
