@@ -8,7 +8,7 @@ import pytest
 
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import Program
-from commcare_connect.solicitations.experiment_helpers import (
+from commcare_connect.solicitations.helpers import (
     create_response_record,
     create_review_record,
     create_solicitation_record,

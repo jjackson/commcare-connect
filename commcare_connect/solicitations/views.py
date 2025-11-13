@@ -5,25 +5,16 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.http import Http404
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import DetailView, ListView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from .experiment_helpers import (
-    create_response_record,
-    create_review_record,
-    create_solicitation_record,
-    get_response_by_id,
-    get_response_for_solicitation,
-    get_responses_for_solicitation,
-    get_review_by_user,
-    get_solicitation_by_id,
-    get_solicitations,
-)
-from .experiment_models import ResponseRecord, ReviewRecord, SolicitationRecord
+from .config import SOLICITATION_DEFAULT_OPPORTUNITY_ID
+from .data_access import SolicitationDataAccess
 from .forms import SolicitationForm, SolicitationResponseForm, SolicitationReviewForm
+from .models import ResponseRecord, ReviewRecord, SolicitationRecord
 
 # =============================================================================
 # Permission Mixins (following established patterns)
@@ -72,6 +63,30 @@ class SolicitationResponseViewAccessMixin(LoginRequiredMixin, UserPassesTestMixi
 
 
 # =============================================================================
+# Data Access Helper Mixin
+# =============================================================================
+
+
+class SolicitationDataAccessMixin:
+    """Provides data_access property to views."""
+
+    @property
+    def data_access(self) -> SolicitationDataAccess:
+        """Get SolicitationDataAccess instance with OAuth token."""
+        if not hasattr(self, "_data_access"):
+            # Get access token from request (set by LabsOAuthMiddleware)
+            access_token = getattr(self.request, "labs_access_token", None)
+            if not access_token:
+                raise ValueError("No OAuth access token available. Ensure LabsOAuthMiddleware is active.")
+
+            # Use hardcoded opportunity_id (temporary until API is updated)
+            self._data_access = SolicitationDataAccess(
+                opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, access_token=access_token
+            )
+        return self._data_access
+
+
+# =============================================================================
 # Custom Decorators (following established patterns from opportunity/program apps)
 # =============================================================================
 def solicitation_access_required(view_func):
@@ -103,7 +118,7 @@ def solicitation_access_required(view_func):
 
 
 # =============================================================================
-# New ExperimentRecord-based Views
+# New LocalLabsRecord-based Views
 # =============================================================================
 
 
@@ -132,7 +147,7 @@ class ProgramSelectView(TemplateView):
         return context
 
 
-class ManageSolicitationsListView(ListView):
+class ManageSolicitationsListView(SolicitationDataAccessMixin, ListView):
     """
     List view of solicitations created by the current user.
     """
@@ -143,15 +158,12 @@ class ManageSolicitationsListView(ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        # Use data access layer to filter by user's production ID
-        from commcare_connect.labs.api_helpers import ExperimentRecordAPI
-
-        api = ExperimentRecordAPI()
-        qs = api.get_records(experiment="solicitations", type="Solicitation", user_id=self.request.user.id)
-        return SolicitationRecord.objects.filter(pk__in=qs.values_list("pk", flat=True)).order_by("-date_created")
+        # Use data access layer to filter by user's username
+        username = self.request.user.username if hasattr(self.request.user, "username") else None
+        return self.data_access.get_solicitations(username=username)
 
 
-class MyResponsesListView(ListView):
+class MyResponsesListView(SolicitationDataAccessMixin, ListView):
     """
     List view of responses created by the current user's organization.
     """
@@ -162,27 +174,22 @@ class MyResponsesListView(ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        # Get user's organization slugs from OAuth data (we store slugs, not IDs)
+        # Get user's organization slugs from OAuth data
         org_slugs = []
         if hasattr(self.request.user, "organizations") and self.request.user.organizations:
             org_slugs = [org.get("slug") for org in self.request.user.organizations if org.get("slug")]
 
         if org_slugs:
-            # Use data access layer - need to combine results for all orgs
-            from commcare_connect.labs.api_helpers import ExperimentRecordAPI
-
-            api = ExperimentRecordAPI()
-
-            # Get records for all user's organizations
-            qs = api.get_records(experiment="solicitations", type="SolicitationResponse").filter(
-                organization_id__in=org_slugs
-            )
-
-            return ResponseRecord.objects.filter(pk__in=qs.values_list("pk", flat=True)).order_by("-date_created")
-        return ResponseRecord.objects.none()
+            # Get responses for all user's organizations
+            all_responses = []
+            for org_slug in org_slugs:
+                responses = self.data_access.get_responses_for_organization(organization_id=org_slug)
+                all_responses.extend(responses)
+            return all_responses
+        return []
 
 
-class SolicitationResponsesListView(SingleTableView):
+class SolicitationResponsesListView(SolicitationDataAccessMixin, SingleTableView):
     """
     List view of all responses to a specific solicitation (for solicitation authors).
     Uses django-tables2 for display.
@@ -196,22 +203,22 @@ class SolicitationResponsesListView(SingleTableView):
     def dispatch(self, request, *args, **kwargs):
         # Get the solicitation
         solicitation_pk = self.kwargs.get("solicitation_pk")
-        self.solicitation = get_solicitation_by_id(solicitation_pk)
+        self.solicitation = self.data_access.get_solicitation_by_id(solicitation_pk)
 
         if not self.solicitation:
             raise Http404("Solicitation not found")
 
         # Check if user created this solicitation
-        if self.solicitation.user_id != request.user.id:
+        if self.solicitation.username != request.user.username:
             raise Http404("You can only view responses to your own solicitations")
 
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        return get_responses_for_solicitation(self.solicitation)
+        return self.data_access.get_responses_for_solicitation(solicitation_record=self.solicitation)
 
     def get_table_class(self):
-        from .experiment_tables import ResponseRecordTable
+        from .tables import ResponseRecordTable
 
         return ResponseRecordTable
 
@@ -221,9 +228,9 @@ class SolicitationResponsesListView(SingleTableView):
         return context
 
 
-class SolicitationListView(ListView):
+class SolicitationListView(SolicitationDataAccessMixin, ListView):
     """
-    Public list view of all publicly listed solicitations using ExperimentRecords.
+    Public list view of all publicly listed solicitations using LocalLabsRecords.
     """
 
     model = SolicitationRecord
@@ -233,39 +240,40 @@ class SolicitationListView(ListView):
 
     def get_queryset(self):
         solicitation_type = self.kwargs.get("type")
-        qs = get_solicitations(status="active", is_publicly_listed=True)
-
+        filters = {"status": "active", "is_publicly_listed": True}
         if solicitation_type:
-            qs = qs.filter(data__solicitation_type=solicitation_type)
-
-        # No select_related needed since we use IDs only (no ForeignKeys)
-        return qs
+            filters["solicitation_type"] = solicitation_type
+        return self.data_access.get_solicitations(**filters)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["current_type"] = self.kwargs.get("type", "all")
-        context["total_active"] = get_solicitations(status="active", is_publicly_listed=True).count()
-        context["eoi_count"] = get_solicitations(
-            status="active", is_publicly_listed=True, solicitation_type="eoi"
-        ).count()
-        context["rfp_count"] = get_solicitations(
-            status="active", is_publicly_listed=True, solicitation_type="rfp"
-        ).count()
+        context["total_active"] = len(self.data_access.get_solicitations(status="active", is_publicly_listed=True))
+        context["eoi_count"] = len(
+            self.data_access.get_solicitations(status="active", is_publicly_listed=True, solicitation_type="eoi")
+        )
+        context["rfp_count"] = len(
+            self.data_access.get_solicitations(status="active", is_publicly_listed=True, solicitation_type="rfp")
+        )
         return context
 
 
-class SolicitationDetailView(DetailView):
+class SolicitationDetailView(SolicitationDataAccessMixin, DetailView):
     """
-    Public detail view of a specific solicitation using ExperimentRecords.
+    Public detail view of a specific solicitation using LocalLabsRecords.
     """
 
     model = SolicitationRecord
     template_name = "solicitations/solicitation_detail.html"
     context_object_name = "solicitation"
 
-    def get_queryset(self):
-        # No select_related needed since we use IDs only (no ForeignKeys)
-        return get_solicitations(status="active")
+    def get_object(self, queryset=None):
+        pk = self.kwargs.get("pk")
+        solicitations = self.data_access.get_solicitations(status="active")
+        for sol in solicitations:
+            if sol.id == pk:
+                return sol
+        raise Http404("Solicitation not found")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -295,13 +303,17 @@ class SolicitationDetailView(DetailView):
             user_org = self.request.user.memberships.first().organization
 
             # Check for draft
-            draft = get_response_for_solicitation(solicitation, user_org, status="draft")
+            draft = self.data_access.get_response_for_solicitation(
+                solicitation_record=solicitation, organization_id=user_org.slug, status="draft"
+            )
             if draft:
                 context["has_draft"] = True
                 context["draft"] = draft
 
             # Check for submitted response
-            submitted = get_response_for_solicitation(solicitation, user_org, status="submitted")
+            submitted = self.data_access.get_response_for_solicitation(
+                solicitation_record=solicitation, organization_id=user_org.slug, status="submitted"
+            )
             if submitted:
                 context["has_submitted_response"] = True
                 context["submitted_response"] = submitted
@@ -309,9 +321,9 @@ class SolicitationDetailView(DetailView):
         return context
 
 
-class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
+class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, SolicitationDataAccessMixin, UpdateView):
     """
-    Create or update a solicitation response using ExperimentRecords.
+    Create or update a solicitation response using LocalLabsRecords.
     Simplified version that works directly with JSON data.
     """
 
@@ -323,7 +335,7 @@ class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
         response_pk = self.kwargs.get("pk")
         if response_pk:
             # Edit mode - explicit PK provided
-            response = get_response_by_id(response_pk)
+            response = self.data_access.get_response_by_id(response_pk)
             if not response:
                 raise Http404("Response not found")
 
@@ -343,11 +355,11 @@ class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
             solicitation_pk = self.kwargs.get("solicitation_pk")
             if solicitation_pk:
                 # Try to find existing response for this org+solicitation
-                from .experiment_helpers import get_response_for_solicitation
-
-                solicitation = get_solicitation_by_id(solicitation_pk)
+                solicitation = self.data_access.get_solicitation_by_id(solicitation_pk)
                 if solicitation:
-                    response = get_response_for_solicitation(solicitation, org_slug, self.request.user.id)
+                    response = self.data_access.get_response_for_solicitation(
+                        solicitation_record=solicitation, organization_id=org_slug, username=self.request.user.username
+                    )
                     if response:
                         return response
 
@@ -357,10 +369,10 @@ class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
         # Get solicitation
         if self.kwargs.get("pk"):
             response = self.get_object()
-            self.solicitation = get_solicitation_by_id(response.parent_id)
+            self.solicitation = self.data_access.get_solicitation_by_id(response.labs_record_id)
         else:
             solicitation_pk = self.kwargs.get("solicitation_pk")
-            self.solicitation = get_solicitation_by_id(solicitation_pk)
+            self.solicitation = self.data_access.get_solicitation_by_id(solicitation_pk)
 
         if not self.solicitation:
             raise Http404("Solicitation not found")
@@ -376,6 +388,7 @@ class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
         kwargs = super().get_form_kwargs()
         kwargs["solicitation"] = self.solicitation
         kwargs["user"] = self.request.user
+        kwargs["data_access"] = self.data_access
         # Pass instance if we have one (for editing existing responses)
         if self.object:
             kwargs["instance"] = self.object
@@ -412,51 +425,52 @@ class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
 
         # Create or update response
         if self.object:
-            # Update existing
-            self.object.data = response_data
-            self.object.organization_id = org_slug  # Store slug (not int ID)
-            self.object.save()
-            response = self.object
+            # Update existing via API
+            response = self.data_access.update_response(
+                record_id=self.object.id, data_dict=response_data, organization_id=org_slug
+            )
         else:
             # Create new
-            response = create_response_record(
+            response = self.data_access.create_response(
                 solicitation_record=self.solicitation,
                 organization_id=org_slug,  # Pass slug (not int ID)
-                user_id=self.request.user.id,
+                username=self.request.user.username,
                 data_dict=response_data,
             )
 
         if is_draft:
             messages.success(self.request, "Draft saved successfully")
-            return redirect("solicitations:response_edit", pk=response.pk)
+            return redirect("solicitations:response_edit", pk=response.id)
         else:
             messages.success(self.request, "Response submitted successfully")
-            return redirect("solicitations:response_detail", pk=response.pk)
+            return redirect("solicitations:response_detail", pk=response.id)
 
 
-class SolicitationResponseDetailView(SolicitationResponseViewAccessMixin, DetailView):
+class SolicitationResponseDetailView(SolicitationResponseViewAccessMixin, SolicitationDataAccessMixin, DetailView):
     """
-    View response details using ExperimentRecords.
+    View response details using LocalLabsRecords.
     """
 
     model = ResponseRecord
     template_name = "solicitations/response_detail.html"
     context_object_name = "response"
 
-    def get_queryset(self):
-        # Use data access layer to get responses
-        from commcare_connect.labs.api_helpers import ExperimentRecordAPI
-
-        api = ExperimentRecordAPI()
-        qs = api.get_records(experiment="solicitations", type="SolicitationResponse")
-        return ResponseRecord.objects.filter(pk__in=qs.values_list("pk", flat=True))
+    def get_object(self, queryset=None):
+        pk = self.kwargs.get("pk")
+        response = self.data_access.get_response_by_id(pk)
+        if not response:
+            raise Http404("Response not found")
+        return response
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         response = self.object
-        solicitation = get_solicitation_by_id(response.parent_id)
+        solicitation = self.data_access.get_solicitation_by_id(response.labs_record_id)
         context["solicitation"] = solicitation
-        context["reviews"] = response.children.filter(type="SolicitationReview")
+
+        # Get reviews
+        # Note: This would need a method in data_access to fetch reviews for a response
+        context["reviews"] = []  # TODO: Implement get_reviews_for_response
 
         # Build questions_with_answers for template
         questions_with_answers = []
@@ -482,9 +496,9 @@ class SolicitationResponseDetailView(SolicitationResponseViewAccessMixin, Detail
         return context
 
 
-class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, UpdateView):
+class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, SolicitationDataAccessMixin, UpdateView):
     """
-    Create or update a review for a response using ExperimentRecords.
+    Create or update a review for a response using LocalLabsRecords.
     """
 
     model = ReviewRecord
@@ -493,23 +507,23 @@ class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, UpdateV
 
     def get_object(self, queryset=None):
         response_pk = self.kwargs.get("response_pk")
-        response = get_response_by_id(response_pk)
+        response = self.data_access.get_response_by_id(response_pk)
 
         if not response:
             raise Http404("Response not found")
 
         # Check if review already exists for this user
-        review = get_review_by_user(response, self.request.user)
+        review = self.data_access.get_review_by_user(response_record=response, username=self.request.user.username)
         return review
 
     def dispatch(self, request, *args, **kwargs):
         response_pk = self.kwargs.get("response_pk")
-        self.response = get_response_by_id(response_pk)
+        self.response = self.data_access.get_response_by_id(response_pk)
 
         if not self.response:
             raise Http404("Response not found")
 
-        self.solicitation = get_solicitation_by_id(self.response.parent_id)
+        self.solicitation = self.data_access.get_solicitation_by_id(self.response.labs_record_id)
 
         return super().dispatch(request, *args, **kwargs)
 
@@ -551,23 +565,22 @@ class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, UpdateV
         }
 
         if self.object:
-            # Update existing review
-            self.object.data = review_data
-            self.object.save()
+            # Update existing review via API
+            self.data_access.update_review(record_id=self.object.id, data_dict=review_data)
             messages.success(self.request, "Review updated successfully")
         else:
             # Create new review
-            create_review_record(
-                response_record=self.response, reviewer_id=self.request.user.id, data_dict=review_data
+            self.data_access.create_review(
+                response_record=self.response, username=self.request.user.username, data_dict=review_data
             )
             messages.success(self.request, "Review submitted successfully")
 
-        return redirect("solicitations:response_detail", pk=self.response.pk)
+        return redirect("solicitations:response_detail", pk=self.response.id)
 
 
-class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
+class SolicitationCreateOrUpdate(SolicitationManagerMixin, SolicitationDataAccessMixin, UpdateView):
     """
-    Create or edit solicitations using ExperimentRecords.
+    Create or edit solicitations using LocalLabsRecords.
     Simplified version that stores data in JSON.
     """
 
@@ -579,20 +592,17 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
         pk = self.kwargs.get("pk")
         if pk:
             # Edit mode - return existing solicitation
-            program_pk = self.kwargs.get("program_pk")
-            filters = {"pk": pk, "experiment": "solicitations", "type": "Solicitation"}
-            if program_pk:
-                filters["program_id"] = program_pk
-
-            obj = get_object_or_404(SolicitationRecord, **filters)
+            solicitation = self.data_access.get_solicitation_by_id(pk)
+            if not solicitation:
+                raise Http404("Solicitation not found")
             # For labs: permissions already checked by SolicitationManagerMixin
-            return obj
+            return solicitation
         return None
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
 
-        # Remove instance since we're using ExperimentRecords, not Solicitation model
+        # Remove instance since we're using LocalLabsRecords, not Solicitation model
         kwargs.pop("instance", None)
 
         # Pass user for program choices
@@ -687,18 +697,19 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
         }
 
         if is_edit:
-            # Update existing record
-            self.object.data = solicitation_data
-            self.object.save()
+            # Update existing record via API
+            self.object = self.data_access.update_solicitation(
+                record_id=self.object.id, data_dict=solicitation_data, program_id=program_pk
+            )
             messages.success(
                 self.request, f'Solicitation "{solicitation_data["title"]}" has been updated successfully.'
             )
         else:
             # Create new record with production IDs
-            self.object = create_solicitation_record(
+            self.object = self.data_access.create_solicitation(
                 program_id=program_pk,
                 organization_id=org_id,
-                user_id=self.request.user.id,
+                username=self.request.user.username,
                 data_dict=solicitation_data,
             )
             messages.success(

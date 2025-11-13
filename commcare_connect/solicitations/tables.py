@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-from commcare_connect.solicitations.experiment_models import ResponseRecord, ReviewRecord, SolicitationRecord
+from commcare_connect.solicitations.models import ResponseRecord, ReviewRecord, SolicitationRecord
 
 # =============================================================================
 # Utility Functions
