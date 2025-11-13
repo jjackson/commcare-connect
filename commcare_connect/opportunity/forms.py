@@ -1095,7 +1095,6 @@ class PaymentInvoiceForm(forms.ModelForm):
         required=False,
     )
     invoice_type = forms.CharField(
-        required=True,
         label=_("Invoice Type"),
         widget=forms.Select(
             choices=[
