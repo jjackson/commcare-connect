@@ -17,6 +17,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 
+from commcare_connect.labs.config import LABS_DEFAULT_OPPORTUNITY_ID
 from commcare_connect.tasks.data_access import TaskDataAccess
 from commcare_connect.tasks.models import TaskRecord
 from commcare_connect.tasks.ocs_client import OCSClientError, get_recent_session, get_transcript, trigger_bot
@@ -34,7 +35,9 @@ class TaskListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         """Get tasks the user can access with filtering."""
-        data_access = TaskDataAccess(user=self.request.user, request=self.request)
+        data_access = TaskDataAccess(
+            opportunity_id=LABS_DEFAULT_OPPORTUNITY_ID, user=self.request.user, request=self.request
+        )
 
         # Get all tasks (OAuth enforces access)
         queryset = data_access.get_tasks()
@@ -58,7 +61,9 @@ class TaskListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        data_access = TaskDataAccess(user=self.request.user, request=self.request)
+        data_access = TaskDataAccess(
+            opportunity_id=LABS_DEFAULT_OPPORTUNITY_ID, user=self.request.user, request=self.request
+        )
         all_tasks = data_access.get_tasks()
 
         # Calculate statistics
@@ -128,7 +133,9 @@ class TaskDetailView(LoginRequiredMixin, DetailView):
     def get_object(self, queryset=None):
         """Get task by ID."""
         task_id = self.kwargs.get(self.pk_url_kwarg)
-        data_access = TaskDataAccess(user=self.request.user, request=self.request)
+        data_access = TaskDataAccess(
+            opportunity_id=LABS_DEFAULT_OPPORTUNITY_ID, user=self.request.user, request=self.request
+        )
         task = data_access.get_task(task_id)
 
         if not task:
@@ -147,7 +154,9 @@ class TaskDetailView(LoginRequiredMixin, DetailView):
         timeline = task.get_timeline()
 
         # Get FLW history (past tasks for the same user)
-        data_access = TaskDataAccess(user=self.request.user, request=self.request)
+        data_access = TaskDataAccess(
+            opportunity_id=LABS_DEFAULT_OPPORTUNITY_ID, user=self.request.user, request=self.request
+        )
         flw_history = (
             data_access.get_tasks(user_id=task.user_id)
             .exclude(id=task.id)
@@ -242,7 +251,9 @@ class OpportunitySearchAPIView(LoginRequiredMixin, View):
         limit = int(request.GET.get("limit", 50))
 
         try:
-            data_access = TaskDataAccess(user=request.user, request=request)
+            data_access = TaskDataAccess(
+                opportunity_id=LABS_DEFAULT_OPPORTUNITY_ID, user=request.user, request=request
+            )
             opportunities = data_access.search_opportunities(query, limit)
             data_access.close()
 
@@ -257,7 +268,9 @@ class OpportunityWorkersAPIView(LoginRequiredMixin, View):
 
     def get(self, request, opportunity_id):
         try:
-            data_access = TaskDataAccess(user=request.user, request=request)
+            data_access = TaskDataAccess(
+                opportunity_id=LABS_DEFAULT_OPPORTUNITY_ID, user=request.user, request=request
+            )
             workers = data_access.get_users_from_opportunity(opportunity_id)
             data_access.close()
 
