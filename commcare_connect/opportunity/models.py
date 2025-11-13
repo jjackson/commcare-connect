@@ -858,26 +858,13 @@ class CredentialConfiguration(models.Model):
 
 class LabsRecord(models.Model):
     experiment = models.TextField()
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="experiment_records",
-    )
-    organization = models.ForeignKey(
-        Organization,
-        on_delete=models.CASCADE,
-        related_name="experiment_records",
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, null=True)
     opportunity = models.ForeignKey(
         Opportunity,
         on_delete=models.CASCADE,
-        related_name="experiment_records",
     )
-    labs_record = models.ForeignKey(
-        "LabsRecord",
-        on_delete=models.CASCADE,
-        related_name="experiment_records",
-    )
+    labs_record = models.ForeignKey("LabsRecord", on_delete=models.CASCADE, null=True)
     type = models.CharField(max_length=255)
     data = models.JSONField()
 
