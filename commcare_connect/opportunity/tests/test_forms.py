@@ -10,6 +10,7 @@ from commcare_connect.opportunity.tests.factories import (
     CommCareAppFactory,
     ExchangeRateFactory,
     OpportunityFactory,
+    PaymentInvoiceFactory,
     PaymentUnitFactory,
 )
 from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
@@ -321,6 +322,27 @@ class TestAddBudgetNewUsersForm:
 
 @pytest.mark.django_db
 class TestPaymentInvoiceForm:
+    def test_duplicate_invoice_number(self, valid_opportunity):
+        ExchangeRateFactory()
+        PaymentInvoiceFactory(opportunity=valid_opportunity, invoice_number="INV-001")
+
+        form = PaymentInvoiceForm(
+            opportunity=valid_opportunity,
+            data={
+                "invoice_number": "INV-001",
+                "date": "2025-11-06",
+                "usd_currency": False,
+                "local_amount": 100.0,
+                "start_date": None,
+                "end_date": None,
+                "notes": "",
+                "title": "",
+                "invoice_type": "custom",
+            },
+        )
+        assert not form.is_valid()
+        assert form.errors["invoice_number"][0] == "Please use a different invoice number"
+
     def test_valid_form(self, valid_opportunity):
         ExchangeRateFactory()
 
