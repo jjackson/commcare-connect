@@ -13,6 +13,10 @@ DEPLOY_ENVIRONMENT = "labs"
 # OAuth configuration
 LABS_OAUTH_SCOPES = ["export"]  # Expandable: ["export", "labs_data_storage"]
 
+# Solicitations configuration
+# TEMPORARY: Hardcoded opportunity_id until API is updated to use program_id instead
+SOLICITATION_DEFAULT_OPPORTUNITY_ID = 1  # TODO: Update this to your desired opportunity ID
+
 # Disable local registration
 ACCOUNT_ALLOW_REGISTRATION = False
 
