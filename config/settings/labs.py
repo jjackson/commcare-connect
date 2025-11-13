@@ -45,4 +45,4 @@ COMMCARE_OAUTH_CLIENT_SECRET = env("COMMCARE_OAUTH_CLIENT_SECRET", default="")  
 
 # Labs apps configuration
 # TEMPORARY: Hardcoded opportunity_id for all Labs apps (audit, tasks, solicitations)
-LABS_DEFAULT_OPPORTUNITY_ID = 764
+LABS_DEFAULT_OPP_ID = 764

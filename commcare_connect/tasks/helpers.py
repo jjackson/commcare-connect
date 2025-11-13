@@ -18,9 +18,9 @@ def get_user_tasks_queryset(user):
     Returns:
         QuerySet of TaskRecord instances (OAuth enforces access)
     """
-    from commcare_connect.labs.config import LABS_DEFAULT_OPPORTUNITY_ID
+    from commcare_connect.labs.config import LABS_DEFAULT_OPP_ID
 
-    data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPPORTUNITY_ID, user=user)
+    data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=user)
     return data_access.get_tasks()
 
 
@@ -51,9 +51,9 @@ def create_task_from_audit(
     Returns:
         The created TaskRecord instance
     """
-    from commcare_connect.labs.config import LABS_DEFAULT_OPPORTUNITY_ID
+    from commcare_connect.labs.config import LABS_DEFAULT_OPP_ID
 
-    data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPPORTUNITY_ID)
+    data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID)
 
     return data_access.create_task(
         user_id=user_id,
