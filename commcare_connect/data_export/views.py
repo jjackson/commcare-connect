@@ -218,9 +218,9 @@ class AssessmentDataView(OpportunityScopedDataView):
 class LabsRecordDataView(OpportunityDataExportView, ListCreateAPIView):
     serializer_class = LabsRecordDataSerializer
 
-    def get_queryset(self, request, opp_id):
+    def get_queryset(self):
         filters = {}
-        query_params = request.query_params.copy()
+        query_params = self.request.query_params.copy()
         query_params.pop("opportunity", None)
         for key, value in query_params.items():
             filters[key] = value
@@ -239,15 +239,16 @@ class LabsRecordDataView(OpportunityDataExportView, ListCreateAPIView):
 
         instances = []
         for item in data:
+            item = item.copy()
             username = item.pop("username", None)
             user = None
             if username:
                 user = User.objects.get(username=username)
-            item["user"] = user
+                item["user"] = user
             item["opportunity"] = self.opportunity
             item["organization"] = self.opportunity.organization
-            id = item.pop("id", None)
-            obj, created = LabsRecord.objects.update_or_create(defaults=item, **{"id": id})
+            pk = item.pop("id", None)
+            obj, created = LabsRecord.objects.update_or_create(defaults=item, **{"id": pk})
             instances.append(obj)
         serializer = self.get_serializer(instances, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
