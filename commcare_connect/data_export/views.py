@@ -239,10 +239,13 @@ class LabsRecordDataView(OpportunityDataExportView, ListCreateAPIView):
 
         instances = []
         for item in data:
-            user = item.pop("username", None)
-            if user:
-                user = User.objects.get(username=item.get("username"))
+            username = item.pop("username", None)
+            user = None
+            if username:
+                user = User.objects.get(username=username)
             item["user"] = user
+            item["opportunity"] = self.opportunity
+            item["organization"] = self.opportunity.organization
             id = item.pop("id", None)
             obj, created = LabsRecord.objects.update_or_create(defaults=item, **{"id": id})
             instances.append(obj)
