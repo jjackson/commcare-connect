@@ -1097,7 +1097,6 @@ class PaymentInvoiceForm(forms.ModelForm):
         required=False,
     )
     invoice_type = forms.CharField(
-        required=True,
         label=_("Invoice Type"),
         widget=forms.Select(
             choices=[
@@ -1247,9 +1246,9 @@ class PaymentInvoiceForm(forms.ModelForm):
         if not invoice_number:
             invoice_number = self.generate_invoice_number()
 
-        if PaymentInvoice.objects.filter(opportunity=self.opportunity, invoice_number=invoice_number).exists():
+        if PaymentInvoice.objects.filter(invoice_number=invoice_number).exists():
             raise ValidationError(
-                f'Invoice "{invoice_number}" already exists',
+                "Please use a different invoice number",
                 code="invoice_number_reused",
             )
         return invoice_number
