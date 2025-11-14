@@ -61,8 +61,8 @@ TEST_CONFIGS = {
         audit_type="last_n_per_flw",
         count_per_flw=10,
     ),
-    "opp385_across": TestConfig(
-        name="Opp 385 - Last 10 Across All (workaround for missing user_id)",
+    "opp385_last10": TestConfig(
+        name="Opp 385 - Last 10 Total",
         search_query="385",
         select_count=1,
         audit_type="last_n_across_all",

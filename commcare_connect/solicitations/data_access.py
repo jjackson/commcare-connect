@@ -8,6 +8,8 @@ It handles casting API responses to typed proxy models
 This is a pure API client with no local database storage.
 """
 
+from django.http import HttpRequest
+
 from commcare_connect.labs.api_client import LabsRecordAPIClient
 from commcare_connect.solicitations.models import ResponseRecord, ReviewRecord, SolicitationRecord
 
@@ -20,14 +22,28 @@ class SolicitationDataAccess:
     API responses to appropriate proxy model types.
     """
 
-    def __init__(self, opportunity_id: int, access_token: str):
+    def __init__(self, opportunity_id: int, access_token: str | None = None, request: HttpRequest | None = None):
         """Initialize solicitations data access.
 
         Args:
             opportunity_id: Opportunity ID for API scoping
             access_token: OAuth Bearer token for production API
+            request: HttpRequest object (for extracting token in labs mode)
         """
         self.opportunity_id = opportunity_id
+
+        # Get OAuth token from labs session
+        if not access_token and request:
+            from django.utils import timezone
+
+            labs_oauth = request.session.get("labs_oauth", {})
+            expires_at = labs_oauth.get("expires_at", 0)
+            if timezone.now().timestamp() < expires_at:
+                access_token = labs_oauth.get("access_token")
+
+        if not access_token:
+            raise ValueError("OAuth access token required for solicitation data access")
+
         self.labs_api = LabsRecordAPIClient(access_token, opportunity_id)
 
     def get_solicitations(

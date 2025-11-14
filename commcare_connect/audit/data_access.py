@@ -202,6 +202,7 @@ class AuditDataAccess:
             "kpi_notes": "",
             "visit_ids": visit_ids,
             "visit_results": {},  # Initialize empty
+            "opportunity_id": opportunity_id,  # Store primary opportunity ID for later use
         }
 
         # Note: auditor username should be passed from request.user
