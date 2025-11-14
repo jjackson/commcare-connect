@@ -219,3 +219,77 @@ def get_oauth_token(
         if verbose:
             print(f"\n[ERROR] Error exchanging token: {str(e)}")
         return None
+
+
+def get_labs_user_from_token(
+    token_manager=None,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+    production_url: str | None = None,
+):
+    """
+    Create LabsUser instance by introspecting saved CLI token at runtime.
+
+    This is the recommended way for CLI scripts to get a LabsUser object.
+    It loads the token saved by `python manage.py get_cli_token` and
+    introspects it to get fresh user profile data.
+
+    Args:
+        token_manager: Optional TokenManager instance (defaults to new TokenManager())
+        client_id: OAuth client ID for introspection (defaults to settings.CONNECT_OAUTH_CLIENT_ID)
+        client_secret: OAuth client secret for introspection (defaults to settings.CONNECT_OAUTH_CLIENT_SECRET)
+        production_url: Production URL (defaults to settings.CONNECT_PRODUCTION_URL)
+
+    Returns:
+        LabsUser instance or None if token invalid/expired or introspection fails
+
+    Example:
+        >>> from commcare_connect.labs.oauth_cli import get_labs_user_from_token
+        >>> user = get_labs_user_from_token()
+        >>> if user:
+        >>>     print(f"Authenticated as: {user.username}")
+    """
+    from django.conf import settings
+
+    from commcare_connect.labs.models import LabsUser
+    from commcare_connect.labs.oauth_cli.token_manager import TokenManager
+    from commcare_connect.labs.oauth_helpers import introspect_token
+
+    # Load token
+    if token_manager is None:
+        token_manager = TokenManager()
+
+    access_token = token_manager.get_valid_token()
+    if not access_token:
+        return None
+
+    # Get OAuth credentials from settings if not provided
+    # Note: We use the WEB OAuth credentials for introspection (confidential client)
+    # because the CLI app is public and cannot introspect tokens
+    if client_id is None:
+        client_id = getattr(settings, "CONNECT_OAUTH_CLIENT_ID", None)
+    if client_secret is None:
+        client_secret = getattr(settings, "CONNECT_OAUTH_CLIENT_SECRET", None)
+    if production_url is None:
+        production_url = getattr(settings, "CONNECT_PRODUCTION_URL", None)
+
+    if not client_id or not client_secret or not production_url:
+        return None
+
+    # Introspect token at runtime to get fresh user profile
+    user_profile = introspect_token(
+        access_token=access_token,
+        client_id=client_id,
+        client_secret=client_secret,
+        production_url=production_url,
+    )
+
+    if not user_profile:
+        return None
+
+    # Create LabsUser from profile data
+    session_data = {
+        "user_profile": user_profile,
+        "organization_data": {},
+    }
+    return LabsUser(session_data)

@@ -103,7 +103,7 @@ class AuditDataAccess:
 
     def create_audit_template(
         self,
-        user_id: int,
+        username: str,
         opportunity_ids: list[int],
         audit_type: str,
         granularity: str,
@@ -114,7 +114,7 @@ class AuditDataAccess:
         Create a new audit template.
 
         Args:
-            user_id: Creator user ID
+            username: Creator username (from OAuth profile)
             opportunity_ids: List of opportunity IDs to audit
             audit_type: Type of audit (date_range, last_n_per_flw, etc.)
             granularity: Audit granularity (combined, per_opp, per_flw)
@@ -132,16 +132,26 @@ class AuditDataAccess:
             **criteria,  # Unpack all criteria fields
         }
 
-        # Note: username lookup would be needed here if user_id is provided
-        # For now, Labs users are identified by request.user.username
         record = self.labs_api.create_record(
             experiment="audit",
             type="AuditTemplate",
             data=data,
-            username=None,  # Could pass request.user.username if available
+            username=username,
         )
 
-        return record
+        # Cast to AuditTemplateRecord for convenience properties
+        api_data = {
+            "id": record.id,
+            "experiment": record.experiment,
+            "type": record.type,
+            "data": record.data,
+            "username": record.username,
+            "opportunity_id": record.opportunity_id,
+            "organization_id": record.organization_id,
+            "program_id": record.program_id,
+            "labs_record_id": record.labs_record_id,
+        }
+        return AuditTemplateRecord(api_data)
 
     def get_audit_template(self, template_id: int) -> AuditTemplateRecord | None:
         """
@@ -153,7 +163,9 @@ class AuditDataAccess:
         Returns:
             AuditTemplateRecord or None
         """
-        record = self.labs_api.get_record_by_id(record_id=template_id, experiment="audit", type="AuditTemplate")
+        record = self.labs_api.get_record_by_id(
+            record_id=template_id, experiment="audit", type="AuditTemplate", model_class=AuditTemplateRecord
+        )
         return record
 
     def get_audit_templates(self, username: str | None = None) -> list[AuditTemplateRecord]:
@@ -166,14 +178,16 @@ class AuditDataAccess:
         Returns:
             List of AuditTemplateRecord instances
         """
-        return self.labs_api.get_records(experiment="audit", type="AuditTemplate", username=username)
+        return self.labs_api.get_records(
+            experiment="audit", type="AuditTemplate", username=username, model_class=AuditTemplateRecord
+        )
 
     # Session Methods
 
     def create_audit_session(
         self,
         template_id: int,
-        auditor_id: int,
+        username: str,
         visit_ids: list[int],
         title: str,
         tag: str,
@@ -184,7 +198,7 @@ class AuditDataAccess:
 
         Args:
             template_id: Parent template ID
-            auditor_id: Auditor user ID
+            username: Auditor username (from OAuth profile)
             visit_ids: List of visit IDs to audit
             title: Session title
             tag: Session tag
@@ -205,16 +219,27 @@ class AuditDataAccess:
             "opportunity_id": opportunity_id,  # Store primary opportunity ID for later use
         }
 
-        # Note: auditor username should be passed from request.user
         record = self.labs_api.create_record(
             experiment="audit",
             type="AuditSession",
             data=data,
             labs_record_id=template_id,
-            username=None,  # Should pass request.user.username if available
+            username=username,
         )
 
-        return record
+        # Cast to AuditSessionRecord for convenience properties
+        api_data = {
+            "id": record.id,
+            "experiment": record.experiment,
+            "type": record.type,
+            "data": record.data,
+            "username": record.username,
+            "opportunity_id": record.opportunity_id,
+            "organization_id": record.organization_id,
+            "program_id": record.program_id,
+            "labs_record_id": record.labs_record_id,
+        }
+        return AuditSessionRecord(api_data)
 
     def get_audit_session(self, session_id: int) -> AuditSessionRecord | None:
         """
@@ -226,7 +251,9 @@ class AuditDataAccess:
         Returns:
             AuditSessionRecord or None
         """
-        record = self.labs_api.get_record_by_id(record_id=session_id, experiment="audit", type="AuditSession")
+        record = self.labs_api.get_record_by_id(
+            record_id=session_id, experiment="audit", type="AuditSession", model_class=AuditSessionRecord
+        )
         return record
 
     def get_audit_sessions(self, username: str | None = None, status: str | None = None) -> list[AuditSessionRecord]:
@@ -245,12 +272,15 @@ class AuditDataAccess:
         if status:
             kwargs["status"] = status
 
-        return self.labs_api.get_records(
+        records = self.labs_api.get_records(
             experiment="audit",
             type="AuditSession",
             username=username,
+            model_class=AuditSessionRecord,
             **kwargs,
         )
+
+        return records
 
     def save_audit_session(self, session: AuditSessionRecord) -> AuditSessionRecord:
         """
@@ -262,8 +292,26 @@ class AuditDataAccess:
         Returns:
             Updated AuditSessionRecord
         """
-        updated_record = self.labs_api.update_record(record_id=session.id, data=session.data)
-        return updated_record
+        updated_record = self.labs_api.update_record(
+            record_id=session.id,
+            experiment="audit",
+            type="AuditSession",
+            data=session.data,
+            username=session.username,
+        )
+        # Cast to AuditSessionRecord
+        api_data = {
+            "id": updated_record.id,
+            "experiment": updated_record.experiment,
+            "type": updated_record.type,
+            "data": updated_record.data,
+            "username": updated_record.username,
+            "opportunity_id": updated_record.opportunity_id,
+            "organization_id": updated_record.organization_id,
+            "program_id": updated_record.program_id,
+            "labs_record_id": updated_record.labs_record_id,
+        }
+        return AuditSessionRecord(api_data)
 
     def complete_audit_session(
         self, session: AuditSessionRecord, overall_result: str, notes: str = "", kpi_notes: str = ""

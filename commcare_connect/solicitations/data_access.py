@@ -79,6 +79,7 @@ class SolicitationDataAccess:
             experiment="solicitations",
             type="Solicitation",
             program_id=program_id,
+            model_class=SolicitationRecord,
             **kwargs,
         )
 
@@ -93,7 +94,7 @@ class SolicitationDataAccess:
             SolicitationRecord instance or None
         """
         return self.labs_api.get_record_by_id(
-            record_id=solicitation_id, experiment="solicitations", type="Solicitation"
+            record_id=solicitation_id, experiment="solicitations", type="Solicitation", model_class=SolicitationRecord
         )
 
     def create_solicitation(self, program_id: int, username: str, data_dict: dict) -> SolicitationRecord:
@@ -137,6 +138,7 @@ class SolicitationDataAccess:
             experiment="solicitations",
             type="SolicitationResponse",
             labs_record_id=solicitation_record.id,
+            model_class=ResponseRecord,
             **kwargs,
         )
 
@@ -169,6 +171,7 @@ class SolicitationDataAccess:
             labs_record_id=solicitation_record.id,
             organization_id=organization_id,
             username=username,
+            model_class=ResponseRecord,
             **kwargs,
         )
 
@@ -185,7 +188,7 @@ class SolicitationDataAccess:
             ResponseRecord instance or None
         """
         return self.labs_api.get_record_by_id(
-            record_id=response_id, experiment="solicitations", type="SolicitationResponse"
+            record_id=response_id, experiment="solicitations", type="SolicitationResponse", model_class=ResponseRecord
         )
 
     def create_response(
@@ -227,6 +230,7 @@ class SolicitationDataAccess:
             type="SolicitationReview",
             labs_record_id=response_record.id,
             username=username,
+            model_class=ReviewRecord,
         )
 
         return records[0] if records else None
@@ -271,5 +275,6 @@ class SolicitationDataAccess:
             experiment="solicitations",
             type="SolicitationResponse",
             organization_id=organization_id,
+            model_class=ResponseRecord,
             **kwargs,
         )

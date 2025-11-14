@@ -20,7 +20,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
-from .api_helpers import fetch_user_organization_data
+from .oauth_helpers import fetch_user_organization_data, introspect_token
 
 logger = logging.getLogger(__name__)
 
@@ -162,34 +162,13 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
 
     # Get user info from Connect production
     access_token = token_json["access_token"]
-    profile_data = None
-
     # Try to introspect the token to get user information
-    try:
-        introspect_response = httpx.post(
-            f"{settings.CONNECT_PRODUCTION_URL}/o/introspect/",
-            data={"token": access_token},
-            auth=(settings.CONNECT_OAUTH_CLIENT_ID, settings.CONNECT_OAUTH_CLIENT_SECRET),
-            timeout=10,
-        )
-        logger.info(f"Introspect response status: {introspect_response.status_code}")
-        if introspect_response.status_code == 200:
-            introspect_data = introspect_response.json()
-            logger.info(f"Introspect response: {introspect_data}")
-            if introspect_data.get("active"):
-                # Token is active, extract user info
-                # Note: We use a dummy ID (0) since we never query the database
-                # The ID field is just to satisfy Django's User interface
-                profile_data = {
-                    "id": introspect_data.get("user_id") or introspect_data.get("sub") or 0,
-                    "username": introspect_data.get("username"),
-                    "email": introspect_data.get("email", ""),
-                    "first_name": introspect_data.get("given_name", ""),
-                    "last_name": introspect_data.get("family_name", ""),
-                }
-                logger.info(f"Got user info from token introspection: {profile_data}")
-    except Exception as e:
-        logger.error(f"Failed to introspect token: {str(e)}", exc_info=True)
+    profile_data = introspect_token(
+        access_token=access_token,
+        client_id=settings.CONNECT_OAUTH_CLIENT_ID,
+        client_secret=settings.CONNECT_OAUTH_CLIENT_SECRET,
+        production_url=settings.CONNECT_PRODUCTION_URL,
+    )
 
     # If we still don't have profile data, we can't authenticate
     if not profile_data:

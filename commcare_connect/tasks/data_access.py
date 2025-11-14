@@ -156,7 +156,9 @@ class TaskDataAccess:
         Returns:
             TaskRecord or None if not found
         """
-        return self.labs_api.get_record_by_id(record_id=task_id, experiment="tasks", type="Task")
+        return self.labs_api.get_record_by_id(
+            record_id=task_id, experiment="tasks", type="Task", model_class=TaskRecord
+        )
 
     def get_tasks(
         self,
@@ -187,6 +189,7 @@ class TaskDataAccess:
         return self.labs_api.get_records(
             experiment="tasks",
             type="Task",
+            model_class=TaskRecord,
             **kwargs,
         )
 

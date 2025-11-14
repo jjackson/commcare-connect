@@ -105,8 +105,15 @@ class AuditSessionRecord(LocalLabsRecord):
 
     @property
     def opportunity_id(self):
-        """Primary opportunity ID for this session."""
+        """Primary opportunity ID for this audit session (the audit target, not Labs storage)."""
         return self.data.get("opportunity_id")
+
+    @opportunity_id.setter
+    def opportunity_id(self, value):
+        """Allow setting opportunity_id from LocalLabsRecord.__init__."""
+        # LocalLabsRecord.__init__ tries to set this from api_data
+        # We intercept it here and store in internal attribute
+        object.__setattr__(self, "_opportunity_id_from_api", value)
 
     @property
     def visit_results(self):

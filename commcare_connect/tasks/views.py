@@ -37,24 +37,25 @@ class TaskListView(LoginRequiredMixin, ListView):
         """Get tasks the user can access with filtering."""
         data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=self.request.user, request=self.request)
 
-        # Get all tasks (OAuth enforces access)
-        queryset = data_access.get_tasks()
+        # Get all tasks (OAuth enforces access) - returns a list, not QuerySet
+        tasks = data_access.get_tasks()
 
         # Apply filters from GET parameters
         status_filter = self.request.GET.get("status")
         if status_filter and status_filter != "all":
-            queryset = queryset.filter(data__status=status_filter)
+            tasks = [t for t in tasks if t.status == status_filter]
 
         action_type_filter = self.request.GET.get("action_type")
         if action_type_filter and action_type_filter != "all":
-            queryset = queryset.filter(data__task_type=action_type_filter)
+            tasks = [t for t in tasks if t.task_type == action_type_filter]
 
         search_query = self.request.GET.get("search")
         if search_query:
-            # Search in title (JSON field)
-            queryset = queryset.filter(data__title__icontains=search_query)
+            search_lower = search_query.lower()
+            tasks = [t for t in tasks if search_lower in t.title.lower()]
 
-        return queryset.order_by("-date_created")
+        # Sort by date_created descending
+        return sorted(tasks, key=lambda x: x.date_created or "", reverse=True)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -62,14 +63,14 @@ class TaskListView(LoginRequiredMixin, ListView):
         data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=self.request.user, request=self.request)
         all_tasks = data_access.get_tasks()
 
-        # Calculate statistics
+        # Calculate statistics - all_tasks is a list, not QuerySet
         stats = {
-            "total": all_tasks.count(),
-            "unassigned": all_tasks.filter(data__status="unassigned").count(),
-            "network_manager": all_tasks.filter(data__status="network_manager").count(),
-            "program_manager": all_tasks.filter(data__status="program_manager").count(),
-            "action_underway": all_tasks.filter(data__status="action_underway").count(),
-            "resolved": all_tasks.filter(data__status="resolved").count(),
+            "total": len(all_tasks),
+            "unassigned": len([t for t in all_tasks if t.status == "unassigned"]),
+            "network_manager": len([t for t in all_tasks if t.status == "network_manager"]),
+            "program_manager": len([t for t in all_tasks if t.status == "program_manager"]),
+            "action_underway": len([t for t in all_tasks if t.status == "action_underway"]),
+            "resolved": len([t for t in all_tasks if t.status == "resolved"]),
         }
 
         # Status and type choices for filters
@@ -147,25 +148,24 @@ class TaskDetailView(LoginRequiredMixin, DetailView):
         # Get timeline (events + comments combined)
         timeline = task.get_timeline()
 
-        # Get FLW history (past tasks for the same user)
+        # Get FLW history (past tasks for the same user) - returns list, not QuerySet
         data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=self.request.user, request=self.request)
-        flw_history = (
-            data_access.get_tasks(user_id=task.user_id)
-            .exclude(id=task.id)
-            .order_by("-date_created")[:5]
-            .values("id", "date_created", "data")
-        )
+        all_flw_tasks = data_access.get_tasks(username=task.task_username)
+
+        # Filter out current task and sort by date_created
+        flw_history = [t for t in all_flw_tasks if t.id != task.id]
+        flw_history = sorted(flw_history, key=lambda x: x.date_created or "", reverse=True)[:5]
 
         # Format history for template
         formatted_history = []
         for hist in flw_history:
             formatted_history.append(
                 {
-                    "id": hist["id"],
-                    "date_created": hist["date_created"],
-                    "task_type": hist["data"].get("task_type"),
-                    "status": hist["data"].get("status"),
-                    "title": hist["data"].get("title"),
+                    "id": hist.id,
+                    "date_created": hist.date_created,
+                    "task_type": hist.task_type,
+                    "status": hist.status,
+                    "title": hist.title,
                 }
             )
 
@@ -314,9 +314,12 @@ class DatabaseResetAPIView(LoginRequiredMixin, View):
 def task_initiate_ai(request, task_id):
     """Initiate an AI assistant conversation for a task via OCS."""
     try:
-        # Get the task using ExperimentRecord
-        task = TaskRecord.objects.get(id=task_id, experiment="tasks")
-    except TaskRecord.DoesNotExist:
+        # Get the task using TaskDataAccess
+        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=request.user, request=request)
+        task = data_access.get_task(task_id)
+        if not task:
+            return JsonResponse({"error": "Task not found"}, status=404)
+    except Exception:
         return JsonResponse({"error": "Task not found"}, status=404)
 
     try:
@@ -359,9 +362,9 @@ def task_initiate_ai(request, task_id):
 
         # Add AI session to task using nested JSON
         task.add_ai_session(
-            session_id=None,  # Will be populated later via manual linking
+            ocs_session_id=None,  # Will be populated later via manual linking
             status="pending",
-            session_metadata={
+            metadata={
                 "parameters": {
                     "identifier": identifier,
                     "experiment": experiment,
@@ -370,15 +373,18 @@ def task_initiate_ai(request, task_id):
                 }
             },
         )
-        task.save()
 
         # Add event for AI conversation initiation
         task.add_event(
-            action="AI Conversation Initiated",
+            event_type="ai_initiated",
             actor=request.user.username if hasattr(request.user, "username") else "system",
+            actor_user_id=request.user.id if hasattr(request.user, "id") else 0,
             description=f"Triggered AI assistant for {identifier}",
         )
-        task.save()
+
+        # Save task via data access
+        data_access.save_task(task)
+        data_access.close()
 
         return JsonResponse(
             {
@@ -401,8 +407,11 @@ def task_initiate_ai(request, task_id):
 def task_ai_sessions(request, task_id):
     """Get AI sessions for a task and try to populate session_id from OCS if missing."""
     try:
-        task = TaskRecord.objects.get(id=task_id, experiment="tasks")
-    except TaskRecord.DoesNotExist:
+        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=request.user, request=request)
+        task = data_access.get_task(task_id)
+        if not task:
+            return JsonResponse({"error": "Task not found"}, status=404)
+    except Exception:
         return JsonResponse({"error": "Task not found"}, status=404)
 
     # Get all AI sessions from task's nested data
@@ -442,10 +451,12 @@ def task_ai_sessions(request, task_id):
                         # Update the session in the nested data
                         pending_session["session_id"] = session_id
                         pending_session["status"] = "completed"
-                        task.save()
+                        data_access.save_task(task)
 
             except OCSClientError as e:
                 logger.error(f"Error fetching OCS sessions: {e}")
+
+        data_access.close()
 
     # Return the AI sessions
     return JsonResponse({"success": True, "sessions": ai_sessions})
@@ -457,8 +468,11 @@ def task_ai_sessions(request, task_id):
 def task_add_ai_session(request, task_id):
     """Manually add OCS session ID to a task."""
     try:
-        task = TaskRecord.objects.get(id=task_id, experiment="tasks")
-    except TaskRecord.DoesNotExist:
+        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=request.user, request=request)
+        task = data_access.get_task(task_id)
+        if not task:
+            return JsonResponse({"error": "Task not found"}, status=404)
+    except Exception:
         return JsonResponse({"error": "Task not found"}, status=404)
 
     session_id = request.POST.get("session_id", "").strip()
@@ -476,18 +490,20 @@ def task_add_ai_session(request, task_id):
         created = False
     else:
         # Create new AI session
-        task.add_ai_session(session_id=session_id, status="completed")
+        task.add_ai_session(ocs_session_id=session_id, status="completed")
         created = True
-
-    task.save()
 
     # Add event for AI conversation linked
     task.add_event(
-        action="AI Conversation Linked",
+        event_type="ai_linked",
         actor=request.user.username if hasattr(request.user, "username") else "system",
+        actor_user_id=request.user.id if hasattr(request.user, "id") else 0,
         description=f"Linked OCS session: {session_id}",
     )
-    task.save()
+
+    # Save task via data access
+    data_access.save_task(task)
+    data_access.close()
 
     return JsonResponse({"success": True, "session_id": session_id, "created": created})
 
@@ -496,8 +512,12 @@ def task_add_ai_session(request, task_id):
 def task_ai_transcript(request, task_id):
     """Fetch AI conversation transcript from OCS."""
     try:
-        task = TaskRecord.objects.get(id=task_id, experiment="tasks")
-    except TaskRecord.DoesNotExist:
+        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=request.user, request=request)
+        task = data_access.get_task(task_id)
+        data_access.close()
+        if not task:
+            return JsonResponse({"error": "Task not found"}, status=404)
+    except Exception:
         return JsonResponse({"error": "Task not found"}, status=404)
 
     # Get AI sessions from nested data

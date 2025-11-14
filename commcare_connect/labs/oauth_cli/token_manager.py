@@ -32,12 +32,13 @@ class TokenManager:
             config_dir.mkdir(exist_ok=True)
             self.token_file = config_dir / "token.json"
 
-    def save_token(self, token_data: dict) -> bool:
+    def save_token(self, token_data: dict, user_profile: dict | None = None) -> bool:
         """
-        Save OAuth token to file with expiration timestamp.
+        Save OAuth token to file with expiration timestamp and optional user profile.
 
         Args:
             token_data: Token response from OAuth provider
+            user_profile: Optional user profile dict with keys: id, username, email, first_name, last_name
 
         Returns:
             True if successful, False otherwise
@@ -50,6 +51,10 @@ class TokenManager:
 
             # Add saved timestamp
             token_data["saved_at"] = datetime.now().isoformat()
+
+            # Add user profile if provided
+            if user_profile:
+                token_data["user_profile"] = user_profile
 
             # Ensure parent directory exists
             self.token_file.parent.mkdir(parents=True, exist_ok=True)

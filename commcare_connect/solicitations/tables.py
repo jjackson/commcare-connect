@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-from commcare_connect.solicitations.models import ResponseRecord, ReviewRecord, SolicitationRecord
+from commcare_connect.solicitations.models import ResponseRecord, SolicitationRecord
 
 # =============================================================================
 # Utility Functions
@@ -78,6 +78,7 @@ class SolicitationRecordTable(tables.Table):
     - Uses proxy model properties (.title, .status, etc.) instead of model fields
     - No ForeignKey relationships - uses production IDs
     - Updated URL patterns for labs (no org_slug)
+    - Requires data_access to be passed via table_kwargs for counting responses
     """
 
     title = tables.Column(verbose_name="Title", orderable=True)
@@ -85,6 +86,11 @@ class SolicitationRecordTable(tables.Table):
     application_deadline = tables.Column(verbose_name="Deadline", orderable=True, empty_values=())
     total = tables.Column(empty_values=(), verbose_name="Responses", orderable=False)
     actions = tables.Column(empty_values=(), verbose_name="Actions", orderable=False)
+
+    def __init__(self, *args, data_access=None, **kwargs):
+        """Initialize table with optional data_access for API queries."""
+        super().__init__(*args, **kwargs)
+        self.data_access = data_access
 
     class Meta:
         model = SolicitationRecord
@@ -120,8 +126,15 @@ class SolicitationRecordTable(tables.Table):
 
     def render_total(self, record):
         """Render total responses count"""
-        # Count child responses
-        total = record.children.filter(type="SolicitationResponse").count()
+        # Count child responses via API if data_access available
+        if self.data_access:
+            try:
+                responses = self.data_access.get_responses_for_solicitation(record)
+                total = len(responses)
+            except Exception:
+                total = 0
+        else:
+            total = 0
         return format_html('<span class="font-medium">{}</span>', total)
 
     def render_actions(self, record):
@@ -145,9 +158,10 @@ class ResponseRecordTable(tables.Table):
 
     Key differences from old SolicitationResponseAndReviewTable:
     - Uses proxy model properties (.response_status, .responses, etc.)
-    - Accesses parent solicitation via .parent relationship
-    - Reviews accessed via .children relationship
+    - Queries parent solicitation via API using labs_record_id
+    - Reviews queried via API
     - No ForeignKey dependencies - uses production IDs
+    - Requires data_access to be passed via table_kwargs
     """
 
     solicitation = tables.Column(verbose_name="Solicitation", orderable=False, empty_values=())
@@ -157,6 +171,11 @@ class ResponseRecordTable(tables.Table):
     score = tables.Column(empty_values=(), verbose_name="Score", orderable=False)
     actions = tables.Column(empty_values=(), verbose_name="Actions", orderable=False)
 
+    def __init__(self, *args, data_access=None, **kwargs):
+        """Initialize table with optional data_access for API queries."""
+        super().__init__(*args, **kwargs)
+        self.data_access = data_access
+
     class Meta:
         model = ResponseRecord
         fields = ("solicitation", "status", "last_edited", "recommendation", "score", "actions")
@@ -165,11 +184,14 @@ class ResponseRecordTable(tables.Table):
 
     def render_solicitation(self, value, record):
         """Render solicitation title with type badge"""
-        # Get parent solicitation and cast to SolicitationRecord proxy model
-        if record.parent:
-            # Cast ExperimentRecord to SolicitationRecord to access properties
-            solicitation = SolicitationRecord.objects.get(pk=record.parent.pk)
-            return render_text_with_badge(solicitation.title, solicitation.solicitation_type)
+        # Get parent solicitation via API using labs_record_id
+        if record.labs_record_id and self.data_access:
+            try:
+                solicitation = self.data_access.get_solicitation_by_id(record.labs_record_id)
+                if solicitation:
+                    return render_text_with_badge(solicitation.title, solicitation.solicitation_type)
+            except Exception:
+                pass
         return "—"
 
     def render_status(self, value, record):
@@ -188,32 +210,29 @@ class ResponseRecordTable(tables.Table):
 
     def render_recommendation(self, record):
         """Render recommendation from review if it exists"""
-        try:
-            review_base = record.children.filter(type="SolicitationReview").first()
-            if review_base:
-                # Cast to ReviewRecord proxy to access properties
-                review = ReviewRecord.objects.get(pk=review_base.pk)
-                recommendation = review.recommendation
-                if recommendation:
-                    badge_class = get_status_badge_class(recommendation)
+        if self.data_access:
+            try:
+                # Get review for this response via API
+                review = self.data_access.get_review_by_user(record, username=record.username)
+                if review and review.recommendation:
+                    badge_class = get_status_badge_class(review.recommendation)
                     return format_html(
-                        '<span class="{}">{}</span>', badge_class, recommendation.replace("_", " ").title()
+                        '<span class="{}">{}</span>', badge_class, review.recommendation.replace("_", " ").title()
                     )
-        except Exception:
-            pass
+            except Exception:
+                pass
         return "—"
 
     def render_score(self, record):
         """Render score from review if it exists"""
-        try:
-            review_base = record.children.filter(type="SolicitationReview").first()
-            if review_base:
-                # Cast to ReviewRecord proxy to access properties
-                review = ReviewRecord.objects.get(pk=review_base.pk)
-                if review.score is not None:
+        if self.data_access:
+            try:
+                # Get review for this response via API
+                review = self.data_access.get_review_by_user(record, username=record.username)
+                if review and review.score is not None:
                     return review.score
-        except Exception:
-            pass
+            except Exception:
+                pass
         return "—"
 
     def render_actions(self, record):
@@ -229,8 +248,8 @@ class ResponseRecordTable(tables.Table):
             edit_url = reverse("solicitations:response_edit", kwargs={"pk": record.pk})
             actions.append(create_action_link(edit_url, "fa-pen-to-square", "Edit Response"))
 
-        # Review link
-        if record.parent:
+        # Review link - check if this response has a parent solicitation
+        if record.labs_record_id:
             review_url = reverse("solicitations:review_create", kwargs={"response_pk": record.pk})
             actions.append(create_action_link(review_url, "fa-clipboard-check", "Review"))
 

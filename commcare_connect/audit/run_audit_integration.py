@@ -8,9 +8,10 @@ Usage:
     python commcare_connect/audit/run_experiment_audit_integration.py [config]
 
 Available configs:
-    fastest    - 1 Readers opp, last 5 visits (default)
-    readers    - 2 Readers opps, last 5 per FLW
-    chc        - 2 CHC opps, last 10 across all
+    opp385_last10 - Opp 385, last 10 visits (default, fast)
+    opp385        - Opp 385, last 10 per FLW
+    readers       - 2 Readers opps, last 5 per FLW
+    chc           - 2 CHC opps, last 10 across all
 """
 
 import os
@@ -71,7 +72,7 @@ TEST_CONFIGS = {
 }
 
 
-def test_experiment_audit_flow(config_name="fastest"):
+def test_experiment_audit_flow(config_name="opp385_last10"):
     """Test complete audit flow with experiment records."""
 
     # Get configuration
@@ -95,10 +96,15 @@ def test_experiment_audit_flow(config_name="fastest"):
     try:
         import os
 
+        from django.conf import settings
+
         from commcare_connect.audit.data_access import AuditDataAccess
+        from commcare_connect.labs.oauth_cli import TokenManager
+        from commcare_connect.labs.oauth_helpers import introspect_token
 
         # Try to get OAuth token using the token manager
         access_token = None
+        user_profile = None
 
         # Option 1: Check environment variable
         access_token = os.getenv("CONNECT_OAUTH_TOKEN")
@@ -107,8 +113,6 @@ def test_experiment_audit_flow(config_name="fastest"):
         else:
             # Option 2: Load from token manager (saved by get_cli_token command)
             print("[INFO] Checking for saved OAuth token...")
-            from commcare_connect.labs.oauth_cli import TokenManager
-
             token_manager = TokenManager()
             access_token = token_manager.get_valid_token()
 
@@ -119,14 +123,26 @@ def test_experiment_audit_flow(config_name="fastest"):
                     print(f"[OK] Using saved token (expires in {minutes} minutes)")
             else:
                 print("[WARNING] No valid OAuth token found")
-                print("[INFO] This test requires a Connect OAuth token")
-                print("[INFO] Please run one of the following:")
-                print("\n       Option 1: Get token via CLI OAuth flow")
-                print("       python manage.py get_cli_token")
-                print("\n       Option 2: Set environment variable")
-                print("       export CONNECT_OAUTH_TOKEN='your_token_here'")
+                print("[INFO] Please run: python manage.py get_cli_token")
                 print("\n[SKIP] Skipping integration test - no OAuth token available")
                 return
+
+        # Introspect token at runtime to get user profile
+        # Note: Use web OAuth credentials (confidential client) for introspection
+        print("[INFO] Introspecting token to get user profile...")
+        user_profile = introspect_token(
+            access_token=access_token,
+            client_id=settings.CONNECT_OAUTH_CLIENT_ID,
+            client_secret=settings.CONNECT_OAUTH_CLIENT_SECRET,
+            production_url=settings.CONNECT_PRODUCTION_URL,
+        )
+
+        if not user_profile:
+            print("[ERROR] Could not introspect token to get user profile")
+            print("[INFO] Please ensure CONNECT_OAUTH_CLIENT_SECRET is configured in settings")
+            return
+
+        print(f"[OK] User profile: {user_profile.get('username')} (ID: {user_profile.get('id')})")
 
         # Initialize data access with token
         from commcare_connect.labs.config import LABS_DEFAULT_OPP_ID
@@ -225,18 +241,14 @@ def test_experiment_audit_flow(config_name="fastest"):
 
         print(f"[OK] Found {len(visit_ids)} visits matching criteria")
 
-        # Get a user for creating records
-        from django.contrib.auth import get_user_model
-
-        User = get_user_model()
-        test_user = User.objects.first()
-        if not test_user:
-            print("[ERROR] No users found in database")
-            return
+        # Use authenticated OAuth user from profile
+        user_id = user_profile["id"]
+        username = user_profile["username"]
+        print(f"[INFO] Creating records as user: {username} (ID: {user_id})")
 
         # Create template
         template = data_access.create_audit_template(
-            user_id=test_user.id,
+            username=username,
             opportunity_ids=[test_opp_id],
             audit_type=criteria["audit_type"],
             granularity=criteria["granularity"],
@@ -249,7 +261,7 @@ def test_experiment_audit_flow(config_name="fastest"):
         print("\n[4] Creating audit session...")
         session = data_access.create_audit_session(
             template_id=template.id,
-            auditor_id=test_user.id,
+            username=username,
             visit_ids=visit_ids,
             title="Integration Test Audit",
             tag="integration_test",
@@ -393,5 +405,5 @@ if __name__ == "__main__":
     django.setup()
 
     # Get config from command line
-    config_name = sys.argv[1] if len(sys.argv) > 1 else "fastest"
+    config_name = sys.argv[1] if len(sys.argv) > 1 else "opp385_last10"
     test_experiment_audit_flow(config_name)

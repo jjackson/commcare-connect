@@ -188,11 +188,12 @@ class SolicitationResponsesListView(SingleTableView):
     paginate_by = 20
 
     def dispatch(self, request, *args, **kwargs):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=request)
+        # Store data_access as instance variable for use in multiple methods
+        self.data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=request)
 
         # Get the solicitation
         solicitation_pk = self.kwargs.get("solicitation_pk")
-        self.solicitation = data_access.get_solicitation_by_id(solicitation_pk)
+        self.solicitation = self.data_access.get_solicitation_by_id(solicitation_pk)
 
         if not self.solicitation:
             raise Http404("Solicitation not found")
@@ -204,13 +205,18 @@ class SolicitationResponsesListView(SingleTableView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
-        return data_access.get_responses_for_solicitation(solicitation_record=self.solicitation)
+        return self.data_access.get_responses_for_solicitation(solicitation_record=self.solicitation)
 
     def get_table_class(self):
         from .tables import ResponseRecordTable
 
         return ResponseRecordTable
+
+    def get_table_kwargs(self):
+        """Pass data_access to table for API queries."""
+        kwargs = super().get_table_kwargs()
+        kwargs["data_access"] = self.data_access
+        return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
