@@ -15,6 +15,8 @@ need to edit some settings.
 
     # install requirements
     $ pip install -r requirements-dev.txt
+    # for labs requirements
+    $ pip install -r requirements/labs.txt
 
     # install git hooks
     $ pre-commit install
