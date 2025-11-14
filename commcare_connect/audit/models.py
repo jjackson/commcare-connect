@@ -104,6 +104,11 @@ class AuditSessionRecord(LocalLabsRecord):
         return self.data.get("visit_ids", [])
 
     @property
+    def opportunity_id(self):
+        """Primary opportunity ID for this session."""
+        return self.data.get("opportunity_id")
+
+    @property
     def visit_results(self):
         """Dict of visit results keyed by visit_id."""
         return self.data.get("visit_results", {})

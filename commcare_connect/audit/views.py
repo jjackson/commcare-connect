@@ -45,10 +45,12 @@ class ExperimentAuditListView(LoginRequiredMixin, SingleTableView):
     paginate_by = 20
 
     def get_queryset(self):
-        # Get AuditSessionRecords from ExperimentRecords
+        # Get AuditSessionRecords from API (returns list, not QuerySet)
         data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=self.request)
         try:
-            return data_access.get_audit_sessions().order_by("-date_created")
+            sessions = data_access.get_audit_sessions()
+            # Sort by date_created descending (API returns list, not QuerySet)
+            return sorted(sessions, key=lambda x: x.date_created or "", reverse=True)
         finally:
             data_access.close()
 
@@ -110,8 +112,9 @@ class ExperimentAuditDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         session = self.get_object()
 
-        # Initialize data access
-        data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=self.request)
+        # Initialize data access with session's opportunity ID
+        opportunity_id = session.opportunity_id or LABS_DEFAULT_OPP_ID
+        data_access = AuditDataAccess(opportunity_id=opportunity_id, request=self.request)
 
         try:
             # Get visit IDs from session
@@ -903,8 +906,9 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
             # Get auditor user ID
             auditor_id = request.user.id
 
-            # Initialize data access
-            data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=request)
+            # Initialize data access with first selected opportunity ID
+            # (Currently requires exactly one opportunity, will support multiple in future)
+            data_access = AuditDataAccess(opportunity_id=opportunity_ids[0], request=request)
 
             # Extract and normalize criteria
             audit_type = criteria.get("type", criteria.get("audit_type", "date_range"))

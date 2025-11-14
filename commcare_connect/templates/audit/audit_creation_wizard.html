@@ -13,12 +13,6 @@
         <p class="text-gray-600">Search and select opportunities, configure audit criteria, and preview FLW counts</p>
       </div>
       <div class="flex gap-3">
-        <button
-          @click="showImportModal = true"
-          class="px-4 py-2 text-brand-indigo bg-white border border-brand-indigo rounded-md hover:bg-brand-indigo/5 flex items-center gap-2">
-          <i class="fa-solid fa-upload"></i>
-          Import Audit Definition
-        </button>
         <a href="{% url 'audit:session_list' %}"
            class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
           ← Back to Sessions
@@ -118,20 +112,55 @@
                 <th class="w-12">
                   <span>Select</span>
                 </th>
-                <th class="w-16">
-                  <span>ID</span>
+                <th class="w-16 cursor-pointer hover:bg-gray-100" @click="sortBy('id')">
+                  <span class="flex items-center justify-between">
+                    ID
+                    <i class="fa-solid text-xs ml-1" :class="{
+                      'fa-sort': sortColumn !== 'id',
+                      'fa-sort-up': sortColumn === 'id' && sortDirection === 'asc',
+                      'fa-sort-down': sortColumn === 'id' && sortDirection === 'desc'
+                    }"></i>
+                  </span>
                 </th>
-                <th class="w-1/4">
-                  <span>Opportunity Name</span>
+                <th class="w-1/4 cursor-pointer hover:bg-gray-100" @click="sortBy('name')">
+                  <span class="flex items-center justify-between">
+                    Opportunity Name
+                    <i class="fa-solid text-xs ml-1" :class="{
+                      'fa-sort': sortColumn !== 'name',
+                      'fa-sort-up': sortColumn === 'name' && sortDirection === 'asc',
+                      'fa-sort-down': sortColumn === 'name' && sortDirection === 'desc'
+                    }"></i>
+                  </span>
                 </th>
-                <th class="w-1/6">
-                  <span>Organization</span>
+                <th class="w-1/6 cursor-pointer hover:bg-gray-100" @click="sortBy('organization_name')">
+                  <span class="flex items-center justify-between">
+                    Organization
+                    <i class="fa-solid text-xs ml-1" :class="{
+                      'fa-sort': sortColumn !== 'organization_name',
+                      'fa-sort-up': sortColumn === 'organization_name' && sortDirection === 'asc',
+                      'fa-sort-down': sortColumn === 'organization_name' && sortDirection === 'desc'
+                    }"></i>
+                  </span>
                 </th>
-                <th class="w-1/6">
-                  <span>Program</span>
+                <th class="w-1/6 cursor-pointer hover:bg-gray-100" @click="sortBy('program_name')">
+                  <span class="flex items-center justify-between">
+                    Program
+                    <i class="fa-solid text-xs ml-1" :class="{
+                      'fa-sort': sortColumn !== 'program_name',
+                      'fa-sort-up': sortColumn === 'program_name' && sortDirection === 'asc',
+                      'fa-sort-down': sortColumn === 'program_name' && sortDirection === 'desc'
+                    }"></i>
+                  </span>
                 </th>
-                <th class="w-20 text-center">
-                  <span>Visits</span>
+                <th class="w-20 text-center cursor-pointer hover:bg-gray-100" @click="sortBy('visit_count')">
+                  <span class="flex items-center justify-center gap-1">
+                    Visits
+                    <i class="fa-solid text-xs" :class="{
+                      'fa-sort': sortColumn !== 'visit_count',
+                      'fa-sort-up': sortColumn === 'visit_count' && sortDirection === 'asc',
+                      'fa-sort-down': sortColumn === 'visit_count' && sortDirection === 'desc'
+                    }"></i>
+                  </span>
                 </th>
                 <th class="w-24">
                   <span>Dates</span>
@@ -142,7 +171,7 @@
               </tr>
             </thead>
             <tbody>
-              <template x-for="opportunity in searchResults" :key="opportunity.id">
+              <template x-for="opportunity in getSortedResults()" :key="opportunity.id">
                 <tr class="group hover:bg-gray-50 cursor-pointer"
                     :class="selectedOpportunities.some(o => o.id === opportunity.id) ? 'bg-brand-indigo/5' : ''"
                     @click="toggleOpportunitySelection(opportunity)">
@@ -576,7 +605,7 @@
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          <template x-for="flw in previewResults" :key="flw.user_id">
+          <template x-for="flw in previewResults" :key="flw.username">
             <tr class="hover:bg-gray-50">
               <td class="px-2 py-2 text-center whitespace-nowrap">
                 <input type="checkbox" :checked="isFlwSelected(flw)" @change="toggleFlwSelection(flw)" class="h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300 rounded">
@@ -651,57 +680,6 @@
         <i class="fa-solid fa-plus" :class="{'fa-spin': creating}"></i>
         <span x-text="creating ? 'Creating...' : 'Create Audit Session'"></span>
       </button>
-    </div>
-  </div>
-
-  <!-- Import Modal -->
-  <div x-show="showImportModal"
-       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-       x-cloak
-       @keydown.escape.window="showImportModal = false">
-    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md" @click.away="showImportModal = false">
-      <div class="mb-4">
-        <h3 class="text-lg font-semibold text-gray-900">Import Audit Definition</h3>
-        <p class="text-sm text-gray-600 mt-1">Upload a previously exported audit definition JSON file</p>
-      </div>
-
-      <!-- File Upload -->
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-2">
-          Select JSON File
-        </label>
-        <input
-          type="file"
-          accept=".json"
-          @change="handleImportFileSelect($event)"
-          class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-brand-indigo file:text-white hover:file:bg-brand-indigo/90">
-      </div>
-
-      <!-- Error Message -->
-      <div x-show="importError" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-        <p class="text-sm text-red-800" x-text="importError"></p>
-      </div>
-
-      <!-- Success Message -->
-      <div x-show="importSuccess" class="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-        <p class="text-sm text-green-800" x-text="importSuccess"></p>
-      </div>
-
-      <!-- Buttons -->
-      <div class="flex justify-end gap-3">
-        <button
-          @click="closeImportModal()"
-          class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-          Cancel
-        </button>
-        <button
-          @click="importAuditDefinition()"
-          :disabled="!importFile || importing"
-          class="px-4 py-2 bg-brand-indigo text-white rounded-md hover:bg-brand-indigo/90 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
-          <i class="fa-solid fa-upload" :class="{'fa-spin': importing}"></i>
-          <span x-text="importing ? 'Importing...' : 'Import'"></span>
-        </button>
-      </div>
     </div>
   </div>
 
@@ -797,19 +775,14 @@ function auditCreationPage() {
     progressSteps: [],
     progressMode: 'creation', // 'preview' or 'creation'
 
-    // Import/Export state
-    showImportModal: false,
-    importFile: null,
-    importing: false,
-    importError: null,
-    importSuccess: null,
-
     // Search state
     searchQuery: '',
     searchResults: [],
     searchPerformed: false,
     searching: false,
     tableExpanded: true,
+    sortColumn: 'visit_count',
+    sortDirection: 'desc',
 
     // Selection state
     selectedOpportunities: [],
@@ -885,6 +858,49 @@ function auditCreationPage() {
       this.searchQuery = '';
       this.searchResults = [];
       this.searchPerformed = false;
+    },
+
+    // Sorting methods
+    sortBy(column) {
+      if (this.sortColumn === column) {
+        // Toggle direction if same column
+        this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        // New column, default to descending for visit_count, ascending for others
+        this.sortColumn = column;
+        this.sortDirection = column === 'visit_count' ? 'desc' : 'asc';
+      }
+    },
+
+    getSortedResults() {
+      if (!this.searchResults || this.searchResults.length === 0) {
+        return [];
+      }
+
+      const sorted = [...this.searchResults].sort((a, b) => {
+        let aVal = a[this.sortColumn];
+        let bVal = b[this.sortColumn];
+
+        // Handle undefined values
+        if (aVal === undefined || aVal === null) aVal = '';
+        if (bVal === undefined || bVal === null) bVal = '';
+
+        // Handle numeric comparison for visit_count
+        if (this.sortColumn === 'visit_count') {
+          aVal = Number(aVal) || 0;
+          bVal = Number(bVal) || 0;
+        } else if (typeof aVal === 'string') {
+          // Case-insensitive string comparison
+          aVal = aVal.toLowerCase();
+          bVal = bVal.toLowerCase();
+        }
+
+        if (aVal < bVal) return this.sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return this.sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      return sorted;
     },
 
     clearAllSelections() {
@@ -1232,156 +1248,6 @@ function auditCreationPage() {
         console.error('Creation error:', error);
         alert('Failed to create audit session. Please try again.');
         this.creating = false;
-      }
-    },
-
-    // Export audit definition
-    exportAuditDefinition() {
-      if (!this.auditDefinitionId) {
-        alert('Please generate a preview first before exporting');
-        return;
-      }
-
-      // Trigger download by navigating to the export URL
-      window.location.href = `/audit/api/definition/${this.auditDefinitionId}/export/`;
-    },
-
-    // Handle file selection for import
-    handleImportFileSelect(event) {
-      this.importFile = event.target.files[0];
-      this.importError = null;
-      this.importSuccess = null;
-    },
-
-    // Import audit definition
-    async importAuditDefinition() {
-      if (!this.importFile) {
-        this.importError = 'Please select a file';
-        return;
-      }
-
-      this.importing = true;
-      this.importError = null;
-      this.importSuccess = null;
-
-      try {
-        const formData = new FormData();
-        formData.append('definition_file', this.importFile);
-
-        const response = await fetch('{% url "audit:definition_import" %}', {
-          method: 'POST',
-          headers: {
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-          },
-          body: formData
-        });
-
-        const data = await response.json();
-
-        if (data.success && data.definition) {
-          this.importSuccess = data.message || 'Import successful!';
-
-          // Load the imported definition into the UI
-          await this.loadImportedDefinition(data.definition);
-
-          setTimeout(() => {
-            this.closeImportModal();
-          }, 1500);
-        } else {
-          this.importError = data.error || 'Import failed';
-        }
-      } catch (error) {
-        console.error('Import error:', error);
-        this.importError = 'Failed to import definition. Please try again.';
-      } finally {
-        this.importing = false;
-      }
-    },
-
-    // Load imported definition into the UI
-    async loadImportedDefinition(definition) {
-      console.log('Loading imported definition:', definition);
-
-      // Load audit definition ID
-      this.auditDefinitionId = definition.id;
-
-      // Load audit criteria
-      this.auditCriteria.granularity = definition.granularity;
-      this.auditCriteria.type = definition.audit_type;
-      this.auditCriteria.samplePercentage = definition.sample_percentage || 100;
-
-      // Load type-specific criteria
-      if (definition.audit_type === 'date_range') {
-        this.auditCriteria.startDate = definition.start_date || '';
-        this.auditCriteria.endDate = definition.end_date || '';
-      } else if (definition.audit_type === 'last_n_per_flw') {
-        this.auditCriteria.countPerFlw = definition.count_per_flw || 100;
-        // Check if "all visits" was selected (represented by a very large number)
-        this.auditCriteria.allVisitsPerFlw = definition.count_per_flw >= 99999;
-      } else if (definition.audit_type === 'last_n_per_opp') {
-        this.auditCriteria.countPerOpp = definition.count_per_opp || 500;
-      } else if (definition.audit_type === 'last_n_across_all') {
-        this.auditCriteria.countAcrossAll = definition.count_across_all || 1000;
-      }
-
-      // Load preview results if available
-      if (definition.preview_data && Array.isArray(definition.preview_data)) {
-        this.previewResults = definition.preview_data;
-      }
-
-      // Load selected opportunities
-      if (definition.opportunity_ids && definition.opportunity_ids.length > 0) {
-        // Fetch opportunity details for the selected IDs
-        try {
-          const oppIds = definition.opportunity_ids.join(',');
-          const response = await fetch(`{% url "audit:program_search" %}?q=${oppIds}&limit=100`);
-          const oppData = await response.json();
-
-          if (oppData.success && oppData.opportunities) {
-            // Filter to only the opportunities that are in the definition
-            this.selectedOpportunities = oppData.opportunities.filter(
-              opp => definition.opportunity_ids.includes(opp.id)
-            );
-
-            // If we didn't find all opportunities via search, create placeholder objects
-            if (this.selectedOpportunities.length < definition.opportunity_ids.length) {
-              const foundIds = this.selectedOpportunities.map(o => o.id);
-              const missingIds = definition.opportunity_ids.filter(id => !foundIds.includes(id));
-
-              // Add placeholders for missing opportunities
-              missingIds.forEach(id => {
-                this.selectedOpportunities.push({
-                  id: id,
-                  name: `Opportunity ${id}`,
-                  description: '(Imported)',
-                  organization_name: 'Unknown'
-                });
-              });
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching opportunity details:', error);
-          // Create placeholder opportunities if fetch fails
-          this.selectedOpportunities = definition.opportunity_ids.map(id => ({
-            id: id,
-            name: `Opportunity ${id}`,
-            description: '(Imported)',
-            organization_name: 'Unknown'
-          }));
-        }
-      }
-    },
-
-    // Close import modal
-    closeImportModal() {
-      this.showImportModal = false;
-      this.importFile = null;
-      this.importError = null;
-      this.importSuccess = null;
-      // Reset file input
-      const fileInput = document.querySelector('input[type="file"]');
-      if (fileInput) {
-        fileInput.value = '';
       }
     },
 
