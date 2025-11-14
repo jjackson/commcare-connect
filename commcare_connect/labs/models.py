@@ -123,6 +123,19 @@ class LocalLabsRecord:
         self.program_id: int | None = api_data.get("program_id")  # Coming soon - being added to production API
         self.labs_record_id: int | None = api_data.get("labs_record_id")  # Parent reference
 
+        # Timestamp fields from API
+        self.date_created: str | None = api_data.get("date_created")
+        self.date_modified: str | None = api_data.get("date_modified")
+
+    @property
+    def pk(self) -> int:
+        """Alias for id to mimic Django model interface.
+
+        This allows LocalLabsRecord instances to be used in contexts that expect
+        Django models, such as django-tables2 and URL reverse lookups.
+        """
+        return self.id
+
     def __str__(self) -> str:
         return f"{self.experiment}:{self.type}:{self.id}"
 
