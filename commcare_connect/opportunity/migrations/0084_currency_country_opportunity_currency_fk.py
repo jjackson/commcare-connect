@@ -3,6 +3,9 @@
 from django.db import migrations, models
 import django.db.models.deletion
 
+from commcare_connect.program.utils import populate_currency_and_country_fk_for_model
+
+
 # Compiled from https://github.com/datasets/country-codes
 #   and https://github.com/datasets/currency-codes/
 #   which in turn are sourced from ISO data source
@@ -461,6 +464,11 @@ def load_currency_and_country_data(apps, schema_editor):
     Country.objects.bulk_create(country_objs)
 
 
+
+def populate_currency_and_country_fk(apps, schema_editor):
+    populate_currency_and_country_fk_for_model(apps, "Opportunity", "opportunity", "opportunity")
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("opportunity", "0083_credentialconfiguration"),
@@ -506,6 +514,12 @@ class Migration(migrations.Migration):
             load_currency_and_country_data,
             reverse_code=migrations.RunPython.noop,
             # No need to run since the rows can get replicated
+            hints={"run_on_secondary": False},
+        ),
+        migrations.RunPython(
+            populate_currency_and_country_fk,
+            reverse_code=migrations.RunPython.noop,
+            # No need to run since the rows will get auto replicated
             hints={"run_on_secondary": False},
         ),
     ]
