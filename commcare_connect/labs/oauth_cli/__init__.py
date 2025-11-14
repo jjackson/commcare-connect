@@ -23,11 +23,12 @@ Quick Start:
     )
 """
 
-from .client import get_oauth_token
+from .client import get_labs_user_from_token, get_oauth_token
 from .token_manager import TokenManager, get_or_refresh_token
 
 __all__ = [
     "get_oauth_token",
+    "get_labs_user_from_token",
     "TokenManager",
     "get_or_refresh_token",
 ]

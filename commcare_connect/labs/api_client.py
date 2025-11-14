@@ -64,6 +64,7 @@ class LabsRecordAPIClient:
         organization_id: str | None = None,
         program_id: int | None = None,
         labs_record_id: int | None = None,
+        model_class: type[LocalLabsRecord] | None = None,
         **data_filters,
     ) -> list[LocalLabsRecord]:
         """Fetch records from production API.
@@ -75,10 +76,11 @@ class LabsRecordAPIClient:
             organization_id: Filter by organization slug/ID
             program_id: Filter by program ID
             labs_record_id: Filter by parent record ID
+            model_class: Optional proxy model class to instantiate (e.g., AuditSessionRecord)
             **data_filters: Additional filters for JSON data fields
 
         Returns:
-            List of LocalLabsRecord instances
+            List of LocalLabsRecord instances (or proxy model instances if model_class provided)
 
         Raises:
             LabsAPIError: If API request fails
@@ -110,9 +112,10 @@ class LabsRecordAPIClient:
             response = self.http_client.get(url, params=params)
             response.raise_for_status()
 
-            # Deserialize to LocalLabsRecord instances
+            # Deserialize to LocalLabsRecord instances (or proxy model if specified)
             records_data = response.json()
-            return [LocalLabsRecord(item) for item in records_data]
+            record_class = model_class if model_class else LocalLabsRecord
+            return [record_class(item) for item in records_data]
 
         except httpx.HTTPError as e:
             logger.error(f"Failed to fetch records: {e}", exc_info=True)
@@ -123,6 +126,7 @@ class LabsRecordAPIClient:
         record_id: int,
         experiment: str,
         type: str,
+        model_class: type[LocalLabsRecord] | None = None,
     ) -> LocalLabsRecord | None:
         """Get a single record by ID.
 
@@ -130,12 +134,13 @@ class LabsRecordAPIClient:
             record_id: Record ID
             experiment: Experiment name (for filtering)
             type: Record type (for filtering)
+            model_class: Optional proxy model class to instantiate
 
         Returns:
-            LocalLabsRecord instance or None if not found
+            LocalLabsRecord instance (or proxy model) or None if not found
         """
         # Fetch all records and filter by ID
-        records = self.get_records(experiment=experiment, type=type)
+        records = self.get_records(experiment=experiment, type=type, model_class=model_class)
         for record in records:
             if record.id == record_id:
                 return record
@@ -179,15 +184,45 @@ class LabsRecordAPIClient:
         if labs_record_id:
             payload["labs_record_id"] = labs_record_id
 
+        # TEMPORARY WORKAROUND: Generate fake ID to work around production API bug
+        # Production has update_or_create(id=None) bug - sending a fake ID works around it
+        # Remove this once PR is merged and deployed
+        import time
+
+        fake_id = int(time.time() * 1000) % 10000 + 50000
+        payload["id"] = fake_id
+        logger.info(f"WORKAROUND: Using fake ID {fake_id} (remove after production deployment)")
+
         try:
             url = f"{self.base_url}/export/opportunity/{self.opportunity_id}/labs_record/"
-            logger.debug(f"POST {url} with payload: {payload}")
+            logger.info(f"POST {url} with payload: {payload}")
+
+            # DEBUG: Print exact API call details
+            import json
+
+            print("\n" + "=" * 80)
+            print("API WRITE CALL - CREATE RECORD")
+            print("=" * 80)
+            print(f"URL: {url}")
+            print("Method: POST")
+            print(f"Headers: Authorization: Bearer {self.access_token[:20]}...")
+            print("Payload (will be sent as list):")
+            print(json.dumps([payload], indent=2))
+            print("=" * 80 + "\n")
 
             response = self.http_client.post(url, json=[payload])
+
+            # DEBUG: Print response details
+            print(f"Response Status: {response.status_code}")
+            if response.status_code >= 400:
+                print(f"Error Response Body: {response.text}")
+
             response.raise_for_status()
 
             # API returns list, get first item
             result = response.json()
+            print(f"Success Response: {json.dumps(result, indent=2)}")
+
             if not result:
                 raise LabsAPIError("API returned empty response after create")
 
@@ -195,11 +230,18 @@ class LabsRecordAPIClient:
 
         except httpx.HTTPError as e:
             logger.error(f"Failed to create record: {e}", exc_info=True)
+            print("\nERROR DETAILS:")
+            print(f"Exception: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                print(f"Response Status: {e.response.status_code}")
+                print(f"Response Body: {e.response.text}")
             raise LabsAPIError(f"Failed to create record in production API: {e}") from e
 
     def update_record(
         self,
         record_id: int,
+        experiment: str,
+        type: str,
         data: dict,
         username: str | None = None,
         program_id: int | None = None,
@@ -209,6 +251,8 @@ class LabsRecordAPIClient:
 
         Args:
             record_id: ID of record to update
+            experiment: Experiment name (required to fetch current record)
+            type: Record type (required to fetch current record)
             data: New JSON data
             username: Updated username
             program_id: Updated program ID
@@ -221,7 +265,7 @@ class LabsRecordAPIClient:
             LabsAPIError: If API request fails
         """
         # Get current record to merge fields
-        current = self.get_record_by_id(record_id, experiment="", type="")
+        current = self.get_record_by_id(record_id, experiment=experiment, type=type)
         if not current:
             raise LabsAPIError(f"Record {record_id} not found")
 
@@ -249,13 +293,34 @@ class LabsRecordAPIClient:
 
         try:
             url = f"{self.base_url}/export/opportunity/{self.opportunity_id}/labs_record/"
-            logger.debug(f"POST {url} (update) with payload: {payload}")
+            logger.info(f"POST {url} (update) with payload: {payload}")
+
+            # DEBUG: Print exact API call details
+            import json
+
+            print("\n" + "=" * 80)
+            print("API WRITE CALL - UPDATE RECORD")
+            print("=" * 80)
+            print(f"URL: {url}")
+            print("Method: POST")
+            print(f"Headers: Authorization: Bearer {self.access_token[:20]}...")
+            print("Payload (will be sent as list):")
+            print(json.dumps([payload], indent=2))
+            print("=" * 80 + "\n")
 
             response = self.http_client.post(url, json=[payload])
+
+            # DEBUG: Print response details
+            print(f"Response Status: {response.status_code}")
+            if response.status_code >= 400:
+                print(f"Error Response Body: {response.text}")
+
             response.raise_for_status()
 
             # API returns list, get first item
             result = response.json()
+            print(f"Success Response: {json.dumps(result, indent=2)}")
+
             if not result:
                 raise LabsAPIError("API returned empty response after update")
 
@@ -263,6 +328,11 @@ class LabsRecordAPIClient:
 
         except httpx.HTTPError as e:
             logger.error(f"Failed to update record: {e}", exc_info=True)
+            print("\nERROR DETAILS:")
+            print(f"Exception: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                print(f"Response Status: {e.response.status_code}")
+                print(f"Response Body: {e.response.text}")
             raise LabsAPIError(f"Failed to update record in production API: {e}") from e
 
     def delete_record(self, record_id: int) -> None:

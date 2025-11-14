@@ -104,10 +104,6 @@ class ExperimentAuditDetailView(LoginRequiredMixin, DetailView):
     template_name = "audit/audit_session_detail.html"
     context_object_name = "session"
 
-    def get_queryset(self):
-        # Get AuditSessionRecords from ExperimentRecords
-        return AuditSessionRecord.objects.filter(experiment="audit", type="AuditSession")
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         session = self.get_object()
@@ -214,9 +210,6 @@ class ExperimentBulkAssessmentView(LoginRequiredMixin, DetailView):
     model = AuditSessionRecord
     template_name = "audit/bulk_assessment.html"
     context_object_name = "session"
-
-    def get_queryset(self):
-        return AuditSessionRecord.objects.filter(experiment="audit", type="AuditSession")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -903,8 +896,8 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
             if not opportunity_ids or not criteria:
                 return JsonResponse({"error": "Missing required data"}, status=400)
 
-            # Get auditor user ID
-            auditor_id = request.user.id
+            # Get auditor username
+            username = request.user.username
 
             # Initialize data access with first selected opportunity ID
             # (Currently requires exactly one opportunity, will support multiple in future)
@@ -953,7 +946,7 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
 
             # Create template
             template = data_access.create_audit_template(
-                user_id=auditor_id,
+                username=username,
                 opportunity_ids=opportunity_ids,
                 audit_type=audit_type,
                 granularity=criteria.get("granularity", "combined"),
@@ -964,7 +957,7 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
             # Create session
             session = data_access.create_audit_session(
                 template_id=template.id,
-                auditor_id=auditor_id,
+                username=username,
                 visit_ids=visit_ids,
                 title=criteria.get("title", f"Audit {timezone.now().strftime('%Y-%m-%d')}"),
                 tag=criteria.get("tag", ""),
