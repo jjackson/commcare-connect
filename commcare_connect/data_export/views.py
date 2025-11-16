@@ -295,12 +295,12 @@ class LabsRecordDataView(BaseDataExportView, ListCreateAPIView):
         query_params = self.request.query_params.copy()
         for key, value in query_params.items():
             filters[key] = value
-        queryset = LabsRecord.objects.filter(**filter)
-        if self.opportunity:
+        queryset = LabsRecord.objects.filter(**filters)
+        if hasattr(self, "opportunity"):
             queryset = queryset.filter(opportunity=self.opportunity)
-        if self.program:
+        if hasattr(self, "program"):
             queryset = queryset.filter(program=self.program)
-        if self.organization:
+        if hasattr(self, "organization"):
             queryset = queryset.filter(organization=self.organization)
         queryset = queryset.annotate(
             username=F("user__username"),
