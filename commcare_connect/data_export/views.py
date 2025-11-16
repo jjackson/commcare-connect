@@ -5,7 +5,7 @@ from django.http import JsonResponse, StreamingHttpResponse
 from drf_spectacular.utils import extend_schema, inline_serializer
 from oauth2_provider.contrib.rest_framework.permissions import TokenHasScope
 from rest_framework import status
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.generics import ListCreateAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -257,6 +257,8 @@ class LabsRecordDataView(BaseDataExportView, ListCreateAPIView):
         elif params.get("organization_id"):
             org_id = params.get("organization_id")
             self.organization = _get_org_or_404(request.user, org_id)
+        else:
+            raise PermissionDenied("Specifying an org, opp, or program is required")
 
     def _check_post_permissions(self, request):
         data = request.data
