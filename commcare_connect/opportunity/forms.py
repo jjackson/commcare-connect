@@ -1094,15 +1094,6 @@ class PaymentInvoiceForm(forms.ModelForm):
         widget=forms.NumberInput(attrs={"placeholder": "0.00"}),
         required=False,
     )
-    invoice_type = forms.CharField(
-        label=_("Invoice Type"),
-        widget=forms.Select(
-            choices=[
-                ("service_delivery", _("Service Delivery")),
-                ("custom", _("Custom")),
-            ],
-        ),
-    )
     invoice_number = forms.CharField(
         label=_("Invoice ID"),
         required=False,
@@ -1130,6 +1121,8 @@ class PaymentInvoiceForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
+        self.invoice_type = kwargs.pop("invoice_type", PaymentInvoice.InvoiceType.service_delivery)
+
         super().__init__(*args, **kwargs)
 
         self.fields["invoice_number"].initial = self.generate_invoice_number()
@@ -1138,42 +1131,39 @@ class PaymentInvoiceForm(forms.ModelForm):
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Div(
-                Field(
-                    "invoice_type",
-                    **{
-                        "x-model": "invoiceType",
-                    },
-                ),
-                Field("invoice_number", **{"readonly": "readonly"}),
-                Div(Field("title"), **{"x-show": "serviceDeliverySelected()"}),
-                Field(
-                    "date",
-                    **{
-                        "x-ref": "date",
-                        "x-on:change": "convert()",
-                    },
+                Div(
+                    Field("invoice_number", **{"readonly": "readonly"}),
+                    Field("title") if self.is_service_delivery else None,
+                    css_class="grid grid-cols-3 gap-6",
                 ),
                 Div(
-                    Field("start_date"),
-                    **{"x-show": "serviceDeliverySelected()"},
+                    Field(
+                        "date",
+                        **{
+                            "x-ref": "date",
+                            "x-on:change": "convert()",
+                        },
+                    ),
+                    Field("start_date") if self.is_service_delivery else None,
+                    Field("end_date") if self.is_service_delivery else None,
+                    css_class="grid grid-cols-3 gap-6",
                 ),
                 Div(
-                    Field("end_date"),
-                    **{"x-show": "serviceDeliverySelected()"},
+                    Field(
+                        "local_amount",
+                        label=f"Amount ({self.opportunity.currency})",
+                        **{
+                            "x-ref": "amount",
+                            "x-on:input.debounce.300ms": "convert()",
+                        },
+                    ),
+                    Field("amount_usd"),
+                    Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
+                    css_class="grid grid-cols-3 gap-6",
                 ),
-                Field(
-                    "local_amount",
-                    label=f"Amount ({self.opportunity.currency})",
-                    **{
-                        "x-ref": "amount",
-                        "x-on:input.debounce.300ms": "convert()",
-                    },
-                ),
-                Field("amount_usd"),
-                Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
-                css_class="grid grid-cols-3 gap-6",
+                css_class="flex flex-col gap-4",
             ),
-            Div(Field("notes"), **{"x-show": "serviceDeliverySelected()"}),
+            Field("notes") if self.is_service_delivery else None,
             Div(
                 Submit("submit", "Submit", css_class="button button-md primary-dark"),
                 css_class="flex justify-end mt-4",
@@ -1239,4 +1229,4 @@ class PaymentInvoiceForm(forms.ModelForm):
 
     @property
     def is_service_delivery(self):
-        return self.cleaned_data.get("invoice_type") == "service_delivery"
+        return self.invoice_type == PaymentInvoice.InvoiceType.service_delivery

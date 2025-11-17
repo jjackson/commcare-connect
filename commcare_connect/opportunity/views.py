@@ -1297,28 +1297,38 @@ class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateVie
                     {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
                     {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
                     {"title": "Invoices", "url": reverse("opportunity:invoice_list", args=(org_slug, opportunity.id))},
-                    {"title": "New", "url": reverse("opportunity:invoice_create", args=(org_slug, opportunity.id))},
+                    {
+                        "title": self.breadcrumb_title,
+                        "url": reverse("opportunity:invoice_create", args=(org_slug, opportunity.id)),
+                    },
                 ],
             }
         )
         return context
+
+    @property
+    def breadcrumb_title(self):
+        service_delivery = PaymentInvoice.InvoiceType.service_delivery
+        if self.request.GET.get("invoice_type", service_delivery) == service_delivery:
+            return "New Service Delivery Invoice"
+        return "New Custom Invoice"
 
     def post(self, request, org_slug, opp_id, **kwargs):
         opportunity = self.get_opportunity()
         if not opportunity.managed or request.is_opportunity_pm:
             return redirect("opportunity:detail", org_slug, opp_id)
 
-        form = PaymentInvoiceForm(data=request.POST or None, opportunity=opportunity)
+        form = self.get_form()
         if not form.is_valid():
             return self.get(request, org_slug, opp_id, **kwargs)
 
         form.save()
-        form = PaymentInvoiceForm(opportunity=opportunity)
         return redirect(reverse("opportunity:invoice_list", args=[org_slug, opp_id]))
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["opportunity"] = self.get_opportunity()
+        kwargs["invoice_type"] = self.request.GET.get("invoice_type", PaymentInvoice.InvoiceType.service_delivery)
         return kwargs
 
     def get_success_url(self):

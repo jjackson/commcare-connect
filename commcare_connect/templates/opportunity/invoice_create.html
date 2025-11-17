@@ -17,11 +17,7 @@
     Alpine.data('invoiceFormHandler', () => ({
       open: false,
       currency: false,
-      invoiceType: 'service_delivery',
 
-      serviceDeliverySelected() {
-        return this.invoiceType === 'service_delivery';
-      },
       convert(replace = false) {
         // date and amount should be present before making http call
         if (!this.$refs.amount?.value || !this.$refs.date?.value) return;
