@@ -4,3 +4,4 @@
 # NOTE: Some of these may require different versions than base/production
 # (e.g. pandas needs cffi 2.0.0 vs base.txt's 1.15.1)
 pandas
+pydantic-ai
