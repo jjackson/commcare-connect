@@ -856,13 +856,14 @@ class CredentialConfiguration(models.Model):
 
 
 class LabsRecord(models.Model):
+    # inline import to avoid circular import
+    from commcare_connect.program.models import Program
+
     experiment = models.TextField()
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, null=True)
-    opportunity = models.ForeignKey(
-        Opportunity,
-        on_delete=models.CASCADE,
-    )
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, null=True)
+    program = models.ForeignKey(Program, on_delete=models.CASCADE, null=True)
     labs_record = models.ForeignKey("LabsRecord", on_delete=models.CASCADE, null=True)
     type = models.CharField(max_length=255)
     data = models.JSONField()

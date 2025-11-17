@@ -214,7 +214,7 @@ class LabsRecordDataSerializer(serializers.ModelSerializer):
         ]
 
     def get_username(self, obj) -> str:
-        return obj.user.username
+        return obj.user.username if obj.user else None
 
 
 class CompletedModuleDataSerializer(serializers.ModelSerializer):
