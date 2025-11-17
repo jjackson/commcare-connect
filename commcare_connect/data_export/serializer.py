@@ -13,6 +13,7 @@ from commcare_connect.opportunity.models import (
     Assessment,
     CompletedModule,
     CompletedWork,
+    LabsRecord,
     Opportunity,
     OpportunityClaimLimit,
     Payment,
@@ -26,13 +27,17 @@ from commcare_connect.program.models import Program
 class OpportunityDataExportSerializer(serializers.ModelSerializer):
     organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
     program = serializers.SerializerMethodField()
+    visit_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Opportunity
-        fields = ["id", "name", "date_created", "organization", "end_date", "is_active", "program"]
+        fields = ["id", "name", "date_created", "organization", "end_date", "is_active", "program", "visit_count"]
 
     def get_program(self, obj) -> int:
         return obj.managedopportunity.program_id if obj.managed else None
+
+    def get_visit_count(self, obj) -> int:
+        return getattr(obj, "visit_count", 0)
 
 
 class OrganizationDataExportSerializer(serializers.ModelSerializer):
@@ -190,6 +195,26 @@ class AssessmentDataSerializer(serializers.ModelSerializer):
 
     def get_username(self, obj) -> str:
         return obj.username
+
+
+class LabsRecordDataSerializer(serializers.ModelSerializer):
+    username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LabsRecord
+        fields = [
+            "id",
+            "username",
+            "experiment",
+            "opportunity_id",
+            "organization_id",
+            "labs_record_id",
+            "type",
+            "data",
+        ]
+
+    def get_username(self, obj) -> str:
+        return obj.user.username
 
 
 class CompletedModuleDataSerializer(serializers.ModelSerializer):
