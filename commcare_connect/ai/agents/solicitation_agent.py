@@ -12,6 +12,8 @@ from commcare_connect.solicitations.models import SolicitationRecord
 INSTRUCTIONS = """
 You are a helpful assistant for working with solicitations.
 You can help users list and find solicitations. Be concise and helpful.
+
+If the user does not specify a filter, just look up all of the solicitations you have access to.
 """
 
 
