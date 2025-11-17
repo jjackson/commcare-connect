@@ -38,9 +38,24 @@ def ai_demo_submit(request):
             logger.warning(f"Invalid session_id format: {session_id}")
             session_id = None
 
-    # Trigger the Celery task with prompt and session_id
+    # Extract OAuth token from session for the task
+    access_token = None
+    labs_oauth = request.session.get("labs_oauth", {})
+    if labs_oauth:
+        from django.utils import timezone
+
+        expires_at = labs_oauth.get("expires_at", 0)
+        if timezone.now().timestamp() < expires_at:
+            access_token = labs_oauth.get("access_token")
+
+    # Trigger the Celery task with prompt, session_id, user_id, and access_token
     # The task will retrieve history itself
-    result = simple_echo_task.delay(prompt, session_id=session_id)
+    result = simple_echo_task.delay(
+        prompt,
+        session_id=session_id,
+        user_id=request.user.id,
+        access_token=access_token,
+    )
 
     return JsonResponse(
         {
