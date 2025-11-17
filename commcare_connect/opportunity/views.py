@@ -1292,12 +1292,13 @@ class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateVie
 
         context.update(
             {
+                "opportunity": opportunity,
                 "path": [
                     {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
                     {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
                     {"title": "Invoices", "url": reverse("opportunity:invoice_list", args=(org_slug, opportunity.id))},
                     {"title": "New", "url": reverse("opportunity:invoice_create", args=(org_slug, opportunity.id))},
-                ]
+                ],
             }
         )
         return context
