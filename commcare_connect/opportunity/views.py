@@ -1263,7 +1263,6 @@ def invoice_list(request, org_slug, opp_id):
         csrf_token=csrf_token,
     )
 
-    form = PaymentInvoiceForm(opportunity=request.opportunity)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
     return render(
         request,
@@ -1271,7 +1270,7 @@ def invoice_list(request, org_slug, opp_id):
         {
             "opportunity": request.opportunity,
             "table": table,
-            "form": form,
+            "new_invoice_url": reverse("opportunity:invoice_create", args=(org_slug, opp_id)),
             "path": [
                 {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
                 {"title": request.opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opp_id))},
@@ -1281,20 +1280,49 @@ def invoice_list(request, org_slug, opp_id):
     )
 
 
-@org_member_required
-@opportunity_required
-def invoice_create(request, org_slug=None, opp_id=None):
-    if not request.opportunity.managed or request.is_opportunity_pm:
-        return redirect("opportunity:detail", org_slug, opp_id)
-    form = PaymentInvoiceForm(data=request.POST or None, opportunity=request.opportunity)
-    if request.POST and form.is_valid():
-        form.save()
-        form = PaymentInvoiceForm(opportunity=request.opportunity)
-        redirect_url = reverse("opportunity:invoice_list", args=[org_slug, opp_id])
-        response = HttpResponse(status=200)
-        response["HX-Redirect"] = redirect_url
-        return response
-    return HttpResponse(render_crispy_form(form))
+class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateView):
+    model = PaymentInvoice
+    form_class = PaymentInvoiceForm
+    template_name = "opportunity/invoice_create.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        opportunity = self.get_opportunity()
+        org_slug = self.request.org.slug
+
+        context.update(
+            {
+                "path": [
+                    {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
+                    {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
+                    {"title": "Invoices", "url": reverse("opportunity:invoice_list", args=(org_slug, opportunity.id))},
+                    {"title": "New", "url": reverse("opportunity:invoice_create", args=(org_slug, opportunity.id))},
+                ]
+            }
+        )
+        return context
+
+    def post(self, request, org_slug, opp_id, **kwargs):
+        if not request.opportunity.managed or request.is_opportunity_pm:
+            return redirect("opportunity:detail", org_slug, opp_id)
+
+        form = PaymentInvoiceForm(data=request.POST or None, opportunity=request.opportunity)
+        if form.is_valid():
+            form.save()
+            form = PaymentInvoiceForm(opportunity=request.opportunity)
+            redirect_url = reverse("opportunity:invoice_list", args=[org_slug, opp_id])
+            response = HttpResponse(status=200)
+            response["HX-Redirect"] = redirect_url
+            return response
+        return HttpResponse(render_crispy_form(form))
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["opportunity"] = self.get_opportunity()
+        return kwargs
+
+    def get_success_url(self):
+        return reverse("opportunity:invoice_list", args=(self.request.org.slug, self.get_opportunity().id))
 
 
 @org_member_required
