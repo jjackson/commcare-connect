@@ -18,10 +18,6 @@ module.exports = {
       __dirname,
       '../commcare_connect/static/js/tomselect.js',
     ),
-    'react-demo': path.resolve(
-      __dirname,
-      '../commcare_connect/static/js/react-demo.tsx',
-    ),
     'chat-widget': path.resolve(
       __dirname,
       '../commcare_connect/static/js/chat-widget.tsx',
