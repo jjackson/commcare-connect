@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import oauth_views
+from . import ai_views, oauth_views
 
 app_name = "labs"
 
@@ -15,4 +15,8 @@ urlpatterns = [
     # CommCare OAuth (for API access)
     path("commcare/initiate/", oauth_views.labs_commcare_initiate, name="commcare_initiate"),
     path("commcare/callback/", oauth_views.labs_commcare_callback, name="commcare_callback"),
+    # Pydantic AI Demo
+    path("ai-demo/", ai_views.ai_demo_view, name="ai_demo"),
+    path("ai-demo/submit/", ai_views.ai_demo_submit, name="ai_demo_submit"),
+    path("ai-demo/status/", ai_views.ai_demo_status, name="ai_demo_status"),
 ]
