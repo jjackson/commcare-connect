@@ -369,6 +369,7 @@ class TestPaymentInvoiceForm:
 
         form = PaymentInvoiceForm(
             opportunity=valid_opportunity,
+            invoice_type="custom",
             data={
                 "invoice_number": "INV-001",
                 "date": "2025-11-06",
