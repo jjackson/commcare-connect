@@ -275,7 +275,7 @@ class LabsRecordDataView(BaseDataExportView, ListCreateAPIView):
             if item.get("program_id"):
                 programs.add(item["program_id"])
             if item.get("organization_id"):
-                programs.add(item["organization_id"])
+                orgs.add(item["organization_id"])
         for opp_id in opps:
             _get_opportunity_or_404(request.user, opp_id)
         for program_id in programs:
