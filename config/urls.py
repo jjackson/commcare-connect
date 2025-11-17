@@ -34,6 +34,7 @@ urlpatterns = [
     path("tasks/", include("commcare_connect.tasks.urls", namespace="tasks")),
     path("audit/", include("commcare_connect.audit.urls", namespace="audit")),
     path("labs/", include("commcare_connect.labs.urls", namespace="labs")),
+    path("ai/", include("commcare_connect.ai.urls", namespace="ai")),
     path("hq/", include("commcare_connect.commcarehq.urls", namespace="commcarehq")),
     path("export/", include("commcare_connect.data_export.urls", namespace="data_export")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
