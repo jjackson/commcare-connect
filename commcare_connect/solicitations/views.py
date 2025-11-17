@@ -144,8 +144,7 @@ class ManageSolicitationsListView(ListView):
     def get_queryset(self):
         # Use data access layer to filter by user's username
         data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
-        username = self.request.user.username if hasattr(self.request.user, "username") else None
-        return data_access.get_solicitations(username=username)
+        return data_access.get_solicitations()
 
 
 class MyResponsesListView(ListView):
