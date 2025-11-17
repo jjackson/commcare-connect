@@ -92,6 +92,7 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
+    "commcare_connect.ai",
     "commcare_connect.tasks",
     "commcare_connect.audit",
     "commcare_connect.commcarehq_provider",
@@ -268,6 +269,11 @@ LOGGING = {
     "loggers": {
         "django.security.DisallowedHost": {
             "handlers": ["null"],
+            "propagate": False,
+        },
+        "commcare_connect.ai": {
+            "handlers": ["console"],
+            "level": "INFO",
             "propagate": False,
         },
     },

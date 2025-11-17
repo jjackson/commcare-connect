@@ -18,6 +18,10 @@ module.exports = {
       __dirname,
       '../commcare_connect/static/js/tomselect.js',
     ),
+    'chat-widget': path.resolve(
+      __dirname,
+      '../commcare_connect/static/js/chat-widget.tsx',
+    ),
   },
   output: {
     path: path.resolve(__dirname, '../commcare_connect/static/bundles/'),
@@ -36,12 +40,30 @@ module.exports = {
   module: {
     rules: [
       {
-        test: /\.js$/,
+        test: /\.(js|jsx|ts|tsx)$/,
         exclude: /node_modules/,
         loader: 'babel-loader',
       },
       {
-        test: /\.s?css$/i,
+        test: /\.css$/i,
+        use: [
+          MiniCssExtractPlugin.loader,
+          'css-loader',
+          {
+            loader: 'postcss-loader',
+            options: {
+              postcssOptions: {
+                plugins: [
+                  require('@tailwindcss/postcss'),
+                  require('autoprefixer'),
+                ],
+              },
+            },
+          },
+        ],
+      },
+      {
+        test: /\.(scss|sass)$/i,
         use: [
           MiniCssExtractPlugin.loader,
           'css-loader',
@@ -63,7 +85,10 @@ module.exports = {
   },
   resolve: {
     modules: ['node_modules'],
-    extensions: ['.js', '.jsx'],
+    extensions: ['.js', '.jsx', '.ts', '.tsx'],
+    alias: {
+      '@': path.resolve(__dirname, '../'),
+    },
   },
   devtool: 'eval-cheap-source-map',
 };

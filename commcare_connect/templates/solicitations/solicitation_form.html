@@ -173,6 +173,14 @@
 
     <!-- Force bottom spacing -->
     <div style="height: 2rem;"></div>
+
+    <!-- AI Chat Widget -->
+    <div
+      id="chat-widget-root"
+      data-submit-url="{% url 'ai:ai_demo_submit' %}"
+      data-status-url="{% url 'ai:ai_demo_status' %}"
+      data-history-url="{% url 'ai:ai_demo_history' %}"
+    ></div>
 {% endblock %}
 
 {% block inline_javascript %}
@@ -327,3 +335,8 @@ document.addEventListener('alpine:init', () => {
 });
 </script>
 {% endblock %}
+
+{% block javascript %}
+  {{ block.super }}
+  <script src="{% static 'bundles/js/chat-widget-bundle.js' %}" defer></script>
+{% endblock javascript %}
