@@ -132,6 +132,14 @@ or you can embed the beat service inside a worker with the `-B` option (not reco
 celery -A config.celery_app worker -B -l info
 ```
 
+### AI integrations
+
+To use the labs AI integrations you will need to add an OpenAI key to your `.env` file:
+
+```
+OPENAI_API_KEY=sk...
+```
+
 ## Deployment
 
 The following details how to deploy this application.
