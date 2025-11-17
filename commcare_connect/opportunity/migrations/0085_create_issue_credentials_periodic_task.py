@@ -32,7 +32,7 @@ def delete_periodic_task(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0083_credentialconfiguration"),
+        ("opportunity", "0084_labsrecord"),
     ]
 
     operations = [
