@@ -271,6 +271,16 @@ class OpportunityInitForm(forms.ModelForm):
         self.org_slug = kwargs.pop("org_slug", "")
         super().__init__(*args, **kwargs)
 
+        short_desc_tooltip = _(
+            "This field is used to provide a description to users on the mobile app. "
+            "It is displayed when the user wants to view more information about the opportunity."
+        )
+        self.fields["short_description"].label = (
+            f"{_('Short description')} "
+            "<i class='fa-solid fa-circle-info text-gray-400'"
+            f"x-tooltip.raw='{short_desc_tooltip}'></i>"
+        )
+
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Row(
@@ -326,6 +336,12 @@ class OpportunityInitForm(forms.ModelForm):
         )
 
         self.fields["description"] = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
+        desc_tooltip = _("This field is used to provide a description to users accessing the opportunity on the web.")
+        self.fields["description"].label = (
+            f"{_('Description')} "
+            "<i class='fa-solid fa-circle-info text-gray-400'"
+            f"x-tooltip.raw='{desc_tooltip}'></i>"
+        )
 
         def get_htmx_swap_attrs(url_query: str, include: str, trigger: str):
             return {
