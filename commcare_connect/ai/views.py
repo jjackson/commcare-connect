@@ -2,6 +2,7 @@
 Views for Pydantic AI demo.
 """
 import logging
+import uuid
 
 from celery.result import AsyncResult
 from django.contrib.auth.decorators import login_required
@@ -11,6 +12,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
 
+from .session_store import get_message_history
 from .tasks import simple_echo_task
 
 logger = logging.getLogger(__name__)
@@ -33,17 +35,28 @@ def ai_demo_submit(request):
     Returns the task ID for polling.
     """
     prompt = request.POST.get("prompt", "").strip()
+    session_id = request.POST.get("session_id", "").strip()
 
     if not prompt:
         return JsonResponse({"error": "Prompt is required"}, status=400)
 
-    # Trigger the Celery task
-    result = simple_echo_task.delay(prompt)
+    # Validate session_id format if provided
+    if session_id:
+        try:
+            uuid.UUID(session_id)
+        except ValueError:
+            logger.warning(f"Invalid session_id format: {session_id}")
+            session_id = None
+
+    # Trigger the Celery task with prompt and session_id
+    # The task will retrieve history itself
+    result = simple_echo_task.delay(prompt, session_id=session_id)
 
     return JsonResponse(
         {
             "success": True,
             "task_id": result.id,
+            "session_id": session_id,
         }
     )
 
@@ -82,4 +95,36 @@ def ai_demo_status(request):
 
     except Exception as e:
         logger.error(f"Error checking task status: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_GET
+def ai_demo_history(request):
+    """
+    Retrieve message history for a session.
+    Returns the full conversation history.
+    """
+    session_id = request.GET.get("session_id", "").strip()
+
+    if not session_id:
+        return JsonResponse({"error": "session_id is required"}, status=400)
+
+    # Validate session_id format
+    try:
+        uuid.UUID(session_id)
+    except ValueError:
+        return JsonResponse({"error": "Invalid session_id format"}, status=400)
+
+    try:
+        message_history = get_message_history(session_id)
+        return JsonResponse(
+            {
+                "success": True,
+                "session_id": session_id,
+                "messages": message_history,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving history for session {session_id}: {e}")
         return JsonResponse({"error": str(e)}, status=500)

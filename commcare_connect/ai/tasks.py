@@ -7,27 +7,106 @@ import logging
 from httpx import AsyncClient
 
 from commcare_connect.ai.agents.weather_agent import Deps, weather_agent
+from commcare_connect.ai.session_store import add_message_to_history, get_message_history
 from commcare_connect.utils.celery import set_task_progress
 from config import celery_app
 
 logger = logging.getLogger(__name__)
 
+# Try to import Pydantic AI Message classes if available
+try:
+    from pydantic_ai.messages import ModelRequest, ModelResponse, SystemPromptPart, TextPart, UserPromptPart
+
+    HAS_MESSAGE_CLASSES = True
+except ImportError:
+    HAS_MESSAGE_CLASSES = False
+    logger.warning("[AI TASK] Pydantic AI Message classes not available, using dict format")
+
 
 @celery_app.task(bind=True)
-def simple_echo_task(self, prompt: str):
+def simple_echo_task(self, prompt: str, session_id: str | None = None):
     """
-    Run the weather agent with the user's prompt.
+    Run the weather agent with the user's prompt and optional message history.
+
+    Args:
+        prompt: The user's prompt
+        session_id: Optional session ID for history tracking
     """
     set_task_progress(self, "Processing your prompt with AI...")
+
+    # Retrieve message history if session_id is provided
+    history = []
+    if session_id:
+        history = get_message_history(session_id)
+        logger.warning(f"[AI TASK] Retrieved {len(history)} messages for session {session_id}")
+        if history:
+            logger.warning(f"[AI TASK] History sample: {history[:2]}")
+    else:
+        logger.warning("[AI TASK] No session_id provided, running without history")
+
+    def convert_history_to_pydantic_format(messages: list[dict]) -> list:
+        """
+        Convert our message format to Pydantic AI format.
+
+        Our format: [{"role": "user|assistant", "content": "..."}]
+        Pydantic AI format: List of ModelRequest/ModelResponse objects with parts
+        """
+        if not HAS_MESSAGE_CLASSES:
+            # If Message classes aren't available, return as-is (dict format)
+            logger.warning("[AI TASK] Message classes not available, using dict format")
+            return messages
+
+        # Convert to Pydantic AI message format
+        pydantic_messages = []
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+
+            if role == "user":
+                pydantic_messages.append(ModelRequest(parts=[UserPromptPart(content=content)]))
+            elif role == "assistant":
+                pydantic_messages.append(ModelResponse(parts=[TextPart(content=content)]))
+            elif role in ["system", "developer"]:
+                pydantic_messages.append(ModelRequest(parts=[SystemPromptPart(content=content)]))
+            else:
+                logger.warning(f"[AI TASK] Unknown message role: {role}, skipping")
+
+        return pydantic_messages
 
     async def run_agent():
         async with AsyncClient() as client:
             deps = Deps(client=client)
-            result = await weather_agent.run(prompt, deps=deps)
+            # Pass message_history to maintain conversation context
+            if history:
+                logger.warning(f"[AI TASK] Running agent with {len(history)} previous messages")
+                logger.warning(f"[AI TASK] Prompt: {prompt[:100]}...")
+                try:
+                    # Convert history to Pydantic AI format
+                    pydantic_history = convert_history_to_pydantic_format(history)
+                    logger.warning(f"[AI TASK] Converted history format, length: {len(pydantic_history)}")
+                    result = await weather_agent.run(prompt, message_history=pydantic_history, deps=deps)
+                    logger.warning("[AI TASK] Agent completed with history")
+                except Exception as e:
+                    logger.error(f"[AI TASK] Error running agent with history: {e}", exc_info=True)
+                    # Fallback to running without history if there's a format issue
+                    logger.warning("[AI TASK] Falling back to running without message history")
+                    result = await weather_agent.run(prompt, deps=deps)
+            else:
+                logger.warning("[AI TASK] Running agent without message history")
+                result = await weather_agent.run(prompt, deps=deps)
             return result.output
 
     try:
         response = asyncio.run(run_agent())
+
+        # Save messages to history if session_id is provided
+        if session_id:
+            # Add user message
+            add_message_to_history(session_id, "user", prompt)
+            # Add assistant response
+            add_message_to_history(session_id, "assistant", response)
+            logger.warning(f"[AI TASK] Saved messages to history for session {session_id}")
+
         return response
     except Exception as e:
         logger.error(f"Error running weather agent: {e}", exc_info=True)

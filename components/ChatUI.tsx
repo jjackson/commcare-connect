@@ -22,11 +22,22 @@ type MessageType = {
   parts: Array<{ type: 'text'; text: string }>;
 };
 
+const SESSION_STORAGE_KEY = 'ai_demo_session_id';
+
 function getCSRFToken(): string {
   const tokenInput = document.querySelector<HTMLInputElement>(
     '[name=csrfmiddlewaretoken]',
   );
   return tokenInput ? tokenInput.value : '';
+}
+
+function getOrCreateSessionId(): string {
+  let sessionId = localStorage.getItem(SESSION_STORAGE_KEY);
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+  }
+  return sessionId;
 }
 
 export function ChatUI() {
@@ -35,6 +46,7 @@ export function ChatUI() {
   const [status, setStatus] = useState<
     'ready' | 'submitted' | 'streaming' | 'error'
   >('ready');
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isPollingRef = useRef(false);
 
@@ -47,6 +59,11 @@ export function ChatUI() {
   const getSubmitUrl = () => {
     const container = document.getElementById('react-demo-root');
     return container?.dataset.submitUrl || '/ai/demo/submit/';
+  };
+
+  const getHistoryUrl = () => {
+    const container = document.getElementById('react-demo-root');
+    return container?.dataset.historyUrl || '/ai/demo/history/';
   };
 
   const stopPolling = useCallback(() => {
@@ -207,6 +224,12 @@ export function ChatUI() {
       setIsSubmitting(true);
       setStatus('submitted');
 
+      // Get or create session ID
+      const currentSessionId = sessionId || getOrCreateSessionId();
+      if (!sessionId) {
+        setSessionId(currentSessionId);
+      }
+
       try {
         const response = await fetch(getSubmitUrl(), {
           method: 'POST',
@@ -216,6 +239,7 @@ export function ChatUI() {
           },
           body: new URLSearchParams({
             prompt: prompt,
+            session_id: currentSessionId,
           }),
         });
 
@@ -240,6 +264,12 @@ export function ChatUI() {
         }
 
         if (data.task_id) {
+          // Update session_id if returned from server
+          if (data.session_id && data.session_id !== currentSessionId) {
+            setSessionId(data.session_id);
+            localStorage.setItem(SESSION_STORAGE_KEY, data.session_id);
+          }
+
           setStatus('streaming');
           // Add a loading message
           setMessages((prev) => [
@@ -286,6 +316,43 @@ export function ChatUI() {
     },
     [pollTaskStatus],
   );
+
+  // Initialize session ID and load history on mount
+  useEffect(() => {
+    const currentSessionId = getOrCreateSessionId();
+    setSessionId(currentSessionId);
+
+    // Load message history if session exists
+    const loadHistory = async () => {
+      try {
+        const response = await fetch(
+          `${getHistoryUrl()}?session_id=${currentSessionId}`,
+        );
+        const data = await response.json();
+
+        if (data.success && data.messages && data.messages.length > 0) {
+          // Convert backend message format to frontend format
+          const loadedMessages: MessageType[] = data.messages.map(
+            (msg: { role: string; content: string }) => ({
+              role: msg.role as 'user' | 'assistant',
+              parts: [
+                {
+                  type: 'text' as const,
+                  text: msg.content,
+                },
+              ],
+            }),
+          );
+          setMessages(loadedMessages);
+        }
+      } catch (error) {
+        console.error('Error loading history:', error);
+        // Silently fail - it's okay if history doesn't load
+      }
+    };
+
+    loadHistory();
+  }, []);
 
   // Cleanup polling on unmount
   useEffect(() => {
