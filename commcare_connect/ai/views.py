@@ -73,9 +73,10 @@ def ai_demo_status(request):
 
         # If task is complete, include the result
         if status == CELERY_TASK_SUCCESS:
-            response_data["result"] = task_meta.get("result")
+            task_result = task.result
+            response_data["result"] = task_result
         elif status == "FAILURE":
-            response_data["error"] = str(task_meta.get("result"))
+            response_data["error"] = str(task.result) if hasattr(task, "result") else str(task_meta.get("result"))
 
         return JsonResponse(response_data)
 
