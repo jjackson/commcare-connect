@@ -1107,6 +1107,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         label=_("Invoice ID"),
         required=False,
         widget=forms.TextInput(attrs={"placeholder": _("Auto-generated on save")}),
+        help_text=_("This value is system-generated and unique."),
     )
 
     class Meta:
@@ -1126,7 +1127,6 @@ class PaymentInvoiceForm(forms.ModelForm):
             "date": _("Generation date"),
             "notes": _("Service Delivery Notes"),
         }
-        help_texts = {"invoice_number": _("This value is system-generated and is unique.")}
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
@@ -1138,61 +1138,45 @@ class PaymentInvoiceForm(forms.ModelForm):
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Div(
-                Div(
-                    Field("invoice_number"),
-                    Field(
-                        "invoice_type",
-                        **{
-                            "x-model": "invoiceType",
-                        },
-                    ),
-                    css_class="grid grid-cols-2 gap-4",
+                Field(
+                    "invoice_type",
+                    **{
+                        "x-model": "invoiceType",
+                    },
+                ),
+                Field("invoice_number", **{"readonly": "readonly"}),
+                Div(Field("title"), **{"x-show": "serviceDeliverySelected()"}),
+                Field(
+                    "date",
+                    **{
+                        "x-ref": "date",
+                        "x-on:change": "convert()",
+                    },
                 ),
                 Div(
-                    Div(
-                        Field("title"),
-                        **{"x-show": "serviceDeliverySelected()"},
-                    ),
-                    Field(
-                        "date",
-                        **{
-                            "x-ref": "date",
-                            "x-on:change": "convert()",
-                        },
-                    ),
-                    css_class="grid grid-cols-2 gap-4",
-                ),
-                Div(
-                    Div(
-                        Field(
-                            "local_amount",
-                            label=f"Amount ({self.opportunity.currency})",
-                            **{
-                                "x-ref": "amount",
-                                "x-on:input.debounce.300ms": "convert()",
-                            },
-                        ),
-                        Field("amount_usd"),
-                        css_class="grid grid-cols-2 gap-4",
-                    ),
-                    Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
-                    css_class="flex flex-col",
-                ),
-                Div(
-                    Field(
-                        "start_date",
-                    ),
-                    Field(
-                        "end_date",
-                    ),
-                    **{"x-show": "serviceDeliverySelected()"},
-                    css_class="grid grid-cols-2 gap-4",
-                ),
-                Div(
-                    Field("notes"),
+                    Field("start_date"),
                     **{"x-show": "serviceDeliverySelected()"},
                 ),
-                css_class="flex flex-col",
+                Div(
+                    Field("end_date"),
+                    **{"x-show": "serviceDeliverySelected()"},
+                ),
+                Field(
+                    "local_amount",
+                    label=f"Amount ({self.opportunity.currency})",
+                    **{
+                        "x-ref": "amount",
+                        "x-on:input.debounce.300ms": "convert()",
+                    },
+                ),
+                Field("amount_usd"),
+                Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
+                css_class="grid grid-cols-3 gap-6",
+            ),
+            Div(Field("notes"), **{"x-show": "serviceDeliverySelected()"}),
+            Div(
+                Submit("submit", "Submit", css_class="button button-md primary-dark"),
+                css_class="flex justify-end mt-4",
             ),
         )
         self.helper.form_tag = False
