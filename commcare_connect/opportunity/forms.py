@@ -33,8 +33,7 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import ManagedOpportunity
-from commcare_connect.users.credential_levels import DeliveryLevel, LearnLevel
-from commcare_connect.users.models import User
+from commcare_connect.users.models import User, UserCredential
 
 FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Africa"), ("+91", "India")]
 
@@ -148,7 +147,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                 Column(
                     Field("end_date"),
                 ),
-                Column(Field("currency"), Field("additional_users")),
+                Column(Field("currency")),
                 css_class="grid grid-cols-2 gap-4 p-6 card_bg",
             ),
             Row(
@@ -188,10 +187,9 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(*layout_fields)
+        if self.opportunity.managed:
+            self.fields["delivery_type"].disabled = True
 
-        self.fields["additional_users"] = forms.IntegerField(
-            required=False, help_text=_("Adds budget for additional users.")
-        )
         self.fields["end_date"] = forms.DateField(
             widget=forms.DateInput(attrs={"type": "date", "class": "form-input"}),
             required=False,
@@ -208,14 +206,14 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             credential_issuer = CredentialConfiguration.objects.filter(opportunity=self.instance).first()
 
         self.fields["learn_level"] = forms.ChoiceField(
-            choices=[("", _("None"))] + LearnLevel.choices,
+            choices=[("", _("None"))] + UserCredential.LearnLevel.choices,
             required=False,
             label=_("Learn Level"),
             help_text=_("Credential level required for completing the learning phase."),
             initial=credential_issuer.learn_level if credential_issuer else "",
         )
         self.fields["delivery_level"] = forms.ChoiceField(
-            choices=[("", _("None"))] + DeliveryLevel.choices,
+            choices=[("", _("None"))] + UserCredential.DeliveryLevel.choices,
             required=False,
             label=_("Delivery Level"),
             help_text=_("Credential level required for completing deliveries."),
@@ -752,6 +750,7 @@ class AddBudgetNewUsersForm(forms.Form):
         )
 
         self.fields["total_budget"].initial = self.opportunity.total_budget
+        self.fields["total_budget"].label += f" ({self.opportunity.currency})"
 
         self.fields["add_users"].widget.attrs.update(
             {
@@ -941,7 +940,7 @@ class PaymentUnitForm(forms.ModelForm):
 
 class SendMessageMobileUsersForm(forms.Form):
     title = forms.CharField(
-        empty_value="Notification from CommCare Connect",
+        empty_value="Notification from Connect",
         required=False,
     )
     body = forms.CharField(widget=forms.Textarea)

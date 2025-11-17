@@ -91,7 +91,7 @@ def test_get_table_data_for_year_month(from_date, to_date, httpx_mock):
     fetch_user_counts.clear()
     httpx_mock.add_response(
         method="GET",
-        json=connectid_user_counts,
+        json={"total_users": connectid_user_counts, "non_invited_users": connectid_user_counts},
     )
     data = get_table_data_for_year_month(from_date=from_date, to_date=to_date)
 
@@ -102,6 +102,7 @@ def test_get_table_data_for_year_month(from_date, to_date, httpx_mock):
         total_connectid_user_count += connectid_user_counts.get(row["month_group"].strftime("%Y-%m"))
         assert row["connectid_users"] == total_connectid_user_count
         assert row["total_eligible_users"] == 10
+        assert row["non_preregistered_users"] == total_connectid_user_count
         assert row["users"] == 10
         assert row["services"] == 10
         assert row["avg_time_to_payment"] == 50
@@ -221,6 +222,7 @@ def test_get_table_data_for_year_month_by_delivery_type(delivery_type, httpx_moc
             or row["month_group"].year != now.year
             or row["delivery_type_name"] == "All"
         ):
+            assert row["total_eligible_users"] == 10
             continue
         assert row["delivery_type_name"] in delivery_type_slugs
         assert row["users"] == 5
@@ -232,6 +234,7 @@ def test_get_table_data_for_year_month_by_delivery_type(delivery_type, httpx_moc
         assert row["nm_amount_earned"] == 1500
         assert row["nm_amount_paid"] == 500
         assert row["avg_top_paid_flws"] == 400
+        assert row["total_eligible_users"] == 5
 
 
 @pytest.mark.django_db
