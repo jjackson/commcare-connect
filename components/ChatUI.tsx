@@ -15,7 +15,10 @@ import {
   PromptInputSubmit,
   PromptInputAttachments,
   PromptInputAttachment,
+  PromptInputTools,
+  PromptInputButton,
 } from '@/components/ai-elements/prompt-input';
+import { PlusIcon } from 'lucide-react';
 
 type MessageType = {
   role: 'user' | 'assistant';
@@ -40,7 +43,11 @@ function getOrCreateSessionId(): string {
   return sessionId;
 }
 
-export function ChatUI() {
+interface ChatUIProps {
+  containerId?: string;
+}
+
+export function ChatUI({ containerId = 'react-demo-root' }: ChatUIProps) {
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState<
@@ -52,17 +59,17 @@ export function ChatUI() {
 
   // Get URLs from data attributes on the container
   const getStatusUrl = () => {
-    const container = document.getElementById('react-demo-root');
+    const container = document.getElementById(containerId);
     return container?.dataset.statusUrl || '/ai/demo/status/';
   };
 
   const getSubmitUrl = () => {
-    const container = document.getElementById('react-demo-root');
+    const container = document.getElementById(containerId);
     return container?.dataset.submitUrl || '/ai/demo/submit/';
   };
 
   const getHistoryUrl = () => {
-    const container = document.getElementById('react-demo-root');
+    const container = document.getElementById(containerId);
     return container?.dataset.historyUrl || '/ai/demo/history/';
   };
 
@@ -197,6 +204,21 @@ export function ChatUI() {
     },
     [stopPolling],
   );
+
+  const handleNewChat = useCallback(() => {
+    // Clear session ID from localStorage
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    // Generate a new session ID
+    const newSessionId = crypto.randomUUID();
+    localStorage.setItem(SESSION_STORAGE_KEY, newSessionId);
+    // Reset state
+    setSessionId(newSessionId);
+    setMessages([]);
+    setStatus('ready');
+    setIsSubmitting(false);
+    // Stop any ongoing polling
+    stopPolling();
+  }, [stopPolling]);
 
   const handleSubmit = useCallback(
     async (message: { text: string; files: any[] }, event: React.FormEvent) => {
@@ -419,6 +441,12 @@ export function ChatUI() {
               />
             </PromptInputBody>
             <PromptInputFooter>
+              <PromptInputTools>
+                <PromptInputButton onClick={handleNewChat} type="button">
+                  <PlusIcon size={16} />
+                  <span>New Chat</span>
+                </PromptInputButton>
+              </PromptInputTools>
               <PromptInputSubmit status={status} disabled={isSubmitting} />
             </PromptInputFooter>
           </PromptInput>

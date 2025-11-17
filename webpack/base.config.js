@@ -22,6 +22,10 @@ module.exports = {
       __dirname,
       '../commcare_connect/static/js/react-demo.tsx',
     ),
+    'chat-widget': path.resolve(
+      __dirname,
+      '../commcare_connect/static/js/chat-widget.tsx',
+    ),
   },
   output: {
     path: path.resolve(__dirname, '../commcare_connect/static/bundles/'),
