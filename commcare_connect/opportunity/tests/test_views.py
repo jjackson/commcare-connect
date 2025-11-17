@@ -1,3 +1,4 @@
+import inspect
 from datetime import timedelta
 from http import HTTPStatus
 from unittest import mock
@@ -5,7 +6,7 @@ from unittest import mock
 import pytest
 from django.contrib.messages import get_messages
 from django.test import Client
-from django.urls import reverse
+from django.urls import get_resolver, reverse
 from django.utils.timezone import now
 
 from commcare_connect.connect_id_client.models import ConnectIdUser
@@ -238,7 +239,11 @@ def test_get_opportunity_list_data_all_annotations(organization, filters, expect
 
     # Visits
     UserVisitFactory(
-        opportunity=opportunity, opportunity_access=oa1, status=VisitValidationStatus.pending, visit_date=now()
+        opportunity=opportunity,
+        opportunity_access=oa1,
+        status=VisitValidationStatus.pending,
+        visit_date=now(),
+        completed_work__opportunity_access=oa1,
     )
 
     UserVisitFactory(
@@ -342,6 +347,7 @@ def test_tab_param_persistence(rf, opportunity, organization, referring_url, sho
         assert "status=active" not in tab_a_link
 
 
+@mock.patch("commcare_connect.opportunity.views.send_event_to_ga")
 class TestDeleteUserInvites:
     @pytest.fixture(autouse=True)
     def setup_invites(self, organization, opportunity, org_user_member, client):
@@ -381,7 +387,7 @@ class TestDeleteUserInvites:
             ("empty_ids_list", lambda self: {"user_invite_ids": []}, 400, 4, False),
         ],
     )
-    def test_delete_invites(self, test_case, data, expected_status, expected_count, check_redirect):
+    def test_delete_invites(self, mock_send_event, test_case, data, expected_status, expected_count, check_redirect):
         response = self.client.post(self.url, data=data(self))
         assert response.status_code == expected_status
 
@@ -390,7 +396,7 @@ class TestDeleteUserInvites:
 
         assert UserInvite.objects.count() == expected_count
 
-    def test_messages(self):
+    def test_messages(self, mock_send_event):
         response = self.client.post(
             self.url,
             data={"user_invite_ids": [self.not_found_invites[0].id, self.invited_invite.id, self.accepted_invite.id]},
@@ -402,6 +408,7 @@ class TestDeleteUserInvites:
         assert str(messages[1]) == "Cannot delete 1 invite(s). Accepted invites cannot be deleted."
 
 
+@mock.patch("commcare_connect.opportunity.views.send_event_to_ga")
 @pytest.mark.django_db
 class TestResendUserInvites:
     @pytest.fixture(autouse=True)
@@ -446,7 +453,7 @@ class TestResendUserInvites:
     @mock.patch("commcare_connect.opportunity.tasks.invite_user.delay")
     @mock.patch("commcare_connect.opportunity.tasks.send_message")
     @mock.patch("commcare_connect.opportunity.tasks.send_sms")
-    def test_success(self, mock_send_sms, mock_send_message, mock_invite_user):
+    def test_success(self, mock_send_sms, mock_send_message, mock_invite_user, mock_send_event):
         mock_sms_response = mock.Mock()
         mock_sms_response.sid = 1
         mock_send_sms.return_value = mock_sms_response
@@ -467,12 +474,12 @@ class TestResendUserInvites:
         assert self.old_invite.status == UserInviteStatus.invited
         assert self.old_invite.notification_date is not None
 
-    def test_no_user_ids(self):
+    def test_no_user_ids(self, mock_send_event):
         response = self.client.post(self.url, data={})
         assert response.status_code == 400
 
     @mock.patch("commcare_connect.opportunity.tasks.invite_user.delay")
-    def test_recent_invite_not_resent(self, mock_invite_user):
+    def test_recent_invite_not_resent(self, mock_invite_user, mock_send_event):
         response = self.client.post(self.url, data={"user_invite_ids": [self.recent_invite.id]})
 
         assert response.status_code == 200
@@ -485,7 +492,7 @@ class TestResendUserInvites:
         )
 
     @mock.patch("commcare_connect.opportunity.views.fetch_users")
-    def test_not_found_invite_still_not_found(self, mock_fetch_users):
+    def test_not_found_invite_still_not_found(self, mock_fetch_users, mock_send_event):
         mock_fetch_users.return_value = []
         response = self.client.post(self.url, data={"user_invite_ids": [self.not_found_invite.id]})
 
@@ -500,7 +507,7 @@ class TestResendUserInvites:
 
     @mock.patch("commcare_connect.opportunity.views.update_user_and_send_invite")
     @mock.patch("commcare_connect.opportunity.views.fetch_users")
-    def test_not_found_invite_with_found_user(self, mock_fetch_users, mock_update_and_send):
+    def test_not_found_invite_with_found_user(self, mock_fetch_users, mock_update_and_send, mock_send_event):
         mock_user = ConnectIdUser(
             name="New User",
             username="newuser",
@@ -512,3 +519,145 @@ class TestResendUserInvites:
         assert response.status_code == 200
         assert response.headers["HX-Redirect"] == self.expected_redirect
         mock_update_and_send.assert_called_once_with(mock_user, self.opportunity.id)
+
+    @mock.patch("commcare_connect.opportunity.views.update_user_and_send_invite")
+    @mock.patch("commcare_connect.opportunity.views.fetch_users")
+    def test_org_member_can_resend_invite(
+        self, mock_fetch_users, mock_update_and_send, mock_send_event, org_user_member
+    ):
+        mock_user = ConnectIdUser(
+            name="New User",
+            username="newuser",
+            phone_number=self.not_found_invite.phone_number,
+        )
+        mock_fetch_users.return_value = [mock_user]
+
+        self.client.force_login(org_user_member)
+        response = self.client.post(self.url, data={"user_invite_ids": [self.not_found_invite.id]})
+
+        assert response.status_code == 200
+        assert response.headers["HX-Redirect"] == self.expected_redirect
+
+
+def test_views_use_opportunity_decorator_or_mixin():
+    """
+    Ensure all views in the opportunity module use the
+    @opportunity_required decorator or the OpportunityObjectMixin,
+    except explicitly excluded ones.
+    The purpose of this test is to prevent new views from being
+    added without the necessary authorization checks.
+    """
+    from commcare_connect.opportunity.views import OpportunityObjectMixin
+
+    def unwrap_view(func):
+        """Recursively unwrap all decorators."""
+        while hasattr(func, "__wrapped__"):
+            func = func.__wrapped__
+        return func
+
+    def collect_views():
+        """Return both function-based and class-based views from opportunity URLs."""
+        resolver = get_resolver("commcare_connect.opportunity.urls")
+        function_views = []
+        class_views = []
+
+        def collect_patterns(patterns):
+            for pattern in patterns:
+                if hasattr(pattern, "url_patterns"):  # included URLConf
+                    collect_patterns(pattern.url_patterns)
+                else:
+                    view = pattern.callback
+                    pattern_name = getattr(pattern, "name", None)
+
+                    if not pattern_name:
+                        continue
+
+                    if hasattr(view, "view_class"):
+                        class_views.append(
+                            {
+                                "url": str(pattern.pattern),
+                                "name": pattern_name,
+                                "view_class": view.view_class,
+                                "class_name": view.view_class.__name__,
+                            }
+                        )
+                    else:
+                        original = unwrap_view(view)
+                        if not inspect.isclass(original):
+                            function_views.append(
+                                {
+                                    "url": str(pattern.pattern),
+                                    "name": pattern_name,
+                                    "function": view,
+                                    "function_name": original.__name__,
+                                }
+                            )
+
+        collect_patterns(resolver.url_patterns)
+        return function_views, class_views
+
+    def has_opportunity_decorator(func):
+        return getattr(func, "_has_opportunity_required_decorator", False)
+
+    def has_opportunity_object_mixin(view_class):
+        """Check if a class-based view uses OpportunityObjectMixin."""
+        return issubclass(view_class, OpportunityObjectMixin)
+
+    # Exclusion lists with explanations
+    function_excluded = {
+        "export_status",  # Uses task_id parameter, and similar check is applied directly in code.
+        "download_export",  # Uses task_id parameter, and similar check is applied directly in code.
+        "fetch_attachment",  # Uses blob_id parameter, not opp_id
+        "add_api_key",  # API key management, no opportunity context needed
+    }
+
+    class_excluded = {
+        "OpportunityList",  # OpportunityList - lists all opportunities, doesn't operate on specific one
+        "OpportunityInit",  # OpportunityInit - creates new opportunity, no existing opportunity context
+    }
+
+    function_views, class_views = collect_views()
+
+    # Check function-based views
+    missing_function_decorator = [
+        v
+        for v in function_views
+        if v["function_name"] not in function_excluded and not has_opportunity_decorator(v["function"])
+    ]
+
+    # Check class-based views that operate on opportunities
+    missing_mixin = [
+        v
+        for v in class_views
+        if (v["class_name"] not in class_excluded and not has_opportunity_object_mixin(v["view_class"]))
+    ]
+
+    # Build error messages
+    errors = []
+
+    if missing_function_decorator:
+        errors.extend(
+            [
+                "The following function-based views are missing the `opportunity_required` decorator:",
+                *[f"  - {v['name']} ({v['function_name']}) at URL: {v['url']}" for v in missing_function_decorator],
+                "All function-based views that operate on opportunities must use `opportunity_required` "
+                "decorator. If this view is intentionally excluded, "
+                "please add it to the exclusion list (in variable `function_excluded`) in this test.",
+            ]
+        )
+
+    if missing_mixin:
+        if errors:
+            errors.append("")  # Add empty line between sections
+        errors.extend(
+            [
+                "The following class-based views are missing the `OpportunityObjectMixin`:",
+                *[f"  - {v['name']} ({v['class_name']}) at URL: {v['url']}" for v in missing_mixin],
+                "All class-based views that operate on opportunities must inherit from `OpportunityObjectMixin`. "
+                "If this view is intentionally excluded, "
+                "please add it to the exclusion list (in variable `class_excluded`) in this test.",
+            ]
+        )
+
+    if errors:
+        pytest.fail("\n".join(errors))
