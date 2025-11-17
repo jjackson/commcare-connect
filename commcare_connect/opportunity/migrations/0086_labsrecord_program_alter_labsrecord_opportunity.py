@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("program", "0001_initial"),
-        ("opportunity", "0084_labsrecord"),
+        ("opportunity", "0085_create_issue_credentials_periodic_task"),
     ]
 
     operations = [
