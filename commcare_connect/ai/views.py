@@ -22,7 +22,7 @@ def ai_demo_view(request):
     Main view for the Pydantic AI demo.
     Shows a form where users can enter a prompt.
     """
-    return render(request, "labs/ai_demo.html")
+    return render(request, "ai/ai_demo.html")
 
 
 @login_required

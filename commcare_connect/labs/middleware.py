@@ -68,6 +68,7 @@ class LabsURLWhitelistMiddleware:
     """
 
     WHITELISTED_PREFIXES = [
+        "/ai/",
         "/audit/",
         "/tasks/",
         "/solicitations/",

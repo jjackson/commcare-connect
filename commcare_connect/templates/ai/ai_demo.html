@@ -83,7 +83,7 @@
 
       pollingInterval = setInterval(async () => {
         try {
-          const response = await fetch(`{% url "labs:ai_demo_status" %}?task_id=${taskId}`);
+          const response = await fetch(`{% url "ai:ai_demo_status" %}?task_id=${taskId}`);
           const data = await response.json();
 
           if (data.error) {
@@ -116,7 +116,8 @@
       resultContainer.classList.remove('hidden');
       resultContent.classList.remove('hidden');
       errorContent.classList.add('hidden');
-      resultText.textContent = result.message;
+      // result is a string from the Celery task
+      resultText.textContent = typeof result === 'string' ? result : (result.message || JSON.stringify(result));
       progressMessage.textContent = 'Complete!';
       submitBtn.disabled = false;
     }
@@ -152,7 +153,7 @@
       progressMessage.textContent = 'Submitting...';
 
       try {
-        const response = await fetch('{% url "labs:ai_demo_submit" %}', {
+        const response = await fetch('{% url "ai:ai_demo_submit" %}', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
