@@ -18,7 +18,7 @@ import {
   PromptInputTools,
   PromptInputButton,
 } from '@/components/ai-elements/prompt-input';
-import { PlusIcon } from 'lucide-react';
+import { PlusIcon, X } from 'lucide-react';
 
 type MessageType = {
   role: 'user' | 'assistant';
@@ -45,9 +45,13 @@ function getOrCreateSessionId(): string {
 
 interface ChatUIProps {
   containerId?: string;
+  onClose?: () => void;
 }
 
-export function ChatUI({ containerId = 'react-demo-root' }: ChatUIProps) {
+export function ChatUI({
+  containerId = 'chat-widget-root',
+  onClose,
+}: ChatUIProps) {
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState<
@@ -386,7 +390,7 @@ export function ChatUI({ containerId = 'react-demo-root' }: ChatUIProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Messages Container */}
-      <div className="flex-1 flex flex-col gap-4 mb-4 min-h-[300px] max-h-[600px] overflow-y-auto px-1">
+      <div className="flex-1 flex flex-col gap-4 overflow-y-auto px-4 py-4">
         {messages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center text-muted-foreground">
@@ -446,6 +450,12 @@ export function ChatUI({ containerId = 'react-demo-root' }: ChatUIProps) {
                   <PlusIcon size={16} />
                   <span>New Chat</span>
                 </PromptInputButton>
+                {onClose && (
+                  <PromptInputButton onClick={onClose} type="button">
+                    <X size={16} />
+                    <span>Close</span>
+                  </PromptInputButton>
+                )}
               </PromptInputTools>
               <PromptInputSubmit status={status} disabled={isSubmitting} />
             </PromptInputFooter>

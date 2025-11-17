@@ -7,7 +7,6 @@ import uuid
 from celery.result import AsyncResult
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
-from django.shortcuts import render
 from django.views.decorators.http import require_GET, require_POST
 
 from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
@@ -16,15 +15,6 @@ from .session_store import get_message_history
 from .tasks import simple_echo_task
 
 logger = logging.getLogger(__name__)
-
-
-@login_required
-def ai_demo_view(request):
-    """
-    Main view for the Pydantic AI demo.
-    Shows a form where users can enter a prompt.
-    """
-    return render(request, "ai/ai_demo.html")
 
 
 @login_required
