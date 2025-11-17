@@ -1304,18 +1304,17 @@ class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateVie
         return context
 
     def post(self, request, org_slug, opp_id, **kwargs):
-        if not request.opportunity.managed or request.is_opportunity_pm:
+        opportunity = self.get_opportunity()
+        if not opportunity.managed or request.is_opportunity_pm:
             return redirect("opportunity:detail", org_slug, opp_id)
 
-        form = PaymentInvoiceForm(data=request.POST or None, opportunity=request.opportunity)
-        if form.is_valid():
-            form.save()
-            form = PaymentInvoiceForm(opportunity=request.opportunity)
-            redirect_url = reverse("opportunity:invoice_list", args=[org_slug, opp_id])
-            response = HttpResponse(status=200)
-            response["HX-Redirect"] = redirect_url
-            return response
-        return HttpResponse(render_crispy_form(form))
+        form = PaymentInvoiceForm(data=request.POST or None, opportunity=opportunity)
+        if not form.is_valid():
+            return self.get(request, org_slug, opp_id, **kwargs)
+
+        form.save()
+        form = PaymentInvoiceForm(opportunity=opportunity)
+        return redirect(reverse("opportunity:invoice_list", args=[org_slug, opp_id]))
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
