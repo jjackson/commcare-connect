@@ -50,6 +50,10 @@
         {% endblock %}
       </main>
     </div>
+
+    <!-- CSRF Token for React components and AJAX requests -->
+    {% csrf_token %}
+
   {% block inline_javascript %}
     {% comment %}
       Script tags with only code, no src (defer by default). To run
