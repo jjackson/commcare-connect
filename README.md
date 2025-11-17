@@ -55,6 +55,7 @@ Some useful command are available via the `tasks.py` file:
 - Update your `.env` file with the host:
 
       DJANGO_ALLOWED_HOSTS=[my-unique-subdomain].ngrok-free.app
+      CSRF_TRUSTED_ORIGINS=https://[my-unique-subdomain].ngrok-free.app
 
 **Create an OAuth2 application on CommCare HQ**
 
