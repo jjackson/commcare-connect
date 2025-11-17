@@ -41,7 +41,25 @@ module.exports = {
         loader: 'babel-loader',
       },
       {
-        test: /\.s?css$/i,
+        test: /\.css$/i,
+        use: [
+          MiniCssExtractPlugin.loader,
+          'css-loader',
+          {
+            loader: 'postcss-loader',
+            options: {
+              postcssOptions: {
+                plugins: [
+                  require('@tailwindcss/postcss'),
+                  require('autoprefixer'),
+                ],
+              },
+            },
+          },
+        ],
+      },
+      {
+        test: /\.(scss|sass)$/i,
         use: [
           MiniCssExtractPlugin.loader,
           'css-loader',
