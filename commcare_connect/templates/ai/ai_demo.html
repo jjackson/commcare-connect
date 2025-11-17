@@ -98,10 +98,16 @@
 
           if (data.complete) {
             stopPolling();
-            if (data.result) {
+            console.log('Task complete, data:', data); // Debug logging
+            if (data.result !== undefined && data.result !== null) {
+              console.log('Showing result:', data.result); // Debug logging
               showResult(data.result);
             } else if (data.error) {
               showError(data.error);
+            } else {
+              // Task completed but no result - show the message
+              console.log('No result, showing message:', data.message); // Debug logging
+              showResult(data.message || 'Task completed');
             }
           }
         } catch (error) {
@@ -113,11 +119,14 @@
     }
 
     function showResult(result) {
+      console.log('showResult called with:', result, typeof result); // Debug logging
       resultContainer.classList.remove('hidden');
       resultContent.classList.remove('hidden');
       errorContent.classList.add('hidden');
       // result is a string from the Celery task
-      resultText.textContent = typeof result === 'string' ? result : (result.message || JSON.stringify(result));
+      const resultString = typeof result === 'string' ? result : (result?.message || JSON.stringify(result));
+      console.log('Setting result text to:', resultString); // Debug logging
+      resultText.textContent = resultString || 'No response received';
       progressMessage.textContent = 'Complete!';
       submitBtn.disabled = false;
     }
