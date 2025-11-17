@@ -98,6 +98,14 @@ class LabsUser:
         """Prevent deletion from database."""
         raise NotImplementedError("LabsUser cannot be deleted from database")
 
+    def has_module_perms(self, module: str) -> bool:
+        """Return True if the user has permission to access the given module."""
+        return True
+
+    def has_perm(self, perm: str) -> bool:
+        """Return True if the user has the given permission."""
+        return True
+
 
 class LocalLabsRecord:
     """Transient object for Labs API responses. Never saved to database.
