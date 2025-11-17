@@ -25,6 +25,7 @@ INTERNAL_IPS = ["127.0.0.1", "10.0.2.2"]
 # ------------------------------------------------------------------------------
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TASK_STORE_EAGER_RESULT = True  # Store results even in eager mode so we can retrieve them
 
 # CommCareConnect
 # ------------------------------------------------------------------------------
