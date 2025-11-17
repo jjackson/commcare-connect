@@ -241,20 +241,62 @@ class AuditDataAccess:
         }
         return AuditSessionRecord(api_data)
 
-    def get_audit_session(self, session_id: int) -> AuditSessionRecord | None:
+    def get_audit_session(
+        self, session_id: int, try_multiple_opportunities: bool = False
+    ) -> AuditSessionRecord | None:
         """
         Get an audit session by ID.
 
         Args:
             session_id: Session ID
+            try_multiple_opportunities: If True, searches across multiple opportunities
+                when the session is not found under the current opportunity_id
 
         Returns:
             AuditSessionRecord or None
         """
-        record = self.labs_api.get_record_by_id(
-            record_id=session_id, experiment="audit", type="AuditSession", model_class=AuditSessionRecord
+        # First try with current opportunity_id
+        sessions = self.labs_api.get_records(
+            experiment="audit",
+            type="AuditSession",
+            model_class=AuditSessionRecord,
         )
-        return record
+
+        # Find the session with matching ID
+        for session in sessions:
+            if session.id == session_id:
+                return session
+
+        # If not found and try_multiple_opportunities is True, search other opportunities
+        if try_multiple_opportunities:
+            # Get all opportunities user has access to
+            try:
+                opportunities = self.search_opportunities(query="", limit=1000)
+
+                # Try each opportunity
+                for opp in opportunities:
+                    opp_id = opp.get("id")
+                    if opp_id == self.opportunity_id:
+                        continue  # Already tried this one
+
+                    # Create a temporary API client for this opportunity
+                    temp_labs_api = LabsRecordAPIClient(self.access_token, opp_id)
+                    try:
+                        sessions = temp_labs_api.get_records(
+                            experiment="audit",
+                            type="AuditSession",
+                            model_class=AuditSessionRecord,
+                        )
+
+                        for session in sessions:
+                            if session.id == session_id:
+                                return session
+                    finally:
+                        temp_labs_api.close()
+            except Exception:
+                pass  # If search fails, just return None
+
+        return None
 
     def get_audit_sessions(self, username: str | None = None, status: str | None = None) -> list[AuditSessionRecord]:
         """

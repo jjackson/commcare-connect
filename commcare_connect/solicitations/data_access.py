@@ -52,6 +52,7 @@ class SolicitationDataAccess:
         status: str | None = None,
         solicitation_type: str | None = None,
         is_publicly_listed: bool | None = None,
+        username: str | None = None,
     ) -> list[SolicitationRecord]:
         """
         Query for solicitation records with optional filters.
@@ -61,6 +62,7 @@ class SolicitationDataAccess:
             status: Filter by status ('active', 'closed', 'draft')
             solicitation_type: Filter by type ('eoi', 'rfp')
             is_publicly_listed: Filter by public listing status
+            username: Filter by username who created the solicitation (client-side filter)
 
         Returns:
             List of SolicitationRecord instances
@@ -74,14 +76,20 @@ class SolicitationDataAccess:
         if is_publicly_listed is not None:
             kwargs["is_publicly_listed"] = is_publicly_listed
 
-        # Get records from API
-        return self.labs_api.get_records(
+        # Get records from API (don't send username - production doesn't support it)
+        records = self.labs_api.get_records(
             experiment="solicitations",
             type="Solicitation",
             program_id=program_id,
             model_class=SolicitationRecord,
             **kwargs,
         )
+
+        # Filter by username client-side if specified
+        if username:
+            records = [r for r in records if r.username == username]
+
+        return records
 
     def get_solicitation_by_id(self, solicitation_id: int) -> SolicitationRecord | None:
         """
