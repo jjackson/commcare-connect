@@ -46,9 +46,9 @@ class UserCredentialIssuer:
                 status=CompletedWorkStatus.approved,
             )
             .exclude(opportunity_access__user_id__in=Subquery(user_credentials_to_exclude))
-            .values("opportunity_access__user_id", "opportunity_access__opportunity_id")
+            .values("opportunity_access")
             .annotate(
-                deliveries_count=Count("opportunity_access__user_id"),
+                deliveries_count=Count("*"),
                 opportunity_id=F("opportunity_access__opportunity_id"),
                 delivery_type_id=F("opportunity_access__opportunity__delivery_type_id"),
                 cred_user_id=F("opportunity_access__user_id"),
