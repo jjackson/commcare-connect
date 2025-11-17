@@ -29,7 +29,7 @@ function getCSRFToken(): string {
   return tokenInput ? tokenInput.value : '';
 }
 
-export function HelloWorld() {
+export function ChatUI() {
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [status, setStatus] = useState<

@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { HelloWorld } from '@/components/HelloWorld';
+import { ChatUI } from '@/components/ChatUI';
 
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', () => {
@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const root = createRoot(container);
     root.render(
       <React.StrictMode>
-        <HelloWorld />
+        <ChatUI />
       </React.StrictMode>,
     );
   }
