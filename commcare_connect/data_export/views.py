@@ -4,9 +4,11 @@ from django.db.models import Count, F, Q
 from django.http import JsonResponse, StreamingHttpResponse
 from drf_spectacular.utils import extend_schema, inline_serializer
 from oauth2_provider.contrib.rest_framework.permissions import TokenHasScope
+from rest_framework import status
 from rest_framework.exceptions import NotFound
-from rest_framework.generics import RetrieveAPIView
+from rest_framework.generics import ListCreateAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from commcare_connect.data_export.serializer import (
@@ -14,6 +16,7 @@ from commcare_connect.data_export.serializer import (
     CompletedModuleDataSerializer,
     CompletedWorkDataSerializer,
     InvoiceDataSerializer,
+    LabsRecordDataSerializer,
     OpportunityDataExportSerializer,
     OpportunitySerializer,
     OpportunityUserDataSerializer,
@@ -26,6 +29,7 @@ from commcare_connect.opportunity.models import (
     Assessment,
     CompletedModule,
     CompletedWork,
+    LabsRecord,
     Opportunity,
     OpportunityAccess,
     Payment,
@@ -34,11 +38,21 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import Program
+from commcare_connect.users.models import User
 
 
 class BaseDataExportView(APIView):
     permission_classes = [IsAuthenticated, TokenHasScope]
     required_scopes = ["export"]
+
+
+class OpportunityDataExportView(BaseDataExportView):
+    def check_opportunity_permission(self, user, opp_id):
+        self.opportunity = _get_opportunity_or_404(user, opp_id)
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        self.check_opportunity_permission(request.user, self.kwargs.get("opp_id"))
 
 
 class EchoWriter:
@@ -124,13 +138,8 @@ class SingleOpportunityDataView(RetrieveAPIView, BaseDataExportView):
         return _get_opportunity_or_404(self.request.user, self.kwargs.get("opp_id"))
 
 
-class OpportunityScopedDataView(BaseStreamingCSVExportView):
-    def check_opportunity_permission(self, user, opp_id):
-        self.opportunity = _get_opportunity_or_404(user, opp_id)
-
-    def check_permissions(self, request):
-        super().check_permissions(request)
-        self.check_opportunity_permission(request.user, self.kwargs.get("opp_id"))
+class OpportunityScopedDataView(OpportunityDataExportView, BaseStreamingCSVExportView):
+    pass
 
 
 class OpportunityUserDataView(OpportunityScopedDataView):
@@ -206,6 +215,45 @@ class AssessmentDataView(OpportunityScopedDataView):
         return Assessment.objects.filter(opportunity=self.opportunity).annotate(
             username=F("opportunity_access__user__username"),
         )
+
+
+class LabsRecordDataView(OpportunityDataExportView, ListCreateAPIView):
+    serializer_class = LabsRecordDataSerializer
+
+    def get_queryset(self):
+        filters = {}
+        query_params = self.request.query_params.copy()
+        query_params.pop("opportunity", None)
+        for key, value in query_params.items():
+            filters[key] = value
+        return LabsRecord.objects.filter(opportunity=self.opportunity, **filters).annotate(
+            username=F("user__username"),
+        )
+
+    def create(self, request, *args, **kwargs):
+        # Handles upsert (update or create) for LabsRecord via JSON data
+
+        # Assume incoming data is a single object or a list of objects
+        data = request.data
+        many = isinstance(data, list)
+        if not many:
+            data = [data]
+
+        instances = []
+        for item in data:
+            item = item.copy()
+            username = item.pop("username", None)
+            user = None
+            if username:
+                user = User.objects.get(username=username)
+                item["user"] = user
+            item["opportunity"] = self.opportunity
+            item["organization"] = self.opportunity.organization
+            pk = item.pop("id", None)
+            obj, created = LabsRecord.objects.update_or_create(defaults=item, **{"id": pk})
+            instances.append(obj)
+        serializer = self.get_serializer(instances, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class OrganizationProgramDataView(BaseStreamingCSVExportView):

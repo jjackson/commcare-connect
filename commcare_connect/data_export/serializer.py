@@ -13,6 +13,7 @@ from commcare_connect.opportunity.models import (
     Assessment,
     CompletedModule,
     CompletedWork,
+    LabsRecord,
     Opportunity,
     OpportunityClaimLimit,
     Payment,
@@ -194,6 +195,26 @@ class AssessmentDataSerializer(serializers.ModelSerializer):
 
     def get_username(self, obj) -> str:
         return obj.username
+
+
+class LabsRecordDataSerializer(serializers.ModelSerializer):
+    username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LabsRecord
+        fields = [
+            "id",
+            "username",
+            "experiment",
+            "opportunity_id",
+            "organization_id",
+            "labs_record_id",
+            "type",
+            "data",
+        ]
+
+    def get_username(self, obj) -> str:
+        return obj.user.username
 
 
 class CompletedModuleDataSerializer(serializers.ModelSerializer):
