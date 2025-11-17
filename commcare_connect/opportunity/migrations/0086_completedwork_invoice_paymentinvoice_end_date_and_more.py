@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0083_credentialconfiguration"),
+        ("opportunity", "0085_create_issue_credentials_periodic_task"),
     ]
 
     operations = [
