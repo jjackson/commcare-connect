@@ -60,6 +60,8 @@ export function ChatUI({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isPollingRef = useRef(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Get URLs from data attributes on the container
   const getStatusUrl = () => {
@@ -387,10 +389,37 @@ export function ChatUI({
     };
   }, [stopPolling]);
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop =
+        messagesContainerRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  // Focus textarea after submission completes
+  useEffect(() => {
+    if (!isSubmitting && status === 'ready') {
+      // Small delay to ensure the textarea is re-enabled
+      const timer = setTimeout(() => {
+        const textarea = document.querySelector<HTMLTextAreaElement>(
+          `#${containerId} textarea[name="message"]`,
+        );
+        if (textarea) {
+          textarea.focus();
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isSubmitting, status, containerId]);
+
   return (
     <div className="flex flex-col h-full">
       {/* Messages Container */}
-      <div className="flex-1 flex flex-col gap-4 overflow-y-auto px-4 py-4">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 flex flex-col gap-4 overflow-y-auto px-4 py-4"
+      >
         {messages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center text-muted-foreground">
@@ -429,6 +458,8 @@ export function ChatUI({
             );
           })
         )}
+        {/* Invisible element to scroll to */}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Input - Fixed at bottom */}
