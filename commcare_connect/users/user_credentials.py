@@ -57,9 +57,9 @@ class UserCredentialIssuer:
                 status=CompletedWorkStatus.approved,
             )
             .exclude(opportunity_access__user_id__in=Subquery(user_credentials_to_exclude))
-            .values("opportunity_access__user_id", "opportunity_access__opportunity_id")
+            .values("opportunity_access")
             .annotate(
-                deliveries_count=Count("opportunity_access__user_id"),
+                deliveries_count=Count("*"),
                 opportunity_id=F("opportunity_access__opportunity_id"),
                 delivery_type_id=F("opportunity_access__opportunity__delivery_type_id"),
                 cred_user_id=F("opportunity_access__user_id"),
@@ -87,6 +87,7 @@ class UserCredentialIssuer:
             Assessment.objects.filter(
                 opportunity_id__in=opportunities,
                 passed=True,
+                opportunity_access__isnull=False,
             )
             .exclude(opportunity_access__user_id__in=Subquery(user_credentials_to_exclude))
             .annotate(
@@ -164,13 +165,11 @@ class UserCredentialIssuer:
     def _parse_to_user_credential_models(cls, credentials_users, credential_type, level):
         return [
             UserCredential(
-                **{
-                    "user_id": cred_user["cred_user_id"],
-                    "credential_type": credential_type,
-                    "level": level,
-                    "opportunity_id": cred_user["opportunity_id"],
-                    "delivery_type_id": cred_user.get("delivery_type_id", None),
-                }
+                user_id=cred_user["cred_user_id"],
+                credential_type=credential_type,
+                level=level,
+                opportunity_id=cred_user["opportunity_id"],
+                delivery_type_id=cred_user.get("delivery_type_id", None),
             )
             for cred_user in credentials_users
         ]
