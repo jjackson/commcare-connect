@@ -92,8 +92,10 @@ class LabsRecordAPIClient:
                 "type": type,
             }
 
-            if username:
-                params["username"] = username
+            # NOTE: username filtering not supported by production API
+            # Callers should filter by username client-side after fetching records
+            # if username:
+            #     params["username"] = username
             if organization_id:
                 params["organization_id"] = organization_id
             if program_id:
@@ -179,8 +181,9 @@ class LabsRecordAPIClient:
 
         if username:
             payload["username"] = username
-        if program_id:
-            payload["program_id"] = program_id
+        # NOTE: program_id is not sent - it's inferred from opportunity on production side
+        # if program_id:
+        #     payload["program_id"] = program_id
         if labs_record_id:
             payload["labs_record_id"] = labs_record_id
 
@@ -281,10 +284,11 @@ class LabsRecordAPIClient:
         elif current.username:
             payload["username"] = current.username
 
-        if program_id is not None:
-            payload["program_id"] = program_id
-        elif current.program_id:
-            payload["program_id"] = current.program_id
+        # NOTE: program_id is not sent - it's inferred from opportunity on production side
+        # if program_id is not None:
+        #     payload["program_id"] = program_id
+        # elif current.program_id:
+        #     payload["program_id"] = current.program_id
 
         if labs_record_id is not None:
             payload["labs_record_id"] = labs_record_id
