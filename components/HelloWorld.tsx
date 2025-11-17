@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Message,
   MessageContent,
@@ -35,9 +35,8 @@ export function HelloWorld() {
   const [status, setStatus] = useState<
     'ready' | 'submitted' | 'streaming' | 'error'
   >('ready');
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
-    null,
-  );
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isPollingRef = useRef(false);
 
   // Get URLs from data attributes on the container
   const getStatusUrl = () => {
@@ -51,17 +50,32 @@ export function HelloWorld() {
   };
 
   const stopPolling = useCallback(() => {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-      setPollingInterval(null);
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+      isPollingRef.current = false;
     }
-  }, [pollingInterval]);
+  }, []);
 
   const pollTaskStatus = useCallback(
     (taskId: string) => {
+      // Stop any existing polling
       stopPolling();
 
+      // Prevent multiple polling instances
+      if (isPollingRef.current) {
+        return;
+      }
+
+      isPollingRef.current = true;
+
       const interval = setInterval(async () => {
+        // Double-check we should still be polling
+        if (!isPollingRef.current) {
+          clearInterval(interval);
+          return;
+        }
+
         try {
           const response = await fetch(`${getStatusUrl()}?task_id=${taskId}`);
           const data = await response.json();
@@ -70,18 +84,27 @@ export function HelloWorld() {
             stopPolling();
             setStatus('error');
             setIsSubmitting(false);
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: 'assistant',
-                parts: [
-                  {
-                    type: 'text',
-                    text: `Error: ${data.error}`,
-                  },
-                ],
-              },
-            ]);
+            setMessages((prev) => {
+              // Only add error if we haven't already processed this task
+              const lastMessage = prev[prev.length - 1];
+              if (
+                lastMessage?.role === 'assistant' &&
+                lastMessage.parts[0]?.text === 'Thinking...'
+              ) {
+                const newMessages = [...prev];
+                newMessages[newMessages.length - 1] = {
+                  role: 'assistant',
+                  parts: [
+                    {
+                      type: 'text',
+                      text: `Error: ${data.error}`,
+                    },
+                  ],
+                };
+                return newMessages;
+              }
+              return prev;
+            });
             return;
           }
 
@@ -99,6 +122,7 @@ export function HelloWorld() {
 
             setMessages((prev) => {
               // Replace the "Thinking..." message with the actual result
+              // Only do this once - check if we've already processed this
               const newMessages = [...prev];
               const lastMessage = newMessages[newMessages.length - 1];
               if (
@@ -116,18 +140,8 @@ export function HelloWorld() {
                 };
                 return newMessages;
               }
-              return [
-                ...newMessages,
-                {
-                  role: 'assistant',
-                  parts: [
-                    {
-                      type: 'text',
-                      text: resultText,
-                    },
-                  ],
-                },
-              ];
+              // If "Thinking..." was already replaced, don't add another message
+              return newMessages;
             });
           } else if (data.message) {
             setStatus('streaming');
@@ -138,22 +152,31 @@ export function HelloWorld() {
           stopPolling();
           setStatus('error');
           setIsSubmitting(false);
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: 'assistant',
-              parts: [
-                {
-                  type: 'text',
-                  text: 'Failed to check task status',
-                },
-              ],
-            },
-          ]);
+          setMessages((prev) => {
+            // Only add error if we haven't already processed this
+            const lastMessage = prev[prev.length - 1];
+            if (
+              lastMessage?.role === 'assistant' &&
+              lastMessage.parts[0]?.text === 'Thinking...'
+            ) {
+              const newMessages = [...prev];
+              newMessages[newMessages.length - 1] = {
+                role: 'assistant',
+                parts: [
+                  {
+                    type: 'text',
+                    text: 'Failed to check task status',
+                  },
+                ],
+              };
+              return newMessages;
+            }
+            return prev;
+          });
         }
       }, 1000);
 
-      setPollingInterval(interval);
+      pollingIntervalRef.current = interval;
     },
     [stopPolling],
   );
