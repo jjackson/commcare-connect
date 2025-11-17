@@ -53,25 +53,19 @@ export function ChatWidget({
 
   return (
     <>
-      {/* Floating Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all duration-300 ${
-          isOpen
-            ? 'bg-gray-600 hover:bg-gray-700'
-            : 'bg-brand-indigo hover:bg-brand-deep-purple'
-        } text-white focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:ring-offset-2`}
-        aria-label={isOpen ? 'Close chat' : 'Open chat'}
-      >
-        {isOpen ? (
-          <X size={24} className="transition-transform duration-200" />
-        ) : (
+      {/* Floating Button - Hidden when chat is open */}
+      {!isOpen && (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all duration-300 bg-brand-indigo hover:bg-brand-deep-purple text-white focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:ring-offset-2"
+          aria-label="Open chat"
+        >
           <MessageCircle
             size={24}
             className="transition-transform duration-200"
           />
-        )}
-      </button>
+        </button>
+      )}
 
       {/* Slide-out Panel */}
       <div
@@ -92,7 +86,7 @@ export function ChatWidget({
         </div>
 
         {/* Chat UI Container */}
-        <div className="flex-1 overflow-hidden p-4">
+        <div className="flex-1 overflow-hidden">
           <div
             id={containerId}
             data-submit-url={getSubmitUrl()}
@@ -100,7 +94,10 @@ export function ChatWidget({
             data-history-url={getHistoryUrl()}
             className="h-full"
           >
-            <ChatUI containerId={containerId} />
+            <ChatUI
+              containerId={containerId}
+              onClose={() => setIsOpen(false)}
+            />
           </div>
         </div>
       </div>

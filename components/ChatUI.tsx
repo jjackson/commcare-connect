@@ -432,7 +432,7 @@ export function ChatUI({
       </div>
 
       {/* Input - Fixed at bottom */}
-      <div className="border-t pt-4">
+      <div className="border-t p-4">
         <PromptInputProvider>
           <PromptInput onSubmit={handleSubmit} className="w-full">
             <PromptInputAttachments>
