@@ -15,6 +15,8 @@ need to edit some settings.
 
     # install requirements
     $ pip install -r requirements-dev.txt
+    # for labs requirements
+    $ pip install -r requirements/labs.txt
 
     # install git hooks
     $ pre-commit install
@@ -53,6 +55,7 @@ Some useful command are available via the `tasks.py` file:
 - Update your `.env` file with the host:
 
       DJANGO_ALLOWED_HOSTS=[my-unique-subdomain].ngrok-free.app
+      CSRF_TRUSTED_ORIGINS=https://[my-unique-subdomain].ngrok-free.app
 
 **Create an OAuth2 application on CommCare HQ**
 
@@ -64,6 +67,8 @@ Some useful command are available via the `tasks.py` file:
   - Pkce required: False
 - Copy the Client ID and Client Secret
 - Create a new SocialApp locally at http://localhost:8000/admin/socialaccount/socialapp/
+
+Note: for labs set ups see the [labs README](./commcare_connect/labs/README.md) for how to enable oauth.
 
 **Test the OAuth2 flow**
 
