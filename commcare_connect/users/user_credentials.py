@@ -96,13 +96,11 @@ class UserCredentialIssuer:
     def _parse_to_user_credential_models(cls, credentials_users, credential_type, level):
         return [
             UserCredential(
-                **{
-                    "user_id": cred_user["cred_user_id"],
-                    "credential_type": credential_type,
-                    "level": level,
-                    "opportunity_id": cred_user["opportunity_id"],
-                    "delivery_type_id": cred_user.get("delivery_type_id", None),
-                }
+                user_id=cred_user["cred_user_id"],
+                credential_type=credential_type,
+                level=level,
+                opportunity_id=cred_user["opportunity_id"],
+                delivery_type_id=cred_user.get("delivery_type_id", None),
             )
             for cred_user in credentials_users
         ]
