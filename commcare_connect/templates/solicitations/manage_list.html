@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Manage Solicitations - Solicitations Lab{% endblock %}
 
@@ -104,4 +105,17 @@
         </div>
     {% endif %}
 </div>
+
+    <!-- AI Chat Widget -->
+    <div
+      id="chat-widget-root"
+      data-submit-url="{% url 'ai:ai_demo_submit' %}"
+      data-status-url="{% url 'ai:ai_demo_status' %}"
+      data-history-url="{% url 'ai:ai_demo_history' %}"
+    ></div>
 {% endblock %}
+
+{% block javascript %}
+  {{ block.super }}
+  <script src="{% static 'bundles/js/chat-widget-bundle.js' %}" defer></script>
+{% endblock javascript %}
