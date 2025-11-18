@@ -25,7 +25,7 @@ class TestBackfillUserAnalyticsData:
                 "data": [
                     {
                         "username": "test",
-                        "has_viewed_work_history": False,
+                        "has_viewed_work_history": None,
                         "has_sent_message": None,
                     }
                 ]
@@ -88,7 +88,7 @@ class TestBackfillUserAnalyticsData:
         assert analytics_data.has_offered_multiple_opps == access.invited_date
         assert analytics_data.has_accepted_multiple_opps == access.invited_date
         assert analytics_data.has_completed_multiple_opps == completed_work.status_modified_date
-        assert not analytics_data.has_viewed_work_history
+        assert analytics_data.has_viewed_work_history is None
         assert analytics_data.has_sent_message is None
 
     def test_data_for_personalid_user(self, db, httpx_mock):
@@ -98,7 +98,7 @@ class TestBackfillUserAnalyticsData:
                 "data": [
                     {
                         "username": "test",
-                        "has_viewed_work_history": True,
+                        "has_viewed_work_history": str(datetime.datetime(2023, 1, 1, tzinfo=timezone.utc)),
                         "has_sent_message": str(datetime.datetime(2023, 1, 1, tzinfo=timezone.utc)),
                     }
                 ]
@@ -123,5 +123,5 @@ class TestBackfillUserAnalyticsData:
         assert analytics_data.has_offered_multiple_opps is None
         assert analytics_data.has_accepted_multiple_opps is None
         assert analytics_data.has_completed_multiple_opps is None
-        assert analytics_data.has_viewed_work_history
+        assert analytics_data.has_viewed_work_history == datetime.datetime(2023, 1, 1, tzinfo=timezone.utc)
         assert analytics_data.has_sent_message == datetime.datetime(2023, 1, 1, tzinfo=timezone.utc)

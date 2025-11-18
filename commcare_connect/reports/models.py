@@ -22,6 +22,5 @@ class UserAnalyticsData(models.Model):
     has_completed_multiple_opps = models.DateTimeField(null=True)
     has_offered_multiple_opps = models.DateTimeField(null=True)
     has_accepted_multiple_opps = models.DateTimeField(null=True)
-    # NOTE: UserCredentials do not have timestamps currently.
-    has_viewed_work_history = models.BooleanField(default=False)
+    has_viewed_work_history = models.DateTimeField(null=True)
     has_sent_message = models.DateTimeField(null=True)
