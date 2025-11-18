@@ -31,7 +31,17 @@ class OpportunityDataExportSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Opportunity
-        fields = ["id", "name", "date_created", "organization", "end_date", "is_active", "program", "visit_count", "org_pay_per_visit"]
+        fields = [
+            "id",
+            "name",
+            "date_created",
+            "organization",
+            "end_date",
+            "is_active",
+            "program",
+            "visit_count",
+            "org_pay_per_visit",
+        ]
 
     def get_program(self, obj) -> int:
         return obj.managedopportunity.program_id if obj.managed else None
