@@ -9,6 +9,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.db.models import F, Q, Sum, TextChoices
 from django.urls import reverse
+from django.utils.html import format_html
 from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
 from waffle import switch_is_active
@@ -272,6 +273,15 @@ class OpportunityInitForm(forms.ModelForm):
         self.org_slug = kwargs.pop("org_slug", "")
         super().__init__(*args, **kwargs)
 
+        self.fields["short_description"].label = format_html(
+            "{} <i class='fa-solid fa-circle-info text-gray-400' x-tooltip.raw='{}'></i>",
+            _("Short description"),
+            _(
+                "This field is used to provide a description to users on the mobile app. "
+                "It is displayed when the user wants to view more information about the opportunity."
+            ),
+        )
+
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
             Row(
@@ -327,6 +337,11 @@ class OpportunityInitForm(forms.ModelForm):
         )
 
         self.fields["description"] = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
+        self.fields["description"].label = format_html(
+            "{} <i class='fa-solid fa-circle-info text-gray-400' x-tooltip.raw='{}'></i>",
+            _("Description"),
+            _("This field is used to provide a description to users accessing the opportunity on the web."),
+        )
 
         def get_htmx_swap_attrs(url_query: str, include: str, trigger: str):
             return {
