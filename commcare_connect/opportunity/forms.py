@@ -1127,25 +1127,34 @@ class PaymentInvoiceForm(forms.ModelForm):
         self.fields["date"].initial = str(datetime.date.today())
 
         self.helper = FormHelper(self)
+
+        invoice_form_fields = self.invoice_form_fields()
+        if self.is_service_delivery:
+            invoice_form_fields.append(Field("notes"))
+
         self.helper.layout = Layout(
+            *invoice_form_fields,
             Div(
-                Div(
-                    Field("invoice_number", **{"readonly": "readonly"}),
-                    Field("title") if self.is_service_delivery else None,
-                    css_class="grid grid-cols-3 gap-6",
-                ),
-                Div(
-                    Field(
-                        "date",
-                        **{
-                            "x-ref": "date",
-                            "x-on:change": "convert()",
-                        },
-                    ),
-                    Field("start_date") if self.is_service_delivery else None,
-                    Field("end_date") if self.is_service_delivery else None,
-                    css_class="grid grid-cols-3 gap-6",
-                ),
+                Submit("submit", "Submit", css_class="button button-md primary-dark"),
+                css_class="flex justify-end mt-4",
+            ),
+        )
+        self.helper.form_tag = False
+
+    def invoice_form_fields(self):
+        first_row = [Field("invoice_number", **{"readonly": "readonly"})]
+        if self.is_service_delivery:
+            first_row.append(Field("title"))
+
+        second_row = [Field("date", **{"x-ref": "date", "x-on:change": "convert()"})]
+        if self.is_service_delivery:
+            second_row.append(Field("start_date"))
+            second_row.append(Field("end_date"))
+
+        return [
+            Div(
+                Div(*first_row, css_class="grid grid-cols-3 gap-6"),
+                Div(*second_row, css_class="grid grid-cols-3 gap-6"),
                 Div(
                     Field(
                         "local_amount",
@@ -1161,13 +1170,7 @@ class PaymentInvoiceForm(forms.ModelForm):
                 ),
                 css_class="flex flex-col gap-4",
             ),
-            Field("notes") if self.is_service_delivery else None,
-            Div(
-                Submit("submit", "Submit", css_class="button button-md primary-dark"),
-                css_class="flex justify-end mt-4",
-            ),
-        )
-        self.helper.form_tag = False
+        ]
 
     def generate_invoice_number(self):
         return uuid.uuid4().hex[:10].upper()
