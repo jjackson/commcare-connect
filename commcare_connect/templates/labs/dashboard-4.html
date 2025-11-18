@@ -1,0 +1,493 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-6" x-data="dashboard4Data()">
+  <div class="mb-6">
+    <h1 class="text-3xl font-bold mb-2">Dashboard Prototype 4: Drill-Down Tables</h1>
+    <p class="text-gray-600 mb-4">Table-based navigation with breadcrumbs: Program Type → Program → Opportunity → FLWs</p>
+    <a href="{% url 'labs:dashboard' %}" class="text-blue-600 hover:underline">← Back to Dashboard</a>
+  </div>
+
+  <nav class="mb-6 flex items-center space-x-2 text-sm">
+    <a @click="navigateTo('types')" class="text-blue-600 hover:underline cursor-pointer">Dashboard</a>
+    <template x-if="currentView !== 'types'">
+      <span class="text-gray-400">›</span>
+    </template>
+    <template x-if="breadcrumb.type">
+      <a @click="navigateTo('programs', breadcrumb.type)" class="text-blue-600 hover:underline cursor-pointer" x-text="breadcrumb.type"></a>
+    </template>
+    <template x-if="breadcrumb.program">
+      <span class="text-gray-400">›</span>
+    </template>
+    <template x-if="breadcrumb.program">
+      <a @click="navigateTo('opportunities', breadcrumb.type, breadcrumb.program)" class="text-blue-600 hover:underline cursor-pointer" x-text="breadcrumb.program.name"></a>
+    </template>
+    <template x-if="breadcrumb.opportunity">
+      <span class="text-gray-400">›</span>
+    </template>
+    <template x-if="breadcrumb.opportunity">
+      <span class="text-gray-700" x-text="breadcrumb.opportunity.name"></span>
+    </template>
+  </nav>
+
+  <div class="bg-white rounded-lg shadow overflow-hidden">
+    <template x-if="currentView === 'types'">
+      <div>
+        <div class="px-6 py-4 border-b bg-gray-50">
+          <h2 class="text-xl font-semibold">Program Types</h2>
+        </div>
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th @click="sortTable('name')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                Type <span x-show="sortBy === 'name'" x-text="sortDesc ? '▼' : '▲'"></span>
+              </th>
+              <th @click="sortTable('programs')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                Programs <span x-show="sortBy === 'programs'" x-text="sortDesc ? '▼' : '▲'"></span>
+              </th>
+              <th @click="sortTable('opportunities')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                Opportunities <span x-show="sortBy === 'opportunities'" x-text="sortDesc ? '▼' : '▲'"></span>
+              </th>
+              <th @click="sortTable('visits')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                Total Visits <span x-show="sortBy === 'visits'" x-text="sortDesc ? '▼' : '▲'"></span>
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Currencies</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <template x-for="item in sortedTypeData" :key="item.name">
+              <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class="font-medium" x-text="item.name"></span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap" x-text="item.programCount"></td>
+                <td class="px-6 py-4 whitespace-nowrap" x-text="item.oppCount"></td>
+                <td class="px-6 py-4 whitespace-nowrap" x-text="item.totalVisits"></td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex gap-1">
+                    <template x-for="currency in item.currencies" :key="currency">
+                      <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded" x-text="currency"></span>
+                    </template>
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <button @click="navigateTo('programs', item.name)" class="text-blue-600 hover:underline">View Programs →</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+          <tfoot class="bg-gray-50">
+            <tr>
+              <td class="px-6 py-3 font-semibold">Total</td>
+              <td class="px-6 py-3 font-semibold" x-text="totalStats.programs"></td>
+              <td class="px-6 py-3 font-semibold" x-text="totalStats.opportunities"></td>
+              <td class="px-6 py-3 font-semibold" x-text="totalStats.visits"></td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </template>
+
+    <template x-if="currentView === 'programs'">
+      <div>
+        <div class="px-6 py-4 border-b bg-gray-50">
+          <h2 class="text-xl font-semibold">Programs in <span x-text="breadcrumb.type"></span></h2>
+        </div>
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th @click="sortTable('name')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                Name <span x-show="sortBy === 'name'" x-text="sortDesc ? '▼' : '▲'"></span>
+              </th>
+              <th @click="sortTable('opportunities')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                Opportunities <span x-show="sortBy === 'opportunities'" x-text="sortDesc ? '▼' : '▲'"></span>
+              </th>
+              <th @click="sortTable('active')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                Active/Total <span x-show="sortBy === 'active'" x-text="sortDesc ? '▼' : '▲'"></span>
+              </th>
+              <th @click="sortTable('visits')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                Total Visits <span x-show="sortBy === 'visits'" x-text="sortDesc ? '▼' : '▲'"></span>
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Currency</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <template x-for="program in sortedProgramData" :key="program.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4">
+                  <div class="font-medium" x-text="program.name"></div>
+                  <div class="text-sm text-gray-500">ID: <span x-text="program.id"></span></div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap" x-text="program.opportunities.length"></td>
+                <td class="px-6 py-4 whitespace-nowrap" x-text="`${program.activeOpps}/${program.opportunities.length}`"></td>
+                <td class="px-6 py-4 whitespace-nowrap" x-text="program.totalVisits"></td>
+                <td class="px-6 py-4 whitespace-nowrap" x-text="program.currency"></td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <button @click="navigateTo('opportunities', breadcrumb.type, program)" class="text-blue-600 hover:underline">View Opportunities →</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+          <tfoot class="bg-gray-50">
+            <tr>
+              <td class="px-6 py-3 font-semibold">Total</td>
+              <td class="px-6 py-3 font-semibold" x-text="currentPrograms.reduce((sum, p) => sum + p.opportunities.length, 0)"></td>
+              <td colspan="4"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </template>
+
+    <template x-if="currentView === 'opportunities'">
+      <div>
+        <div class="px-6 py-4 border-b bg-gray-50">
+          <h2 class="text-xl font-semibold">Opportunities in <span x-text="breadcrumb.program.name"></span></h2>
+        </div>
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th @click="sortTable('name')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                Name <span x-show="sortBy === 'name'" x-text="sortDesc ? '▼' : '▲'"></span>
+              </th>
+              <th @click="sortTable('active')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                Status <span x-show="sortBy === 'active'" x-text="sortDesc ? '▼' : '▲'"></span>
+              </th>
+              <th @click="sortTable('visits')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                Visits <span x-show="sortBy === 'visits'" x-text="sortDesc ? '▼' : '▲'"></span>
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">End Date</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <template x-for="opp in sortedOpportunityData" :key="opp.id">
+              <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4">
+                  <div class="font-medium" x-text="opp.name"></div>
+                  <div class="text-sm text-gray-500">ID: <span x-text="opp.id"></span></div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span
+                    :class="opp.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                    class="px-2 py-1 text-xs rounded"
+                    x-text="opp.is_active ? 'Active' : 'Inactive'"
+                  ></span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap" x-text="opp.visit_count || 0"></td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600" x-text="opp.date_created ? new Date(opp.date_created).toLocaleDateString() : 'N/A'"></td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600" x-text="opp.end_date ? new Date(opp.end_date).toLocaleDateString() : 'N/A'"></td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <button @click="navigateTo('flws', breadcrumb.type, breadcrumb.program, opp)" class="text-blue-600 hover:underline">View FLWs →</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+          <tfoot class="bg-gray-50">
+            <tr>
+              <td class="px-6 py-3 font-semibold">Total</td>
+              <td colspan="1"></td>
+              <td class="px-6 py-3 font-semibold" x-text="currentOpportunities.reduce((sum, o) => sum + (o.visit_count || 0), 0)"></td>
+              <td colspan="3"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </template>
+
+    <template x-if="currentView === 'flws'">
+      <div>
+        <div class="px-6 py-4 border-b bg-gray-50">
+          <h2 class="text-xl font-semibold">Field Workers for <span x-text="breadcrumb.opportunity.name"></span></h2>
+        </div>
+
+        <template x-if="flwDataLoading">
+          <div class="flex items-center justify-center p-12">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            <span class="ml-4 text-gray-600 text-lg">Loading FLWs...</span>
+          </div>
+        </template>
+
+        <template x-if="flwDataError">
+          <div class="p-6">
+            <div class="bg-red-50 border border-red-200 rounded p-4">
+              <p class="text-red-800">Error loading FLWs: <span x-text="flwDataError"></span></p>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="!flwDataLoading && !flwDataError && currentFlws.length > 0">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th @click="sortTable('username')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                  Username <span x-show="sortBy === 'username'" x-text="sortDesc ? '▼' : '▲'"></span>
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                <th @click="sortTable('payment')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                  Payment Accrued <span x-show="sortBy === 'payment'" x-text="sortDesc ? '▼' : '▲'"></span>
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th @click="sortTable('lastActive')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                  Last Active <span x-show="sortBy === 'lastActive'" x-text="sortDesc ? '▼' : '▲'"></span>
+                </th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <template x-for="flw in sortedFlwData" :key="flw.username">
+                <tr class="hover:bg-gray-50">
+                  <td class="px-6 py-4">
+                    <div class="font-medium" x-text="flw.username"></div>
+                    <template x-if="flw.suspended">
+                      <span class="inline-block mt-1 px-2 py-1 bg-red-100 text-red-800 text-xs rounded">Suspended</span>
+                    </template>
+                  </td>
+                  <td class="px-6 py-4 text-sm" x-text="flw.phone"></td>
+                  <td class="px-6 py-4 font-semibold" x-text="flw.payment_accrued || 0"></td>
+                  <td class="px-6 py-4 text-sm">
+                    <span
+                      :class="{'text-green-600': flw.user_invite_status === 'accepted', 'text-yellow-600': flw.user_invite_status === 'invited'}"
+                      x-text="flw.user_invite_status"
+                    ></span>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600" x-text="flw.last_active ? new Date(flw.last_active).toLocaleDateString() : 'N/A'"></td>
+                </tr>
+              </template>
+            </tbody>
+            <tfoot class="bg-gray-50">
+              <tr>
+                <td class="px-6 py-3 font-semibold">Total: <span x-text="currentFlws.length"></span> FLWs</td>
+                <td colspan="1"></td>
+                <td class="px-6 py-3 font-semibold" x-text="currentFlws.reduce((sum, f) => sum + (f.payment_accrued || 0), 0)"></td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </template>
+
+        <template x-if="!flwDataLoading && !flwDataError && currentFlws.length === 0">
+          <div class="text-center text-gray-600 p-12">No FLWs found for this opportunity.</div>
+        </template>
+      </div>
+    </template>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block inline_javascript %}
+<script>
+function dashboard4Data() {
+  return {
+    programs: {{ programs_json|safe }},
+    opportunities: {{ opportunities_json|safe }},
+    groupedData: {},
+    currentView: 'types',
+    breadcrumb: {
+      type: null,
+      program: null,
+      opportunity: null
+    },
+    currentPrograms: [],
+    currentOpportunities: [],
+    currentFlws: [],
+    flwDataLoading: false,
+    flwDataError: null,
+    sortBy: 'name',
+    sortDesc: false,
+    totalStats: { programs: 0, opportunities: 0, visits: 0 },
+
+    init() {
+      this.processData();
+    },
+
+    processData() {
+      const programMap = new Map(this.programs.map(p => [p.id, p]));
+      const orphanedOpportunities = [];
+
+      this.opportunities.forEach(opp => {
+        const program = programMap.get(opp.program);
+        if (program) {
+          if (!program.opportunities) {
+            program.opportunities = [];
+          }
+          program.opportunities.push(opp);
+        } else if (opp.program === null) {
+          // Opportunity has no program
+          orphanedOpportunities.push(opp);
+        }
+      });
+
+      const grouped = {};
+      let totalProgs = 0;
+      let totalOpps = 0;
+      let totalVisits = 0;
+
+      this.programs.forEach(program => {
+        const typeName = program.delivery_type || 'Uncategorized';
+
+        if (!grouped[typeName]) {
+          grouped[typeName] = {
+            programs: [],
+            totalOpps: 0,
+            totalVisits: 0,
+            currencies: new Set()
+          };
+        }
+
+        program.opportunities = program.opportunities || [];
+        program.activeOpps = program.opportunities.filter(o => o.is_active).length;
+        program.totalVisits = program.opportunities.reduce((sum, o) => sum + (o.visit_count || 0), 0);
+
+        grouped[typeName].programs.push(program);
+        grouped[typeName].totalOpps += program.opportunities.length;
+        grouped[typeName].totalVisits += program.totalVisits;
+        grouped[typeName].currencies.add(program.currency);
+
+        totalProgs++;
+        totalOpps += program.opportunities.length;
+        totalVisits += program.totalVisits;
+      });
+
+      // Add "no program" category if there are orphaned opportunities
+      if (orphanedOpportunities.length > 0) {
+        grouped['no program'] = {
+          programs: [{
+            id: 'no-program',
+            name: 'Opportunities without Program',
+            delivery_type: 'no program',
+            currency: 'N/A',
+            organization: 'various',
+            opportunities: orphanedOpportunities,
+            activeOpps: orphanedOpportunities.filter(o => o.is_active).length,
+            totalVisits: orphanedOpportunities.reduce((sum, o) => sum + (o.visit_count || 0), 0)
+          }],
+          totalOpps: orphanedOpportunities.length,
+          totalVisits: orphanedOpportunities.reduce((sum, o) => sum + (o.visit_count || 0), 0),
+          currencies: ['N/A']
+        };
+        totalProgs++;
+        totalOpps += orphanedOpportunities.length;
+        totalVisits += orphanedOpportunities.reduce((sum, o) => sum + (o.visit_count || 0), 0);
+      }
+
+      Object.keys(grouped).forEach(key => {
+        grouped[key].currencies = Array.from(grouped[key].currencies);
+      });
+
+      this.groupedData = grouped;
+      this.totalStats = { programs: totalProgs, opportunities: totalOpps, visits: totalVisits };
+    },
+
+    navigateTo(view, type = null, programOrOpp = null, opp = null) {
+      this.currentView = view;
+      this.sortBy = 'name';
+      this.sortDesc = false;
+
+      if (view === 'types') {
+        this.breadcrumb = { type: null, program: null, opportunity: null };
+      } else if (view === 'programs') {
+        this.breadcrumb = { type: type, program: null, opportunity: null };
+        this.currentPrograms = this.groupedData[type].programs;
+      } else if (view === 'opportunities') {
+        this.breadcrumb = { type: type, program: programOrOpp, opportunity: null };
+        this.currentOpportunities = programOrOpp.opportunities;
+      } else if (view === 'flws') {
+        this.breadcrumb = { type: type, program: programOrOpp, opportunity: opp };
+        this.fetchFLWs(opp.id);
+      }
+    },
+
+    async fetchFLWs(oppId) {
+      this.flwDataLoading = true;
+      this.flwDataError = null;
+      this.currentFlws = [];
+
+      try {
+        const response = await fetch(`/labs/api/opportunity/${oppId}/flws/`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        this.currentFlws = data.flws || [];
+      } catch (error) {
+        console.error('Error fetching FLWs:', error);
+        this.flwDataError = error.message;
+      } finally {
+        this.flwDataLoading = false;
+      }
+    },
+
+    sortTable(column) {
+      if (this.sortBy === column) {
+        this.sortDesc = !this.sortDesc;
+      } else {
+        this.sortBy = column;
+        this.sortDesc = false;
+      }
+    },
+
+    get sortedTypeData() {
+      const data = Object.keys(this.groupedData).map(name => ({
+        name: name,
+        programCount: this.groupedData[name].programs.length,
+        oppCount: this.groupedData[name].totalOpps,
+        totalVisits: this.groupedData[name].totalVisits,
+        currencies: this.groupedData[name].currencies
+      }));
+
+      return this.sortData(data, this.sortBy, {
+        name: (item) => item.name,
+        programs: (item) => item.programCount,
+        opportunities: (item) => item.oppCount,
+        visits: (item) => item.totalVisits
+      });
+    },
+
+    get sortedProgramData() {
+      return this.sortData(this.currentPrograms, this.sortBy, {
+        name: (item) => item.name,
+        opportunities: (item) => item.opportunities.length,
+        active: (item) => item.activeOpps,
+        visits: (item) => item.totalVisits
+      });
+    },
+
+    get sortedOpportunityData() {
+      return this.sortData(this.currentOpportunities, this.sortBy, {
+        name: (item) => item.name,
+        active: (item) => item.is_active,
+        visits: (item) => item.visit_count || 0
+      });
+    },
+
+    get sortedFlwData() {
+      return this.sortData(this.currentFlws, this.sortBy, {
+        username: (item) => item.username,
+        payment: (item) => item.payment_accrued || 0,
+        lastActive: (item) => item.last_active ? new Date(item.last_active).getTime() : 0
+      });
+    },
+
+    sortData(data, column, getters) {
+      const sorted = [...data];
+      const getter = getters[column];
+      if (!getter) return sorted;
+
+      sorted.sort((a, b) => {
+        const aVal = getter(a);
+        const bVal = getter(b);
+        const result = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return this.sortDesc ? -result : result;
+      });
+
+      return sorted;
+    }
+  };
+}
+</script>
+{% endblock %}

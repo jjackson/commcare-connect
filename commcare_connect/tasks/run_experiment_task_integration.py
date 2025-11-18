@@ -101,11 +101,10 @@ def test_experiment_task_flow():
     # Step 4: Initialize TaskDataAccess
     print("\n[4] Initializing TaskDataAccess...")
     try:
-        # Initialize with OAuth token directly
-        from commcare_connect.labs.config import LABS_DEFAULT_OPP_ID
+        # Initialize with OAuth token directly (will use organization_id from context)
         from commcare_connect.tasks.data_access import TaskDataAccess
 
-        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=oauth_user, access_token=access_token)
+        data_access = TaskDataAccess(user=oauth_user, access_token=access_token)
         print("[OK] TaskDataAccess initialized")
 
     except Exception as e:

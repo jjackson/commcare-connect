@@ -15,7 +15,7 @@ This document summarizes the migration from `ExperimentRecord` (local database p
 
 2. **LabsRecordAPIClient** (`labs/api_client.py`)
 
-   - Pure HTTP client for production `/export/opportunity/{opp_id}/labs_record/` API
+   - Pure HTTP client for production `/export/labs_record/` API
    - Methods:
      - `get_records(experiment, type, **filters)` → `list[LocalLabsRecord]`
      - `get_record_by_id(record_id, experiment, type)` → `LocalLabsRecord | None`
@@ -233,15 +233,11 @@ audit/tests/
 
 ## Breaking Changes Summary
 
-1. **Data Access Initialization**: All require `opportunity_id` parameter
-2. **Return Types**: `QuerySet` → `list` (no Django ORM methods)
-3. **User Identification**: `user_id` (int) → `username` (str)
-4. **Parent References**: `parent_id` → `labs_record_id`
-5. **Save Operations**: No `.save()` method, must use `labs_api.update_record()`
+. **Data Access Initialization**: Support flexible scoping via `organization_id`, `program_id`, or `opportunity_id` 2. **Return Types**: `QuerySet` → `list` (no Django ORM methods) 3. **User Identification**: `user_id` (int) → `username` (str) 4. **Parent References**: `parent_id` → `labs_record_id` 5. **Save Operations**: No `.save()` method, must use `labs_api.update_record()`
 
 ## Production API Endpoint
 
-**URL**: `/export/opportunity/<int:opp_id>/labs_record/`
+**URL**: `/export/labs_record/` (no opportunity_id in URL path)
 
 **Authentication**: OAuth Bearer token
 
@@ -250,10 +246,13 @@ audit/tests/
 - `experiment`: Filter by experiment name
 - `type`: Filter by record type
 - `username`: Filter by username
-- `organization_id`: Filter by org
-- `program_id`: Filter by program (coming soon)
+- `opportunity_id`: Filter by opportunity (optional)
+- `organization_id`: Filter by organization (optional)
+- `program_id`: Filter by program (optional)
 - `labs_record_id`: Filter by parent
 - `data__<field>`: Filter by JSON data field
+
+**Note**: At least one of `opportunity_id`, `organization_id`, or `program_id` must be provided for scoping.
 
 **POST Body** (upsert):
 
@@ -266,7 +265,8 @@ audit/tests/
     "data": {"status": "in_progress", ...},
     "username": "user@example.com",
     "labs_record_id": 789,  // Parent reference
-    "program_id": 25  // Coming soon
+    "organization_id": 25,  // Optional
+    "program_id": 15  // Optional
   }
 ]
 ```

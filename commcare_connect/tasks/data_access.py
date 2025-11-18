@@ -26,7 +26,9 @@ class TaskDataAccess:
 
     def __init__(
         self,
-        opportunity_id: int,
+        opportunity_id: int | None = None,
+        organization_id: int | None = None,
+        program_id: int | None = None,
         user=None,
         request: HttpRequest | None = None,
         access_token: str | None = None,
@@ -35,14 +37,36 @@ class TaskDataAccess:
         Initialize the task data access layer.
 
         Args:
-            opportunity_id: Primary opportunity ID for tasks
+            opportunity_id: Optional opportunity ID for scoped API requests
+            organization_id: Optional organization ID for scoped API requests
+            program_id: Optional program ID for scoped API requests
             user: Django User object (for OAuth token extraction)
-            request: HttpRequest object (for extracting token in labs mode)
+            request: HttpRequest object (for extracting token and org context in labs mode)
             access_token: OAuth token for Connect production APIs
         """
         self.opportunity_id = opportunity_id
+        self.organization_id = organization_id
+        self.program_id = program_id
         self.user = user
         self.request = request
+
+        # Extract organization_id or opportunity_id from request if available and not provided
+        if not organization_id and not opportunity_id and request:
+            # Get from user's OAuth data
+            if hasattr(request.user, "_org_data"):
+                # Production API doesn't return organization IDs, only slugs
+                # But programs and opportunities DO have IDs, so use those instead
+                # Note: We use the FIRST program for scoping (not hardcoded)
+                # Views that need multi-program access should loop and create multiple instances
+                programs = request.user._org_data.get("programs", [])
+                opportunities = request.user._org_data.get("opportunities", [])
+
+                # Prefer program_id since programs are org-scoped
+                if programs:
+                    self.program_id = programs[0].get("id")  # First program ID (dynamic, not hardcoded)
+                # Fall back to opportunity_id if no programs
+                elif opportunities:
+                    self.opportunity_id = opportunities[0].get("id")
 
         # Get OAuth token
         if not access_token and request:
@@ -72,7 +96,12 @@ class TaskDataAccess:
         )
 
         # Initialize Labs API client for state management
-        self.labs_api = LabsRecordAPIClient(access_token, opportunity_id)
+        self.labs_api = LabsRecordAPIClient(
+            access_token,
+            opportunity_id=self.opportunity_id,
+            organization_id=self.organization_id,
+            program_id=self.program_id,
+        )
 
     def close(self):
         """Close HTTP client."""

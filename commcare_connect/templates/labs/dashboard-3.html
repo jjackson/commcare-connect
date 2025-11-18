@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-6" x-data="dashboard3Data()">
+  <div class="mb-6">
+    <h1 class="text-3xl font-bold mb-2">Dashboard Prototype 3: Tree/Sidebar Navigation</h1>
+    <p class="text-gray-600 mb-4">Interactive tree with detail panel: Program Type → Program → Opportunity → FLWs</p>
+    <a href="{% url 'labs:dashboard' %}" class="text-blue-600 hover:underline">← Back to Dashboard</a>
+  </div>
+
+  <div class="mb-4 flex gap-4">
+    <input
+      type="text"
+      x-model="searchQuery"
+      placeholder="Search programs or opportunities..."
+      class="flex-1 px-4 py-2 border rounded-lg"
+    >
+    <select x-model="filterDeliveryType" class="px-4 py-2 border rounded-lg">
+      <option value="">All Delivery Types</option>
+      <template x-for="type in deliveryTypes" :key="type">
+        <option :value="type" x-text="type"></option>
+      </template>
+    </select>
+    <select x-model="filterActive" class="px-4 py-2 border rounded-lg">
+      <option value="">All Opportunities</option>
+      <option value="active">Active Only</option>
+      <option value="inactive">Inactive Only</option>
+    </select>
+  </div>
+
+  <div class="flex gap-6">
+    <div class="w-1/3 bg-white border rounded-lg p-4 max-h-[800px] overflow-y-auto">
+      <h3 class="font-semibold mb-3">Navigation Tree</h3>
+
+      <template x-for="(programType, typeName) in filteredGroupedData" :key="typeName">
+        <div class="mb-2">
+          <div
+            @click="toggleTreeNode('type', typeName); selectItem('type', typeName)"
+            :class="selectedItem.type === 'type' && selectedItem.id === typeName ? 'bg-indigo-100' : 'hover:bg-gray-100'"
+            class="cursor-pointer p-2 rounded flex justify-between items-center"
+          >
+            <span class="font-medium">
+              <span x-text="expandedTreeNodes['type-' + typeName] ? '▼' : '▶'"></span>
+              <span x-text="typeName || 'Uncategorized'"></span>
+            </span>
+            <span class="text-xs bg-gray-200 px-2 py-1 rounded" x-text="programType.programs.length"></span>
+          </div>
+
+          <div x-show="expandedTreeNodes['type-' + typeName]" class="ml-4">
+            <template x-for="program in programType.programs" :key="program.id">
+              <div class="mb-1">
+                <div
+                  @click="toggleTreeNode('program', program.id); selectItem('program', program)"
+                  :class="selectedItem.type === 'program' && selectedItem.id === program.id ? 'bg-indigo-100' : 'hover:bg-gray-100'"
+                  class="cursor-pointer p-2 rounded flex justify-between items-center text-sm"
+                >
+                  <span>
+                    <span x-text="expandedTreeNodes['program-' + program.id] ? '▼' : '▶'"></span>
+                    <span x-text="program.name"></span>
+                  </span>
+                  <span class="text-xs bg-gray-200 px-2 py-1 rounded" x-text="program.opportunities.length"></span>
+                </div>
+
+                <div x-show="expandedTreeNodes['program-' + program.id]" class="ml-4">
+                  <template x-for="opp in program.opportunities" :key="opp.id">
+                    <div
+                      @click="selectItem('opportunity', opp); loadFLWsIfNeeded(opp.id)"
+                      :class="selectedItem.type === 'opportunity' && selectedItem.id === opp.id ? 'bg-indigo-100' : 'hover:bg-gray-100'"
+                      class="cursor-pointer p-2 rounded text-sm flex justify-between items-center"
+                    >
+                      <span x-text="opp.name"></span>
+                      <span
+                        :class="opp.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                        class="text-xs px-2 py-1 rounded"
+                        x-text="opp.is_active ? '●' : '○'"
+                      ></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div class="flex-1 bg-white border rounded-lg p-6 max-h-[800px] overflow-y-auto">
+      <template x-if="!selectedItem.type">
+        <div class="text-center text-gray-500 p-12">
+          Select an item from the tree to view details
+        </div>
+      </template>
+
+      <template x-if="selectedItem.type === 'type'">
+        <div>
+          <h2 class="text-2xl font-bold mb-4">Program Type: <span x-text="selectedItem.id"></span></h2>
+          <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="bg-blue-50 p-4 rounded">
+              <p class="text-sm text-gray-600">Programs</p>
+              <p class="text-2xl font-bold" x-text="filteredGroupedData[selectedItem.id].programs.length"></p>
+            </div>
+            <div class="bg-green-50 p-4 rounded">
+              <p class="text-sm text-gray-600">Opportunities</p>
+              <p class="text-2xl font-bold" x-text="filteredGroupedData[selectedItem.id].totalOpps"></p>
+            </div>
+            <div class="bg-purple-50 p-4 rounded">
+              <p class="text-sm text-gray-600">Total Visits</p>
+              <p class="text-2xl font-bold" x-text="filteredGroupedData[selectedItem.id].totalVisits"></p>
+            </div>
+            <div class="bg-yellow-50 p-4 rounded">
+              <p class="text-sm text-gray-600">Currencies</p>
+              <p class="text-lg font-bold" x-text="filteredGroupedData[selectedItem.id].currencies.join(', ')"></p>
+            </div>
+          </div>
+          <h3 class="font-semibold mb-2">Programs in this type:</h3>
+          <ul class="space-y-2">
+            <template x-for="program in filteredGroupedData[selectedItem.id].programs" :key="program.id">
+              <li class="border-l-4 border-indigo-400 pl-3 py-2 hover:bg-gray-50 cursor-pointer" @click="selectItem('program', program)">
+                <p class="font-medium" x-text="program.name"></p>
+                <p class="text-sm text-gray-600"><span x-text="program.opportunities.length"></span> opportunities</p>
+              </li>
+            </template>
+          </ul>
+        </div>
+      </template>
+
+      <template x-if="selectedItem.type === 'program'">
+        <div>
+          <h2 class="text-2xl font-bold mb-2" x-text="selectedItem.data.name"></h2>
+          <p class="text-gray-600 mb-4">Program ID: <span x-text="selectedItem.data.id"></span> | Org: <span x-text="selectedItem.data.organization"></span></p>
+
+          <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="bg-blue-50 p-4 rounded">
+              <p class="text-sm text-gray-600">Opportunities</p>
+              <p class="text-2xl font-bold" x-text="selectedItem.data.opportunities.length"></p>
+            </div>
+            <div class="bg-green-50 p-4 rounded">
+              <p class="text-sm text-gray-600">Active</p>
+              <p class="text-2xl font-bold" x-text="selectedItem.data.activeOpps"></p>
+            </div>
+            <div class="bg-purple-50 p-4 rounded">
+              <p class="text-sm text-gray-600">Total Visits</p>
+              <p class="text-2xl font-bold" x-text="selectedItem.data.totalVisits"></p>
+            </div>
+          </div>
+
+          <h3 class="font-semibold mb-2">Opportunities in this program:</h3>
+          <div class="space-y-2">
+            <template x-for="opp in selectedItem.data.opportunities" :key="opp.id">
+              <div class="border rounded p-3 hover:bg-gray-50 cursor-pointer" @click="selectItem('opportunity', opp); loadFLWsIfNeeded(opp.id)">
+                <div class="flex justify-between items-start">
+                  <div>
+                    <p class="font-medium" x-text="opp.name"></p>
+                    <p class="text-sm text-gray-600">ID: <span x-text="opp.id"></span> | Visits: <span x-text="opp.visit_count || 0"></span></p>
+                  </div>
+                  <span
+                    :class="opp.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                    class="px-2 py-1 text-xs rounded"
+                    x-text="opp.is_active ? 'Active' : 'Inactive'"
+                  ></span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="selectedItem.type === 'opportunity'">
+        <div>
+          <h2 class="text-2xl font-bold mb-2" x-text="selectedItem.data.name"></h2>
+          <p class="text-gray-600 mb-4">
+            Opportunity ID: <span x-text="selectedItem.data.id"></span> |
+            Status: <span :class="selectedItem.data.is_active ? 'text-green-600' : 'text-red-600'" x-text="selectedItem.data.is_active ? 'Active' : 'Inactive'"></span>
+          </p>
+
+          <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="bg-purple-50 p-4 rounded">
+              <p class="text-sm text-gray-600">Total Visits</p>
+              <p class="text-2xl font-bold" x-text="selectedItem.data.visit_count || 0"></p>
+            </div>
+            <div class="bg-blue-50 p-4 rounded">
+              <p class="text-sm text-gray-600">Organization</p>
+              <p class="text-lg font-bold" x-text="selectedItem.data.organization"></p>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <a
+              :href="`{{ connect_url }}/a/${selectedItem.data.organization}/opportunity/${selectedItem.data.id}/`"
+              target="_blank"
+              class="text-blue-600 hover:underline"
+            >
+              View in Production →
+            </a>
+          </div>
+
+          <h3 class="font-semibold mb-3">Field Workers</h3>
+
+          <template x-if="flwDataLoading[selectedItem.data.id]">
+            <div class="flex items-center justify-center p-8">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+              <span class="ml-3 text-gray-600">Loading FLWs...</span>
+            </div>
+          </template>
+
+          <template x-if="flwDataErrors[selectedItem.data.id]">
+            <div class="bg-red-50 border border-red-200 rounded p-4">
+              <p class="text-red-800">Error loading FLWs: <span x-text="flwDataErrors[selectedItem.data.id]"></span></p>
+            </div>
+          </template>
+
+          <template x-if="flwData[selectedItem.data.id] && flwData[selectedItem.data.id].length > 0">
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Last Active</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <template x-for="flw in flwData[selectedItem.data.id]" :key="flw.username">
+                    <tr class="hover:bg-gray-50">
+                      <td class="px-4 py-3 text-sm">
+                        <span x-text="flw.username"></span>
+                        <template x-if="flw.suspended">
+                          <span class="ml-2 inline-block px-2 py-1 bg-red-100 text-red-800 text-xs rounded">Suspended</span>
+                        </template>
+                      </td>
+                      <td class="px-4 py-3 text-sm" x-text="flw.phone"></td>
+                      <td class="px-4 py-3 text-sm font-semibold" x-text="flw.payment_accrued || 0"></td>
+                      <td class="px-4 py-3 text-sm" x-text="flw.user_invite_status"></td>
+                      <td class="px-4 py-3 text-sm text-gray-600" x-text="flw.last_active ? new Date(flw.last_active).toLocaleDateString() : 'N/A'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+
+          <template x-if="flwData[selectedItem.data.id] && flwData[selectedItem.data.id].length === 0">
+            <div class="text-gray-600 text-center p-8">No FLWs found for this opportunity.</div>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block inline_javascript %}
+<script>
+function dashboard3Data() {
+  return {
+    programs: {{ programs_json|safe }},
+    opportunities: {{ opportunities_json|safe }},
+    groupedData: {},
+    filteredGroupedData: {},
+    deliveryTypes: [],
+    searchQuery: '',
+    filterDeliveryType: '',
+    filterActive: '',
+    expandedTreeNodes: {},
+    selectedItem: { type: null, id: null, data: null },
+    flwData: {},
+    flwDataLoading: {},
+    flwDataErrors: {},
+
+    init() {
+      this.processData();
+      this.applyFilters();
+      this.$watch('searchQuery', () => this.applyFilters());
+      this.$watch('filterDeliveryType', () => this.applyFilters());
+      this.$watch('filterActive', () => this.applyFilters());
+    },
+
+    processData() {
+      const programMap = new Map(this.programs.map(p => [p.id, p]));
+      const orphanedOpportunities = [];
+
+      this.opportunities.forEach(opp => {
+        const program = programMap.get(opp.program);
+        if (program) {
+          if (!program.opportunities) {
+            program.opportunities = [];
+          }
+          program.opportunities.push(opp);
+        } else if (opp.program === null) {
+          // Opportunity has no program
+          orphanedOpportunities.push(opp);
+        }
+      });
+
+      const grouped = {};
+      const types = new Set();
+
+      this.programs.forEach(program => {
+        const typeName = program.delivery_type || 'Uncategorized';
+        types.add(typeName);
+
+        if (!grouped[typeName]) {
+          grouped[typeName] = {
+            programs: [],
+            totalOpps: 0,
+            totalVisits: 0,
+            currencies: new Set()
+          };
+        }
+
+        program.opportunities = program.opportunities || [];
+        program.activeOpps = program.opportunities.filter(o => o.is_active).length;
+        program.totalVisits = program.opportunities.reduce((sum, o) => sum + (o.visit_count || 0), 0);
+
+        grouped[typeName].programs.push(program);
+        grouped[typeName].totalOpps += program.opportunities.length;
+        grouped[typeName].totalVisits += program.totalVisits;
+        grouped[typeName].currencies.add(program.currency);
+      });
+
+      // Add "no program" category if there are orphaned opportunities
+      if (orphanedOpportunities.length > 0) {
+        types.add('no program');
+        grouped['no program'] = {
+          programs: [{
+            id: 'no-program',
+            name: 'Opportunities without Program',
+            delivery_type: 'no program',
+            currency: 'N/A',
+            organization: 'various',
+            opportunities: orphanedOpportunities,
+            activeOpps: orphanedOpportunities.filter(o => o.is_active).length,
+            totalVisits: orphanedOpportunities.reduce((sum, o) => sum + (o.visit_count || 0), 0)
+          }],
+          totalOpps: orphanedOpportunities.length,
+          totalVisits: orphanedOpportunities.reduce((sum, o) => sum + (o.visit_count || 0), 0),
+          currencies: ['N/A']
+        };
+      }
+
+      Object.keys(grouped).forEach(key => {
+        grouped[key].currencies = Array.from(grouped[key].currencies);
+      });
+
+      this.groupedData = grouped;
+      this.deliveryTypes = Array.from(types);
+    },
+
+    applyFilters() {
+      const filtered = {};
+      const query = this.searchQuery.toLowerCase();
+
+      Object.keys(this.groupedData).forEach(typeName => {
+        if (this.filterDeliveryType && typeName !== this.filterDeliveryType) {
+          return;
+        }
+
+        const typeData = this.groupedData[typeName];
+        const filteredPrograms = typeData.programs.map(program => {
+          const programMatches = !query || program.name.toLowerCase().includes(query);
+
+          let filteredOpps = program.opportunities;
+
+          if (this.filterActive === 'active') {
+            filteredOpps = filteredOpps.filter(o => o.is_active);
+          } else if (this.filterActive === 'inactive') {
+            filteredOpps = filteredOpps.filter(o => !o.is_active);
+          }
+
+          if (query) {
+            filteredOpps = filteredOpps.filter(o => o.name.toLowerCase().includes(query));
+          }
+
+          if (programMatches || filteredOpps.length > 0) {
+            return { ...program, opportunities: filteredOpps };
+          }
+          return null;
+        }).filter(p => p !== null);
+
+        if (filteredPrograms.length > 0) {
+          filtered[typeName] = {
+            ...typeData,
+            programs: filteredPrograms,
+            totalOpps: filteredPrograms.reduce((sum, p) => sum + p.opportunities.length, 0)
+          };
+        }
+      });
+
+      this.filteredGroupedData = filtered;
+    },
+
+    toggleTreeNode(type, id) {
+      const key = `${type}-${id}`;
+      this.expandedTreeNodes[key] = !this.expandedTreeNodes[key];
+    },
+
+    selectItem(type, data) {
+      this.selectedItem = {
+        type: type,
+        id: type === 'type' ? data : data.id,
+        data: type === 'type' ? null : data
+      };
+    },
+
+    async loadFLWsIfNeeded(oppId) {
+      if (!this.flwData[oppId]) {
+        await this.fetchFLWs(oppId);
+      }
+    },
+
+    async fetchFLWs(oppId) {
+      this.flwDataLoading[oppId] = true;
+      this.flwDataErrors[oppId] = null;
+
+      try {
+        const response = await fetch(`/labs/api/opportunity/${oppId}/flws/`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        this.flwData[oppId] = data.flws || [];
+      } catch (error) {
+        console.error('Error fetching FLWs:', error);
+        this.flwDataErrors[oppId] = error.message;
+      } finally {
+        this.flwDataLoading[oppId] = false;
+      }
+    }
+  };
+}
+</script>
+{% endblock %}

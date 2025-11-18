@@ -11,8 +11,6 @@ from django.utils import timezone
 from django.views.generic import DetailView, ListView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
 
-from commcare_connect.labs.config import LABS_DEFAULT_OPP_ID as SOLICITATION_DEFAULT_OPPORTUNITY_ID
-
 from .data_access import SolicitationDataAccess
 from .forms import SolicitationForm, SolicitationResponseForm, SolicitationReviewForm
 from .models import ResponseRecord, ReviewRecord, SolicitationRecord
@@ -143,7 +141,7 @@ class ManageSolicitationsListView(ListView):
 
     def get_queryset(self):
         # Use data access layer to filter by user's username
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
         return data_access.get_solicitations()
 
 
@@ -158,7 +156,7 @@ class MyResponsesListView(ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
 
         # Get user's organization slugs from OAuth data
         org_slugs = []
@@ -188,7 +186,7 @@ class SolicitationResponsesListView(SingleTableView):
 
     def dispatch(self, request, *args, **kwargs):
         # Store data_access as instance variable for use in multiple methods
-        self.data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=request)
+        self.data_access = SolicitationDataAccess(request=request)
 
         # Get the solicitation
         solicitation_pk = self.kwargs.get("solicitation_pk")
@@ -234,7 +232,7 @@ class SolicitationListView(ListView):
     paginate_by = 12
 
     def get_queryset(self):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
         solicitation_type = self.kwargs.get("type")
         filters = {"status": "active", "is_publicly_listed": True}
         if solicitation_type:
@@ -242,7 +240,7 @@ class SolicitationListView(ListView):
         return data_access.get_solicitations(**filters)
 
     def get_context_data(self, **kwargs):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
         context = super().get_context_data(**kwargs)
         context["current_type"] = self.kwargs.get("type", "all")
         context["total_active"] = len(data_access.get_solicitations(status="active", is_publicly_listed=True))
@@ -265,7 +263,7 @@ class SolicitationDetailView(DetailView):
     context_object_name = "solicitation"
 
     def get_object(self, queryset=None):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
         pk = self.kwargs.get("pk")
         solicitations = data_access.get_solicitations(status="active")
         for sol in solicitations:
@@ -274,7 +272,7 @@ class SolicitationDetailView(DetailView):
         raise Http404("Solicitation not found")
 
     def get_context_data(self, **kwargs):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
         context = super().get_context_data(**kwargs)
         solicitation = self.object
         today = timezone.now().date()
@@ -331,7 +329,7 @@ class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
     template_name = "solicitations/response_form.html"
 
     def get_object(self, queryset=None):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
         response_pk = self.kwargs.get("pk")
         if response_pk:
             # Edit mode - explicit PK provided
@@ -366,7 +364,7 @@ class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
         return None
 
     def dispatch(self, request, *args, **kwargs):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=request)
+        data_access = SolicitationDataAccess(request=request)
 
         # Get solicitation
         if self.kwargs.get("pk"):
@@ -387,7 +385,7 @@ class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
         kwargs = super().get_form_kwargs()
         kwargs["solicitation"] = self.solicitation
         kwargs["user"] = self.request.user
@@ -405,7 +403,7 @@ class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
         return context
 
     def form_valid(self, form):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
 
         # Get organization slug from form (user selected it)
         org_slug = form.cleaned_data.get("organization_id")
@@ -461,7 +459,7 @@ class SolicitationResponseDetailView(SolicitationResponseViewAccessMixin, Detail
     context_object_name = "response"
 
     def get_object(self, queryset=None):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
         pk = self.kwargs.get("pk")
         response = data_access.get_response_by_id(pk)
         if not response:
@@ -469,7 +467,7 @@ class SolicitationResponseDetailView(SolicitationResponseViewAccessMixin, Detail
         return response
 
     def get_context_data(self, **kwargs):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
         context = super().get_context_data(**kwargs)
         response = self.object
         solicitation = data_access.get_solicitation_by_id(response.labs_record_id)
@@ -513,7 +511,7 @@ class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, UpdateV
     template_name = "solicitations/review_form.html"
 
     def get_object(self, queryset=None):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
         response_pk = self.kwargs.get("response_pk")
         response = data_access.get_response_by_id(response_pk)
 
@@ -525,7 +523,7 @@ class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, UpdateV
         return review
 
     def dispatch(self, request, *args, **kwargs):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=request)
+        data_access = SolicitationDataAccess(request=request)
         response_pk = self.kwargs.get("response_pk")
         self.response = data_access.get_response_by_id(response_pk)
 
@@ -566,7 +564,7 @@ class SolicitationResponseReviewCreateOrUpdate(SolicitationManagerMixin, UpdateV
         return context
 
     def form_valid(self, form):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
         review_data = {
             "score": form.cleaned_data.get("score"),
             "recommendation": form.cleaned_data.get("recommendation"),
@@ -601,9 +599,7 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
     def get_object(self, queryset=None):
         pk = self.kwargs.get("pk")
         if pk:
-            data_access = SolicitationDataAccess(
-                opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request
-            )
+            data_access = SolicitationDataAccess(request=self.request)
             # Edit mode - return existing solicitation
             solicitation = data_access.get_solicitation_by_id(pk)
             if not solicitation:
@@ -662,7 +658,7 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
         return context
 
     def form_valid(self, form):
-        data_access = SolicitationDataAccess(opportunity_id=SOLICITATION_DEFAULT_OPPORTUNITY_ID, request=self.request)
+        data_access = SolicitationDataAccess(request=self.request)
         is_edit = self.object is not None
 
         # Get program ID and name from form (user selected from dropdown)

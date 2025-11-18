@@ -111,7 +111,7 @@ class LocalLabsRecord:
         """Initialize from production API response.
 
         Args:
-            api_data: Response data from /export/opportunity/{opp_id}/labs_record/ API
+            api_data: Response data from /export/labs_record/ API
         """
         self.id: int = api_data["id"]
         self.experiment: str = api_data["experiment"]
