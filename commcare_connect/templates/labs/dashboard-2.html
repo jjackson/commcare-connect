@@ -8,17 +8,38 @@
     <a href="{% url 'labs:dashboard' %}" class="text-blue-600 hover:underline">← Back to Dashboard</a>
   </div>
 
+  <!-- Filter Controls -->
+  <div class="bg-white border border-gray-200 rounded-lg p-4 mb-4 shadow-sm">
+    <div class="flex items-center gap-4">
+      <label class="font-semibold text-gray-700">Filter Test Opportunities:</label>
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-gray-600">Min Visits:</span>
+        <input
+          type="number"
+          x-model.number="minVisits"
+          @input="applyFilter()"
+          class="border border-gray-300 rounded px-3 py-1 w-24"
+          min="0"
+          placeholder="0"
+        />
+      </div>
+      <div class="text-sm text-gray-600">
+        Showing <span x-text="filteredOpportunitiesCount"></span> of <span x-text="totalOpportunitiesCount"></span> opportunities
+      </div>
+    </div>
+  </div>
+
   <!-- Debug info -->
-  <div class="bg-yellow-50 border border-yellow-200 rounded p-4 mb-4">
-    <p class="font-semibold">Debug Info:</p>
-    <p>Programs available: {{ user.programs|length }}</p>
+  <details class="bg-yellow-50 border border-yellow-200 rounded p-4 mb-4">
+    <summary class="cursor-pointer font-semibold">Debug Info (click to expand)</summary>
+    <p class="mt-2">Programs available: {{ user.programs|length }}</p>
     <p>Opportunities available: {{ user.opportunities|length }}</p>
-    <details>
+    <details class="mt-2">
       <summary class="cursor-pointer text-sm text-blue-600">View raw JSON (click to expand)</summary>
       <pre class="text-xs mt-2 p-2 bg-white rounded overflow-auto max-h-40">Programs JSON: {{ programs_json }}</pre>
       <pre class="text-xs mt-2 p-2 bg-white rounded overflow-auto max-h-40">Opportunities JSON: {{ opportunities_json }}</pre>
     </details>
-  </div>
+  </details>
 
   <template x-for="(programType, typeName) in groupedData" :key="typeName">
     <div class="mb-4 border rounded-lg shadow-sm bg-white">
@@ -173,19 +194,36 @@ function dashboard2Data() {
     flwDataLoading: {},
     flwDataErrors: {},
     groupedData: {},
+    minVisits: 0,
+    filteredOpportunitiesCount: 0,
+    totalOpportunitiesCount: 0,
 
     init() {
       console.log('Dashboard2 init - Programs:', this.programs);
       console.log('Dashboard2 init - Opportunities:', this.opportunities);
+
+      // Read min_visits from URL parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      this.minVisits = parseInt(urlParams.get('min_visits')) || 0;
+
+      this.totalOpportunitiesCount = this.opportunities.length;
       this.processData();
     },
 
     processData() {
-      console.log('Processing data...');
+      console.log('Processing data with minVisits filter:', this.minVisits);
+
+      // Clear existing opportunities from programs to avoid duplicates
+      this.programs.forEach(p => { p.opportunities = []; });
+
       const programMap = new Map(this.programs.map(p => [p.id, p]));
       const orphanedOpportunities = [];
 
-      this.opportunities.forEach(opp => {
+      // Filter opportunities based on visit count
+      const filteredOpportunities = this.opportunities.filter(opp => (opp.visit_count || 0) >= this.minVisits);
+      this.filteredOpportunitiesCount = filteredOpportunities.length;
+
+      filteredOpportunities.forEach(opp => {
         const program = programMap.get(opp.program);
         if (program) {
           if (!program.opportunities) {
@@ -277,6 +315,20 @@ function dashboard2Data() {
           await this.fetchFLWs(oppId);
         }
       }
+    },
+
+    applyFilter() {
+      // Update URL with new filter value
+      const url = new URL(window.location);
+      if (this.minVisits > 0) {
+        url.searchParams.set('min_visits', this.minVisits);
+      } else {
+        url.searchParams.delete('min_visits');
+      }
+      window.history.pushState({}, '', url);
+
+      // Reprocess data with new filter
+      this.processData();
     },
 
     async fetchFLWs(oppId) {

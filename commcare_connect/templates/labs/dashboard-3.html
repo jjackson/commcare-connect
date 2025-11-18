@@ -8,7 +8,7 @@
     <a href="{% url 'labs:dashboard' %}" class="text-blue-600 hover:underline">← Back to Dashboard</a>
   </div>
 
-  <div class="mb-4 flex gap-4">
+  <div class="mb-4 flex gap-4 flex-wrap">
     <input
       type="text"
       x-model="searchQuery"
@@ -26,6 +26,21 @@
       <option value="active">Active Only</option>
       <option value="inactive">Inactive Only</option>
     </select>
+    <div class="flex items-center gap-2 border rounded-lg px-3 py-2">
+      <label class="text-sm text-gray-700 whitespace-nowrap">Min Visits:</label>
+      <input
+        type="number"
+        x-model.number="minVisits"
+        @input="applyMinVisitsFilter()"
+        class="w-20 px-2 py-1 border rounded"
+        min="0"
+        placeholder="0"
+      />
+    </div>
+  </div>
+
+  <div class="mb-4 text-sm text-gray-600">
+    Showing <span x-text="filteredOpportunitiesCount"></span> of <span x-text="totalOpportunitiesCount"></span> opportunities
   </div>
 
   <div class="flex gap-6">
@@ -264,6 +279,9 @@ function dashboard3Data() {
     searchQuery: '',
     filterDeliveryType: '',
     filterActive: '',
+    minVisits: 0,
+    filteredOpportunitiesCount: 0,
+    totalOpportunitiesCount: 0,
     expandedTreeNodes: {},
     selectedItem: { type: null, id: null, data: null },
     flwData: {},
@@ -271,6 +289,11 @@ function dashboard3Data() {
     flwDataErrors: {},
 
     init() {
+      // Read min_visits from URL parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      this.minVisits = parseInt(urlParams.get('min_visits')) || 0;
+
+      this.totalOpportunitiesCount = this.opportunities.length;
       this.processData();
       this.applyFilters();
       this.$watch('searchQuery', () => this.applyFilters());
@@ -279,10 +302,17 @@ function dashboard3Data() {
     },
 
     processData() {
+      // Clear existing opportunities from programs to avoid duplicates
+      this.programs.forEach(p => { p.opportunities = []; });
+
       const programMap = new Map(this.programs.map(p => [p.id, p]));
       const orphanedOpportunities = [];
 
-      this.opportunities.forEach(opp => {
+      // Filter opportunities based on visit count
+      const filteredOpportunities = this.opportunities.filter(opp => (opp.visit_count || 0) >= this.minVisits);
+      this.filteredOpportunitiesCount = filteredOpportunities.length;
+
+      filteredOpportunities.forEach(opp => {
         const program = programMap.get(opp.program);
         if (program) {
           if (!program.opportunities) {
@@ -409,6 +439,21 @@ function dashboard3Data() {
       if (!this.flwData[oppId]) {
         await this.fetchFLWs(oppId);
       }
+    },
+
+    applyMinVisitsFilter() {
+      // Update URL with new filter value
+      const url = new URL(window.location);
+      if (this.minVisits > 0) {
+        url.searchParams.set('min_visits', this.minVisits);
+      } else {
+        url.searchParams.delete('min_visits');
+      }
+      window.history.pushState({}, '', url);
+
+      // Reprocess data with new filter
+      this.processData();
+      this.applyFilters();
     },
 
     async fetchFLWs(oppId) {
