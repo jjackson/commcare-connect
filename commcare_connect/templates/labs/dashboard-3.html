@@ -329,6 +329,13 @@ function dashboard3Data() {
       const types = new Set();
 
       this.programs.forEach(program => {
+        program.opportunities = program.opportunities || [];
+
+        // Skip programs with no opportunities after filtering
+        if (program.opportunities.length === 0) {
+          return;
+        }
+
         const typeName = program.delivery_type || 'Uncategorized';
         types.add(typeName);
 
@@ -341,7 +348,6 @@ function dashboard3Data() {
           };
         }
 
-        program.opportunities = program.opportunities || [];
         program.activeOpps = program.opportunities.filter(o => o.is_active).length;
         program.totalVisits = program.opportunities.reduce((sum, o) => sum + (o.visit_count || 0), 0);
 
@@ -371,12 +377,20 @@ function dashboard3Data() {
         };
       }
 
+      // Convert currencies Set to Array and filter out empty program types
+      const filteredGrouped = {};
+      const filteredTypes = new Set();
       Object.keys(grouped).forEach(key => {
         grouped[key].currencies = Array.from(grouped[key].currencies);
+        // Only include program types that have programs with opportunities
+        if (grouped[key].programs.length > 0 || grouped[key].totalOpps > 0) {
+          filteredGrouped[key] = grouped[key];
+          filteredTypes.add(key);
+        }
       });
 
-      this.groupedData = grouped;
-      this.deliveryTypes = Array.from(types);
+      this.groupedData = filteredGrouped;
+      this.deliveryTypes = Array.from(filteredTypes);
     },
 
     applyFilters() {
