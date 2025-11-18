@@ -69,8 +69,6 @@ _auth_idx = MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddl
 MIDDLEWARE.remove("commcare_connect.users.middleware.OrganizationMiddleware")  # Remove production middleware
 MIDDLEWARE.insert(_auth_idx + 1, "commcare_connect.labs.middleware.LabsAuthenticationMiddleware")
 MIDDLEWARE.insert(_auth_idx + 2, "commcare_connect.labs.middleware.LabsURLWhitelistMiddleware")
-MIDDLEWARE.insert(_auth_idx + 3, "commcare_connect.labs.organization_middleware.LabsOrganizationMiddleware")
 
 # Labs apps configuration
-# TEMPORARY: Hardcoded opportunity_id for all Labs apps (audit, tasks, solicitations)
-LABS_DEFAULT_OPP_ID = 764  # TODO: Update this to your desired opportunity ID
+# No longer need hardcoded opportunity_id - API now supports organization_id/program_id

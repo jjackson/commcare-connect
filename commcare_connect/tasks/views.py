@@ -17,7 +17,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 
-from commcare_connect.labs.config import LABS_DEFAULT_OPP_ID
 from commcare_connect.tasks.data_access import TaskDataAccess
 from commcare_connect.tasks.models import TaskRecord
 from commcare_connect.tasks.ocs_client import OCSClientError, get_recent_session, get_transcript, trigger_bot
@@ -35,7 +34,7 @@ class TaskListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         """Get tasks the user can access with filtering."""
-        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=self.request.user, request=self.request)
+        data_access = TaskDataAccess(user=self.request.user, request=self.request)
 
         # Get all tasks (OAuth enforces access) - returns a list, not QuerySet
         tasks = data_access.get_tasks()
@@ -60,7 +59,7 @@ class TaskListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=self.request.user, request=self.request)
+        data_access = TaskDataAccess(user=self.request.user, request=self.request)
         all_tasks = data_access.get_tasks()
 
         # Calculate statistics - all_tasks is a list, not QuerySet
@@ -130,7 +129,7 @@ class TaskDetailView(LoginRequiredMixin, DetailView):
     def get_object(self, queryset=None):
         """Get task by ID."""
         task_id = self.kwargs.get(self.pk_url_kwarg)
-        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=self.request.user, request=self.request)
+        data_access = TaskDataAccess(user=self.request.user, request=self.request)
         task = data_access.get_task(task_id)
 
         if not task:
@@ -149,7 +148,7 @@ class TaskDetailView(LoginRequiredMixin, DetailView):
         timeline = task.get_timeline()
 
         # Get FLW history (past tasks for the same user) - returns list, not QuerySet
-        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=self.request.user, request=self.request)
+        data_access = TaskDataAccess(user=self.request.user, request=self.request)
         all_flw_tasks = data_access.get_tasks(username=task.task_username)
 
         # Filter out current task and sort by date_created
@@ -243,7 +242,7 @@ class OpportunitySearchAPIView(LoginRequiredMixin, View):
         limit = int(request.GET.get("limit", 50))
 
         try:
-            data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=request.user, request=request)
+            data_access = TaskDataAccess(user=request.user, request=request)
             opportunities = data_access.search_opportunities(query, limit)
             data_access.close()
 
@@ -258,7 +257,7 @@ class OpportunityWorkersAPIView(LoginRequiredMixin, View):
 
     def get(self, request, opportunity_id):
         try:
-            data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=request.user, request=request)
+            data_access = TaskDataAccess(user=request.user, request=request)
             workers = data_access.get_users_from_opportunity(opportunity_id)
             data_access.close()
 
@@ -305,6 +304,64 @@ class DatabaseResetAPIView(LoginRequiredMixin, View):
             return JsonResponse({"error": str(e), "traceback": traceback.format_exc()}, status=500)
 
 
+# Task Bulk Creation API
+
+
+@login_required
+@csrf_exempt
+@require_POST
+def task_bulk_create(request):
+    """Create multiple tasks at once (bulk creation)."""
+    try:
+        body = json.loads(request.body)
+        opportunity_id = body.get("opportunity_id")
+        flw_ids = body.get("flw_ids", [])
+        task_type = body.get("task_type", "warning")
+        priority = body.get("priority", "medium")
+        title = body.get("title", "")
+        description = body.get("description", "")
+        learning_assignment_text = body.get("learning_assignment_text", "")
+
+        if not opportunity_id:
+            return JsonResponse({"success": False, "error": "opportunity_id is required"}, status=400)
+
+        if not flw_ids:
+            return JsonResponse({"success": False, "error": "At least one FLW must be selected"}, status=400)
+
+        data_access = TaskDataAccess(user=request.user, request=request)
+        created_count = 0
+        errors = []
+
+        for flw_id in flw_ids:
+            try:
+                # Create task for each FLW
+                data_access.create_task(
+                    username=str(flw_id),  # Using flw_id as username for now
+                    opportunity_id=opportunity_id,
+                    created_by_id=request.user.id if hasattr(request.user, "id") else 0,
+                    task_type=task_type,
+                    priority=priority,
+                    title=title,
+                    description=description,
+                    learning_assignment_text=learning_assignment_text,
+                    creator_name=request.user.get_full_name() if hasattr(request.user, "get_full_name") else "User",
+                )
+                created_count += 1
+            except Exception as e:
+                errors.append(f"Failed to create task for FLW {flw_id}: {str(e)}")
+                logger.error(f"Error creating task for FLW {flw_id}: {e}", exc_info=True)
+
+        data_access.close()
+
+        return JsonResponse({"success": True, "created_count": created_count, "errors": errors})
+
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Error in bulk task creation: {e}", exc_info=True)
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
 # AI Assistant Integration Views
 
 
@@ -315,7 +372,7 @@ def task_initiate_ai(request, task_id):
     """Initiate an AI assistant conversation for a task via OCS."""
     try:
         # Get the task using TaskDataAccess
-        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=request.user, request=request)
+        data_access = TaskDataAccess(user=request.user, request=request)
         task = data_access.get_task(task_id)
         if not task:
             return JsonResponse({"error": "Task not found"}, status=404)
@@ -407,7 +464,7 @@ def task_initiate_ai(request, task_id):
 def task_ai_sessions(request, task_id):
     """Get AI sessions for a task and try to populate session_id from OCS if missing."""
     try:
-        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=request.user, request=request)
+        data_access = TaskDataAccess(user=request.user, request=request)
         task = data_access.get_task(task_id)
         if not task:
             return JsonResponse({"error": "Task not found"}, status=404)
@@ -468,7 +525,7 @@ def task_ai_sessions(request, task_id):
 def task_add_ai_session(request, task_id):
     """Manually add OCS session ID to a task."""
     try:
-        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=request.user, request=request)
+        data_access = TaskDataAccess(user=request.user, request=request)
         task = data_access.get_task(task_id)
         if not task:
             return JsonResponse({"error": "Task not found"}, status=404)
@@ -512,7 +569,7 @@ def task_add_ai_session(request, task_id):
 def task_ai_transcript(request, task_id):
     """Fetch AI conversation transcript from OCS."""
     try:
-        data_access = TaskDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, user=request.user, request=request)
+        data_access = TaskDataAccess(user=request.user, request=request)
         task = data_access.get_task(task_id)
         data_access.close()
         if not task:

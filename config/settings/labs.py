@@ -35,7 +35,6 @@ _auth_idx = MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddl
 MIDDLEWARE[_auth_idx] = "commcare_connect.labs.middleware.LabsAuthenticationMiddleware"
 MIDDLEWARE.remove("commcare_connect.users.middleware.OrganizationMiddleware")  # Remove production middleware
 MIDDLEWARE.insert(_auth_idx + 1, "commcare_connect.labs.middleware.LabsURLWhitelistMiddleware")
-MIDDLEWARE.insert(_auth_idx + 2, "commcare_connect.labs.organization_middleware.LabsOrganizationMiddleware")
 
 # CommCare OAuth configuration (for accessing CommCare HQ APIs)
 # These should be set via environment variables
@@ -44,5 +43,4 @@ COMMCARE_OAUTH_CLIENT_ID = env("COMMCARE_OAUTH_CLIENT_ID", default="")  # noqa: 
 COMMCARE_OAUTH_CLIENT_SECRET = env("COMMCARE_OAUTH_CLIENT_SECRET", default="")  # noqa: F405
 
 # Labs apps configuration
-# TEMPORARY: Hardcoded opportunity_id for all Labs apps (audit, tasks, solicitations)
-LABS_DEFAULT_OPP_ID = 764
+# No longer need hardcoded opportunity_id - API now supports organization_id/program_id

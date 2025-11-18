@@ -15,10 +15,10 @@ Successfully migrated Labs from prototype `ExperimentRecord` (local database) to
   - Uses `username` (not `user_id`) as primary user identifier
 
 - **`LabsRecordAPIClient`** (`labs/api_client.py`): Pure HTTP client for production API
-  - Endpoint: `/export/opportunity/{opp_id}/labs_record/`
+  - Endpoint: `/export/labs_record/`
   - Methods: `get_records()`, `get_record_by_id()`, `create_record()`, `update_record()`
   - Returns `LocalLabsRecord` instances
-  - Requires `opportunity_id` (API is opportunity-scoped)
+  - Supports flexible scoping via `organization_id`, `program_id`, or `opportunity_id`
 
 ### 2. Proxy Models Updated
 
@@ -106,7 +106,7 @@ See `labs/MIGRATION_STATUS.md` for complete details and checklists.
 
 ## Breaking Changes
 
-1. **Initialization**: All data access classes now require `opportunity_id`
+1. **Initialization**: All data access classes support flexible scoping (no longer require hardcoded `opportunity_id`)
 2. **Return Types**: `QuerySet` → `list`
 3. **User ID**: `user_id` (int) → `username` (str)
 4. **Parent Field**: `parent_id` → `labs_record_id`
@@ -114,14 +114,16 @@ See `labs/MIGRATION_STATUS.md` for complete details and checklists.
 
 ## Production API Details
 
-**Endpoint**: `/export/opportunity/<int:opp_id>/labs_record/`
+**Endpoint**: `/export/labs_record/` (no opportunity_id in URL path)
 
 **Authentication**: OAuth Bearer token from `request.session["labs_oauth"]["access_token"]`
 
+**Scoping**: API accepts `organization_id`, `program_id`, or `opportunity_id` as query parameters (GET) or body fields (POST)
+
 **Key Features**:
 
-- Opportunity-scoped (all operations require opportunity_id)
-- Supports filtering by experiment, type, username, program_id, labs_record_id
+- Flexible scoping by `organization_id`, `program_id`, or `opportunity_id`
+- Supports filtering by experiment, type, username, labs_record_id
 - Upsert operation (POST with or without ID)
 - Returns list of records in JSON format
 

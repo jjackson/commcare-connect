@@ -22,15 +22,44 @@ class SolicitationDataAccess:
     API responses to appropriate proxy model types.
     """
 
-    def __init__(self, opportunity_id: int, access_token: str | None = None, request: HttpRequest | None = None):
+    def __init__(
+        self,
+        opportunity_id: int | None = None,
+        organization_id: int | None = None,
+        program_id: int | None = None,
+        access_token: str | None = None,
+        request: HttpRequest | None = None,
+    ):
         """Initialize solicitations data access.
 
         Args:
-            opportunity_id: Opportunity ID for API scoping
+            opportunity_id: Optional opportunity ID for API scoping
+            organization_id: Optional organization ID for API scoping
+            program_id: Optional program ID for API scoping
             access_token: OAuth Bearer token for production API
-            request: HttpRequest object (for extracting token in labs mode)
+            request: HttpRequest object (for extracting token and org context in labs mode)
         """
         self.opportunity_id = opportunity_id
+        self.organization_id = organization_id
+        self.program_id = program_id
+
+        # Extract organization_id or opportunity_id from request if available and not provided
+        if not organization_id and not opportunity_id and not program_id and request:
+            # Get from user's OAuth data
+            if hasattr(request.user, "_org_data"):
+                # Production API doesn't return organization IDs, only slugs
+                # But programs and opportunities DO have IDs, so use those instead
+                # Note: We use the FIRST program for scoping (not hardcoded)
+                # Views that need multi-program access should loop and create multiple instances
+                programs = request.user._org_data.get("programs", [])
+                opportunities = request.user._org_data.get("opportunities", [])
+
+                # Prefer program_id since programs are org-scoped
+                if programs:
+                    self.program_id = programs[0].get("id")  # First program ID (dynamic, not hardcoded)
+                # Fall back to opportunity_id if no programs
+                elif opportunities:
+                    self.opportunity_id = opportunities[0].get("id")
 
         # Get OAuth token from labs session
         if not access_token and request:
@@ -44,7 +73,12 @@ class SolicitationDataAccess:
         if not access_token:
             raise ValueError("OAuth access token required for solicitation data access")
 
-        self.labs_api = LabsRecordAPIClient(access_token, opportunity_id)
+        self.labs_api = LabsRecordAPIClient(
+            access_token,
+            opportunity_id=self.opportunity_id,
+            organization_id=self.organization_id,
+            program_id=self.program_id,
+        )
 
     def get_solicitations(
         self,
@@ -279,10 +313,16 @@ class SolicitationDataAccess:
         if status:
             kwargs["status"] = status
 
+        # Don't pass organization_id if it's a slug (string), only if it's an actual ID (int)
+        # The client is already scoped by program_id or opportunity_id
+        org_id_param = {}
+        if organization_id and isinstance(organization_id, int):
+            org_id_param["organization_id"] = organization_id
+
         return self.labs_api.get_records(
             experiment="solicitations",
             type="SolicitationResponse",
-            organization_id=organization_id,
             model_class=ResponseRecord,
+            **org_id_param,
             **kwargs,
         )

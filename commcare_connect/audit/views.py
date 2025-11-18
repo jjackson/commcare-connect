@@ -22,7 +22,6 @@ from django_tables2 import SingleTableView
 from commcare_connect.audit.data_access import AuditDataAccess
 from commcare_connect.audit.models import AuditSessionRecord
 from commcare_connect.audit.tables import AuditTable
-from commcare_connect.labs.config import LABS_DEFAULT_OPP_ID
 
 
 class ExperimentAuditCreateView(LoginRequiredMixin, TemplateView):
@@ -46,7 +45,7 @@ class ExperimentAuditListView(LoginRequiredMixin, SingleTableView):
 
     def get_queryset(self):
         # Get AuditSessionRecords from API (returns list, not QuerySet)
-        data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=self.request)
+        data_access = AuditDataAccess(request=self.request)
         try:
             sessions = data_access.get_audit_sessions()
             # Sort by date_created descending (API returns list, not QuerySet)
@@ -107,7 +106,7 @@ class ExperimentAuditDetailView(LoginRequiredMixin, DetailView):
     def get_object(self, queryset=None):
         """Fetch session from API instead of using Django ORM."""
         session_id = self.kwargs.get("pk")
-        data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=self.request)
+        data_access = AuditDataAccess(request=self.request)
         try:
             # Try to find the session across all opportunities the user has access to
             session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
@@ -123,9 +122,10 @@ class ExperimentAuditDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         session = self.get_object()
 
-        # Initialize data access with session's opportunity ID
-        opportunity_id = session.opportunity_id or LABS_DEFAULT_OPP_ID
-        data_access = AuditDataAccess(opportunity_id=opportunity_id, request=self.request)
+        # Initialize data access with session's opportunity ID if available
+        data_access = AuditDataAccess(
+            opportunity_id=session.opportunity_id if session.opportunity_id else None, request=self.request
+        )
 
         try:
             # Get visit IDs from session
@@ -229,7 +229,7 @@ class ExperimentBulkAssessmentView(LoginRequiredMixin, DetailView):
     def get_object(self, queryset=None):
         """Fetch session from API instead of using Django ORM."""
         session_id = self.kwargs.get("pk")
-        data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=self.request)
+        data_access = AuditDataAccess(request=self.request)
         try:
             # Try to find the session across all opportunities the user has access to
             session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
@@ -263,7 +263,7 @@ class ExperimentAuditResultUpdateView(LoginRequiredMixin, View):
     def post(self, request, session_id):
         try:
             # Initialize data access
-            data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=request)
+            data_access = AuditDataAccess(request=request)
 
             try:
                 # Get session
@@ -335,7 +335,7 @@ class ExperimentAuditVisitDataView(LoginRequiredMixin, View):
     """Fetch visit data for dynamic navigation within the audit detail view."""
 
     def get(self, request, session_id):
-        data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=request)
+        data_access = AuditDataAccess(request=request)
         try:
             session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
             if not session:
@@ -462,7 +462,7 @@ class ExperimentAssessmentUpdateView(LoginRequiredMixin, View):
     def post(self, request, session_id):
         try:
             # Initialize data access
-            data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=request)
+            data_access = AuditDataAccess(request=request)
 
             try:
                 # Get session
@@ -519,7 +519,7 @@ class ExperimentAuditCompleteView(LoginRequiredMixin, View):
     def post(self, request, session_id):
         try:
             # Initialize data access
-            data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=request)
+            data_access = AuditDataAccess(request=request)
 
             try:
                 # Get session
@@ -554,7 +554,7 @@ class ExperimentAuditUncompleteView(LoginRequiredMixin, View):
     """Reopen a completed experiment-based audit session."""
 
     def post(self, request, session_id):
-        data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=request)
+        data_access = AuditDataAccess(request=request)
         try:
             session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
             if not session:
@@ -576,7 +576,7 @@ class ExperimentApplyAssessmentResultsView(LoginRequiredMixin, View):
     """Apply image assessment outcomes to visit-level results."""
 
     def post(self, request, session_id):
-        data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=request)
+        data_access = AuditDataAccess(request=request)
         try:
             session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
             if not session:
@@ -642,7 +642,7 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
     """Return bulk assessment data asynchronously."""
 
     def get(self, request, session_id):
-        data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=request)
+        data_access = AuditDataAccess(request=request)
         try:
             session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
             if not session:
@@ -878,7 +878,7 @@ class ExperimentAuditImageView(LoginRequiredMixin, View):
                 return HttpResponse("Missing xform_id or domain", status=400)
 
             # Initialize data access
-            data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=request)
+            data_access = AuditDataAccess(request=request)
 
             try:
                 # Get blob metadata
@@ -1023,7 +1023,7 @@ class ExperimentOpportunitySearchAPIView(LoginRequiredMixin, View):
         query = request.GET.get("q", "").strip()
         limit = int(request.GET.get("limit", 1000))  # Default to 1000, no max limit
 
-        data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=request)
+        data_access = AuditDataAccess(request=request)
         try:
             opportunities = data_access.search_opportunities(query, limit)
 
@@ -1098,7 +1098,7 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
                 return JsonResponse({"error": "Missing required data"}, status=400)
 
             # Initialize data access
-            data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, request=request)
+            data_access = AuditDataAccess(request=request)
 
             # Extract and normalize criteria
             audit_type = criteria.get("type", criteria.get("audit_type", "date_range"))

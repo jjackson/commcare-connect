@@ -5,7 +5,6 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 
 from commcare_connect.ai.types import UserDependencies
-from commcare_connect.labs.config import LABS_DEFAULT_OPP_ID
 from commcare_connect.solicitations.data_access import SolicitationDataAccess
 from commcare_connect.solicitations.models import SolicitationRecord
 
@@ -77,10 +76,7 @@ async def list_solicitations(
     if not ctx.deps.request:
         raise ValueError("Request object is required to access solicitations")
 
-    data_access = SolicitationDataAccess(
-        opportunity_id=LABS_DEFAULT_OPP_ID,
-        request=ctx.deps.request,
-    )
+    data_access = SolicitationDataAccess(request=ctx.deps.request)
 
     solicitations = data_access.get_solicitations(
         program_id=program_id,

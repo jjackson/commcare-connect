@@ -8,6 +8,7 @@ urlpatterns = [
     # Main views
     path("", views.TaskListView.as_view(), name="list"),
     path("create/", views.TaskCreationWizardView.as_view(), name="create"),
+    path("bulk-create/", views.task_bulk_create, name="bulk_create"),
     path("<int:task_id>/", views.TaskDetailView.as_view(), name="detail"),
     # AI Assistant API
     path("<int:task_id>/ai/initiate/", views.task_initiate_ai, name="ai_initiate"),

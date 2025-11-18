@@ -28,15 +28,27 @@ class LabsRecordAPIClient:
     and returns LocalLabsRecord instances. No local database storage.
     """
 
-    def __init__(self, access_token: str, opportunity_id: int):
+    def __init__(
+        self,
+        access_token: str,
+        opportunity_id: int | None = None,
+        organization_id: int | None = None,
+        program_id: int | None = None,
+    ):
         """Initialize API client.
 
         Args:
             access_token: OAuth Bearer token for production API
-            opportunity_id: Opportunity ID for scoped API requests
+            opportunity_id: Optional opportunity ID for scoped API requests
+            organization_id: Optional organization ID for scoped API requests
+            program_id: Optional program ID for scoped API requests
+
+        Note: At least one of opportunity_id, organization_id, or program_id should be provided.
         """
         self.access_token = access_token
         self.opportunity_id = opportunity_id
+        self.organization_id = organization_id
+        self.program_id = program_id
         self.base_url = settings.CONNECT_PRODUCTION_URL.rstrip("/")
         self.http_client = httpx.Client(
             headers={"Authorization": f"Bearer {self.access_token}"},
@@ -92,14 +104,21 @@ class LabsRecordAPIClient:
                 "type": type,
             }
 
-            # NOTE: username filtering not supported by production API
-            # Callers should filter by username client-side after fetching records
-            # if username:
-            #     params["username"] = username
+            # Add username filter if provided
+            if username:
+                params["username"] = username
+
+            # Add scope filters from client initialization or method parameters
             if organization_id:
                 params["organization_id"] = organization_id
+            elif self.organization_id:
+                params["organization_id"] = self.organization_id
             if program_id:
                 params["program_id"] = program_id
+            elif self.program_id:
+                params["program_id"] = self.program_id
+            if self.opportunity_id:
+                params["opportunity_id"] = self.opportunity_id
             if labs_record_id:
                 params["labs_record_id"] = labs_record_id
 
@@ -107,8 +126,8 @@ class LabsRecordAPIClient:
             for key, value in data_filters.items():
                 params[f"data__{key}"] = value
 
-            # Make API request
-            url = f"{self.base_url}/export/opportunity/{self.opportunity_id}/labs_record/"
+            # Make API request to new endpoint (no opportunity_id in URL)
+            url = f"{self.base_url}/export/labs_record/"
             logger.debug(f"GET {url} with params: {params}")
 
             response = self.http_client.get(url, params=params)
@@ -181,23 +200,20 @@ class LabsRecordAPIClient:
 
         if username:
             payload["username"] = username
-        # NOTE: program_id is not sent - it's inferred from opportunity on production side
-        # if program_id:
-        #     payload["program_id"] = program_id
+        if program_id:
+            payload["program_id"] = program_id
+        elif self.program_id:
+            payload["program_id"] = self.program_id
+        if self.organization_id:
+            payload["organization_id"] = self.organization_id
+        if self.opportunity_id:
+            payload["opportunity_id"] = self.opportunity_id
         if labs_record_id:
             payload["labs_record_id"] = labs_record_id
 
-        # TEMPORARY WORKAROUND: Generate fake ID to work around production API bug
-        # Production has update_or_create(id=None) bug - sending a fake ID works around it
-        # Remove this once PR is merged and deployed
-        import time
-
-        fake_id = int(time.time() * 1000) % 10000 + 50000
-        payload["id"] = fake_id
-        logger.info(f"WORKAROUND: Using fake ID {fake_id} (remove after production deployment)")
-
         try:
-            url = f"{self.base_url}/export/opportunity/{self.opportunity_id}/labs_record/"
+            # Use new endpoint without opportunity_id in URL
+            url = f"{self.base_url}/export/labs_record/"
             logger.info(f"POST {url} with payload: {payload}")
 
             # DEBUG: Print exact API call details
@@ -284,11 +300,23 @@ class LabsRecordAPIClient:
         elif current.username:
             payload["username"] = current.username
 
-        # NOTE: program_id is not sent - it's inferred from opportunity on production side
-        # if program_id is not None:
-        #     payload["program_id"] = program_id
-        # elif current.program_id:
-        #     payload["program_id"] = current.program_id
+        # Add scope identifiers from current record or client initialization
+        if program_id is not None:
+            payload["program_id"] = program_id
+        elif current.program_id:
+            payload["program_id"] = current.program_id
+        elif self.program_id:
+            payload["program_id"] = self.program_id
+
+        if current.organization_id:
+            payload["organization_id"] = current.organization_id
+        elif self.organization_id:
+            payload["organization_id"] = self.organization_id
+
+        if current.opportunity_id:
+            payload["opportunity_id"] = current.opportunity_id
+        elif self.opportunity_id:
+            payload["opportunity_id"] = self.opportunity_id
 
         if labs_record_id is not None:
             payload["labs_record_id"] = labs_record_id
@@ -296,7 +324,8 @@ class LabsRecordAPIClient:
             payload["labs_record_id"] = current.labs_record_id
 
         try:
-            url = f"{self.base_url}/export/opportunity/{self.opportunity_id}/labs_record/"
+            # Use new endpoint without opportunity_id in URL
+            url = f"{self.base_url}/export/labs_record/"
             logger.info(f"POST {url} (update) with payload: {payload}")
 
             # DEBUG: Print exact API call details

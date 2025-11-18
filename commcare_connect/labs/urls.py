@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 
 from . import oauth_views
 
@@ -15,4 +15,6 @@ urlpatterns = [
     # CommCare OAuth (for API access)
     path("commcare/initiate/", oauth_views.labs_commcare_initiate, name="commcare_initiate"),
     path("commcare/callback/", oauth_views.labs_commcare_callback, name="commcare_callback"),
+    # Dashboard Prototypes
+    path("", include("commcare_connect.labs.dashboards.urls")),
 ]

@@ -144,10 +144,8 @@ def test_experiment_audit_flow(config_name="opp385_last10"):
 
         print(f"[OK] User profile: {user_profile.get('username')} (ID: {user_profile.get('id')})")
 
-        # Initialize data access with token
-        from commcare_connect.labs.config import LABS_DEFAULT_OPP_ID
-
-        data_access = AuditDataAccess(opportunity_id=LABS_DEFAULT_OPP_ID, access_token=access_token)
+        # Initialize data access with token (will use organization_id from API context)
+        data_access = AuditDataAccess(access_token=access_token)
         print("[OK] Data access initialized successfully")
 
     except Exception as e:
