@@ -544,7 +544,7 @@ class CompletedWork(models.Model):
     saved_org_payment_accrued_usd = models.DecimalField(
         max_digits=10, decimal_places=2, default=0, help_text="Payment accrued for the organization in USD."
     )
-    invoice = models.ForeignKey(PaymentInvoice, on_delete=models.DO_NOTHING, null=True, blank=True)
+    invoice = models.ForeignKey(PaymentInvoice, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         unique_together = ("opportunity_access", "entity_id", "payment_unit")
