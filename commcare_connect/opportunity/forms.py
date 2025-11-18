@@ -1,7 +1,6 @@
 import datetime
 import json
 import uuid
-from decimal import Decimal
 
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Column, Div, Field, Fieldset, Layout, Row, Submit
@@ -1083,15 +1082,15 @@ class FormJsonValidationRulesForm(forms.ModelForm):
 
 
 class PaymentInvoiceForm(forms.ModelForm):
-    local_amount = forms.CharField(
+    local_amount = forms.DecimalField(
         label="Amount (Local currency)",
-        widget=forms.NumberInput(attrs={"placeholder": "0.00"}),
         help_text=_("Local currency is determined by the opportunity."),
+        decimal_places=2,
     )
-    amount_usd = forms.CharField(
+    amount_usd = forms.DecimalField(
         label="Amount (USD)",
-        widget=forms.NumberInput(attrs={"placeholder": "0.00"}),
         required=False,
+        decimal_places=2,
     )
     invoice_number = forms.CharField(
         label=_("Invoice ID"),
@@ -1199,7 +1198,7 @@ class PaymentInvoiceForm(forms.ModelForm):
             raise ValidationError("Exchange rate not available for selected date.")
 
         cleaned_data["exchange_rate"] = exchange_rate
-        cleaned_data["amount_usd"] = round(Decimal(local_amount) / exchange_rate.rate, 2)
+        cleaned_data["amount_usd"] = round(local_amount / exchange_rate.rate, 2)
 
         if not self.is_service_delivery:
             cleaned_data["title"] = None
@@ -1218,7 +1217,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         instance = super().save(commit=False)
         instance.opportunity = self.opportunity
         instance.amount_usd = self.cleaned_data["amount_usd"]
-        instance.amount = Decimal(self.cleaned_data["local_amount"])
+        instance.amount = self.cleaned_data["local_amount"]
         instance.exchange_rate = self.cleaned_data["exchange_rate"]
         instance.service_delivery = self.is_service_delivery
 
