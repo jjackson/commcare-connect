@@ -574,6 +574,37 @@ class TestFetchAttachmentView:
         assert response.status_code == 200
         storage_handler_getitem_mock.assert_called_once()
 
+    @mock.patch.object(StorageHandler, "__getitem__")
+    def test_user_cannot_fetch_managed_opp(self, storage_handler_getitem_mock, org_user_member, organization, client):
+        opp = ManagedOpportunityFactory()
+        opp.program.organization = opp.organization
+        opp.program.save()
+
+        visit = UserVisitFactory(opportunity=opp)
+        blob_meta = BlobMetaFactory(parent_id=visit.xform_id)
+
+        url = reverse("opportunity:fetch_attachment", args=(organization.slug, blob_meta.blob_id))
+        client.force_login(org_user_member)
+
+        response = client.get(url)
+        assert response.status_code == 403
+
+    @mock.patch.object(StorageHandler, "__getitem__")
+    def test_user_can_fetch_managed_opp(self, storage_handler_getitem_mock, org_user_member, organization, client):
+        opp = ManagedOpportunityFactory(organization=organization)
+        opp.program.organization = organization
+        opp.program.save()
+
+        visit = UserVisitFactory(opportunity=opp)
+        blob_meta = BlobMetaFactory(parent_id=visit.xform_id)
+
+        url = reverse("opportunity:fetch_attachment", args=(organization.slug, blob_meta.blob_id))
+        client.force_login(org_user_member)
+
+        response = client.get(url)
+        assert response.status_code == 200
+        storage_handler_getitem_mock.assert_called_once()
+
 
 def test_views_use_opportunity_decorator_or_mixin():
     """

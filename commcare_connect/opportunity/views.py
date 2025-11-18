@@ -13,7 +13,21 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.core.files.storage import default_storage, storages
-from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
+from django.db.models import (
+    Case,
+    Count,
+    DecimalField,
+    F,
+    FloatField,
+    Func,
+    Max,
+    OuterRef,
+    Q,
+    Subquery,
+    Sum,
+    Value,
+    When,
+)
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
@@ -932,10 +946,25 @@ def reject_visits(request, org_slug=None, opp_id=None):
 def fetch_attachment(request, org_slug, blob_id):
     blob_meta = BlobMeta.objects.get(blob_id=blob_id)
 
-    if not UserVisit.objects.filter(
-        opportunity__organization__slug=org_slug,
-        xform_id=blob_meta.parent_id,
-    ).exists():
+    user_visit_qs = (
+        UserVisit.objects.filter(
+            xform_id=blob_meta.parent_id,
+        )
+        .annotate(
+            organization_slug=Case(
+                When(
+                    opportunity__managed=True, then=F("opportunity__managedopportunity__program__organization__slug")
+                ),
+                When(opportunity__managed=False, then=F("opportunity__organization__slug")),
+                default=F("opportunity__organization__slug"),
+            )
+        )
+        .filter(
+            organization_slug=org_slug,
+        )
+    )
+
+    if not user_visit_qs.exists():
         return HttpResponseForbidden()
 
     attachment = storages["default"].open(blob_id)
