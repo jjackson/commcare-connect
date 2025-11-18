@@ -624,6 +624,7 @@ class VisitExportForm(forms.Form):
             )
 
         self.fields["status"].widget.attrs.update(hx_attrs)
+        self.fields["format"].widget.attrs.update(hx_attrs)
 
         self.helper = FormHelper(self)
 
