@@ -13,8 +13,7 @@ from django.utils.translation import gettext
 
 from commcare_connect.commcarehq.models import HQServer
 from commcare_connect.organization.models import Organization
-from commcare_connect.users.credential_levels import DeliveryLevel, LearnLevel
-from commcare_connect.users.models import User
+from commcare_connect.users.models import User, UserCredential
 from commcare_connect.utils.db import BaseModel, slugify_uniquely
 
 
@@ -466,6 +465,10 @@ class ExchangeRate(models.Model):
 
 
 class PaymentInvoice(models.Model):
+    class InvoiceType(models.TextChoices):
+        service_delivery = "service_delivery", gettext("Service Delivery")
+        custom = "custom", gettext("Custom")
+
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     amount_usd = models.DecimalField(max_digits=10, decimal_places=2, null=True)
@@ -541,7 +544,7 @@ class CompletedWork(models.Model):
     saved_org_payment_accrued_usd = models.DecimalField(
         max_digits=10, decimal_places=2, default=0, help_text="Payment accrued for the organization in USD."
     )
-    invoice = models.ForeignKey(PaymentInvoice, on_delete=models.DO_NOTHING, null=True, blank=True)
+    invoice = models.ForeignKey(PaymentInvoice, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         unique_together = ("opportunity_access", "entity_id", "payment_unit")
@@ -851,11 +854,28 @@ class CredentialConfiguration(models.Model):
         null=True,
         blank=True,
         max_length=32,
-        choices=LearnLevel.choices,
+        choices=UserCredential.LearnLevel.choices,
     )
     delivery_level = models.CharField(
         null=True,
         blank=True,
         max_length=32,
-        choices=DeliveryLevel.choices,
+        choices=UserCredential.DeliveryLevel.choices,
     )
+
+
+class LabsRecord(models.Model):
+    # inline import to avoid circular import
+    from commcare_connect.program.models import Program
+
+    experiment = models.TextField()
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, null=True)
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, null=True)
+    program = models.ForeignKey(Program, on_delete=models.CASCADE, null=True)
+    labs_record = models.ForeignKey("LabsRecord", on_delete=models.CASCADE, null=True)
+    type = models.CharField(max_length=255)
+    data = models.JSONField()
+
+    def __str__(self):
+        return f"ExperimentRecord({self.user}, {self.organization}, {self.opportunity}, {self.experiment})"
