@@ -2474,6 +2474,7 @@ def visit_export_count(request, org_slug, opp_id):
     to_date = request.GET.get("to_date", datetime.date.today())
     status = request.GET.get("status", None)
     review_export = request.GET.get("review_export") == "true"
+    format = request.GET.get("format", "csv")
 
     visits = UserVisit.objects.filter(opportunity_id=opp_id, visit_date__gte=from_date, visit_date__lte=to_date)
 
@@ -2491,11 +2492,11 @@ def visit_export_count(request, org_slug, opp_id):
     message = f"{count:,} visits match your filters."
     button_disabled = ""
 
-    if count > EXPORT_ROW_LIMIT:
+    if format == "xlsx" and count > EXPORT_ROW_LIMIT:
         button_disabled = "disabled"
         message = (
             f"You have {count} visits matching your filters. "
-            f"The maximum export limit is {EXPORT_ROW_LIMIT}. Please narrow your filters."
+            f"The maximum export limit for Excel is {EXPORT_ROW_LIMIT}. Please narrow your filters."
         )
         message_class = "text-red-600"
 
