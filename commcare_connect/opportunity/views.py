@@ -639,11 +639,10 @@ def payment_import(request, org_slug=None, opp_id=None):
 
     lock = cache.lock(get_payment_upload_key(request.opportunity.pk))
 
-    if not lock.acquire(blocking=False):
+    if lock.locked():
         messages.error(request, "Another payment import is in progress. Please try again later.")
         return redirect(f"{redirect_url}?{request.GET.copy().urlencode()}")
 
-    lock.release()
     file_path = f"{request.opportunity.pk}_{datetime.datetime.now().isoformat}_payment_import"
     saved_path = default_storage.save(file_path, file)
 
