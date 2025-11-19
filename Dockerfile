@@ -3,7 +3,9 @@ RUN apt-get update \
   # dependencies for building Python packages
   && apt-get install -y build-essential libpq-dev
 COPY ./requirements /requirements
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /wheels \
+RUN pip wheel --no-cache-dir --wheel-dir /wheels \
+    -r /requirements/base.txt \
+    -r /requirements/production.txt \
     -r /requirements/labs.txt
 
 FROM node:18-bullseye AS build-node
@@ -36,6 +38,8 @@ COPY --from=build-node /app/commcare_connect/static/bundles /app/commcare_connec
 COPY --from=build-python /wheels /wheels
 COPY ./requirements /requirements
 RUN pip install --no-index --find-links=/wheels \
+    -r /requirements/base.txt \
+    -r /requirements/production.txt \
     -r /requirements/labs.txt \
     && rm -rf /wheels \
     && rm -rf /root/.cache/pip/*
