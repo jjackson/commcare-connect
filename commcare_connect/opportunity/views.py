@@ -638,9 +638,8 @@ def payment_import(request, org_slug=None, opp_id=None):
     redirect_url = reverse("opportunity:worker_payments", args=(org_slug, opp_id))
 
     lock = cache.lock(get_payment_upload_key(request.opportunity.pk))
-    got_lock = lock.acquire(blocking=False)
 
-    if not got_lock:
+    if not lock.acquire(blocking=False):
         messages.error(request, "Another payment import is in progress. Please try again later.")
         return redirect(f"{redirect_url}?{request.GET.copy().urlencode()}")
 
