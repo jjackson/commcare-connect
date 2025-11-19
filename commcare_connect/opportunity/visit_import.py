@@ -339,23 +339,26 @@ def bulk_update_payments(opportunity_id: int, headers: list[str], rows: list[lis
             "payment_method": payment_method,
             "payment_operator": payment_operator,
         }
-        access = OpportunityAccess.objects.filter(
-            user__username=username, opportunity=opportunity, suspended=False
-        ).first()
-        if access:
-            user_last_payment = Payment.objects.filter(opportunity_access=access).order_by("-created_at").first()
-            date_paid = payment_date if payment_date else datetime.date.today()
-            if (
-                user_last_payment
-                and user_last_payment.amount == amount
-                and user_last_payment.date_paid.date() == date_paid
-            ):
-                invalid_rows.append(
-                    (
-                        [escape(r) for r in row],
-                        "A payment for this user with the same amount and date already exists.",
-                    )
+        user_last_payment = (
+            Payment.objects.filter(
+                opportunity_access__user__username=username,
+                opportunity_access__opportunity=opportunity,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        date_paid = payment_date if payment_date else datetime.date.today()
+        if (
+            user_last_payment
+            and user_last_payment.amount == amount
+            and user_last_payment.date_paid.date() == date_paid
+        ):
+            invalid_rows.append(
+                (
+                    [escape(r) for r in row],
+                    "A payment for this user with the same amount and date already exists.",
                 )
+            )
         payments_by_user[username].append(payment_row)
 
     if invalid_rows:
