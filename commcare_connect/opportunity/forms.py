@@ -1184,8 +1184,12 @@ class PaymentInvoiceForm(forms.ModelForm):
 
     def get_earliest_uninvoiced_date(self):
         date = (
-            CompletedWork.objects.filter(invoice__isnull=True, opportunity_access__opportunity=self.opportunity)
-            .aggregate(earliest_date=Min("date_created"))
+            CompletedWork.objects.filter(
+                invoice__isnull=True,
+                opportunity_access__opportunity=self.opportunity,
+                status=CompletedWork.Status.approved,
+            )
+            .aggregate(earliest_date=Min("status_modified_date"))
             .get("earliest_date")
         )
         if not date:
