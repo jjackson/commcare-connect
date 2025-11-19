@@ -1296,6 +1296,8 @@ class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateVie
         context.update(
             {
                 "opportunity": opportunity,
+                "is_service_delivery": self.request.GET.get("invoice_type")
+                == PaymentInvoice.InvoiceType.service_delivery,
                 "path": [
                     {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
                     {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
