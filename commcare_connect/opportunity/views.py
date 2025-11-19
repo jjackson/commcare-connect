@@ -2526,11 +2526,14 @@ def add_api_key(request, org_slug):
 @opportunity_required
 def invoice_items(request, *args, **kwargs):
     body = json.loads(request.body)
-    start_date_str = body.get("start_date")
-    end_date_str = body.get("end_date")
+    start_date_str = body.get("start_date", None)
+    end_date_str = body.get("end_date", None)
 
-    start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else None
-    end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else None
+    if not start_date_str or not end_date_str:
+        return JsonResponse({"error": _("Start date and end date are required.")})
+
+    start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
+    end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
 
     line_items = get_uninvoiced_visit_items(request.opportunity, start_date, end_date)
     total_local_amount = sum(item["total_amount_local"] for item in line_items)
