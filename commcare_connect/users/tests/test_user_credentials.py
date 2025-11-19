@@ -282,3 +282,29 @@ class TestUserCredentialIssuer:
         UserCredentialIssuer.submit_user_credentials()
 
         assert UserCredential.objects.filter(issued_on__isnull=False).count() == 6
+
+    @mock.patch("commcare_connect.users.user_credentials.add_credentials_on_personalid")
+    @mock.patch.object(UserCredentialIssuer, "USERNAME_CHUNK_SIZE", 2)
+    def test_payload_username_chunking(self, mock_add_credentials_on_personalid, opportunity):
+        UserCredentialFactory.create_batch(
+            4,
+            issued_on=None,
+            credential_type=UserCredential.CredentialType.DELIVERY,
+            level=UserCredential.DeliveryLevel.FIFTY,
+            opportunity=opportunity,
+            delivery_type=opportunity.delivery_type,
+        )
+        assert UserCredential.objects.filter(issued_on__isnull=True).count() == 4
+
+        # Make sure usernames are populated
+        for user in UserCredential.objects.all().values_list("user", flat=True):
+            User.objects.filter(id=user).update(username=f"user_{user}")
+
+        # All credentials will be "successfully" submitted, hence return all payload indices
+        mock_add_credentials_on_personalid.side_effect = [
+            {"success": [0, 1], "failed": []},
+            {"success": [2, 3], "failed": []},
+        ]
+        UserCredentialIssuer.submit_user_credentials()
+
+        assert UserCredential.objects.filter(issued_on__isnull=False).count() == 4

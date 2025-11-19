@@ -11,7 +11,8 @@ from commcare_connect.users.models import UserCredential
 
 
 class UserCredentialIssuer:
-    MAX_CREDENTIALS_PER_REQUEST = 200
+    MAX_CREDENTIALS_PER_REQUEST = 100
+    USERNAME_CHUNK_SIZE = 100
 
     @classmethod
     def run(cls):
@@ -110,19 +111,24 @@ class UserCredentialIssuer:
         """
 
         def parse_credential_payload_item(users_credential):
-            return {
-                "usernames": users_credential["usernames"],
-                "title": UserCredential.get_title(
-                    credential_type=users_credential["credential_type"],
-                    level=users_credential["level"],
-                    delivery_type_name=users_credential["delivery_type__name"]
-                    or users_credential["opportunity__name"],
-                ),
-                "type": users_credential["credential_type"],
-                "level": users_credential["level"],
-                "slug": users_credential["opportunity__id"],
-                "opportunity_id": users_credential["opportunity__id"],
-            }
+            """
+            Chunk the usernames to make sure the endpoint is not overwhelmed.
+            """
+            for i in range(0, len(users_credential["usernames"]), cls.USERNAME_CHUNK_SIZE):
+                i_chunk = i + cls.USERNAME_CHUNK_SIZE
+                yield {
+                    "usernames": users_credential["usernames"][i:i_chunk],
+                    "title": UserCredential.get_title(
+                        credential_type=users_credential["credential_type"],
+                        level=users_credential["level"],
+                        delivery_type_name=users_credential["delivery_type__name"]
+                        or users_credential["opportunity__name"],
+                    ),
+                    "type": users_credential["credential_type"],
+                    "level": users_credential["level"],
+                    "slug": users_credential["opportunity__id"],
+                    "opportunity_id": users_credential["opportunity__id"],
+                }, users_credential["credential_ids"][i:i_chunk]
 
         unissued_credentials_qs = cls._get_unissued_user_credentials_queryset()
         index_in_chunk = 0
@@ -130,15 +136,18 @@ class UserCredentialIssuer:
         index_to_credential_ids_set_mapper = {}
 
         for users_credential in unissued_credentials_qs.iterator(chunk_size=cls.MAX_CREDENTIALS_PER_REQUEST):
-            index_to_credential_ids_set_mapper[index_in_chunk] = users_credential["credential_ids"]
-            credentials_payload_items.append(parse_credential_payload_item(users_credential))
-            index_in_chunk += 1
+            for payload_with_chunked_usernames, creds_ids in parse_credential_payload_item(users_credential):
+                index_to_credential_ids_set_mapper[index_in_chunk] = creds_ids
+                credentials_payload_items.append(payload_with_chunked_usernames)
+                index_in_chunk += 1
 
-            if index_in_chunk >= cls.MAX_CREDENTIALS_PER_REQUEST:
-                cls._submit_credentials_to_personal_id(index_to_credential_ids_set_mapper, credentials_payload_items)
-                index_in_chunk = 0
-                credentials_payload_items = []
-                index_to_credential_ids_set_mapper = {}
+                if index_in_chunk >= cls.MAX_CREDENTIALS_PER_REQUEST:
+                    cls._submit_credentials_to_personal_id(
+                        index_to_credential_ids_set_mapper, credentials_payload_items
+                    )
+                    index_in_chunk = 0
+                    credentials_payload_items = []
+                    index_to_credential_ids_set_mapper = {}
 
         if credentials_payload_items:
             cls._submit_credentials_to_personal_id(index_to_credential_ids_set_mapper, credentials_payload_items)
@@ -176,6 +185,7 @@ class UserCredentialIssuer:
 
     def _submit_credentials_to_personal_id(index_to_credential_ids_set_mapper, credentials_items: list[dict]):
         result = add_credentials_on_personalid(credentials_items)
+
         success_indices = result.get("success", [])
         failed_indices = result.get("failed", [])
 
