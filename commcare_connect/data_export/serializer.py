@@ -14,6 +14,7 @@ from commcare_connect.opportunity.models import (
     CompletedModule,
     CompletedWork,
     Opportunity,
+    OpportunityAccess,
     OpportunityClaimLimit,
     Payment,
     PaymentInvoice,
@@ -213,6 +214,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     deliver_app = CommCareAppSerializer()
     payment_units = PaymentUnitSerializer(source="paymentunit_set", many=True)
     verification_flags = OpportunityVerificationFlagsSerializer(source="opportunityverificationflags", read_only=True)
+    user_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Opportunity
@@ -237,7 +239,11 @@ class OpportunitySerializer(serializers.ModelSerializer):
             "is_active",
             "payment_units",
             "verification_flags",
+            "user_count",
         ]
+
+    def get_user_count(self, obj):
+        return OpportunityAccess.objects.filter(opportunity=obj).count()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
