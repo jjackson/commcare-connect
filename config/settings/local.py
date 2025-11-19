@@ -48,6 +48,11 @@ LABS_OAUTH_SCOPES = ["export"]
 CLI_OAUTH_CLIENT_ID = env("CLI_OAUTH_CLIENT_ID", default="")
 CLI_OAUTH_CLIENT_SECRET = env("CLI_OAUTH_CLIENT_SECRET", default="")  # Not needed for public clients
 
+# CommCare HQ OAuth Configuration (for API access)
+COMMCARE_HQ_URL = env("COMMCARE_HQ_URL", default="https://www.commcarehq.org")
+COMMCARE_OAUTH_CLIENT_ID = env("COMMCARE_OAUTH_CLIENT_ID", default="")
+COMMCARE_OAUTH_CLIENT_SECRET = env("COMMCARE_OAUTH_CLIENT_SECRET", default="")
+
 # Disable local registration
 ACCOUNT_ALLOW_REGISTRATION = False
 

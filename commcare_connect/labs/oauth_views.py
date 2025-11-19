@@ -291,23 +291,18 @@ def labs_commcare_initiate(request: HttpRequest) -> HttpResponseRedirect:
         messages.error(request, "CommCare OAuth not configured. Contact administrator.")
         return redirect(request.headers.get("referer", "/audit/"))
 
-    # Generate PKCE challenge
-    code_verifier = urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
-    code_challenge = urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode("utf-8").rstrip("=")
-
-    # Store in session
-    request.session["commcare_oauth_verifier"] = code_verifier
+    # Store next URL in session
     request.session["commcare_oauth_next"] = request.GET.get("next", "/audit/")
 
-    # Build authorization URL
+    # Build authorization URL (CommCareHQ doesn't support PKCE despite having a checkbox for it)
+    # Note: CommCareHQ expects an empty state parameter (state=) based on working examples
     callback_url = request.build_absolute_uri(reverse("labs:commcare_callback"))
     auth_params = {
         "client_id": client_id,
-        "response_type": "code",
         "redirect_uri": callback_url,
-        "code_challenge": code_challenge,
-        "code_challenge_method": "S256",
-        "scope": "access_apis",  # Adjust scope as needed
+        "scope": "access_apis",
+        "response_type": "code",
+        "state": "",  # Empty state - CommCareHQ doesn't handle non-empty state properly
     }
 
     auth_url = f"{commcare_url}/oauth/authorize/?{urlencode(auth_params)}"
@@ -334,15 +329,10 @@ def labs_commcare_callback(request: HttpRequest) -> HttpResponseRedirect:
         messages.error(request, "No authorization code received from CommCare.")
         return redirect("/audit/")
 
-    # Get stored verifier
-    code_verifier = request.session.get("commcare_oauth_verifier")
+    # Get next URL from session (no state validation since CommCareHQ doesn't handle it properly)
     next_url = request.session.get("commcare_oauth_next", "/audit/")
 
-    if not code_verifier:
-        messages.error(request, "OAuth session expired. Please try again.")
-        return redirect("/audit/")
-
-    # Exchange code for token
+    # Exchange code for token (no PKCE - CommCareHQ doesn't support it)
     client_id = settings.COMMCARE_OAUTH_CLIENT_ID
     client_secret = settings.COMMCARE_OAUTH_CLIENT_SECRET
     commcare_url = getattr(settings, "COMMCARE_HQ_URL", "https://www.commcarehq.org")
@@ -358,7 +348,6 @@ def labs_commcare_callback(request: HttpRequest) -> HttpResponseRedirect:
                     "redirect_uri": callback_url,
                     "client_id": client_id,
                     "client_secret": client_secret,
-                    "code_verifier": code_verifier,
                 },
                 timeout=30.0,
             )
@@ -379,7 +368,6 @@ def labs_commcare_callback(request: HttpRequest) -> HttpResponseRedirect:
         }
 
         # Clean up OAuth flow data
-        request.session.pop("commcare_oauth_verifier", None)
         request.session.pop("commcare_oauth_next", None)
 
         logger.info(f"CommCare OAuth successful for user {request.user.username}")
