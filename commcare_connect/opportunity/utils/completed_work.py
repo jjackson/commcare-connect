@@ -287,9 +287,9 @@ def get_uninvoiced_completed_works_qs(opportunity, start_date=None, end_date=Non
     )
 
     if start_date:
-        query = query.filter(date_created__gte=start_date)
+        query = query.filter(status_modified_date__gte=start_date)
     if end_date:
-        query = query.filter(date_created__lte=end_date)
+        query = query.filter(status_modified_date__lte=end_date)
 
     return query
 
