@@ -339,9 +339,8 @@ def bulk_update_payments(opportunity_id: int, headers: list[str], rows: list[lis
             "payment_method": payment_method,
             "payment_operator": payment_operator,
         }
-        user_last_payment = (
-            Payment.objects.filter(opportunity_access__user__username=username).order_by("-created_at").first()
-        )
+        access = OpportunityAccess.objects.filter(user__username=username, opportunity=opportunity, suspended=False)
+        user_last_payment = Payment.objects.filter(opportunity_access=access).order_by("-created_at").first()
         date_paid = payment_date if payment_date else datetime.date.today()
         if (
             user_last_payment
