@@ -269,6 +269,7 @@ class TestUserCredentialIssuer:
             opportunity=opportunity,
             delivery_type=opportunity.delivery_type,
         )
+        # Each learning credential is for a different opportunity
         UserCredentialFactory.create_batch(
             3,
             issued_on=None,
@@ -301,10 +302,8 @@ class TestUserCredentialIssuer:
             User.objects.filter(id=user).update(username=f"user_{user}")
 
         # All credentials will be "successfully" submitted, hence return all payload indices
-        mock_add_credentials_on_personalid.side_effect = [
-            {"success": [0, 1], "failed": []},
-            {"success": [2, 3], "failed": []},
-        ]
+        # In this case, there should be 2 payloads created due to chunking (4 usernames, chunk size 2)
+        mock_add_credentials_on_personalid.return_value = {"success": [0, 1], "failed": []}
         UserCredentialIssuer.submit_user_credentials()
 
         assert UserCredential.objects.filter(issued_on__isnull=False).count() == 4
