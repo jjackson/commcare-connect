@@ -1154,6 +1154,14 @@ class PaymentInvoiceForm(forms.ModelForm):
                     Fieldset(
                         "Line Items",
                         Div(
+                            HTML(
+                                """
+                                {% load i18n %}
+                                <div class="text-sm text-gray-500">
+                                    {% translate "Loading line items..." %}
+                                </div>
+                            """
+                            ),
                             css_id="invoice-line-items-wrapper",
                             css_class="space-y-1 text-sm text-gray-500 mb-4",
                         ),
@@ -1192,8 +1200,10 @@ class PaymentInvoiceForm(forms.ModelForm):
 
         second_row = [Field("date", **{"x-ref": "date", "x-on:change": "convert()"})]
         if self.is_service_delivery:
-            second_row.append(Field("start_date"))
-            second_row.append(Field("end_date"))
+            second_row.append(
+                Field("start_date", **{"x-model": "startDate", "x-on:change": "fetchInvoiceLineItems()"})
+            )
+            second_row.append(Field("end_date", **{"x-model": "endDate", "x-on:change": "fetchInvoiceLineItems()"}))
 
         return [
             Div(
@@ -1205,10 +1215,11 @@ class PaymentInvoiceForm(forms.ModelForm):
                         label=f"Amount ({self.opportunity.currency})",
                         **{
                             "x-ref": "amount",
+                            "x-model": "amount",
                             "x-on:input.debounce.300ms": "convert()",
                         },
                     ),
-                    Field("amount_usd"),
+                    Field("amount_usd", **{"x-model": "usdAmount"}),
                     Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
                     css_class="grid grid-cols-3 gap-6",
                 ),
