@@ -3,10 +3,10 @@ RUN apt-get update \
   # dependencies for building Python packages
   && apt-get install -y build-essential libpq-dev
 COPY ./requirements /requirements
-RUN pip wheel --no-cache-dir --wheel-dir /wheels \
-    -r /requirements/base.txt \
-    -r /requirements/production.txt \
-    -r /requirements/labs.txt
+# Build wheels for each requirement file separately to avoid conflicts
+RUN pip wheel --no-cache-dir --wheel-dir /wheels -r /requirements/base.txt
+RUN pip wheel --no-cache-dir --wheel-dir /wheels -r /requirements/production.txt
+RUN pip wheel --no-cache-dir --wheel-dir /wheels -r /requirements/labs.txt
 
 FROM node:18-bullseye AS build-node
 #RUN apt-get update && apt-get -y install curl
@@ -37,10 +37,10 @@ ENV DJANGO_SETTINGS_MODULE=config.settings.labs
 COPY --from=build-node /app/commcare_connect/static/bundles /app/commcare_connect/static/bundles
 COPY --from=build-python /wheels /wheels
 COPY ./requirements /requirements
-RUN pip install --no-index --find-links=/wheels \
-    -r /requirements/base.txt \
-    -r /requirements/production.txt \
-    -r /requirements/labs.txt \
+# Install sequentially: base, then production, then labs (which may upgrade packages)
+RUN pip install --no-index --find-links=/wheels -r /requirements/base.txt && \
+    pip install --no-index --find-links=/wheels -r /requirements/production.txt && \
+    pip install --no-index --find-links=/wheels -r /requirements/labs.txt --force-reinstall \
     && rm -rf /wheels \
     && rm -rf /root/.cache/pip/*
 
