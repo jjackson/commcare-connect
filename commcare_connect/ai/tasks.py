@@ -80,8 +80,9 @@ def simple_echo_task(
 
         return pydantic_messages
 
-    # Get user object
+    # Get user object and create LabsUser with organization data
     user = None
+    labs_user = None
     if user_id:
         try:
             user = User.objects.get(id=user_id)
@@ -89,11 +90,41 @@ def simple_echo_task(
             logger.error(f"[AI TASK] User with ID {user_id} does not exist")
             raise ValueError(f"User with ID {user_id} does not exist")
 
+    # Fetch organization data and create LabsUser if we have an access token
+    if access_token:
+        from commcare_connect.labs.models import LabsUser
+        from commcare_connect.labs.oauth_helpers import fetch_user_organization_data
+
+        # Fetch organization data from production API
+        org_data = fetch_user_organization_data(access_token)
+        if org_data is None:
+            logger.warning("[AI TASK] Failed to fetch organization data, continuing without it")
+
+        # Create session data structure expected by LabsUser
+        session_data = {
+            "user_profile": {
+                "id": user.id if user else 0,
+                "username": user.username if user else "unknown",
+                "email": user.email if user else "",
+                "first_name": user.first_name if user else "",
+                "last_name": user.last_name if user else "",
+            },
+            "organization_data": org_data or {},
+        }
+
+        # Create LabsUser with organization data (needed for API scoping)
+        try:
+            labs_user = LabsUser(session_data)
+        except Exception as e:
+            logger.warning(f"[AI TASK] Failed to create LabsUser: {e}, falling back to regular user")
+            labs_user = user
+
     # Create a minimal request-like object for OAuth token access
     # We'll create a simple object that has the session data needed
     class MockRequest:
-        def __init__(self, access_token):
+        def __init__(self, access_token, user=None):
             self.session = {}
+            self.user = user
             if access_token:
                 import time
 
@@ -103,10 +134,13 @@ def simple_echo_task(
                     "expires_at": time.time() + 3600,  # 1 hour from now
                 }
 
-    mock_request = MockRequest(access_token)
+    # Use LabsUser if available (has _org_data), otherwise fall back to regular user
+    # This ensures the user has _org_data for API scoping
+    request_user = labs_user or user
+    mock_request = MockRequest(access_token, user=request_user)
 
-    # Create dependencies
-    deps = UserDependencies(user=user, request=mock_request)
+    # Create dependencies - use the same user object for consistency
+    deps = UserDependencies(user=request_user, request=mock_request)
 
     async def run_agent():
         # Pass message_history to maintain conversation context
