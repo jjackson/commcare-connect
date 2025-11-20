@@ -2,6 +2,7 @@ import datetime
 import json
 import uuid
 
+import waffle
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Column, Div, Field, Fieldset, Layout, Row, Submit
 from dateutil.relativedelta import relativedelta
@@ -1297,8 +1298,9 @@ class PaymentInvoiceForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
 
-        self.fields["invoice_number"].initial = self.generate_invoice_number()
-        self.fields["date"].initial = str(datetime.date.today())
+        if self.is_automed_invoice:
+            self.fields["invoice_number"].initial = self.generate_invoice_number()
+            self.fields["date"].initial = str(datetime.date.today())
 
         self.helper = FormHelper(self)
 
@@ -1315,8 +1317,16 @@ class PaymentInvoiceForm(forms.ModelForm):
         )
         self.helper.form_tag = False
 
+    @property
+    def is_automed_invoice(self):
+        return waffle.switch_is_active("automated_invoices")
+
     def invoice_form_fields(self):
-        first_row = [Field("invoice_number", **{"readonly": "readonly"})]
+        invoice_number_attrs = {}
+        if self.is_automed_invoice:
+            invoice_number_attrs["readonly"] = "readonly"
+        first_row = [Field("invoice_number", **invoice_number_attrs)]
+
         if self.is_service_delivery:
             first_row.append(Field("title"))
 
@@ -1396,7 +1406,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         instance.amount_usd = self.cleaned_data["amount_usd"]
         instance.amount = self.cleaned_data["local_amount"]
         instance.exchange_rate = self.cleaned_data["exchange_rate"]
-        instance.service_delivery = self.is_service_delivery
+        instance.service_delivery = self.invoice_type == PaymentInvoice.InvoiceType.service_delivery
 
         if commit:
             instance.save()
@@ -1404,4 +1414,8 @@ class PaymentInvoiceForm(forms.ModelForm):
 
     @property
     def is_service_delivery(self):
-        return self.invoice_type == PaymentInvoice.InvoiceType.service_delivery
+        """
+        Check if the invoice is for service delivery.
+        This check only governs behavior that we want on v2 invoices.
+        """
+        return self.invoice_type == PaymentInvoice.InvoiceType.service_delivery and self.is_automed_invoice
