@@ -16,7 +16,7 @@ from django.core.files.storage import default_storage, storages
 from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, HttpResponseNotFound
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -930,8 +930,15 @@ def reject_visits(request, org_slug=None, opp_id=None):
 
 @org_member_required
 @opportunity_required
-def fetch_attachment(self, org_slug, opp_id, blob_id):
+def fetch_attachment(request, org_slug, opp_id, blob_id):
     blob_meta = BlobMeta.objects.get(blob_id=blob_id)
+
+    if not UserVisit.objects.filter(
+        opportunity=request.opportunity,
+        xform_id=blob_meta.parent_id,
+    ).exists():
+        return HttpResponseNotFound()
+
     attachment = storages["default"].open(blob_id)
     return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
 
