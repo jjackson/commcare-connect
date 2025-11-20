@@ -931,7 +931,7 @@ def reject_visits(request, org_slug=None, opp_id=None):
 @org_member_required
 @opportunity_required
 def fetch_attachment(request, org_slug, opp_id, blob_id):
-    blob_meta = BlobMeta.objects.get(blob_id=blob_id)
+    blob_meta = get_object_or_404(BlobMeta, blob_id=blob_id)
 
     if not UserVisit.objects.filter(
         opportunity=request.opportunity,
@@ -939,7 +939,10 @@ def fetch_attachment(request, org_slug, opp_id, blob_id):
     ).exists():
         return HttpResponseNotFound()
 
-    attachment = storages["default"].open(blob_id)
+    try:
+        attachment = storages["default"].open(blob_id)
+    except FileNotFoundError:
+        return HttpResponseNotFound()
     return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
 
 
