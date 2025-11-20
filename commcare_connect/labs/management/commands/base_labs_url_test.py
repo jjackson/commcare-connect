@@ -55,12 +55,15 @@ class BaseLabsURLTest(BaseCommand):
             )
             if not profile_data:
                 self.stdout.write(self.style.ERROR("Failed to introspect token"))
-                return
+                raise SystemExit(1)
 
             org_data = fetch_user_organization_data(access_token)
+            if not org_data:
+                self.stdout.write(self.style.ERROR("Failed to fetch organization data"))
+                raise SystemExit(1)
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"Failed to fetch user profile: {e}"))
-            return
+            raise SystemExit(1)
 
         # Temporarily add testserver to ALLOWED_HOSTS for testing
         current_allowed_hosts = list(settings.ALLOWED_HOSTS)

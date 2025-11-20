@@ -27,6 +27,11 @@ class Command(BaseCommand):
         for project in projects:
             command_name = f"test_{project}_urls"
             self.stdout.write(f"\n{project.upper()}:")
-            call_command(command_name, user=user_email)
+            try:
+                call_command(command_name, user=user_email)
+            except SystemExit as e:
+                if e.code != 0:
+                    self.stdout.write(self.style.ERROR(f"\nFAILED: {project} tests failed\n"))
+                    raise
 
         self.stdout.write(self.style.SUCCESS("\nPASS: All labs projects passed!\n"))

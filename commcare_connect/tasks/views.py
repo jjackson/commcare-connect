@@ -34,6 +34,12 @@ class TaskListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         """Get tasks the user can access with filtering."""
+        # Check if required context is present (program or opportunity)
+        labs_context = getattr(self.request, "labs_context", {})
+        if not labs_context.get("opportunity_id") and not labs_context.get("program_id"):
+            # No program or opportunity selected, return empty list
+            return []
+
         data_access = TaskDataAccess(user=self.request.user, request=self.request)
 
         # Get all tasks (OAuth enforces access) - returns a list, not QuerySet
@@ -59,8 +65,15 @@ class TaskListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        data_access = TaskDataAccess(user=self.request.user, request=self.request)
-        all_tasks = data_access.get_tasks()
+        # Check if required context is present (program or opportunity)
+        labs_context = getattr(self.request, "labs_context", {})
+        has_context = bool(labs_context.get("opportunity_id") or labs_context.get("program_id"))
+
+        if has_context:
+            data_access = TaskDataAccess(user=self.request.user, request=self.request)
+            all_tasks = data_access.get_tasks()
+        else:
+            all_tasks = []
 
         # Calculate statistics - all_tasks is a list, not QuerySet
         stats = {
@@ -112,6 +125,7 @@ class TaskListView(LoginRequiredMixin, ListView):
                 "selected_action_type": self.request.GET.get("action_type", "all"),
                 "has_connect_token": has_token,
                 "token_expires_at": token_expires_at,
+                "has_context": has_context,
             }
         )
 
