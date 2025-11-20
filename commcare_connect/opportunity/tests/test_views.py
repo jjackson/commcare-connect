@@ -712,7 +712,6 @@ def test_views_use_opportunity_decorator_or_mixin():
     function_excluded = {
         "export_status",  # Uses task_id parameter, and similar check is applied directly in code.
         "download_export",  # Uses task_id parameter, and similar check is applied directly in code.
-        "fetch_attachment",  # Uses blob_id parameter, not opp_id
         "add_api_key",  # API key management, no opportunity context needed
     }
 
