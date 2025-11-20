@@ -24,3 +24,4 @@ class UserAnalyticsData(models.Model):
     has_accepted_multiple_opps = models.DateTimeField(null=True)
     has_viewed_work_history = models.DateTimeField(null=True)
     has_sent_message = models.DateTimeField(null=True)
+    has_sso_on_hq_app = models.DateTimeField(null=True)
