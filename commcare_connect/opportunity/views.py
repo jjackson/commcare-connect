@@ -534,6 +534,8 @@ def review_visit_import(request, org_slug=None, opp_id=None):
         message = f"Visit review updated successfully for {len(status)} visits."
         if status.missing_visits:
             message += status.get_missing_message()
+        if status.locked_visits:
+            message += status.get_locked_message()
         messages.success(request, mark_safe(message))
     return redirect(redirect_url)
 
