@@ -48,7 +48,12 @@ module.exports = {
         test: /\.css$/i,
         use: [
           MiniCssExtractPlugin.loader,
-          'css-loader',
+          {
+            loader: 'css-loader',
+            options: {
+              sourceMap: false, // Strip source map references to avoid WhiteNoise errors with tomselect.js
+            },
+          },
           {
             loader: 'postcss-loader',
             options: {
