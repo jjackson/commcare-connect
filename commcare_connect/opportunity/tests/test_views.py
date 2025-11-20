@@ -551,10 +551,24 @@ class TestFetchAttachmentView:
         response = client.get(url)
         assert response.status_code == 404
 
-    def test_user_cannot_fetch_from_another_org(self, org_user_member, organization, client):
+    def test_user_cannot_fetch_blob_from_another_org_opportunity(self, org_user_member, organization, client):
         different_org = OrganizationFactory()  # Different organization
         visit = UserVisitFactory(opportunity__organization=different_org)
         blob_meta = BlobMetaFactory(parent_id=visit.xform_id)
+
+        url = reverse(
+            "opportunity:fetch_attachment", args=(organization.slug, visit.opportunity.id, blob_meta.blob_id)
+        )
+        client.force_login(org_user_member)
+
+        response = client.get(url)
+        assert response.status_code == 404
+
+    def test_user_cannot_fetch_blob_using_own_opp_access(self, org_user_member, organization, client):
+        different_org = OrganizationFactory()  # Different organization
+        visit = UserVisitFactory(opportunity__organization=organization)
+        other_visit = UserVisitFactory(opportunity__organization=different_org)
+        blob_meta = BlobMetaFactory(parent_id=other_visit.xform_id)
 
         url = reverse(
             "opportunity:fetch_attachment", args=(organization.slug, visit.opportunity.id, blob_meta.blob_id)
