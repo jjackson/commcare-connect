@@ -24,6 +24,11 @@ class TaskRecord(LocalLabsRecord):
         return self.data.get("username")
 
     @property
+    def user_id(self):
+        """User ID of the FLW this task is about (may be None if not available from API)."""
+        return self.data.get("user_id")
+
+    @property
     def task_type(self):
         """Type of task: warning, deactivation."""
         return self.data.get("task_type", "warning")

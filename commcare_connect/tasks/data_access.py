@@ -138,7 +138,20 @@ class TaskDataAccess:
 
         Returns:
             TaskRecord instance with initial "created" event
+
+        Raises:
+            ValueError: If username is empty or appears invalid
         """
+        # Validate username
+        if not username or not username.strip():
+            raise ValueError("Username is required to create a task")
+
+        # Warn about suspiciously long usernames (might be tokens or IDs)
+        if len(username) > 50:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Creating task with unusually long username (len={len(username)}): {username[:50]}...")
         data = {
             "username": username,
             "user_id": user_id,
@@ -445,16 +458,38 @@ class TaskDataAccess:
             # Parse CSV
             df = pd.read_csv(tmp_path)
 
+            # Log CSV structure for debugging
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.info(f"CSV columns for opportunity {opportunity_id}: {list(df.columns)}")
+            logger.info(f"CSV has {len(df)} rows")
+
             users = []
             for idx, row in df.iterrows():
                 username = str(row["username"]) if pd.notna(row.get("username")) else None
                 if username:
-                    # Note: user_id is not exported by the data_export API
-                    users.append(
-                        {
-                            "username": username,
-                        }
-                    )
+                    # Parse all available fields from CSV
+                    user_dict = {"username": username}
+
+                    # Add optional fields if they exist in the CSV
+                    optional_fields = [
+                        "name",
+                        "phone_number",
+                        "total_visits",
+                        "approved_visits",
+                        "flagged_visits",
+                        "rejected_visits",
+                        "last_active",
+                        "email",
+                    ]
+                    for field in optional_fields:
+                        if field in row and pd.notna(row[field]):
+                            user_dict[field] = (
+                                str(row[field]) if not isinstance(row[field], (int, float)) else row[field]
+                            )
+
+                    users.append(user_dict)
 
             return users
 

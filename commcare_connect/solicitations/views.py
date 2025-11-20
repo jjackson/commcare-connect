@@ -26,11 +26,16 @@ class SolicitationAccessMixin(LoginRequiredMixin, UserPassesTestMixin):
 
     Following the OrganizationUserMixin pattern from opportunity/views.py.
     Users must have organization membership to access solicitation features.
+    For labs environment, authenticated labs users have access.
     """
 
     def test_func(self):
-        # Follow OrganizationUserMixin pattern exactly
-        return self.request.org_membership != None or self.request.user.is_superuser  # noqa: E711
+        # Labs environment: authenticated labs users have access
+        if getattr(self.request.user, "is_labs_user", False):
+            return True
+
+        # Production: Follow OrganizationUserMixin pattern exactly
+        return self.request.org_membership is not None
 
 
 class SolicitationManagerMixin(LoginRequiredMixin, UserPassesTestMixin):
@@ -39,26 +44,31 @@ class SolicitationManagerMixin(LoginRequiredMixin, UserPassesTestMixin):
 
     Following the ProgramManagerMixin pattern from program/views.py exactly.
     Users must be organization admins with program manager role.
+    For labs environment, authenticated labs users have access.
     """
 
     def test_func(self):
-        # Follow ProgramManagerMixin pattern exactly
+        # Labs environment: authenticated labs users have access
+        if getattr(self.request.user, "is_labs_user", False):
+            return True
+
+        # Production: Follow ProgramManagerMixin pattern exactly
         org_membership = getattr(self.request, "org_membership", None)
         is_admin = getattr(org_membership, "is_admin", False)
         org = getattr(self.request, "org", None)
         program_manager = getattr(org, "program_manager", False)
-        return (org_membership is not None and is_admin and program_manager) or self.request.user.is_superuser
+        return org_membership is not None and is_admin and program_manager
 
 
 class SolicitationResponseViewAccessMixin(LoginRequiredMixin, UserPassesTestMixin):
     """
     Handles access permissions for viewing solicitation responses.
-    Simplified for labs - superuser gets access (since LabsUser is always superuser).
+    For labs environment, authenticated labs users have access.
     """
 
     def test_func(self):
-        # For labs, LabsUser is superuser so this will pass
-        return self.request.user.is_superuser
+        # Labs environment: authenticated labs users have access
+        return getattr(self.request.user, "is_labs_user", False)
 
 
 # =============================================================================
@@ -75,6 +85,7 @@ def solicitation_access_required(view_func):
     """
     Decorator equivalent of SolicitationAccessMixin for function-based views.
     Ensures user has organization membership (following established patterns).
+    For labs environment, authenticated labs users have access.
     """
     from functools import wraps
 
@@ -83,8 +94,12 @@ def solicitation_access_required(view_func):
     @login_required
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
-        # Follow SolicitationAccessMixin logic exactly
-        if not (getattr(request, "org_membership", None) or request.user.is_superuser):
+        # Labs environment: authenticated labs users have access
+        if getattr(request.user, "is_labs_user", False):
+            return view_func(request, *args, **kwargs)
+
+        # Production: Follow SolicitationAccessMixin logic exactly
+        if not getattr(request, "org_membership", None):
             raise PermissionDenied("Organization membership required")
         return view_func(request, *args, **kwargs)
 

@@ -149,24 +149,31 @@ class TaskDetailView(LoginRequiredMixin, DetailView):
 
         # Get FLW history (past tasks for the same user) - returns list, not QuerySet
         data_access = TaskDataAccess(user=self.request.user, request=self.request)
-        all_flw_tasks = data_access.get_tasks(username=task.task_username)
-
-        # Filter out current task and sort by date_created
-        flw_history = [t for t in all_flw_tasks if t.id != task.id]
-        flw_history = sorted(flw_history, key=lambda x: x.date_created or "", reverse=True)[:5]
-
-        # Format history for template
         formatted_history = []
-        for hist in flw_history:
-            formatted_history.append(
-                {
-                    "id": hist.id,
-                    "date_created": hist.date_created,
-                    "task_type": hist.task_type,
-                    "status": hist.status,
-                    "title": hist.title,
-                }
-            )
+
+        # Try to get FLW history, but handle errors gracefully (e.g., invalid username)
+        try:
+            if task.task_username:
+                all_flw_tasks = data_access.get_tasks(username=task.task_username)
+
+                # Filter out current task and sort by date_created
+                flw_history = [t for t in all_flw_tasks if t.id != task.id]
+                flw_history = sorted(flw_history, key=lambda x: x.date_created or "", reverse=True)[:5]
+
+                # Format history for template
+                for hist in flw_history:
+                    formatted_history.append(
+                        {
+                            "id": hist.id,
+                            "date_created": hist.date_created,
+                            "task_type": hist.task_type,
+                            "status": hist.status,
+                            "title": hist.title,
+                        }
+                    )
+        except Exception as e:
+            # Log the error but don't crash the page
+            logger.error(f"Failed to fetch FLW history for task {task.id}: {e}", exc_info=True)
 
         context.update(
             {
