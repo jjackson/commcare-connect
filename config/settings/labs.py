@@ -35,6 +35,7 @@ _auth_idx = MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddl
 MIDDLEWARE[_auth_idx] = "commcare_connect.labs.middleware.LabsAuthenticationMiddleware"
 MIDDLEWARE.remove("commcare_connect.users.middleware.OrganizationMiddleware")  # Remove production middleware
 MIDDLEWARE.insert(_auth_idx + 1, "commcare_connect.labs.middleware.LabsURLWhitelistMiddleware")
+MIDDLEWARE.insert(_auth_idx + 2, "commcare_connect.labs.context.LabsContextMiddleware")
 
 # CommCare OAuth configuration (for accessing CommCare HQ APIs)
 # These should be set via environment variables

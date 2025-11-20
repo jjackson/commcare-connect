@@ -241,7 +241,12 @@
           <tr>
             <td colspan="9" class="px-6 py-12 text-center text-gray-500">
               <i class="fa-solid fa-inbox text-4xl mb-2 block text-gray-300"></i>
-              No actions found matching your filters.
+              {% if not has_context %}
+                <p class="font-medium text-lg mb-2">No program or opportunity selected</p>
+                <p class="text-sm">Please select a program or opportunity from the context selector above to view tasks.</p>
+              {% else %}
+                No actions found matching your filters.
+              {% endif %}
             </td>
           </tr>
           {% endfor %}

@@ -15,6 +15,11 @@
         {% if request.user.is_authenticated %}
         <!-- Right Section: Org, Profile Dropdown -->
         <div class="flex items-center gap-x-2">
+            <!-- Labs Context Selector (labs mode only) -->
+            {% if request.user.is_labs_user %}
+                {% include "labs/context_selector.html" %}
+            {% endif %}
+
             <!-- Organization selector (hidden in labs mode) -->
             {% if not request.user.is_labs_user %}
             <div x-data="{ open: false }" @click.away="open = false" class="relative mx-8">

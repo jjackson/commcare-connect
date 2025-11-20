@@ -155,9 +155,21 @@ class ManageSolicitationsListView(ListView):
     paginate_by = 20
 
     def get_queryset(self):
+        # Check if required context is present (organization or program)
+        labs_context = getattr(self.request, "labs_context", {})
+        if not labs_context.get("organization_id") and not labs_context.get("program_id"):
+            # No organization or program selected, return empty list
+            return []
+
         # Use data access layer to filter by user's username
         data_access = SolicitationDataAccess(request=self.request)
         return data_access.get_solicitations()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        labs_context = getattr(self.request, "labs_context", {})
+        context["has_context"] = bool(labs_context.get("organization_id") or labs_context.get("program_id"))
+        return context
 
 
 class MyResponsesListView(ListView):

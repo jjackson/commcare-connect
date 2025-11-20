@@ -1,0 +1,398 @@
+{% load static %}
+{# Context selector component for labs header #}
+
+{{user.organizations|json_script:"org-data"}}
+{{ user.programs|json_script:"program-data"}}
+{{ user.opportunities|json_script:"opportunity-data"}}
+
+<div class="relative inline-block"
+     x-data="labsContextSelector()"
+     x-init="init()">
+
+  {% if request.labs_context.organization or request.labs_context.program or request.labs_context.opportunity %}
+    {# Context is selected - show in order: org, program, opp #}
+    <button @click="open = !open"
+            class="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition"
+            type="button">
+      <div class="flex items-center space-x-2 text-sm">
+        {% if request.labs_context.organization %}
+          <span class="font-medium text-gray-700">Org:</span>
+          <span class="text-gray-900">{{ request.labs_context.organization.name }}</span>
+        {% endif %}
+        {% if request.labs_context.program %}
+          {% if request.labs_context.organization %}<span class="text-gray-400">|</span>{% endif %}
+          <span class="font-medium text-gray-700">Program:</span>
+          <span class="text-gray-900">{{ request.labs_context.program.name }}</span>
+        {% endif %}
+        {% if request.labs_context.opportunity %}
+          {% if request.labs_context.organization or request.labs_context.program %}<span class="text-gray-400">|</span>{% endif %}
+          <span class="font-medium text-gray-700">Opp:</span>
+          <span class="text-gray-900">{{ request.labs_context.opportunity.name }}</span>
+        {% endif %}
+      </div>
+      <svg class="w-4 h-4 text-gray-500" :class="{'rotate-180': open}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+      </svg>
+    </button>
+  {% else %}
+    {# No context selected - show selection button #}
+    <button @click="open = !open"
+            class="flex items-center space-x-2 px-4 py-2 bg-yellow-500 text-white rounded-lg shadow-sm hover:bg-yellow-600 transition"
+            type="button">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+      </svg>
+      <span class="font-medium">Select Context</span>
+    </button>
+  {% endif %}
+
+  {# Full-width dropdown menu #}
+  <div x-show="open"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="transform opacity-0 -translate-y-2"
+       x-transition:enter-end="transform opacity-100 translate-y-0"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="transform opacity-100 translate-y-0"
+       x-transition:leave-end="transform opacity-0 -translate-y-2"
+       @click.away="open = false"
+       class="fixed left-0 right-0 mt-2 bg-white shadow-2xl border-t border-b border-gray-200 z-50"
+       style="display: none; top: 60px;">
+
+    <div class="max-w-7xl mx-auto p-6">
+      {# Search bar #}
+      <div class="mb-6">
+        <div class="relative">
+          <input type="text"
+                 x-model="search"
+                 placeholder="Search organizations, programs, or opportunities..."
+                 class="w-full px-4 py-3 pl-11 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          <svg class="absolute left-3 top-3.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
+        </div>
+      </div>
+
+      {# Three-column layout - always show all columns #}
+      <div class="grid gap-6 mb-6 grid-cols-3">
+
+        {# Organizations column #}
+        <div class="border-r border-gray-200 pr-6">
+          <h3 class="text-sm font-semibold uppercase tracking-wider mb-3 flex items-center justify-between"
+              :class="showOrgs ? 'text-gray-700' : 'text-gray-400'">
+            <div class="flex flex-col">
+              <span>Organizations</span>
+              <span x-show="!showOrgs" class="text-xs font-normal normal-case italic">(Filter not used by this labs project)</span>
+            </div>
+            <span class="text-xs text-gray-500 font-normal normal-case" x-text="'(' + orgData.length + ')'"></span>
+          </h3>
+          <div class="space-y-1 max-h-96 overflow-y-auto">
+            <template x-for="org in orgData" :key="org.slug">
+              <button type="button"
+                 x-show="matchesSearch(org.name) || matchesSearch(org.slug)"
+                 @click="selectOrg(org)"
+                 class="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-blue-50 rounded-lg transition"
+                 :class="{
+                   'bg-blue-100 font-medium border-l-4 border-blue-500': selectedOrg && selectedOrg.slug === org.slug,
+                   'opacity-50': !showOrgs
+                 }">
+                <div class="font-medium" x-text="org.name"></div>
+                <div class="text-xs text-gray-500 mt-0.5" x-text="org.slug"></div>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        {# Programs column #}
+        <div class="border-r border-gray-200 pr-6">
+          <h3 class="text-sm font-semibold uppercase tracking-wider mb-3 flex items-center justify-between"
+              :class="showPrograms ? 'text-gray-700' : 'text-gray-400'">
+            <div class="flex flex-col">
+              <span>Programs</span>
+              <span x-show="!showPrograms" class="text-xs font-normal normal-case italic">(Filter not used by this labs project)</span>
+            </div>
+            <span class="text-xs text-gray-500 font-normal normal-case" x-text="'(' + filteredPrograms.length + ' of ' + programData.length + ')'"></span>
+          </h3>
+          <div class="space-y-1 max-h-96 overflow-y-auto">
+            <template x-for="program in filteredPrograms" :key="program.id">
+              <button type="button"
+                 x-show="matchesSearch(program.name)"
+                 @click="selectProgram(program)"
+                 class="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-green-50 rounded-lg transition"
+                 :class="{
+                   'bg-green-100 font-medium border-l-4 border-green-500': selectedProgram && selectedProgram.id === program.id,
+                   'opacity-50': !showPrograms
+                 }">
+                <div class="font-medium" x-text="program.name"></div>
+                <div class="text-xs text-gray-500 mt-0.5" x-text="program.organization"></div>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        {# Opportunities column #}
+        <div>
+          <h3 class="text-sm font-semibold uppercase tracking-wider mb-3 flex items-center justify-between"
+              :class="showOpps ? 'text-gray-700' : 'text-gray-400'">
+            <div class="flex flex-col">
+              <span>Opportunities</span>
+              <span x-show="!showOpps" class="text-xs font-normal normal-case italic">(Filter not used by this labs project)</span>
+            </div>
+            <span class="text-xs text-gray-500 font-normal normal-case" x-text="'(' + filteredOpps.length + ' of ' + oppData.length + ')'"></span>
+          </h3>
+          <div class="space-y-1 max-h-96 overflow-y-auto">
+            <template x-for="opp in filteredOpps" :key="opp.id">
+              <button type="button"
+                 x-show="matchesSearch(opp.name) || matchesSearch(opp.program_name || '')"
+                 @click="selectOpp(opp)"
+                 class="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-purple-50 rounded-lg transition"
+                 :class="{
+                   'bg-purple-100 font-medium border-l-4 border-purple-500': selectedOpp && selectedOpp.id === opp.id,
+                   'opacity-50': !showOpps
+                 }">
+                <div class="font-medium" x-text="opp.name"></div>
+                <div class="text-xs text-gray-500 mt-0.5" x-text="opp.program_name || ''"></div>
+              </button>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      {# Footer with Apply and Clear buttons #}
+      <div class="border-t border-gray-200 pt-4 flex items-center justify-between">
+        <div class="text-sm text-gray-600">
+          <span x-show="hasSelection">
+            Selected:
+            <span x-show="selectedOrg" class="font-medium text-blue-600" x-text="selectedOrg ? selectedOrg.name : ''"></span>
+            <span x-show="selectedOrg && (selectedProgram || selectedOpp)"> → </span>
+            <span x-show="selectedProgram" class="font-medium text-green-600" x-text="selectedProgram ? selectedProgram.name : ''"></span>
+            <span x-show="selectedProgram && selectedOpp"> → </span>
+            <span x-show="selectedOpp" class="font-medium text-purple-600" x-text="selectedOpp ? selectedOpp.name : ''"></span>
+          </span>
+          <span x-show="!hasSelection" class="text-gray-400 italic">
+            No selection
+          </span>
+        </div>
+        <div class="flex items-center space-x-3">
+          <button type="button"
+                  @click="clearSelection()"
+                  x-show="hasSelection"
+                  class="px-4 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg font-medium transition flex items-center">
+            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+            Clear
+          </button>
+          <button type="button"
+                  @click="applySelection()"
+                  class="px-6 py-2 text-sm rounded-lg font-medium transition flex items-center bg-blue-600 hover:bg-blue-700 text-white">
+            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            Apply Selection
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function labsContextSelector() {
+  return {
+    open: false,
+    search: '',
+    selectedOrg: null,
+    selectedProgram: null,
+    selectedOpp: null,
+    orgData: [],
+    programData: [],
+    oppData: [],
+    currentPath: window.location.pathname,
+
+    init() {
+      // Initialize data from JSON script tags
+      const orgDataEl = document.getElementById('org-data');
+      if (orgDataEl) {
+        this.orgData = JSON.parse(orgDataEl.textContent);
+      }
+
+      const programDataEl = document.getElementById('program-data');
+      if (programDataEl) {
+        this.programData = JSON.parse(programDataEl.textContent);
+      }
+
+      const oppDataEl = document.getElementById('opportunity-data');
+      if (oppDataEl) {
+        this.oppData = JSON.parse(oppDataEl.textContent);
+      }
+
+      // Initialize from current context using URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const orgId = urlParams.get('organization_id');
+      const programId = urlParams.get('program_id');
+      const oppId = urlParams.get('opportunity_id');
+
+      if (orgId) {
+        const org = this.orgData.find(o => o.slug === orgId);
+        if (org) {
+          this.selectedOrg = {slug: org.slug, name: org.name};
+        }
+      }
+
+      if (programId) {
+        const program = this.programData.find(p => p.id === parseInt(programId));
+        if (program) {
+          this.selectedProgram = {id: program.id, name: program.name};
+        }
+      }
+
+      if (oppId) {
+        const opp = this.oppData.find(o => o.id === parseInt(oppId));
+        if (opp) {
+          this.selectedOpp = {id: opp.id, name: opp.name};
+        }
+      }
+    },
+
+    get showOrgs() {
+      return this.currentPath.includes('/solicitations/');
+    },
+
+    get showPrograms() {
+      return this.currentPath.includes('/solicitations/') || this.currentPath.includes('/audit/') || this.currentPath.includes('/tasks/');
+    },
+
+    get showOpps() {
+      return this.currentPath.includes('/tasks/') || this.currentPath.includes('/audit/');
+    },
+
+    get hasSelection() {
+      return this.selectedOrg || this.selectedProgram || this.selectedOpp;
+    },
+
+    get filteredPrograms() {
+      // Don't filter if orgs aren't used by this project
+      if (!this.showOrgs || !this.selectedOrg) return this.programData;
+      return this.programData.filter(p => p.organization === this.selectedOrg.slug);
+    },
+
+    get filteredOpps() {
+      // Don't filter if programs aren't used by this project
+      if (!this.showPrograms || !this.selectedProgram) return this.oppData;
+      return this.oppData.filter(o => o.program === this.selectedProgram.id);
+    },
+
+    matchesSearch(text) {
+      if (!this.search) return true;
+      return text.toLowerCase().includes(this.search.toLowerCase());
+    },
+
+    isSelected(type, id) {
+      if (type === 'org') return this.selectedOrg && this.selectedOrg.slug === id;
+      if (type === 'program') return this.selectedProgram && this.selectedProgram.id === id;
+      if (type === 'opp') return this.selectedOpp && this.selectedOpp.id === id;
+      return false;
+    },
+
+    selectOrg(org) {
+      this.selectedOrg = {slug: org.slug, name: org.name};
+    },
+
+    selectProgram(program) {
+      this.selectedProgram = {id: program.id, name: program.name};
+      // Auto-select parent org
+      if (program.organization && !this.selectedOrg) {
+        const org = this.orgData.find(o => o.slug === program.organization);
+        if (org) this.selectedOrg = {slug: org.slug, name: org.name};
+      }
+    },
+
+    selectOpp(opp) {
+      this.selectedOpp = {id: opp.id, name: opp.name};
+      // Auto-select parent program
+      if (opp.program && !this.selectedProgram) {
+        const program = this.programData.find(p => p.id === opp.program);
+        if (program) {
+          this.selectedProgram = {id: program.id, name: program.name};
+          // Auto-select parent org
+          if (program.organization && !this.selectedOrg) {
+            const org = this.orgData.find(o => o.slug === program.organization);
+            if (org) this.selectedOrg = {slug: org.slug, name: org.name};
+          }
+        }
+      }
+    },
+
+    clearSelection() {
+      // Just clear the Alpine state, don't navigate
+      // User will click "Apply" to actually clear the selection
+      this.selectedOrg = null;
+      this.selectedProgram = null;
+      this.selectedOpp = null;
+    },
+
+    applySelection() {
+      // Check if nothing is selected
+      const hasSelection = (this.selectedOrg && this.showOrgs) ||
+                          (this.selectedProgram && this.showPrograms) ||
+                          (this.selectedOpp && this.showOpps);
+
+      if (!hasSelection) {
+        // If nothing selected, call the clear context endpoint
+        // Create a form and submit it to clear the session
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/labs/clear-context/';
+
+        // Add CSRF token
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+                         document.querySelector('meta[name="csrf-token"]')?.content ||
+                         this.getCookie('csrftoken');
+        if (csrfToken) {
+          const csrfInput = document.createElement('input');
+          csrfInput.type = 'hidden';
+          csrfInput.name = 'csrfmiddlewaretoken';
+          csrfInput.value = csrfToken;
+          form.appendChild(csrfInput);
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+      } else {
+        // Only apply filters that are relevant to this project
+        const url = new URL(window.location.href);
+        url.searchParams.delete('organization_id');
+        url.searchParams.delete('program_id');
+        url.searchParams.delete('opportunity_id');
+
+        if (this.selectedOrg && this.showOrgs) {
+          url.searchParams.set('organization_id', this.selectedOrg.slug);
+        }
+        if (this.selectedProgram && this.showPrograms) {
+          url.searchParams.set('program_id', this.selectedProgram.id);
+        }
+        if (this.selectedOpp && this.showOpps) {
+          url.searchParams.set('opportunity_id', this.selectedOpp.id);
+        }
+
+        window.location.href = url.toString();
+      }
+    },
+
+    getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+  };
+}
+</script>

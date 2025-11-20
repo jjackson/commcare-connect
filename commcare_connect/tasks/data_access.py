@@ -50,23 +50,15 @@ class TaskDataAccess:
         self.user = user
         self.request = request
 
-        # Extract organization_id or opportunity_id from request if available and not provided
-        if not organization_id and not opportunity_id and request:
-            # Get from user's OAuth data
-            if hasattr(request.user, "_org_data"):
-                # Production API doesn't return organization IDs, only slugs
-                # But programs and opportunities DO have IDs, so use those instead
-                # Note: We use the FIRST program for scoping (not hardcoded)
-                # Views that need multi-program access should loop and create multiple instances
-                programs = request.user._org_data.get("programs", [])
-                opportunities = request.user._org_data.get("opportunities", [])
-
-                # Prefer program_id since programs are org-scoped
-                if programs:
-                    self.program_id = programs[0].get("id")  # First program ID (dynamic, not hardcoded)
-                # Fall back to opportunity_id if no programs
-                elif opportunities:
-                    self.opportunity_id = opportunities[0].get("id")
+        # Use labs_context from middleware if available (takes precedence)
+        if request and hasattr(request, "labs_context"):
+            labs_context = request.labs_context
+            if not opportunity_id and "opportunity_id" in labs_context:
+                self.opportunity_id = labs_context["opportunity_id"]
+            if not program_id and "program_id" in labs_context:
+                self.program_id = labs_context["program_id"]
+            if not organization_id and "organization_id" in labs_context:
+                self.organization_id = labs_context["organization_id"]
 
         # Get OAuth token
         if not access_token and request:

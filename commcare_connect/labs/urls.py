@@ -1,10 +1,12 @@
 from django.urls import include, path
 
-from . import oauth_views
+from . import oauth_views, views
 
 app_name = "labs"
 
 urlpatterns = [
+    # Context management
+    path("clear-context/", views.clear_context, name="clear_context"),
     # Connect OAuth (for labs authentication)
     path("login/", oauth_views.labs_login_page, name="login"),
     path("initiate/", oauth_views.labs_oauth_login, name="oauth_initiate"),

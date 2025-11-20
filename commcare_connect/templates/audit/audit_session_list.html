@@ -38,16 +38,28 @@
         Labs Status
       </a>
       {% endif %}
-      <a class="button button-md primary-dark" href="{% url 'audit:creation_wizard' %}">
-        <i class="fa-solid fa-plus mr-2"></i>
-        {% translate "Create Audit" %}
-      </a>
+      {% if has_context %}
+        <a class="button button-md primary-dark" href="{% url 'audit:creation_wizard' %}">
+          <i class="fa-solid fa-plus mr-2"></i>
+          {% translate "Create Audit" %}
+        </a>
+      {% endif %}
     </div>
   </div>
 
   <!-- Sessions Table -->
   <div class="w-full overflow-y-auto rounded-lg shadow-xs">
-    {% render_table table %}
+    {% if not has_context %}
+      <div class="bg-blue-50 border border-blue-200 rounded-lg p-12 text-center">
+        <svg class="w-16 h-16 text-blue-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        <h3 class="text-xl font-semibold text-blue-900 mb-2">No program or opportunity selected</h3>
+        <p class="text-blue-700 mb-6">Please select a program or opportunity from the context selector above to view audit sessions.</p>
+      </div>
+    {% else %}
+      {% render_table table %}
+    {% endif %}
   </div>
 </div>
 

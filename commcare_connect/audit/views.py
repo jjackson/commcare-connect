@@ -44,6 +44,12 @@ class ExperimentAuditListView(LoginRequiredMixin, SingleTableView):
     paginate_by = 20
 
     def get_queryset(self):
+        # Check if required context is present (program or opportunity)
+        labs_context = getattr(self.request, "labs_context", {})
+        if not labs_context.get("opportunity_id") and not labs_context.get("program_id"):
+            # No program or opportunity selected, return empty list
+            return []
+
         # Get AuditSessionRecords from API (returns list, not QuerySet)
         data_access = AuditDataAccess(request=self.request)
         try:
@@ -55,6 +61,10 @@ class ExperimentAuditListView(LoginRequiredMixin, SingleTableView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+
+        # Check if required context is present (program or opportunity)
+        labs_context = getattr(self.request, "labs_context", {})
+        context["has_context"] = bool(labs_context.get("opportunity_id") or labs_context.get("program_id"))
 
         # Check for Connect OAuth token
         from django.conf import settings

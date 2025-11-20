@@ -109,9 +109,11 @@ class LabsRecordAPIClient:
                 params["username"] = username
 
             # Add scope filters from client initialization or method parameters
-            if organization_id:
+            # NOTE: organization_id must be an integer ID, not a slug
+            # The API doesn't support organization slugs for filtering
+            if organization_id and isinstance(organization_id, int):
                 params["organization_id"] = organization_id
-            elif self.organization_id:
+            elif self.organization_id and isinstance(self.organization_id, int):
                 params["organization_id"] = self.organization_id
             if program_id:
                 params["program_id"] = program_id
@@ -204,7 +206,8 @@ class LabsRecordAPIClient:
             payload["program_id"] = program_id
         elif self.program_id:
             payload["program_id"] = self.program_id
-        if self.organization_id:
+        # Only include organization_id if it's an integer ID, not a slug
+        if self.organization_id and isinstance(self.organization_id, int):
             payload["organization_id"] = self.organization_id
         if self.opportunity_id:
             payload["opportunity_id"] = self.opportunity_id
@@ -308,9 +311,10 @@ class LabsRecordAPIClient:
         elif self.program_id:
             payload["program_id"] = self.program_id
 
-        if current.organization_id:
+        # Only include organization_id if it's an integer ID, not a slug
+        if current.organization_id and isinstance(current.organization_id, int):
             payload["organization_id"] = current.organization_id
-        elif self.organization_id:
+        elif self.organization_id and isinstance(self.organization_id, int):
             payload["organization_id"] = self.organization_id
 
         if current.opportunity_id:
