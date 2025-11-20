@@ -92,8 +92,9 @@ def simple_echo_task(
     # Create a minimal request-like object for OAuth token access
     # We'll create a simple object that has the session data needed
     class MockRequest:
-        def __init__(self, access_token):
+        def __init__(self, access_token, user=None):
             self.session = {}
+            self.user = user
             if access_token:
                 import time
 
@@ -103,7 +104,7 @@ def simple_echo_task(
                     "expires_at": time.time() + 3600,  # 1 hour from now
                 }
 
-    mock_request = MockRequest(access_token)
+    mock_request = MockRequest(access_token, user=user)
 
     # Create dependencies
     deps = UserDependencies(user=user, request=mock_request)
