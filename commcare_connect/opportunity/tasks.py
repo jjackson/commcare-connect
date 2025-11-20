@@ -28,7 +28,6 @@ from commcare_connect.opportunity.export import (
     export_user_visit_review_data,
     export_work_status_table,
 )
-from commcare_connect.opportunity.forms import DateRanges
 from commcare_connect.opportunity.models import (
     BlobMeta,
     CompletedWorkStatus,
@@ -142,25 +141,28 @@ def invite_user(user_id, opportunity_access_id):
 
 
 @celery_app.task()
-def generate_visit_export(opportunity_id: int, date_range: str, status: list[str], export_format: str, flatten: bool):
+def generate_visit_export(
+    opportunity_id: int, from_date, to_date, status: list[str], export_format: str, flatten: bool
+):
     opportunity = Opportunity.objects.get(id=opportunity_id)
-    logger.info(f"Export for {opportunity.name} with date range {date_range} and status {','.join(status)}")
+    logger.info(
+        f"Export for {opportunity.name} with date range from {from_date} to {to_date} and status {','.join(status)}"
+    )
     exporter = UserVisitExporter(opportunity, flatten)
-    dataset = exporter.get_dataset(DateRanges(date_range), [VisitValidationStatus(s) for s in status])
+    dataset = exporter.get_dataset(from_date, to_date, [VisitValidationStatus(s) for s in status])
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_visit_export.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
 
 
 @celery_app.task()
-def generate_review_visit_export(opportunity_id: int, date_range: str, status: list[str], export_format: str):
+def generate_review_visit_export(opportunity_id: int, from_date, to_date, status: list[str], export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     logger.info(
-        f"Export review visit for {opportunity.name} with date range {date_range} and status {','.join(status)}"
+        f"""Export review visit for {opportunity.name} with date
+        from {from_date} to {to_date} and status {','.join(status)}"""
     )
-    dataset = export_user_visit_review_data(
-        opportunity, DateRanges(date_range), [VisitReviewStatus(s) for s in status]
-    )
+    dataset = export_user_visit_review_data(opportunity, from_date, to_date, [VisitReviewStatus(s) for s in status])
     export_tmp_name = f"{now().isoformat()}_{opportunity.name}_review_visit_export.{export_format}"
     save_export(dataset, export_tmp_name, export_format)
     return export_tmp_name
@@ -463,4 +465,10 @@ def fetch_exchange_rates(date=None, currency=None):
 
 @celery_app.task()
 def issue_user_credentials():
+    """Runs daily to issue credentials to users who have earned them."""
     UserCredentialIssuer.run()
+
+
+@celery_app.task()
+def submit_credentials_to_personalid_task():
+    UserCredentialIssuer.submit_user_credentials()

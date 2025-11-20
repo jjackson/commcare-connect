@@ -1,7 +1,9 @@
 import datetime
 import json
 import uuid
+from urllib.parse import urlencode
 
+import waffle
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Column, Div, Field, Fieldset, Layout, Row, Submit
 from dateutil.relativedelta import relativedelta
@@ -18,6 +20,7 @@ from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.models import (
     CommCareApp,
     CompletedWork,
+    CompletedWorkStatus,
     CredentialConfiguration,
     DeliverUnit,
     DeliverUnitFlagRules,
@@ -42,6 +45,10 @@ from commcare_connect.users.models import User, UserCredential
 FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Africa"), ("+91", "India")]
 
 CHECKBOX_CLASS = "simple-toggle"
+
+DOMAIN_PLACEHOLDER_CHOICE = ("", "Select an API key to load domains.")
+APP_PLACEHOLDER_CHOICE = ("", "Select an Application")
+API_KEY_PLACEHOLDER_CHOICE = ("", "Select a HQ Server to load API Keys.")
 
 
 class HQApiKeyCreateForm(forms.ModelForm):
@@ -259,6 +266,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
 
 class OpportunityInitForm(forms.ModelForm):
     managed_opp = False
+    app_hint_text = "Add required apps to the opportunity. All fields are mandatory."
 
     class Meta:
         model = Opportunity
@@ -318,7 +326,7 @@ class OpportunityInitForm(forms.ModelForm):
                 HTML(
                     "<div class='col-span-2'>"
                     "<h6 class='title-sm'>Apps</h6>"
-                    "<span class='hint'>Add required apps to the opportunity. All fields are mandatory.</span>"
+                    f"<span class='hint'>{self.app_hint_text}</span>"
                     "</div>"
                 ),
                 Column(
@@ -371,7 +379,7 @@ class OpportunityInitForm(forms.ModelForm):
 
         self.fields["learn_app_domain"] = forms.Field(
             widget=forms.Select(
-                choices=[(None, "Select an API key to load domains.")],
+                choices=[DOMAIN_PLACEHOLDER_CHOICE],
                 attrs=get_domain_select_attrs(),
             ),
         )
@@ -383,7 +391,7 @@ class OpportunityInitForm(forms.ModelForm):
 
         self.fields["deliver_app_domain"] = forms.Field(
             widget=forms.Select(
-                choices=[(None, "Select an API key to load domains.")],
+                choices=[DOMAIN_PLACEHOLDER_CHOICE],
                 attrs=get_domain_select_attrs(),
             ),
         )
@@ -393,7 +401,7 @@ class OpportunityInitForm(forms.ModelForm):
 
         self.fields["api_key"] = forms.Field(
             widget=forms.Select(
-                choices=[(None, "Select a HQ Server to load API Keys.")],
+                choices=[API_KEY_PLACEHOLDER_CHOICE],
                 attrs=get_htmx_swap_attrs(
                     "users:get_api_keys",
                     "#id_hq_server",
@@ -416,57 +424,211 @@ class OpportunityInitForm(forms.ModelForm):
                 raise forms.ValidationError("Invalid app data")
             return cleaned_data
 
-    def save(self, commit=True):
-        organization = Organization.objects.get(slug=self.org_slug)
-        learn_app = self.cleaned_data["learn_app"]
-        deliver_app = self.cleaned_data["deliver_app"]
-        learn_app_domain = self.cleaned_data["learn_app_domain"]
-        deliver_app_domain = self.cleaned_data["deliver_app_domain"]
+    def _build_commcare_app(self, *, app_type, organization, hq_server, created_by, update_existing=False):
+        app_data = self.cleaned_data[f"{app_type}_app"]
+        domain = self.cleaned_data[f"{app_type}_app_domain"]
+        defaults = {
+            "name": app_data["name"],
+            "created_by": created_by,
+            "modified_by": self.user.email,
+        }
+        if app_type == "learn":
+            defaults.update(
+                {
+                    "description": self.cleaned_data["learn_app_description"],
+                    "passing_score": self.cleaned_data["learn_app_passing_score"],
+                }
+            )
+        app, created = CommCareApp.objects.get_or_create(
+            cc_app_id=app_data["id"],
+            cc_domain=domain,
+            organization=organization,
+            hq_server=hq_server,
+            defaults=defaults,
+        )
+        if not created and update_existing:
+            update_fields = ["name", "hq_server", "modified_by"]
+            app.name = app_data["name"]
+            app.hq_server = hq_server
+            app.modified_by = self.user.email
+            if app_type == "learn":
+                app.description = self.cleaned_data["learn_app_description"]
+                app.passing_score = self.cleaned_data["learn_app_passing_score"]
+                update_fields.extend(["description", "passing_score"])
+            app.save(update_fields=update_fields)
+        return app
 
-        self.instance.learn_app, _ = CommCareApp.objects.get_or_create(
-            cc_app_id=learn_app["id"],
-            cc_domain=learn_app_domain,
+    def save(self, commit=True):
+        opportunity = super().save(commit=False)
+        organization = Organization.objects.get(slug=self.org_slug)
+        hq_server = self.cleaned_data["hq_server"]
+
+        learn_app = self._build_commcare_app(
+            app_type="learn",
             organization=organization,
-            hq_server=self.instance.hq_server,
-            defaults={
-                "name": learn_app["name"],
-                "created_by": self.user.email,
-                "modified_by": self.user.email,
-                "description": self.cleaned_data["learn_app_description"],
-                "passing_score": self.cleaned_data["learn_app_passing_score"],
-            },
+            hq_server=hq_server,
+            created_by=self.user.email,
+            update_existing=False,
         )
-        self.instance.deliver_app, _ = CommCareApp.objects.get_or_create(
-            cc_app_id=deliver_app["id"],
-            cc_domain=deliver_app_domain,
+        deliver_app = self._build_commcare_app(
+            app_type="deliver",
             organization=organization,
-            hq_server=self.instance.hq_server,
-            defaults={
-                "name": deliver_app["name"],
-                "created_by": self.user.email,
-                "modified_by": self.user.email,
-            },
+            hq_server=hq_server,
+            created_by=self.user.email,
+            update_existing=False,
         )
-        self.instance.created_by = self.user.email
-        self.instance.modified_by = self.user.email
-        self.instance.currency = self.instance.currency.upper()
+
+        opportunity.learn_app = learn_app
+        opportunity.deliver_app = deliver_app
+
+        if not getattr(opportunity, "created_by", None):
+            opportunity.created_by = self.user.email
+        opportunity.modified_by = self.user.email
 
         if self.managed_opp:
-            self.instance.organization = self.cleaned_data.get("organization")
+            opportunity.organization = self.cleaned_data.get("organization")
         else:
-            self.instance.organization = organization
+            opportunity.currency = self.cleaned_data["currency"].upper()
+            opportunity.organization = organization
 
-        api_key, _ = HQApiKey.objects.get_or_create(
+        opportunity.api_key, _ = HQApiKey.objects.get_or_create(
             id=self.cleaned_data["api_key"],
             defaults={
-                "hq_server": self.cleaned_data["hq_server"],
+                "hq_server": hq_server,
                 "user": self.user,
             },
         )
-        self.instance.api_key = api_key
-        super().save(commit=commit)
 
-        return self.instance
+        if commit:
+            opportunity.save()
+        return opportunity
+
+
+class OpportunityInitUpdateForm(OpportunityInitForm):
+    app_hint_text = "To switch apps, re-select the HQ Server field to see all app choices. All fields are mandatory."
+    disabled_app_hint_text = (
+        "Learn and Deliver apps and the API key cannot be changed after Connect Workers have joined. "
+        "You can still edit the learn app description and passing score."
+    )
+
+    def __init__(self, *args, **kwargs):
+        opportunity = kwargs.get("instance")
+        self._has_existing_accesses = False
+        self._disabled_fields = ()
+        if opportunity and getattr(opportunity, "pk", None):
+            self._has_existing_accesses = OpportunityAccess.objects.filter(opportunity=opportunity).exists()
+            if self._has_existing_accesses:
+                self.app_hint_text = self.disabled_app_hint_text
+
+        super().__init__(*args, **kwargs)
+        opportunity = self.instance
+
+        if not getattr(opportunity, "pk", None):
+            return
+
+        for field_name in ("name", "short_description", "description", "currency"):
+            if field_name in self.fields:
+                self.fields[field_name].initial = getattr(opportunity, field_name)
+
+        self._set_initial_api_key(getattr(opportunity, "api_key", None))
+        self._set_initial_app("learn", getattr(opportunity, "learn_app", None))
+        self._set_initial_app("deliver", getattr(opportunity, "deliver_app", None))
+
+        if self._has_existing_accesses:
+            self._disabled_fields = (
+                "hq_server",
+                "api_key",
+                "learn_app_domain",
+                "learn_app",
+                "deliver_app_domain",
+                "deliver_app",
+            )
+            for field_name in self._disabled_fields:
+                if field_name in self.fields:
+                    self.fields[field_name].disabled = True
+
+    def _set_initial_api_key(self, api_key):
+        choices = [API_KEY_PLACEHOLDER_CHOICE]
+        if api_key:
+            if not api_key.api_key:
+                api_key_hidden = ""
+            else:
+                api_key_hidden = (
+                    f"{api_key.api_key[:4]}...{api_key.api_key[-4:]}" if len(api_key.api_key) > 8 else api_key.api_key
+                )
+            choices.append((api_key.id, api_key_hidden))
+            self.fields["api_key"].initial = api_key.id
+        self.fields["api_key"].widget.choices = choices
+
+    def _set_initial_app(self, app_type, app):
+        if not app:
+            return
+
+        app_option_value = json.dumps({"id": app.cc_app_id, "name": app.name})
+        self.fields[f"{app_type}_app"].widget.choices = [
+            APP_PLACEHOLDER_CHOICE,
+            (app_option_value, app.name),
+        ]
+        self.fields[f"{app_type}_app"].initial = app_option_value
+
+        self.fields[f"{app_type}_app_domain"].widget.choices = [
+            DOMAIN_PLACEHOLDER_CHOICE,
+            (app.cc_domain, app.cc_domain),
+        ]
+        self.fields[f"{app_type}_app_domain"].initial = app.cc_domain
+
+        if app_type == "learn":
+            self.fields["learn_app_description"].initial = app.description
+            self.fields["learn_app_passing_score"].initial = app.passing_score
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if self._has_existing_accesses:
+            for field_name in self._disabled_fields:
+                if field_name in self.data:
+                    self.add_error(
+                        field_name,
+                        "This field cannot be edited after Connect Workers have joined the opportunity.",
+                    )
+        return cleaned_data
+
+    def save(self, commit=True):
+        opportunity = self.instance
+        if self.managed_opp and self.cleaned_data.get("organization"):
+            opportunity.organization = self.cleaned_data.get("organization")
+        if not self.managed_opp:
+            opportunity.currency = self.cleaned_data["currency"].upper()
+
+        created_by = opportunity.created_by or self.user.email
+        hq_server = self.cleaned_data["hq_server"]
+
+        opportunity.learn_app = self._build_commcare_app(
+            app_type="learn",
+            organization=opportunity.organization,
+            hq_server=hq_server,
+            created_by=created_by,
+            update_existing=True,
+        )
+        opportunity.deliver_app = self._build_commcare_app(
+            app_type="deliver",
+            organization=opportunity.organization,
+            hq_server=hq_server,
+            created_by=created_by,
+            update_existing=True,
+        )
+
+        opportunity.modified_by = self.user.email
+        opportunity.api_key, _ = HQApiKey.objects.get_or_create(
+            id=self.cleaned_data["api_key"],
+            defaults={
+                "hq_server": hq_server,
+                "user": self.user,
+            },
+        )
+
+        if commit:
+            opportunity.save()
+        return opportunity
 
 
 class OpportunityFinalizeForm(forms.ModelForm):
@@ -590,22 +752,79 @@ class DateRanges(TextChoices):
 
 class VisitExportForm(forms.Form):
     format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="csv")
-    date_range = forms.ChoiceField(choices=DateRanges.choices, initial=DateRanges.LAST_30_DAYS)
-    status = forms.MultipleChoiceField(choices=[("all", "All")] + VisitValidationStatus.choices, initial=["all"])
+    from_date = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    to_date = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date"}),
+        required=False,
+        initial=datetime.date.today().strftime("%Y-%m-%d"),
+    )
+    status = forms.ChoiceField(
+        choices=[("all", "All")] + VisitValidationStatus.choices,
+        initial="all",
+        widget=forms.Select(
+            attrs={
+                "hx-trigger": "change",
+                "hx-target": "#visit-count-warning",
+                "hx-include": "closest form",
+            }
+        ),
+    )
     flatten_form_data = forms.BooleanField(initial=True, required=False)
 
     def __init__(self, *args, **kwargs):
+        self.opportunity = kwargs.pop("opportunity")
+        self.review_export = kwargs.pop("review_export", False)
         super().__init__(*args, **kwargs)
+
+        visit_count_url = reverse(
+            "opportunity:visit_export_count", args=(self.opportunity.organization.slug, self.opportunity.id)
+        )
+
+        # if export is for review update the status and url
+        if self.review_export:
+            status_choices = [("all", "All")] + (
+                VisitReviewStatus.choices if self.review_export else VisitValidationStatus.choices
+            )
+            self.fields["status"].choices = status_choices
+
+            visit_count_url = f"{visit_count_url}?{urlencode({'review_export': 'true'})}"
+
+        hx_attrs = {
+            "hx-get": visit_count_url,
+            "hx-trigger": "change",
+            "hx-target": "#visit-count-warning",
+            "hx-include": "closest form",
+        }
+
+        for field_name in ["from_date", "to_date"]:
+            self.fields[field_name].widget.attrs.update(
+                {"max": datetime.date.today().strftime("%Y-%m-%d"), **hx_attrs}
+            )
+
+        self.fields["status"].widget.attrs.update(hx_attrs)
+        self.fields["format"].widget.attrs.update(hx_attrs)
+
         self.helper = FormHelper(self)
+
         self.helper.layout = Layout(
             Row(
                 Field("format"),
-                Field("date_range"),
+                Row(
+                    Field("from_date"),
+                    Field("to_date"),
+                    css_class="grid grid-cols-2 gap-6",
+                ),
                 Field("status"),
                 Field(
                     "flatten_form_data",
                     css_class=CHECKBOX_CLASS,
                     wrapper_class="flex p-4 justify-between rounded-lg bg-gray-100",
+                ),
+                Div(
+                    css_id="visit-count-warning",
+                    css_class="text-sm text-center",
                 ),
                 css_class="flex flex-col",
             ),
@@ -618,32 +837,6 @@ class VisitExportForm(forms.Form):
             return []
 
         return [VisitValidationStatus(status) for status in statuses]
-
-
-class ReviewVisitExportForm(forms.Form):
-    format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="csv")
-    date_range = forms.ChoiceField(choices=DateRanges.choices, initial=DateRanges.LAST_30_DAYS)
-    status = forms.MultipleChoiceField(choices=[("all", "All")] + VisitReviewStatus.choices, initial=["all"])
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.helper = FormHelper(self)
-        self.helper.layout = Layout(
-            Row(
-                Field("format"),
-                Field("date_range"),
-                Field("status"),
-                css_class="flex flex-col",
-            ),
-        )
-        self.helper.form_tag = False
-
-    def clean_status(self):
-        statuses = self.cleaned_data["status"]
-        if not statuses or "all" in statuses:
-            return []
-
-        return [VisitReviewStatus(status) for status in statuses]
 
 
 class PaymentExportForm(forms.Form):
@@ -1140,10 +1333,11 @@ class PaymentInvoiceForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
 
-        self.fields["invoice_number"].initial = self.generate_invoice_number()
-        self.fields["date"].initial = str(datetime.date.today())
-        self.fields["start_date"].initial = str(self.get_earliest_uninvoiced_date())
-        self.fields["end_date"].initial = str(datetime.date.today() - relativedelta(days=1))
+        if self.is_automed_invoice:
+            self.fields["invoice_number"].initial = self.generate_invoice_number()
+            self.fields["date"].initial = str(datetime.date.today())
+            self.fields["start_date"].initial = str(self.get_earliest_uninvoiced_date())
+            self.fields["end_date"].initial = str(datetime.date.today() - relativedelta(days=1))
 
         self.helper = FormHelper(self)
 
@@ -1187,7 +1381,7 @@ class PaymentInvoiceForm(forms.ModelForm):
             CompletedWork.objects.filter(
                 invoice__isnull=True,
                 opportunity_access__opportunity=self.opportunity,
-                status=CompletedWork.Status.approved,
+                status=CompletedWorkStatus.approved,
             )
             .aggregate(earliest_date=Min("status_modified_date"))
             .get("earliest_date")
@@ -1197,8 +1391,16 @@ class PaymentInvoiceForm(forms.ModelForm):
 
         return date.date()
 
+    @property
+    def is_automed_invoice(self):
+        return waffle.switch_is_active("automated_invoices")
+
     def invoice_form_fields(self):
-        first_row = [Field("invoice_number", **{"readonly": "readonly"})]
+        invoice_number_attrs = {}
+        if self.is_automed_invoice:
+            invoice_number_attrs["readonly"] = "readonly"
+        first_row = [Field("invoice_number", **invoice_number_attrs)]
+
         if self.is_service_delivery:
             first_row.append(Field("title"))
 
@@ -1287,7 +1489,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         instance.amount_usd = self.cleaned_data["amount_usd"]
         instance.amount = self.cleaned_data["amount"]
         instance.exchange_rate = self.cleaned_data["exchange_rate"]
-        instance.service_delivery = self.is_service_delivery
+        instance.service_delivery = self.invoice_type == PaymentInvoice.InvoiceType.service_delivery
 
         if commit:
             instance.save()
@@ -1298,4 +1500,8 @@ class PaymentInvoiceForm(forms.ModelForm):
 
     @property
     def is_service_delivery(self):
-        return self.invoice_type == PaymentInvoice.InvoiceType.service_delivery
+        """
+        Check if the invoice is for service delivery.
+        This check only governs behavior that we want on v2 invoices.
+        """
+        return self.invoice_type == PaymentInvoice.InvoiceType.service_delivery and self.is_automed_invoice
