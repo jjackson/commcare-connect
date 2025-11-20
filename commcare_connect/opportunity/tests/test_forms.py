@@ -599,7 +599,33 @@ class TestPaymentInvoiceForm:
         assert invoice.notes is None
         assert invoice.title is None
 
-    def test_service_delivery_form(self, valid_opportunity):
+    @override_switch("automated_invoices", active=False)
+    def test_service_delivery_form_switch_inactive(self, valid_opportunity):
+        ExchangeRateFactory()
+
+        form = PaymentInvoiceForm(
+            opportunity=valid_opportunity,
+            data={
+                "invoice_number": "INV-001",
+                "local_amount": 100.0,
+                "date": "2025-11-06",
+                "usd_currency": False,
+                "invoice_type": "service_delivery",
+                "title": "Consulting Services Invoice",
+                "start_date": "2025-10-01",
+                "end_date": "2025-10-31",
+                "notes": "Monthly consulting services rendered.",
+            },
+        )
+        assert form.is_valid()
+        invoice = form.save()
+        assert invoice.service_delivery
+        assert invoice.start_date is None
+        assert invoice.end_date is None
+        assert invoice.notes is None
+
+    @override_switch("automated_invoices", active=True)
+    def test_service_delivery_form_switch_active(self, valid_opportunity):
         ExchangeRateFactory()
 
         form = PaymentInvoiceForm(
