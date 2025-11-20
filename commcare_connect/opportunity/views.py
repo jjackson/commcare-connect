@@ -13,24 +13,10 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.core.files.storage import default_storage, storages
-from django.db.models import (
-    Case,
-    Count,
-    DecimalField,
-    F,
-    FloatField,
-    Func,
-    Max,
-    OuterRef,
-    Q,
-    Subquery,
-    Sum,
-    Value,
-    When,
-)
+from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -943,30 +929,9 @@ def reject_visits(request, org_slug=None, opp_id=None):
 
 
 @org_member_required
-def fetch_attachment(request, org_slug, blob_id):
+@opportunity_required
+def fetch_attachment(self, org_slug, opp_id, blob_id):
     blob_meta = BlobMeta.objects.get(blob_id=blob_id)
-
-    user_visit_qs = (
-        UserVisit.objects.filter(
-            xform_id=blob_meta.parent_id,
-        )
-        .annotate(
-            organization_slug=Case(
-                When(
-                    opportunity__managed=True, then=F("opportunity__managedopportunity__program__organization__slug")
-                ),
-                When(opportunity__managed=False, then=F("opportunity__organization__slug")),
-                default=F("opportunity__organization__slug"),
-            )
-        )
-        .filter(
-            organization_slug=org_slug,
-        )
-    )
-
-    if not user_visit_qs.exists():
-        return HttpResponseForbidden()
-
     attachment = storages["default"].open(blob_id)
     return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
 

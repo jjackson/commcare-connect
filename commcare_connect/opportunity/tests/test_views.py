@@ -545,7 +545,7 @@ class TestResendUserInvites:
 @pytest.mark.django_db
 class TestFetchAttachmentView:
     def test_user_without_org_membership_cannot_fetch(self, user, organization, client):
-        url = reverse("opportunity:fetch_attachment", args=(organization.slug, "some-blob-id"))
+        url = reverse("opportunity:fetch_attachment", args=(organization.slug, "1", "some-blob-id"))
         client.force_login(user)
 
         response = client.get(url)
@@ -556,18 +556,22 @@ class TestFetchAttachmentView:
         visit = UserVisitFactory(opportunity__organization=different_org)
         blob_meta = BlobMetaFactory(parent_id=visit.xform_id)
 
-        url = reverse("opportunity:fetch_attachment", args=(organization.slug, blob_meta.blob_id))
+        url = reverse(
+            "opportunity:fetch_attachment", args=(organization.slug, visit.opportunity.id, blob_meta.blob_id)
+        )
         client.force_login(org_user_member)
 
         response = client.get(url)
-        assert response.status_code == 403
+        assert response.status_code == 404
 
     @mock.patch.object(StorageHandler, "__getitem__")
     def test_user_can_fetch(self, storage_handler_getitem_mock, org_user_member, organization, client):
         visit = UserVisitFactory(opportunity__organization=organization)
         blob_meta = BlobMetaFactory(parent_id=visit.xform_id)
 
-        url = reverse("opportunity:fetch_attachment", args=(organization.slug, blob_meta.blob_id))
+        url = reverse(
+            "opportunity:fetch_attachment", args=(organization.slug, visit.opportunity.id, blob_meta.blob_id)
+        )
         client.force_login(org_user_member)
 
         response = client.get(url)
@@ -583,11 +587,11 @@ class TestFetchAttachmentView:
         visit = UserVisitFactory(opportunity=opp)
         blob_meta = BlobMetaFactory(parent_id=visit.xform_id)
 
-        url = reverse("opportunity:fetch_attachment", args=(organization.slug, blob_meta.blob_id))
+        url = reverse("opportunity:fetch_attachment", args=(organization.slug, opp.id, blob_meta.blob_id))
         client.force_login(org_user_member)
 
         response = client.get(url)
-        assert response.status_code == 403
+        assert response.status_code == 404
 
     @mock.patch.object(StorageHandler, "__getitem__")
     def test_user_can_fetch_managed_opp(self, storage_handler_getitem_mock, org_user_member, organization, client):
@@ -598,7 +602,7 @@ class TestFetchAttachmentView:
         visit = UserVisitFactory(opportunity=opp)
         blob_meta = BlobMetaFactory(parent_id=visit.xform_id)
 
-        url = reverse("opportunity:fetch_attachment", args=(organization.slug, blob_meta.blob_id))
+        url = reverse("opportunity:fetch_attachment", args=(organization.slug, opp.id, blob_meta.blob_id))
         client.force_login(org_user_member)
 
         response = client.get(url)
