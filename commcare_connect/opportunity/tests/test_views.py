@@ -612,8 +612,7 @@ class TestFetchAttachmentView:
         assert response.status_code == 200
         storage_handler_getitem_mock.assert_called_once()
 
-    @mock.patch.object(StorageHandler, "__getitem__")
-    def test_user_cannot_fetch_managed_opp(self, storage_handler_getitem_mock, org_user_member, organization, client):
+    def test_user_cannot_fetch_managed_opp(self, org_user_member, organization, client):
         opp = ManagedOpportunityFactory()
         opp.program.organization = opp.organization
         opp.program.save()
