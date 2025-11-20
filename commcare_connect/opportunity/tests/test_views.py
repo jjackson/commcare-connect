@@ -551,7 +551,7 @@ class TestFetchAttachmentView:
         response = client.get(url)
         assert response.status_code == 404
 
-    def test_user_cannot_fetch_blob_from_another_org_opportunity(self, org_user_member, organization, client):
+    def test_user_cannot_fetch_another_org_opportunity_blob(self, org_user_member, organization, client):
         different_org = OrganizationFactory()  # Different organization
         visit = UserVisitFactory(opportunity__organization=different_org)
         blob_meta = BlobMetaFactory(parent_id=visit.xform_id)
@@ -564,7 +564,9 @@ class TestFetchAttachmentView:
         response = client.get(url)
         assert response.status_code == 404
 
-    def test_user_cannot_fetch_blob_using_own_opp_access(self, org_user_member, organization, client):
+    def test_user_cannot_fetch_blob_from_different_opportunity_on_another_org(
+        self, org_user_member, organization, client
+    ):
         different_org = OrganizationFactory()  # Different organization
         visit = UserVisitFactory(opportunity__organization=organization)
         other_visit = UserVisitFactory(opportunity__organization=different_org)
@@ -577,6 +579,24 @@ class TestFetchAttachmentView:
 
         response = client.get(url)
         assert response.status_code == 404
+
+    @mock.patch.object(StorageHandler, "__getitem__")
+    def test_user_cannot_fetch_blob_from_different_opportunity_same_org(
+        self, storage_handler_getitem_mock, org_user_member, organization, client
+    ):
+        opp_a = OpportunityFactory(organization=organization)
+        opp_b = OpportunityFactory(organization=organization)
+
+        visit_b = UserVisitFactory(opportunity=opp_b)
+        blob_meta = BlobMetaFactory(parent_id=visit_b.xform_id)
+
+        # Try to fetch blob of a different opportunity
+        url = reverse("opportunity:fetch_attachment", args=(organization.slug, opp_a.id, blob_meta.blob_id))
+        client.force_login(org_user_member)
+
+        response = client.get(url)
+        assert response.status_code == 404
+        storage_handler_getitem_mock.assert_not_called()
 
     @mock.patch.object(StorageHandler, "__getitem__")
     def test_user_can_fetch(self, storage_handler_getitem_mock, org_user_member, organization, client):
