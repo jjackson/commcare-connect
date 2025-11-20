@@ -1330,7 +1330,7 @@ class PaymentInvoiceForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
 
-        if self.is_automed_invoice:
+        if self.is_automated_invoice:
             self.fields["invoice_number"].initial = self.generate_invoice_number()
             self.fields["date"].initial = str(datetime.date.today())
 
@@ -1350,12 +1350,12 @@ class PaymentInvoiceForm(forms.ModelForm):
         self.helper.form_tag = False
 
     @property
-    def is_automed_invoice(self):
+    def is_automated_invoice(self):
         return waffle.switch_is_active("automated_invoices")
 
     def invoice_form_fields(self):
         invoice_number_attrs = {}
-        if self.is_automed_invoice:
+        if self.is_automated_invoice:
             invoice_number_attrs["readonly"] = "readonly"
         first_row = [Field("invoice_number", **invoice_number_attrs)]
 
@@ -1450,4 +1450,4 @@ class PaymentInvoiceForm(forms.ModelForm):
         Check if the invoice is for service delivery.
         This check only governs behavior that we want on v2 invoices.
         """
-        return self.invoice_type == PaymentInvoice.InvoiceType.service_delivery and self.is_automed_invoice
+        return self.invoice_type == PaymentInvoice.InvoiceType.service_delivery and self.is_automated_invoice
