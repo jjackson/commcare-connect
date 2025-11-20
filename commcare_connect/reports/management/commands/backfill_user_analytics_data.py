@@ -117,6 +117,7 @@ class Command(BaseCommand):
                 "has_accepted_multiple_opps",
                 "has_viewed_work_history",
                 "has_sent_message",
+                "has_sso_on_hq_app",
             ],
             unique_fields=["username"],
             batch_size=500,
