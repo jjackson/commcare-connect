@@ -207,10 +207,11 @@ class TestStartLearnAppView:
         access = OpportunityAccessFactory(opportunity=opportunity, user=user)
         UserInviteFactory(opportunity=opportunity, opportunity_access=access)
 
-        response = self._post(
+        response, mock_create = self._post(
             api_client,
             user,
             data={"opportunity": opportunity.id},
             create_user_result=True,
         )
         assert response.status_code == 200
+        mock_create.assert_called_once()
