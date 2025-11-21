@@ -235,7 +235,8 @@ class LabsContextMiddleware(MiddlewareMixin):
         session_context = extract_context_from_session(request)
 
         # If session has context but URL doesn't, redirect to add params
-        if session_context and not url_context:
+        # Only redirect GET requests - POST/PUT/DELETE requests can't preserve their body through redirects
+        if session_context and not url_context and request.method == "GET":
             # Check if this is a labs whitelisted path (not login/logout)
             path = request.path
             whitelisted_prefixes = ["/audit/", "/tasks/", "/solicitations/", "/ai/", "/labs/explorer/"]
