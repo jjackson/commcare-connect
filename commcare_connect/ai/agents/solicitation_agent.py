@@ -68,7 +68,7 @@ async def list_solicitations(
 
     Args:
         ctx: The run context with user dependencies.
-        program_id: Filter by production program ID.
+        program_id: Filter by production program ID (overrides deps.program_id if provided).
         status: Filter by status ('active', 'closed', 'draft').
         solicitation_type: Filter by type ('eoi', 'rfp').
         is_publicly_listed: Filter by public listing status.
@@ -76,7 +76,15 @@ async def list_solicitations(
     if not ctx.deps.request:
         raise ValueError("Request object is required to access solicitations")
 
-    data_access = SolicitationDataAccess(request=ctx.deps.request)
+    if ctx.deps.program_id is None:
+        raise ValueError(
+            "program_id is required in UserDependencies. " "This should have been validated at agent initialization."
+        )
+
+    # Use program_id from deps if not explicitly provided
+    effective_program_id = program_id if program_id is not None else ctx.deps.program_id
+
+    data_access = SolicitationDataAccess(request=ctx.deps.request, program_id=effective_program_id)
 
     solicitations = data_access.get_solicitations(
         program_id=program_id,

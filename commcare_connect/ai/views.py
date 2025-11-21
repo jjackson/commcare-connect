@@ -40,6 +40,7 @@ def ai_demo_submit(request):
             session_id = None
 
     # Get program_id from POST or from labs_context (set by middleware)
+    # program_id is required for the agent to function
     program_id_int = None
     if program_id:
         try:
@@ -48,6 +49,12 @@ def ai_demo_submit(request):
             logger.warning(f"Invalid program_id format: {program_id}")
     elif hasattr(request, "labs_context"):
         program_id_int = request.labs_context.get("program_id")
+
+    if program_id_int is None:
+        return JsonResponse(
+            {"error": "program_id is required."},
+            status=400,
+        )
 
     # Extract OAuth token from session for the task
     access_token = None
