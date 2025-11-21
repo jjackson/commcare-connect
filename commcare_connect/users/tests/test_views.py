@@ -156,8 +156,11 @@ class TestStartLearnAppView:
 
     def _post(self, client, user, data, create_user_result=True):
         client.force_authenticate(user)
-        with patch("commcare_connect.users.views.create_hq_user_and_link", return_value=create_user_result):
-            return client.post(self.url, data=data)
+        with patch(
+            "commcare_connect.users.views.create_hq_user_and_link", return_value=create_user_result
+        ) as mock_create:
+            response = client.post(self.url, data=data)
+        return response, mock_create
 
     @pytest.mark.parametrize(
         "data, create_user_result, setup_access, expected_error",
@@ -186,7 +189,7 @@ class TestStartLearnAppView:
         if setup_access:
             OpportunityAccessFactory(opportunity=opportunity, user=user)
 
-        response = self._post(
+        response, mock_create = self._post(
             api_client,
             user,
             data=data,
@@ -194,6 +197,10 @@ class TestStartLearnAppView:
         )
 
         assert response.status_code == 400
+        if expected_error == ErrorCodes.OPPORTUNITY_REQUIRED:
+            mock_create.assert_not_called()
+        else:
+            mock_create.assert_called_once()
         assert response.json()["error_code"] == expected_error
 
     def test_starts_learning_successfully(self, opportunity, user, api_client):
