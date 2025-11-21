@@ -28,7 +28,12 @@ except ImportError:
 
 @celery_app.task(bind=True)
 def simple_echo_task(
-    self, prompt: str, session_id: str | None = None, user_id: int | None = None, access_token: str | None = None
+    self,
+    prompt: str,
+    session_id: str | None = None,
+    user_id: int | None = None,
+    access_token: str | None = None,
+    program_id: int | None = None,
 ):
     """
     Run the solicitation agent with the user's prompt and optional message history.
@@ -38,6 +43,7 @@ def simple_echo_task(
         session_id: Optional session ID for history tracking
         user_id: The user ID for authentication
         access_token: OAuth access token for API access
+        program_id: Optional program ID for API scoping
     """
     set_task_progress(self, "Processing your prompt with AI...")
 
@@ -122,7 +128,7 @@ def simple_echo_task(
     # Create a minimal request-like object for OAuth token access
     # We'll create a simple object that has the session data needed
     class MockRequest:
-        def __init__(self, access_token, user=None):
+        def __init__(self, access_token, user=None, program_id=None):
             self.session = {}
             self.user = user
             if access_token:
@@ -133,14 +139,25 @@ def simple_echo_task(
                     "access_token": access_token,
                     "expires_at": time.time() + 3600,  # 1 hour from now
                 }
+            # Set labs_context for data access classes that check request.labs_context
+            if program_id is not None:
+                self.labs_context = {"program_id": program_id}
+            else:
+                self.labs_context = {}
 
     # Use LabsUser if available (has _org_data), otherwise fall back to regular user
     # This ensures the user has _org_data for API scoping
     request_user = labs_user or user
-    mock_request = MockRequest(access_token, user=request_user)
+    mock_request = MockRequest(access_token, user=request_user, program_id=program_id)
 
     # Create dependencies - use the same user object for consistency
-    deps = UserDependencies(user=request_user, request=mock_request)
+    # program_id is required for UserDependencies
+    if program_id is None:
+        raise ValueError(
+            "program_id is required to run the AI agent. "
+            "Please provide program_id in the request or ensure it's set in labs_context."
+        )
+    deps = UserDependencies(user=request_user, request=mock_request, program_id=program_id)
 
     async def run_agent():
         # Get the agent instance (lazy-loaded)

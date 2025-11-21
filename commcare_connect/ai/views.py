@@ -26,6 +26,7 @@ def ai_demo_submit(request):
     """
     prompt = request.POST.get("prompt", "").strip()
     session_id = request.POST.get("session_id", "").strip()
+    program_id = request.POST.get("program_id", "").strip()
 
     if not prompt:
         return JsonResponse({"error": "Prompt is required"}, status=400)
@@ -38,6 +39,23 @@ def ai_demo_submit(request):
             logger.warning(f"Invalid session_id format: {session_id}")
             session_id = None
 
+    # Get program_id from POST or from labs_context (set by middleware)
+    # program_id is required for the agent to function
+    program_id_int = None
+    if program_id:
+        try:
+            program_id_int = int(program_id)
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid program_id format: {program_id}")
+    elif hasattr(request, "labs_context"):
+        program_id_int = request.labs_context.get("program_id")
+
+    if program_id_int is None:
+        return JsonResponse(
+            {"error": "program_id is required."},
+            status=400,
+        )
+
     # Extract OAuth token from session for the task
     access_token = None
     labs_oauth = request.session.get("labs_oauth", {})
@@ -48,13 +66,14 @@ def ai_demo_submit(request):
         if timezone.now().timestamp() < expires_at:
             access_token = labs_oauth.get("access_token")
 
-    # Trigger the Celery task with prompt, session_id, user_id, and access_token
+    # Trigger the Celery task with prompt, session_id, user_id, access_token, and program_id
     # The task will retrieve history itself
     result = simple_echo_task.delay(
         prompt,
         session_id=session_id,
         user_id=request.user.id,
         access_token=access_token,
+        program_id=program_id_int,
     )
 
     return JsonResponse(
