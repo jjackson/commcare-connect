@@ -24,7 +24,6 @@ class SolicitationDataAccess:
 
     def __init__(
         self,
-        opportunity_id: int | None = None,
         organization_id: int | None = None,
         program_id: int | None = None,
         access_token: str | None = None,
@@ -33,21 +32,20 @@ class SolicitationDataAccess:
         """Initialize solicitations data access.
 
         Args:
-            opportunity_id: Optional opportunity ID for API scoping
             organization_id: Optional organization ID for API scoping
             program_id: Optional program ID for API scoping
             access_token: OAuth Bearer token for production API
             request: HttpRequest object (for extracting token and org context in labs mode)
+
+        Note: Solicitations use program_id (for solicitation queries) and
+        organization_id (for response queries). They do NOT use opportunity_id.
         """
-        self.opportunity_id = opportunity_id
         self.organization_id = organization_id
         self.program_id = program_id
 
         # Use labs_context from middleware if available (takes precedence)
         if request and hasattr(request, "labs_context"):
             labs_context = request.labs_context
-            if not opportunity_id and "opportunity_id" in labs_context:
-                self.opportunity_id = labs_context["opportunity_id"]
             if not program_id and "program_id" in labs_context:
                 self.program_id = labs_context["program_id"]
             if not organization_id and "organization_id" in labs_context:
@@ -67,7 +65,6 @@ class SolicitationDataAccess:
 
         self.labs_api = LabsRecordAPIClient(
             access_token,
-            opportunity_id=self.opportunity_id,
             organization_id=self.organization_id,
             program_id=self.program_id,
         )

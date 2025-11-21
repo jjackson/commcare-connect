@@ -10,8 +10,6 @@ from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-from commcare_connect.solicitations.models import ResponseRecord, SolicitationRecord
-
 # =============================================================================
 # Utility Functions
 # =============================================================================
@@ -93,7 +91,8 @@ class SolicitationRecordTable(tables.Table):
         self.data_access = data_access
 
     class Meta:
-        model = SolicitationRecord
+        # Note: SolicitationRecord is not a Django model, it's a LocalLabsRecord subclass
+        # So we don't specify model= here (similar to audit tables)
         fields = ("title", "status", "application_deadline", "total", "actions")
         order_by = ("-date_created",)
         template_name = "base_table.html"
@@ -177,7 +176,8 @@ class ResponseRecordTable(tables.Table):
         self.data_access = data_access
 
     class Meta:
-        model = ResponseRecord
+        # Note: ResponseRecord is not a Django model, it's a LocalLabsRecord subclass
+        # So we don't specify model= here (similar to audit tables)
         fields = ("solicitation", "status", "last_edited", "recommendation", "score", "actions")
         order_by = ("-date_modified",)
         template_name = "base_table.html"

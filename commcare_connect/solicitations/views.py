@@ -127,23 +127,6 @@ class LabsHomeView(TemplateView):
     template_name = "solicitations/labs_home.html"
 
 
-class ProgramSelectView(TemplateView):
-    """
-    View for program managers to select which program they want to create a solicitation for.
-    """
-
-    template_name = "solicitations/program_select.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        # Get programs from OAuth session data
-        if hasattr(self.request.user, "programs"):
-            context["programs"] = self.request.user.programs
-        else:
-            context["programs"] = []
-        return context
-
-
 class ManageSolicitationsListView(ListView):
     """
     List view of solicitations created by the current user.
@@ -212,6 +195,12 @@ class SolicitationResponsesListView(SingleTableView):
     paginate_by = 20
 
     def dispatch(self, request, *args, **kwargs):
+        # Verify program context is selected
+        labs_context = getattr(request, "labs_context", {})
+        if not labs_context.get("program_id"):
+            messages.error(request, "Please select a program context to view responses.")
+            return redirect("solicitations:manage_list")
+
         # Store data_access as instance variable for use in multiple methods
         self.data_access = SolicitationDataAccess(request=request)
 
@@ -222,9 +211,15 @@ class SolicitationResponsesListView(SingleTableView):
         if not self.solicitation:
             raise Http404("Solicitation not found")
 
-        # Check if user created this solicitation
-        if self.solicitation.username != request.user.username:
-            raise Http404("You can only view responses to your own solicitations")
+        # Check if user has access to the solicitation's program
+        # If solicitation has a program_id, verify user is in that program
+        if self.solicitation.program_id:
+            user_program_ids = []
+            if hasattr(request.user, "programs"):
+                user_program_ids = [prog.get("id") for prog in request.user.programs if prog.get("id")]
+
+            if self.solicitation.program_id not in user_program_ids:
+                raise Http404("You don't have access to this solicitation's program")
 
         return super().dispatch(request, *args, **kwargs)
 
@@ -290,13 +285,26 @@ class SolicitationDetailView(DetailView):
     context_object_name = "solicitation"
 
     def get_object(self, queryset=None):
-        data_access = SolicitationDataAccess(request=self.request)
         pk = self.kwargs.get("pk")
-        solicitations = data_access.get_solicitations(status="active")
-        for sol in solicitations:
-            if sol.id == pk:
-                return sol
-        raise Http404("Solicitation not found")
+
+        # For public viewing, we need to bypass context filtering
+        # Create data_access without context restrictions for ID lookup
+        data_access = SolicitationDataAccess(request=self.request)
+        solicitation = data_access.get_solicitation_by_id(pk)
+
+        if not solicitation:
+            raise Http404("Solicitation not found")
+
+        # Allow viewing if:
+        # 1. Solicitation is active and publicly listed (public access - no context needed)
+        # 2. User is authenticated and is the owner (can view their own drafts/closed)
+        is_public = solicitation.status == "active" and solicitation.is_publicly_listed
+        is_owner = self.request.user.is_authenticated and solicitation.username == self.request.user.username
+
+        if not (is_public or is_owner):
+            raise Http404("Solicitation not found")
+
+        return solicitation
 
     def get_context_data(self, **kwargs):
         data_access = SolicitationDataAccess(request=self.request)
@@ -391,6 +399,17 @@ class SolicitationResponseCreateOrUpdate(SolicitationAccessMixin, UpdateView):
         return None
 
     def dispatch(self, request, *args, **kwargs):
+        # Verify organization context is selected for responding
+        labs_context = getattr(request, "labs_context", {})
+        if not labs_context.get("organization_id"):
+            # Check if user has organizations from OAuth
+            has_orgs = hasattr(request.user, "organizations") and request.user.organizations
+            if not has_orgs:
+                messages.error(request, "You need to be part of an organization to respond to solicitations.")
+            else:
+                messages.error(request, "Please select an organization context to respond to solicitations.")
+            return redirect("solicitations:list")
+
         data_access = SolicitationDataAccess(request=request)
 
         # Get solicitation
@@ -641,15 +660,13 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
         # Remove instance since we're using LocalLabsRecords, not Solicitation model
         kwargs.pop("instance", None)
 
-        # Pass user for program choices
+        # Pass user for form setup (even though program field is removed)
         kwargs["user"] = self.request.user
 
-        # For labs: form doesn't need program object, just use JSON data
+        # For labs: populate form with JSON data for editing
         if self.object:
             # Populate form with JSON data for editing
             initial_data = self.object.data.copy()
-            # Add program_id to initial data for the dropdown
-            initial_data["program"] = str(self.object.program_id) if self.object.program_id else ""
             kwargs["initial"] = initial_data
 
         return kwargs
@@ -657,14 +674,20 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # For labs: don't fetch program from DB, get production program info from OAuth data
-        program_pk = self.kwargs.get("program_pk") or (self.object.program_id if self.object else None)
-        if program_pk and hasattr(self.request.user, "programs"):
+        # Get program context from labs_context
+        labs_context = getattr(self.request, "labs_context", {})
+        program_id = labs_context.get("program_id")
+
+        # For labs: get production program info from labs_context or OAuth data
+        if program_id and hasattr(self.request.user, "programs"):
             # Find program in user's OAuth data
             for prog in self.request.user.programs:
-                if prog.get("id") == program_pk:
+                if prog.get("id") == program_id:
                     context["program"] = prog
                     break
+
+        # Check if program context is required for this view
+        context["has_program_context"] = bool(program_id)
 
         # Build question context inline (no helper needed)
         if self.object and hasattr(self.object, "questions"):
@@ -685,11 +708,20 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
         return context
 
     def form_valid(self, form):
+        # Validate that program context is selected
+        labs_context = getattr(self.request, "labs_context", {})
+        program_pk = labs_context.get("program_id")
+
+        if not program_pk:
+            messages.error(
+                self.request, "Please select a program context from the header before creating a solicitation."
+            )
+            return redirect("solicitations:manage_list")
+
         data_access = SolicitationDataAccess(request=self.request)
         is_edit = self.object is not None
 
-        # Get program ID and name from form (user selected from dropdown)
-        program_pk = form.cleaned_data.get("program")
+        # Get program ID and name from labs_context
         program_name = None
         if hasattr(self.request.user, "programs") and program_pk:
             for prog in self.request.user.programs:
