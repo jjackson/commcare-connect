@@ -148,8 +148,12 @@ class ProgramOpportunityOrganizationDataView(BaseDataExportView):
     )
     def get(self, request):
         organizations = Organization.objects.filter(memberships__user=request.user)
-        opportunities = Opportunity.objects.filter(organization__in=organizations).annotate(
-            visit_count=Count("uservisit", distinct=True)
+        opportunities = (
+            Opportunity.objects.filter(
+                Q(organization__in=organizations) | Q(managedopportunity__program__organization__in=organizations)
+            )
+            .annotate(visit_count=Count("uservisit", distinct=True))
+            .distinct()
         )
         programs = Program.objects.filter(organization__in=organizations)
 
