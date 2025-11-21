@@ -259,16 +259,26 @@ export function ChatUI({
       }
 
       try {
+        // Extract program_id from URL params if available
+        const urlParams = new URLSearchParams(window.location.search);
+        const programId = urlParams.get('program_id');
+
+        const bodyParams: Record<string, string> = {
+          prompt: prompt,
+          session_id: currentSessionId,
+        };
+
+        if (programId) {
+          bodyParams.program_id = programId;
+        }
+
         const response = await fetch(getSubmitUrl(), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             'X-CSRFToken': getCSRFToken(),
           },
-          body: new URLSearchParams({
-            prompt: prompt,
-            session_id: currentSessionId,
-          }),
+          body: new URLSearchParams(bodyParams),
         });
 
         const data = await response.json();
