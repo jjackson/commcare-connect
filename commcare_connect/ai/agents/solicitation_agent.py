@@ -87,6 +87,48 @@ async def list_solicitations(
     return [SolicitationData.from_solicitation_record(sol) for sol in solicitations]
 
 
+class ProgramData(BaseModel):
+    """Program information."""
+
+    id: int
+    name: str
+    organization: str
+    currency: str | None = None
+    delivery_type: str | None = None
+
+
+async def get_program_details(ctx: RunContext["UserDependencies"]) -> ProgramData:
+    """Get details about the current program.
+
+    Args:
+        ctx: The run context with user dependencies.
+
+    Returns:
+        ProgramData with program information.
+    """
+    if not ctx.deps.request:
+        raise ValueError("Request object is required to access program details")
+
+    # Get program from user's OAuth data
+    user = ctx.deps.user
+    program_id = ctx.deps.program_id
+
+    # Check if user has programs data (LabsUser has this)
+    if hasattr(user, "programs"):
+        for program in user.programs:
+            if program.get("id") == program_id:
+                return ProgramData(
+                    id=program_id,
+                    name=program.get("name", "Unknown Program"),
+                    organization=program.get("organization", "Unknown Organization"),
+                    currency=program.get("currency"),
+                    delivery_type=program.get("delivery_type"),
+                )
+
+    # Fallback: if program not found in user's programs, raise error
+    raise ValueError(f"Program {program_id} not found in user's accessible programs")
+
+
 # TODO: Implement create_solicitation function
 # def create_solicitation(
 #     ctx: RunContext["UserDependencies"], solicitation_data: SolicitationData
@@ -126,6 +168,7 @@ async def list_solicitations(
 solicitation_toolset = FunctionToolset(
     tools=[
         list_solicitations,
+        get_program_details,
         # TODO: Add create_solicitation, update_solicitation, delete_solicitation
     ]
 )
