@@ -131,10 +131,30 @@ solicitation_toolset = FunctionToolset(
     ]
 )
 
-solicitation_agent = Agent(
-    "openai:gpt-4o-mini",
-    instructions=INSTRUCTIONS,
-    deps_type=UserDependencies,
-    toolsets=[solicitation_toolset],
-    retries=2,
-)
+# Lazy-loaded agent instance
+_agent_instance = None
+
+
+def get_solicitation_agent() -> Agent:
+    """
+    Get or create the solicitation agent instance.
+
+    This function lazy-loads the agent to avoid requiring OPENAI_API_KEY
+    at import time. The agent is only created when actually needed.
+
+    Returns:
+        Agent: The solicitation agent instance
+
+    Raises:
+        ValueError: If OPENAI_API_KEY is not set when the agent is first accessed
+    """
+    global _agent_instance
+    if _agent_instance is None:
+        _agent_instance = Agent(
+            "openai:gpt-4o-mini",
+            instructions=INSTRUCTIONS,
+            deps_type=UserDependencies,
+            toolsets=[solicitation_toolset],
+            retries=2,
+        )
+    return _agent_instance
