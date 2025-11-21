@@ -151,7 +151,13 @@ def simple_echo_task(
     mock_request = MockRequest(access_token, user=request_user, program_id=program_id)
 
     # Create dependencies - use the same user object for consistency
-    deps = UserDependencies(user=request_user, request=mock_request)
+    # program_id is required for UserDependencies
+    if program_id is None:
+        raise ValueError(
+            "program_id is required to run the AI agent. "
+            "Please provide program_id in the request or ensure it's set in labs_context."
+        )
+    deps = UserDependencies(user=request_user, request=mock_request, program_id=program_id)
 
     async def run_agent():
         # Get the agent instance (lazy-loaded)
