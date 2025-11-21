@@ -43,7 +43,10 @@ class Command(BaseCommand):
             .annotate(
                 username=F("user__username"),
                 has_opp_invite=Max("invited_date"),
-                has_accepted_opp=Max("invited_date", filter=Q(accepted=True)),
+                has_ever_earned_payment=Min(
+                    "completedwork__status_modified_date",
+                    filter=Q(completedwork__status=CompletedWorkStatus.approved),
+                ),
                 has_started_learning=Max("date_learn_started"),
                 has_completed_learning=Max("completed_learn_date"),
                 has_completed_assessment=Max("assessment__date", filter=Q(assessment__passed=True)),
@@ -75,7 +78,7 @@ class Command(BaseCommand):
                 "username",
                 "user_id",
                 "has_opp_invite",
-                "has_accepted_opp",
+                "has_ever_earned_payment",
                 "has_started_learning",
                 "has_completed_learning",
                 "has_completed_assessment",
@@ -104,7 +107,7 @@ class Command(BaseCommand):
             update_conflicts=True,
             update_fields=[
                 "has_opp_invite",
-                "has_accepted_opp",
+                "has_ever_earned_payment",
                 "has_started_learning",
                 "has_completed_learning",
                 "has_completed_assessment",
@@ -115,8 +118,6 @@ class Command(BaseCommand):
                 "has_completed_multiple_opps",
                 "has_offered_multiple_opps",
                 "has_accepted_multiple_opps",
-                "has_viewed_work_history",
-                "has_sent_message",
                 "has_sso_on_hq_app",
             ],
             unique_fields=["username"],
