@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% load render_table from django_tables2 %}
+{% load crispy_forms_tags %}
+{% load i18n %}
+{% load static %}
+
+{% block css %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'django_tables2/themes/paleblue/css/screen.css' %}" />
+<style>
+  .filter-sidebar {
+    background: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    padding: 1.5rem;
+  }
+</style>
+{% endblock css %}
+
+{% block content %}
+{% csrf_token %}
+<div class="flex flex-col gap-4 w-full max-w-full">
+  <!-- Header -->
+  <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
+    <div>
+      <a href="{% url 'labs:dashboard' %}" class="text-sm text-blue-600 hover:underline mr-2">← Labs</a>
+      <span class="text-sm text-brand-deep-purple font-semibold">Data Explorer</span>
+    </div>
+    <div class="flex gap-x-3 items-center">
+      {% if has_connect_token %}
+      <div class="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-md">
+        <i class="fa-solid fa-check-circle text-green-600"></i>
+        <span class="text-xs text-green-700">Connected to Connect</span>
+      </div>
+      <a href="{% url 'labs:status' %}" class="button button-sm outline-style text-blue-600 hover:bg-blue-50 border-blue-300 hover:border-blue-400">
+        <i class="fa-solid fa-flask mr-2"></i>
+        Labs Status
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Main content area with sidebar and table -->
+    <div class="flex gap-4">
+      <!-- Filter Sidebar -->
+      <div class="w-64 flex-shrink-0">
+        <div class="filter-sidebar sticky top-4">
+          <h3 class="text-lg font-semibold mb-4 text-brand-deep-purple">Filters</h3>
+          {% crispy filter_form %}
+        </div>
+      </div>
+
+      <!-- Table Area -->
+      <div class="flex-1 overflow-hidden">
+        {% if not has_context %}
+        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <i class="fa-solid fa-exclamation-triangle text-yellow-400"></i>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm text-yellow-700">
+                Please select an organization, program, or opportunity using the filters at the top of the page to view records.
+              </p>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Action buttons -->
+        <div class="mb-4 flex gap-2" x-data="{showUpload: false}">
+          <button
+            @click="downloadSelected()"
+            class="button button-sm primary-dark"
+            title="Download selected records">
+            <i class="fa-solid fa-download mr-2"></i>
+            Download Selected
+          </button>
+          <a
+            href="?{{ request.GET.urlencode }}&download=all"
+            class="button button-sm outline-style"
+            title="Download all filtered records">
+            <i class="fa-solid fa-download mr-2"></i>
+            Download All Filtered
+          </a>
+          <button
+            @click="showUpload = !showUpload"
+            class="button button-sm outline-style"
+            title="Upload/import records">
+            <i class="fa-solid fa-upload mr-2"></i>
+            Upload/Import
+          </button>
+
+          <!-- Upload form (hidden by default) -->
+          <div x-show="showUpload"
+               x-cloak
+               class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+               @click.self="showUpload = false">
+            <div class="bg-white rounded-lg p-6 max-w-md w-full">
+              <h3 class="text-lg font-semibold mb-4">Upload Records</h3>
+              <form method="post" action="{% url 'explorer:upload' %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="mb-4">
+                  <label for="file" class="block text-sm font-medium text-gray-700 mb-2">
+                    Select JSON file
+                  </label>
+                  <input
+                    type="file"
+                    name="file"
+                    id="file"
+                    accept=".json"
+                    required
+                    class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                  <p class="mt-1 text-xs text-gray-500">Upload a JSON file with records to import</p>
+                </div>
+                <div class="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    @click="showUpload = false"
+                    class="button button-sm outline-style">
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    class="button button-sm primary-dark">
+                    <i class="fa-solid fa-upload mr-2"></i>
+                    Upload
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- Records Table -->
+        <div class="w-full overflow-x-auto rounded-lg shadow-xs bg-white">
+          {% render_table table %}
+        </div>
+      </div>
+    </div>
+</div>
+
+<script>
+  function downloadSelected() {
+    const checkboxes = document.querySelectorAll('input[name="record_select"]:checked');
+    const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+
+    if (selectedIds.length === 0) {
+      alert('Please select at least one record to download');
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    selectedIds.forEach(id => params.append('selected_ids', id));
+
+    window.location.href = '{% url "explorer:download" %}?' + params.toString();
+  }
+
+  function toggleSelectAll() {
+    const selectAll = document.querySelector('input[name="select_all"]');
+    const checkboxes = document.querySelectorAll('input[name="record_select"]');
+    checkboxes.forEach(cb => cb.checked = selectAll.checked);
+  }
+
+  function updateSelectAll() {
+    const selectAll = document.querySelector('input[name="select_all"]');
+    const checkboxes = document.querySelectorAll('input[name="record_select"]');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    if (selectAll) selectAll.checked = allChecked;
+  }
+</script>
+
+{% endblock %}
