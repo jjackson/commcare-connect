@@ -6,7 +6,7 @@ import logging
 
 from django.contrib.auth import get_user_model
 
-from commcare_connect.ai.agents.solicitation_agent import solicitation_agent
+from commcare_connect.ai.agents.solicitation_agent import get_solicitation_agent
 from commcare_connect.ai.session_store import add_message_to_history, get_message_history
 from commcare_connect.ai.types import UserDependencies
 from commcare_connect.utils.celery import set_task_progress
@@ -143,6 +143,8 @@ def simple_echo_task(
     deps = UserDependencies(user=request_user, request=mock_request)
 
     async def run_agent():
+        # Get the agent instance (lazy-loaded)
+        agent = get_solicitation_agent()
         # Pass message_history to maintain conversation context
         if history:
             logger.warning(f"[AI TASK] Running agent with {len(history)} previous messages")
@@ -151,16 +153,16 @@ def simple_echo_task(
                 # Convert history to Pydantic AI format
                 pydantic_history = convert_history_to_pydantic_format(history)
                 logger.warning(f"[AI TASK] Converted history format, length: {len(pydantic_history)}")
-                result = await solicitation_agent.run(prompt, message_history=pydantic_history, deps=deps)
+                result = await agent.run(prompt, message_history=pydantic_history, deps=deps)
                 logger.warning("[AI TASK] Agent completed with history")
             except Exception as e:
                 logger.error(f"[AI TASK] Error running agent with history: {e}", exc_info=True)
                 # Fallback to running without history if there's a format issue
                 logger.warning("[AI TASK] Falling back to running without message history")
-                result = await solicitation_agent.run(prompt, deps=deps)
+                result = await agent.run(prompt, deps=deps)
         else:
             logger.warning("[AI TASK] Running agent without message history")
-            result = await solicitation_agent.run(prompt, deps=deps)
+            result = await agent.run(prompt, deps=deps)
         return result.output
 
     try:
