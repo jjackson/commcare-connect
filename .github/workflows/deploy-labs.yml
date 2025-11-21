@@ -110,6 +110,7 @@ jobs:
           aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
             --service ${{ env.ECS_WEB_SERVICE }} \
+            --task-definition ${{ env.ECS_WEB_SERVICE }} \
             --force-new-deployment \
             --output text
 
@@ -118,6 +119,7 @@ jobs:
           aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
             --service ${{ env.ECS_WORKER_SERVICE }} \
+            --task-definition ${{ env.ECS_WORKER_SERVICE }} \
             --force-new-deployment \
             --output text
 
