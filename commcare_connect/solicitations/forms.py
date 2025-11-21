@@ -214,24 +214,10 @@ class SolicitationResponseForm(forms.Form):
 class SolicitationForm(forms.Form):
     """
     Form for creating/editing solicitations - works with ExperimentRecord JSON storage
+    Program context is now provided via labs_context instead of a form field.
     """
 
     # Define all fields
-    program = forms.ChoiceField(
-        required=True,
-        label="Program",
-        widget=forms.Select(
-            attrs={
-                "class": (
-                    "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none "
-                    "focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
-                ),
-                "data-searchable": "true",  # For potential JS enhancement
-            }
-        ),
-        help_text="Select which program this solicitation is for",
-    )
-
     title = forms.CharField(
         max_length=255,
         required=True,
@@ -343,17 +329,6 @@ class SolicitationForm(forms.Form):
     def __init__(self, user=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Populate program choices from user's OAuth data
-        program_choices = [("", "Select a program...")]
-        if user and hasattr(user, "programs"):
-            for prog in user.programs:
-                prog_id = prog.get("id")
-                prog_name = prog.get("name", f"Program {prog_id}")
-                if prog_id:
-                    program_choices.append((str(prog_id), prog_name))
-
-        self.fields["program"].choices = program_choices
-
         # Setup crispy forms
         self.helper = FormHelper(self)
         self.helper.form_class = "space-y-8"
@@ -371,8 +346,6 @@ class SolicitationForm(forms.Form):
                     '<i class="fa-solid fa-info-circle mr-2"></i>Basic Information</h2>'
                 ),
                 Div(
-                    # Program selection (full width)
-                    Field("program", wrapper_class="mb-6"),
                     # Title (full width)
                     Field("title", wrapper_class="mb-6"),
                     # Row 2: Type, Status, and Visibility
