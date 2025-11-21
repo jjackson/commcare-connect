@@ -11,7 +11,7 @@ class UserAnalyticsData(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True)
 
     has_opp_invite = models.DateTimeField(null=True)
-    has_accepted_opp = models.DateTimeField(null=True)
+    has_ever_earned_payment = models.DateTimeField(null=True)
     has_started_learning = models.DateTimeField(null=True)
     has_completed_learning = models.DateTimeField(null=True)
     has_completed_assessment = models.DateTimeField(null=True)
@@ -22,6 +22,4 @@ class UserAnalyticsData(models.Model):
     has_completed_multiple_opps = models.DateTimeField(null=True)
     has_offered_multiple_opps = models.DateTimeField(null=True)
     has_accepted_multiple_opps = models.DateTimeField(null=True)
-    has_viewed_work_history = models.DateTimeField(null=True)
-    has_sent_message = models.DateTimeField(null=True)
     has_sso_on_hq_app = models.DateTimeField(null=True)
