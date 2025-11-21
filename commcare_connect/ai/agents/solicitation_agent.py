@@ -97,6 +97,22 @@ class ProgramData(BaseModel):
     delivery_type: str | None = None
 
 
+class OrganizationData(BaseModel):
+    """Organization information."""
+
+    id: int | None = None
+    slug: str
+    name: str
+
+
+class OpportunityData(BaseModel):
+    """Opportunity information."""
+
+    id: int
+    name: str
+    program: int | None = None
+
+
 async def get_program_details(ctx: RunContext["UserDependencies"]) -> ProgramData:
     """Get details about the current program.
 
@@ -127,6 +143,92 @@ async def get_program_details(ctx: RunContext["UserDependencies"]) -> ProgramDat
 
     # Fallback: if program not found in user's programs, raise error
     raise ValueError(f"Program {program_id} not found in user's accessible programs")
+
+
+async def list_programs(ctx: RunContext["UserDependencies"]) -> list[ProgramData]:
+    """List all programs the user has access to.
+
+    Args:
+        ctx: The run context with user dependencies.
+
+    Returns:
+        List of ProgramData with program information.
+    """
+    user = ctx.deps.user
+
+    # Check if user has programs data (LabsUser has this)
+    if not hasattr(user, "programs"):
+        return []
+
+    programs = []
+    for program in user.programs:
+        programs.append(
+            ProgramData(
+                id=program.get("id"),
+                name=program.get("name", "Unknown Program"),
+                organization=program.get("organization", "Unknown Organization"),
+                currency=program.get("currency"),
+                delivery_type=program.get("delivery_type"),
+            )
+        )
+
+    return programs
+
+
+async def list_organizations(ctx: RunContext["UserDependencies"]) -> list[OrganizationData]:
+    """List all organizations the user is a member of.
+
+    Args:
+        ctx: The run context with user dependencies.
+
+    Returns:
+        List of OrganizationData with organization information.
+    """
+    user = ctx.deps.user
+
+    # Check if user has organizations data (LabsUser has this)
+    if not hasattr(user, "organizations"):
+        return []
+
+    organizations = []
+    for org in user.organizations:
+        organizations.append(
+            OrganizationData(
+                id=org.get("id"),
+                slug=org.get("slug", ""),
+                name=org.get("name", "Unknown Organization"),
+            )
+        )
+
+    return organizations
+
+
+async def list_opportunities(ctx: RunContext["UserDependencies"]) -> list[OpportunityData]:
+    """List all opportunities the user has access to.
+
+    Args:
+        ctx: The run context with user dependencies.
+
+    Returns:
+        List of OpportunityData with opportunity information.
+    """
+    user = ctx.deps.user
+
+    # Check if user has opportunities data (LabsUser has this)
+    if not hasattr(user, "opportunities"):
+        return []
+
+    opportunities = []
+    for opp in user.opportunities:
+        opportunities.append(
+            OpportunityData(
+                id=opp.get("id"),
+                name=opp.get("name", "Unknown Opportunity"),
+                program=opp.get("program"),
+            )
+        )
+
+    return opportunities
 
 
 # TODO: Implement create_solicitation function
@@ -169,6 +271,9 @@ solicitation_toolset = FunctionToolset(
     tools=[
         list_solicitations,
         get_program_details,
+        list_programs,
+        list_organizations,
+        list_opportunities,
         # TODO: Add create_solicitation, update_solicitation, delete_solicitation
     ]
 )
