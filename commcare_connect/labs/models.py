@@ -120,12 +120,8 @@ class LocalLabsRecord:
         self.username: str | None = api_data.get("username")  # Primary user identifier (not user_id)
         self.opportunity_id: int = api_data["opportunity_id"]
         self.organization_id: str | None = api_data.get("organization_id")
-        self.program_id: int | None = api_data.get("program_id")  # Coming soon - being added to production API
+        self.program_id: int | None = api_data.get("program_id")
         self.labs_record_id: int | None = api_data.get("labs_record_id")  # Parent reference
-
-        # Timestamp fields from API
-        self.date_created: str | None = api_data.get("date_created")
-        self.date_modified: str | None = api_data.get("date_modified")
 
     @property
     def pk(self) -> int:

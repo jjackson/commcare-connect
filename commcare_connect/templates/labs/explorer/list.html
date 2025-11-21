@@ -14,6 +14,42 @@
     box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
     padding: 1.5rem;
   }
+
+  /* Compact table styling */
+  .table-striped td,
+  .table-striped th {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.85rem;
+    vertical-align: middle;
+  }
+
+  .table-striped th {
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .table-striped code {
+    font-size: 0.75rem;
+    background: #f3f4f6;
+    padding: 0.15rem 0.3rem;
+    border-radius: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    max-width: 300px;
+  }
+
+  .text-nowrap {
+    white-space: nowrap;
+  }
+
+  /* Ensure checkbox column stays narrow */
+  .table-striped td:first-child,
+  .table-striped th:first-child {
+    width: 30px;
+    padding: 0.4rem;
+  }
 </style>
 {% endblock css %}
 
