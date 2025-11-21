@@ -222,6 +222,7 @@ class LabsRecordDataSerializer(serializers.ModelSerializer):
             "experiment",
             "opportunity_id",
             "organization_id",
+            "program_id",
             "labs_record_id",
             "type",
             "data",
