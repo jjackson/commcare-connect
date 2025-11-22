@@ -43,7 +43,7 @@ class TestProgramCreateOrUpdateView(BaseProgramTest):
             "description": "A description for the new program",
             "delivery_type": self.delivery_type.id,
             "budget": 10000,
-            "currency": "USD",
+            "currency_fk": "USD",
             "start_date": "2024-01-01",
             "end_date": "2024-12-31",
         }
@@ -69,7 +69,7 @@ class TestProgramCreateOrUpdateView(BaseProgramTest):
             "delivery_type": self.delivery_type.id,
             "organization": self.organization.id,
             "budget": 15000,
-            "currency": "EUR",
+            "currency_fk": "EUR",
             "start_date": "2024-02-01",
             "end_date": "2024-11-30",
         }
