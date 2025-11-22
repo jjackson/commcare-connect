@@ -338,6 +338,8 @@ class ImageView(OpportunityDataExportView):
     def get(self, request, *args, **kwargs):
         blob_id = request.data["blob_id"]
         blob_meta = BlobMeta.objects.get(blob_id=blob_id)
+        form = UserVisit.objects.get(xform_id=blob_meta.parent_id)
+        _get_opportunity_or_404(request.user, form.opportunity_id)
         attachment = storages["default"].open(blob_id)
         return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
 
