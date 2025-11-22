@@ -2,9 +2,9 @@ from enum import StrEnum
 
 
 class ErrorCodes(StrEnum):
-    OPPORTUNITY_REQUIRED = "opportunity_required"
-    FAILED_USER_CREATE = "failed_user_create"
-    NO_OPPORTUNITY_ACCESS = "no_opportunity_access"
-    OPPORTUNITY_FULL = "opportunity_full"
-    OPPORTUNITY_ENDED = "opportunity_ended"
-    INVALID_FLAG = "invalid_flag"
+    OPPORTUNITY_REQUIRED = "OPPORTUNITY_REQUIRED"
+    FAILED_USER_CREATE = "FAILED_USER_CREATE"
+    NO_OPPORTUNITY_ACCESS = "NO_OPPORTUNITY_ACCESS"
+    OPPORTUNITY_FULL = "OPPORTUNITY_FULL"
+    OPPORTUNITY_ENDED = "OPPORTUNITY_ENDED"
+    INVALID_FLAG = "INVALID_FLAG"
