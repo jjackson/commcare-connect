@@ -4,7 +4,7 @@ from factory import DictFactory, Faker, LazyAttribute, SelfAttribute, SubFactory
 from factory.django import DjangoModelFactory
 
 from commcare_connect.commcarehq.tests.factories import HQServerFactory
-from commcare_connect.opportunity.models import VisitValidationStatus
+from commcare_connect.opportunity.models import Currency, VisitValidationStatus
 from commcare_connect.users.tests.factories import OrganizationFactory
 
 
@@ -58,6 +58,12 @@ class OpportunityFactory(DjangoModelFactory):
     api_key = SubFactory(HQApiKeyFactory)
     delivery_type = SubFactory(DeliveryTypeFactory)
     currency = "USD"
+    currency_fk = LazyAttribute(
+        lambda o: Currency.objects.get_or_create(
+            code=o.currency,
+            defaults={"name": o.currency, "is_valid": True},
+        )[0]
+    )
     hq_server = SubFactory(HQServerFactory)
 
     class Meta:
