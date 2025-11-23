@@ -13,7 +13,7 @@ from commcare_connect.users.tests.factories import ProgramManagerOrgWithUsersFac
 
 
 @pytest.mark.django_db
-@patch("commcare_connect.program.tasks.send_mail")
+@patch("commcare_connect.program.tasks.send_mail_async.delay")
 def test_send_program_invite_applied_notification(mock_send_mail):
     pm_org = ProgramManagerOrgWithUsersFactory()
     program_application = ProgramApplicationFactory(
@@ -32,7 +32,7 @@ def test_send_program_invite_applied_notification(mock_send_mail):
 
 
 @pytest.mark.django_db
-@patch("commcare_connect.program.tasks.send_mail")
+@patch("commcare_connect.program.tasks.send_mail_async.delay")
 def test_send_program_invited_notification(mock_send_mail):
     pm_org = ProgramManagerOrgWithUsersFactory()
     nm_org = ProgramManagerOrgWithUsersFactory()
@@ -54,7 +54,7 @@ def test_send_program_invited_notification(mock_send_mail):
 
 
 @pytest.mark.django_db
-@patch("commcare_connect.program.tasks.send_mail")
+@patch("commcare_connect.program.tasks.send_mail_async.delay")
 def test_send_opportunity_created_notification(mock_send_mail):
     nm_org = ProgramManagerOrgWithUsersFactory()
     managed_opportunity = ManagedOpportunityFactory(

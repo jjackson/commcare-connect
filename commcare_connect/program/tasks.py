@@ -1,15 +1,12 @@
 from allauth.utils import build_absolute_uri
-from django.conf import settings
-from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.urls import reverse
 
 from commcare_connect.organization.models import UserOrganizationMembership
 from commcare_connect.program.models import ManagedOpportunity, ProgramApplication
-from config import celery_app
+from commcare_connect.utils.tasks import send_mail_async
 
 
-@celery_app.task()
 def send_program_invite_applied_email(application_id):
     application = ProgramApplication.objects.select_related("program", "organization").get(pk=application_id)
     pm_org = application.program.organization
@@ -27,16 +24,14 @@ def send_program_invite_applied_email(application_id):
     message = render_to_string("program/email/program_invite_applied.txt", context)
     html_message = render_to_string("program/email/program_invite_applied.html", context)
 
-    send_mail(
+    send_mail_async.delay(
         subject=subject,
         message=message,
         recipient_list=recipient_emails,
-        from_email=settings.DEFAULT_FROM_EMAIL,
         html_message=html_message,
     )
 
 
-@celery_app.task()
 def send_program_invite_email(application_id):
     application = ProgramApplication.objects.select_related("program", "organization").get(pk=application_id)
     nm_org = application.organization
@@ -52,16 +47,14 @@ def send_program_invite_email(application_id):
     message = render_to_string("program/email/program_invite_notification.txt", context)
     html_message = render_to_string("program/email/program_invite_notification.html", context)
 
-    send_mail(
+    send_mail_async.delay(
         subject=subject,
         message=message,
         recipient_list=recipient_emails,
-        from_email=settings.DEFAULT_FROM_EMAIL,
         html_message=html_message,
     )
 
 
-@celery_app.task()
 def send_opportunity_created_email(opportunity_id):
     opportunity = ManagedOpportunity.objects.select_related("program", "organization").get(pk=opportunity_id)
     nm_org = opportunity.organization
@@ -82,11 +75,10 @@ def send_opportunity_created_email(opportunity_id):
     message = render_to_string("program/email/opportunity_created.txt", context)
     html_message = render_to_string("program/email/opportunity_created.html", context)
 
-    send_mail(
+    send_mail_async.delay(
         subject=subject,
         message=message,
         recipient_list=recipient_emails,
-        from_email=settings.DEFAULT_FROM_EMAIL,
         html_message=html_message,
     )
 
