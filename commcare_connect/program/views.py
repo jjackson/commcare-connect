@@ -120,7 +120,7 @@ class ManagedOpportunityInit(ProgramManagerMixin, OpportunityInit):
 
     def form_valid(self, form):
         response = super().form_valid(form)
-        send_opportunity_created_email.delay(self.object.id)
+        send_opportunity_created_email(self.object.id)
         return response
 
     def get_form_kwargs(self):
@@ -154,7 +154,7 @@ def invite_organization(request, org_slug, pk):
     else:
         messages.info(request, "The invitation for this organization has been updated.")
 
-    send_program_invite_email.delay(obj.id)
+    send_program_invite_email(obj.id)
 
     return redirect(reverse("program:home", kwargs={"org_slug": org_slug}))
 
@@ -209,7 +209,7 @@ def apply_or_decline_application(request, application_id, action, org_slug=None,
     application.save()
 
     if action == "apply":
-        send_program_invite_applied_email.delay(application.id)
+        send_program_invite_applied_email(application.id)
 
     return redirect(redirect_url)
 
