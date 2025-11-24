@@ -23,7 +23,7 @@ The invite can be accepted by visiting the link.
 Thank You,
 Connect"""
 
-    send_mail_async(
+    send_mail_async.delay(
         subject=f"{host_user.name} has invited you to join '{membership.organization.name}' on Connect",
         message=message,
         recipient_list=[membership.user.email],
