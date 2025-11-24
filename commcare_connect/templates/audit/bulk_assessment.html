@@ -615,13 +615,8 @@ function bulkAssessmentInterface() {
       this.loading = true;
       this.loadCancelled = false;
       this.loadError = null;
+      // Fetch ALL data without filters - filtering happens client-side
       const url = new URL(this.bulkDataUrl, window.location.origin);
-      if (this.selectedQuestionId) {
-        url.searchParams.set('question_id', this.selectedQuestionId);
-      }
-      if (this.selectedStatus && this.selectedStatus !== 'all') {
-        url.searchParams.set('status', this.selectedStatus);
-      }
       this.controller = new AbortController();
       try {
         const response = await fetch(url.toString(), { signal: this.controller.signal });
@@ -636,7 +631,8 @@ function bulkAssessmentInterface() {
         this.questionIds = data.question_ids || [];
         this.visitResults = data.visit_results || {};
         this.allAssessments = data.assessments || [];
-        this.assessments = [...this.allAssessments];
+        // Apply filters client-side
+        this.applyFiltersClientSide();
         console.log('[BULK DEBUG] Loaded assessments:', this.assessments.length);
         console.log('[BULK DEBUG] First assessment:', this.assessments[0]);
         console.log('[BULK DEBUG] Question IDs:', this.questionIds);
@@ -673,7 +669,16 @@ function bulkAssessmentInterface() {
     },
     applyFilters() {
       this.updateUrlParams();
-      this.fetchData();
+      this.applyFiltersClientSide();
+    },
+    applyFiltersClientSide() {
+      // Filter assessments client-side without making API calls
+      this.assessments = this.allAssessments.filter((assessment) => {
+        const questionMatch = !this.selectedQuestionId || assessment.question_id === this.selectedQuestionId;
+        const statusMatch = this.selectedStatus === 'all' || assessment.status === this.selectedStatus;
+        return questionMatch && statusMatch;
+      });
+      this.recalculateStats();
     },
     updateWidgetSize() {
       localStorage.setItem('bulkAssessmentWidgetSize', this.widgetSize);

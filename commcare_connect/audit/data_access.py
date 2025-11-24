@@ -627,22 +627,39 @@ class AuditDataAccess:
             visit_data: Visit data dict with 'form_json' and 'images' fields
 
         Returns:
-            List of dicts with blob_id, name, and question_id:
+            List of dicts with blob_id, name, question_id, plus visit-level data:
             [
                 {
                     "blob_id": "abc123",
                     "name": "photo.jpg",
-                    "question_id": "/data/beneficiary_photo"
+                    "question_id": "/data/beneficiary_photo",
+                    "username": "user123",
+                    "visit_date": "2024-01-01T12:00:00Z",
+                    "entity_name": "Entity Name"
                 }
             ]
         """
         form_json = visit_data.get("form_json", {})
         images = visit_data.get("images", [])
 
+        # Extract visit-level data to store with images
+        username = visit_data.get("username") or visit_data.get("user_login") or ""
+        visit_date = visit_data.get("visit_date") or ""
+        entity_name = visit_data.get("entity_name") or "No Entity"
+
         result = []
         for image in images:
             question_id = self.extract_question_id_from_form_json(form_json, image["name"])
-            result.append({"blob_id": image["blob_id"], "name": image["name"], "question_id": question_id})
+            result.append(
+                {
+                    "blob_id": image["blob_id"],
+                    "name": image["name"],
+                    "question_id": question_id,
+                    "username": username,
+                    "visit_date": visit_date,
+                    "entity_name": entity_name,
+                }
+            )
 
         return result
 
