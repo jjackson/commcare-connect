@@ -17,7 +17,7 @@ from django.core.files.storage import default_storage, storages
 from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, HttpResponseNotFound
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -432,7 +432,7 @@ class OpportunityDashboard(OpportunityObjectMixin, OrganizationUserMixin, Detail
 @org_member_required
 @opportunity_required
 def export_user_visits(request, org_slug, opp_id):
-    form = VisitExportForm(data=request.POST, opportunity=request.opportunity)
+    form = VisitExportForm(data=request.POST, opportunity=request.opportunity, org_slug=org_slug)
     if not form.is_valid():
         messages.error(request, form.errors)
         return redirect("opportunity:worker_list", request.org.slug, opp_id)
@@ -450,7 +450,7 @@ def export_user_visits(request, org_slug, opp_id):
 @org_member_required
 @opportunity_required
 def review_visit_export(request, org_slug, opp_id):
-    form = VisitExportForm(data=request.POST, opportunity=request.opportunity, review_export=True)
+    form = VisitExportForm(data=request.POST, opportunity=request.opportunity, org_slug=org_slug, review_export=True)
     redirect_url = reverse("opportunity:worker_deliver", args=(org_slug, opp_id))
     if not form.is_valid():
         messages.error(request, form.errors)
@@ -981,9 +981,20 @@ def reject_visits(request, org_slug=None, opp_id=None):
 
 
 @org_member_required
-def fetch_attachment(self, org_slug, blob_id):
-    blob_meta = BlobMeta.objects.get(blob_id=blob_id)
-    attachment = storages["default"].open(blob_id)
+@opportunity_required
+def fetch_attachment(request, org_slug, opp_id, blob_id):
+    blob_meta = get_object_or_404(BlobMeta, blob_id=blob_id)
+
+    if not UserVisit.objects.filter(
+        opportunity=request.opportunity,
+        xform_id=blob_meta.parent_id,
+    ).exists():
+        return HttpResponseNotFound()
+
+    try:
+        attachment = storages["default"].open(blob_id)
+    except FileNotFoundError:
+        return HttpResponseNotFound()
     return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
 
 
@@ -2020,8 +2031,10 @@ class WorkerDeliverView(BaseWorkerListView, FilterMixin):
 
     def get_extra_context(self, opportunity, org_slug):
         context = {
-            "visit_export_form": VisitExportForm(opportunity=opportunity),
-            "review_visit_export_form": VisitExportForm(opportunity=opportunity, review_export=True),
+            "visit_export_form": VisitExportForm(opportunity=opportunity, org_slug=org_slug),
+            "review_visit_export_form": VisitExportForm(
+                opportunity=opportunity, org_slug=org_slug, review_export=True
+            ),
             "import_export_delivery_urls": {
                 "export_url_for_pm": reverse(
                     "opportunity:review_visit_export",

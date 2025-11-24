@@ -98,6 +98,7 @@ class UserVisitDataSerialier(serializers.ModelSerializer):
     class Meta:
         model = UserVisit
         fields = [
+            "id",
             "opportunity_id",
             "username",
             "deliver_unit",
