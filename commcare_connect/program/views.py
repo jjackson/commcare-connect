@@ -18,14 +18,14 @@ from commcare_connect.opportunity.models import (
     VisitReviewStatus,
     VisitValidationStatus,
 )
-from commcare_connect.opportunity.views import OpportunityInit
+from commcare_connect.opportunity.views import OpportunityInit, OpportunityInitUpdate
 from commcare_connect.organization.decorators import (
     org_admin_required,
     org_program_manager_required,
     org_viewer_required,
 )
 from commcare_connect.organization.models import Organization
-from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
+from commcare_connect.program.forms import ManagedOpportunityInitForm, ManagedOpportunityInitUpdateForm, ProgramForm
 from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplication, ProgramApplicationStatus
 from commcare_connect.program.tasks import (
     send_opportunity_created_email,
@@ -106,8 +106,7 @@ class ManagedOpportunityList(ProgramManagerMixin, ListView):
         return context
 
 
-class ManagedOpportunityInit(ProgramManagerMixin, OpportunityInit):
-    form_class = ManagedOpportunityInitForm
+class ManagedOpportunityViewMixin:
     program = None
 
     def dispatch(self, request, *args, **kwargs):
@@ -127,6 +126,14 @@ class ManagedOpportunityInit(ProgramManagerMixin, OpportunityInit):
         kwargs = super().get_form_kwargs()
         kwargs["program"] = self.program
         return kwargs
+
+
+class ManagedOpportunityInit(ManagedOpportunityViewMixin, ProgramManagerMixin, OpportunityInit):
+    form_class = ManagedOpportunityInitForm
+
+
+class ManagedOpportunityInitUpdate(ManagedOpportunityViewMixin, ProgramManagerMixin, OpportunityInitUpdate):
+    form_class = ManagedOpportunityInitUpdateForm
 
 
 @org_program_manager_required
@@ -271,7 +278,7 @@ def program_manager_home(request, org):
         pending_payments_data, org.slug, "opportunity:invoice_list", small_text=True, opportunity_slug="opp_id"
     )
 
-    organizations = Organization.objects.exclude(pk=org.pk)
+    organizations = Organization.objects.exclude(pk=org.pk).order_by("name")
     recent_activities = [
         {"title": "Pending Review", "rows": pending_review},
         {"title": "Pending Invoices", "rows": pending_payments},
