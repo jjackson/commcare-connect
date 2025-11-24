@@ -13,11 +13,12 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.humanize.templatetags.humanize import intcomma
+from django.core.cache import cache
 from django.core.files.storage import default_storage, storages
 from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, HttpResponseNotFound, JsonResponse
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -122,6 +123,7 @@ from commcare_connect.opportunity.tasks import (
     generate_user_status_export,
     generate_visit_export,
     generate_work_status_export,
+    get_payment_upload_key,
     invite_user,
     send_push_notification_task,
     update_user_and_send_invite,
@@ -678,10 +680,18 @@ def payment_import(request, org_slug=None, opp_id=None):
     if file_format not in ("csv", "xlsx"):
         raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
 
+    redirect_url = reverse("opportunity:worker_payments", args=(org_slug, opp_id))
+
+    lock = cache.lock(get_payment_upload_key(request.opportunity.pk))
+
+    if lock.locked():
+        messages.error(request, "Another payment import is in progress. Please try again later.")
+        return redirect(f"{redirect_url}?{request.GET.copy().urlencode()}")
+
     file_path = f"{request.opportunity.pk}_{datetime.datetime.now().isoformat}_payment_import"
     saved_path = default_storage.save(file_path, file)
+
     result = bulk_update_payments_task.delay(request.opportunity.pk, saved_path, file_format)
-    redirect_url = reverse("opportunity:worker_payments", args=(org_slug, opp_id))
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 
 
@@ -974,9 +984,20 @@ def reject_visits(request, org_slug=None, opp_id=None):
 
 
 @org_member_required
-def fetch_attachment(self, org_slug, blob_id):
-    blob_meta = BlobMeta.objects.get(blob_id=blob_id)
-    attachment = storages["default"].open(blob_id)
+@opportunity_required
+def fetch_attachment(request, org_slug, opp_id, blob_id):
+    blob_meta = get_object_or_404(BlobMeta, blob_id=blob_id)
+
+    if not UserVisit.objects.filter(
+        opportunity=request.opportunity,
+        xform_id=blob_meta.parent_id,
+    ).exists():
+        return HttpResponseNotFound()
+
+    try:
+        attachment = storages["default"].open(blob_id)
+    except FileNotFoundError:
+        return HttpResponseNotFound()
     return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
 
 
