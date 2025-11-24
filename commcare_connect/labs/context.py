@@ -92,17 +92,19 @@ def validate_context_access(request: HttpRequest, context: dict) -> dict:
     validated = {}
 
     # Validate organization_id
-    # NOTE: OAuth API only returns organization slugs, not integer IDs
-    # LabsRecord API expects integer IDs, so we can't use organization slugs for filtering
-    # Use program_id or opportunity_id instead for API scoping
+    # OAuth API now returns integer IDs alongside slugs
+    # URLs use slugs (human-readable), but APIs need integer IDs
     if "organization_id" in context:
-        org_id = context["organization_id"]
+        org_slug = context["organization_id"]
         organizations = org_data.get("organizations", [])
         for org in organizations:
-            if org.get("slug") == org_id:
-                # Store for display purposes, but don't pass to API
+            if org.get("slug") == org_slug:
+                # Store organization object for display
                 validated["organization"] = org
-                # Don't add organization_id to validated context - API can't use it
+                # Store slug for URLs
+                validated["organization_slug"] = org_slug
+                # Store integer ID for API calls
+                validated["organization_id"] = org.get("id")
                 break
 
     # Validate program_id
@@ -119,11 +121,19 @@ def validate_context_access(request: HttpRequest, context: dict) -> dict:
     if "opportunity_id" in context:
         opp_id = context["opportunity_id"]
         opportunities = org_data.get("opportunities", [])
+        opp_found = False
         for opp in opportunities:
             if opp.get("id") == opp_id:
                 validated["opportunity_id"] = opp_id
                 validated["opportunity"] = opp
+                opp_found = True
                 break
+
+        # If opportunity not found in cached data, still pass through the ID
+        # Let the view/API handle authorization (handles managed opps bug)
+        if not opp_found:
+            logger.info(f"Opportunity {opp_id} not in cached OAuth data, passing through for API validation")
+            validated["opportunity_id"] = opp_id
 
     return validated
 
@@ -143,7 +153,10 @@ def add_context_to_url(url: str, context: dict) -> str:
 
     # Add context params (only the ID fields, not the full objects)
     for param in CONTEXT_PARAMS:
-        if param in context:
+        # For organization_id, prefer slug for human-readable URLs
+        if param == "organization_id" and "organization_slug" in context:
+            query_params[param] = [str(context["organization_slug"])]
+        elif param in context:
             query_params[param] = [str(context[param])]
 
     new_query = urlencode(query_params, doseq=True)
@@ -161,7 +174,10 @@ def get_context_url_params(context: dict) -> str:
     """
     params = {}
     for param in CONTEXT_PARAMS:
-        if param in context:
+        # For organization_id, prefer slug for human-readable URLs
+        if param == "organization_id" and "organization_slug" in context:
+            params[param] = context["organization_slug"]
+        elif param in context:
             params[param] = context[param]
     return urlencode(params)
 
@@ -239,7 +255,7 @@ class LabsContextMiddleware(MiddlewareMixin):
         if session_context and not url_context and request.method == "GET":
             # Check if this is a labs whitelisted path (not login/logout)
             path = request.path
-            whitelisted_prefixes = ["/audit/", "/tasks/", "/solicitations/", "/ai/", "/labs/explorer/"]
+            whitelisted_prefixes = ["/audit/", "/tasks/", "/solicitations/", "/ai/", "/labs/explorer/", "/coverage/"]
             is_whitelisted = any(path.startswith(prefix) for prefix in whitelisted_prefixes)
 
             if is_whitelisted:

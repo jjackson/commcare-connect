@@ -99,7 +99,16 @@ class AuditDataAccess:
 
     @property
     def blob_api(self):
-        """Lazy-load BlobMetadataAPI only when needed for CommCare API calls."""
+        """Lazy-load BlobMetadataAPI only when needed for CommCare API calls.
+
+        Note: As of PR #859, Connect production now provides image APIs:
+        - UserVisit records include 'images' field with blob metadata:
+          [{"blob_id": "...", "name": "...", "parent_id": "..."}]
+        - Images can be fetched via: /export/opportunity/<int:opp_id>/image/
+          (POST with {"blob_id": "..."} in request body)
+        - This provides an alternative to CommCare HQ blob API
+        - TODO: Integrate Connect image API into audit app
+        """
         if self._blob_api is None:
             # Try to get CommCare OAuth token from session
             oauth_token = None
@@ -228,6 +237,24 @@ class AuditDataAccess:
         Returns:
             AuditSessionRecord instance with empty visit_results
         """
+        # Extract and store complete image metadata for all visits
+        visit_images = {}
+        if opportunity_id:
+            # Fetch all visits once and build cache to avoid repeated API calls
+            all_visits = self._fetch_visits_for_opportunity(opportunity_id)
+            visit_cache = {visit["id"]: visit for visit in all_visits}
+
+            for visit_id in visit_ids:
+                try:
+                    visit_data = self.get_visit_data(visit_id, opportunity_id=opportunity_id, visit_cache=visit_cache)
+                    if visit_data:
+                        images_with_questions = self.get_images_with_question_ids(visit_data)
+                        visit_images[str(visit_id)] = images_with_questions
+                except Exception as e:
+                    # Log but continue if image extraction fails for one visit
+                    print(f"[WARNING] Failed to extract images for visit {visit_id}: {e}")
+                    visit_images[str(visit_id)] = []
+
         data = {
             "title": title,
             "tag": tag,
@@ -238,6 +265,7 @@ class AuditDataAccess:
             "visit_ids": visit_ids,
             "visit_results": {},  # Initialize empty
             "opportunity_id": opportunity_id,  # Store primary opportunity ID for later use
+            "visit_images": visit_images,  # Store complete image metadata with question_ids
         }
 
         record = self.labs_api.create_record(
@@ -548,6 +576,94 @@ class AuditDataAccess:
         """
         return self.blob_api.download_blob(blob_url)
 
+    def extract_question_id_from_form_json(self, form_json: dict, filename: str) -> str | None:
+        """
+        Extract question ID for an attachment from form_json.
+
+        Walks the form data tree to find the question whose value matches the filename.
+
+        Args:
+            form_json: Full form JSON data
+            filename: Attachment filename to search for
+
+        Returns:
+            Question ID path (e.g., "/data/beneficiary_photo") or None
+        """
+
+        def search_dict(data, target_filename, path=""):
+            """Recursively search for filename in nested dict structure"""
+            if not isinstance(data, dict):
+                return None
+
+            for key, value in data.items():
+                # Skip metadata and special fields
+                if key in ["@xmlns", "@name", "@uiVersion", "@version", "meta", "#type", "attachments"]:
+                    continue
+
+                current_path = f"{path}/{key}" if path else key
+
+                # Check if this value matches our filename
+                if isinstance(value, str) and value == target_filename:
+                    return current_path
+
+                # Recursively search nested dicts
+                if isinstance(value, dict):
+                    result = search_dict(value, target_filename, current_path)
+                    if result:
+                        return result
+
+            return None
+
+        # Search in the form data
+        form_data = form_json.get("form", form_json)
+        question_path = search_dict(form_data, filename)
+        return question_path
+
+    def get_images_with_question_ids(self, visit_data: dict) -> list[dict]:
+        """
+        Build complete image metadata by combining images array with question_ids from form_json.
+
+        Args:
+            visit_data: Visit data dict with 'form_json' and 'images' fields
+
+        Returns:
+            List of dicts with blob_id, name, and question_id:
+            [
+                {
+                    "blob_id": "abc123",
+                    "name": "photo.jpg",
+                    "question_id": "/data/beneficiary_photo"
+                }
+            ]
+        """
+        form_json = visit_data.get("form_json", {})
+        images = visit_data.get("images", [])
+
+        result = []
+        for image in images:
+            question_id = self.extract_question_id_from_form_json(form_json, image["name"])
+            result.append({"blob_id": image["blob_id"], "name": image["name"], "question_id": question_id})
+
+        return result
+
+    def download_image_from_connect(self, blob_id: str, opportunity_id: int) -> bytes:
+        """
+        Download image from Connect API.
+
+        Args:
+            blob_id: Blob ID to download
+            opportunity_id: Opportunity ID for authorization
+
+        Returns:
+            Image content as bytes
+        """
+        # Use POST request with blob_id in body (workaround for production API expecting request.data)
+        response = self.http_client.post(
+            f"{self.production_url}/export/opportunity/{opportunity_id}/image/", json={"blob_id": blob_id}
+        )
+        response.raise_for_status()
+        return response.content
+
     # Connect API Helper Methods
 
     def _call_connect_api(self, endpoint: str) -> httpx.Response:
@@ -597,19 +713,39 @@ class AuditDataAccess:
                 elif "id" in row and pd.notna(row["id"]):
                     visit_id = int(row["id"])
 
-                # Extract xform_id from form_json if available
+                # Extract xform_id and form_json from CSV
                 xform_id = None
+                form_json = {}
                 if "form_json" in row and pd.notna(row["form_json"]):
                     try:
                         import json
 
+                        # Try JSON first (double quotes)
                         form_json = json.loads(row["form_json"])
                         xform_id = form_json.get("id")
                     except (json.JSONDecodeError, AttributeError):
-                        pass
+                        # Fall back to Python literal syntax (single quotes)
+                        try:
+                            import ast
+
+                            form_json = ast.literal_eval(row["form_json"])
+                            xform_id = form_json.get("id")
+                        except (ValueError, SyntaxError):
+                            pass
 
                 # Extract user_id - need to look up from username since CSV doesn't have it
                 user_id = None  # Would need to map username to user_id
+
+                # Extract images from CSV (comes as Python literal string, not JSON)
+                # Note: csv.DictWriter uses str() which produces Python syntax with single quotes
+                images = []
+                if "images" in row and pd.notna(row["images"]):
+                    try:
+                        import ast
+
+                        images = ast.literal_eval(row["images"])
+                    except (ValueError, SyntaxError):
+                        pass
 
                 visit = {
                     "id": visit_id,
@@ -622,7 +758,8 @@ class AuditDataAccess:
                     "user_id": user_id,
                     "username": str(row["username"]) if pd.notna(row.get("username")) else None,
                     "opportunity_id": opportunity_id,
-                    "form_json": row.get("form_json"),  # Include raw form_json for blob extraction
+                    "form_json": form_json,  # Include parsed form_json for blob extraction
+                    "images": images,  # Include images for audit session creation
                 }
                 visits.append(visit)
 

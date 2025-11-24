@@ -660,7 +660,7 @@
 
 @layer components {
   .base-table {
-    @apply w-full table-auto border-collapse text-gray-700;
+    @apply w-full table-fixed border-collapse text-gray-700;
   }
 
   .base-table thead {

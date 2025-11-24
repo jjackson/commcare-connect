@@ -70,8 +70,8 @@ class LabsRecordAPIClient:
 
     def get_records(
         self,
-        experiment: str,
-        type: str,
+        experiment: str | None = None,
+        type: str | None = None,
         username: str | None = None,
         organization_id: str | None = None,
         program_id: int | None = None,
@@ -82,8 +82,8 @@ class LabsRecordAPIClient:
         """Fetch records from production API.
 
         Args:
-            experiment: Experiment name (e.g., 'audit', 'tasks', 'solicitations')
-            type: Record type (e.g., 'AuditSession', 'Task')
+            experiment: Optional experiment name filter (e.g., 'audit', 'tasks', 'solicitations')
+            type: Optional record type filter (e.g., 'AuditSession', 'Task')
             username: Filter by username
             organization_id: Filter by organization slug/ID
             program_id: Filter by program ID
@@ -99,10 +99,13 @@ class LabsRecordAPIClient:
         """
         try:
             # Build query parameters
-            params = {
-                "experiment": experiment,
-                "type": type,
-            }
+            params = {}
+
+            # Add optional filters
+            if experiment:
+                params["experiment"] = experiment
+            if type:
+                params["type"] = type
 
             # Add username filter if provided
             if username:
@@ -110,7 +113,7 @@ class LabsRecordAPIClient:
 
             # Add scope filters from client initialization or method parameters
             # NOTE: organization_id must be an integer ID, not a slug
-            # The API doesn't support organization slugs for filtering
+            # labs_context now provides integer IDs extracted from OAuth data
             if organization_id and isinstance(organization_id, int):
                 params["organization_id"] = organization_id
             elif self.organization_id and isinstance(self.organization_id, int):
@@ -147,16 +150,16 @@ class LabsRecordAPIClient:
     def get_record_by_id(
         self,
         record_id: int,
-        experiment: str,
-        type: str,
+        experiment: str | None = None,
+        type: str | None = None,
         model_class: type[LocalLabsRecord] | None = None,
     ) -> LocalLabsRecord | None:
         """Get a single record by ID.
 
         Args:
             record_id: Record ID
-            experiment: Experiment name (for filtering)
-            type: Record type (for filtering)
+            experiment: Optional experiment name filter (optimization hint)
+            type: Optional record type filter (optimization hint)
             model_class: Optional proxy model class to instantiate
 
         Returns:
@@ -286,7 +289,7 @@ class LabsRecordAPIClient:
         Raises:
             LabsAPIError: If API request fails
         """
-        # Get current record to merge fields
+        # Get current record to merge fields (use experiment/type as optimization hints)
         current = self.get_record_by_id(record_id, experiment=experiment, type=type)
         if not current:
             raise LabsAPIError(f"Record {record_id} not found")
@@ -373,12 +376,63 @@ class LabsRecordAPIClient:
             raise LabsAPIError(f"Failed to update record in production API: {e}") from e
 
     def delete_record(self, record_id: int) -> None:
-        """Delete a record (if supported by API).
+        """Delete a single record.
 
         Args:
             record_id: ID of record to delete
 
         Raises:
-            NotImplementedError: Delete not yet supported by production API
+            LabsAPIError: If API request fails
         """
-        raise NotImplementedError("Delete operation not yet supported by production LabsRecord API")
+        self.delete_records([record_id])
+
+    def delete_records(self, record_ids: list[int]) -> None:
+        """Delete multiple records.
+
+        Args:
+            record_ids: List of record IDs to delete
+
+        Raises:
+            LabsAPIError: If API request fails
+        """
+        if not record_ids:
+            return
+
+        try:
+            # Build payload with record IDs
+            payload = [{"id": record_id} for record_id in record_ids]
+
+            url = f"{self.base_url}/export/labs_record/"
+            logger.info(f"DELETE {url} with {len(record_ids)} record(s)")
+
+            # DEBUG: Print exact API call details
+            import json
+
+            print("\n" + "=" * 80)
+            print("API DELETE CALL - DELETE RECORD(S)")
+            print("=" * 80)
+            print(f"URL: {url}")
+            print("Method: DELETE")
+            print(f"Headers: Authorization: Bearer {self.access_token[:20]}...")
+            print("Payload:")
+            print(json.dumps(payload, indent=2))
+            print("=" * 80 + "\n")
+
+            response = self.http_client.request("DELETE", url, json=payload)
+
+            # DEBUG: Print response details
+            print(f"Response Status: {response.status_code}")
+            if response.status_code >= 400:
+                print(f"Error Response Body: {response.text}")
+
+            response.raise_for_status()
+            print(f"Successfully deleted {len(record_ids)} record(s)")
+
+        except httpx.HTTPError as e:
+            logger.error(f"Failed to delete records: {e}", exc_info=True)
+            print("\nERROR DETAILS:")
+            print(f"Exception: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                print(f"Response Status: {e.response.status_code}")
+                print(f"Response Body: {e.response.text}")
+            raise LabsAPIError(f"Failed to delete records in production API: {e}") from e

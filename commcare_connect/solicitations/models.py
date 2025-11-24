@@ -114,7 +114,8 @@ class ResponseRecord(LocalLabsRecord):
 
     @property
     def submission_date(self):
-        return self.date_created
+        # date_created doesn't exist on LocalLabsRecord - store in data if needed
+        return self.data.get("submission_date")
 
     @property
     def attachments(self):
@@ -175,7 +176,8 @@ class ReviewRecord(LocalLabsRecord):
 
     @property
     def review_date(self):
-        return self.date_created
+        # date_created doesn't exist on LocalLabsRecord - store in data if needed
+        return self.data.get("review_date")
 
     def get_recommendation_display(self):
         """Get display text for recommendation."""

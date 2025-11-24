@@ -97,6 +97,7 @@ LOCAL_APPS = [
     "commcare_connect.audit",
     "commcare_connect.commcarehq_provider",
     "commcare_connect.commcarehq",
+    "commcare_connect.coverage",
     "commcare_connect.data_export",
     "commcare_connect.flags",
     "commcare_connect.form_receiver",

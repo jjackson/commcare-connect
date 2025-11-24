@@ -59,8 +59,8 @@ class TaskListView(LoginRequiredMixin, ListView):
             search_lower = search_query.lower()
             tasks = [t for t in tasks if search_lower in t.title.lower()]
 
-        # Sort by date_created descending
-        return sorted(tasks, key=lambda x: x.date_created or "", reverse=True)
+        # Sort by id descending (higher IDs are more recent)
+        return sorted(tasks, key=lambda x: x.id, reverse=True)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -170,16 +170,15 @@ class TaskDetailView(LoginRequiredMixin, DetailView):
             if task.task_username:
                 all_flw_tasks = data_access.get_tasks(username=task.task_username)
 
-                # Filter out current task and sort by date_created
+                # Filter out current task and sort by id descending
                 flw_history = [t for t in all_flw_tasks if t.id != task.id]
-                flw_history = sorted(flw_history, key=lambda x: x.date_created or "", reverse=True)[:5]
+                flw_history = sorted(flw_history, key=lambda x: x.id, reverse=True)[:5]
 
                 # Format history for template
                 for hist in flw_history:
                     formatted_history.append(
                         {
                             "id": hist.id,
-                            "date_created": hist.date_created,
                             "task_type": hist.task_type,
                             "status": hist.status,
                             "title": hist.title,
@@ -204,7 +203,6 @@ class TaskDetailView(LoginRequiredMixin, DetailView):
                     "audit_session_id": task.audit_session_id,
                     "assigned_to_id": task.assigned_to_id,
                     "created_by_id": task.created_by_id,
-                    "date_created": task.date_created,
                     "timeline": timeline,
                     "flw_history": formatted_history,
                 },

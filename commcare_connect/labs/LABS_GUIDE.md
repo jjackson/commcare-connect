@@ -89,8 +89,12 @@ record = client.create_record(
     program_id=25
 )
 
-# Query records
-records = client.get_records(
+# Query records - all parameters are optional for filtering
+# Get all records for the opportunity/program/org
+all_records = client.get_records()
+
+# Or filter by experiment, type, username
+filtered_records = client.get_records(
     experiment="my_experiment",
     type="MyRecordType",
     username="user@example.com"
@@ -144,6 +148,7 @@ class MyAppDataAccess:
 
     def get_my_records(self, username: str | None = None) -> list[MyRecord]:
         """Get MyRecord instances."""
+        # Filters are optional - experiment/type can improve query performance
         return self.client.get_records(
             experiment="my_app",
             type="MyRecordType",

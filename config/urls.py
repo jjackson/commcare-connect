@@ -33,6 +33,7 @@ urlpatterns = [
     path("admin_reports/", include("commcare_connect.reports.urls")),
     path("tasks/", include("commcare_connect.tasks.urls", namespace="tasks")),
     path("audit/", include("commcare_connect.audit.urls", namespace="audit")),
+    path("coverage/", include("commcare_connect.coverage.urls", namespace="coverage")),
     path("labs/explorer/", include("commcare_connect.labs.explorer.urls", namespace="explorer")),
     path("labs/", include("commcare_connect.labs.urls", namespace="labs")),
     path("ai/", include("commcare_connect.ai.urls", namespace="ai")),

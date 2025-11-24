@@ -54,8 +54,8 @@ class ExperimentAuditListView(LoginRequiredMixin, SingleTableView):
         data_access = AuditDataAccess(request=self.request)
         try:
             sessions = data_access.get_audit_sessions()
-            # Sort by date_created descending (API returns list, not QuerySet)
-            return sorted(sessions, key=lambda x: x.date_created or "", reverse=True)
+            # Sort by id descending (higher IDs are more recent)
+            return sorted(sessions, key=lambda x: x.id, reverse=True)
         finally:
             data_access.close()
 
@@ -167,37 +167,27 @@ class ExperimentAuditDetailView(LoginRequiredMixin, DetailView):
                 if visit_data:
                     current_visit = visit_data
 
-                    # Get blob metadata from CommCare
-                    # Get cc_domain from opportunity details
-                    opp_details = data_access.get_opportunity_details(opportunity_id)
-                    cc_domain = opp_details.get("cc_domain") if opp_details else None
+                    # Get images from stored session data (includes question_id from form_json)
+                    images_metadata = session.data.get("visit_images", {}).get(str(current_visit_id), [])
 
-                    if cc_domain and visit_data.get("xform_id"):
-                        try:
-                            blob_metadata = data_access.get_blob_metadata_for_visit(visit_data["xform_id"], cc_domain)
+                    # Get existing assessments from session JSON
+                    assessments = session.get_assessments(current_visit_id)
 
-                            # Get existing assessments from session JSON
-                            assessments = session.get_assessments(current_visit_id)
-
-                            # Build images list for template
-                            for blob_id, blob_info in blob_metadata.items():
-                                assessment = assessments.get(blob_id, {})
-                                image_data = {
-                                    "blob_id": blob_id,
-                                    "question_id": blob_info.get("question_id"),
-                                    "url": (
-                                        f"/audit/experiment/image/{blob_id}/"
-                                        f"?xform_id={visit_data['xform_id']}&domain={cc_domain}"
-                                    ),
-                                    "result": assessment.get("result"),
-                                    "notes": assessment.get("notes", ""),
-                                    "name": blob_info.get("filename"),
-                                }
-                                current_visit_images.append(image_data)
-
-                        except Exception as e:
-                            # Log error but continue
-                            print(f"[WARNING] Could not fetch blob metadata: {e}")
+                    # Build images list for template using Connect API
+                    for img in images_metadata:
+                        blob_id = img["blob_id"]
+                        assessment = assessments.get(blob_id, {})
+                        image_data = {
+                            "blob_id": blob_id,
+                            "question_id": img.get("question_id"),
+                            "url": reverse(
+                                "audit:audit_image_connect", kwargs={"opp_id": opportunity_id, "blob_id": blob_id}
+                            ),
+                            "result": assessment.get("result"),
+                            "notes": assessment.get("notes", ""),
+                            "name": img.get("name"),
+                        }
+                        current_visit_images.append(image_data)
 
                     # Get visit result from session JSON
                     visit_result = session.get_visit_result(current_visit_id)
@@ -663,7 +653,6 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
 
             visit_ids = session.visit_ids or []
             opportunity_id = session.opportunity_id
-            cc_domain = None
             primary_opportunity = ""
             earliest_visit = None
             latest_visit = None
@@ -671,19 +660,30 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
             if opportunity_id:
                 try:
                     opportunity_details = data_access.get_opportunity_details(opportunity_id)
-                    cc_domain = opportunity_details.get("cc_domain") if opportunity_details else None
                     primary_opportunity = opportunity_details.get("name") if opportunity_details else ""
                 except Exception:
-                    cc_domain = None
+                    pass
 
             question_ids = set()
             visit_result_map: dict[str, str] = {}
             all_assessments: list[dict] = []
             bulk_primary_username = ""
+            assessment_counter = 0  # Counter to ensure unique IDs even for duplicate visits
+
+            # Fetch all visits once and build cache to avoid repeated API calls
+            visit_cache = {}
+            if opportunity_id and visit_ids:
+                try:
+                    all_visits = data_access._fetch_visits_for_opportunity(opportunity_id)
+                    visit_cache = {visit["id"]: visit for visit in all_visits}
+                except Exception:
+                    pass  # Continue with empty cache if fetch fails
 
             for visit_id in visit_ids:
                 try:
-                    visit_data = data_access.get_visit_data(visit_id, opportunity_id=opportunity_id)
+                    visit_data = data_access.get_visit_data(
+                        visit_id, opportunity_id=opportunity_id, visit_cache=visit_cache
+                    )
                 except Exception:
                     visit_data = None
 
@@ -708,7 +708,6 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                     if latest_visit is None or visit_date_local > latest_visit:
                         latest_visit = visit_date_local
 
-                xform_id = visit_data.get("xform_id")
                 entity_name = visit_data.get("entity_name") or "No Entity"
 
                 visit_result_entry = session.get_visit_result(visit_id) or {}
@@ -719,17 +718,18 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                 assessments_map = session.get_assessments(visit_id)
                 seen_blob_ids = set()
 
-                blob_metadata = {}
-                if cc_domain and xform_id:
-                    try:
-                        blob_metadata = data_access.get_blob_metadata_for_visit(xform_id, cc_domain)
-                    except Exception:
-                        blob_metadata = {}
+                # Get images from stored session data (includes question_id from form_json)
+                images_metadata = session.data.get("visit_images", {}).get(str(visit_id), [])
+
+                # Convert to dict for easy lookup
+                blob_metadata = {
+                    img["blob_id"]: {"question_id": img["question_id"], "filename": img["name"]}
+                    for img in images_metadata
+                }
 
                 def build_image_url(blob_id: str) -> str:
-                    url = reverse("audit:audit_image", kwargs={"blob_id": blob_id})
-                    if cc_domain and xform_id:
-                        url = f"{url}?xform_id={xform_id}&domain={cc_domain}"
+                    # Use Connect API image endpoint
+                    url = reverse("audit:audit_image_connect", kwargs={"opp_id": opportunity_id, "blob_id": blob_id})
                     return url
 
                 for blob_id, metadata in blob_metadata.items():
@@ -739,9 +739,11 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                     result_value = assessment_data.get("result") or ""
                     status_value = result_value if result_value in {"pass", "fail"} else "pending"
 
+                    # Use counter to ensure unique IDs even if same visit appears multiple times
+                    assessment_counter += 1
                     all_assessments.append(
                         {
-                            "id": f"{visit_id}:{blob_id}",
+                            "id": f"{assessment_counter}:{visit_id}:{blob_id}",
                             "visit_id": visit_id,
                             "blob_id": blob_id,
                             "question_id": question_id,
@@ -766,9 +768,11 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                     result_value = assessment_data.get("result") or ""
                     status_value = result_value if result_value in {"pass", "fail"} else "pending"
 
+                    # Use counter to ensure unique IDs
+                    assessment_counter += 1
                     all_assessments.append(
                         {
-                            "id": f"{visit_id}:{blob_id}",
+                            "id": f"{assessment_counter}:{visit_id}:{blob_id}",
                             "visit_id": visit_id,
                             "blob_id": blob_id,
                             "question_id": question_id,
@@ -919,6 +923,37 @@ class ExperimentAuditImageView(LoginRequiredMixin, View):
         except Exception as e:
             import traceback
 
+            print(f"[ERROR] {traceback.format_exc()}")
+            return HttpResponse(f"Image not found: {e}", status=404)
+
+
+class ExperimentAuditImageConnectView(LoginRequiredMixin, View):
+    """Serve audit visit images from Connect API (no CommCare HQ)"""
+
+    def get(self, request, opp_id, blob_id):
+        try:
+            print(f"[IMAGE] Fetching image: opp_id={opp_id}, blob_id={blob_id}")
+            # Initialize data access with opportunity ID
+            data_access = AuditDataAccess(opportunity_id=opp_id, request=request)
+
+            try:
+                # Download image from Connect API
+                print("[IMAGE] Calling download_image_from_connect...")
+                image_content = data_access.download_image_from_connect(blob_id, opp_id)
+                print(f"[IMAGE] Downloaded {len(image_content)} bytes")
+
+                # Return as image response
+                response = HttpResponse(image_content, content_type="image/jpeg")
+                response["Content-Disposition"] = f'inline; filename="{blob_id}.jpg"'
+                return response
+
+            finally:
+                data_access.close()
+
+        except Exception as e:
+            import traceback
+
+            print(f"[ERROR] Image fetch failed for blob_id={blob_id}, opp_id={opp_id}")
             print(f"[ERROR] {traceback.format_exc()}")
             return HttpResponse(f"Image not found: {e}", status=404)
 

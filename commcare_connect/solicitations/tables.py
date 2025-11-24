@@ -94,7 +94,7 @@ class SolicitationRecordTable(tables.Table):
         # Note: SolicitationRecord is not a Django model, it's a LocalLabsRecord subclass
         # So we don't specify model= here (similar to audit tables)
         fields = ("title", "status", "application_deadline", "total", "actions")
-        order_by = ("-date_created",)
+        order_by = ("-id",)  # Higher IDs are more recent
         template_name = "base_table.html"
 
     def render_title(self, value, record):
@@ -165,7 +165,7 @@ class ResponseRecordTable(tables.Table):
 
     solicitation = tables.Column(verbose_name="Solicitation", orderable=False, empty_values=())
     status = tables.Column(verbose_name="Status", orderable=False, empty_values=())
-    last_edited = tables.Column(accessor="date_modified", verbose_name="Last Edited", orderable=True)
+    last_edited = tables.Column(accessor="id", verbose_name="Last Edited", orderable=True)
     recommendation = tables.Column(empty_values=(), verbose_name="Recommendation", orderable=False)
     score = tables.Column(empty_values=(), verbose_name="Score", orderable=False)
     actions = tables.Column(empty_values=(), verbose_name="Actions", orderable=False)
@@ -179,7 +179,7 @@ class ResponseRecordTable(tables.Table):
         # Note: ResponseRecord is not a Django model, it's a LocalLabsRecord subclass
         # So we don't specify model= here (similar to audit tables)
         fields = ("solicitation", "status", "last_edited", "recommendation", "score", "actions")
-        order_by = ("-date_modified",)
+        order_by = ("-id",)  # Higher IDs are more recent
         template_name = "base_table.html"
 
     def render_solicitation(self, value, record):

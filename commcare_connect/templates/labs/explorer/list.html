@@ -126,6 +126,13 @@
             <i class="fa-solid fa-upload mr-2"></i>
             Upload/Import
           </button>
+          <button
+            @click="deleteSelected()"
+            class="button button-sm outline-style text-red-600 hover:bg-red-50 border-red-300 hover:border-red-400"
+            title="Delete selected records">
+            <i class="fa-solid fa-trash mr-2"></i>
+            Delete Selected
+          </button>
 
           <!-- Upload form (hidden by default) -->
           <div x-show="showUpload"
@@ -191,6 +198,43 @@
     selectedIds.forEach(id => params.append('selected_ids', id));
 
     window.location.href = '{% url "explorer:download" %}?' + params.toString();
+  }
+
+  function deleteSelected() {
+    const checkboxes = document.querySelectorAll('input[name="record_select"]:checked');
+    const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+
+    if (selectedIds.length === 0) {
+      alert('Please select at least one record to delete');
+      return;
+    }
+
+    const message = `Are you sure you want to delete ${selectedIds.length} record(s)? This action cannot be undone.`;
+    if (!confirm(message)) {
+      return;
+    }
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{% url "explorer:delete" %}';
+
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = 'csrfmiddlewaretoken';
+    csrfInput.value = csrfToken;
+    form.appendChild(csrfInput);
+
+    selectedIds.forEach(id => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'selected_ids';
+      input.value = id;
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
   }
 
   function toggleSelectAll() {

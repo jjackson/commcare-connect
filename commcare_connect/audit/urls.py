@@ -56,4 +56,9 @@ urlpatterns = [
         name="bulk_assessment_data",
     ),
     path("image/<str:blob_id>/", views.ExperimentAuditImageView.as_view(), name="audit_image"),
+    path(
+        "image/<int:opp_id>/<str:blob_id>/",
+        views.ExperimentAuditImageConnectView.as_view(),
+        name="audit_image_connect",
+    ),
 ]
