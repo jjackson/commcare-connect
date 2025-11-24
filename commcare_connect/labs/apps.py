@@ -26,5 +26,3 @@ class LabsConfig(AppConfig):
 
         if not getattr(settings, "CONNECT_PRODUCTION_URL", None):
             logger.error("CONNECT_PRODUCTION_URL not configured for labs environment")
-
-        logger.info("Labs OAuth configuration validated")

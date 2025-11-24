@@ -648,9 +648,6 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
             if not session:
                 return JsonResponse({"error": "Session not found"}, status=404)
 
-            question_filter = request.GET.get("question_id", "").strip()
-            status_filter = request.GET.get("status", "all").strip().lower() or "all"
-
             visit_ids = session.visit_ids or []
             opportunity_id = session.opportunity_id
             primary_opportunity = ""
@@ -670,31 +667,29 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
             bulk_primary_username = ""
             assessment_counter = 0  # Counter to ensure unique IDs even for duplicate visits
 
-            # Fetch all visits once and build cache to avoid repeated API calls
-            visit_cache = {}
-            if opportunity_id and visit_ids:
-                try:
-                    all_visits = data_access._fetch_visits_for_opportunity(opportunity_id)
-                    visit_cache = {visit["id"]: visit for visit in all_visits}
-                except Exception:
-                    pass  # Continue with empty cache if fetch fails
-
+            # Use stored visit_images data - no need to fetch visits again!
             for visit_id in visit_ids:
-                try:
-                    visit_data = data_access.get_visit_data(
-                        visit_id, opportunity_id=opportunity_id, visit_cache=visit_cache
-                    )
-                except Exception:
-                    visit_data = None
+                visit_result_entry = session.get_visit_result(visit_id) or {}
+                visit_result_value = visit_result_entry.get("result")
+                if visit_result_value:
+                    visit_result_map[str(visit_id)] = visit_result_value
 
-                if not visit_data:
+                assessments_map = session.get_assessments(visit_id)
+                seen_blob_ids = set()
+
+                # Get images from stored session data (includes question_id, username, visit_date, entity_name)
+                images_metadata = session.data.get("visit_images", {}).get(str(visit_id), [])
+
+                if not images_metadata:
                     continue
 
-                username = visit_data.get("username") or visit_data.get("user_login") or ""
+                # Get visit-level data from first image (all images have same visit data)
+                first_image = images_metadata[0]
+                username = first_image.get("username", "")
                 if not bulk_primary_username and username:
                     bulk_primary_username = username
 
-                visit_date_raw = visit_data.get("visit_date")
+                visit_date_raw = first_image.get("visit_date", "")
                 visit_date_dt = parse_datetime(visit_date_raw) if visit_date_raw else None
                 if visit_date_dt and timezone.is_naive(visit_date_dt):
                     visit_date_dt = timezone.make_aware(visit_date_dt, timezone.utc)
@@ -708,18 +703,7 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                     if latest_visit is None or visit_date_local > latest_visit:
                         latest_visit = visit_date_local
 
-                entity_name = visit_data.get("entity_name") or "No Entity"
-
-                visit_result_entry = session.get_visit_result(visit_id) or {}
-                visit_result_value = visit_result_entry.get("result")
-                if visit_result_value:
-                    visit_result_map[str(visit_id)] = visit_result_value
-
-                assessments_map = session.get_assessments(visit_id)
-                seen_blob_ids = set()
-
-                # Get images from stored session data (includes question_id from form_json)
-                images_metadata = session.data.get("visit_images", {}).get(str(visit_id), [])
+                entity_name = first_image.get("entity_name", "No Entity")
 
                 # Convert to dict for easy lookup
                 blob_metadata = {
@@ -788,13 +772,7 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                         }
                     )
 
-            filtered_assessments = [
-                assessment
-                for assessment in all_assessments
-                if (not question_filter or assessment["question_id"] == question_filter)
-                and (status_filter == "all" or assessment["status"] == status_filter)
-            ]
-
+            # All filtering happens client-side now
             total_assessments = len(all_assessments)
             pass_count = sum(1 for a in all_assessments if a["status"] == "pass")
             fail_count = sum(1 for a in all_assessments if a["status"] == "fail")
@@ -854,7 +832,7 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
             end_date_display = latest_visit.strftime("%b %d, %Y") if latest_visit else ""
 
             response_data = {
-                "assessments": filtered_assessments,
+                "assessments": all_assessments,
                 "question_ids": sorted(q for q in question_ids if q),
                 "total_assessments": total_assessments,
                 "pending_count": pending_count,
@@ -1040,7 +1018,7 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
             )
 
             # Determine redirect URL
-            redirect_url = reverse_lazy("audit:session_detail", kwargs={"pk": session.pk})
+            redirect_url = reverse_lazy("audit:session_list")
 
             return JsonResponse(
                 {
