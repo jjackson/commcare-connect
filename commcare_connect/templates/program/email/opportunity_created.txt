@@ -9,4 +9,4 @@ Organization: {{ opportunity.organization.name }}
 Click here({{ opportunity_url }}) to view the opportunity
 
 Thank you,
-CommCare Connect
+Connect
