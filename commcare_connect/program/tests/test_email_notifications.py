@@ -37,7 +37,7 @@ def test_send_program_invited_notification(mock_send_mail):
     pm_org = ProgramManagerOrgWithUsersFactory()
     nm_org = ProgramManagerOrgWithUsersFactory()
     program_application = ProgramApplicationFactory(
-        status=ProgramApplicationStatus.APPLIED,
+        status=ProgramApplicationStatus.INVITED,
     )
     # Override the program's and application organization to be our PM org and NM org respectively
     program_application.program.organization = pm_org
