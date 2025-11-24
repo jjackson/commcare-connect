@@ -24,7 +24,7 @@ Thank You,
 Connect"""
 
     send_mail_async(
-        subject=f"{host_user.name} has invite you to join '{membership.organization.name}' on Connect",
+        subject=f"{host_user.name} has invited you to join '{membership.organization.name}' on Connect",
         message=message,
         recipient_list=[membership.user.email],
     )
