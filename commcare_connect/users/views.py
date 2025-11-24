@@ -118,7 +118,7 @@ def start_learn_app(request):
         user_invite = UserInvite.objects.get(opportunity_access=access_object)
         user_invite.status = UserInviteStatus.accepted
         user_invite.save()
-    return Response(status=200)
+    return Response()
 
 
 class AcceptInviteView(View):
