@@ -340,12 +340,20 @@ class LabsRecordDataView(BaseDataExportView, ListCreateAPIView):
 
 class ImageView(OpportunityDataExportView):
     def get(self, request, *args, **kwargs):
-        blob_id = request.data["blob_id"]
-        blob_meta = BlobMeta.objects.get(blob_id=blob_id)
-        form = UserVisit.objects.get(xform_id=blob_meta.parent_id)
-        _get_opportunity_or_404(request.user, form.opportunity_id)
-        attachment = storages["default"].open(blob_id)
-        return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
+        blob_id = request.GET.get("blob_id")
+        if not blob_id:
+            return Response({"error": "blob_id query parameter is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            blob_meta = BlobMeta.objects.get(blob_id=blob_id)
+            form = UserVisit.objects.get(xform_id=blob_meta.parent_id)
+            _get_opportunity_or_404(request.user, form.opportunity_id)
+            attachment = storages["default"].open(blob_id)
+            return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
+        except BlobMeta.DoesNotExist:
+            return Response({"error": "Image not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class OrganizationProgramDataView(BaseStreamingCSVExportView):
