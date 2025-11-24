@@ -118,8 +118,10 @@ class ManagedOpportunityViewMixin:
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
+        is_create = self.object is None
         response = super().form_valid(form)
-        send_opportunity_created_email(self.object.id)
+        if is_create:
+            send_opportunity_created_email(self.object.id)
         return response
 
     def get_form_kwargs(self):
