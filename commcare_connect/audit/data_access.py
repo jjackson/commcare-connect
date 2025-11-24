@@ -657,9 +657,9 @@ class AuditDataAccess:
         Returns:
             Image content as bytes
         """
-        # Use POST request with blob_id in body (workaround for production API expecting request.data)
-        response = self.http_client.post(
-            f"{self.production_url}/export/opportunity/{opportunity_id}/image/", json={"blob_id": blob_id}
+        # Use GET request with blob_id as query parameter
+        response = self.http_client.get(
+            f"{self.production_url}/export/opportunity/{opportunity_id}/image/", params={"blob_id": blob_id}
         )
         response.raise_for_status()
         return response.content
