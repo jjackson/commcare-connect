@@ -201,12 +201,28 @@ def test_experiment_audit_flow(config_name="opp385_last10"):
                 print(f"     - Visits with user_id: {len(with_user_id)}")
                 print(f"     - Visits without user_id: {len(without_user_id)}")
 
+                # Check images distribution
+                visits_with_images = [v for v in raw_visits if v.get("images")]
+                visits_without_images = [v for v in raw_visits if not v.get("images")]
+                print(f"     - Visits with images: {len(visits_with_images)}")
+                print(f"     - Visits without images: {len(visits_without_images)}")
+
                 sample = raw_visits[0]
                 print(f"     Sample visit keys: {list(sample.keys())}")
                 print(
                     f"     Sample visit: id={sample.get('id')}, "
-                    f"user_id={sample.get('user_id')}, visit_date={sample.get('visit_date')}"
+                    f"user_id={sample.get('user_id')}, visit_date={sample.get('visit_date')}, "
+                    f"images={len(sample.get('images', []))} images"
                 )
+
+                if visits_with_images:
+                    sample_with_images = visits_with_images[0]
+                    print(
+                        f"     Sample WITH images: id={sample_with_images.get('id')}, "
+                        f"images={len(sample_with_images.get('images', []))} images"
+                    )
+                    if sample_with_images.get("images"):
+                        print(f"       First image: {sample_with_images.get('images')[0]}")
 
                 if with_user_id:
                     sample_with_user = with_user_id[0]
@@ -270,6 +286,18 @@ def test_experiment_audit_flow(config_name="opp385_last10"):
         print(f"     Status: {session.status}")
         print(f"     Visit IDs: {session.visit_ids}")
         print(f"     Visit results (should be empty): {session.visit_results}")
+
+        # Check visit_images structure
+        print("\n[DEBUG] Checking visit_images structure...")
+        visit_images = session.data.get("visit_images", {})
+        print(f"     visit_images keys: {list(visit_images.keys())}")
+        for visit_id_key, images in list(visit_images.items())[:3]:  # Show first 3
+            print(f"     Visit {visit_id_key}: {len(images)} images")
+            if images:
+                print(f"       Sample image: {images[0]}")
+
+        total_images = sum(len(imgs) for imgs in visit_images.values())
+        print(f"     Total images across all visits: {total_images}")
 
         # Step 5: Fetch first visit
         print("\n[5] Fetching visit data from Connect API...")

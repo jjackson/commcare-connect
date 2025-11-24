@@ -294,15 +294,29 @@ def labs_commcare_initiate(request: HttpRequest) -> HttpResponseRedirect:
     # Store next URL in session
     request.session["commcare_oauth_next"] = request.GET.get("next", "/audit/")
 
-    # Build authorization URL (CommCareHQ doesn't support PKCE despite having a checkbox for it)
-    # Note: CommCareHQ expects an empty state parameter (state=) based on working examples
+    # Generate PKCE code verifier and challenge (CommCareHQ now requires PKCE)
+    code_verifier = secrets.token_urlsafe(64)
+    code_challenge = (
+        urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest()).decode("ascii").rstrip("=")
+    )
+
+    # Store code verifier in session for token exchange
+    request.session["commcare_oauth_code_verifier"] = code_verifier
+
+    # Generate CSRF state token
+    state = secrets.token_urlsafe(32)
+    request.session["commcare_oauth_state"] = state
+
+    # Build authorization URL with PKCE
     callback_url = request.build_absolute_uri(reverse("labs:commcare_callback"))
     auth_params = {
         "client_id": client_id,
         "redirect_uri": callback_url,
         "scope": "access_apis",
         "response_type": "code",
-        "state": "",  # Empty state - CommCareHQ doesn't handle non-empty state properly
+        "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
     }
 
     auth_url = f"{commcare_url}/oauth/authorize/?{urlencode(auth_params)}"
@@ -319,20 +333,37 @@ def labs_commcare_callback(request: HttpRequest) -> HttpResponseRedirect:
     """
     code = request.GET.get("code")
     error = request.GET.get("error")
+    error_description = request.GET.get("error_description", "")
 
     if error:
         logger.error(f"CommCare OAuth error: {error}")
-        messages.error(request, f"CommCare authorization failed: {error}")
+        messages.error(request, f"CommCare authorization failed: {error_description or error}")
         return redirect("/audit/")
 
     if not code:
         messages.error(request, "No authorization code received from CommCare.")
         return redirect("/audit/")
 
-    # Get next URL from session (no state validation since CommCareHQ doesn't handle it properly)
+    # Verify state to prevent CSRF
+    state = request.GET.get("state")
+    saved_state = request.session.get("commcare_oauth_state")
+
+    if not state or state != saved_state:
+        logger.warning("CommCare OAuth callback with invalid state parameter", extra={"received_state": state})
+        messages.error(request, "Invalid authentication state. Please try logging in again.")
+        return redirect("/audit/")
+
+    # Get PKCE code verifier from session
+    code_verifier = request.session.get("commcare_oauth_code_verifier")
+    if not code_verifier:
+        logger.error("CommCare OAuth callback missing code verifier in session")
+        messages.error(request, "Session expired. Please try logging in again.")
+        return redirect("/audit/")
+
+    # Get next URL from session
     next_url = request.session.get("commcare_oauth_next", "/audit/")
 
-    # Exchange code for token (no PKCE - CommCareHQ doesn't support it)
+    # Exchange code for token with PKCE
     client_id = settings.COMMCARE_OAUTH_CLIENT_ID
     client_secret = settings.COMMCARE_OAUTH_CLIENT_SECRET
     commcare_url = getattr(settings, "COMMCARE_HQ_URL", "https://www.commcarehq.org")
@@ -348,6 +379,7 @@ def labs_commcare_callback(request: HttpRequest) -> HttpResponseRedirect:
                     "redirect_uri": callback_url,
                     "client_id": client_id,
                     "client_secret": client_secret,
+                    "code_verifier": code_verifier,
                 },
                 timeout=30.0,
             )
@@ -369,6 +401,8 @@ def labs_commcare_callback(request: HttpRequest) -> HttpResponseRedirect:
 
         # Clean up OAuth flow data
         request.session.pop("commcare_oauth_next", None)
+        request.session.pop("commcare_oauth_state", None)
+        request.session.pop("commcare_oauth_code_verifier", None)
 
         logger.info(f"CommCare OAuth successful for user {request.user.username}")
         messages.success(request, "Successfully connected to CommCare!")

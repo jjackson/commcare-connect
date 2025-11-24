@@ -92,6 +92,7 @@ def get_oauth_token(
     production_url: str,
     client_secret: str | None = None,
     port: int = 8765,
+    callback_path: str = "/callback",
     scope: str = "export",
     verbose: bool = True,
 ) -> dict | None:
@@ -109,7 +110,8 @@ def get_oauth_token(
         production_url: Base URL of the production CommCare Connect instance
         client_secret: OAuth client secret (optional, not needed for public clients with PKCE)
         port: Local port for OAuth callback (default: 8765)
-        scope: OAuth scopes to request (default: "read write")
+        callback_path: Path for OAuth callback (default: "/callback")
+        scope: OAuth scopes to request (default: "export")
         verbose: Print status messages (default: True)
 
     Returns:
@@ -123,7 +125,7 @@ def get_oauth_token(
         ... )
         >>> access_token = token_data['access_token']
     """
-    redirect_uri = f"http://localhost:{port}/callback"
+    redirect_uri = f"http://localhost:{port}{callback_path}"
 
     # Check if port is available
     if not is_port_available(port):
@@ -150,7 +152,8 @@ def get_oauth_token(
         print("\n" + "=" * 70)
         print("OAuth Authorization Flow")
         print("=" * 70)
-        print(f"\nOpening browser to: {production_url}")
+        print("\nAuthorization URL:")
+        print(auth_url)
         print("\nPlease authorize the application in your browser.")
         print("Waiting for authorization...")
 

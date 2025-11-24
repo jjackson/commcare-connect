@@ -178,11 +178,13 @@
   <!-- Assessment Grid -->
   <template x-if="!loading && !loadCancelled && !loadError">
     <div class="grid gap-4 mb-8"
-         :style="`grid-template-columns: repeat(auto-fill, minmax(${widgetSize}px, 1fr))`">
+         :style="`grid-template-columns: repeat(auto-fill, minmax(${widgetSize}px, 1fr))`"
+         x-init="console.log('[GRID DEBUG] Rendering grid with', assessments.length, 'assessments')">
       <template x-if="assessments.length === 0">
         <div class="col-span-full text-center py-12 text-gray-500">
           <i class="fa-solid fa-images text-4xl mb-4"></i>
           <p>No assessments match the current filters.</p>
+          <p class="text-xs mt-2" x-text="'Debug: allAssessments=' + allAssessments.length + ', loading=' + loading"></p>
         </div>
       </template>
       <template x-for="assessment in assessments" :key="assessment.id">
@@ -635,6 +637,9 @@ function bulkAssessmentInterface() {
         this.visitResults = data.visit_results || {};
         this.allAssessments = data.assessments || [];
         this.assessments = [...this.allAssessments];
+        console.log('[BULK DEBUG] Loaded assessments:', this.assessments.length);
+        console.log('[BULK DEBUG] First assessment:', this.assessments[0]);
+        console.log('[BULK DEBUG] Question IDs:', this.questionIds);
         this.recalculateStats();
         this.loading = false;
         this.controller = null;

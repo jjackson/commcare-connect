@@ -35,9 +35,13 @@ class RecordListView(LoginRequiredMixin, SingleTableView):
     table_class = LabsRecordTable
     template_name = "labs/explorer/list.html"
     paginate_by = 25
+    _all_records_cache = None  # Cache for all unfiltered records
 
-    def get_queryset(self):
-        """Get filtered records from API."""
+    def _get_all_records_once(self):
+        """Get all records from API once and cache them."""
+        if self._all_records_cache is not None:
+            return self._all_records_cache
+
         # Check for context - API requires at least one of org/program/opp
         labs_context = getattr(self.request, "labs_context", {})
         if (
@@ -48,6 +52,27 @@ class RecordListView(LoginRequiredMixin, SingleTableView):
             logger.warning("No labs context selected")
             return []
 
+        # Fetch all records once (no filters - we'll filter in Python)
+        try:
+            data_access = RecordExplorerDataAccess(request=self.request)
+            try:
+                self._all_records_cache = data_access.get_all_records()
+            finally:
+                data_access.close()
+        except Exception as e:
+            logger.error(f"Failed to get records: {e}")
+            messages.error(self.request, f"Failed to load records: {e}")
+            self._all_records_cache = []
+
+        return self._all_records_cache
+
+    def get_queryset(self):
+        """Get filtered records from cached data."""
+        # Get all records (cached)
+        all_records = self._get_all_records_once()
+        if not all_records:
+            return []
+
         # Get filter parameters
         experiment = self.request.GET.get("experiment", "")
         type_filter = self.request.GET.get("type", "")
@@ -55,29 +80,23 @@ class RecordListView(LoginRequiredMixin, SingleTableView):
         date_start = self.request.GET.get("date_created_start", "")
         date_end = self.request.GET.get("date_created_end", "")
 
-        # Get records from API
-        try:
-            data_access = RecordExplorerDataAccess(request=self.request)
-            try:
-                records = data_access.get_all_records(
-                    experiment=experiment if experiment else None,
-                    type=type_filter if type_filter else None,
-                    username=username if username else None,
-                )
+        # Filter records in Python
+        filtered_records = all_records
 
-                # Apply date filtering
-                if date_start or date_end:
-                    start_date, end_date = parse_date_range(date_start, date_end)
-                    records = filter_records_by_date(records, start_date, end_date, "date_created")
+        if experiment:
+            filtered_records = [r for r in filtered_records if r.experiment == experiment]
+        if type_filter:
+            filtered_records = [r for r in filtered_records if r.type == type_filter]
+        if username:
+            filtered_records = [r for r in filtered_records if r.username == username]
 
-                # Sort by date_created descending
-                return sorted(records, key=lambda x: x.date_created or "", reverse=True)
-            finally:
-                data_access.close()
-        except Exception as e:
-            logger.error(f"Failed to get records: {e}")
-            messages.error(self.request, f"Failed to load records: {e}")
-            return []
+        # Apply date filtering
+        if date_start or date_end:
+            start_date, end_date = parse_date_range(date_start, date_end)
+            filtered_records = filter_records_by_date(filtered_records, start_date, end_date, "date_created")
+
+        # Sort by id descending (most recent records first)
+        return sorted(filtered_records, key=lambda x: x.id, reverse=True)
 
     def get_context_data(self, **kwargs):
         """Add filter form and other context."""
@@ -93,17 +112,15 @@ class RecordListView(LoginRequiredMixin, SingleTableView):
         labs_oauth = self.request.session.get("labs_oauth", {})
         context["has_connect_token"] = bool(labs_oauth.get("access_token"))
 
-        # Get distinct values for filter choices (only if we have both context and token)
+        # Get distinct values for filter choices from cached records
         experiment_choices = []
         type_choices = []
         if context["has_context"] and context["has_connect_token"]:
             try:
-                data_access = RecordExplorerDataAccess(request=self.request)
-                try:
-                    experiment_choices = data_access.get_distinct_values("experiment")
-                    type_choices = data_access.get_distinct_values("type")
-                finally:
-                    data_access.close()
+                # Use cached records to get distinct values (no extra API call)
+                all_records = self._get_all_records_once()
+                experiment_choices = sorted(list({r.experiment for r in all_records if r.experiment}))
+                type_choices = sorted(list({r.type for r in all_records if r.type}))
             except Exception as e:
                 logger.error(f"Failed to get distinct values: {e}")
 
@@ -266,5 +283,39 @@ class UploadRecordsView(LoginRequiredMixin, View):
             for field, errors in form.errors.items():
                 for error in errors:
                     messages.error(request, f"{field}: {error}")
+
+        return redirect(reverse("explorer:list"))
+
+
+class DeleteRecordsView(LoginRequiredMixin, View):
+    """Delete selected records."""
+
+    def post(self, request):
+        """Handle delete request."""
+        # Get selected record IDs from POST data
+        selected_ids = request.POST.getlist("selected_ids")
+
+        if not selected_ids:
+            messages.error(request, "No records selected for deletion")
+            return redirect(reverse("explorer:list"))
+
+        # Convert to integers
+        try:
+            record_ids = [int(id_str) for id_str in selected_ids]
+        except ValueError:
+            messages.error(request, "Invalid record IDs")
+            return redirect(reverse("explorer:list"))
+
+        # Delete records via API
+        try:
+            data_access = RecordExplorerDataAccess(request=request)
+            try:
+                data_access.delete_records(record_ids)
+                messages.success(request, f"Successfully deleted {len(record_ids)} record(s)")
+            finally:
+                data_access.close()
+        except Exception as e:
+            logger.error(f"Failed to delete records: {e}")
+            messages.error(request, f"Failed to delete records: {e}")
 
         return redirect(reverse("explorer:list"))

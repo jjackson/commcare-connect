@@ -9,12 +9,13 @@ A table-based UI for exploring, filtering, editing, and managing LabsRecord data
 - **Edit Records**: Dedicated edit page with JSON validation and formatting
 - **Download Records**: Export selected or filtered records as JSON
 - **Upload/Import**: Bulk import records from JSON files
+- **Delete Records**: Bulk delete selected records with confirmation
 - **Labs Context**: Automatically scopes data by selected opportunity/program
 
 ## Structure
 
 ```
-data_explorer/
+explorer/
 ├── __init__.py
 ├── data_access.py      # API client wrapper with context filtering
 ├── forms.py            # Filter, edit, and upload forms (crispy forms)
@@ -24,7 +25,7 @@ data_explorer/
 ├── views.py            # List, edit, download, upload views
 └── README.md
 
-templates/labs/data-explorer/
+templates/labs/explorer/
 ├── list.html           # Main table view with filters
 └── edit.html           # Dedicated edit page with JSON editor
 ```
@@ -33,7 +34,7 @@ templates/labs/data-explorer/
 
 ### Access
 
-Navigate to `/labs/data-explorer/` after logging into Labs and selecting a context (opportunity/program).
+Navigate to `/labs/explorer/` after logging into Labs and selecting a context (opportunity/program).
 
 ### Filtering
 
@@ -65,13 +66,25 @@ Use the sidebar filters to narrow down records:
 3. File is validated before import
 4. Records are created via API with bulk_create_records
 
+### Deleting
+
+- **Delete Selected**: Check records and click to delete them
+- Confirmation prompt before deletion
+- Records are permanently deleted via API
+- This action cannot be undone
+
 ## Implementation Notes
 
 ### Data Access
 
 - Uses `RecordExplorerDataAccess` class that wraps `LabsRecordAPIClient`
 - Automatically applies labs context (opportunity_id/program_id) from session
-- Handles multiple experiment/type combinations when fetching all records
+- **Optimized**: Makes a single API call per page load
+  - Fetches all records once and caches them in the view
+  - Filters are applied client-side (Python) from the cached data
+  - Distinct values for filter dropdowns extracted from cached data
+  - Previous implementation made 3 API calls (queryset + 2 for distinct values)
+- Trade-off: Client-side filtering vs. fewer API calls (worthwhile for typical dataset sizes)
 
 ### Forms
 
@@ -85,6 +98,7 @@ Use the sidebar filters to narrow down records:
 - `RecordEditView`: TemplateView with form handling
 - `RecordDownloadView`: View that returns JSON file response
 - `RecordUploadView`: View that handles bulk imports
+- `DeleteRecordsView`: View that handles bulk deletions
 
 ### Templates
 
@@ -94,7 +108,6 @@ Use the sidebar filters to narrow down records:
 
 ## Future Enhancements
 
-- Delete functionality (when API supports it)
 - Batch editing of multiple records
 - Advanced search with JSON field queries
 - Export to CSV format

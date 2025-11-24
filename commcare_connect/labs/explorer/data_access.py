@@ -72,8 +72,8 @@ class RecordExplorerDataAccess:
     ) -> list[LocalLabsRecord]:
         """Get all records matching filters.
 
-        If experiment and type are not provided, returns all records
-        for the current labs context.
+        The API accepts optional filters - if not provided, returns all records
+        for the current labs context (opportunity/program/organization).
 
         Args:
             experiment: Filter by experiment name
@@ -84,16 +84,9 @@ class RecordExplorerDataAccess:
             List of LocalLabsRecord instances
         """
         try:
-            # If both experiment and type are specified, use direct query
-            if experiment and type:
-                return self.client.get_records(
-                    experiment=experiment,
-                    type=type,
-                    username=username,
-                )
-
-            # Otherwise get all by making multiple calls
-            return self._get_all_records_all_types(
+            # Make a single API call with optional filters
+            # The API will return all records matching the labs context if no filters provided
+            return self.client.get_records(
                 experiment=experiment,
                 type=type,
                 username=username,
@@ -101,61 +94,6 @@ class RecordExplorerDataAccess:
         except LabsAPIError as e:
             logger.error(f"Failed to get records: {e}")
             return []
-
-    def _get_all_records_all_types(
-        self,
-        experiment: str | None = None,
-        type: str | None = None,
-        username: str | None = None,
-    ) -> list[LocalLabsRecord]:
-        """Get all records across all experiments/types.
-
-        Since the API requires experiment and type, we query each
-        known combination.
-
-        Args:
-            experiment: Filter by experiment (if None, tries all known)
-            type: Filter by type (if None, tries all known)
-            username: Filter by username
-
-        Returns:
-            List of LocalLabsRecord instances
-        """
-        all_records = []
-
-        # Known experiment/type combinations from labs projects
-        known_combinations = [
-            ("audit", "AuditTemplate"),
-            ("audit", "AuditSession"),
-            ("tasks", "Task"),
-            ("solicitations", "Solicitation"),
-            ("solicitations", "SolicitationResponse"),
-            ("solicitations", "Response"),
-            ("solicitations", "Review"),
-            ("explorer", "ExplorerTest"),  # For testing
-        ]
-
-        # Filter combinations based on provided experiment/type
-        if experiment:
-            known_combinations = [(exp, t) for exp, t in known_combinations if exp == experiment]
-        if type:
-            known_combinations = [(exp, t) for exp, t in known_combinations if t == type]
-
-        # Query each combination
-        for exp, rec_type in known_combinations:
-            try:
-                records = self.client.get_records(
-                    experiment=exp,
-                    type=rec_type,
-                    username=username,
-                )
-                all_records.extend(records)
-            except LabsAPIError as e:
-                # Silently skip combinations with no records
-                logger.debug(f"No records found for {exp}/{rec_type}: {e}")
-                continue
-
-        return all_records
 
     def get_record_by_id(self, record_id: int) -> LocalLabsRecord | None:
         """Get a single record by ID.
@@ -263,3 +201,16 @@ class RecordExplorerDataAccess:
             if value:
                 values.add(value)
         return sorted(list(values))
+
+    def delete_records(self, record_ids: list[int]) -> None:
+        """Delete multiple records.
+
+        Args:
+            record_ids: List of record IDs to delete
+
+        Raises:
+            LabsAPIError: If delete fails
+        """
+        if not record_ids:
+            return
+        self.client.delete_records(record_ids)

@@ -256,7 +256,7 @@ function labsContextSelector() {
     },
 
     get showOpps() {
-      return this.currentPath.includes('/tasks/') || this.currentPath.includes('/audit/') || this.currentPath.includes('/explorer/');
+      return this.currentPath.includes('/tasks/') || this.currentPath.includes('/audit/') || this.currentPath.includes('/explorer/') || this.currentPath.includes('/coverage/');
     },
 
     get hasSelection() {
@@ -264,8 +264,8 @@ function labsContextSelector() {
     },
 
     get filteredPrograms() {
-      // Don't filter if orgs aren't used by this project
-      if (!this.showOrgs || !this.selectedOrg) return this.programData;
+      // Filter by selected org if one is selected
+      if (!this.selectedOrg) return this.programData;
       return this.programData.filter(p => p.organization === this.selectedOrg.slug);
     },
 

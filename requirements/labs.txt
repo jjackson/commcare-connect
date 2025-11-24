@@ -50,6 +50,8 @@ certifi==2025.11.12
     # via
     #   httpcore
     #   httpx
+    #   pyogrio
+    #   pyproj
     #   requests
 cffi==2.0.0
     # via cryptography
@@ -62,12 +64,14 @@ click==8.3.1
 cohere==5.20.0
     # via pydantic-ai-slim
 colorama==0.4.6
-    # via griffe
+    # via
+    #   click
+    #   griffe
+    #   tqdm
 cryptography==46.0.3
     # via
     #   authlib
     #   pyjwt
-    #   secretstorage
 cyclopts==4.2.4
     # via fastmcp
 diskcache==5.6.3
@@ -103,6 +107,8 @@ fsspec==2025.10.0
     # via huggingface-hub
 genai-prices==0.0.39
     # via pydantic-ai-slim
+geopandas==1.1.1
+    # via -r requirements/labs.in
 google-auth==2.43.0
     # via
     #   google-genai
@@ -164,10 +170,6 @@ jaraco-context==6.0.1
     # via keyring
 jaraco-functools==4.3.0
     # via keyring
-jeepney==0.9.0
-    # via
-    #   keyring
-    #   secretstorage
 jiter==0.12.0
     # via
     #   anthropic
@@ -209,7 +211,11 @@ more-itertools==10.8.0
 nexus-rpc==1.1.0
     # via temporalio
 numpy==2.3.4
-    # via pandas
+    # via
+    #   geopandas
+    #   pandas
+    #   pyogrio
+    #   shapely
 openai==2.8.0
     # via pydantic-ai-slim
 openapi-pydantic==0.5.1
@@ -249,10 +255,14 @@ opentelemetry-util-http==0.59b0
     # via opentelemetry-instrumentation-httpx
 packaging==25.0
     # via
+    #   geopandas
     #   huggingface-hub
     #   opentelemetry-instrumentation
+    #   pyogrio
 pandas==2.3.3
-    # via -r requirements/labs.in
+    # via
+    #   -r requirements/labs.in
+    #   geopandas
 pathable==0.4.4
     # via jsonschema-path
 pathvalidate==3.3.1
@@ -321,10 +331,14 @@ pyjwt[crypto]==2.10.1
     # via
     #   mcp
     #   pyjwt
+pyogrio==0.11.1
+    # via geopandas
 pyperclip==1.11.0
     # via
     #   fastmcp
     #   pydantic-ai-slim
+pyproj==3.7.2
+    # via geopandas
 python-dateutil==2.9.0.post0
     # via
     #   botocore
@@ -338,6 +352,10 @@ python-multipart==0.0.20
     # via mcp
 pytz==2025.2
     # via pandas
+pywin32==311
+    # via mcp
+pywin32-ctypes==0.2.3
+    # via keyring
 pyyaml==6.0.3
     # via
     #   huggingface-hub
@@ -374,8 +392,10 @@ rsa==4.9.1
     # via google-auth
 s3transfer==0.14.0
     # via boto3
-secretstorage==3.4.1
-    # via keyring
+shapely==2.1.2
+    # via
+    #   -r requirements/labs.in
+    #   geopandas
 shellingham==1.5.4
     # via huggingface-hub
 six==1.17.0

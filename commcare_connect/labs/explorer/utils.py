@@ -59,8 +59,8 @@ def export_records_to_json(records: list[LocalLabsRecord]) -> str:
             "organization_id": record.organization_id,
             "program_id": record.program_id,
             "labs_record_id": record.labs_record_id,
-            "date_created": record.date_created,
-            "date_modified": record.date_modified,
+            # Note: date_created and date_modified don't exist on LocalLabsRecord
+            # Store dates in record.data if needed
         }
         records_data.append(record_dict)
 
@@ -146,7 +146,8 @@ def filter_records_by_date(
         records: List of records to filter
         start_date: Start date (ISO format string)
         end_date: End date (ISO format string)
-        date_field: Field to filter on ('date_created' or 'date_modified')
+        date_field: Field to filter on (note: date_created/date_modified don't exist on
+            LocalLabsRecord - use 'id' for recency)
 
     Returns:
         Filtered list of records
@@ -156,7 +157,9 @@ def filter_records_by_date(
 
     filtered = []
     for record in records:
-        record_date = getattr(record, date_field, None)
+        # Note: date_created and date_modified don't exist on LocalLabsRecord
+        # If date filtering is needed, store dates in record.data
+        record_date = record.data.get(date_field) if hasattr(record, "data") else getattr(record, date_field, None)
         if not record_date:
             continue
 
