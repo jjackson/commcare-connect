@@ -755,10 +755,9 @@ class VisitExportForm(forms.Form):
         required=False,
         initial=datetime.date.today().strftime("%Y-%m-%d"),
     )
-    status = forms.ChoiceField(
+    status = forms.MultipleChoiceField(
         choices=[("all", "All")] + VisitValidationStatus.choices,
-        initial="all",
-        widget=forms.Select(
+        widget=forms.SelectMultiple(
             attrs={
                 "hx-trigger": "change",
                 "hx-target": "#visit-count-warning",
