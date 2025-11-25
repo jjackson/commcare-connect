@@ -531,12 +531,14 @@ def review_visit_import(request, org_slug=None, opp_id=None):
     except ImportException as e:
         messages.error(request, e.message)
     else:
-        message = f"Visit review updated successfully for {len(status)} visits."
+        warning_message = ""
         if status.missing_visits:
-            message += status.get_missing_message()
+            warning_message += status.get_missing_message()
         if status.locked_visits:
-            message += status.get_locked_message()
-        messages.success(request, mark_safe(message))
+            warning_message += status.get_locked_message()
+        if warning_message:
+            messages.warning(request, mark_safe(warning_message))
+        messages.success(request, mark_safe(f"Visit review updated successfully for {len(status)} visits."))
     return redirect(redirect_url)
 
 
