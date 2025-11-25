@@ -39,7 +39,7 @@ def labs_login_page(request: HttpRequest) -> HttpResponse:
         user_profile = labs_oauth.get("user_profile")
 
     # Get the next URL to pass through
-    next_url = request.GET.get("next", "/audit/")
+    next_url = request.GET.get("next", "/labs/overview/")
 
     context = {
         "next": next_url,
@@ -65,7 +65,7 @@ def labs_oauth_login(request: HttpRequest) -> HttpResponse:
     # Generate CSRF state token
     state = secrets.token_urlsafe(32)
     request.session["oauth_state"] = state
-    request.session["oauth_next"] = request.GET.get("next", "/audit/")
+    request.session["oauth_next"] = request.GET.get("next", "/labs/overview/")
 
     # Generate PKCE code verifier and challenge
     code_verifier = secrets.token_urlsafe(64)
@@ -210,7 +210,7 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
     # Clean up temporary session keys
     request.session.pop("oauth_state", None)
     request.session.pop("oauth_code_verifier", None)
-    next_url = request.session.pop("oauth_next", "/audit/")
+    next_url = request.session.pop("oauth_next", "/labs/overview/")
 
     username = profile_data.get("username", "unknown")
     logger.info(f"Successfully authenticated user {username} via OAuth")
@@ -244,25 +244,6 @@ def labs_logout(request: HttpRequest) -> HttpResponse:
 
     # Redirect to login page
     return redirect("labs:login")
-
-
-def labs_status(request: HttpRequest) -> HttpResponse:
-    """
-    Display current OAuth authentication status and allow clearing token.
-
-    Shows user profile information if authenticated, or login prompt if not.
-    """
-    labs_oauth = request.session.get("labs_oauth")
-    user_profile = None
-
-    if labs_oauth:
-        user_profile = labs_oauth.get("user_profile")
-
-    context = {
-        "user_profile": user_profile,
-    }
-
-    return render(request, "labs/status.html", context)
 
 
 def labs_dashboard(request: HttpRequest) -> HttpResponse:

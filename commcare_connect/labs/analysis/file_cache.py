@@ -449,3 +449,169 @@ def clear_all_analysis_caches() -> int:
 
     logger.info(f"Cleared {count} analysis cache files")
     return count
+
+
+class RawAPICache:
+    """
+    Simple caching for raw API responses (like user_visits CSV data).
+
+    Uses the same two-level backend as AnalysisCacheManager:
+    - Prefers Django cache (Redis) when available
+    - Falls back to file-based pickle cache
+
+    Cache invalidation based on visit count changes.
+    """
+
+    def __init__(self, opportunity_id: int):
+        """
+        Initialize cache for an opportunity.
+
+        Args:
+            opportunity_id: Opportunity ID for cache scoping
+        """
+        self.opportunity_id = opportunity_id
+        self.use_django = _use_django_cache()
+
+        logger.debug(
+            f"RawAPICache initialized: opp={opportunity_id}, " f"backend={'django' if self.use_django else 'file'}"
+        )
+
+    def _get_cache_key(self, api_endpoint: str) -> str:
+        """Generate cache key for an API endpoint."""
+        # Clean endpoint to make it filesystem-safe
+        endpoint_clean = api_endpoint.replace("/", "_").replace(":", "")
+        return f"raw_api_{self.opportunity_id}_{endpoint_clean}"
+
+    def _get_file_path(self, api_endpoint: str) -> Path:
+        """Get file path for file-based cache."""
+        endpoint_clean = api_endpoint.replace("/", "_").replace(":", "")
+        return CACHE_DIR / f"raw_api_{self.opportunity_id}_{endpoint_clean}.pkl"
+
+    def get(self, api_endpoint: str) -> dict | None:
+        """
+        Get cached API response.
+
+        Args:
+            api_endpoint: API endpoint (e.g., "user_visits")
+
+        Returns:
+            Dict with 'visit_count', 'cached_at', 'data' or None if not cached
+        """
+        key = self._get_cache_key(api_endpoint)
+        if self.use_django:
+            from django.core.cache import cache
+
+            try:
+                return cache.get(key)
+            except Exception as e:
+                logger.warning(f"Django cache get failed for {key}: {e}")
+                return None
+        else:
+            path = self._get_file_path(api_endpoint)
+            if not path.exists():
+                return None
+            try:
+                with open(path, "rb") as f:
+                    return pickle.load(f)
+            except Exception as e:
+                logger.warning(f"File cache read failed for {path}: {e}")
+                return None
+
+    def set(self, api_endpoint: str, data: Any, visit_count: int | None = None) -> bool:
+        """
+        Cache API response.
+
+        Args:
+            api_endpoint: API endpoint (e.g., "user_visits")
+            data: Response data to cache
+            visit_count: Optional visit count for invalidation
+
+        Returns:
+            True if cached successfully
+        """
+        cache_data = {
+            "cached_at": datetime.utcnow().isoformat(),
+            "data": data,
+        }
+        if visit_count is not None:
+            cache_data["visit_count"] = visit_count
+
+        key = self._get_cache_key(api_endpoint)
+        if self.use_django:
+            from django.core.cache import cache
+
+            try:
+                cache.set(key, cache_data, DJANGO_CACHE_TTL)
+                logger.info(f"Cached API response: {api_endpoint} for opp {self.opportunity_id}")
+                return True
+            except Exception as e:
+                logger.warning(f"Django cache set failed for {key}: {e}")
+                return False
+        else:
+            path = self._get_file_path(api_endpoint)
+            try:
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                with open(path, "wb") as f:
+                    pickle.dump(cache_data, f)
+                logger.info(f"Cached API response: {api_endpoint} for opp {self.opportunity_id}")
+                return True
+            except Exception as e:
+                logger.warning(f"File cache write failed for {path}: {e}")
+                return False
+
+    def is_valid(self, cached_data: dict | None, current_visit_count: int | None = None) -> bool:
+        """
+        Check if cached data is still valid.
+
+        Args:
+            cached_data: Cached data dict
+            current_visit_count: Current visit count for validation (optional)
+
+        Returns:
+            True if cache is valid
+        """
+        if not cached_data:
+            return False
+
+        # If no visit count validation needed, cache is valid
+        if current_visit_count is None:
+            return True
+
+        # If cache has visit count, it must match
+        cached_count = cached_data.get("visit_count")
+        if cached_count is not None:
+            if cached_count != current_visit_count:
+                logger.info(f"Cache invalid: cached_count={cached_count}, " f"current_count={current_visit_count}")
+                return False
+
+        return True
+
+    def clear(self, api_endpoint: str) -> bool:
+        """
+        Clear cached response for an endpoint.
+
+        Args:
+            api_endpoint: API endpoint to clear
+
+        Returns:
+            True if cleared successfully
+        """
+        key = self._get_cache_key(api_endpoint)
+        if self.use_django:
+            from django.core.cache import cache
+
+            try:
+                cache.delete(key)
+                return True
+            except Exception as e:
+                logger.warning(f"Django cache delete failed for {key}: {e}")
+                return False
+        else:
+            path = self._get_file_path(api_endpoint)
+            try:
+                if path.exists():
+                    path.unlink()
+                return True
+            except Exception as e:
+                logger.warning(f"File cache delete failed for {path}: {e}")
+                return False

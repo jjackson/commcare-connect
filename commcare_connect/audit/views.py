@@ -22,6 +22,7 @@ from django_tables2 import SingleTableView
 from commcare_connect.audit.data_access import AuditDataAccess
 from commcare_connect.audit.models import AuditSessionRecord
 from commcare_connect.audit.tables import AuditTable
+from commcare_connect.labs.analysis.base import get_flw_names_for_opportunity
 
 
 class ExperimentAuditCreateView(LoginRequiredMixin, TemplateView):
@@ -943,17 +944,15 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 "selected_flw_user_ids": criteria.get("selected_flw_user_ids", []),
             }
 
-            # Get visit IDs based on criteria
+            # Get visit IDs based on criteria (uses cached visits automatically)
             visit_ids = data_access.get_visit_ids_for_audit(
                 opportunity_ids=opportunity_ids, audit_type=audit_type, criteria=normalized_criteria
             )
 
             # Filter by selected FLW identifiers if provided
-            # TODO: Check with team whether to use user_id or username as primary identifier
-            # Currently using username as primary, with user_id fallback
             selected_flw_user_ids = normalized_criteria.get("selected_flw_user_ids", [])
             if selected_flw_user_ids and visit_ids:
-                # Fetch visits and filter by username (or user_id as fallback)
+                # Fetch visits and filter by username
                 filtered_visit_ids = []
                 for opp_id in opportunity_ids:
                     visits = data_access.get_visits_batch(visit_ids, opp_id)
@@ -979,7 +978,13 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 preview_data=[],
             )
 
-            # Create session
+            # Fetch all visits once for this request to build in-memory cache
+            # This prevents multiple fetches even if RawAPICache isn't working
+            all_visits_cache = {}
+            for opp_id in opportunity_ids:
+                all_visits_cache[opp_id] = data_access._fetch_visits_for_opportunity(opp_id)
+
+            # Create session (passing visits cache to avoid re-fetch)
             session = data_access.create_audit_session(
                 template_id=template.id,
                 username=username,
@@ -989,6 +994,7 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 opportunity_id=opportunity_ids[0] if opportunity_ids else None,
                 audit_type=audit_type,
                 criteria=normalized_criteria,
+                visits_cache=all_visits_cache.get(opportunity_ids[0], []) if opportunity_ids else None,
             )
 
             # Determine redirect URL
@@ -1115,17 +1121,36 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
                 "sample_percentage": criteria.get("sample_percentage", criteria.get("samplePercentage", 100)),
             }
 
-            # Get visit IDs based on criteria
+            # Fetch all visits ONCE for this request to build in-memory cache
+            # This prevents multiple fetches even if RawAPICache isn't working
+            all_visits_cache = {}
+            for opp_id in opportunity_ids:
+                all_visits_cache[opp_id] = data_access._fetch_visits_for_opportunity(opp_id)
+
+            # Get visit IDs based on criteria (passing visits cache to avoid re-fetch)
             visit_ids = data_access.get_visit_ids_for_audit(
-                opportunity_ids=opportunity_ids, audit_type=audit_type, criteria=normalized_criteria
+                opportunity_ids=opportunity_ids,
+                audit_type=audit_type,
+                criteria=normalized_criteria,
+                visits_cache=all_visits_cache,
             )
 
-            # Fetch detailed visit data and group by FLW
-            # TODO: Check with team whether to use user_id or username as primary identifier
-            # Currently using username since it's unique and always populated
+            # Fetch FLW names mapping (username -> display name)
+            flw_names = {}
+            try:
+                flw_names = get_flw_names_for_opportunity(request)
+            except Exception as e:
+                import logging
+
+                logging.warning(f"Could not fetch FLW names: {e}")
+
+            # Fetch detailed visit data and group by FLW (using cached visits)
             flw_data = {}
             for opp_id in opportunity_ids:
-                visits = data_access.get_visits_batch(visit_ids, opp_id)
+                # Use cached visits instead of fetching again
+                all_visits = all_visits_cache.get(opp_id, [])
+                visit_id_set = set(visit_ids)
+                visits = [v for v in all_visits if v["id"] in visit_id_set]
 
                 for visit in visits:
                     # Use username as primary identifier
@@ -1136,7 +1161,7 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
                     if username not in flw_data:
                         flw_data[username] = {
                             "user_id": visit.get("user_id"),  # May be None
-                            "name": username,
+                            "name": flw_names.get(username, username),  # Use proper name, fallback to username
                             "connect_id": username,
                             "visit_count": 0,
                             "visits": [],

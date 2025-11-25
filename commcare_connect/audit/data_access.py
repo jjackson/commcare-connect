@@ -10,8 +10,6 @@ It handles:
 This is a pure API client with no local database storage.
 """
 
-import os
-import tempfile
 from typing import Any
 
 import httpx
@@ -271,6 +269,7 @@ class AuditDataAccess:
         opportunity_id: int | None = None,
         audit_type: str | None = None,
         criteria: dict | None = None,
+        visits_cache: list[dict] | None = None,
     ) -> AuditSessionRecord:
         """
         Create a new audit session.
@@ -303,8 +302,11 @@ class AuditDataAccess:
         # Extract and store complete image metadata for all visits
         visit_images = {}
         if opportunity_id:
-            # Fetch all visits once and build cache to avoid repeated API calls
-            all_visits = self._fetch_visits_for_opportunity(opportunity_id)
+            # Use provided visits cache if available, otherwise fetch
+            if visits_cache is not None:
+                all_visits = visits_cache
+            else:
+                all_visits = self._fetch_visits_for_opportunity(opportunity_id)
             visit_cache = {visit["id"]: visit for visit in all_visits}
 
             for visit_id in visit_ids:
@@ -498,6 +500,7 @@ class AuditDataAccess:
         opportunity_ids: list[int],
         audit_type: str,
         criteria: dict,
+        visits_cache: dict[int, list[dict]] | None = None,
     ) -> list[int]:
         """
         Get list of visit IDs for audit based on criteria.
@@ -508,15 +511,19 @@ class AuditDataAccess:
             opportunity_ids: List of opportunity IDs
             audit_type: Audit type (date_range, last_n_per_flw, etc.)
             criteria: Criteria dict with filtering parameters
+            visits_cache: Optional dict mapping opportunity_id to list of visits (to avoid re-fetching)
 
         Returns:
             List of visit IDs
         """
         all_visits = []
 
-        # Fetch visits for each opportunity
+        # Fetch visits for each opportunity (use cache if provided)
         for opp_id in opportunity_ids:
-            visits = self._fetch_visits_for_opportunity(opp_id)
+            if visits_cache and opp_id in visits_cache:
+                visits = visits_cache[opp_id]
+            else:
+                visits = self._fetch_visits_for_opportunity(opp_id)
             all_visits.extend(visits)
 
         # Convert to DataFrame for easier filtering
@@ -767,87 +774,26 @@ class AuditDataAccess:
         """
         Fetch all visits for an opportunity from Connect API.
 
+        Uses centralized Labs caching - no project-specific caching logic needed.
+
         Args:
             opportunity_id: Opportunity ID
 
         Returns:
             List of visit dicts
         """
-        # Download visits CSV
-        response = self._call_connect_api(f"/export/opportunity/{opportunity_id}/user_visits/")
+        from commcare_connect.labs.api_cache import fetch_user_visits_cached
 
-        # Write to temp file and parse
-        with tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=".csv") as tmp_file:
-            for chunk in response.iter_bytes():
-                tmp_file.write(chunk)
-            tmp_path = tmp_file.name
+        # Define the API call function
+        def make_api_call():
+            return self._call_connect_api(f"/export/opportunity/{opportunity_id}/user_visits/")
 
-        try:
-            df = pd.read_csv(tmp_path)
-
-            # Convert to list of dicts
-            visits = []
-            for _, row in df.iterrows():
-                # Extract visit ID - use UserVisit's own id
-                visit_id = None
-                if "id" in row and pd.notna(row["id"]):
-                    visit_id = int(row["id"])
-
-                # Extract xform_id and form_json from CSV
-                xform_id = None
-                form_json = {}
-                if "form_json" in row and pd.notna(row["form_json"]):
-                    try:
-                        import json
-
-                        # Try JSON first (double quotes)
-                        form_json = json.loads(row["form_json"])
-                        xform_id = form_json.get("id")
-                    except (json.JSONDecodeError, AttributeError):
-                        # Fall back to Python literal syntax (single quotes)
-                        try:
-                            import ast
-
-                            form_json = ast.literal_eval(row["form_json"])
-                            xform_id = form_json.get("id")
-                        except (ValueError, SyntaxError):
-                            pass
-
-                # Extract user_id - need to look up from username since CSV doesn't have it
-                user_id = None  # Would need to map username to user_id
-
-                # Extract images from CSV (comes as Python literal string, not JSON)
-                # Note: csv.DictWriter uses str() which produces Python syntax with single quotes
-                images = []
-                if "images" in row and pd.notna(row["images"]):
-                    try:
-                        import ast
-
-                        images = ast.literal_eval(row["images"])
-                    except (ValueError, SyntaxError):
-                        pass
-
-                visit = {
-                    "id": visit_id,
-                    "xform_id": xform_id,
-                    "visit_date": str(row["visit_date"]) if pd.notna(row.get("visit_date")) else None,
-                    "entity_id": str(row["entity_id"]) if pd.notna(row.get("entity_id")) else None,
-                    "entity_name": str(row["entity_name"]) if pd.notna(row.get("entity_name")) else None,
-                    "status": str(row["status"]) if pd.notna(row.get("status")) else None,
-                    "flagged": bool(row["flagged"]) if pd.notna(row.get("flagged")) else False,
-                    "user_id": user_id,
-                    "username": str(row["username"]) if pd.notna(row.get("username")) else None,
-                    "opportunity_id": opportunity_id,
-                    "form_json": form_json,  # Include parsed form_json for blob extraction
-                    "images": images,  # Include images for audit session creation
-                }
-                visits.append(visit)
-
-            return visits
-
-        finally:
-            # Clean up temp file
-            os.unlink(tmp_path)
+        # Use Labs centralized caching (handles cache check, fetch, store automatically)
+        return fetch_user_visits_cached(
+            request=self.request if hasattr(self, "request") else None,
+            opportunity_id=opportunity_id,
+            api_call_func=make_api_call,
+        )
 
     def search_opportunities(self, query: str = "", limit: int = 100, program_id: int | None = None) -> list[dict]:
         """

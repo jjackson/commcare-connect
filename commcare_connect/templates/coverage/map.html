@@ -4,7 +4,7 @@
 {% block title %}Coverage Map{% endblock %}
 
 {% block content %}
-<div class="container mx-auto p-6" x-data="coverageMap()" x-init="$nextTick(() => initMap())">
+<div class="container mx-auto p-6" x-data="coverageMap()" x-init="init()">
   <h1 class="text-3xl font-bold mb-6">Coverage Map</h1>
 
   {% if error %}
@@ -31,8 +31,57 @@
   </div>
   {% else %}
 
+  <!-- Loading Indicator -->
+  <div class="mb-4 p-6 bg-blue-50 border border-blue-200 rounded-lg" x-show="loading" x-cloak>
+    <div class="flex items-start gap-4">
+      <i class="fa-solid fa-spinner fa-spin text-blue-600 text-2xl mt-1"></i>
+      <div class="flex-1">
+        <h3 class="text-lg font-semibold text-blue-900 mb-2">Loading Coverage Map Data</h3>
+        <div class="space-y-1 text-sm text-blue-800">
+          <div x-show="loadingStep >= 1" class="flex items-center gap-2">
+            <i class="fa-solid" :class="loadingStep > 1 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
+            <span>Initializing map data request...</span>
+          </div>
+          <div x-show="loadingStep >= 2" class="flex items-center gap-2">
+            <i class="fa-solid" :class="loadingStep > 2 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
+            <span>Fetching delivery units from CommCare HQ...</span>
+          </div>
+          <div x-show="loadingStep >= 3" class="flex items-center gap-2">
+            <i class="fa-solid" :class="loadingStep > 3 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
+            <span>Loading visit data from Connect (this may take 30-60 seconds)...</span>
+          </div>
+          <div x-show="loadingStep >= 4" class="flex items-center gap-2">
+            <i class="fa-solid" :class="loadingStep > 4 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
+            <span>Processing geographic data and building map layers...</span>
+          </div>
+          <div x-show="loadingStep >= 5" class="flex items-center gap-2">
+            <i class="fa-solid fa-check text-green-600"></i>
+            <span>Map ready!</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Display -->
+  <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg" x-show="loadError" x-cloak>
+    <div class="flex items-center justify-between">
+      <div class="flex items-center">
+        <i class="fa-solid fa-circle-exclamation text-red-600 mr-3"></i>
+        <div>
+          <strong class="text-red-800">Error Loading Map Data:</strong>
+          <span class="ml-2 text-red-700" x-text="loadError"></span>
+        </div>
+      </div>
+      <button @click="loadMapData()"
+              class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium">
+        <i class="fa-solid fa-rotate mr-1"></i>Retry
+      </button>
+    </div>
+  </div>
+
   <!-- Control Panel -->
-  <div class="bg-white shadow-sm rounded-lg p-4 mb-4">
+  <div class="bg-white shadow-sm rounded-lg p-4 mb-4" x-show="!loading && !loadError" x-cloak>
     <!-- Top Row: Layers, Service Area, Status -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
 
@@ -53,7 +102,7 @@
                    x-model="showServicePoints"
                    @change="togglePointsLayer()"
                    class="form-checkbox h-4 w-4 text-blue-600 rounded border-gray-300">
-            <span class="ml-2 text-sm text-gray-700">Service Points ({{ service_points_count|default:"0" }})</span>
+            <span class="ml-2 text-sm text-gray-700">Service Points (<span x-text="servicePointsCount"></span>)</span>
           </label>
         </div>
       </div>
@@ -65,9 +114,9 @@
                 @change="onServiceAreaChange()"
                 class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
           <option value="">All Service Areas</option>
-          {% for sa_id in service_area_list %}
-          <option value="{{ sa_id }}">SA {{ sa_id }}</option>
-          {% endfor %}
+          <template x-for="sa_id in serviceAreaList" :key="sa_id">
+            <option :value="sa_id" x-text="'SA ' + sa_id"></option>
+          </template>
         </select>
       </div>
 
@@ -104,10 +153,11 @@
     </div>
 
     <!-- FLW Toggles Section -->
-    {% if flw_list_colored %}
-    <div class="border-t border-gray-200 pt-4">
+    <div class="border-t border-gray-200 pt-4" x-show="flwListColored.length > 0">
       <div class="flex items-center justify-between mb-3">
-        <h3 class="text-sm font-semibold text-gray-700">Field Workers ({{ flw_list_colored|length }})</h3>
+        <h3 class="text-sm font-semibold text-gray-700">
+          Field Workers (<span x-text="flwListColored.length"></span>)
+        </h3>
         <div class="flex gap-2">
           <button @click="toggleAllFLWs(true)"
                   class="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded border border-gray-300 transition">
@@ -120,26 +170,49 @@
         </div>
       </div>
       <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-48 overflow-y-auto">
-        {% for flw in flw_list_colored %}
-        <label class="inline-flex items-center cursor-pointer px-2 py-1 rounded hover:bg-gray-50 border border-gray-200">
-          <input type="checkbox"
-                 value="{{ flw.id }}"
-                 x-model="selectedFLWs"
-                 @change="applyFilters()"
-                 class="form-checkbox h-3 w-3 rounded border-gray-300">
-          <span class="inline-block w-3 h-3 ml-2 rounded border border-gray-400" style="background-color: {{ flw.color }};"></span>
-          <span class="ml-1 text-xs text-gray-700 truncate" title="{{ flw.name }} ({{ flw.visits }})">
-            {{ flw.name }} ({{ flw.visits }})
-          </span>
-        </label>
-        {% endfor %}
+        <template x-for="flw in flwListColored" :key="flw.id">
+          <label class="inline-flex items-center cursor-pointer px-2 py-1 rounded hover:bg-gray-50 border border-gray-200">
+            <input type="checkbox"
+                   :value="flw.id"
+                   x-model="selectedFLWs"
+                   @change="applyFilters()"
+                   class="form-checkbox h-4 w-4 rounded border-gray-300">
+            <span class="inline-block w-5 h-5 ml-2 rounded border border-gray-400 flex-shrink-0"
+                  :style="'background-color: ' + flw.color"></span>
+            <span class="ml-2 text-xs text-gray-700 truncate"
+                  :title="flw.name + ' (' + flw.visits + ')'"
+                  x-text="flw.name + ' (' + flw.visits + ')'"></span>
+          </label>
+        </template>
       </div>
     </div>
-    {% endif %}
+
+    <!-- Custom Data Filters Section -->
+    <div class="border-t border-gray-200 pt-4 mt-4" x-show="mapFilterDefinitions.length > 0">
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">Data Filters</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template x-for="filter in mapFilterDefinitions" :key="filter.name">
+          <div class="flex flex-col">
+            <label class="text-xs font-medium text-gray-600 mb-1" x-text="filter.label" :title="filter.description"></label>
+            <select x-model="filterStates[filter.name]"
+                    @change="applyFilters()"
+                    class="text-sm border-gray-300 rounded">
+              <option value="all">Show All</option>
+              <option value="true">Only Matching</option>
+              <option value="false">Only Non-Matching</option>
+            </select>
+          </div>
+        </template>
+      </div>
+    </div>
   </div>
 
   <!-- Map Container -->
-  <div x-ref="mapContainer" class="w-full h-[75vh] rounded-lg shadow-lg" style="height: 75vh; min-height: 500px;"></div>
+  <div x-ref="mapContainer"
+       class="w-full h-[75vh] rounded-lg shadow-lg"
+       style="height: 75vh; min-height: 500px;"
+       x-show="!loading && !loadError"
+       x-cloak></div>
 
   {% endif %}
 </div>
@@ -154,11 +227,16 @@
 <script>
 function coverageMap() {
   return {
+    // Loading state
+    loading: true,
+    loadingStep: 0,
+    loadError: null,
+
     // State
     showDeliveryUnits: true,
     showServicePoints: false,
     selectedServiceArea: '',
-    selectedFLWs: {% if flw_list_colored %}[{% for flw in flw_list_colored %}'{{ flw.id }}'{% if not forloop.last %}, {% endif %}{% endfor %}]{% else %}[]{% endif %},
+    selectedFLWs: [],
     selectedStatuses: ['completed', 'visited', 'unvisited'],
     selectedServiceAreaId: null,
 
@@ -170,12 +248,106 @@ function coverageMap() {
     pointLayerGroup: null,
     boundaryHighlightLayer: null,
 
-    // Data
-    duData: {{ delivery_units_geojson|safe }},
-    pointsData: {{ service_points_geojson|safe }},
+    // Data (loaded asynchronously)
+    duData: null,
+    pointsData: null,
+    flwListColored: [],
+    serviceAreaList: [],
+    servicePointsCount: 0,
+    mapFilterDefinitions: [],
+    filterStates: {},
+
+    // API endpoint
+    mapDataUrl: '{{ map_data_url }}',
+
+    // Initialize
+    init() {
+      this.loadMapData();
+    },
+
+    // Load map data asynchronously
+    async loadMapData() {
+      this.loading = true;
+      this.loadError = null;
+      this.loadingStep = 0;
+
+      try {
+        // Step 1: Initializing
+        this.loadingStep = 1;
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        // Step 2: Start fetching (show this before the long API call)
+        this.loadingStep = 2;
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Step 3: The actual long API call (fetching from Connect)
+        // This is where most time is spent - the UI will show step 3 during this
+        this.loadingStep = 3;
+        const response = await fetch(this.mapDataUrl + window.location.search);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to load map data');
+        }
+
+        const data = await response.json();
+
+        // Step 4: Processing received data
+        this.loadingStep = 4;
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        // Parse GeoJSON data
+        this.duData = JSON.parse(data.delivery_units_geojson);
+        this.pointsData = JSON.parse(data.service_points_geojson);
+        this.flwListColored = data.flw_list_colored || [];
+        this.serviceAreaList = data.service_area_list || [];
+        this.servicePointsCount = data.service_points_count || 0;
+        this.mapFilterDefinitions = data.map_filter_definitions || [];
+
+        // Initialize selected FLWs (all selected by default)
+        this.selectedFLWs = this.flwListColored.map(flw => flw.id);
+
+        // Initialize filter states (all set to 'all' by default)
+        this.filterStates = {};
+        this.mapFilterDefinitions.forEach(filter => {
+          this.filterStates[filter.name] = 'all';
+        });
+
+        // Step 5: Initialize map and complete
+        this.loadingStep = 5;
+        this.$nextTick(() => {
+          this.initMap();
+          setTimeout(() => {
+            this.loading = false;
+          }, 300);
+        });
+
+      } catch (error) {
+        console.error('Failed to load map data:', error);
+        this.loadError = error.message || 'Failed to load map data. Please try again.';
+        this.loading = false;
+      }
+    },
 
     // Initialize map
     initMap() {
+      if (!this.duData || !this.pointsData) {
+        console.error('Cannot initialize map: data not loaded');
+        return;
+      }
+
+      // Clean up existing map if it exists
+      if (this.map) {
+        console.log('Removing existing map instance');
+        this.map.remove();
+        this.map = null;
+        this.duLayers = {};
+        this.pointLayers = {};
+        this.duLayerGroup = null;
+        this.pointLayerGroup = null;
+        this.boundaryHighlightLayer = null;
+      }
+
       // Initialize Leaflet map
       this.map = L.map(this.$refs.mapContainer).setView([9.0, 8.6], 7);
 
@@ -333,7 +505,20 @@ function coverageMap() {
         const matchesFLW = selectedFLWsSet.has(props.username);
         const matchesSA = !this.selectedServiceArea || props.service_area_id === this.selectedServiceArea;
 
-        if (matchesFLW && matchesSA) {
+        // Check custom map filters
+        let matchesFilters = true;
+        for (const [filterName, filterState] of Object.entries(this.filterStates)) {
+          if (filterState !== 'all') {
+            const visitValue = props[filterName];
+            const expectedValue = (filterState === 'true');
+            if (visitValue !== expectedValue) {
+              matchesFilters = false;
+              break;
+            }
+          }
+        }
+
+        if (matchesFLW && matchesSA && matchesFilters) {
           marker.addTo(this.pointLayerGroup);
         }
       });
@@ -342,7 +527,7 @@ function coverageMap() {
     // Toggle all FLWs
     toggleAllFLWs(checked) {
       if (checked) {
-        this.selectedFLWs = [{% for flw in flw_list_colored %}'{{ flw.id }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
+        this.selectedFLWs = this.flwListColored.map(flw => flw.id);
       } else {
         this.selectedFLWs = [];
       }

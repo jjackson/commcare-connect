@@ -834,9 +834,8 @@ function auditCreationPage() {
     auditTitle: '',
     auditTag: '',
 
-    // Quick filter for specific username/user_id (from URL params)
+    // Quick filter for specific username (from URL params)
     quickFilterUsername: null,
-    quickFilterUserId: null,
 
     // Methods
     searchOpportunities() {
@@ -934,16 +933,16 @@ function auditCreationPage() {
 
     // FLW selection methods
     isFlwSelected(flw) {
-      return this.selectedFlwUserIds.includes(flw.user_id || flw.connect_id);
+      return this.selectedFlwUserIds.includes(flw.username);
     },
 
     toggleFlwSelection(flw) {
-      const userId = flw.user_id || flw.connect_id;
-      const index = this.selectedFlwUserIds.indexOf(userId);
+      const username = flw.username;
+      const index = this.selectedFlwUserIds.indexOf(username);
       if (index >= 0) {
         this.selectedFlwUserIds.splice(index, 1);
       } else {
-        this.selectedFlwUserIds.push(userId);
+        this.selectedFlwUserIds.push(username);
       }
     },
 
@@ -956,14 +955,14 @@ function auditCreationPage() {
         this.selectedFlwUserIds = [];
       } else {
         // Select all FLWs
-        this.selectedFlwUserIds = this.previewResults.map(flw => flw.user_id || flw.connect_id);
+        this.selectedFlwUserIds = this.previewResults.map(flw => flw.username);
       }
     },
 
     areAllFlwsSelected() {
       if (!this.previewResults || this.previewResults.length === 0) return false;
       return this.previewResults.every(flw =>
-        this.selectedFlwUserIds.includes(flw.user_id || flw.connect_id)
+        this.selectedFlwUserIds.includes(flw.username)
       );
     },
 
@@ -1066,22 +1065,15 @@ function auditCreationPage() {
           // Populate preview results with FLW data
           this.previewResults = preview.flws;
 
-          // If quick filter username/user_id is set, only select that FLW
-          if (this.quickFilterUsername || this.quickFilterUserId) {
+          // If quick filter username is set, only select that FLW
+          if (this.quickFilterUsername) {
             const matchingFlws = preview.flws.filter(flw => {
-              if (this.quickFilterUsername) {
-                return flw.username === this.quickFilterUsername || flw.name === this.quickFilterUsername;
-              }
-              if (this.quickFilterUserId) {
-                return String(flw.user_id) === String(this.quickFilterUserId) ||
-                       String(flw.connect_id) === String(this.quickFilterUserId);
-              }
-              return false;
+              return flw.username === this.quickFilterUsername || flw.name === this.quickFilterUsername;
             });
-            this.selectedFlwUserIds = matchingFlws.map(flw => flw.user_id || flw.connect_id);
+            this.selectedFlwUserIds = matchingFlws.map(flw => flw.username);
           } else {
             // Auto-select all FLWs by default
-            this.selectedFlwUserIds = preview.flws.map(flw => flw.user_id || flw.connect_id);
+            this.selectedFlwUserIds = preview.flws.map(flw => flw.username);
           }
         }
 
@@ -1141,9 +1133,9 @@ function auditCreationPage() {
               this.previewResults.forEach(result => {
                 if (result.flws && result.flws.length > 0) {
                   result.flws.forEach(flw => {
-                    const userId = flw.user_id || flw.connect_id;
-                    if (userId && !this.selectedFlwUserIds.includes(userId)) {
-                      this.selectedFlwUserIds.push(userId);
+                    const username = flw.username;
+                    if (username && !this.selectedFlwUserIds.includes(username)) {
+                      this.selectedFlwUserIds.push(username);
                     }
                   });
                 }
@@ -1331,16 +1323,15 @@ function auditCreationPage() {
         this.auditTag = params.tag;
       }
 
-      // For per_flw granularity with username, we'll filter FLWs after preview
-      // Store the username/user_id for later filtering
+      // Pre-populate selected FLW IDs from URL params
+      // This allows creating a session without generating a preview first
+      // We only need username since that's what visits are keyed by
       if (params.username) {
         this.quickFilterUsername = params.username;
-      }
-      if (params.user_id) {
-        this.quickFilterUserId = params.user_id;
+        this.selectedFlwUserIds.push(params.username);
       }
 
-      return params.auto_create === 'true';
+      return false;  // Never auto-create
     },
 
     // Initialize
@@ -1364,15 +1355,8 @@ function auditCreationPage() {
         }
       }
 
-      // Apply quick params from URL and check if auto-create is requested
-      const shouldAutoCreate = this.applyQuickParams();
-
-      // If auto_create is set and we have valid criteria, trigger creation after a short delay
-      if (shouldAutoCreate && this.selectedOpportunities.length > 0 && this.isAuditCriteriaValid()) {
-        setTimeout(() => {
-          this.createAuditSession();
-        }, 500);
-      }
+      // Apply quick params from URL (pre-populates FLW selection)
+      this.applyQuickParams();
     }
   }
 }

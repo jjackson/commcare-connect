@@ -1,6 +1,8 @@
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponseRedirect
 from django.views.decorators.http import require_http_methods
+from django.views.generic import TemplateView
 
 from commcare_connect.labs.context import clear_context_from_session
 from commcare_connect.labs.integrations.connect.oauth import fetch_user_organization_data
@@ -74,3 +76,62 @@ def refresh_org_data(request):
 
     # Redirect back to referrer
     return HttpResponseRedirect(request.headers.get("referer", "/"))
+
+
+class LabsOverviewView(LoginRequiredMixin, TemplateView):
+    """
+    Main landing page for labs projects.
+
+    Shows all available labs projects and custom analysis tools in a card-based layout.
+    This page is the default landing for users who log into labs without a specific URL redirect.
+    """
+
+    template_name = "labs/overview.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Define labs projects with descriptions
+        context["labs_projects"] = [
+            {
+                "name": "Audit",
+                "url": "/audit/",
+                "icon": "fa-clipboard-check",
+                "description": "Data quality auditing tools for program monitoring",
+                "color": "blue",
+            },
+            {
+                "name": "Solicitations",
+                "url": "/solicitations/",
+                "icon": "fa-file-contract",
+                "description": "RFP management system for posting Solicitations and receiving responses",
+                "color": "indigo",
+            },
+            {
+                "name": "Tasks",
+                "url": "/tasks/",
+                "icon": "fa-tasks",
+                "description": "Task management and workflow tracking for program managers and network managers",
+                "color": "purple",
+            },
+            {
+                "name": "Coverage",
+                "url": "/coverage/map/",
+                "icon": "fa-map-marked-alt",
+                "description": "Geographic coverage analysis and mapping for Service Areas and Delivery Units",
+                "color": "green",
+            },
+        ]
+
+        # Define custom analysis projects with descriptions
+        context["custom_analysis_projects"] = [
+            {
+                "name": "CHC Nutrition",
+                "url": "/custom_analysis/chc_nutrition/",
+                "icon": "fa-heartbeat",
+                "description": "Nutrition and health metrics analysis for the Child Health Campaign",
+                "color": "rose",
+            },
+        ]
+
+        return context

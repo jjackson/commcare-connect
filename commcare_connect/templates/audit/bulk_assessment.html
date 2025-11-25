@@ -260,7 +260,7 @@
                 <i class="fa-solid fa-calendar mr-1"></i><span x-text="assessment.visit_date"></span>
               </div>
               <div class="truncate">
-                <i class="fa-solid fa-map-marker-alt mr-1"></i><span x-text="assessment.entity_name || 'No Entity'"></span>
+                <i class="fa-solid fa-hashtag mr-1"></i><span x-text="'Visit ' + assessment.visit_id"></span>
               </div>
               <div class="truncate" x-show="assessment.question_id">
                 <i class="fa-solid fa-tag mr-1"></i><span x-text="assessment.question_id"></span>
@@ -331,7 +331,7 @@
             <template x-for="visit in visitSummaries" :key="visit.visit_id">
               <tr>
                 <td class="px-4 py-3">
-                  <div class="text-sm font-medium text-gray-900" x-text="visit.username"></div>
+                  <div class="text-sm font-medium text-gray-900" x-text="visit.visit_id"></div>
                   <div class="text-xs text-gray-500" x-text="visit.visit_date"></div>
                 </td>
                 <td class="px-4 py-3 text-center">
