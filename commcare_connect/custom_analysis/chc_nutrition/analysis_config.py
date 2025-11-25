@@ -5,7 +5,7 @@ Based on SQL query for opportunity 575 - extracts nutrition and health metrics
 from UserVisit form_json and aggregates at FLW level.
 """
 
-from commcare_connect.labs.analysis import AnalysisConfig, FieldComputation, HistogramComputation
+from commcare_connect.labs.analysis import AnalysisConfig, FieldComputation, HistogramComputation, MapFilter
 
 CHC_NUTRITION_CONFIG = AnalysisConfig(
     grouping_key="username",
@@ -36,6 +36,21 @@ CHC_NUTRITION_CONFIG = AnalysisConfig(
             path="form.additional_case_info.childs_gender",
             aggregation="first",
             description="Child gender (first visit)",
+        ),
+        # Gender counts for calculating gender split
+        FieldComputation(
+            name="male_count",
+            path="form.additional_case_info.childs_gender",
+            aggregation="count",
+            transform=lambda x: 1 if str(x).lower() in ["male", "m", "boy", "male_child"] else None,
+            description="Number of male children",
+        ),
+        FieldComputation(
+            name="female_count",
+            path="form.additional_case_info.childs_gender",
+            aggregation="count",
+            transform=lambda x: 1 if str(x).lower() in ["female", "f", "girl", "female_child"] else None,
+            description="Number of female children",
         ),
         FieldComputation(
             name="phone_number",
@@ -196,4 +211,37 @@ CHC_NUTRITION_CONFIG = AnalysisConfig(
         ),
     ],
     filters={},  # Include all visits regardless of status
+    map_filters=[
+        # SAM: Severe Acute Malnutrition (MUAC < 11.5 cm)
+        MapFilter(
+            name="has_sam",
+            label="SAM Cases (MUAC < 11.5cm)",
+            filter_type="boolean",
+            path="form.case.update.soliciter_muac_cm",
+            condition=lambda x: (
+                float(x) < 11.5 if (x and str(x).replace(".", "").replace("-", "").isdigit()) else False
+            ),
+            description="Severe Acute Malnutrition cases (MUAC < 11.5 cm)",
+        ),
+        # MAM: Moderate Acute Malnutrition (MUAC >= 11.5 and < 12.5 cm)
+        MapFilter(
+            name="has_mam",
+            label="MAM Cases (MUAC 11.5-12.5cm)",
+            filter_type="boolean",
+            path="form.case.update.soliciter_muac_cm",
+            condition=lambda x: (
+                11.5 <= float(x) < 12.5 if (x and str(x).replace(".", "").replace("-", "").isdigit()) else False
+            ),
+            description="Moderate Acute Malnutrition cases (MUAC 11.5-12.5 cm)",
+        ),
+        # Child unwell today
+        MapFilter(
+            name="child_unwell",
+            label="Child Unwell Today",
+            filter_type="boolean",
+            path="form.case.update.va_child_unwell_today",
+            condition=lambda x: str(x).lower() in ["yes", "1", "true"] if x else False,
+            description="Child was unwell at time of visit",
+        ),
+    ],
 )

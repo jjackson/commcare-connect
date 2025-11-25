@@ -65,35 +65,30 @@
         </div>
     {% else %}
 
-        <!-- Summary Statistics Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                <div class="text-sm text-gray-600 mb-1">Total FLWs</div>
-                <div class="text-3xl font-bold text-gray-900">{{ summary.total_flws }}</div>
-            </div>
-            <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                <div class="text-sm text-gray-600 mb-1">Total Visits</div>
-                <div class="text-3xl font-bold text-gray-900">{{ summary.total_visits }}</div>
-            </div>
-            <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                <div class="text-sm text-gray-600 mb-1">Avg Visits/FLW</div>
-                <div class="text-3xl font-bold text-gray-900">{{ summary.avg_visits_per_flw }}</div>
-            </div>
-            <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                <div class="text-sm text-gray-600 mb-1">Total Approved</div>
-                <div class="text-3xl font-bold text-gray-900">{{ summary.total_approved }}</div>
-            </div>
-        </div>
-
-        <!-- Nutrition Metrics Summary -->
+        <!-- Summary Statistics -->
         {% if nutrition_summary %}
         <div class="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mb-6">
-            <h2 class="text-xl font-semibold text-gray-900 mb-4">Nutrition Metrics Summary</h2>
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Summary</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <!-- General Stats -->
                 <div class="border-l-4 border-blue-500 pl-3">
-                    <div class="text-sm text-gray-600">Total MUAC Measurements</div>
-                    <div class="text-2xl font-bold text-gray-900">{{ nutrition_summary.total_muac_measurements }}</div>
+                    <div class="text-sm text-gray-600">Total FLWs</div>
+                    <div class="text-2xl font-bold text-gray-900">{{ summary.total_flws }}</div>
                 </div>
+                <div class="border-l-4 border-blue-500 pl-3">
+                    <div class="text-sm text-gray-600">Total Visits</div>
+                    <div class="text-2xl font-bold text-gray-900">{{ summary.total_visits }}</div>
+                </div>
+                <div class="border-l-4 border-blue-500 pl-3">
+                    <div class="text-sm text-gray-600">Avg Visits/FLW</div>
+                    <div class="text-2xl font-bold text-gray-900">{{ summary.avg_visits_per_flw }}</div>
+                </div>
+                <div class="border-l-4 border-blue-500 pl-3">
+                    <div class="text-sm text-gray-600">Total Approved</div>
+                    <div class="text-2xl font-bold text-gray-900">{{ summary.total_approved }}</div>
+                </div>
+
+                <!-- Nutrition Metrics -->
                 <div class="border-l-4 border-red-600 pl-3" title="Severe Acute Malnutrition (MUAC < 11.5 cm)">
                     <div class="text-sm text-gray-600">SAM Rate</div>
                     <div class="text-2xl font-bold text-red-600">{{ nutrition_summary.sam_rate }}% <span class="text-base text-gray-500">({{ nutrition_summary.total_sam }})</span></div>
@@ -102,25 +97,13 @@
                     <div class="text-sm text-gray-600">MAM Rate</div>
                     <div class="text-2xl font-bold text-yellow-600">{{ nutrition_summary.mam_rate }}% <span class="text-base text-gray-500">({{ nutrition_summary.total_mam }})</span></div>
                 </div>
-                <div class="border-l-4 border-green-500 pl-3">
-                    <div class="text-sm text-gray-600">MUAC Consent Rate</div>
-                    <div class="text-2xl font-bold text-gray-900">{{ nutrition_summary.muac_consent_rate }}%</div>
-                </div>
                 <div class="border-l-4 border-orange-500 pl-3">
                     <div class="text-sm text-gray-600">Children Unwell</div>
                     <div class="text-2xl font-bold text-gray-900">{{ nutrition_summary.total_children_unwell }}</div>
                 </div>
-                <div class="border-l-4 border-rose-500 pl-3">
-                    <div class="text-sm text-gray-600">Malnutrition Diagnosed</div>
-                    <div class="text-2xl font-bold text-gray-900">{{ nutrition_summary.total_malnutrition_diagnosed }}</div>
-                </div>
                 <div class="border-l-4 border-purple-500 pl-3">
                     <div class="text-sm text-gray-600">Under Treatment</div>
                     <div class="text-2xl font-bold text-gray-900">{{ nutrition_summary.total_under_treatment }}</div>
-                </div>
-                <div class="border-l-4 border-indigo-500 pl-3">
-                    <div class="text-sm text-gray-600">VA Doses Given</div>
-                    <div class="text-2xl font-bold text-gray-900">{{ nutrition_summary.total_va_doses }}</div>
                 </div>
             </div>
         </div>
@@ -166,14 +149,11 @@
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 MUAC Distribution
                             </th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Children Unwell
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Female % of (Male + Female)">
+                                Gender Split
                             </th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Malnutrition Dx
-                            </th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                VA Doses
+                                Actions
                             </th>
                         </tr>
                     </thead>
@@ -255,18 +235,29 @@
                                 {% endwith %}
                             </td>
                             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                {{ flw.custom_fields.children_unwell_count|default:0 }}
+                                {% if flw.gender_split_female_pct is not None %}
+                                    {% with male_count=flw.custom_fields.male_count|default:0 female_count=flw.custom_fields.female_count|default:0 %}
+                                    <span class="{% if flw.gender_split_female_pct >= 45 and flw.gender_split_female_pct <= 55 %}text-green-600{% elif flw.gender_split_female_pct < 40 or flw.gender_split_female_pct > 60 %}text-red-600{% else %}text-yellow-600{% endif %} font-medium">
+                                        {{ flw.gender_split_female_pct }}%
+                                    </span>
+                                    <span class="text-gray-500 text-xs ml-1">({{ female_count }}F/{{ male_count }}M)</span>
+                                    {% endwith %}
+                                {% else %}
+                                    <span class="text-gray-400">-</span>
+                                {% endif %}
                             </td>
-                            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                {{ flw.custom_fields.malnutrition_diagnosed_count|default:0 }}
-                            </td>
-                            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                                {{ flw.custom_fields.received_va_dose_before_count|default:0 }}
+                            <td class="px-4 py-3 whitespace-nowrap text-sm">
+                                <a href="{% url 'audit:creation_wizard' %}?opportunity_id={{ opportunity_id }}&username={{ flw.username }}&granularity=per_flw"
+                                   class="inline-flex items-center px-3 py-1 border border-blue-300 rounded-md text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition-colors"
+                                   title="Create audit for {{ flw.display_name }}">
+                                    <i class="fa-solid fa-clipboard-check mr-1"></i>
+                                    Audit
+                                </a>
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="12" class="px-4 py-8 text-center text-sm text-gray-500">
+                            <td colspan="11" class="px-4 py-8 text-center text-sm text-gray-500">
                                 No data available
                             </td>
                         </tr>

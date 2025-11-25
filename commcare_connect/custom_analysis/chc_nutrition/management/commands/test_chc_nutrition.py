@@ -4,7 +4,13 @@ Django management command to test CHC Nutrition Analysis.
 Similar to audit's run_audit_integration.py - runs analysis from command line with debugging.
 
 Usage:
+    # Run full analysis
     python manage.py test_chc_nutrition --opportunity-id 814
+
+    # Test caching functionality
+    python manage.py test_chc_nutrition --opportunity-id 814 --test-cache
+
+    # Debug options
     python manage.py test_chc_nutrition --opportunity-id 814 --debug-fields
     python manage.py test_chc_nutrition --opportunity-id 814 --show-form-structure
 """
@@ -52,6 +58,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Enable file/Redis caching (to test cache performance)",
         )
+        parser.add_argument(
+            "--test-cache",
+            action="store_true",
+            help="Test cache functionality: run twice and verify cache hits",
+        )
 
     def handle(self, *args, **options):
         opportunity_id = options["opportunity_id"]
@@ -79,13 +90,13 @@ class Command(BaseCommand):
 
         # Run requested operations
         try:
-            if options["show_form_structure"]:
+            if options["test_cache"]:
+                self.test_cache_functionality(request, opportunity_id)
+            elif options["show_form_structure"]:
                 self.analyze_form_structure(request, opportunity_id, options["sample_size"])
-
-            if options["debug_fields"]:
+            elif options["debug_fields"]:
                 self.debug_field_extraction(request, opportunity_id)
-
-            if not options["show_form_structure"] and not options["debug_fields"]:
+            else:
                 # Default: run full analysis
                 self.run_full_analysis(request, opportunity_id, use_cache=options["use_cache"])
 
@@ -203,6 +214,201 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(self.style.ERROR(f"[MISSING] {field_comp.name:50s} = None"))
 
+    def test_cache_functionality(self, request, opportunity_id):
+        """Test cache functionality with real data."""
+        from commcare_connect.labs.analysis.file_cache import AnalysisCacheManager
+
+        self.stdout.write("")
+        self.stdout.write("=" * 80)
+        self.stdout.write(f"TESTING CACHE FUNCTIONALITY FOR OPPORTUNITY {opportunity_id}")
+        self.stdout.write("=" * 80)
+        self.stdout.write("")
+
+        # Initialize cache manager
+        cache_manager = AnalysisCacheManager(opportunity_id, CHC_NUTRITION_CONFIG)
+        self.stdout.write(f"Cache config hash: {cache_manager.config_hash}")
+        self.stdout.write(f"Cache backend: {'Django (Redis)' if cache_manager.use_django else 'File-based'}")
+        self.stdout.write("")
+
+        # Clear existing cache
+        self.stdout.write("Step 1: Clearing existing cache...")
+        cache_manager.clear_cache()
+        self.stdout.write(self.style.SUCCESS("[OK] Cache cleared"))
+        self.stdout.write("")
+
+        # First run - should MISS cache
+        self.stdout.write("Step 2: First run (expecting CACHE MISS)...")
+        import time
+
+        start = time.time()
+        result1 = compute_flw_analysis(request=request, config=CHC_NUTRITION_CONFIG, use_cache=True)
+        duration1 = time.time() - start
+
+        self.stdout.write(self.style.SUCCESS(f"[OK] Analysis complete in {duration1:.2f}s"))
+        self.stdout.write(f"  - FLWs: {len(result1.rows)}")
+        self.stdout.write(f"  - Visits: {result1.metadata.get('total_visits', 0)}")
+        self.stdout.write("")
+
+        # Check cache was populated
+        cached_flw = cache_manager.get_results_cache()
+        if cached_flw:
+            self.stdout.write(
+                self.style.SUCCESS(f"[OK] FLW cache populated (visit_count: {cached_flw['visit_count']})")
+            )
+        else:
+            self.stdout.write(self.style.ERROR("[ERROR] FLW cache NOT populated"))
+            return
+
+        cached_visits = cache_manager.get_visit_results_cache()
+        if cached_visits:
+            self.stdout.write(
+                self.style.SUCCESS(f"[OK] Visit cache populated (visit_count: {cached_visits['visit_count']})")
+            )
+        else:
+            self.stdout.write(self.style.WARNING("[WARN] Visit cache not populated"))
+        self.stdout.write("")
+
+        # Second run - should HIT cache
+        self.stdout.write("Step 3: Second run (expecting CACHE HIT)...")
+        start = time.time()
+        result2 = compute_flw_analysis(request=request, config=CHC_NUTRITION_CONFIG, use_cache=True)
+        duration2 = time.time() - start
+
+        self.stdout.write(self.style.SUCCESS(f"[OK] Analysis complete in {duration2:.2f}s"))
+        speedup = duration1 / duration2 if duration2 > 0 else 0
+        self.stdout.write(f"  - Speedup: {speedup:.1f}x faster")
+        self.stdout.write(f"  - Results match: {len(result1.rows) == len(result2.rows)}")
+        self.stdout.write("")
+
+        # Test cache validation with simulated visit count mismatch
+        self.stdout.write("Step 4: Testing cache validation behavior...")
+        original_count = request.labs_context["opportunity"]["visit_count"]
+
+        # Check current actual count from API
+        data_access = AnalysisDataAccess(request)
+        actual_count = data_access.fetch_visit_count()
+
+        self.stdout.write(f"  - Original cached count: {original_count}")
+        self.stdout.write(f"  - Current actual count: {actual_count}")
+
+        if actual_count == original_count:
+            self.stdout.write(self.style.SUCCESS("  [OK] No new visits - cache should remain valid"))
+
+            # Test that cache is still used
+            start = time.time()
+            result3 = compute_flw_analysis(request=request, config=CHC_NUTRITION_CONFIG, use_cache=True)
+            duration3 = time.time() - start
+
+            if duration3 < duration1 / 2:
+                self.stdout.write(self.style.SUCCESS(f"  [OK] Cache still valid ({duration3:.2f}s)"))
+            else:
+                self.stdout.write(self.style.WARNING(f"  [WARN] Unexpected recomputation ({duration3:.2f}s)"))
+
+            # Now artificially simulate new data for tolerance testing
+            self.stdout.write("")
+            self.stdout.write("  - Simulating visit count mismatch for tolerance test...")
+            request.labs_context["opportunity"]["visit_count"] = original_count + 5
+
+            # Without tolerance - should invalidate
+            self.stdout.write("    * Without tolerance: should invalidate cache...")
+            start = time.time()
+            result_no_tol = compute_flw_analysis(request=request, config=CHC_NUTRITION_CONFIG, use_cache=True)
+            duration_no_tol = time.time() - start
+
+            if duration_no_tol > duration1 / 3:
+                self.stdout.write(
+                    self.style.SUCCESS(f"      [OK] Cache invalidated ({duration_no_tol:.2f}s) - recomputed")
+                )
+            else:
+                self.stdout.write(
+                    self.style.WARNING(f"      [WARN] Cache may not have invalidated ({duration_no_tol:.2f}s)")
+                )
+
+            # Restore and re-cache
+            request.labs_context["opportunity"]["visit_count"] = original_count
+            compute_flw_analysis(request=request, config=CHC_NUTRITION_CONFIG, use_cache=True)
+
+            # Test WITH tolerance
+            request.labs_context["opportunity"]["visit_count"] = original_count + 5
+            self.stdout.write("    * With 10-min tolerance: should accept stale cache...")
+
+            from django.http import QueryDict
+
+            request.GET = QueryDict(mutable=True)
+            request.GET["cache_tolerance"] = "10"
+
+            start = time.time()
+            result4 = compute_flw_analysis(request=request, config=CHC_NUTRITION_CONFIG, use_cache=True)
+            duration4 = time.time() - start
+
+            if duration4 < duration1 / 2:
+                self.stdout.write(
+                    self.style.SUCCESS(f"      [OK] Tolerance working ({duration4:.2f}s) - used stale cache!")
+                )
+            else:
+                self.stdout.write(
+                    self.style.ERROR(f"      [ERROR] Tolerance not working ({duration4:.2f}s) - recomputed anyway")
+                )
+        else:
+            # Real new visits exist
+            self.stdout.write(
+                self.style.WARNING(
+                    f"  [WARN] Visit count changed ({original_count} -> {actual_count}) - " "cache should invalidate"
+                )
+            )
+
+            # This should recompute
+            start = time.time()
+            result3 = compute_flw_analysis(request=request, config=CHC_NUTRITION_CONFIG, use_cache=True)
+            duration3 = time.time() - start
+
+            if duration3 > duration1 / 3:
+                self.stdout.write(self.style.SUCCESS(f"  [OK] Cache correctly invalidated ({duration3:.2f}s)"))
+            else:
+                self.stdout.write(self.style.ERROR(f"  [ERROR] Cache not invalidated? ({duration3:.2f}s)"))
+
+            # Update for tolerance test
+            duration4 = duration3  # Use this for summary
+
+        # Summary
+        self.stdout.write("")
+        self.stdout.write("=" * 80)
+        self.stdout.write("CACHE TEST SUMMARY")
+        self.stdout.write("=" * 80)
+        self.stdout.write(f"First run (cache miss):   {duration1:.2f}s")
+        self.stdout.write(f"Second run (cache hit):   {duration2:.2f}s (speedup: {speedup:.1f}x)")
+        if "duration4" in locals():
+            self.stdout.write(f"Tolerance test:           {duration4:.2f}s")
+        self.stdout.write("")
+
+        # Determine if cache is working based on speedup
+        cache_working = speedup > 2  # At least 2x speedup indicates cache is working
+
+        if cache_working:
+            self.stdout.write(self.style.SUCCESS("*** CACHE IS WORKING CORRECTLY ***"))
+            if actual_count == original_count and "duration4" in locals():
+                tolerance_working = duration4 < duration1 / 2
+                if tolerance_working:
+                    self.stdout.write(self.style.SUCCESS("*** CACHE TOLERANCE IS WORKING ***"))
+                else:
+                    self.stdout.write(self.style.WARNING("[WARN] Cache tolerance may not be working as expected"))
+        else:
+            self.stdout.write(self.style.ERROR("*** CACHE MAY NOT BE WORKING AS EXPECTED ***"))
+            self.stdout.write("")
+            self.stdout.write("Debug info:")
+            self.stdout.write(f"  - Cache backend: {'Django (Redis)' if cache_manager.use_django else 'File-based'}")
+            self.stdout.write(f"  - Cache hash: {cache_manager.config_hash}")
+            self.stdout.write(f"  - Opportunity ID: {opportunity_id}")
+            self.stdout.write(f"  - Expected speedup: >2x, got: {speedup:.1f}x")
+
+            # Suggest fixes
+            self.stdout.write("")
+            self.stdout.write("Possible issues:")
+            if not cache_manager.use_django:
+                self.stdout.write("  - File cache being used (slower than Redis)")
+            self.stdout.write("  - Check Redis connection if expecting Django cache")
+            self.stdout.write("  - Verify visit_count is being synced correctly in labs_context")
+
     def run_full_analysis(self, request, opportunity_id, use_cache=False):
         """Run the full analysis and show results."""
         self.stdout.write("")
@@ -221,7 +427,7 @@ class Command(BaseCommand):
         self.stdout.write(f"  - Total Visits: {result.metadata.get('total_visits', 0)}")
 
         if result.rows:
-            self.stdout.write(f"\nResults (first 5 FLWs):")
+            self.stdout.write("\nResults (first 5 FLWs):")
 
             for i, flw in enumerate(result.rows[:5], 1):
                 self.stdout.write(f"\n--- FLW {i}: {flw.username} ---")

@@ -227,54 +227,38 @@ class AnalysisDataAccess:
         """
         Fetch all UserVisits for the opportunity from Connect API.
 
+        Uses centralized Labs caching to avoid repeated API calls.
+
         Returns:
             List of LocalUserVisit proxies
 
         Raises:
             httpx.HTTPStatusError: If API request fails
         """
-        url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{self.opportunity_id}/user_visits/"
+        from commcare_connect.labs.api_cache import fetch_user_visits_cached
 
-        logger.info(f"Fetching user visits from {url}")
+        logger.info(f"Fetching user visits for opportunity {self.opportunity_id}")
 
-        try:
-            response = httpx.get(url, headers={"Authorization": f"Bearer {self.access_token}"}, timeout=120.0)
-            response.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            logger.error(f"Failed to fetch user visits: {e}")
-            raise
+        # Define the API call function
+        def make_api_call():
+            url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{self.opportunity_id}/user_visits/"
+            try:
+                response = httpx.get(url, headers={"Authorization": f"Bearer {self.access_token}"}, timeout=120.0)
+                response.raise_for_status()
+                return response
+            except httpx.HTTPStatusError as e:
+                logger.error(f"Failed to fetch user visits: {e}")
+                raise
 
-        # Parse CSV response
-        df = pd.read_csv(StringIO(response.text))
+        # Use centralized caching (returns list of dicts with parsed form_json)
+        visits_data = fetch_user_visits_cached(
+            request=self.request,
+            opportunity_id=self.opportunity_id,
+            api_call_func=make_api_call,
+        )
 
-        logger.info(f"Fetched {len(df)} user visits from Connect")
-
-        # Parse form_json if it's a string
-        # NOTE: The API returns form_json as Python repr format (single quotes, Python literals)
-        # not valid JSON (double quotes, null/true/false). We use ast.literal_eval() to parse it.
-        if "form_json" in df.columns and len(df) > 0:
-            import ast
-            import json
-
-            def parse_json(x):
-                if isinstance(x, str) and x:
-                    # First try json.loads for valid JSON
-                    try:
-                        return json.loads(x)
-                    except json.JSONDecodeError:
-                        pass
-                    # Fall back to ast.literal_eval for Python dict repr format
-                    try:
-                        return ast.literal_eval(x)
-                    except (ValueError, SyntaxError):
-                        logger.warning(f"Failed to parse form_json: {x[:100]}...")
-                        return {}
-                return x if isinstance(x, dict) else {}
-
-            df["form_json"] = df["form_json"].apply(parse_json)
-
-        # Convert to LocalUserVisit proxies
-        visits = [LocalUserVisit(row.to_dict()) for _, row in df.iterrows()]
+        # Convert dicts to LocalUserVisit proxies
+        visits = [LocalUserVisit(data) for data in visits_data]
 
         logger.info(f"Created {len(visits)} LocalUserVisit proxies")
 
@@ -284,20 +268,22 @@ class AnalysisDataAccess:
         """
         Get visit count for cache validation.
 
-        Uses the visit_count from labs_context (already loaded from opp_org_program API)
-        which is much faster than downloading the full visits CSV.
+        Uses the visit_count from labs_context (synced from actual data during previous runs).
+        The single opportunity API endpoint doesn't reliably include visit_count, so we
+        prioritize the in-memory value that was synced from actual visit data.
 
         Returns:
             Total visit count for the opportunity
         """
-        # Try to get from labs_context first (fastest - already in memory)
+        # Get from labs_context (synced from actual visit data)
         opportunity = self.labs_context.get("opportunity", {})
         if opportunity and "visit_count" in opportunity:
             count = opportunity.get("visit_count", 0)
             logger.info(f"Visit count from labs_context for opportunity {self.opportunity_id}: {count}")
             return count
 
-        # Fallback: fetch from single opportunity endpoint (much lighter than full CSV)
+        # Fallback: Try fetching from single opportunity endpoint
+        # Note: This endpoint may not include visit_count, so this is best-effort
         url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{self.opportunity_id}/"
 
         logger.info(f"Fetching visit count from {url}")
@@ -306,9 +292,16 @@ class AnalysisDataAccess:
             response = httpx.get(url, headers={"Authorization": f"Bearer {self.access_token}"}, timeout=30.0)
             response.raise_for_status()
             data = response.json()
-            count = data.get("visit_count", 0)
-            logger.info(f"Visit count for opportunity {self.opportunity_id}: {count}")
-            return count
+
+            # Check if visit_count is in the response
+            if "visit_count" in data:
+                count = data.get("visit_count", 0)
+                logger.info(f"Visit count for opportunity {self.opportunity_id}: {count}")
+                return count
+            else:
+                logger.warning(f"API endpoint does not include visit_count for opportunity {self.opportunity_id}")
+                # Return 0 to force cache miss (safer - will fetch and count actual visits)
+                return 0
         except Exception as e:
             logger.warning(f"Failed to fetch visit count from API: {e}")
             # Return 0 to force cache miss (safer than using stale cache)

@@ -32,7 +32,7 @@ Usage:
     result = analyzer.compute()  # One row per visit
 """
 
-from commcare_connect.labs.analysis.config import AnalysisConfig, FieldComputation, HistogramComputation
+from commcare_connect.labs.analysis.config import AnalysisConfig, FieldComputation, HistogramComputation, MapFilter
 from commcare_connect.labs.analysis.flw_analyzer import FLWAnalyzer, compute_flw_analysis
 from commcare_connect.labs.analysis.models import (
     AnalysisResult,
@@ -48,6 +48,7 @@ __all__ = [
     "AnalysisConfig",
     "FieldComputation",
     "HistogramComputation",
+    "MapFilter",
     # FLW Analysis
     "FLWAnalyzer",
     "FLWAnalysisResult",

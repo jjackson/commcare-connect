@@ -75,11 +75,27 @@ class CHCNutritionAnalysisView(LoginRequiredMixin, TemplateView):
             context["summary"] = flw_result.get_summary_stats()
             context["from_cache"] = not self.request.GET.get("refresh")
 
-            # Add display names to FLW rows
+            # Add display names to FLW rows and calculate gender split
             for flw in flw_result.rows:
                 flw.display_name = flw_names.get(flw.username, flw.username)
 
+                # Calculate gender split (female percentage of total gendered children)
+                male_count = flw.custom_fields.get("male_count") or 0
+                female_count = flw.custom_fields.get("female_count") or 0
+                total_gendered = male_count + female_count
+
+                if total_gendered > 0:
+                    flw.gender_split_female_pct = round((female_count / total_gendered) * 100, 1)
+                else:
+                    flw.gender_split_female_pct = None
+
             context["flws"] = flw_result.rows
+
+            # Get deliver app info from opportunity for audit button
+            opportunity = labs_context.get("opportunity", {})
+            deliver_app = opportunity.get("deliver_app", {})
+            context["deliver_app_cc_app_id"] = deliver_app.get("cc_app_id")
+            context["deliver_app_cc_domain"] = deliver_app.get("cc_domain")
 
             # Visit-level results for potential drill-down
             context["visit_result"] = visit_result

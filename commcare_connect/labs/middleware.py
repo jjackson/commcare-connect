@@ -98,10 +98,14 @@ class LabsURLWhitelistMiddleware:
         if path == "/health/":
             return self.get_response(request)
 
-        # Special case: root path redirects to labs login
+        # Special case: root path redirects to overview if authenticated, login if not
         if path == "/":
-            logger.debug("Redirecting root path to labs login")
-            return HttpResponseRedirect("/labs/login/")
+            if request.user.is_authenticated:
+                logger.debug("Redirecting authenticated user from root to labs overview")
+                return HttpResponseRedirect("/labs/overview/")
+            else:
+                logger.debug("Redirecting unauthenticated user from root to labs login")
+                return HttpResponseRedirect("/labs/login/")
 
         # Check if path is whitelisted
         is_whitelisted = any(path.startswith(prefix) for prefix in self.WHITELISTED_PREFIXES)
