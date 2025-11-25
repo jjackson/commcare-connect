@@ -352,10 +352,10 @@ python-multipart==0.0.20
     # via mcp
 pytz==2025.2
     # via pandas
-pywin32==311
-    # via mcp
-pywin32-ctypes==0.2.3
-    # via keyring
+# pywin32==311  # Windows-only, excluded for Linux deployment
+#     # via mcp
+# pywin32-ctypes==0.2.3  # Windows-only, excluded for Linux deployment
+#     # via keyring
 pyyaml==6.0.3
     # via
     #   huggingface-hub
