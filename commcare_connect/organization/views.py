@@ -37,13 +37,13 @@ def organization_home(request, org_slug):
     form = None
     membership_form = MembershipForm(organization=org)
     if request.method == "POST":
-        form = OrganizationChangeForm(request.POST, instance=org)
+        form = OrganizationChangeForm(request.POST, instance=org, user=request.user)
         if form.is_valid():
             messages.success(request, gettext("Organization details saved!"))
             form.save()
 
     if not form:
-        form = OrganizationChangeForm(instance=org)
+        form = OrganizationChangeForm(instance=org, user=request.user)
 
     return render(
         request,
