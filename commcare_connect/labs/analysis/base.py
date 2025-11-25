@@ -56,6 +56,12 @@ class LocalUserVisit:
         return self._data.get("username", "")
 
     @property
+    def commcare_userid(self) -> str:
+        """CommCare user ID from form.meta.userID in form_json."""
+        form_json = self.form_json
+        return form_json.get("form", {}).get("meta", {}).get("userID", "")
+
+    @property
     def deliver_unit_id(self) -> int | None:
         du_id = self._data.get("deliver_unit_id")
         return int(du_id) if du_id else None

@@ -215,6 +215,7 @@ class VisitRow:
     id: str
     user_id: int | None = None
     username: str = ""
+    commcare_userid: str = ""  # CommCare user ID from form.meta.userID
 
     # Visit metadata
     visit_date: datetime | None = None

@@ -5,7 +5,6 @@ Provides access to CommCare Case API v2 for fetching case data.
 """
 
 import logging
-from typing import List
 
 import httpx
 from django.conf import settings

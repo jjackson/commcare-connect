@@ -154,13 +154,26 @@ class BaseCoverageView(LoginRequiredMixin, TemplateView):
             point = LocalUserVisit(visit_data)
             coverage.service_points.append(point)
 
-            # Update FLW visit tracking
-            user_id = visit_row.user_id
-            if user_id:
-                if user_id not in coverage.flws:
-                    coverage.flws[user_id] = FLW(id=user_id, name=visit_row.username)
+            # Update FLW visit tracking (merge with existing FLW from DU data if present)
+            username = visit_row.username
+            commcare_userid = visit_row.commcare_userid
 
-                flw = coverage.flws[user_id]
+            if username:
+                # Check if FLW already exists under CommCare ID (from DU data)
+                if commcare_userid and commcare_userid in coverage.flws:
+                    # Re-key existing FLW from CommCare ID to username
+                    flw = coverage.flws[commcare_userid]
+                    flw.id = username  # Update ID to username
+                    flw.name = username
+                    coverage.flws[username] = flw
+                    del coverage.flws[commcare_userid]
+                    logger.debug(f"[Coverage] Re-keyed FLW {commcare_userid} -> {username}")
+                elif username not in coverage.flws:
+                    # Create new FLW if neither username nor CommCare ID exist
+                    coverage.flws[username] = FLW(id=username, name=username)
+
+                # Update FLW with visit data (works for both new and re-keyed FLWs)
+                flw = coverage.flws[username]
                 flw.total_visits += 1
                 flw.service_points.append(point)
 
@@ -231,8 +244,11 @@ class CoverageIndexView(BaseCoverageView):
         return context
 
 
-class CoverageMapView(BaseCoverageView):
-    """Interactive Leaflet map with optional analysis config for computed fields."""
+class BaseCoverageMapView(BaseCoverageView):
+    """Base interactive Leaflet map with optional analysis config for computed fields.
+
+    Note: This is a base class. Use CoverageMapView instead, which adds FLW color-coding.
+    """
 
     template_name = "coverage/map.html"
 
@@ -451,12 +467,15 @@ class CoverageMapView(BaseCoverageView):
         return json.dumps({"type": "FeatureCollection", "features": features})
 
 
-class CoverageMapView(CoverageMapView):
+class CoverageMapView(BaseCoverageMapView):
     """
-    Improved coverage map with UI patterns from the coverage project.
+    Enhanced coverage map with FLW color-coding.
 
-    Uses the same backend (analysis framework for caching) but with
-    a cleaner UI: FLW-colored polygons/points, better controls.
+    Extends BaseCoverageMapView to add:
+    - Unique colors for each FLW
+    - Colored delivery unit polygons
+    - Colored service point markers
+    - FLW filter with color swatches
     """
 
     template_name = "coverage/map.html"
@@ -472,51 +491,53 @@ class CoverageMapView(CoverageMapView):
             flw_colors = generate_flw_colors(coverage.flws)
             context["flw_colors"] = flw_colors
 
-            # Build colored GeoJSON
-            context["delivery_units_geojson"] = self.build_colored_du_geojson(coverage, flw_colors)
-
-            # Get visit rows and build colored points
+            # Get analysis config for visit data access
             config = self.get_analysis_config()
             if not config:
                 from commcare_connect.coverage.analysis import COVERAGE_BASE_CONFIG
 
                 config = COVERAGE_BASE_CONFIG
 
-            # Build du_lookup with BOTH id and name as keys (visits might use either)
+            # Build du_lookup
             du_lookup = {}
             for du in coverage.delivery_units.values():
                 du_info = {"service_area_id": du.service_area_id}
-                # Add by name (alphanumeric)
                 du_lookup[du.du_name] = du_info
-                # Add by ID (case_id) as both string and without prefix
                 du_lookup[du.id] = du_info
-                # Also try converting ID to integer if possible (Connect entity IDs)
                 try:
                     du_lookup[int(du.id)] = du_info
                 except (ValueError, TypeError):
                     pass
 
-            logger.info(
-                f"[Coverage Map2] Built du_lookup with {len(du_lookup)} key variations "
-                f"from {len(coverage.delivery_units)} DUs"
-            )
-            sample_keys = list(du_lookup.keys())[:10]
-            logger.info(f"[Coverage Map2] Sample du_lookup keys: {sample_keys}")
-
+            # Get visit data to build CommCare ID → username mapping
             from commcare_connect.coverage.analysis import get_coverage_visit_analysis
 
-            # Force cache refresh if ?refresh=1 in URL
             use_cache = self.request.GET.get("refresh") != "1"
-
             result = get_coverage_visit_analysis(
                 request=self.request, config=config, du_lookup=du_lookup, use_cache=use_cache
             )
 
+            # Build mapping: commcare_userid → username
+            commcare_to_username = {}
+            for visit in result.rows:
+                if visit.commcare_userid and visit.username:
+                    commcare_to_username[visit.commcare_userid] = visit.username
+
+            logger.info(f"[Coverage Map] Built FLW ID mapping with {len(commcare_to_username)} entries")
+            logger.info(f"[Coverage Map] FLWs after loading: {len(coverage.flws)}")
+
+            # Build colored GeoJSON with username mapping
+            context["delivery_units_geojson"] = self.build_colored_du_geojson(
+                coverage, flw_colors, commcare_to_username
+            )
+
+            # Build colored service points (using already-fetched result)
             context["service_points_geojson"] = self.build_colored_points_geojson(
                 result.rows, coverage.flws, flw_colors
             )
 
             # Build FLW list with colors for UI
+            # FLWs are now properly merged during loading, so we just need to format them
             context["flw_list_colored"] = [
                 {
                     "id": flw_id,
@@ -535,8 +556,8 @@ class CoverageMapView(CoverageMapView):
 
         return context
 
-    def build_colored_du_geojson(self, coverage: CoverageData, flw_colors: dict) -> str:
-        """Build DU GeoJSON with FLW colors"""
+    def build_colored_du_geojson(self, coverage: CoverageData, flw_colors: dict, commcare_to_username: dict) -> str:
+        """Build DU GeoJSON with FLW colors and username mapping"""
         features = []
 
         for du in coverage.delivery_units.values():
@@ -545,7 +566,10 @@ class CoverageMapView(CoverageMapView):
                     continue
 
                 geometry = du.geometry
-                flw_color = flw_colors.get(du.flw_commcare_id, "#999999")
+
+                # Map CommCare owner ID to username for consistent filtering
+                flw_username = commcare_to_username.get(du.flw_commcare_id, du.flw_commcare_id)
+                flw_color = flw_colors.get(flw_username, "#999999")
 
                 features.append(
                     {
@@ -557,7 +581,8 @@ class CoverageMapView(CoverageMapView):
                             "status": du.status or "unvisited",
                             "buildings": du.buildings,
                             "visits": len(du.service_points),
-                            "flw_id": du.flw_commcare_id,
+                            "flw_id": du.flw_commcare_id,  # Keep original for reference
+                            "username": flw_username,  # Add username for filtering
                             "color": flw_color,
                         },
                     }
@@ -577,11 +602,12 @@ class CoverageMapView(CoverageMapView):
                 if not visit.has_gps:
                     continue
 
-                flw_color = flw_colors.get(visit.user_id, "#999999")
+                # Match by username (CommCare username hash), not user_id
+                flw_color = flw_colors.get(visit.username, "#999999")
 
                 props = visit.to_geojson_properties()
                 props["color"] = flw_color
-                props["flw_name"] = visit.username
+                props["username"] = visit.username  # Use username consistently for filtering
 
                 features.append(
                     {
