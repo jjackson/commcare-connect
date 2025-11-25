@@ -135,6 +135,8 @@ class CoverageDataAccess:
         Visits should be fetched separately via the analysis framework
         for consistent caching behavior.
         """
+        from commcare_connect.coverage.field_mappings import get_unmapped_properties
+
         coverage = CoverageData()
 
         # Get opportunity metadata
@@ -148,10 +150,18 @@ class CoverageDataAccess:
         # Fetch DUs from CommCare
         du_cases = self.fetch_delivery_units_from_commcare()
 
+        # Track unmapped properties across all DUs
+        all_unmapped_properties = set()
+
         for case_data in du_cases:
             try:
                 du = DeliveryUnit.from_commcare_case(case_data)
                 coverage.delivery_units[du.du_name] = du
+
+                # Track unmapped properties for debugging
+                properties = case_data.get("properties", {})
+                unmapped = get_unmapped_properties(properties)
+                all_unmapped_properties.update(unmapped)
 
                 # Group by service area
                 sa_id = du.service_area_id
@@ -177,12 +187,30 @@ class CoverageDataAccess:
                 logger.warning(f"Failed to process delivery unit {case_data.get('case_id')}: {e}")
                 continue
 
+        # Populate SA metadata from DUs
+        for sa in coverage.service_areas.values():
+            sa.aggregate_metadata_from_dus()
+
+        # Log unmapped properties for future schema updates
+        if all_unmapped_properties:
+            logger.info(
+                f"[Coverage] Found {len(all_unmapped_properties)} unmapped properties: "
+                f"{sorted(all_unmapped_properties)}"
+            )
+
         logger.info(
             f"[Coverage] DU data complete: {len(coverage.delivery_units)} DUs, " f"{len(coverage.service_areas)} SAs"
         )
         if coverage.service_areas:
             sample_sas = list(coverage.service_areas.keys())[:5]
             logger.info(f"[Coverage] Sample service area IDs: {sample_sas}")
+            # Log sample SA metadata
+            if sample_sas:
+                first_sa = coverage.service_areas[sample_sas[0]]
+                logger.info(
+                    f"[Coverage] Sample SA metadata - ID: {first_sa.id}, Name: {first_sa.name}, "
+                    f"Unlock Order: {first_sa.unlock_order}, Ward: {first_sa.ward_name}"
+                )
         else:
             logger.warning("[Coverage] No service areas found! Check if DUs have service_area_id set.")
 
@@ -190,6 +218,8 @@ class CoverageDataAccess:
 
     def build_coverage_data(self) -> CoverageData:
         """Build complete CoverageData object"""
+        from commcare_connect.coverage.field_mappings import get_unmapped_properties
+
         coverage = CoverageData()
 
         # Get opportunity metadata
@@ -203,10 +233,18 @@ class CoverageDataAccess:
         # Fetch DUs from CommCare
         du_cases = self.fetch_delivery_units_from_commcare()
 
+        # Track unmapped properties across all DUs
+        all_unmapped_properties = set()
+
         for case_data in du_cases:
             try:
                 du = DeliveryUnit.from_commcare_case(case_data)
                 coverage.delivery_units[du.du_name] = du
+
+                # Track unmapped properties for debugging
+                properties = case_data.get("properties", {})
+                unmapped = get_unmapped_properties(properties)
+                all_unmapped_properties.update(unmapped)
 
                 # Group by service area
                 sa_id = du.service_area_id
@@ -231,6 +269,17 @@ class CoverageDataAccess:
             except Exception as e:
                 logger.warning(f"Failed to process delivery unit {case_data.get('case_id')}: {e}")
                 continue
+
+        # Populate SA metadata from DUs
+        for sa in coverage.service_areas.values():
+            sa.aggregate_metadata_from_dus()
+
+        # Log unmapped properties for future schema updates
+        if all_unmapped_properties:
+            logger.info(
+                f"[Coverage] Found {len(all_unmapped_properties)} unmapped properties: "
+                f"{sorted(all_unmapped_properties)}"
+            )
 
         # Fetch visits from Connect
         visits_df = self.fetch_user_visits_from_connect()

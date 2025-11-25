@@ -5,11 +5,10 @@ Provides one-row-per-visit analysis with computed fields (no aggregation).
 """
 
 import logging
-from typing import Any
 
 from django.http import HttpRequest
 
-from commcare_connect.labs.analysis.base import Analyzer, LocalUserVisit
+from commcare_connect.labs.analysis.base import Analyzer
 from commcare_connect.labs.analysis.computations import compute_visit_fields
 from commcare_connect.labs.analysis.config import AnalysisConfig, FieldComputation
 from commcare_connect.labs.analysis.models import VisitAnalysisResult, VisitRow
@@ -232,6 +231,23 @@ def compute_visit_analysis(
             visit_count = result.metadata.get("total_visits", 0)
             cache_manager.set_visit_results_cache(visit_count, result)
 
+            # Sync labs_context with actual visit count
+            if hasattr(request, "labs_context") and request.labs_context.get("opportunity"):
+                old_count = request.labs_context["opportunity"].get("visit_count", 0)
+                if old_count != visit_count:
+                    logger.info(
+                        f"[Analysis] Syncing labs_context visit count: "
+                        f"{old_count} -> {visit_count} (opp {opportunity_id})"
+                    )
+                    request.labs_context["opportunity"]["visit_count"] = visit_count
+
+                    # Also update session so it persists across requests
+                    if hasattr(request, "session") and "labs_context" in request.session:
+                        session_context = request.session["labs_context"]
+                        if "opportunity" in session_context and isinstance(session_context["opportunity"], dict):
+                            session_context["opportunity"]["visit_count"] = visit_count
+                            request.session.modified = True
+
         return result
 
     # Initialize cache manager
@@ -264,5 +280,22 @@ def compute_visit_analysis(
     visit_count = result.metadata.get("total_visits", 0)
     cache_manager.set_visit_results_cache(visit_count, result)
     logger.info(f"[Analysis] Cached {visit_count} visits for next time")
+
+    # Sync labs_context with actual visit count to prevent future cache misses
+    # The labs_context is loaded once during OAuth and becomes stale over time
+    if hasattr(request, "labs_context") and request.labs_context.get("opportunity"):
+        old_count = request.labs_context["opportunity"].get("visit_count", 0)
+        if old_count != visit_count:
+            logger.info(
+                f"[Analysis] Syncing labs_context visit count: {old_count} -> {visit_count} (opp {opportunity_id})"
+            )
+            request.labs_context["opportunity"]["visit_count"] = visit_count
+
+            # Also update session so it persists across requests
+            if hasattr(request, "session") and "labs_context" in request.session:
+                session_context = request.session["labs_context"]
+                if "opportunity" in session_context and isinstance(session_context["opportunity"], dict):
+                    session_context["opportunity"]["visit_count"] = visit_count
+                    request.session.modified = True
 
     return result

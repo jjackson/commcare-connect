@@ -107,19 +107,54 @@ class LocalUserVisit:
 class DeliveryUnit:
     """DU case from CommCare (NOT Connect's DeliverUnit model)"""
 
+    # Core identification
     id: str  # case_id
     du_name: str
-    service_area_id: str  # Format: "oa_id-sa_id"
+    service_area_id: str  # Service area identifier
     flw_commcare_id: str
-    status: str | None  # completed, visited, None (unvisited)
-    wkt: str  # WKT polygon geometry
+    du_id: str | None = None  # Human-readable DU identifier (e.g., "DU123")
+
+    # Status and workflow
+    status: str | None = None  # completed, visited, None (unvisited)
+    visited: bool = False
+    checked_in_date: str | None = None
+    checked_out_date: str | None = None
+    last_modified_date: datetime | None = None
+
+    # Geometry
+    wkt: str = ""  # WKT polygon geometry
+    centroid: str | None = None  # "lat lon" format from CommCare
+    bounding_box: str | None = None
+    radius: float | None = None
+
+    # Counts and measurements
     buildings: int = 0
     surface_area: float = 0.0
     delivery_count: int = 0
     delivery_target: int = 0
-    checked_in_date: str | None = None
-    checked_out_date: str | None = None
-    last_modified_date: datetime | None = None
+
+    # Distance measurements
+    distance_btw_adj_1: float | None = None
+    distance_btw_adj_2: float | None = None
+    distance_to_nearest_multi_building_du: float | None = None
+
+    # Administrative/geographic metadata
+    oa: str | None = None  # Operational Area
+    ward_name: str | None = None
+    llo: str | None = None  # Local Level Organization
+    service_area_unlock_order: int | None = None  # Order in which SA is unlocked (1st, 2nd, 3rd, etc)
+
+    # Additional metadata
+    max_round: int | None = None
+    is_single_building: bool = False
+    nearest_multi_building_du_id: str | None = None
+    nearest_multi_building_du_name: str | None = None
+    nearest_multi_building_du_count: int | None = None
+
+    # Raw data storage
+    raw_properties: dict = field(default_factory=dict)
+
+    # Visit tracking
     service_points: list[LocalUserVisit] = field(default_factory=list)
 
     @property
@@ -129,33 +164,89 @@ class DeliveryUnit:
             raise ValueError(f"Empty WKT string for delivery unit {self.id}")
         return wkt.loads(self.wkt)
 
-    @property
-    def centroid(self) -> tuple:
-        """Get centroid as (lat, lon)"""
-        geom = self.geometry
-        return (geom.centroid.y, geom.centroid.x)
-
     @classmethod
     def from_commcare_case(cls, case_data: dict):
-        """Parse CommCare case API response"""
+        """
+        Parse CommCare case API response using field mapping system.
+
+        Stores all properties in raw_properties and maps known fields to typed attributes.
+        """
+        from commcare_connect.coverage.field_mappings import get_property_with_fallback
+
         properties = case_data.get("properties", {})
 
+        # Helper to safely convert to int
+        def safe_int(val) -> int | None:
+            if val is None or val == "":
+                return None
+            try:
+                return int(float(val))  # Handle "123.0" strings
+            except (ValueError, TypeError):
+                return None
+
+        # Helper to safely convert to float
+        def safe_float(val) -> float | None:
+            if val is None or val == "":
+                return None
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return None
+
+        # Helper to safely convert to bool
+        def safe_bool(val) -> bool:
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, str):
+                return val.lower() in ("true", "yes", "1")
+            return bool(val)
+
         return cls(
-            id=case_data.get("case_id"),
+            # Core identification
+            id=case_data.get("case_id", ""),
             du_name=case_data.get("case_name", ""),
-            service_area_id=properties.get("service_area_id", ""),
+            service_area_id=get_property_with_fallback(properties, "service_area_id") or "",
             flw_commcare_id=case_data.get("owner_id", ""),
-            status=properties.get("du_status"),
-            wkt=properties.get("WKT", ""),
-            buildings=int(properties.get("buildings", 0) or 0),
-            surface_area=float(properties.get("surface_area", 0) or 0),
-            delivery_count=int(properties.get("delivery_count", 0) or 0),
-            delivery_target=int(properties.get("delivery_target", 0) or 0),
-            checked_in_date=properties.get("checked_in_date"),
-            checked_out_date=properties.get("checked_out_date"),
+            du_id=get_property_with_fallback(properties, "du_id"),
+            # Status and workflow
+            status=get_property_with_fallback(properties, "du_status"),
+            visited=safe_bool(get_property_with_fallback(properties, "visited")),
+            checked_in_date=get_property_with_fallback(properties, "checked_in_date"),
+            checked_out_date=get_property_with_fallback(properties, "checked_out_date"),
             last_modified_date=pd.to_datetime(case_data.get("last_modified"))
             if case_data.get("last_modified")
             else None,
+            # Geometry
+            wkt=get_property_with_fallback(properties, "wkt") or "",
+            centroid=get_property_with_fallback(properties, "centroid"),
+            bounding_box=get_property_with_fallback(properties, "bounding_box"),
+            radius=safe_float(get_property_with_fallback(properties, "radius")),
+            # Counts and measurements
+            buildings=safe_int(get_property_with_fallback(properties, "buildings")) or 0,
+            surface_area=safe_float(get_property_with_fallback(properties, "surface_area")) or 0.0,
+            delivery_count=safe_int(get_property_with_fallback(properties, "delivery_count")) or 0,
+            delivery_target=safe_int(get_property_with_fallback(properties, "delivery_target")) or 0,
+            # Distance measurements
+            distance_btw_adj_1=safe_float(get_property_with_fallback(properties, "distance_btw_adj_1")),
+            distance_btw_adj_2=safe_float(get_property_with_fallback(properties, "distance_btw_adj_2")),
+            distance_to_nearest_multi_building_du=safe_float(
+                get_property_with_fallback(properties, "distance_to_nearest_multi_building_du")
+            ),
+            # Administrative/geographic metadata
+            oa=get_property_with_fallback(properties, "oa"),
+            ward_name=get_property_with_fallback(properties, "ward_name"),
+            llo=get_property_with_fallback(properties, "llo"),
+            service_area_unlock_order=safe_int(get_property_with_fallback(properties, "service_area_unlock_order")),
+            # Additional metadata
+            max_round=safe_int(get_property_with_fallback(properties, "max_round")),
+            is_single_building=safe_bool(get_property_with_fallback(properties, "is_single_building")),
+            nearest_multi_building_du_id=get_property_with_fallback(properties, "nearest_multi_building_du_id"),
+            nearest_multi_building_du_name=get_property_with_fallback(properties, "nearest_multi_building_du_name"),
+            nearest_multi_building_du_count=safe_int(
+                get_property_with_fallback(properties, "nearest_multi_building_du_count")
+            ),
+            # Store all raw properties
+            raw_properties=dict(properties),
         )
 
 
@@ -165,6 +256,44 @@ class ServiceArea:
 
     id: str
     delivery_units: list[DeliveryUnit] = field(default_factory=list)
+
+    # Metadata (aggregated from DUs)
+    unlock_order: int | None = None  # Order in which SA is unlocked (1st, 2nd, 3rd, etc)
+    name: str | None = None  # Human-readable name
+    oa: str | None = None  # Operational Area
+    ward_name: str | None = None
+    llo: str | None = None  # Local Level Organization
+
+    # Raw properties storage
+    raw_properties: dict = field(default_factory=dict)
+
+    def aggregate_metadata_from_dus(self) -> None:
+        """
+        Aggregate metadata from delivery units.
+
+        Takes values from the first DU since all DUs in same SA should share these attributes.
+        """
+        if not self.delivery_units:
+            return
+
+        # Take metadata from first DU (all DUs in SA should have same values)
+        first_du = self.delivery_units[0]
+
+        self.unlock_order = first_du.service_area_unlock_order
+        self.oa = first_du.oa
+        self.ward_name = first_du.ward_name
+        self.llo = first_du.llo
+
+        # Create a human-readable name from available metadata
+        name_parts = []
+        if self.ward_name:
+            name_parts.append(self.ward_name)
+        if self.oa:
+            name_parts.append(f"OA{self.oa}")
+        if self.id:
+            name_parts.append(f"SA{self.id}")
+
+        self.name = " - ".join(name_parts) if name_parts else self.id
 
     @property
     def total_buildings(self) -> int:
