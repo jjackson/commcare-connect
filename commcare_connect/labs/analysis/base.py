@@ -462,7 +462,7 @@ def get_flw_names_for_opportunity(request: HttpRequest) -> dict[str, str]:
     Get FLW display names for the opportunity in request context.
 
     Fetches username to display name mapping from Connect API and caches it.
-    Uses the same caching backend as analysis results (Redis on labs, file-based locally).
+    Uses the same caching backend as analysis results (Redis if available, file-based fallback).
 
     Args:
         request: HttpRequest with labs_oauth and labs_context in session

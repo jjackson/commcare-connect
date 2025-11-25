@@ -1,8 +1,8 @@
 """
-Two-level analysis caching with environment-aware backend.
+Two-level analysis caching with auto-detected backend.
 
-- Labs server: Uses Django cache (Redis)
-- Local dev: Uses file-based pickle cache
+Prefers Django cache (Redis) when available, falls back to file-based pickle cache.
+This allows using Redis in both labs server and local dev environments.
 
 Cache invalidation based on:
 - Visit count changes (data freshness)
@@ -71,21 +71,33 @@ def get_config_hash(config: AnalysisConfig) -> str:
 
 
 def _use_django_cache() -> bool:
-    """Determine if we should use Django cache (Redis) or file cache."""
-    # Use Django cache if in labs environment
-    if getattr(settings, "IS_LABS_ENVIRONMENT", False):
-        return True
+    """
+    Determine if we should use Django cache (Redis) or file cache.
 
-    # Also use Django cache if Redis is available and working
+    Prefers Django cache (Redis) whenever it's available and working.
+    Falls back to file-based cache only if Redis is unavailable.
+    """
+    # Always try Redis first (works in labs AND local dev if Redis is running)
     try:
         from django.core.cache import cache
 
-        cache.set("_test_key", "test", 1)
-        if cache.get("_test_key") == "test":
-            return True
-    except Exception:
-        pass
+        # Test if cache backend is working
+        test_key = "_cache_backend_test"
+        test_value = "test_value"
+        cache.set(test_key, test_value, 1)
+        result = cache.get(test_key)
 
+        if result == test_value:
+            logger.debug("Using Django cache backend (Redis)")
+            cache.delete(test_key)  # Clean up test key
+            return True
+        else:
+            logger.debug("Django cache test failed - value mismatch")
+    except Exception as e:
+        logger.debug(f"Django cache not available: {e}")
+
+    # Fall back to file-based cache
+    logger.debug("Using file-based cache")
     return False
 
 
@@ -96,9 +108,9 @@ class AnalysisCacheManager:
     Level 1: Extracted visit data (allows re-aggregation)
     Level 2: Aggregated FLW results (fastest load)
 
-    Backend is auto-selected based on environment:
-    - Labs: Django cache (Redis)
-    - Local: File pickle cache
+    Backend is auto-selected based on availability:
+    - If Redis is available: Django cache (Redis) - preferred
+    - If Redis is unavailable: File pickle cache - fallback
     """
 
     def __init__(self, opportunity_id: int, config: AnalysisConfig):
