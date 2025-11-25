@@ -301,7 +301,7 @@ def get_uninvoiced_visit_items(opportunity, start_date=None, end_date=None):
 
     monthly_pu_records = (
         completed_works_qs.annotate(
-            month_created=TruncMonth("date_created"),
+            month_created=TruncMonth("status_modified_date"),
         )
         .values("payment_unit", "month_created")
         .annotate(
