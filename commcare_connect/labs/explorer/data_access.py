@@ -10,7 +10,7 @@ from typing import Any
 
 from django.http import HttpRequest
 
-from commcare_connect.labs.api_client import LabsAPIError, LabsRecordAPIClient
+from commcare_connect.labs.integrations.connect.api_client import LabsAPIError, LabsRecordAPIClient
 from commcare_connect.labs.models import LocalLabsRecord
 
 logger = logging.getLogger(__name__)

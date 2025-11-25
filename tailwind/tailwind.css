@@ -660,7 +660,66 @@
 
 @layer components {
   .base-table {
+    @apply w-full table-auto border-collapse text-gray-700;
+  }
+
+  .base-table-full {
     @apply w-full table-fixed border-collapse text-gray-700;
+  }
+
+  .base-table-full thead {
+    @apply text-brand-deep-purple sticky top-0 z-10 text-sm;
+  }
+
+  .base-table-full thead th {
+    @apply relative h-10 whitespace-nowrap bg-gray-200 p-4 text-left font-medium;
+  }
+
+  .base-table-full thead::after {
+    content: ' ';
+    @apply absolute -bottom-1.5 left-0 h-1.5 w-full bg-stone-100;
+  }
+
+  .base-table-full thead th:first-child {
+    @apply rounded-l-lg;
+  }
+  .base-table-full thead th:last-child {
+    @apply rounded-r-lg;
+  }
+
+  .base-table-full tbody {
+    @apply relative pt-4 text-sm;
+  }
+
+  .base-table-full tbody::before {
+    content: '';
+    @apply absolute left-0 top-0 -z-20 h-full w-full rounded-lg bg-white shadow-sm;
+  }
+
+  .base-table-full tbody tr {
+    @apply relative;
+  }
+
+  .base-table-full tbody tr::after {
+    content: '';
+    @apply -translate-1/2 absolute left-1/2 top-1/2 -z-10 h-[90%] w-[99%] -translate-y-1/2 rounded-lg bg-gray-100 opacity-0;
+  }
+
+  .base-table-full tbody tr:first-child::after {
+    content: '';
+    @apply -translate-1/2 absolute left-1/2 top-[53.8%] -z-10 h-[80%] w-[99%] -translate-y-1/2 rounded-lg bg-gray-100 opacity-0;
+  }
+
+  .base-table-full tbody tr:hover::after {
+    @apply opacity-100;
+  }
+
+  .base-table-full tbody tr.active::after {
+    @apply opacity-100;
+  }
+
+  .base-table-full tbody td {
+    @apply whitespace-nowrap border-b-[1px] border-gray-100 p-4 text-left;
   }
 
   .base-table thead {

@@ -21,7 +21,7 @@ from django.http import HttpRequest
 
 from commcare_connect.audit.blob_api import BlobMetadataAPI
 from commcare_connect.audit.models import AuditSessionRecord, AuditTemplateRecord
-from commcare_connect.labs.api_client import LabsRecordAPIClient
+from commcare_connect.labs.integrations.connect.api_client import LabsRecordAPIClient
 
 
 class AuditDataAccess:
@@ -214,6 +214,53 @@ class AuditDataAccess:
 
     # Session Methods
 
+    def _generate_audit_description(self, audit_type: str, criteria: dict) -> str:
+        """
+        Generate a human-readable description of how an audit session was created.
+
+        Args:
+            audit_type: Type of audit (date_range, last_n_per_flw, etc.)
+            criteria: Audit criteria dict
+
+        Returns:
+            Human-readable description string
+        """
+        parts = []
+
+        if audit_type == "date_range":
+            start_date = criteria.get("start_date") or criteria.get("startDate")
+            end_date = criteria.get("end_date") or criteria.get("endDate")
+            if start_date and end_date:
+                parts.append(f"Visits from {start_date} to {end_date}")
+            elif start_date:
+                parts.append(f"Visits from {start_date}")
+            elif end_date:
+                parts.append(f"Visits until {end_date}")
+            else:
+                parts.append("All visits (date range)")
+
+        elif audit_type == "last_n_per_flw":
+            count = criteria.get("count_per_flw") or criteria.get("countPerFlw", 10)
+            parts.append(f"Last {count} visits per FLW")
+
+        elif audit_type == "last_n_per_opp":
+            count = criteria.get("count_per_opp") or criteria.get("countPerOpp", 10)
+            parts.append(f"Last {count} visits per opportunity")
+
+        elif audit_type == "last_n_across_all":
+            count = criteria.get("count_across_all") or criteria.get("countAcrossAll", 100)
+            parts.append(f"Last {count} visits across all")
+
+        else:
+            parts.append(f"Audit type: {audit_type}")
+
+        # Add sample percentage if less than 100%
+        sample_percentage = criteria.get("sample_percentage") or criteria.get("samplePercentage", 100)
+        if sample_percentage and sample_percentage < 100:
+            parts.append(f"({sample_percentage}% sample)")
+
+        return " ".join(parts)
+
     def create_audit_session(
         self,
         template_id: int,
@@ -222,6 +269,8 @@ class AuditDataAccess:
         title: str,
         tag: str,
         opportunity_id: int | None = None,
+        audit_type: str | None = None,
+        criteria: dict | None = None,
     ) -> AuditSessionRecord:
         """
         Create a new audit session.
@@ -233,10 +282,24 @@ class AuditDataAccess:
             title: Session title
             tag: Session tag
             opportunity_id: Primary opportunity ID
+            audit_type: Type of audit (date_range, last_n_per_flw, etc.)
+            criteria: Audit criteria dict for generating description
 
         Returns:
             AuditSessionRecord instance with empty visit_results
         """
+        # Fetch opportunity name if opportunity_id is provided
+        opportunity_name = ""
+        if opportunity_id:
+            opportunity_details = self.get_opportunity_details(opportunity_id)
+            if opportunity_details:
+                opportunity_name = opportunity_details.get("name", "")
+
+        # Generate human-readable description from audit settings
+        description = ""
+        if audit_type and criteria:
+            description = self._generate_audit_description(audit_type, criteria)
+
         # Extract and store complete image metadata for all visits
         visit_images = {}
         if opportunity_id:
@@ -265,6 +328,8 @@ class AuditDataAccess:
             "visit_ids": visit_ids,
             "visit_results": {},  # Initialize empty
             "opportunity_id": opportunity_id,  # Store primary opportunity ID for later use
+            "opportunity_name": opportunity_name,  # Store opportunity name for display
+            "description": description,  # Human-readable description of audit creation settings
             "visit_images": visit_images,  # Store complete image metadata with question_ids
         }
 
@@ -496,8 +561,8 @@ class AuditDataAccess:
             sample_size = int(len(df) * sample_percentage / 100)
             df = df.sample(n=sample_size, random_state=42)
 
-        # Return list of visit IDs
-        return df["id"].tolist()
+        # Return list of unique visit IDs (deduplicate in case of data issues)
+        return df["id"].unique().tolist()
 
     def get_visit_data(
         self, visit_id: int, opportunity_id: int | None = None, visit_cache: dict | None = None
@@ -723,11 +788,9 @@ class AuditDataAccess:
             # Convert to list of dicts
             visits = []
             for _, row in df.iterrows():
-                # Extract visit ID - Connect CSV uses 'completed_work_id' as the visit ID
+                # Extract visit ID - use UserVisit's own id
                 visit_id = None
-                if "completed_work_id" in row and pd.notna(row["completed_work_id"]):
-                    visit_id = int(row["completed_work_id"])
-                elif "id" in row and pd.notna(row["id"]):
+                if "id" in row and pd.notna(row["id"]):
                     visit_id = int(row["id"])
 
                 # Extract xform_id and form_json from CSV
@@ -786,13 +849,14 @@ class AuditDataAccess:
             # Clean up temp file
             os.unlink(tmp_path)
 
-    def search_opportunities(self, query: str = "", limit: int = 100) -> list[dict]:
+    def search_opportunities(self, query: str = "", limit: int = 100, program_id: int | None = None) -> list[dict]:
         """
         Search for opportunities.
 
         Args:
             query: Search query (name or ID)
             limit: Maximum results
+            program_id: Optional program ID to filter by
 
         Returns:
             List of opportunity dicts
@@ -806,6 +870,10 @@ class AuditDataAccess:
 
         query_lower = query.lower().strip()
         for opp_data in opportunities_list:
+            # Filter by program_id if provided
+            if program_id and opp_data.get("program") != program_id:
+                continue
+
             # Filter by query if provided
             if query_lower:
                 opp_id_match = query_lower.isdigit() and int(query_lower) == opp_data.get("id")

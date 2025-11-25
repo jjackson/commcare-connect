@@ -5,7 +5,7 @@ Implements the OAuth Authorization Code flow with PKCE for CLI tools.
 This allows scripts to authenticate users via browser and obtain access tokens.
 
 Usage:
-    from commcare_connect.labs.oauth_cli import get_oauth_token
+    from commcare_connect.labs.integrations.connect.cli import get_oauth_token
 
     token = get_oauth_token(
         client_id="your_client_id",
@@ -247,16 +247,16 @@ def get_labs_user_from_token(
         LabsUser instance or None if token invalid/expired or introspection fails
 
     Example:
-        >>> from commcare_connect.labs.oauth_cli import get_labs_user_from_token
+        >>> from commcare_connect.labs.integrations.connect.cli import get_labs_user_from_token
         >>> user = get_labs_user_from_token()
         >>> if user:
         >>>     print(f"Authenticated as: {user.username}")
     """
     from django.conf import settings
 
+    from commcare_connect.labs.integrations.connect.cli.token_manager import TokenManager
+    from commcare_connect.labs.integrations.connect.oauth import introspect_token
     from commcare_connect.labs.models import LabsUser
-    from commcare_connect.labs.oauth_cli.token_manager import TokenManager
-    from commcare_connect.labs.oauth_helpers import introspect_token
 
     # Load token
     if token_manager is None:
@@ -296,3 +296,136 @@ def get_labs_user_from_token(
         "organization_data": {},
     }
     return LabsUser(session_data)
+
+
+def create_cli_request(
+    opportunity_id: int | None = None,
+    program_id: int | None = None,
+    organization_id: str | None = None,
+    url_path: str = "/",
+):
+    """
+    Create a mock Django request with full labs context for CLI usage.
+
+    This is the recommended way for CLI scripts to get a request object that
+    mirrors what the web app would create. It:
+    1. Loads the OAuth token from the CLI token cache
+    2. Introspects the token to get user profile
+    3. Fetches organization data to populate labs_context with full objects
+    4. Creates a mock request with properly populated session and labs_context
+
+    Args:
+        opportunity_id: Optional opportunity ID to include in context
+        program_id: Optional program ID to include in context
+        organization_id: Optional organization slug to include in context
+        url_path: URL path for the request (default: "/")
+
+    Returns:
+        Mock HttpRequest with labs_oauth session and labs_context, or None if auth fails
+
+    Example:
+        >>> from commcare_connect.labs.integrations.connect.cli import create_cli_request
+        >>> request = create_cli_request(opportunity_id=814)
+        >>> if request:
+        >>>     # Use request with analysis framework
+        >>>     result = compute_flw_analysis(request, config)
+    """
+    from django.conf import settings
+    from django.test import RequestFactory
+
+    from commcare_connect.labs.integrations.connect.cli.token_manager import TokenManager
+    from commcare_connect.labs.integrations.connect.oauth import fetch_user_organization_data, introspect_token
+    from commcare_connect.labs.models import LabsUser
+
+    # Load token
+    token_manager = TokenManager()
+    access_token = token_manager.get_valid_token()
+    if not access_token:
+        return None
+
+    # Get OAuth credentials from settings
+    client_id = getattr(settings, "CONNECT_OAUTH_CLIENT_ID", None)
+    client_secret = getattr(settings, "CONNECT_OAUTH_CLIENT_SECRET", None)
+    production_url = getattr(settings, "CONNECT_PRODUCTION_URL", None)
+
+    if not client_id or not client_secret or not production_url:
+        return None
+
+    # Introspect token to get user profile
+    user_profile = introspect_token(
+        access_token=access_token,
+        client_id=client_id,
+        client_secret=client_secret,
+        production_url=production_url,
+    )
+
+    if not user_profile:
+        return None
+
+    # Fetch organization data (includes opportunities with visit_count)
+    org_data = fetch_user_organization_data(access_token)
+    if not org_data:
+        org_data = {}
+
+    # Create LabsUser with full organization data
+    session_data = {
+        "user_profile": user_profile,
+        "organization_data": org_data,
+    }
+    user = LabsUser(session_data)
+
+    # Build labs_context similar to what LabsContextMiddleware does
+    labs_context = {}
+
+    # Find and validate opportunity
+    if opportunity_id:
+        opportunities = org_data.get("opportunities", [])
+        for opp in opportunities:
+            if opp.get("id") == opportunity_id:
+                labs_context["opportunity_id"] = opportunity_id
+                labs_context["opportunity"] = opp  # Full object with visit_count
+                labs_context["opportunity_name"] = opp.get("name", f"Opportunity {opportunity_id}")
+                break
+        else:
+            # Not found in user's data, still include ID for API validation
+            labs_context["opportunity_id"] = opportunity_id
+            labs_context["opportunity_name"] = f"Opportunity {opportunity_id}"
+
+    # Find and validate program
+    if program_id:
+        programs = org_data.get("programs", [])
+        for prog in programs:
+            if prog.get("id") == program_id:
+                labs_context["program_id"] = program_id
+                labs_context["program"] = prog
+                break
+        else:
+            labs_context["program_id"] = program_id
+
+    # Find and validate organization
+    if organization_id:
+        organizations = org_data.get("organizations", [])
+        for org in organizations:
+            if org.get("slug") == organization_id:
+                labs_context["organization_id"] = org.get("id")
+                labs_context["organization_slug"] = organization_id
+                labs_context["organization"] = org
+                break
+        else:
+            labs_context["organization_id"] = organization_id
+
+    # Create mock request
+    factory = RequestFactory()
+    request = factory.get(url_path)
+    request.user = user
+    request.session = {
+        "labs_oauth": {
+            "access_token": access_token,
+            "token_type": "Bearer",
+            "user_profile": user_profile,
+            "organization_data": org_data,
+        }
+    }
+    request.labs_context = labs_context
+
+    return request

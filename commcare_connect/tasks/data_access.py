@@ -14,7 +14,7 @@ import httpx
 from django.conf import settings
 from django.http import HttpRequest
 
-from commcare_connect.labs.api_client import LabsRecordAPIClient
+from commcare_connect.labs.integrations.connect.api_client import LabsRecordAPIClient
 from commcare_connect.tasks.models import TaskRecord
 
 

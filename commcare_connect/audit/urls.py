@@ -21,19 +21,14 @@ urlpatterns = [
     path("api/audit/progress/", views.ExperimentAuditProgressAPIView.as_view(), name="audit_progress"),
     # API endpoints for session interaction during auditing
     path(
-        "api/<int:session_id>/result/update/",
-        views.ExperimentAuditResultUpdateView.as_view(),
-        name="audit_result_update",
-    ),
-    path(
         "api/<int:session_id>/visit-data/",
         views.ExperimentAuditVisitDataView.as_view(),
         name="visit_data",
     ),
     path(
-        "api/<int:session_id>/assessment/update/",
-        views.ExperimentAssessmentUpdateView.as_view(),
-        name="audit_assessment_update",
+        "api/<int:session_id>/save/",
+        views.ExperimentSaveAuditView.as_view(),
+        name="audit_save",
     ),
     path(
         "api/<int:session_id>/complete/",

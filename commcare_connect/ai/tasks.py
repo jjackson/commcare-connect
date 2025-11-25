@@ -98,8 +98,8 @@ def simple_echo_task(
 
     # Fetch organization data and create LabsUser if we have an access token
     if access_token:
+        from commcare_connect.labs.integrations.connect.oauth import fetch_user_organization_data
         from commcare_connect.labs.models import LabsUser
-        from commcare_connect.labs.oauth_helpers import fetch_user_organization_data
 
         # Fetch organization data from production API
         org_data = fetch_user_organization_data(access_token)

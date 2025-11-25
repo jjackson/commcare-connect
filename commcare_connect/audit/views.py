@@ -32,6 +32,55 @@ class ExperimentAuditCreateView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["page_title"] = "Create New Audit Session"
+
+        # Pass labs_context to template for pre-selection
+        labs_context = getattr(self.request, "labs_context", {})
+        context["default_opportunity_id"] = labs_context.get("opportunity_id") or ""
+        context["default_program_id"] = labs_context.get("program_id") or ""
+
+        # Pass opportunities from user's org_data (already fetched from opp_org_program API)
+        org_data = getattr(self.request.user, "_org_data", {})
+        opportunities = org_data.get("opportunities", [])
+
+        # Filter by program if one is selected in labs_context
+        program_id = labs_context.get("program_id")
+        if program_id:
+            opportunities = [o for o in opportunities if o.get("program") == program_id]
+
+        # Format for template
+        context["opportunities_json"] = json.dumps(
+            [
+                {
+                    "id": opp.get("id"),
+                    "name": opp.get("name"),
+                    "organization_name": opp.get("organization", ""),
+                    "program_name": "",
+                    "visit_count": opp.get("visit_count", 0),
+                    "end_date": opp.get("end_date"),
+                    "active": opp.get("is_active", True),
+                }
+                for opp in opportunities
+            ]
+        )
+
+        # Quick creation URL parameters for pre-filling the wizard
+        # These allow other pages to link directly to audit creation with params
+        quick_params = {
+            "username": self.request.GET.get("username", ""),
+            "user_id": self.request.GET.get("user_id", ""),
+            "audit_type": self.request.GET.get("audit_type", ""),  # date_range, last_n_per_flw, etc.
+            "granularity": self.request.GET.get("granularity", ""),  # combined, per_opp, per_flw
+            "start_date": self.request.GET.get("start_date", ""),
+            "end_date": self.request.GET.get("end_date", ""),
+            "count": self.request.GET.get("count", ""),  # for last_n types
+            "title": self.request.GET.get("title", ""),
+            "tag": self.request.GET.get("tag", ""),
+            "auto_create": self.request.GET.get("auto_create", ""),  # if 'true', auto-submit
+        }
+        # Filter out empty values
+        quick_params = {k: v for k, v in quick_params.items() if v}
+        context["quick_params"] = json.dumps(quick_params)
+
         return context
 
 
@@ -257,80 +306,6 @@ class ExperimentBulkAssessmentView(LoginRequiredMixin, DetailView):
         return context
 
 
-class ExperimentAuditResultUpdateView(LoginRequiredMixin, View):
-    """AJAX endpoint for updating audit results (experiment-based)"""
-
-    def post(self, request, session_id):
-        try:
-            # Initialize data access
-            data_access = AuditDataAccess(request=request)
-
-            try:
-                # Get session
-                session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
-                if not session:
-                    return JsonResponse({"error": "Session not found"}, status=404)
-
-                visit_id = int(request.POST.get("visit_id"))
-                result = request.POST.get("result")
-                notes = request.POST.get("notes", "")
-                auto_advance = request.POST.get("auto_advance", "true") == "true"
-                current_index = int(request.POST.get("current_index", 0))
-
-                if result not in ["pass", "fail", "", None]:
-                    return JsonResponse({"error": "Invalid data"}, status=400)
-
-                # Get xform_id and other data from visit
-                visit_data = data_access.get_visit_data(visit_id, opportunity_id=session.opportunity_id)
-                if not visit_data:
-                    return JsonResponse({"error": "Visit not found"}, status=404)
-
-                if result in ["pass", "fail"]:
-                    # Update visit result in session
-                    session.set_visit_result(
-                        visit_id=visit_id,
-                        xform_id=visit_data["xform_id"],
-                        result=result,
-                        notes=notes,
-                        user_id=visit_data.get("user_id", 0),
-                        opportunity_id=visit_data.get("opportunity_id", session.opportunity_id),
-                    )
-                else:
-                    session.clear_visit_result(visit_id=visit_id)
-
-                # Save session
-                session = data_access.save_audit_session(session)
-
-                # Calculate updated progress
-                total_visits = len(session.visit_ids)
-                audited_count = len([v for v in session.visit_results.values() if v.get("result")])
-                progress_percentage = round((audited_count / total_visits) * 100, 1) if total_visits > 0 else 0
-
-                # Determine next visit index for auto-advance
-                next_index = current_index + 1 if auto_advance and current_index + 1 < total_visits else current_index
-
-                return JsonResponse(
-                    {
-                        "success": True,
-                        "result": result if result else "",
-                        "progress_percentage": progress_percentage,
-                        "audited_count": audited_count,
-                        "total_visits": total_visits,
-                        "next_index": next_index,
-                        "should_advance": auto_advance and next_index != current_index,
-                    }
-                )
-
-            finally:
-                data_access.close()
-
-        except Exception as e:
-            import traceback
-
-            print(f"[ERROR] {traceback.format_exc()}")
-            return JsonResponse({"error": str(e)}, status=500)
-
-
 class ExperimentAuditVisitDataView(LoginRequiredMixin, View):
     """Fetch visit data for dynamic navigation within the audit detail view."""
 
@@ -456,8 +431,8 @@ class ExperimentAuditVisitDataView(LoginRequiredMixin, View):
             data_access.close()
 
 
-class ExperimentAssessmentUpdateView(LoginRequiredMixin, View):
-    """AJAX endpoint for updating individual image assessments (experiment-based)"""
+class ExperimentSaveAuditView(LoginRequiredMixin, View):
+    """Save audit progress without completing"""
 
     def post(self, request, session_id):
         try:
@@ -470,24 +445,16 @@ class ExperimentAssessmentUpdateView(LoginRequiredMixin, View):
                 if not session:
                     return JsonResponse({"error": "Session not found"}, status=404)
 
-                visit_id = int(request.POST.get("visit_id"))
-                blob_id = request.POST.get("blob_id")
-                question_id = request.POST.get("question_id", "")
-                result = request.POST.get("result")
-                notes = request.POST.get("notes", "")
+                # Get visit_results from frontend
+                visit_results_json = request.POST.get("visit_results")
+                if visit_results_json:
+                    try:
+                        visit_results = json.loads(visit_results_json)
+                        session.data["visit_results"] = visit_results
+                    except json.JSONDecodeError as e:
+                        return JsonResponse({"error": f"Invalid JSON: {e}"}, status=400)
 
-                if not visit_id or not blob_id or result not in ["pass", "fail", "", None]:
-                    return JsonResponse({"error": "Invalid data"}, status=400)
-
-                # Update assessment in session
-                if result in ["pass", "fail"] or notes:
-                    session.set_assessment(
-                        visit_id=visit_id, blob_id=blob_id, question_id=question_id, result=result, notes=notes
-                    )
-                else:
-                    session.clear_assessment(visit_id=visit_id, blob_id=blob_id)
-
-                # Save session
+                # Save session (keeps status as in_progress)
                 session = data_access.save_audit_session(session)
 
                 # Calculate updated progress
@@ -496,7 +463,6 @@ class ExperimentAssessmentUpdateView(LoginRequiredMixin, View):
                 return JsonResponse(
                     {
                         "success": True,
-                        "result": result if result else "",
                         "progress_percentage": progress_stats["percentage"],
                         "assessed_count": progress_stats["assessed"],
                         "total_assessments": progress_stats["total"],
@@ -526,6 +492,15 @@ class ExperimentAuditCompleteView(LoginRequiredMixin, View):
                 session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
                 if not session:
                     return JsonResponse({"error": "Session not found"}, status=404)
+
+                # Get visit_results from frontend
+                visit_results_json = request.POST.get("visit_results")
+                if visit_results_json:
+                    try:
+                        visit_results = json.loads(visit_results_json)
+                        session.data["visit_results"] = visit_results
+                    except json.JSONDecodeError as e:
+                        return JsonResponse({"error": f"Invalid JSON: {e}"}, status=400)
 
                 overall_result = request.POST.get("overall_result")
                 notes = request.POST.get("notes", "")
@@ -910,15 +885,12 @@ class ExperimentAuditImageConnectView(LoginRequiredMixin, View):
 
     def get(self, request, opp_id, blob_id):
         try:
-            print(f"[IMAGE] Fetching image: opp_id={opp_id}, blob_id={blob_id}")
             # Initialize data access with opportunity ID
             data_access = AuditDataAccess(opportunity_id=opp_id, request=request)
 
             try:
                 # Download image from Connect API
-                print("[IMAGE] Calling download_image_from_connect...")
                 image_content = data_access.download_image_from_connect(blob_id, opp_id)
-                print(f"[IMAGE] Downloaded {len(image_content)} bytes")
 
                 # Return as image response
                 response = HttpResponse(image_content, content_type="image/jpeg")
@@ -1015,6 +987,8 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 title=criteria.get("title", f"Audit {timezone.now().strftime('%Y-%m-%d')}"),
                 tag=criteria.get("tag", ""),
                 opportunity_id=opportunity_ids[0] if opportunity_ids else None,
+                audit_type=audit_type,
+                criteria=normalized_criteria,
             )
 
             # Determine redirect URL
@@ -1046,9 +1020,13 @@ class ExperimentOpportunitySearchAPIView(LoginRequiredMixin, View):
         query = request.GET.get("q", "").strip()
         limit = int(request.GET.get("limit", 1000))  # Default to 1000, no max limit
 
+        # Get program_id from labs_context to filter opportunities
+        labs_context = getattr(request, "labs_context", {})
+        program_id = labs_context.get("program_id")
+
         data_access = AuditDataAccess(request=request)
         try:
-            opportunities = data_access.search_opportunities(query, limit)
+            opportunities = data_access.search_opportunities(query, limit, program_id=program_id)
 
             # Convert to JSON-serializable format
             opportunities_data = [

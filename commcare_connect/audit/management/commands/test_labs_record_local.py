@@ -15,7 +15,7 @@ from django.core.management.base import BaseCommand
 from rest_framework.test import APIRequestFactory
 
 from commcare_connect.data_export.views import LabsRecordDataView
-from commcare_connect.labs.oauth_cli import TokenManager
+from commcare_connect.labs.integrations.connect.cli import TokenManager
 from commcare_connect.opportunity.models import Opportunity
 
 

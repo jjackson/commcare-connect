@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.test import Client
 
-from commcare_connect.labs.oauth_cli.token_manager import TokenManager
+from commcare_connect.labs.integrations.connect.cli import TokenManager
 
 
 class BaseLabsURLTest(BaseCommand):
@@ -44,7 +44,7 @@ class BaseLabsURLTest(BaseCommand):
         # Fetch user profile and organization data like the OAuth callback does
         access_token = token_data.get("access_token")
 
-        from commcare_connect.labs.oauth_helpers import fetch_user_organization_data, introspect_token
+        from commcare_connect.labs.integrations.connect.oauth import fetch_user_organization_data, introspect_token
 
         try:
             profile_data = introspect_token(

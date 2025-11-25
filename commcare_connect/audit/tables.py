@@ -21,6 +21,18 @@ class AuditTable(tables.Table):
         },
     )
 
+    opportunity_name = tables.Column(
+        verbose_name=_("Opportunity"),
+        orderable=True,
+        attrs={"td": {"class": "text-sm text-gray-700 whitespace-normal break-words max-w-xs"}},
+    )
+
+    description = tables.Column(
+        verbose_name=_("Description"),
+        orderable=False,
+        attrs={"td": {"class": "text-sm text-gray-600 whitespace-normal break-words max-w-md"}},
+    )
+
     status = tables.Column(
         verbose_name=_("Status"),
         orderable=True,
@@ -66,6 +78,8 @@ class AuditTable(tables.Table):
         fields = (
             "index",
             "title",
+            "opportunity_name",
+            "description",
             "status",
             "overall_result",
             "visit_count",
@@ -76,37 +90,45 @@ class AuditTable(tables.Table):
         sequence = fields
         order_by = ("-date_created",)
         attrs = {
-            "class": "base-table",
+            "class": "base-table-full",
         }
         empty_text = _("No audit sessions yet. Create your first audit to get started.")
 
     def render_title(self, value, record):
-        """Display title with optional tag and identifier details."""
+        """Display title with optional tag."""
         if not value:
             value = _("Untitled Audit")
 
         tag = record.tag
-        subtitle_parts = []
 
         if tag:
-            subtitle_parts.append(_("Tag: {tag}").format(tag=tag))
-
-        if record.opportunity_id:
-            subtitle_parts.append(_("Opportunity #{opp_id}").format(opp_id=record.opportunity_id))
-
-        subtitle = " · ".join(subtitle_parts)
-
-        if subtitle:
             return format_html(
                 '<div class="flex flex-col">'
                 '<span class="text-sm font-semibold text-brand-deep-purple">{}</span>'
-                '<span class="text-xs text-gray-500">{}</span>'
+                '<span class="text-xs text-gray-500">Tag: {}</span>'
                 "</div>",
                 value,
-                subtitle,
+                tag,
             )
 
         return value
+
+    def render_opportunity_name(self, value, record):
+        """Display opportunity name, falling back to ID if name not available."""
+        if value:
+            return value
+        if record.opportunity_id:
+            return format_html(
+                '<span class="text-gray-500">Opportunity #{}</span>',
+                record.opportunity_id,
+            )
+        return "-"
+
+    def render_description(self, value, record):
+        """Display the audit description."""
+        if value:
+            return value
+        return format_html('<span class="text-gray-400 italic">No description</span>')
 
     def render_status(self, value, record):
         """Render status as a badge."""
@@ -175,9 +197,14 @@ class AuditTable(tables.Table):
     def render_actions(self, record):
         """Render action buttons for the audit session."""
         session_url = reverse("audit:session_detail", kwargs={"pk": record.pk})
+        bulk_url = reverse("audit:bulk_assessment", kwargs={"pk": record.pk})
+
+        # Include opportunity_id in URLs to avoid searching all opportunities
+        if record.opportunity_id:
+            session_url = f"{session_url}?opportunity_id={record.opportunity_id}"
+            bulk_url = f"{bulk_url}?opportunity_id={record.opportunity_id}"
 
         button_label = _("Review") if record.status == "completed" else _("Resume")
-        bulk_url = reverse("audit:bulk_assessment", kwargs={"pk": record.pk})
         return format_html(
             '<div class="flex gap-2 justify-end">'
             '<a href="{}" class="button button-sm outline-style">'

@@ -13,7 +13,7 @@ import os
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from commcare_connect.labs.oauth_cli import TokenManager, get_oauth_token
+from commcare_connect.labs.integrations.connect.cli import TokenManager, get_oauth_token
 
 
 class Command(BaseCommand):

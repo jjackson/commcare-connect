@@ -2,7 +2,9 @@
 {% load static i18n %}
 
 {% block content %}
-<div class="max-w-full mx-auto px-4" x-data="bulkAssessmentInterface()">
+<div class="max-w-full mx-auto px-4" x-data="bulkAssessmentInterface()"
+     @update-assessment="handleAssessmentUpdate($event.detail)"
+     @save-notes="handleNotesUpdate($event.detail)">
   <!-- Header and Controls -->
   <div class="flex gap-4 h-32 items-center p-4 profile-bg bg-brand-indigo rounded-2xl mb-4">
     <!-- Session Info -->
@@ -178,13 +180,11 @@
   <!-- Assessment Grid -->
   <template x-if="!loading && !loadCancelled && !loadError">
     <div class="grid gap-4 mb-8"
-         :style="`grid-template-columns: repeat(auto-fill, minmax(${widgetSize}px, 1fr))`"
-         x-init="console.log('[GRID DEBUG] Rendering grid with', assessments.length, 'assessments')">
+         :style="`grid-template-columns: repeat(auto-fill, minmax(${widgetSize}px, 1fr))`">
       <template x-if="assessments.length === 0">
         <div class="col-span-full text-center py-12 text-gray-500">
           <i class="fa-solid fa-images text-4xl mb-4"></i>
           <p>No assessments match the current filters.</p>
-          <p class="text-xs mt-2" x-text="'Debug: allAssessments=' + allAssessments.length + ', loading=' + loading"></p>
         </div>
       </template>
       <template x-for="assessment in assessments" :key="assessment.id">
@@ -194,10 +194,49 @@
                'border-red-500': assessment.result === 'fail',
                'border-gray-200': !assessment.result
              }"
-             x-data="assessmentWidget(assessment.id, assessment.result || '', assessment.notes || '', assessment.visit_id, assessment.blob_id, assessment.question_id || '')"
+             x-data="{
+               assessmentId: assessment.id,
+               visitId: assessment.visit_id,
+               blobId: assessment.blob_id,
+               questionId: assessment.question_id || '',
+               result: assessment.result || '',
+               notes: assessment.notes || '',
+               saving: false,
+               updateResult(newResult) {
+                 if (this.saving) return;
+                 this.$dispatch('update-assessment', {
+                   visitId: this.visitId,
+                   blobId: this.blobId,
+                   questionId: this.questionId,
+                   result: newResult,
+                   notes: this.notes,
+                   callback: (normalized) => { this.result = normalized; }
+                 });
+               },
+               saveNotes() {
+                 if (this.saving) return;
+                 this.$dispatch('save-notes', {
+                   visitId: this.visitId,
+                   blobId: this.blobId,
+                   questionId: this.questionId,
+                   result: this.result,
+                   notes: this.notes
+                 });
+               },
+               handleKeydown(event, currentId) {
+                 if (this.assessmentId !== currentId || event.target.tagName === 'TEXTAREA') return;
+                 if (event.key === 'p' || event.key === 'P') {
+                   event.preventDefault();
+                   this.updateResult('pass');
+                 } else if (event.key === 'f' || event.key === 'F') {
+                   event.preventDefault();
+                   this.updateResult('fail');
+                 }
+               }
+             }"
              @keydown.window="handleKeydown($event, assessment.id)">
           <div class="relative bg-gray-100"
-               :style="`height: ${$root.widgetSize}px`">
+               :style="`height: ${widgetSize}px`">
             <img :src="assessment.image_url"
                  alt="Assessment image"
                  class="w-full h-full object-contain"
@@ -312,8 +351,8 @@
                     <button @click="setVisitResult(visit.visit_id, 'pass')"
                             :disabled="loading || bulkProcessing"
                             :class="{
-                              'bg-green-600 text-white': visitResults[visit.visit_id] === 'pass' || (!visitResults[visit.visit_id] && visit.suggested_result === 'pass'),
-                              'bg-green-50 text-green-700 hover:bg-green-100 border border-green-300': visitResults[visit.visit_id] !== 'pass' && (visitResults[visit.visit_id] || visit.suggested_result !== 'pass')
+                              'bg-green-600 text-white': visitResults[visit.visit_id]?.result === 'pass' || (!visitResults[visit.visit_id]?.result && visit.suggested_result === 'pass'),
+                              'bg-green-50 text-green-700 hover:bg-green-100 border border-green-300': visitResults[visit.visit_id]?.result !== 'pass' && (visitResults[visit.visit_id]?.result || visit.suggested_result !== 'pass')
                             }"
                             class="px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50">
                       <i class="fa-solid fa-check mr-1"></i>Pass
@@ -321,8 +360,8 @@
                     <button @click="setVisitResult(visit.visit_id, 'fail')"
                             :disabled="loading || bulkProcessing"
                             :class="{
-                              'bg-red-600 text-white': visitResults[visit.visit_id] === 'fail' || (!visitResults[visit.visit_id] && visit.suggested_result === 'fail'),
-                              'bg-red-50 text-red-700 hover:bg-red-100 border border-red-300': visitResults[visit.visit_id] !== 'fail' && (visitResults[visit.visit_id] || visit.suggested_result !== 'fail')
+                              'bg-red-600 text-white': visitResults[visit.visit_id]?.result === 'fail' || (!visitResults[visit.visit_id]?.result && visit.suggested_result === 'fail'),
+                              'bg-red-50 text-red-700 hover:bg-red-100 border border-red-300': visitResults[visit.visit_id]?.result !== 'fail' && (visitResults[visit.visit_id]?.result || visit.suggested_result !== 'fail')
                             }"
                             class="px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50">
                       <i class="fa-solid fa-times mr-1"></i>Fail
@@ -347,68 +386,27 @@
       </h2>
 
       {% if session.status == 'completed' %}
-      <!-- Show completed status -->
       <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="flex items-center gap-2 mb-2">
-              <i class="fa-solid fa-check-circle text-green-600 text-xl"></i>
-              <h3 class="text-lg font-semibold text-green-800">Audit Completed</h3>
-            </div>
-            <p class="text-sm text-green-700">
-              Completed on {{ session.completed_at|date:"M d, Y \\a\\t H:i" }}
-            </p>
-            {% if session.overall_result %}
-            <div class="mt-2">
-              <span class="text-sm font-medium text-green-700">Overall Result: </span>
-              <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium
-                           {% if session.overall_result == 'pass' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
-                {{ session.overall_result|upper }}
-              </span>
-            </div>
-            {% endif %}
-            {% if session.notes %}
-            <div class="mt-3">
-              <p class="text-sm font-medium text-green-700 mb-1">Notes:</p>
-              <p class="text-sm text-gray-700 bg-white rounded p-2">{{ session.notes }}</p>
-            </div>
-            {% endif %}
-            {% if session.kpi_notes %}
-            <div class="mt-3">
-              <p class="text-sm font-medium text-green-700 mb-1">KPI Notes:</p>
-              <p class="text-sm text-gray-700 bg-white rounded p-2">{{ session.kpi_notes }}</p>
-            </div>
-            {% endif %}
-          </div>
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-check-circle text-green-600"></i>
+          <span class="text-sm text-green-700">
+            Completed on {{ session.completed_at|date:"M d, Y \\a\\t H:i" }}
+          </span>
         </div>
       </div>
+      {% endif %}
 
-      <!-- Reopen button -->
-      <button @click="uncompleteAudit()"
-              :disabled="submittingCompletion"
-              class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
-              :class="submittingCompletion ? 'opacity-50 cursor-not-allowed' : ''">
-        <i class="fa-solid fa-rotate-left"></i>
-        <span x-show="!submittingCompletion">Reopen Audit</span>
-        <span x-show="submittingCompletion" class="flex items-center gap-2">
-          <i class="fa-solid fa-spinner fa-spin"></i>
-          Reopening...
-        </span>
-      </button>
-
-      {% else %}
-      <!-- Completion form -->
       <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">
-            Overall Result <span class="text-red-500">*</span>
+            Overall Result
           </label>
           <div class="flex gap-4">
-            <label class="flex items-center">
+            <label class="flex items-center cursor-pointer">
               <input type="radio" x-model="overallResult" value="pass" class="mr-2">
               <span class="px-4 py-2 bg-green-100 text-green-800 rounded font-medium">PASS</span>
             </label>
-            <label class="flex items-center">
+            <label class="flex items-center cursor-pointer">
               <input type="radio" x-model="overallResult" value="fail" class="mr-2">
               <span class="px-4 py-2 bg-red-100 text-red-800 rounded font-medium">FAIL</span>
             </label>
@@ -435,23 +433,23 @@
                     rows="3"></textarea>
         </div>
 
-        <button @click="completeAudit()"
-                :disabled="!overallResult || submittingCompletion"
-                class="px-6 py-3 bg-brand-indigo hover:bg-brand-deep-purple text-white font-bold rounded-lg transition-colors flex items-center gap-2"
-                :class="(!overallResult || submittingCompletion) ? 'opacity-50 cursor-not-allowed' : ''">
-          <i class="fa-solid fa-check-circle"></i>
-          <span x-show="!submittingCompletion">Mark as Complete</span>
-          <span x-show="submittingCompletion" class="flex items-center gap-2">
-            <i class="fa-solid fa-spinner fa-spin"></i>
-            Completing...
+        <div class="flex items-center gap-3">
+          <button @click="completeAudit()"
+                  :disabled="submittingCompletion"
+                  class="px-6 py-3 bg-brand-indigo hover:bg-brand-deep-purple text-white font-bold rounded-lg transition-colors flex items-center gap-2"
+                  :class="submittingCompletion ? 'opacity-50 cursor-not-allowed' : ''">
+            <i class="fa-solid fa-save"></i>
+            <span x-show="!submittingCompletion">Save</span>
+            <span x-show="submittingCompletion" class="flex items-center gap-2">
+              <i class="fa-solid fa-spinner fa-spin"></i>
+              Saving...
+            </span>
+          </button>
+          <span x-show="hasUnsavedChanges" class="text-sm text-orange-600 font-medium">
+            <i class="fa-solid fa-exclamation-triangle mr-1"></i>Unsaved changes
           </span>
-        </button>
-
-        <p class="text-xs text-gray-500 italic">
-          Note: Once marked complete, you can still reopen the audit if needed.
-        </p>
+        </div>
       </div>
-      {% endif %}
     </div>
   </div>
 
@@ -540,8 +538,7 @@ function bulkAssessmentInterface() {
       pass: 0,
       fail: 0,
     },
-    assessmentUpdateUrl: '{% url "audit:audit_assessment_update" session.pk %}',
-    resultUpdateUrl: '{% url "audit:audit_result_update" session.pk %}',
+    saveUrl: '{% url "audit:audit_save" session.pk %}',
     applyResultsUrl: '{% url "audit:apply_assessment_results" session.pk %}',
     completeUrl: '{% url "audit:audit_complete" session.pk %}',
     uncompleteUrl: '{% url "audit:audit_uncomplete" session.pk %}',
@@ -552,13 +549,15 @@ function bulkAssessmentInterface() {
     loadError: null,
     controller: null,
     bulkProcessing: false,
+    hasUnsavedChanges: false,
+    saving: false,
     showApplyModal: false,
     showSuccessModal: false,
     applyingResults: false,
     applyResultMessage: '',
-    overallResult: '',
-    completionNotes: '',
-    kpiNotes: '',
+    overallResult: '{{ session.overall_result|default:"" }}',
+    completionNotes: '{{ session.notes|default:""|escapejs }}',
+    kpiNotes: '{{ session.kpi_notes|default:""|escapejs }}',
     submittingCompletion: false,
     allAssessments: [],
     assessments: [],
@@ -580,20 +579,13 @@ function bulkAssessmentInterface() {
       this.csrfToken = tokenInput ? tokenInput.value : '';
       this.updateUrlParams();
       this.fetchData();
-      window.addEventListener('assessment-updated', (event) => {
-        if (!event.detail || event.detail.assessmentId === undefined) {
-          return;
+
+      // Warn user about unsaved changes
+      window.addEventListener('beforeunload', (event) => {
+        if (this.hasUnsavedChanges) {
+          event.preventDefault();
+          event.returnValue = '';
         }
-        const normalized = event.detail.result || '';
-        const updateEntry = (item) => {
-          if (item) {
-            item.result = normalized;
-            item.status = normalized || 'pending';
-          }
-        };
-        updateEntry(this.allAssessments.find((a) => a.id === event.detail.assessmentId));
-        updateEntry(this.assessments.find((a) => a.id === event.detail.assessmentId));
-        this.recalculateStats();
       });
     },
     updateUrlParams() {
@@ -635,9 +627,6 @@ function bulkAssessmentInterface() {
         this.allAssessments = data.assessments || [];
         // Apply filters client-side
         this.applyFiltersClientSide();
-        console.log('[BULK DEBUG] Loaded assessments:', this.assessments.length);
-        console.log('[BULK DEBUG] First assessment:', this.assessments[0]);
-        console.log('[BULK DEBUG] Question IDs:', this.questionIds);
         this.recalculateStats();
         this.loading = false;
         this.controller = null;
@@ -740,42 +729,100 @@ function bulkAssessmentInterface() {
         fail: failCount,
       };
     },
-    async updateAssessmentEntry(assessmentId, visitId, blobId, questionId, resultValue, notesValue) {
-      const formData = new FormData();
-      formData.append('visit_id', visitId);
-      formData.append('blob_id', blobId);
-      formData.append('question_id', questionId || '');
-      formData.append('result', resultValue ?? '');
-      formData.append('notes', notesValue ?? '');
-      formData.append('csrfmiddlewaretoken', this.csrfToken);
-      const response = await fetch(this.assessmentUpdateUrl, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to update assessment');
+    updateAssessmentLocal(visitId, blobId, questionId, resultValue, notesValue) {
+      // Update local visitResults structure
+      const visitKey = String(visitId);
+      if (!this.visitResults[visitKey]) {
+        this.visitResults[visitKey] = { assessments: {} };
       }
-      const normalized = data.result || '';
-      const updateEntry = (entry) => {
-        if (entry) {
-          entry.result = normalized;
-          entry.notes = notesValue ?? entry.notes;
-          entry.status = normalized || 'pending';
-        }
-      };
-      updateEntry(this.allAssessments.find((a) => a.id === assessmentId));
-      updateEntry(this.assessments.find((a) => a.id === assessmentId));
+      if (!this.visitResults[visitKey].assessments) {
+        this.visitResults[visitKey].assessments = {};
+      }
+
+      if (resultValue || notesValue) {
+        this.visitResults[visitKey].assessments[blobId] = {
+          question_id: questionId || '',
+          result: resultValue || '',
+          notes: notesValue || '',
+        };
+      } else {
+        // Clear assessment if no result or notes
+        delete this.visitResults[visitKey].assessments[blobId];
+      }
+
+      // Update allAssessments array for UI display
+      const assessment = this.allAssessments.find((a) => a.visit_id === visitId && a.blob_id === blobId);
+      if (assessment) {
+        assessment.result = resultValue || '';
+        assessment.notes = notesValue || '';
+        assessment.status = resultValue || 'pending';
+      }
+
+      // Update filtered assessments array
+      const filteredAssessment = this.assessments.find((a) => a.visit_id === visitId && a.blob_id === blobId);
+      if (filteredAssessment) {
+        filteredAssessment.result = resultValue || '';
+        filteredAssessment.notes = notesValue || '';
+        filteredAssessment.status = resultValue || 'pending';
+      }
+
+      // Force reactivity by reassigning arrays (Alpine doesn't always detect mutations)
+      // Skip during bulk processing - we'll do it once at the end
+      if (!this.bulkProcessing) {
+        this.allAssessments = [...this.allAssessments];
+        this.assessments = [...this.assessments];
+        this.recalculateStats();
+      }
+      this.hasUnsavedChanges = true;
+
+      return resultValue || '';
+    },
+    handleAssessmentUpdate(detail) {
+      const normalized = this.updateAssessmentLocal(
+        detail.visitId,
+        detail.blobId,
+        detail.questionId,
+        detail.result,
+        detail.notes
+      );
+      if (detail.callback) {
+        detail.callback(normalized);
+      }
+    },
+    handleNotesUpdate(detail) {
+      this.updateAssessmentLocal(
+        detail.visitId,
+        detail.blobId,
+        detail.questionId,
+        detail.result,
+        detail.notes
+      );
+    },
+    passAllPending() {
+      if (this.loading || this.bulkProcessing) {
+        return;
+      }
+      const pendingAssessments = this.allAssessments.filter((a) => !a.result || a.result === '');
+      if (pendingAssessments.length === 0) {
+        return;
+      }
+      this.bulkProcessing = true;
+      for (const assessment of pendingAssessments) {
+        this.updateAssessmentLocal(
+          assessment.visit_id,
+          assessment.blob_id,
+          assessment.question_id,
+          'pass',
+          assessment.notes,
+        );
+      }
+      this.bulkProcessing = false;
+      // Trigger reactivity once after all updates
+      this.allAssessments = [...this.allAssessments];
+      this.assessments = [...this.assessments];
       this.recalculateStats();
-      window.dispatchEvent(new CustomEvent('assessment-updated', {
-        detail: {
-          assessmentId,
-          result: normalized,
-        },
-      }));
-      return normalized;
     },
-    async passAllPending() {
+    failAllPending() {
       if (this.loading || this.bulkProcessing) {
         return;
       }
@@ -783,67 +830,23 @@ function bulkAssessmentInterface() {
       if (pendingAssessments.length === 0) {
         return;
       }
-      if (!confirm(`Pass ${pendingAssessments.length} pending assessment(s)?`)) {
-        return;
-      }
       this.bulkProcessing = true;
       for (const assessment of pendingAssessments) {
-        try {
-          await this.updateAssessmentEntry(
-            assessment.id,
-            assessment.visit_id,
-            assessment.blob_id,
-            assessment.question_id,
-            'pass',
-            assessment.notes,
-          );
-          window.dispatchEvent(new CustomEvent('bulk-assessment-updated', {
-            detail: {
-              assessmentId: assessment.id,
-              result: 'pass',
-            },
-          }));
-        } catch (error) {
-          console.error('Error updating assessment:', error);
-        }
+        this.updateAssessmentLocal(
+          assessment.visit_id,
+          assessment.blob_id,
+          assessment.question_id,
+          'fail',
+          assessment.notes,
+        );
       }
       this.bulkProcessing = false;
+      // Trigger reactivity once after all updates
+      this.allAssessments = [...this.allAssessments];
+      this.assessments = [...this.assessments];
+      this.recalculateStats();
     },
-    async failAllPending() {
-      if (this.loading || this.bulkProcessing) {
-        return;
-      }
-      const pendingAssessments = this.allAssessments.filter((a) => !a.result || a.result === '');
-      if (pendingAssessments.length === 0) {
-        return;
-      }
-      if (!confirm(`Fail ${pendingAssessments.length} pending assessment(s)?`)) {
-        return;
-      }
-      this.bulkProcessing = true;
-      for (const assessment of pendingAssessments) {
-        try {
-          await this.updateAssessmentEntry(
-            assessment.id,
-            assessment.visit_id,
-            assessment.blob_id,
-            assessment.question_id,
-            'fail',
-            assessment.notes,
-          );
-          window.dispatchEvent(new CustomEvent('bulk-assessment-updated', {
-            detail: {
-              assessmentId: assessment.id,
-              result: 'fail',
-            },
-          }));
-        } catch (error) {
-          console.error('Error updating assessment:', error);
-        }
-      }
-      this.bulkProcessing = false;
-    },
-    async clearAllAssessments() {
+    clearAllAssessments() {
       if (this.loading || this.bulkProcessing) {
         return;
       }
@@ -851,61 +854,43 @@ function bulkAssessmentInterface() {
       if (assessedAssessments.length === 0) {
         return;
       }
-      if (!confirm(`Clear all ${assessedAssessments.length} assessment result(s)? This will reset them to pending.`)) {
-        return;
-      }
       this.bulkProcessing = true;
       for (const assessment of assessedAssessments) {
-        try {
-          await this.updateAssessmentEntry(
-            assessment.id,
-            assessment.visit_id,
-            assessment.blob_id,
-            assessment.question_id,
-            '',
-            assessment.notes,
-          );
-          window.dispatchEvent(new CustomEvent('bulk-assessment-updated', {
-            detail: {
-              assessmentId: assessment.id,
-              result: '',
-            },
-          }));
-        } catch (error) {
-          console.error('Error clearing assessment:', error);
-        }
+        this.updateAssessmentLocal(
+          assessment.visit_id,
+          assessment.blob_id,
+          assessment.question_id,
+          '',
+          assessment.notes,
+        );
       }
       this.bulkProcessing = false;
+      // Trigger reactivity once after all updates
+      this.allAssessments = [...this.allAssessments];
+      this.assessments = [...this.assessments];
+      this.recalculateStats();
     },
-    async setVisitResult(visitId, result) {
+    setVisitResult(visitId, result) {
       if (this.loading) {
         return;
       }
-      try {
-        const currentResult = this.visitResults[visitId];
-        const newResult = currentResult === result ? '' : result;
-        const formData = new FormData();
-        formData.append('visit_id', visitId);
-        formData.append('result', newResult || '');
-        formData.append('auto_advance', 'false');
-        formData.append('current_index', '0');
-        formData.append('csrfmiddlewaretoken', this.csrfToken);
-        const response = await fetch(this.resultUpdateUrl, {
-          method: 'POST',
-          body: formData,
-        });
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Failed to update visit result');
-        }
-        if (newResult) {
-          this.visitResults[visitId] = newResult;
-        } else {
-          delete this.visitResults[visitId];
-        }
-      } catch (error) {
-        alert('Error updating visit result: ' + error.message);
+      const visitKey = String(visitId);
+      const currentResult = this.visitResults[visitKey]?.result;
+      const newResult = currentResult === result ? '' : result;
+
+      if (!this.visitResults[visitKey]) {
+        this.visitResults[visitKey] = { assessments: {} };
       }
+
+      if (newResult) {
+        this.visitResults[visitKey].result = newResult;
+      } else {
+        delete this.visitResults[visitKey].result;
+      }
+
+      // Force reactivity for visit results
+      this.visitResults = { ...this.visitResults };
+      this.hasUnsavedChanges = true;
     },
     async applyResults() {
       if (this.loading) {
@@ -933,11 +918,36 @@ function bulkAssessmentInterface() {
         this.applyingResults = false;
       }
     },
+    async saveAudit() {
+      if (this.saving) return;
+      this.saving = true;
+      try {
+        const formData = new FormData();
+        formData.append('visit_results', JSON.stringify(this.visitResults));
+        formData.append('csrfmiddlewaretoken', this.csrfToken);
+        const response = await fetch(this.saveUrl, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Failed to save audit');
+        }
+        this.hasUnsavedChanges = false;
+        alert('Progress saved successfully!');
+      } catch (error) {
+        alert('Error saving audit: ' + error.message);
+        throw error;
+      } finally {
+        this.saving = false;
+      }
+    },
     async completeAudit() {
       if (!this.overallResult || this.submittingCompletion) return;
       this.submittingCompletion = true;
       try {
         const formData = new FormData();
+        formData.append('visit_results', JSON.stringify(this.visitResults));
         formData.append('overall_result', this.overallResult);
         formData.append('notes', this.completionNotes);
         formData.append('kpi_notes', this.kpiNotes);
@@ -950,6 +960,7 @@ function bulkAssessmentInterface() {
         if (!response.ok || !data.success) {
           throw new Error(data.error || 'Failed to complete audit');
         }
+        this.hasUnsavedChanges = false;
         window.location.reload();
       } catch (error) {
         alert('Error completing audit: ' + error.message);
@@ -979,66 +990,6 @@ function bulkAssessmentInterface() {
         alert('Error reopening audit: ' + error.message);
       } finally {
         this.submittingCompletion = false;
-      }
-    },
-  };
-}
-function assessmentWidget(assessmentId, initialResult, initialNotes, visitId, blobId, questionId) {
-  return {
-    assessmentId,
-    visitId,
-    blobId,
-    questionId,
-    result: initialResult,
-    notes: initialNotes,
-    saving: false,
-    async updateResult(newResult) {
-      if (this.saving) return;
-      this.saving = true;
-      const oldResult = this.result;
-      try {
-        const normalized = await this.$root.updateAssessmentEntry(
-          this.assessmentId,
-          this.visitId,
-          this.blobId,
-          this.questionId,
-          newResult,
-          this.notes,
-        );
-        this.result = normalized;
-      } catch (error) {
-        alert('Error updating assessment: ' + error.message);
-        this.result = oldResult;
-      } finally {
-        this.saving = false;
-      }
-    },
-    async saveNotes() {
-      if (this.saving) return;
-      this.saving = true;
-      try {
-        await this.$root.updateAssessmentEntry(
-          this.assessmentId,
-          this.visitId,
-          this.blobId,
-          this.questionId,
-          this.result,
-          this.notes,
-        );
-      } catch (error) {
-        alert('Error saving notes: ' + error.message);
-      } finally {
-        this.saving = false;
-      }
-    },
-    handleKeydown(event, currentId) {
-      if (this.assessmentId !== currentId || event.target.tagName === 'TEXTAREA') return;
-      if (event.key === 'p' || event.key === 'P') {
-        event.preventDefault();
-        this.updateResult('pass');
-      } else if (event.key === 'f' || event.key === 'F') {
-        event.preventDefault();
-        this.updateResult('fail');
       }
     },
   };

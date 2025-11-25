@@ -255,7 +255,15 @@ class LabsContextMiddleware(MiddlewareMixin):
         if session_context and not url_context and request.method == "GET":
             # Check if this is a labs whitelisted path (not login/logout)
             path = request.path
-            whitelisted_prefixes = ["/audit/", "/tasks/", "/solicitations/", "/ai/", "/labs/explorer/", "/coverage/"]
+            whitelisted_prefixes = [
+                "/audit/",
+                "/tasks/",
+                "/solicitations/",
+                "/ai/",
+                "/labs/explorer/",
+                "/coverage/",
+                "/custom_analysis/",
+            ]
             is_whitelisted = any(path.startswith(prefix) for prefix in whitelisted_prefixes)
 
             if is_whitelisted:

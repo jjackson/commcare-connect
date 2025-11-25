@@ -1,5 +1,5 @@
 """
-Token Manager for OAuth CLI tokens.
+Token Manager for CommCare Connect OAuth CLI tokens.
 
 Handles secure storage, loading, and validation of OAuth tokens for CLI usage.
 """
@@ -187,7 +187,7 @@ def get_or_refresh_token(
     Returns:
         Valid access token or None if failed
     """
-    from commcare_connect.labs.oauth_cli.client import get_oauth_token
+    from commcare_connect.labs.integrations.connect.cli.client import get_oauth_token
 
     manager = TokenManager(token_file)
 
