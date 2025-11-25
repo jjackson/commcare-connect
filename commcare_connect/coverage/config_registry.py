@@ -35,7 +35,6 @@ def register_config(name: str, config: AnalysisConfig) -> None:
     if name in _CONFIG_REGISTRY:
         logger.warning(f"Overwriting existing config registration: {name}")
     _CONFIG_REGISTRY[name] = config
-    logger.info(f"Registered analysis config: {name}")
 
 
 def get_config(name: str) -> AnalysisConfig | None:

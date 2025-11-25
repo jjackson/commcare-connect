@@ -6,7 +6,6 @@ Provides one-row-per-FLW analysis with aggregated visit computations.
 
 import logging
 from collections import defaultdict
-from datetime import date
 from typing import Any
 
 from django.http import HttpRequest
@@ -466,5 +465,22 @@ def compute_flw_analysis(request: HttpRequest, config: AnalysisConfig, use_cache
         visit_count = flw_result.metadata.get("total_visits", 0)
         cache_manager.set_results_cache(visit_count, flw_result)
         logger.info(f"Cached FLW results for opp {opportunity_id}")
+
+        # Sync labs_context with actual visit count to prevent future cache misses
+        if hasattr(request, "labs_context") and request.labs_context.get("opportunity"):
+            old_count = request.labs_context["opportunity"].get("visit_count", 0)
+            if old_count != visit_count:
+                logger.info(
+                    f"[FLW Analysis] Syncing labs_context visit count: "
+                    f"{old_count} -> {visit_count} (opp {opportunity_id})"
+                )
+                request.labs_context["opportunity"]["visit_count"] = visit_count
+
+                # Also update session so it persists across requests
+                if hasattr(request, "session") and "labs_context" in request.session:
+                    session_context = request.session["labs_context"]
+                    if "opportunity" in session_context and isinstance(session_context["opportunity"], dict):
+                        session_context["opportunity"]["visit_count"] = visit_count
+                        request.session.modified = True
 
     return flw_result

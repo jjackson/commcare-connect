@@ -328,6 +328,9 @@ commcare_connect/audit/tests/test_connect_staging_api.py
 # Analysis cache (local development)
 .analysis_cache/
 
+# Coverage examples (local development data)
+commcare_connect/coverage/examples/
+
 # Elastic Beanstalk Files
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
