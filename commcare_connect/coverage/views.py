@@ -546,7 +546,7 @@ class CoverageMapView(BaseCoverageMapView):
             context["flw_list_colored"] = [
                 {
                     "id": flw_id,
-                    "name": flw_display_names.get(flw_id, flw.name),
+                    "name": f"{flw_display_names.get(flw_id, flw_id)} ({flw_id})",
                     "visits": flw.total_visits,
                     "color": flw_colors.get(flw_id, "#999999"),
                 }
