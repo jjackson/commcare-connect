@@ -176,89 +176,6 @@ class HistogramComputation:
 
 
 @dataclass
-class MapFilter:
-    """
-    Configuration for a map filter that can be toggled in the UI.
-
-    Defines how to extract a value from form JSON and determine if it matches a condition.
-    Creates tri-state filter in UI: show matching / show non-matching / show all.
-
-    Examples:
-        # Boolean filter for SAM cases
-        MapFilter(
-            name="has_sam",
-            label="SAM Cases (MUAC < 11.5cm)",
-            filter_type="boolean",
-            path="form.case.update.soliciter_muac_cm",
-            condition=lambda x: float(x) < 11.5 if (x and str(x).replace(".", "").isdigit()) else False,
-            description="Severe Acute Malnutrition cases"
-        )
-
-        # Categorical filter for MUAC colors
-        MapFilter(
-            name="muac_color",
-            label="MUAC Color",
-            filter_type="categorical",
-            path="form.case.update.muac_colour",
-            categories=["red", "yellow", "green"],
-            description="Filter by MUAC band color"
-        )
-
-        # Numeric range filter for child age
-        MapFilter(
-            name="child_age",
-            label="Child Age (months)",
-            filter_type="numeric_range",
-            path="form.additional_case_info.childs_age_in_month",
-            min_value=0,
-            max_value=60,
-            transform=lambda x: int(x) if x and str(x).isdigit() else None,
-            description="Filter by child age range"
-        )
-    """
-
-    name: str  # Internal ID (e.g., "has_sam")
-    label: str  # Display label (e.g., "SAM Cases (MUAC < 11.5cm)")
-    filter_type: Literal["boolean", "categorical", "numeric_range"]
-    path: str  # JSON path to extract value from form_json
-
-    # Optional transform applied before condition check
-    transform: Callable[[Any], Any] | None = None
-
-    # For boolean filters: function that returns True/False
-    condition: Callable[[Any], bool] | None = None
-
-    # For categorical filters: list of valid categories
-    categories: list[str] | None = None
-
-    # For numeric_range filters: min and max bounds
-    min_value: float | None = None
-    max_value: float | None = None
-
-    description: str = ""
-
-    def __post_init__(self):
-        """Validate configuration."""
-        if not self.name:
-            raise ValueError("Filter name is required")
-        if not self.label:
-            raise ValueError("Filter label is required")
-        if not self.path:
-            raise ValueError("Filter path is required")
-
-        # Validate type-specific requirements
-        if self.filter_type == "boolean" and not self.condition:
-            raise ValueError("Boolean filters require a condition function")
-        if self.filter_type == "categorical" and not self.categories:
-            raise ValueError("Categorical filters require a categories list")
-        if self.filter_type == "numeric_range":
-            if self.min_value is None or self.max_value is None:
-                raise ValueError("Numeric range filters require min_value and max_value")
-            if self.min_value >= self.max_value:
-                raise ValueError("min_value must be less than max_value")
-
-
-@dataclass
 class AnalysisConfig:
     """
     Configuration for an analysis computation.
@@ -307,7 +224,6 @@ class AnalysisConfig:
     histograms: list[HistogramComputation] = field(default_factory=list)
     filters: dict[str, Any] = field(default_factory=dict)
     date_field: str = "visit_date"
-    map_filters: list[MapFilter] = field(default_factory=list)
 
     def __post_init__(self):
         """Validate configuration."""

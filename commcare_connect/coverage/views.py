@@ -558,21 +558,8 @@ class CoverageMapView(BaseCoverageMapView):
             )
 
             # Build colored service points (using already-fetched result)
-            # Fetch UserVisits for filter computation (if map_filters are defined)
-            visits_by_id = {}
-            if config.map_filters:
-                from commcare_connect.labs.analysis.base import AnalysisDataAccess
-
-                data_access = AnalysisDataAccess(self.request)
-                user_visits = data_access.fetch_user_visits()
-                visits_by_id = {visit.id: visit for visit in user_visits}
-                logger.info(f"[Coverage Map] Fetched {len(visits_by_id)} UserVisits for filter computation")
-                logger.info(f"[Coverage Map] Map filters defined: {[f.name for f in config.map_filters]}")
-                logger.info(f"[Coverage Map] Sample visit IDs from visits_by_id: {list(visits_by_id.keys())[:5]}")
-                logger.info(f"[Coverage Map] Sample visit IDs from result.rows: {[r.id for r in result.rows[:5]]}")
-
             context["service_points_geojson"] = self.build_colored_points_geojson(
-                result.rows, coverage.flws, flw_colors, config.map_filters, visits_by_id
+                result.rows, coverage.flws, flw_colors
             )
 
             # Build FLW list with colors for UI
@@ -597,17 +584,6 @@ class CoverageMapView(BaseCoverageMapView):
             logger.info(f"[Coverage Map2] Found {len(service_area_list)} service areas: {service_area_list}")
             context["service_area_list"] = service_area_list
             context["service_points_count"] = len(result.rows)
-
-            # Serialize map filter definitions for template
-            context["map_filter_definitions"] = [
-                {
-                    "name": f.name,
-                    "label": f.label,
-                    "filter_type": f.filter_type,
-                    "description": f.description,
-                }
-                for f in config.map_filters
-            ]
 
         return context
 
@@ -648,110 +624,9 @@ class CoverageMapView(BaseCoverageMapView):
 
         return json.dumps({"type": "FeatureCollection", "features": features})
 
-    def compute_filter_values(self, visit, map_filters: list) -> dict:
-        """
-        Compute filter values for a visit based on MapFilter configurations.
-
-        Args:
-            visit: LocalUserVisit object with form_json property
-            map_filters: List of MapFilter configurations
-
-        Returns:
-            Dictionary of filter_name -> boolean value
-        """
-        filter_values = {}
-
-        # Get form_json from visit (LocalUserVisit has form_json property)
-        try:
-            form_json = visit.form_json if hasattr(visit, "form_json") else {}
-        except Exception as e:
-            logger.warning(f"Failed to get form_json from visit {visit.id}: {e}")
-            form_json = {}
-
-        for map_filter in map_filters:
-            try:
-                # Extract value using path (similar to FieldComputation)
-                path_parts = map_filter.path.split(".")
-                value = form_json
-
-                for part in path_parts:
-                    if isinstance(value, dict):
-                        value = value.get(part)
-                    else:
-                        value = None
-                        break
-
-                # Log the extracted value for debugging
-                if value is not None:
-                    logger.debug(f"Filter {map_filter.name}: extracted value = {value} from path {map_filter.path}")
-
-                # Apply transform if present
-                if map_filter.transform and value is not None:
-                    try:
-                        value = map_filter.transform(value)
-                        logger.debug(f"Filter {map_filter.name}: transformed value = {value}")
-                    except Exception as e:
-                        logger.warning(f"Transform failed for filter {map_filter.name}: {e}")
-                        value = None
-
-                # Evaluate condition based on filter type
-                if map_filter.filter_type == "boolean":
-                    if map_filter.condition:
-                        try:
-                            result = bool(map_filter.condition(value))
-                            filter_values[map_filter.name] = result
-                            if result:
-                                logger.info(
-                                    f"Filter {map_filter.name}: MATCHED for visit {visit.id} with value {value}"
-                                )
-                        except Exception as e:
-                            logger.warning(f"Condition failed for filter {map_filter.name} on value {value}: {e}")
-                            filter_values[map_filter.name] = False
-                    else:
-                        filter_values[map_filter.name] = False
-
-                elif map_filter.filter_type == "categorical":
-                    # Store the actual category value
-                    filter_values[map_filter.name] = str(value) if value else None
-
-                elif map_filter.filter_type == "numeric_range":
-                    # Store the numeric value (UI will handle range filtering)
-                    try:
-                        filter_values[map_filter.name] = float(value) if value is not None else None
-                    except (ValueError, TypeError):
-                        filter_values[map_filter.name] = None
-
-            except Exception as e:
-                logger.warning(f"Failed to compute filter {map_filter.name} for visit {visit.id}: {e}", exc_info=True)
-                filter_values[map_filter.name] = False if map_filter.filter_type == "boolean" else None
-
-        return filter_values
-
-    def build_colored_points_geojson(
-        self,
-        visit_rows: list[VisitRow],
-        flws: dict,
-        flw_colors: dict,
-        map_filters: list = None,
-        visits_by_id: dict = None,
-    ) -> str:
-        """
-        Build service points GeoJSON with FLW colors and computed filter values.
-
-        Args:
-            visit_rows: List of VisitRow objects with computed fields
-            flws: Dictionary of FLW data
-            flw_colors: Dictionary mapping FLW usernames to colors
-            map_filters: List of MapFilter configurations
-            visits_by_id: Dictionary of visit_id -> UserVisit object for accessing form_json
-        """
+    def build_colored_points_geojson(self, visit_rows: list[VisitRow], flws: dict, flw_colors: dict) -> str:
+        """Build service points GeoJSON with FLW colors"""
         features = []
-        map_filters = map_filters or []
-
-        # Track filter statistics
-        filter_stats = {f.name: 0 for f in map_filters}
-        visits_processed = 0
-        visits_with_filters = 0
 
         for visit in visit_rows:
             try:
@@ -765,22 +640,6 @@ class CoverageMapView(BaseCoverageMapView):
                 props["color"] = flw_color
                 props["username"] = visit.username  # Use username consistently for filtering
 
-                # Compute filter values if filters are defined
-                if map_filters and visits_by_id:
-                    visits_processed += 1
-                    user_visit = visits_by_id.get(visit.id)
-                    if user_visit:
-                        filter_values = self.compute_filter_values(user_visit, map_filters)
-                        props.update(filter_values)
-                        visits_with_filters += 1
-
-                        # Track filter matches
-                        for filter_name, filter_value in filter_values.items():
-                            if filter_value is True:
-                                filter_stats[filter_name] += 1
-                    else:
-                        logger.warning(f"Visit {visit.id} not found in visits_by_id dictionary")
-
                 features.append(
                     {
                         "type": "Feature",
@@ -791,14 +650,6 @@ class CoverageMapView(BaseCoverageMapView):
             except Exception as e:
                 logger.warning(f"Failed to process visit {visit.id}: {e}")
                 continue
-
-        # Log filter statistics
-        if map_filters:
-            logger.info("[Coverage Map] Filter Statistics:")
-            logger.info(f"  Total visits processed: {visits_processed}")
-            logger.info(f"  Visits with filters computed: {visits_with_filters}")
-            for filter_name, count in filter_stats.items():
-                logger.info(f"  {filter_name}: {count} matches")
 
         return json.dumps({"type": "FeatureCollection", "features": features})
 
@@ -884,6 +735,16 @@ class CoverageMapDataView(LoginRequiredMixin, View):
     def get(self, request):
         """Return coverage map data as JSON for progressive loading."""
         try:
+            # Log request details to debug duplicate calls
+            call_id = request.GET.get("call_id", "unknown")
+            config_param = request.GET.get("config", "MISSING")
+            opp_id = request.GET.get("opportunity_id", "MISSING")
+            logger.info(
+                f"[Coverage Map Data API] Request received - Call ID: {call_id}, "
+                f"opp_id: {opp_id}, config: {config_param}, "
+                f"Full query string: {request.META.get('QUERY_STRING', 'NONE')}"
+            )
+
             # Check if user has CommCare OAuth
             from django.utils import timezone
 
@@ -939,47 +800,15 @@ class CoverageMapDataView(LoginRequiredMixin, View):
             # Generate FLW colors
             flw_colors = generate_flw_colors(coverage.flws)
 
-            # Build du_lookup for mapping
-            du_lookup = {}
-            for du in coverage.delivery_units.values():
-                du_info = {"service_area_id": du.service_area_id}
-                du_lookup[du.du_name] = du_info
-                du_lookup[du.id] = du_info
-                try:
-                    du_lookup[int(du.id)] = du_info
-                except (ValueError, TypeError):
-                    pass
-
-            # Get visit data for CommCare ID mapping
-            from commcare_connect.coverage.analysis import get_coverage_visit_analysis
-
-            use_cache = request.GET.get("refresh") != "1"
-            result = get_coverage_visit_analysis(
-                request=request, config=config, du_lookup=du_lookup, use_cache=use_cache
-            )
-
-            # Build mapping: commcare_userid → username
+            # Build mapping: commcare_userid → username from already-fetched visit_rows
             commcare_to_username = {}
-            for visit in result.rows:
+            for visit in visit_rows:
                 if visit.commcare_userid and visit.username:
                     commcare_to_username[visit.commcare_userid] = visit.username
 
             # Build GeoJSON data
             delivery_units_geojson = map_view.build_colored_du_geojson(coverage, flw_colors, commcare_to_username)
-
-            # Fetch UserVisits for filter computation (if map_filters are defined)
-            visits_by_id = {}
-            if config.map_filters:
-                from commcare_connect.labs.analysis.base import AnalysisDataAccess
-
-                data_access = AnalysisDataAccess(request)
-                user_visits = data_access.fetch_user_visits()
-                visits_by_id = {visit.id: visit for visit in user_visits}
-                logger.info(f"[Coverage Map Data API] Fetched {len(visits_by_id)} UserVisits for filter computation")
-
-            service_points_geojson = map_view.build_colored_points_geojson(
-                result.rows, coverage.flws, flw_colors, config.map_filters, visits_by_id
-            )
+            service_points_geojson = map_view.build_colored_points_geojson(visit_rows, coverage.flws, flw_colors)
 
             # Get FLW display names
             from commcare_connect.labs.analysis.base import get_flw_names_for_opportunity
@@ -997,17 +826,6 @@ class CoverageMapDataView(LoginRequiredMixin, View):
                 for flw_id, flw in coverage.flws.items()
             ]
 
-            # Serialize map filter definitions
-            map_filter_definitions = [
-                {
-                    "name": f.name,
-                    "label": f.label,
-                    "filter_type": f.filter_type,
-                    "description": f.description,
-                }
-                for f in config.map_filters
-            ]
-
             # Prepare response data
             response_data = {
                 "success": True,
@@ -1015,14 +833,13 @@ class CoverageMapDataView(LoginRequiredMixin, View):
                 "service_points_geojson": service_points_geojson,
                 "flw_list_colored": flw_list_colored,
                 "service_area_list": sorted(list(coverage.service_areas.keys())),
-                "service_points_count": len(result.rows),
+                "service_points_count": len(visit_rows),
                 "computed_field_metadata": field_metadata,
-                "map_filter_definitions": map_filter_definitions,
             }
 
             logger.info(
-                f"[Coverage Map Data API] Step 5/5: Complete! Returning "
-                f"{len(coverage.delivery_units)} DUs, {len(result.rows)} visits"
+                f"[Coverage Map Data API] Step 5/5: Complete! "
+                f"Returning {len(coverage.delivery_units)} DUs, {len(visit_rows)} visits"
             )
             return JsonResponse(response_data)
 

@@ -4,7 +4,7 @@
 {% block title %}Coverage Map{% endblock %}
 
 {% block content %}
-<div class="container mx-auto p-6" x-data="coverageMap()" x-init="init()">
+<div class="container mx-auto p-6" x-data="coverageMap()">
   <h1 class="text-3xl font-bold mb-6">Coverage Map</h1>
 
   {% if error %}
@@ -186,25 +186,6 @@
         </template>
       </div>
     </div>
-
-    <!-- Custom Data Filters Section -->
-    <div class="border-t border-gray-200 pt-4 mt-4" x-show="mapFilterDefinitions.length > 0">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">Data Filters</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <template x-for="filter in mapFilterDefinitions" :key="filter.name">
-          <div class="flex flex-col">
-            <label class="text-xs font-medium text-gray-600 mb-1" x-text="filter.label" :title="filter.description"></label>
-            <select x-model="filterStates[filter.name]"
-                    @change="applyFilters()"
-                    class="text-sm border-gray-300 rounded">
-              <option value="all">Show All</option>
-              <option value="true">Only Matching</option>
-              <option value="false">Only Non-Matching</option>
-            </select>
-          </div>
-        </template>
-      </div>
-    </div>
   </div>
 
   <!-- Map Container -->
@@ -254,19 +235,24 @@ function coverageMap() {
     flwListColored: [],
     serviceAreaList: [],
     servicePointsCount: 0,
-    mapFilterDefinitions: [],
-    filterStates: {},
 
     // API endpoint
     mapDataUrl: '{{ map_data_url }}',
 
     // Initialize
     init() {
+      console.log(`[Coverage Map] init() called at ${new Date().toISOString()}`);
+      console.log(`[Coverage Map] window.location.search = ${window.location.search}`);
+      console.log(`[Coverage Map] mapDataUrl = ${this.mapDataUrl}`);
+      console.trace('[Coverage Map] init() stack trace');
       this.loadMapData();
     },
 
     // Load map data asynchronously
     async loadMapData() {
+      const callId = Math.random().toString(36).substr(2, 9);
+      console.log(`[Coverage Map] loadMapData() called - ID: ${callId}`);
+
       this.loading = true;
       this.loadError = null;
       this.loadingStep = 0;
@@ -283,7 +269,8 @@ function coverageMap() {
         // Step 3: The actual long API call (fetching from Connect)
         // This is where most time is spent - the UI will show step 3 during this
         this.loadingStep = 3;
-        const response = await fetch(this.mapDataUrl + window.location.search);
+        console.log(`[Coverage Map] Starting API fetch - ID: ${callId}`);
+        const response = await fetch(this.mapDataUrl + window.location.search + `&call_id=${callId}`);
 
         if (!response.ok) {
           const errorData = await response.json();
@@ -302,16 +289,9 @@ function coverageMap() {
         this.flwListColored = data.flw_list_colored || [];
         this.serviceAreaList = data.service_area_list || [];
         this.servicePointsCount = data.service_points_count || 0;
-        this.mapFilterDefinitions = data.map_filter_definitions || [];
 
         // Initialize selected FLWs (all selected by default)
         this.selectedFLWs = this.flwListColored.map(flw => flw.id);
-
-        // Initialize filter states (all set to 'all' by default)
-        this.filterStates = {};
-        this.mapFilterDefinitions.forEach(filter => {
-          this.filterStates[filter.name] = 'all';
-        });
 
         // Step 5: Initialize map and complete
         this.loadingStep = 5;
@@ -505,20 +485,7 @@ function coverageMap() {
         const matchesFLW = selectedFLWsSet.has(props.username);
         const matchesSA = !this.selectedServiceArea || props.service_area_id === this.selectedServiceArea;
 
-        // Check custom map filters
-        let matchesFilters = true;
-        for (const [filterName, filterState] of Object.entries(this.filterStates)) {
-          if (filterState !== 'all') {
-            const visitValue = props[filterName];
-            const expectedValue = (filterState === 'true');
-            if (visitValue !== expectedValue) {
-              matchesFilters = false;
-              break;
-            }
-          }
-        }
-
-        if (matchesFLW && matchesSA && matchesFilters) {
+        if (matchesFLW && matchesSA) {
           marker.addTo(this.pointLayerGroup);
         }
       });
