@@ -517,7 +517,7 @@ def get_flw_names_for_opportunity(request: HttpRequest) -> dict[str, str]:
                 logger.warning(f"File cache read failed for {cache_key}: {e}")
 
     # Fetch from API
-    url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/users/"
+    url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_data/"
     logger.info(f"Fetching FLW names from {url}")
 
     try:
