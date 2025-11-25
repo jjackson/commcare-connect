@@ -1358,6 +1358,20 @@ class PaymentInvoiceForm(forms.ModelForm):
                             css_id="invoice-line-items-wrapper",
                             css_class="space-y-1 text-sm text-gray-500 mb-4",
                         ),
+                        HTML(
+                            """
+                            <div id="download-line-items-wrapper" x-cloak x-show="showDownloadButton" class="my-4">
+                                <a type="button"
+                                   class="button button-md outline-style"
+                                   :href="downloadLineItemsUrl"
+                                   target="_blank"
+                                >
+                                    <i class="fa-solid fa-download mr-2"></i>
+                                    {% load i18n %}{% translate "Download Line Items CSV" %}
+                                </a>
+                            </div>
+                            """
+                        ),
                     ),
                     Fieldset(
                         "Service Delivery Notes",

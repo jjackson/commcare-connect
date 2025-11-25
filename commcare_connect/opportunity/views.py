@@ -1,3 +1,4 @@
+import csv
 import datetime
 import json
 import sys
@@ -5,6 +6,7 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from http import HTTPStatus
+from io import BytesIO, StringIO
 from urllib.parse import urlencode, urlparse
 
 from celery.result import AsyncResult
@@ -2615,6 +2617,55 @@ def invoice_items(request, *args, **kwargs):
             "total_usd_amount": total_usd_amount,
         }
     )
+
+
+@require_GET
+@org_member_required
+@opportunity_required
+def download_invoice_line_items_preview(request, org_slug, opp_id):
+    start_date_str = request.GET.get("start_date", None)
+    end_date_str = request.GET.get("end_date", None)
+
+    if not start_date_str or not end_date_str:
+        return HttpResponseBadRequest("Start date and end date are required.")
+
+    start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
+    end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
+
+    line_items = get_uninvoiced_visit_items(request.opportunity, start_date, end_date)
+
+    output = StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow(
+        [
+            _("Month"),
+            _("Payment Unit"),
+            _("Number Approved"),
+            _("Payment Unit Amount (local)"),
+            _("Total Amount (local)"),
+            _("Exchange Rate"),
+            _("Total Amount (USD)"),
+        ]
+    )
+
+    for item in line_items:
+        writer.writerow(
+            [
+                item["month"].strftime("%B %Y"),
+                item["payment_unit_name"],
+                item["number_approved"],
+                item["amount_per_unit"],
+                item["total_amount_local"],
+                item["exchange_rate"],
+                item["total_amount_usd"],
+            ]
+        )
+
+    buffer = BytesIO(output.getvalue().encode("utf-8"))
+
+    filename = f"invoice_preview_line_items_{start_date}_{end_date}.csv"
+    return FileResponse(buffer, as_attachment=True, filename=filename, content_type="text/csv")
 
 
 @login_required

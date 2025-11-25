@@ -195,12 +195,12 @@ class TestUninvoicedVisitItems:
             assert item["exchange_rate"] == expected_exchange_rate
             assert item["total_amount_usd"] == round(total_local_amount / expected_exchange_rate, 2)
 
-    def _create_completed_work(self, opp_access, date_created, payment_unit, n=1):
+    def _create_completed_work(self, opp_access, status_modified_date, payment_unit, n=1):
         for _ in range(n):
             cw = CompletedWorkFactory(
                 status=CompletedWorkStatus.approved,
                 opportunity_access=opp_access,
                 payment_unit=payment_unit,
             )
-            cw.date_created = date_created
+            cw.status_modified_date = status_modified_date
             cw.save()
