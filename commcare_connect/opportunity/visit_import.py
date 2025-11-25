@@ -78,13 +78,13 @@ class VisitImportStatus:
     def get_missing_message(self):
         return self._create_message(
             self.missing_visits,
-            "<br>{} visits were not found:<br>{}",
+            "{} visits were not found:<br>{}",
         )
 
     def get_locked_message(self):
         return self._create_message(
             self.locked_visits,
-            "<br>{} visits could not be updated as they have already been marked as accepted:<br>{}",
+            "{} visits could not be updated as they have already been marked as accepted:<br>{}",
         )
 
     def _create_message(self, visits, message):
