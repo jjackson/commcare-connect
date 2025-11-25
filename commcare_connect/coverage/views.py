@@ -538,10 +538,15 @@ class CoverageMapView(BaseCoverageMapView):
 
             # Build FLW list with colors for UI
             # FLWs are now properly merged during loading, so we just need to format them
+            # Get display names for FLWs
+            from commcare_connect.coverage.utils import get_flw_names_for_opportunity
+
+            flw_display_names = get_flw_names_for_opportunity(self.opportunity.id)
+
             context["flw_list_colored"] = [
                 {
                     "id": flw_id,
-                    "name": flw.name,
+                    "name": flw_display_names.get(flw_id, flw.name),
                     "visits": flw.total_visits,
                     "color": flw_colors.get(flw_id, "#999999"),
                 }
