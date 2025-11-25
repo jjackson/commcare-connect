@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Coverage Map - {{ coverage.opportunity_name|default:"Connect Labs" }}</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        #map {
+            width: 100%;
+            height: 92vh;
+        }
+        #control-panel {
+            background: white;
+            padding: 10px;
+            height: auto;
+            min-height: 8vh;
+            max-height: 25vh;
+            display: flex;
+            flex-wrap: wrap;
+            border-bottom: 1px solid #ccc;
+            overflow-y: auto;
+        }
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .control-section {
+            margin-right: 15px;
+            margin-bottom: 10px;
+            min-width: 200px;
+            flex: 1;
+        }
+        .section-title {
+            margin-top: 0;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .flw-toggle {
+            display: inline-block;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            cursor: pointer;
+            padding: 2px 5px;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+            background: #f9f9f9;
+            font-size: 12px;
+        }
+        .flw-toggle:hover {
+            background: #f0f0f0;
+        }
+        .flw-toggle input {
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        #flw-toggles {
+            max-height: 12vh;
+            overflow-y: auto;
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            margin-bottom: 5px;
+        }
+        .flw-toggle-controls {
+            display: flex;
+            margin-bottom: 5px;
+            gap: 10px;
+        }
+        .toggle-all-btn {
+            padding: 3px 8px;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .toggle-all-btn:hover {
+            background-color: #e0e0e0;
+        }
+        .color-swatch {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 5px;
+            border: 1px solid #999;
+            vertical-align: middle;
+        }
+        select {
+            padding: 5px;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+            background: #f9f9f9;
+            width: 100%;
+            font-size: 13px;
+        }
+        .layer-toggle {
+            margin-right: 15px;
+        }
+        .layer-toggle input {
+            margin-right: 5px;
+        }
+        .status-toggle {
+            display: inline-block;
+            margin-right: 10px;
+            margin-bottom: 5px;
+            cursor: pointer;
+        }
+        .status-toggle input {
+            margin-right: 5px;
+        }
+        .error-message {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            margin: 20px;
+            border-radius: 4px;
+        }
+        .error-message a {
+            color: #0056b3;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    {% if error %}
+    <div class="error-message">
+        <strong>Error:</strong> {{ error }}
+        {% if needs_oauth %}
+        <br><br>
+        <a href="{% url 'labs:commcare_initiate' %}?next={{ request.path }}" style="background: #0d6efd; color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Authorize CommCare Access
+        </a>
+        {% endif %}
+        <br><br>
+        <a href="{% url 'coverage:index' %}">Back to Index</a>
+    </div>
+    {% else %}
+
+    <!-- Control Panel -->
+    <div id="control-panel">
+        <div class="row">
+            <!-- Layer Toggles -->
+            <div class="control-section" style="flex: 0 0 250px;">
+                <div class="section-title">Layers</div>
+                <label class="layer-toggle">
+                    <input type="checkbox" id="toggle-delivery-units" checked>
+                    Delivery Units
+                </label>
+                <label class="layer-toggle">
+                    <input type="checkbox" id="toggle-service-points">
+                    Service Points ({{ service_points_count|default:"0" }})
+                </label>
+            </div>
+
+            <!-- Service Area Filter -->
+            <div class="control-section" style="flex: 0 0 200px;">
+                <div class="section-title">Service Area</div>
+                <select id="service-area-filter">
+                    <option value="">All Service Areas</option>
+                    {% for sa_id in service_area_list %}
+                    <option value="{{ sa_id }}">SA {{ sa_id }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Status Filters -->
+            <div class="control-section" style="flex: 0 0 250px;">
+                <div class="section-title">DU Status</div>
+                <label class="status-toggle">
+                    <input type="checkbox" class="status-filter" value="completed" checked>
+                    Completed
+                </label>
+                <label class="status-toggle">
+                    <input type="checkbox" class="status-filter" value="visited" checked>
+                    Visited
+                </label>
+                <label class="status-toggle">
+                    <input type="checkbox" class="status-filter" value="unvisited" checked>
+                    Unvisited
+                </label>
+            </div>
+        </div>
+
+        <!-- FLW Toggles -->
+        {% if flw_list_colored %}
+        <div class="row">
+            <div class="control-section" style="flex: 1 1 100%;">
+                <div class="section-title">Field Workers ({{ flw_list_colored|length }})</div>
+                <div class="flw-toggle-controls">
+                    <button class="toggle-all-btn" onclick="toggleAllFLWs(true)">Select All</button>
+                    <button class="toggle-all-btn" onclick="toggleAllFLWs(false)">Deselect All</button>
+                </div>
+                <div id="flw-toggles">
+                    {% for flw in flw_list_colored %}
+                    <label class="flw-toggle">
+                        <input type="checkbox" class="flw-filter" value="{{ flw.id }}" checked>
+                        <span class="color-swatch" style="background-color: {{ flw.color }};"></span>
+                        {{ flw.name }} ({{ flw.visits }})
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Map -->
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+    <script>
+    // Initialize map
+    const map = L.map('map').setView([9.0, 8.6], 7);
+
+    // Add tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 18
+    }).addTo(map);
+
+    // Load data
+    const duData = {{ delivery_units_geojson|safe }};
+    const pointsData = {{ service_points_geojson|safe }};
+
+    console.log('Loaded', duData.features.length, 'delivery units');
+    console.log('Loaded', pointsData.features.length, 'service points');
+
+    // Store layers for filtering
+    let duLayers = {};
+    let pointLayers = {};
+    let duLayerGroup = L.layerGroup().addTo(map);
+    let pointLayerGroup = L.layerGroup();  // Not added initially
+
+    // Track selected service area for highlighting
+    let selectedServiceAreaId = null;
+    let boundaryHighlightLayer = L.layerGroup().addTo(map);
+
+    // Function to style DU based on selection
+    function getDUStyle(props) {
+        const inSelectedSA = selectedServiceAreaId && props.service_area === selectedServiceAreaId;
+        return {
+            fillColor: props.color,
+            weight: 2,
+            opacity: 1,
+            color: inSelectedSA ? 'black' : 'white',  // Black border when selected
+            fillOpacity: props.status === 'completed' ? 0.7 : (props.status === 'visited' ? 0.5 : 0.3)
+        };
+    }
+
+    // Function to highlight SA boundary
+    function highlightServiceAreaBoundary(serviceAreaId) {
+        boundaryHighlightLayer.clearLayers();
+
+        if (!serviceAreaId) return;
+
+        // Get all DUs in the selected SA
+        Object.values(duLayers).forEach(({layer, feature}) => {
+            if (feature.properties.service_area === serviceAreaId) {
+                // Extract boundary coordinates and draw a thick black line
+                layer.getLayers().forEach(polygon => {
+                    if (polygon.getLatLngs) {
+                        const latlngs = polygon.getLatLngs();
+                        latlngs.forEach(ring => {
+                            const boundaryLine = L.polyline(ring, {
+                                color: 'black',
+                                weight: 3.5,
+                                opacity: 1
+                            });
+                            boundaryHighlightLayer.addLayer(boundaryLine);
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    // Function to update all DU styles
+    function updateDUStyles() {
+        Object.values(duLayers).forEach(({layer, feature}) => {
+            layer.setStyle(getDUStyle(feature.properties));
+        });
+        highlightServiceAreaBoundary(selectedServiceAreaId);
+    }
+
+    // Add DU polygons
+    duData.features.forEach(feature => {
+        const props = feature.properties;
+        const layer = L.geoJSON(feature, {
+            style: getDUStyle(props)
+        });
+
+        layer.bindPopup(`
+            <strong>${props.name}</strong><br>
+            Service Area: ${props.service_area}<br>
+            Status: ${props.status}<br>
+            Buildings: ${props.buildings}<br>
+            Visits: ${props.visits}
+        `);
+
+        // Add click handler to highlight SA
+        layer.on('click', function() {
+            selectedServiceAreaId = props.service_area;
+            updateDUStyles();
+        });
+
+        layer.addTo(duLayerGroup);
+        duLayers[props.name] = {layer, feature};
+    });
+
+    // Add service points
+    pointsData.features.forEach(feature => {
+        const coords = feature.geometry.coordinates;
+        const props = feature.properties;
+
+        const marker = L.circleMarker([coords[1], coords[0]], {
+            radius: 5,
+            fillColor: props.color,
+            color: '#fff',
+            weight: 1,
+            fillOpacity: 0.8
+        });
+
+        let popup = `<strong>Visit ${props.id ? props.id.substring(0, 8) : 'N/A'}</strong><br>`;
+        popup += `User: ${props.username || 'N/A'}<br>`;
+        popup += `DU: ${props.du_name || 'N/A'}<br>`;
+        popup += `Status: ${props.status || 'N/A'}<br>`;
+        popup += `Date: ${props.date || 'N/A'}<br>`;
+        if (props.accuracy) popup += `Accuracy: ${props.accuracy}m<br>`;
+
+        marker.bindPopup(popup);
+        marker.addTo(pointLayerGroup);
+
+        pointLayers[props.id] = {marker, feature};
+    });
+
+    // Apply filters
+    function applyFilters() {
+        const selectedFLWs = new Set(
+            Array.from(document.querySelectorAll('.flw-filter:checked')).map(cb => cb.value)
+        );
+        const selectedSA = document.getElementById('service-area-filter').value;
+        const selectedStatuses = new Set(
+            Array.from(document.querySelectorAll('.status-filter:checked')).map(cb => cb.value)
+        );
+
+        // Filter DUs
+        duLayerGroup.clearLayers();
+        Object.values(duLayers).forEach(({layer, feature}) => {
+            const props = feature.properties;
+            const matchesFLW = selectedFLWs.has(props.flw_id);
+            const matchesSA = !selectedSA || props.service_area === selectedSA;
+            const matchesStatus = selectedStatuses.has(props.status || 'unvisited');
+
+            if (matchesFLW && matchesSA && matchesStatus) {
+                layer.addTo(duLayerGroup);
+            }
+        });
+
+        // Filter points
+        pointLayerGroup.clearLayers();
+        Object.values(pointLayers).forEach(({marker, feature}) => {
+            const props = feature.properties;
+            const matchesFLW = selectedFLWs.has(props.user_id);
+            const matchesSA = !selectedSA || props.service_area_id === selectedSA;
+
+            if (matchesFLW && matchesSA) {
+                marker.addTo(pointLayerGroup);
+            }
+        });
+    }
+
+    // Toggle all FLWs
+    function toggleAllFLWs(checked) {
+        document.querySelectorAll('.flw-filter').forEach(cb => {
+            cb.checked = checked;
+        });
+        applyFilters();
+    }
+
+    // Event listeners
+    document.getElementById('toggle-delivery-units').addEventListener('change', function() {
+        if (this.checked) {
+            map.addLayer(duLayerGroup);
+        } else {
+            map.removeLayer(duLayerGroup);
+        }
+    });
+
+    document.getElementById('toggle-service-points').addEventListener('change', function() {
+        if (this.checked) {
+            map.addLayer(pointLayerGroup);
+        } else {
+            map.removeLayer(pointLayerGroup);
+        }
+    });
+
+    document.querySelectorAll('.flw-filter, .status-filter').forEach(cb => {
+        cb.addEventListener('change', applyFilters);
+    });
+
+    document.getElementById('service-area-filter').addEventListener('change', function() {
+        const selectedSA = this.value;
+        selectedServiceAreaId = selectedSA || null;
+        updateDUStyles();
+        applyFilters();
+    });
+
+    // Fit map to DUs
+    if (duData.features.length > 0) {
+        try {
+            const bounds = L.geoJSON(duData).getBounds();
+            map.fitBounds(bounds, {padding: [20, 20]});
+        } catch (e) {
+            console.warn('Could not fit bounds:', e);
+        }
+    }
+    </script>
+    {% endif %}
+</body>
+</html>

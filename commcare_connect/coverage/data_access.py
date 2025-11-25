@@ -1,0 +1,272 @@
+"""
+Data access layer for fetching DUs from CommCare and UserVisits from Connect.
+"""
+
+import json
+import logging
+from io import StringIO
+
+import httpx
+import pandas as pd
+from django.conf import settings
+
+from commcare_connect.coverage.models import FLW, CoverageData, DeliveryUnit, LocalUserVisit, ServiceArea
+
+logger = logging.getLogger(__name__)
+
+
+class CoverageDataAccess:
+    """Fetch DUs from CommCare and UserVisits from Connect"""
+
+    def __init__(self, request):
+        self.request = request
+        self.access_token = request.session.get("labs_oauth", {}).get("access_token")
+        self.opportunity_id = getattr(request, "labs_context", {}).get("opportunity_id")
+
+        # Get CommCare OAuth token from session
+        self.commcare_oauth = request.session.get("commcare_oauth", {})
+        self.commcare_access_token = self.commcare_oauth.get("access_token")
+        self.commcare_domain = None
+        self.commcare_hq_url = getattr(settings, "COMMCARE_HQ_URL", "https://www.commcarehq.org")
+
+        # Debug logging
+        if not self.commcare_access_token:
+            logger.warning("[Coverage] No CommCare OAuth token in session")
+
+    def get_opportunity_metadata(self) -> dict:
+        """Fetch opportunity metadata from Connect export API"""
+        if not self.access_token:
+            raise ValueError("No OAuth access token found. Please log in at /labs/login/")
+
+        url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{self.opportunity_id}/"
+
+        try:
+            response = httpx.get(url, headers={"Authorization": f"Bearer {self.access_token}"}, timeout=30.0)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise ValueError(
+                    f"Opportunity {self.opportunity_id} not found or you don't have access to it. "
+                    f"Please verify the opportunity ID and your permissions."
+                )
+            raise
+
+        opp_data = response.json()
+
+        # Extract deliver_app domain
+        deliver_app = opp_data.get("deliver_app")
+        if deliver_app:
+            self.commcare_domain = deliver_app.get("cc_domain")
+
+        if not self.commcare_domain:
+            raise ValueError("CommCare domain not found in opportunity data")
+
+        if not self.commcare_access_token:
+            raise ValueError(
+                "CommCare OAuth not configured. Please authorize CommCare access at /labs/commcare/initiate/"
+            )
+
+        # Check if token is expired
+        from django.utils import timezone
+
+        expires_at = self.commcare_oauth.get("expires_at", 0)
+        if timezone.now().timestamp() >= expires_at:
+            logger.warning(f"CommCare OAuth token expired (expired at {expires_at})")
+            raise ValueError("CommCare OAuth token has expired. Please re-authorize at /labs/commcare/initiate/")
+
+        return opp_data
+
+    def fetch_delivery_units_from_commcare(self) -> list[dict]:
+        """Fetch DU cases from CommCare Case API v2 using OAuth"""
+        endpoint = f"{self.commcare_hq_url}/a/{self.commcare_domain}/api/case/v2/"
+
+        headers = {
+            "Authorization": f"Bearer {self.commcare_access_token}",
+            "Content-Type": "application/json",
+        }
+
+        params = {"case_type": "deliver-unit", "limit": 1000}
+
+        all_cases = []
+        next_url = endpoint
+
+        # Paginate through results
+        page = 0
+        while next_url:
+            page += 1
+            response = httpx.get(
+                next_url, params=params if next_url == endpoint else None, headers=headers, timeout=60.0
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            cases = data.get("cases", [])
+            all_cases.extend(cases)
+
+            next_url = data.get("next")
+            params = None  # Don't send params for next page URLs
+
+        logger.info(f"[Coverage] Fetched {len(all_cases)} DUs from CommCare ({page} pages)")
+        return all_cases
+
+    def fetch_user_visits_from_connect(self) -> pd.DataFrame:
+        """Fetch UserVisits via Connect export API"""
+        url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{self.opportunity_id}/user_visits/"
+
+        response = httpx.get(url, headers={"Authorization": f"Bearer {self.access_token}"}, timeout=120.0)
+        response.raise_for_status()
+
+        # CSV response
+        df = pd.read_csv(StringIO(response.text))
+
+        # Parse form_json if it's a string
+        if "form_json" in df.columns and len(df) > 0:
+            # Check if first row's form_json is a string
+            if isinstance(df.iloc[0]["form_json"], str):
+                df["form_json"] = df["form_json"].apply(lambda x: json.loads(x) if isinstance(x, str) and x else {})
+
+        logger.info(f"[Coverage] Fetched {len(df)} visits from Connect API")
+        return df
+
+    def build_coverage_dus_only(self) -> CoverageData:
+        """
+        Build CoverageData with DUs only (no visits).
+
+        Visits should be fetched separately via the analysis framework
+        for consistent caching behavior.
+        """
+        coverage = CoverageData()
+
+        # Get opportunity metadata
+        opp_data = self.get_opportunity_metadata()
+        coverage.opportunity_id = self.opportunity_id
+        coverage.opportunity_name = opp_data.get("name")
+        coverage.commcare_domain = self.commcare_domain
+
+        logger.info(f"[Coverage] Building DU data for: {coverage.opportunity_name} (opp {self.opportunity_id})")
+
+        # Fetch DUs from CommCare
+        du_cases = self.fetch_delivery_units_from_commcare()
+
+        for case_data in du_cases:
+            try:
+                du = DeliveryUnit.from_commcare_case(case_data)
+                coverage.delivery_units[du.du_name] = du
+
+                # Group by service area
+                sa_id = du.service_area_id
+                if sa_id and sa_id not in coverage.service_areas:
+                    coverage.service_areas[sa_id] = ServiceArea(id=sa_id)
+                if sa_id:
+                    coverage.service_areas[sa_id].delivery_units.append(du)
+
+                # Track FLWs
+                if du.flw_commcare_id and du.flw_commcare_id not in coverage.flws:
+                    coverage.flws[du.flw_commcare_id] = FLW(id=du.flw_commcare_id, name=du.flw_commcare_id)
+
+                if du.flw_commcare_id and du.flw_commcare_id in coverage.flws:
+                    flw = coverage.flws[du.flw_commcare_id]
+                    flw.assigned_units += 1
+                    if du.status == "completed":
+                        flw.completed_units += 1
+                    if sa_id and sa_id not in flw.service_areas:
+                        flw.service_areas.append(sa_id)
+                    flw.delivery_units.append(du)
+
+            except Exception as e:
+                logger.warning(f"Failed to process delivery unit {case_data.get('case_id')}: {e}")
+                continue
+
+        logger.info(
+            f"[Coverage] DU data complete: {len(coverage.delivery_units)} DUs, " f"{len(coverage.service_areas)} SAs"
+        )
+        if coverage.service_areas:
+            sample_sas = list(coverage.service_areas.keys())[:5]
+            logger.info(f"[Coverage] Sample service area IDs: {sample_sas}")
+        else:
+            logger.warning("[Coverage] No service areas found! Check if DUs have service_area_id set.")
+
+        return coverage
+
+    def build_coverage_data(self) -> CoverageData:
+        """Build complete CoverageData object"""
+        coverage = CoverageData()
+
+        # Get opportunity metadata
+        opp_data = self.get_opportunity_metadata()
+        coverage.opportunity_id = self.opportunity_id
+        coverage.opportunity_name = opp_data.get("name")
+        coverage.commcare_domain = self.commcare_domain
+
+        logger.info(f"[Coverage] Building data for: {coverage.opportunity_name} (opp {self.opportunity_id})")
+
+        # Fetch DUs from CommCare
+        du_cases = self.fetch_delivery_units_from_commcare()
+
+        for case_data in du_cases:
+            try:
+                du = DeliveryUnit.from_commcare_case(case_data)
+                coverage.delivery_units[du.du_name] = du
+
+                # Group by service area
+                sa_id = du.service_area_id
+                if sa_id and sa_id not in coverage.service_areas:
+                    coverage.service_areas[sa_id] = ServiceArea(id=sa_id)
+                if sa_id:
+                    coverage.service_areas[sa_id].delivery_units.append(du)
+
+                # Track FLWs
+                if du.flw_commcare_id and du.flw_commcare_id not in coverage.flws:
+                    coverage.flws[du.flw_commcare_id] = FLW(id=du.flw_commcare_id, name=du.flw_commcare_id)
+
+                if du.flw_commcare_id and du.flw_commcare_id in coverage.flws:
+                    flw = coverage.flws[du.flw_commcare_id]
+                    flw.assigned_units += 1
+                    if du.status == "completed":
+                        flw.completed_units += 1
+                    if sa_id and sa_id not in flw.service_areas:
+                        flw.service_areas.append(sa_id)
+                    flw.delivery_units.append(du)
+
+            except Exception as e:
+                logger.warning(f"Failed to process delivery unit {case_data.get('case_id')}: {e}")
+                continue
+
+        # Fetch visits from Connect
+        visits_df = self.fetch_user_visits_from_connect()
+
+        for _, row in visits_df.iterrows():
+            try:
+                point = LocalUserVisit(row.to_dict())
+                coverage.service_points.append(point)
+
+                # Update FLW visit tracking
+                user_id = point.user_id
+                if user_id:
+                    if user_id not in coverage.flws:
+                        # Create FLW if not already exists from DU data
+                        coverage.flws[user_id] = FLW(id=user_id, name=point.username)
+
+                    flw = coverage.flws[user_id]
+                    flw.total_visits += 1
+                    flw.service_points.append(point)
+
+                    # Track active dates
+                    if point.visit_date:
+                        visit_date = point.visit_date.date()
+                        if visit_date not in flw.dates_active:
+                            flw.dates_active.append(visit_date)
+            except Exception as e:
+                logger.warning(f"Failed to process visit: {e}")
+                continue
+
+        # Compute metadata
+        coverage._compute_metadata()
+
+        logger.info(
+            f"[Coverage] Complete: {len(coverage.delivery_units)} DUs, "
+            f"{len(coverage.service_areas)} SAs, {len(coverage.flws)} FLWs, "
+            f"{len(coverage.service_points)} visits"
+        )
+
+        return coverage
