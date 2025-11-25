@@ -1,5 +1,5 @@
 """
-Labs Record API Client
+CommCare Connect LabsRecord API Client.
 
 Pure API client for production LabsRecord endpoints. No local storage.
 All operations are performed via HTTP calls to production API.

@@ -57,12 +57,23 @@
        style="display: none; top: 64px;">
 
     <div class="max-w-7xl mx-auto p-6">
-      {# Search bar #}
-      <div class="mb-6">
+      {# Search bar and refresh button #}
+      <div class="mb-6 flex gap-3">
         <input type="text"
                x-model="search"
                placeholder="Search organizations, programs, or opportunities..."
-               class="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+               class="flex-1 px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        <form method="post" action="{% url 'labs:refresh_org_data' %}" class="flex-shrink-0">
+          {% csrf_token %}
+          <button type="submit"
+                  class="px-4 py-3 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center gap-2"
+                  title="Refresh organizations, programs, and opportunities from Connect">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            <span>Refresh</span>
+          </button>
+        </form>
       </div>
 
       {# Three-column layout - always show all columns #}
@@ -92,6 +103,9 @@
                 <div class="text-xs text-gray-500 mt-0.5" x-text="org.slug"></div>
               </button>
             </template>
+            <div x-show="orgData.length === 0" class="text-sm text-gray-500 italic px-3 py-4">
+              No organizations found. Click Refresh above to reload data.
+            </div>
           </div>
         </div>
 
@@ -108,7 +122,7 @@
           <div class="space-y-1 max-h-96 overflow-y-auto">
             <template x-for="program in filteredPrograms" :key="program.id">
               <button type="button"
-                 x-show="matchesSearch(program.name)"
+                 x-show="matchesSearch(program.name) || matchesSearch(String(program.id))"
                  @click="selectProgram(program)"
                  class="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-green-50 rounded-lg transition"
                  :class="{
@@ -116,9 +130,12 @@
                    'opacity-50': !showPrograms
                  }">
                 <div class="font-medium" x-text="program.name"></div>
-                <div class="text-xs text-gray-500 mt-0.5" x-text="program.organization"></div>
+                <div class="text-xs text-gray-500 mt-0.5" x-text="'ID: ' + program.id + ' | ' + program.organization"></div>
               </button>
             </template>
+            <div x-show="programData.length === 0" class="text-sm text-gray-500 italic px-3 py-4">
+              No programs found. Click Refresh above to reload data.
+            </div>
           </div>
         </div>
 
@@ -135,7 +152,7 @@
           <div class="space-y-1 max-h-96 overflow-y-auto">
             <template x-for="opp in filteredOpps" :key="opp.id">
               <button type="button"
-                 x-show="matchesSearch(opp.name) || matchesSearch(opp.program_name || '')"
+                 x-show="matchesSearch(opp.name) || matchesSearch(opp.program_name || '') || matchesSearch(String(opp.id))"
                  @click="selectOpp(opp)"
                  class="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-purple-50 rounded-lg transition"
                  :class="{
@@ -143,9 +160,12 @@
                    'opacity-50': !showOpps
                  }">
                 <div class="font-medium" x-text="opp.name"></div>
-                <div class="text-xs text-gray-500 mt-0.5" x-text="opp.program_name || ''"></div>
+                <div class="text-xs text-gray-500 mt-0.5" x-text="'ID: ' + opp.id + ' | Visits: ' + (opp.visit_count || 0)"></div>
               </button>
             </template>
+            <div x-show="oppData.length === 0" class="text-sm text-gray-500 italic px-3 py-4">
+              No opportunities found. Click Refresh above to reload data.
+            </div>
           </div>
         </div>
       </div>

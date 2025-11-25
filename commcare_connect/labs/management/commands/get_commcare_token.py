@@ -11,8 +11,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from commcare_connect.labs.oauth_cli.client import get_oauth_token
-from commcare_connect.labs.oauth_cli.token_manager import TokenManager
+from commcare_connect.labs.integrations.connect.cli import TokenManager, get_oauth_token
 
 
 class Command(BaseCommand):

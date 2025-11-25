@@ -43,7 +43,7 @@ def test_experiment_task_flow():
             print("[OK] Using token from CONNECT_OAUTH_TOKEN environment variable")
         else:
             print("[INFO] Checking for saved OAuth token...")
-            from commcare_connect.labs.oauth_cli import TokenManager
+            from commcare_connect.labs.integrations.connect.cli import TokenManager
 
             token_manager = TokenManager()
             access_token = token_manager.get_valid_token()

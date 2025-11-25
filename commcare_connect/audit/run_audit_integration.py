@@ -99,8 +99,8 @@ def test_experiment_audit_flow(config_name="opp385_last10"):
         from django.conf import settings
 
         from commcare_connect.audit.data_access import AuditDataAccess
-        from commcare_connect.labs.oauth_cli import TokenManager
-        from commcare_connect.labs.oauth_helpers import introspect_token
+        from commcare_connect.labs.integrations.connect.cli import TokenManager
+        from commcare_connect.labs.integrations.connect.oauth import introspect_token
 
         # Try to get OAuth token using the token manager
         access_token = None

@@ -28,8 +28,8 @@ python manage.py get_cli_token
 **In Python Scripts:**
 
 ```python
-from commcare_connect.labs.oauth_cli import TokenManager
-from commcare_connect.labs.oauth_helpers import introspect_token
+from commcare_connect.labs.integrations.connect.cli import TokenManager
+from commcare_connect.labs.integrations.connect.oauth import introspect_token
 from django.conf import settings
 
 # Load saved token
@@ -50,7 +50,7 @@ user_profile = introspect_token(
 **Create LabsUser from CLI Token:**
 
 ```python
-from commcare_connect.labs.oauth_cli import get_labs_user_from_token
+from commcare_connect.labs.integrations.connect.cli import get_labs_user_from_token
 
 # Introspects token at runtime
 user = get_labs_user_from_token()
@@ -63,8 +63,8 @@ if user:
 **Initialize API Client:**
 
 ```python
-from commcare_connect.labs.api_client import LabsRecordAPIClient
-from commcare_connect.labs.oauth_cli import TokenManager
+from commcare_connect.labs.integrations.connect.api_client import LabsRecordAPIClient
+from commcare_connect.labs.integrations.connect.cli import TokenManager
 
 # Get token
 token_manager = TokenManager()
@@ -136,7 +136,7 @@ class MyRecord(LocalLabsRecord):
 
 ```python
 # your_app/data_access.py
-from commcare_connect.labs.api_client import LabsRecordAPIClient
+from commcare_connect.labs.integrations.connect.api_client import LabsRecordAPIClient
 from .models import MyRecord
 
 class MyAppDataAccess:
@@ -167,10 +167,10 @@ class MyAppDataAccess:
 
 ## OAuth Functions Reference
 
-### Shared OAuth Helpers (`oauth_helpers.py`)
+### Connect OAuth Helpers (`integrations/connect/oauth.py`)
 
 ```python
-from commcare_connect.labs.oauth_helpers import (
+from commcare_connect.labs.integrations.connect.oauth import (
     introspect_token,
     fetch_user_organization_data
 )
@@ -189,10 +189,10 @@ org_data = fetch_user_organization_data(access_token="token")
 # Returns: {organizations: [...], programs: [...], opportunities: [...]}
 ```
 
-### CLI OAuth (`oauth_cli/`)
+### CLI OAuth (`integrations/connect/cli/`)
 
 ```python
-from commcare_connect.labs.oauth_cli import (
+from commcare_connect.labs.integrations.connect.cli import (
     get_oauth_token,
     get_labs_user_from_token,
     TokenManager
@@ -261,8 +261,8 @@ class MyRecordListView(ListView):
 ```python
 #!/usr/bin/env python
 from django.conf import settings
-from commcare_connect.labs.oauth_cli import TokenManager
-from commcare_connect.labs.oauth_helpers import introspect_token
+from commcare_connect.labs.integrations.connect.cli import TokenManager
+from commcare_connect.labs.integrations.connect.oauth import introspect_token
 from your_app.data_access import MyAppDataAccess
 
 def main():
@@ -314,10 +314,10 @@ if __name__ == "__main__":
 
 - **Audit App**: `commcare_connect/audit/` - Complete implementation
 - **Integration Test**: `commcare_connect/audit/run_audit_integration.py` - CLI usage example
-- **API Client**: `commcare_connect/labs/api_client.py` - Full API reference
+- **API Client**: `commcare_connect/labs/integrations/connect/api_client.py` - Full API reference
 
 ## Getting Help
 
 - Check `MIGRATION_STATUS.md` for migration notes from old ExperimentRecord pattern
 - See individual app READMEs for app-specific patterns
-- OAuth flow details in `oauth_views.py` for web authentication
+- OAuth flow details in `integrations/connect/oauth_views.py` for web authentication

@@ -1,8 +1,9 @@
 """
-Labs OAuth Helper Functions
+CommCare Connect OAuth Helper Functions.
 
 Shared OAuth utilities for both web and CLI authentication flows.
 """
+
 import logging
 
 import httpx
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def fetch_user_organization_data(access_token: str) -> dict | None:
     """
-    Fetch user's organizations, programs, and opportunities from production.
+    Fetch user's organizations, programs, and opportunities from Connect production.
 
     Args:
         access_token: OAuth Bearer token for Connect production
@@ -25,7 +26,7 @@ def fetch_user_organization_data(access_token: str) -> dict | None:
         response = httpx.get(
             f"{settings.CONNECT_PRODUCTION_URL}/export/opp_org_program_list/",
             headers={"Authorization": f"Bearer {access_token}"},
-            timeout=10,
+            timeout=30,  # Increased timeout from 10 to 30 seconds
         )
         response.raise_for_status()
         data = response.json()

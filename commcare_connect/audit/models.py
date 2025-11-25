@@ -116,6 +116,16 @@ class AuditSessionRecord(LocalLabsRecord):
         object.__setattr__(self, "_opportunity_id_from_api", value)
 
     @property
+    def opportunity_name(self):
+        """Name of the primary opportunity being audited."""
+        return self.data.get("opportunity_name", "")
+
+    @property
+    def description(self):
+        """Human-readable description of how this audit session was created."""
+        return self.data.get("description", "")
+
+    @property
     def visit_results(self):
         """Dict of visit results keyed by visit_id."""
         return self.data.get("visit_results", {})

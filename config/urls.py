@@ -36,6 +36,10 @@ urlpatterns = [
     path("coverage/", include("commcare_connect.coverage.urls", namespace="coverage")),
     path("labs/explorer/", include("commcare_connect.labs.explorer.urls", namespace="explorer")),
     path("labs/", include("commcare_connect.labs.urls", namespace="labs")),
+    path(
+        "custom_analysis/chc_nutrition/",
+        include("commcare_connect.custom_analysis.chc_nutrition.urls", namespace="chc_nutrition"),
+    ),
     path("ai/", include("commcare_connect.ai.urls", namespace="ai")),
     path("hq/", include("commcare_connect.commcarehq.urls", namespace="commcarehq")),
     path("export/", include("commcare_connect.data_export.urls", namespace="data_export")),

@@ -8,8 +8,8 @@ and load credentials from .env (same as real CLI).
 """
 from django.conf import settings
 
-from commcare_connect.labs.oauth_cli import TokenManager, get_labs_user_from_token
-from commcare_connect.labs.oauth_helpers import introspect_token
+from commcare_connect.labs.integrations.connect.cli import TokenManager, get_labs_user_from_token
+from commcare_connect.labs.integrations.connect.oauth import introspect_token
 
 
 def test_token_manager_loads_saved_token():

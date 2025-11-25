@@ -74,6 +74,7 @@ class LabsURLWhitelistMiddleware:
         "/tasks/",
         "/solicitations/",
         "/labs/",
+        "/custom_analysis/",
         "/static/",
         "/media/",
         "/admin/",

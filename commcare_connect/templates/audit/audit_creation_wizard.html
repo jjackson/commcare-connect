@@ -21,6 +21,22 @@
     </div>
   </div>
 
+  <!-- Quick Creation Notice -->
+  <div x-show="Object.keys(quickParams).length > 0"
+       class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+    <div class="flex items-start gap-3">
+      <i class="fa-solid fa-bolt text-blue-600 mt-0.5"></i>
+      <div>
+        <h3 class="text-sm font-medium text-blue-800">Quick Audit Creation</h3>
+        <p class="text-sm text-blue-700 mt-1">
+          Form pre-filled from URL parameters.
+          <span x-show="quickParams.username">Filtering for FLW: <strong x-text="quickParams.username"></strong></span>
+          <span x-show="quickParams.auto_create === 'true'">Auto-creating...</span>
+        </p>
+      </div>
+    </div>
+  </div>
+
   <!-- Step 1: Program Search and Selection -->
   <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
@@ -776,13 +792,18 @@ function auditCreationPage() {
     progressMode: 'creation', // 'preview' or 'creation'
 
     // Search state
-    searchQuery: '',
+    searchQuery: '{{ default_opportunity_id }}',
+    defaultOpportunityId: {{ default_opportunity_id|default:"null" }},
+    allOpportunities: {{ opportunities_json|safe }},
     searchResults: [],
     searchPerformed: false,
     searching: false,
     tableExpanded: true,
     sortColumn: 'visit_count',
     sortDirection: 'desc',
+
+    // Quick params from URL (for quick audit creation from other pages)
+    quickParams: {{ quick_params|safe }},
 
     // Selection state
     selectedOpportunities: [],
@@ -813,28 +834,28 @@ function auditCreationPage() {
     auditTitle: '',
     auditTag: '',
 
+    // Quick filter for specific username/user_id (from URL params)
+    quickFilterUsername: null,
+    quickFilterUserId: null,
+
     // Methods
-    async searchOpportunities() {
-      if (!this.searchQuery.trim()) {
-        this.searchResults = [];
-        this.searchPerformed = false;
+    searchOpportunities() {
+      const query = this.searchQuery.trim().toLowerCase();
+
+      if (!query) {
+        // Show all opportunities when no search query
+        this.searchResults = [...this.allOpportunities];
+        this.searchPerformed = true;
         return;
       }
 
-      this.searching = true;
-
-      const response = await fetch(`{% url "audit:program_search" %}?q=${encodeURIComponent(this.searchQuery)}`);
-      const data = await response.json();
-
-      if (data.success) {
-        this.searchResults = data.opportunities;
-        this.searchPerformed = true;
-      } else {
-        console.error('Search failed:', data.error);
-        this.searchResults = [];
-      }
-
-      this.searching = false;
+      // Filter locally - no API call needed
+      this.searchResults = this.allOpportunities.filter(opp => {
+        const idMatch = query === String(opp.id);
+        const nameMatch = opp.name && opp.name.toLowerCase().includes(query);
+        return idMatch || nameMatch;
+      });
+      this.searchPerformed = true;
     },
 
     toggleOpportunitySelection(opportunity) {
@@ -1045,8 +1066,23 @@ function auditCreationPage() {
           // Populate preview results with FLW data
           this.previewResults = preview.flws;
 
-          // Auto-select all FLWs by default
-          this.selectedFlwUserIds = preview.flws.map(flw => flw.user_id || flw.connect_id);
+          // If quick filter username/user_id is set, only select that FLW
+          if (this.quickFilterUsername || this.quickFilterUserId) {
+            const matchingFlws = preview.flws.filter(flw => {
+              if (this.quickFilterUsername) {
+                return flw.username === this.quickFilterUsername || flw.name === this.quickFilterUsername;
+              }
+              if (this.quickFilterUserId) {
+                return String(flw.user_id) === String(this.quickFilterUserId) ||
+                       String(flw.connect_id) === String(this.quickFilterUserId);
+              }
+              return false;
+            });
+            this.selectedFlwUserIds = matchingFlws.map(flw => flw.user_id || flw.connect_id);
+          } else {
+            // Auto-select all FLWs by default
+            this.selectedFlwUserIds = preview.flws.map(flw => flw.user_id || flw.connect_id);
+          }
         }
 
         this.updating = false;
@@ -1251,6 +1287,62 @@ function auditCreationPage() {
       }
     },
 
+    // Apply quick params from URL
+    applyQuickParams() {
+      if (!this.quickParams || Object.keys(this.quickParams).length === 0) {
+        return false;
+      }
+
+      const params = this.quickParams;
+
+      // Apply audit type
+      if (params.audit_type) {
+        this.auditCriteria.type = params.audit_type;
+      }
+
+      // Apply granularity
+      if (params.granularity) {
+        this.auditCriteria.granularity = params.granularity;
+      }
+
+      // Apply dates
+      if (params.start_date) {
+        this.auditCriteria.startDate = params.start_date;
+      }
+      if (params.end_date) {
+        this.auditCriteria.endDate = params.end_date;
+      }
+
+      // Apply count for last_n types
+      if (params.count) {
+        const count = parseInt(params.count, 10);
+        if (!isNaN(count)) {
+          this.auditCriteria.countPerFlw = count;
+          this.auditCriteria.countPerOpp = count;
+          this.auditCriteria.countAcrossAll = count;
+        }
+      }
+
+      // Apply title and tag
+      if (params.title) {
+        this.auditTitle = params.title;
+      }
+      if (params.tag) {
+        this.auditTag = params.tag;
+      }
+
+      // For per_flw granularity with username, we'll filter FLWs after preview
+      // Store the username/user_id for later filtering
+      if (params.username) {
+        this.quickFilterUsername = params.username;
+      }
+      if (params.user_id) {
+        this.quickFilterUserId = params.user_id;
+      }
+
+      return params.auto_create === 'true';
+    },
+
     // Initialize
     init() {
       // Set default dates (last 30 days)
@@ -1261,8 +1353,26 @@ function auditCreationPage() {
       this.auditCriteria.endDate = today.toISOString().split('T')[0];
       this.auditCriteria.startDate = thirtyDaysAgo.toISOString().split('T')[0];
 
-      // Load some initial opportunities
+      // Load opportunities (local filter, no API call)
       this.searchOpportunities();
+
+      // If a default opportunity is set from labs_context, auto-select it
+      if (this.defaultOpportunityId) {
+        const defaultOpp = this.searchResults.find(o => o.id === this.defaultOpportunityId);
+        if (defaultOpp && !this.selectedOpportunities.some(o => o.id === this.defaultOpportunityId)) {
+          this.selectedOpportunities.push(defaultOpp);
+        }
+      }
+
+      // Apply quick params from URL and check if auto-create is requested
+      const shouldAutoCreate = this.applyQuickParams();
+
+      // If auto_create is set and we have valid criteria, trigger creation after a short delay
+      if (shouldAutoCreate && this.selectedOpportunities.length > 0 && this.isAuditCriteriaValid()) {
+        setTimeout(() => {
+          this.createAuditSession();
+        }, 500);
+      }
     }
   }
 }

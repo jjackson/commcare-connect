@@ -23,6 +23,44 @@ def merge_attrs(*dicts):
     return merged
 
 
+class FullWidthTableMixin:
+    """
+    Mixin that allows tables to opt-in to full-width styling.
+
+    Usage:
+        # Option 1: Set at class level
+        class MyTable(FullWidthTableMixin, tables.Table):
+            full_width = True  # Always full width
+
+        # Option 2: Set at instantiation
+        table = MyTable(data, full_width=True)
+
+    The mixin applies 'base-table-full' CSS class for full-width tables,
+    or 'base-table' for normal width tables.
+    """
+
+    full_width = False  # Default to normal width
+
+    def __init__(self, *args, **kwargs):
+        # Allow full_width to be passed at instantiation
+        self.full_width = kwargs.pop("full_width", self.__class__.full_width)
+        super().__init__(*args, **kwargs)
+
+        # Apply the appropriate CSS class
+        table_class = "base-table-full" if self.full_width else "base-table"
+
+        # Merge with existing attrs, preserving other attributes
+        if hasattr(self, "attrs"):
+            existing_class = self.attrs.get("class", "")
+            # Replace any existing base-table class
+            existing_class = existing_class.replace("base-table-full", "").replace("base-table", "").strip()
+            if existing_class:
+                table_class = f"{table_class} {existing_class}"
+            self.attrs["class"] = table_class
+        else:
+            self.attrs = {"class": table_class}
+
+
 class OrgContextTable(tables.Table):
     def __init__(self, *args, **kwargs):
         self.org_slug = kwargs.pop("org_slug", None)

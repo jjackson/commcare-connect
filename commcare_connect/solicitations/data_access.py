@@ -10,7 +10,7 @@ This is a pure API client with no local database storage.
 
 from django.http import HttpRequest
 
-from commcare_connect.labs.api_client import LabsRecordAPIClient
+from commcare_connect.labs.integrations.connect.api_client import LabsRecordAPIClient
 from commcare_connect.solicitations.models import ResponseRecord, ReviewRecord, SolicitationRecord
 
 
