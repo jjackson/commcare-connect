@@ -140,7 +140,7 @@
                     <thead class="bg-gray-50">
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Username
+                                FLW Name
                             </th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Total Visits
@@ -180,8 +180,15 @@
                     <tbody class="bg-white divide-y divide-gray-200">
                         {% for flw in flws %}
                         <tr class="hover:bg-gray-50">
-                            <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                                {{ flw.username }}
+                            <td class="px-4 py-3 text-sm">
+                                <div class="font-medium text-gray-900">
+                                    {{ flw.display_name }}
+                                </div>
+                                {% if flw.display_name != flw.username %}
+                                <div class="text-xs text-gray-500">
+                                    {{ flw.username }}
+                                </div>
+                                {% endif %}
                             </td>
                             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                                 {{ flw.total_visits }}
@@ -283,7 +290,7 @@
                     <table class="min-w-full divide-y divide-gray-200 border border-gray-200">
                         <thead class="bg-gray-100">
                             <tr>
-                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">FLW Name</th>
                                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Child Age</th>
                                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Gender</th>
                                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">MUAC Colors</th>
@@ -298,7 +305,14 @@
                         <tbody class="bg-white divide-y divide-gray-200">
                             {% for flw in flws %}
                             <tr class="hover:bg-gray-50">
-                                <td class="px-3 py-2 text-sm font-medium text-gray-900">{{ flw.username }}</td>
+                                <td class="px-3 py-2 text-sm">
+                                    <div class="font-medium text-gray-900">
+                                        {{ flw.display_name }}
+                                    </div>
+                                    {% if flw.display_name != flw.username %}
+                                    <div class="text-xs text-gray-500">{{ flw.username }}</div>
+                                    {% endif %}
+                                </td>
                                 <td class="px-3 py-2 text-sm text-gray-700">{{ flw.custom_fields.child_age_months|default:"-" }}</td>
                                 <td class="px-3 py-2 text-sm text-gray-700">{{ flw.custom_fields.child_gender|default:"-" }}</td>
                                 <td class="px-3 py-2 text-sm text-gray-700">

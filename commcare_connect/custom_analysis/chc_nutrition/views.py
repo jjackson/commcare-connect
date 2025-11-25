@@ -17,6 +17,7 @@ from django.views.generic import TemplateView
 
 from commcare_connect.custom_analysis.chc_nutrition.analysis_config import CHC_NUTRITION_CONFIG
 from commcare_connect.labs.analysis import FLWAnalyzer, compute_visit_analysis
+from commcare_connect.labs.analysis.base import get_flw_names_for_opportunity
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +62,24 @@ class CHCNutritionAnalysisView(LoginRequiredMixin, TemplateView):
                 f"{flw_result.metadata.get('total_visits', 0)} visits"
             )
 
+            # Get FLW display names from CommCare
+            try:
+                flw_names = get_flw_names_for_opportunity(self.request)
+                logger.info(f"Loaded display names for {len(flw_names)} FLWs")
+            except Exception as e:
+                logger.warning(f"Failed to fetch FLW names: {e}")
+                flw_names = {}
+
             # FLW-level results for summary table
             context["result"] = flw_result
-            context["flws"] = flw_result.rows
             context["summary"] = flw_result.get_summary_stats()
             context["from_cache"] = not self.request.GET.get("refresh")
+
+            # Add display names to FLW rows
+            for flw in flw_result.rows:
+                flw.display_name = flw_names.get(flw.username, flw.username)
+
+            context["flws"] = flw_result.rows
 
             # Visit-level results for potential drill-down
             context["visit_result"] = visit_result
