@@ -18,6 +18,12 @@ CHC_NUTRITION_CONFIG = AnalysisConfig(
             aggregation="first",
             description="CommCare delivery unit name (from form JSON)",
         ),
+        FieldComputation(
+            name="commcare_userid",
+            path="form.meta.userID",
+            aggregation="first",
+            description="CommCare user ID from form metadata",
+        ),
         # Core Demographics (first occurrence per FLW)
         FieldComputation(
             name="child_age_months",

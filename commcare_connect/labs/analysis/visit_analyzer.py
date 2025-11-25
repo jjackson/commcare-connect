@@ -100,6 +100,7 @@ class VisitAnalyzer(Analyzer):
                 id=visit.id,
                 user_id=visit.user_id,
                 username=visit.username,
+                commcare_userid=visit.commcare_userid,
                 visit_date=visit.visit_date,
                 status=visit.status,
                 flagged=visit.flagged,
@@ -178,7 +179,7 @@ class VisitAnalyzer(Analyzer):
 
 
 def compute_visit_analysis(
-    request: HttpRequest, config: AnalysisConfig, use_cache: bool = True
+    request: HttpRequest, config: AnalysisConfig, use_cache: bool = True, cache_tolerance_minutes: int | None = None
 ) -> VisitAnalysisResult:
     """
     Compute visit-level analysis with caching.
@@ -190,11 +191,13 @@ def compute_visit_analysis(
     - Cache key includes opportunity_id and config hash
     - Invalidation based on visit count changes
     - Manual refresh via ?refresh=1 parameter
+    - Optional tolerance for accepting slightly stale cache
 
     Args:
         request: HttpRequest with labs context
         config: AnalysisConfig defining field computations
         use_cache: Whether to use caching (default: True)
+        cache_tolerance_minutes: Accept cache if age < N minutes (even if counts mismatch)
 
     Returns:
         VisitAnalysisResult with one VisitRow per visit
@@ -254,6 +257,12 @@ def compute_visit_analysis(
     cache_manager = AnalysisCacheManager(opportunity_id, config)
     logger.info(f"[Analysis] Config hash: {cache_manager.config_hash}")
 
+    # Extract tolerance from request if not explicitly provided
+    if cache_tolerance_minutes is None:
+        from commcare_connect.labs.analysis.file_cache import get_cache_tolerance_from_request
+
+        cache_tolerance_minutes = get_cache_tolerance_from_request(request)
+
     # Get current visit count for validation
     try:
         data_access = AnalysisDataAccess(request)
@@ -267,7 +276,7 @@ def compute_visit_analysis(
 
     # Try cache
     cached = cache_manager.get_visit_results_cache()
-    if cached and cache_manager.validate_cache(current_visit_count, cached):
+    if cached and cache_manager.validate_cache(current_visit_count, cached, cache_tolerance_minutes):
         logger.info(f"[Analysis] CACHE HIT - using cached visit results (opp {opportunity_id})")
         return cached["result"]
 

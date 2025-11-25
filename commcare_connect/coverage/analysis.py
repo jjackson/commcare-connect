@@ -88,7 +88,11 @@ def enrich_with_coverage_context(
 
 
 def get_coverage_visit_analysis(
-    request: HttpRequest, config: AnalysisConfig, du_lookup: dict[str, dict] | None = None, use_cache: bool = True
+    request: HttpRequest,
+    config: AnalysisConfig,
+    du_lookup: dict[str, dict] | None = None,
+    use_cache: bool = True,
+    cache_tolerance_minutes: int | None = None,
 ) -> VisitAnalysisResult:
     """
     Get visit analysis with coverage context, using cached data.
@@ -102,6 +106,7 @@ def get_coverage_visit_analysis(
         config: AnalysisConfig defining field computations
         du_lookup: Dict mapping du_name -> {service_area_id, ...}
         use_cache: Whether to use caching (default: True)
+        cache_tolerance_minutes: Accept cache if age < N minutes (even if counts mismatch)
 
     Returns:
         VisitAnalysisResult with service_area_id populated
@@ -117,7 +122,9 @@ def get_coverage_visit_analysis(
         result = get_coverage_visit_analysis(request, CHC_NUTRITION_CONFIG, du_lookup)
     """
     # Get cached visit analysis (shared with other views)
-    visit_result = compute_visit_analysis(request, config, use_cache=use_cache)
+    visit_result = compute_visit_analysis(
+        request, config, use_cache=use_cache, cache_tolerance_minutes=cache_tolerance_minutes
+    )
 
     # Enrich with coverage context
     return enrich_with_coverage_context(visit_result, du_lookup)

@@ -88,7 +88,7 @@ class Command(BaseCommand):
             else:
                 total_no_sa += 1
 
-        self.stdout.write(f"\nResults:")
+        self.stdout.write("\nResults:")
         self.stdout.write(f"  DUs with service_area_id: {self.style.SUCCESS(total_has_sa)}/{len(du_cases)}")
         self.stdout.write(f"  DUs without service_area_id: {self.style.WARNING(total_no_sa)}/{len(du_cases)}")
 

@@ -11,7 +11,6 @@ Cache invalidation based on:
 
 import hashlib
 import logging
-import os
 import pickle
 from datetime import datetime
 from pathlib import Path
@@ -320,13 +319,23 @@ class AnalysisCacheManager:
 
         logger.info(f"Cleared cache for opp={self.opportunity_id}, hash={self.config_hash}")
 
-    def validate_cache(self, current_visit_count: int, cached_data: dict) -> bool:
+    def validate_cache(
+        self, current_visit_count: int, cached_data: dict, tolerance_minutes: int | None = None
+    ) -> bool:
         """
-        Validate cached data against current visit count.
+        Validate cached data with optional time-based tolerance.
+
+        Validation rules:
+        1. If visit counts match -> VALID (always)
+        2. If tolerance_minutes is None -> check must match exactly
+        3. If tolerance_minutes is set:
+           - If cache age < tolerance_minutes -> VALID (accept stale data)
+           - Otherwise -> INVALID
 
         Args:
             current_visit_count: Current visit count from API
-            cached_data: Cached data dict with 'visit_count' key
+            cached_data: Cached data dict with 'visit_count' and 'cached_at'
+            tolerance_minutes: Max age (in minutes) to accept mismatched counts
 
         Returns:
             True if cache is valid, False if stale
@@ -335,12 +344,77 @@ class AnalysisCacheManager:
             return False
 
         cached_count = cached_data.get("visit_count", 0)
-        is_valid = cached_count == current_visit_count
 
-        if not is_valid:
-            logger.info(f"Cache invalid: cached={cached_count}, current={current_visit_count}")
+        # Perfect match - always valid
+        if cached_count == current_visit_count:
+            logger.debug(f"Cache valid: counts match ({cached_count})")
+            return True
 
-        return is_valid
+        # Count mismatch - check tolerance
+        if tolerance_minutes is None:
+            logger.info(f"Cache invalid: cached={cached_count}, current={current_visit_count}, no tolerance")
+            return False
+
+        # Check cache age
+        cached_at_str = cached_data.get("cached_at")
+        if not cached_at_str:
+            logger.warning("Cache has no 'cached_at' timestamp, cannot apply tolerance")
+            return False
+
+        try:
+            cached_at = datetime.fromisoformat(cached_at_str)
+            age = datetime.utcnow() - cached_at
+            age_minutes = age.total_seconds() / 60
+
+            if age_minutes <= tolerance_minutes:
+                logger.info(
+                    f"Cache ACCEPTED with tolerance: "
+                    f"cached={cached_count}, current={current_visit_count}, "
+                    f"age={age_minutes:.1f}min, tolerance={tolerance_minutes}min"
+                )
+                return True
+            else:
+                logger.info(
+                    f"Cache REJECTED (too old): "
+                    f"cached={cached_count}, current={current_visit_count}, "
+                    f"age={age_minutes:.1f}min > tolerance={tolerance_minutes}min"
+                )
+                return False
+        except Exception as e:
+            logger.warning(f"Failed to parse cache timestamp: {e}")
+            return False
+
+
+def get_cache_tolerance_from_request(request) -> int | None:
+    """
+    Extract cache_tolerance from URL parameters.
+
+    Looks for ?cache_tolerance=N where N is minutes.
+
+    Args:
+        request: HttpRequest with GET parameters
+
+    Returns:
+        Tolerance in minutes or None if not specified
+
+    Example:
+        # In view:
+        tolerance = get_cache_tolerance_from_request(request)
+        result = compute_visit_analysis(request, config, cache_tolerance_minutes=tolerance)
+    """
+    try:
+        tolerance_str = request.GET.get("cache_tolerance")
+        if tolerance_str:
+            tolerance = int(tolerance_str)
+            if tolerance < 0:
+                logger.warning(f"Invalid cache_tolerance={tolerance}, must be >= 0")
+                return None
+            logger.info(f"Using cache tolerance: {tolerance} minutes from URL parameter")
+            return tolerance
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Failed to parse cache_tolerance parameter: {e}")
+
+    return None
 
 
 def clear_all_analysis_caches() -> int:
