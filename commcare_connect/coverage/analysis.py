@@ -54,10 +54,15 @@ def enrich_with_coverage_context(
     unmatched_du_count = 0
     sample_visit_du_names = []
     sample_unmatched = []
+    sample_computed_keys = []
 
     for i, row in enumerate(visit_result.rows):
         # Get DU name from computed field (not the base deliver_unit_name field)
         du_name = row.computed.get("du_name", "")
+
+        # Debug: Log computed fields for first few visits
+        if i < 3:
+            sample_computed_keys.append(list(row.computed.keys()))
 
         if not du_name:
             null_du_count += 1
@@ -79,6 +84,8 @@ def enrich_with_coverage_context(
         f"Enriched {enriched_count}/{len(visit_result.rows)} visits with DU context "
         f"({null_du_count} null/empty, {unmatched_du_count} unmatched)"
     )
+    if sample_computed_keys:
+        logger.info(f"Sample computed keys from visits: {sample_computed_keys[:3]}")
     if sample_visit_du_names:
         logger.info(f"Sample visit DU names: {sample_visit_du_names[:5]}")
     if sample_unmatched:
