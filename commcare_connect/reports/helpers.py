@@ -226,11 +226,9 @@ def get_table_data_for_year_month(
 
     activated_personalid_accounts = (
         UserAnalyticsData.objects.filter(
-            models.Q(has_accepted_opp__isnull=False)
-            | models.Q(has_sent_message__isnull=False)
-            | models.Q(has_viewed_work_history__isnull=False)
+            models.Q(has_ever_earned_payment__isnull=False) | models.Q(has_sso_on_hq_app__isnull=False)
         )
-        .annotate(month_group=TruncMonth(Greatest("has_accepted_opp", "has_sent_message", "has_viewed_work_history")))
+        .annotate(month_group=TruncMonth(Greatest("has_ever_earned_payment", "has_sso_on_hq_app")))
         .values("month_group")
         .annotate(users=models.Count("username"))
     )
