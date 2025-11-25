@@ -2,58 +2,6 @@
 Utility functions for coverage visualization.
 """
 
-from django.core.cache import cache
-from django.db.models import F
-
-from commcare_connect.opportunity.models import OpportunityAccess
-
-
-def get_flw_names_for_opportunity(opportunity_id: int, cache_timeout: int = 3600) -> dict[str, str]:
-    """
-    Get FLW display names for an opportunity with caching.
-
-    Retrieves a mapping of username to display name (full name) for all FLWs
-    who have access to the specified opportunity. Results are cached to avoid
-    repeated database queries.
-
-    Args:
-        opportunity_id: The ID of the opportunity
-        cache_timeout: Cache timeout in seconds (default: 3600 = 1 hour)
-
-    Returns:
-        Dictionary mapping username to display name (user's full name)
-        Example: {"e5e685ae3f024fb6848d0d87138d526f": "John Doe"}
-
-    Examples:
-        >>> flw_names = get_flw_names_for_opportunity(814)
-        >>> flw_names["e5e685ae3f024fb6848d0d87138d526f"]
-        'John Doe'
-    """
-    cache_key = f"flw_names_opp_{opportunity_id}"
-
-    # Try to get from cache first
-    cached_names = cache.get(cache_key)
-    if cached_names is not None:
-        return cached_names
-
-    # Query database if not cached
-    flw_data = (
-        OpportunityAccess.objects.filter(opportunity_id=opportunity_id)
-        .annotate(
-            username=F("user__username"),
-            display_name=F("user__name"),
-        )
-        .values("username", "display_name")
-    )
-
-    # Build mapping dictionary
-    flw_names = {row["username"]: row["display_name"] or row["username"] for row in flw_data if row["username"]}
-
-    # Cache the results
-    cache.set(cache_key, flw_names, cache_timeout)
-
-    return flw_names
-
 
 def extract_gps_from_form_json(form_json: dict) -> tuple[float, float, float | None]:
     """
