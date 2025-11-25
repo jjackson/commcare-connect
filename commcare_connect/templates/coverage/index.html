@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Coverage Maps - Labs{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Coverage Maps</h1>
+    <p class="lead">Visualize Delivery Units, Service Areas, and Field Worker Coverage</p>
+
+    {% if error %}
+    <div class="alert alert-danger" role="alert">
+        <strong>Error:</strong> {{ error }}
+        {% if needs_oauth %}
+        <br><br>
+        <a href="{% url 'labs:commcare_initiate' %}?next={{ request.path }}" class="btn btn-primary">
+            Authorize CommCare Access
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if not has_context %}
+    <div class="alert alert-warning" role="alert">
+        <strong>No Opportunity Selected</strong><br>
+        Please select an opportunity from the context selector above to view coverage maps.
+    </div>
+    {% else %}
+        {% if summary_stats %}
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <h2>{{ coverage.opportunity_name }}</h2>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Delivery Units</h5>
+                        <p class="card-text display-4">{{ summary_stats.total_dus }}</p>
+                        <small class="text-muted">Total DUs</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Service Areas</h5>
+                        <p class="card-text display-4">{{ summary_stats.total_sas }}</p>
+                        <small class="text-muted">Total SAs</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Field Workers</h5>
+                        <p class="card-text display-4">{{ summary_stats.total_flws }}</p>
+                        <small class="text-muted">Total FLWs</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Completion</h5>
+                        <p class="card-text display-4">{{ summary_stats.completion }}%</p>
+                        <small class="text-muted">DUs Completed</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Visits</h5>
+                        <p class="card-text display-4">{{ summary_stats.total_visits }}</p>
+                        <small class="text-muted">User Visits Recorded</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <a href="{% url 'coverage:map' %}" class="btn btn-primary btn-lg">
+                    View Coverage Map
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
