@@ -90,7 +90,7 @@
           return;
         }
 
-        var downloadUrl = '{% url "opportunity:download_invoice_line_items_preview" org_slug=request.org.slug opp_id=opportunity.id %}';
+        var downloadUrl = '{% url "opportunity:download_invoice_line_items" org_slug=request.org.slug opp_id=opportunity.id %}';
         downloadUrl += `?start_date=${this.startDate}&end_date=${this.endDate}`;
 
         return downloadUrl;

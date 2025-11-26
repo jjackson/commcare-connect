@@ -2628,7 +2628,7 @@ def invoice_items(request, *args, **kwargs):
 @require_GET
 @org_member_required
 @opportunity_required
-def download_invoice_line_items_preview(request, org_slug, opp_id):
+def download_invoice_line_items(request, org_slug, opp_id):
     start_date_str = request.GET.get("start_date", None)
     end_date_str = request.GET.get("end_date", None)
 
