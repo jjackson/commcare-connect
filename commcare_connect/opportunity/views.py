@@ -2619,7 +2619,7 @@ def invoice_items(request, *args, **kwargs):
             "line_items_table_html": html,
             "total_amount": total_local_amount,
             "total_usd_amount": total_usd_amount,
-            "preview_items_count": preview_size,
+            "preview_items_count": len(line_items),
             "total_items_count": total_items_count,
         }
     )
