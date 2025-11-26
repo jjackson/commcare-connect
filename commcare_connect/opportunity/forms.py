@@ -1577,18 +1577,14 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
             Field(
                 "amount",
                 label=f"Amount ({self.opportunity.currency})",
-                **{
-                    "x-ref": "amount",
-                    "x-model": "amount",
-                    "x-on:input.debounce.300ms": "convert()",
-                },
+                **amount_field_attrs,
             ),
         ]
         if self.is_service_delivery:
             third_row.append(
                 Field(
                     "amount_usd",
-                    **{"x-model": "usdAmount"},
+                    **amount_usd_field_attrs,
                 ),
             )
         else:
