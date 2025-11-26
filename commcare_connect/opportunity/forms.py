@@ -773,12 +773,11 @@ class VisitExportForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
+        self.org_slug = kwargs.pop("org_slug")
         self.review_export = kwargs.pop("review_export", False)
         super().__init__(*args, **kwargs)
 
-        visit_count_url = reverse(
-            "opportunity:visit_export_count", args=(self.opportunity.organization.slug, self.opportunity.id)
-        )
+        visit_count_url = reverse("opportunity:visit_export_count", args=(self.org_slug, self.opportunity.id))
 
         # if export is for review update the status and url
         if self.review_export:
