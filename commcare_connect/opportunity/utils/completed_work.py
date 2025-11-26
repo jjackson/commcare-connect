@@ -309,6 +309,8 @@ def get_uninvoiced_visit_items(opportunity, start_date=None, end_date=None, limi
             payment_unit_amount=F("payment_unit__amount"),
             record_count=Count("id"),
             currency=F("opportunity_access__opportunity__currency"),
+            total_amount_usd=Sum("saved_payment_accrued_usd"),
+            total_amount_local=Sum("saved_payment_accrued"),
         )
     )
 
@@ -317,18 +319,15 @@ def get_uninvoiced_visit_items(opportunity, start_date=None, end_date=None, limi
 
     for record in limited_pu_records:
         exchange_rate = get_exchange_rate(opportunity.currency, record["month_created"])
-        total_local_amount = record["payment_unit_amount"] * record["record_count"]
-        amount_accrued_usd = round(total_local_amount / exchange_rate, 2)
-
         invoice_items.append(
             {
                 "month": record["month_created"],
                 "payment_unit_name": record["payment_unit_name"],
                 "number_approved": record["record_count"],
                 "amount_per_unit": record["payment_unit_amount"],
-                "total_amount_local": total_local_amount,
+                "total_amount_local": record["total_amount_local"],
+                "total_amount_usd": record["total_amount_usd"],
                 "exchange_rate": exchange_rate,
-                "total_amount_usd": amount_accrued_usd,
             }
         )
 
