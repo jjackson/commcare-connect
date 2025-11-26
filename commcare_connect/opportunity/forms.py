@@ -1336,7 +1336,7 @@ class PaymentInvoiceForm(forms.ModelForm):
             self.fields["invoice_number"].initial = self.generate_invoice_number()
             self.fields["date"].initial = str(datetime.date.today())
 
-            start_date = self.get_earliest_uninvoiced_date()
+            start_date = self.get_start_date_for_invoice()
             self.fields["start_date"].initial = str(start_date)
             self.fields["end_date"].initial = str(self.get_end_date_for_invoice(start_date))
 
@@ -1401,7 +1401,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         )
         self.helper.form_tag = False
 
-    def get_earliest_uninvoiced_date(self):
+    def get_start_date_for_invoice(self):
         date = (
             CompletedWork.objects.filter(
                 invoice__isnull=True,
@@ -1411,10 +1411,14 @@ class PaymentInvoiceForm(forms.ModelForm):
             .aggregate(earliest_date=Min("status_modified_date"))
             .get("earliest_date")
         )
-        if not date:
-            return self.opportunity.start_date
 
-        return date.date()
+        start_date = date
+        if date:
+            start_date = date.date()
+        else:
+            start_date = self.opportunity.start_date
+
+        return start_date.replace(day=1)
 
     def get_end_date_for_invoice(self, start_date):
         last_day_previous_month = datetime.date.today().replace(day=1) - datetime.timedelta(days=1)

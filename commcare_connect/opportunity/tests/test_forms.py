@@ -544,11 +544,11 @@ class TestPaymentInvoiceForm:
 
         assert form.fields["invoice_number"].initial
         assert form.fields["date"].initial == str(datetime.date.today())
-        assert form.fields["start_date"].initial == str(valid_opportunity.start_date)
+        assert form.fields["start_date"].initial == str(valid_opportunity.start_date.replace(day=1))
         assert form.fields["end_date"].initial == str(datetime.date.today() - datetime.timedelta(days=1))
 
     @override_switch("automated_invoices", active=True)
-    def test_start_date_equal_to_first_uninvoiced_completed_work_date(self, valid_opportunity):
+    def test_start_date_equal_to_first_uninvoiced_completed_work_month_start(self, valid_opportunity):
         cw = CompletedWorkFactory(
             status=CompletedWorkStatus.approved,
             opportunity_access__opportunity=valid_opportunity,
@@ -571,7 +571,7 @@ class TestPaymentInvoiceForm:
         cw.save()
 
         form = PaymentInvoiceForm(opportunity=valid_opportunity)
-        assert form.fields["start_date"].initial == str(datetime.date(2025, 10, 20))
+        assert form.fields["start_date"].initial == str(datetime.date(2025, 10, 1))
 
     def test_duplicate_invoice_number(self, valid_opportunity):
         ExchangeRateFactory()
