@@ -12,7 +12,7 @@ from collections.abc import Callable
 import pandas as pd
 from django.http import HttpRequest
 
-from commcare_connect.labs.analysis.file_cache import RawAPICache
+from commcare_connect.labs.analysis.cache import RawAPICacheManager
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ def fetch_user_visits_cached(
             )
     """
     # Initialize cache (managed by Labs)
-    cache = RawAPICache(opportunity_id)
+    cache = RawAPICacheManager(opportunity_id)
 
     # Get current visit count for cache validation (if available)
     current_visit_count = None
@@ -151,9 +151,10 @@ def fetch_user_visits_cached(
             }
             visits.append(visit_dict)
 
-        # Cache the result (managed by Labs)
-        cache.set("user_visits", visits, current_visit_count)
-        logger.info(f"Cached {len(visits)} visits for opportunity {opportunity_id}")
+        # Cache the result with ACTUAL visit count (not stale OAuth count)
+        actual_visit_count = len(visits)
+        cache.set("user_visits", visits, actual_visit_count)
+        logger.info(f"Cached {actual_visit_count} visits for opportunity {opportunity_id}")
 
         return visits
 
@@ -181,5 +182,5 @@ def clear_opportunity_cache(opportunity_id: int, endpoint: str = "user_visits") 
         # Clear after data is updated
         clear_opportunity_cache(814)
     """
-    cache = RawAPICache(opportunity_id)
+    cache = RawAPICacheManager(opportunity_id)
     return cache.clear(endpoint)

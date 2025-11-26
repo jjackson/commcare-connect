@@ -72,8 +72,6 @@ class VisitAnalyzer(Analyzer):
         all_visits = self.fetch_visits()
         filtered_visits = self.filter_visits(all_visits)
 
-        logger.info(f"Computing analysis for {len(filtered_visits)} visits")
-
         # Compute fields for each visit (include histogram raw values for later aggregation)
         computed_list = []
         if self.config.fields or self.config.histograms:
@@ -131,8 +129,6 @@ class VisitAnalyzer(Analyzer):
                 "computed_fields": [f.name for f in self.config.fields],
             },
         )
-
-        logger.info(f"Computed visit analysis: {len(rows)} visits")
 
         return result
 
@@ -215,7 +211,7 @@ def compute_visit_analysis(
             print(f"{visit.username}: muac={visit.computed.get('muac_cm')}")
     """
     from commcare_connect.labs.analysis.base import AnalysisDataAccess
-    from commcare_connect.labs.analysis.file_cache import AnalysisCacheManager
+    from commcare_connect.labs.analysis.cache import AnalysisCacheManager
 
     opportunity_id = getattr(request, "labs_context", {}).get("opportunity_id")
     force_refresh = request.GET.get("refresh") == "1"
@@ -235,21 +231,9 @@ def compute_visit_analysis(
             cache_manager.set_visit_results_cache(visit_count, result)
 
             # Sync labs_context with actual visit count
-            if hasattr(request, "labs_context") and request.labs_context.get("opportunity"):
-                old_count = request.labs_context["opportunity"].get("visit_count", 0)
-                if old_count != visit_count:
-                    logger.info(
-                        f"[Analysis] Syncing labs_context visit count: "
-                        f"{old_count} -> {visit_count} (opp {opportunity_id})"
-                    )
-                    request.labs_context["opportunity"]["visit_count"] = visit_count
+            from commcare_connect.labs.analysis.cache import sync_labs_context_visit_count
 
-                    # Also update session so it persists across requests
-                    if hasattr(request, "session") and "labs_context" in request.session:
-                        session_context = request.session["labs_context"]
-                        if "opportunity" in session_context and isinstance(session_context["opportunity"], dict):
-                            session_context["opportunity"]["visit_count"] = visit_count
-                            request.session.modified = True
+            sync_labs_context_visit_count(request, visit_count, opportunity_id)
 
         return result
 
@@ -259,7 +243,7 @@ def compute_visit_analysis(
 
     # Extract tolerance from request if not explicitly provided
     if cache_tolerance_minutes is None:
-        from commcare_connect.labs.analysis.file_cache import get_cache_tolerance_from_request
+        from commcare_connect.labs.analysis.cache import get_cache_tolerance_from_request
 
         cache_tolerance_minutes = get_cache_tolerance_from_request(request)
 
@@ -291,20 +275,8 @@ def compute_visit_analysis(
     logger.info(f"[Analysis] Cached {visit_count} visits for next time")
 
     # Sync labs_context with actual visit count to prevent future cache misses
-    # The labs_context is loaded once during OAuth and becomes stale over time
-    if hasattr(request, "labs_context") and request.labs_context.get("opportunity"):
-        old_count = request.labs_context["opportunity"].get("visit_count", 0)
-        if old_count != visit_count:
-            logger.info(
-                f"[Analysis] Syncing labs_context visit count: {old_count} -> {visit_count} (opp {opportunity_id})"
-            )
-            request.labs_context["opportunity"]["visit_count"] = visit_count
+    from commcare_connect.labs.analysis.cache import sync_labs_context_visit_count
 
-            # Also update session so it persists across requests
-            if hasattr(request, "session") and "labs_context" in request.session:
-                session_context = request.session["labs_context"]
-                if "opportunity" in session_context and isinstance(session_context["opportunity"], dict):
-                    session_context["opportunity"]["visit_count"] = visit_count
-                    request.session.modified = True
+    sync_labs_context_visit_count(request, visit_count, opportunity_id)
 
     return result

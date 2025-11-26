@@ -21,6 +21,7 @@ urlpatterns = [
     # CommCare OAuth (for API access)
     path("commcare/initiate/", commcare_oauth_views.labs_commcare_initiate, name="commcare_initiate"),
     path("commcare/callback/", commcare_oauth_views.labs_commcare_callback, name="commcare_callback"),
+    path("commcare/logout/", commcare_oauth_views.labs_commcare_logout, name="commcare_logout"),
     # Dashboard Prototypes
     path("", include("commcare_connect.labs.dashboards.urls")),
 ]

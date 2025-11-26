@@ -4,7 +4,7 @@
 {% block title %}CHC Nutrition Analysis{% endblock %}
 
 {% block content %}
-<div class="container mx-auto p-6" x-data="chcNutritionAnalysis()" x-init="init()">
+<div class="container mx-auto p-6" x-data="chcNutritionAnalysis()">
     <!-- Header -->
     <div class="flex justify-between items-center mb-6">
         <div>
@@ -61,54 +61,7 @@
         </div>
     {% else %}
 
-    <!-- Loading Indicator -->
-    <div class="mb-6 p-6 bg-blue-50 border border-blue-200 rounded-lg" x-show="loading" x-cloak>
-        <div class="flex items-start gap-4">
-            <i class="fa-solid fa-spinner fa-spin text-blue-600 text-2xl mt-1"></i>
-            <div class="flex-1">
-                <h3 class="text-lg font-semibold text-blue-900 mb-2">Loading CHC Nutrition Analysis</h3>
-                <div class="space-y-1 text-sm text-blue-800">
-                    <div x-show="loadingStep >= 1" class="flex items-center gap-2">
-                        <i class="fa-solid" :class="loadingStep > 1 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
-                        <span>Initializing analysis request...</span>
-                    </div>
-                    <div x-show="loadingStep >= 2" class="flex items-center gap-2">
-                        <i class="fa-solid" :class="loadingStep > 2 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
-                        <span>Fetching visit data from Connect (this may take 30-60 seconds)...</span>
-                    </div>
-                    <div x-show="loadingStep >= 3" class="flex items-center gap-2">
-                        <i class="fa-solid" :class="loadingStep > 3 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
-                        <span>Aggregating visits to FLW level...</span>
-                    </div>
-                    <div x-show="loadingStep >= 4" class="flex items-center gap-2">
-                        <i class="fa-solid" :class="loadingStep > 4 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
-                        <span>Calculating nutrition metrics...</span>
-                    </div>
-                    <div x-show="loadingStep >= 5" class="flex items-center gap-2">
-                        <i class="fa-solid fa-check text-green-600"></i>
-                        <span>Analysis complete!</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Error Display (API errors) -->
-    <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg" x-show="loadError" x-cloak>
-        <div class="flex items-center justify-between">
-            <div class="flex items-center">
-                <i class="fa-solid fa-circle-exclamation text-red-600 mr-3"></i>
-                <div>
-                    <strong class="text-red-800">Error Loading Analysis:</strong>
-                    <span class="ml-2 text-red-700" x-text="loadError"></span>
-                </div>
-            </div>
-            <button @click="loadData()"
-                    class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium">
-                <i class="fa-solid fa-rotate mr-1"></i>Retry
-            </button>
-        </div>
-    </div>
+    {% include "labs/includes/async_loading.html" with title="Loading CHC Nutrition Analysis" %}
 
     <!-- Main Content (shown after loading) -->
     <div x-show="!loading && !loadError" x-cloak>
@@ -163,17 +116,33 @@
 
         <!-- FLW Analysis Table -->
         <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
                 <h2 class="text-xl font-semibold text-gray-900">
                     FLW-Level Analysis
                     <span class="text-sm text-gray-600 font-normal">(<span x-text="flws.length"></span> FLWs)</span>
                 </h2>
+                <div x-show="selectedFlws.length > 0" x-cloak class="flex items-center gap-3">
+                    <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-md text-sm font-medium">
+                        <span x-text="selectedFlws.length"></span> selected
+                    </span>
+                    <button @click="selectedFlws = []" class="text-sm text-gray-500 hover:text-gray-700">
+                        Clear selection
+                    </button>
+                </div>
             </div>
 
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-10">
+                                <input type="checkbox"
+                                       :checked="allSelected"
+                                       :indeterminate="someSelected"
+                                       @click="toggleSelectAll()"
+                                       class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                                       title="Select all FLWs">
+                            </th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">FLW Name</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Visits</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Approved</th>
@@ -189,7 +158,13 @@
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         <template x-for="flw in flws" :key="flw.username">
-                            <tr class="hover:bg-gray-50">
+                            <tr class="hover:bg-gray-50" :class="{'bg-blue-50': isFlwSelected(flw.username)}">
+                                <td class="px-4 py-3 text-center">
+                                    <input type="checkbox"
+                                           :checked="isFlwSelected(flw.username)"
+                                           @click="toggleFlwSelection(flw.username)"
+                                           class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer">
+                                </td>
                                 <td class="px-4 py-3 text-sm">
                                     <div class="font-medium text-gray-900" x-text="flw.display_name"></div>
                                     <template x-if="flw.display_name !== flw.username">
@@ -271,18 +246,18 @@
                                     </template>
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap text-sm">
-                                    <a :href="auditUrl + '?opportunity_id=' + opportunityId + '&username=' + flw.username + '&granularity=per_flw'"
+                                    <a :href="getAuditUrl(flw.username)"
                                        class="inline-flex items-center px-3 py-1 border border-blue-300 rounded-md text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition-colors"
-                                       :title="'Create audit for ' + flw.display_name">
+                                       :title="selectedFlws.length > 0 ? 'Create audit for ' + selectedFlws.length + ' selected FLWs' : 'Create audit for ' + flw.display_name">
                                         <i class="fa-solid fa-clipboard-check mr-1"></i>
-                                        Audit
+                                        <span x-text="selectedFlws.length > 1 ? 'Audit (' + selectedFlws.length + ')' : 'Audit'"></span>
                                     </a>
                                 </td>
                             </tr>
                         </template>
                         <template x-if="flws.length === 0">
                             <tr>
-                                <td colspan="11" class="px-4 py-8 text-center text-sm text-gray-500">
+                                <td colspan="12" class="px-4 py-8 text-center text-sm text-gray-500">
                                     No data available
                                 </td>
                             </tr>
@@ -368,6 +343,9 @@ function chcNutritionAnalysis() {
         // UI state
         showAllFields: false,
 
+        // FLW selection state
+        selectedFlws: [],
+
         // Data
         flws: [],
         summary: {},
@@ -406,11 +384,8 @@ function chcNutritionAnalysis() {
                 this.loadingStep = 1;
                 await new Promise(resolve => setTimeout(resolve, 200));
 
-                // Step 2: Start fetching (show this before the long API call)
+                // Step 2: Fetching data (this is where most time is spent)
                 this.loadingStep = 2;
-                await new Promise(resolve => setTimeout(resolve, 100));
-
-                // The actual API call
                 console.log('[CHC Nutrition] Starting API fetch');
                 const response = await fetch(this.dataApiUrl + window.location.search);
 
@@ -448,6 +423,51 @@ function chcNutritionAnalysis() {
                 console.error('Failed to load analysis data:', error);
                 this.loadError = error.message || 'Failed to load analysis data. Please try again.';
                 this.loading = false;
+            }
+        },
+
+        // Check if all FLWs are selected
+        get allSelected() {
+            return this.flws.length > 0 && this.selectedFlws.length === this.flws.length;
+        },
+
+        // Check if some (but not all) FLWs are selected
+        get someSelected() {
+            return this.selectedFlws.length > 0 && this.selectedFlws.length < this.flws.length;
+        },
+
+        // Toggle select all FLWs
+        toggleSelectAll() {
+            if (this.allSelected) {
+                this.selectedFlws = [];
+            } else {
+                this.selectedFlws = this.flws.map(flw => flw.username);
+            }
+        },
+
+        // Toggle individual FLW selection
+        toggleFlwSelection(username) {
+            const index = this.selectedFlws.indexOf(username);
+            if (index > -1) {
+                this.selectedFlws.splice(index, 1);
+            } else {
+                this.selectedFlws.push(username);
+            }
+        },
+
+        // Check if a specific FLW is selected
+        isFlwSelected(username) {
+            return this.selectedFlws.includes(username);
+        },
+
+        // Build audit URL with selected FLWs
+        getAuditUrl(flwUsername) {
+            const baseUrl = this.auditUrl + '?opportunity_id=' + this.opportunityId + '&granularity=per_flw';
+            // If there are selected FLWs, use those; otherwise use the clicked FLW
+            if (this.selectedFlws.length > 0) {
+                return baseUrl + '&usernames=' + encodeURIComponent(this.selectedFlws.join(','));
+            } else {
+                return baseUrl + '&usernames=' + encodeURIComponent(flwUsername);
             }
         }
     };

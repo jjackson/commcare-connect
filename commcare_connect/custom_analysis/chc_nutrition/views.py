@@ -3,9 +3,9 @@ Views for CHC Nutrition analysis.
 
 Provides FLW-level analysis of nutrition metrics using the labs analysis framework.
 
-Uses the pipeline pattern:
-1. compute_visit_analysis() - cached visit-level data
-2. FLWAnalyzer.from_visit_result() - aggregate to FLW level
+Uses the unified pipeline pattern via run_analysis_pipeline() which handles:
+- Multi-tier caching (LabsRecord, Redis, file)
+- Automatic terminal stage detection from config
 
 The visit_result is kept in context for potential drill-down views.
 """
@@ -19,8 +19,8 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from commcare_connect.custom_analysis.chc_nutrition.analysis_config import CHC_NUTRITION_CONFIG
-from commcare_connect.labs.analysis import FLWAnalyzer, compute_visit_analysis
 from commcare_connect.labs.analysis.base import get_flw_names_for_opportunity
+from commcare_connect.labs.analysis.pipeline import run_analysis_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -75,19 +75,14 @@ class CHCNutritionDataView(LoginRequiredMixin, View):
 
             logger.info(f"[CHC Nutrition API] Starting analysis for opportunity {opportunity_id}")
 
-            # Step 1: Compute visit-level analysis
-            logger.info("[CHC Nutrition API] Step 1/4: Fetching visit data from Connect...")
-            visit_result = compute_visit_analysis(request=request, config=CHC_NUTRITION_CONFIG, use_cache=True)
-            logger.info(f"[CHC Nutrition API] Loaded {len(visit_result.rows)} visits")
+            # Run the unified analysis pipeline
+            # This handles all caching (LabsRecord if ?use_labs_record_cache=true, Redis, file)
+            logger.info("[CHC Nutrition API] Step 1/3: Running analysis pipeline...")
+            flw_result = run_analysis_pipeline(request, CHC_NUTRITION_CONFIG)
+            logger.info(f"[CHC Nutrition API] Got {len(flw_result.rows)} FLWs from pipeline")
 
-            # Step 2: Aggregate to FLW level
-            logger.info("[CHC Nutrition API] Step 2/4: Aggregating visits to FLW level...")
-            analyzer = FLWAnalyzer(request, CHC_NUTRITION_CONFIG)
-            flw_result = analyzer.from_visit_result(visit_result)
-            logger.info(f"[CHC Nutrition API] Aggregated to {len(flw_result.rows)} FLWs")
-
-            # Step 3: Get FLW display names
-            logger.info("[CHC Nutrition API] Step 3/4: Fetching FLW display names...")
+            # Step 2: Get FLW display names
+            logger.info("[CHC Nutrition API] Step 2/3: Fetching FLW display names...")
             try:
                 flw_names = get_flw_names_for_opportunity(request)
                 logger.info(f"[CHC Nutrition API] Loaded display names for {len(flw_names)} FLWs")
@@ -95,8 +90,8 @@ class CHCNutritionDataView(LoginRequiredMixin, View):
                 logger.warning(f"Failed to fetch FLW names: {e}")
                 flw_names = {}
 
-            # Step 4: Build response data
-            logger.info("[CHC Nutrition API] Step 4/4: Building response...")
+            # Step 3: Build response data
+            logger.info("[CHC Nutrition API] Step 3/3: Building response...")
 
             # Process FLW rows
             flws_data = []
@@ -140,7 +135,7 @@ class CHCNutritionDataView(LoginRequiredMixin, View):
                 "flws": flws_data,
                 "summary": summary,
                 "nutrition_summary": nutrition_summary,
-                "total_visits": len(visit_result.rows),
+                "total_visits": flw_result.metadata.get("total_visits", 0),
                 "opportunity_id": opportunity_id,
                 "opportunity_name": labs_context.get("opportunity_name"),
                 "deliver_app_cc_app_id": deliver_app.get("cc_app_id"),

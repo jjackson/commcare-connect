@@ -15,7 +15,7 @@ from django.http import HttpRequest
 
 from commcare_connect.labs.analysis.config import AnalysisConfig, FieldComputation
 from commcare_connect.labs.analysis.models import AnalysisResult
-from commcare_connect.labs.analysis.utils import apply_aggregation, extract_json_path
+from commcare_connect.labs.analysis.utils import apply_aggregation, extract_json_path, extract_json_path_multi
 
 logger = logging.getLogger(__name__)
 
@@ -265,52 +265,31 @@ class AnalysisDataAccess:
         # Convert dicts to LocalUserVisit proxies
         visits = [LocalUserVisit(data) for data in visits_data]
 
-        logger.info(f"Created {len(visits)} LocalUserVisit proxies")
-
         return visits
 
     def fetch_visit_count(self) -> int:
         """
-        Get visit count for cache validation.
+        Get visit count for cache validation from labs_context.
 
-        Uses the visit_count from labs_context (synced from actual data during previous runs).
-        The single opportunity API endpoint doesn't reliably include visit_count, so we
-        prioritize the in-memory value that was synced from actual visit data.
+        The visit_count is synced from actual data during previous runs.
+        Raises an error if not available - this indicates a context loading issue.
 
         Returns:
             Total visit count for the opportunity
+
+        Raises:
+            ValueError: If visit_count is not in labs_context
         """
-        # Get from labs_context (synced from actual visit data)
         opportunity = self.labs_context.get("opportunity", {})
         if opportunity and "visit_count" in opportunity:
             count = opportunity.get("visit_count", 0)
             logger.info(f"Visit count from labs_context for opportunity {self.opportunity_id}: {count}")
             return count
 
-        # Fallback: Try fetching from single opportunity endpoint
-        # Note: This endpoint may not include visit_count, so this is best-effort
-        url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{self.opportunity_id}/"
-
-        logger.info(f"Fetching visit count from {url}")
-
-        try:
-            response = httpx.get(url, headers={"Authorization": f"Bearer {self.access_token}"}, timeout=30.0)
-            response.raise_for_status()
-            data = response.json()
-
-            # Check if visit_count is in the response
-            if "visit_count" in data:
-                count = data.get("visit_count", 0)
-                logger.info(f"Visit count for opportunity {self.opportunity_id}: {count}")
-                return count
-            else:
-                logger.warning(f"API endpoint does not include visit_count for opportunity {self.opportunity_id}")
-                # Return 0 to force cache miss (safer - will fetch and count actual visits)
-                return 0
-        except Exception as e:
-            logger.warning(f"Failed to fetch visit count from API: {e}")
-            # Return 0 to force cache miss (safer than using stale cache)
-            return 0
+        raise ValueError(
+            "Opportunity User Visit count not found in LabsContext. "
+            "You did not have access to this opp at the time of LabsContext loading."
+        )
 
 
 class Analyzer:
@@ -369,8 +348,6 @@ class Analyzer:
             flagged = self.config.filters["flagged"]
             filtered = [v for v in filtered if v.flagged == flagged]
 
-        logger.info(f"Filtered {len(visits)} visits to {len(filtered)} visits")
-
         return filtered
 
     def group_visits(self, visits: list[LocalUserVisit]) -> dict[Any, list[LocalUserVisit]]:
@@ -416,8 +393,15 @@ class Analyzer:
         # Extract values from all visits
         values = []
 
+        # Get paths to try (supports multi-path fallback)
+        paths = field_comp.get_paths()
+
         for visit in visits:
-            value = extract_json_path(visit.form_json, field_comp.path)
+            # Try multi-path extraction if multiple paths configured
+            if len(paths) > 1:
+                value = extract_json_path_multi(visit.form_json, paths)
+            else:
+                value = extract_json_path(visit.form_json, paths[0]) if paths else None
 
             # Apply transform if provided
             if value is not None and field_comp.transform:
@@ -472,7 +456,7 @@ def get_flw_names_for_opportunity(request: HttpRequest) -> dict[str, str]:
     Raises:
         ValueError: If no OAuth token or opportunity context found
     """
-    from commcare_connect.labs.analysis.file_cache import _use_django_cache
+    from commcare_connect.labs.analysis.cache import _use_django_cache
 
     access_token = request.session.get("labs_oauth", {}).get("access_token")
     labs_context = getattr(request, "labs_context", {})
@@ -500,7 +484,7 @@ def get_flw_names_for_opportunity(request: HttpRequest) -> dict[str, str]:
             logger.warning(f"Django cache get failed for {cache_key}: {e}")
     else:
         # File-based cache
-        from commcare_connect.labs.analysis.file_cache import CACHE_DIR
+        from commcare_connect.labs.analysis.cache import CACHE_DIR
 
         cache_file = CACHE_DIR / f"flw_names_{opportunity_id}.pkl"
         if cache_file.exists():
@@ -548,7 +532,7 @@ def get_flw_names_for_opportunity(request: HttpRequest) -> dict[str, str]:
             logger.warning(f"Django cache set failed for {cache_key}: {e}")
     else:
         # File-based cache
-        from commcare_connect.labs.analysis.file_cache import CACHE_DIR
+        from commcare_connect.labs.analysis.cache import CACHE_DIR
 
         try:
             CACHE_DIR.mkdir(exist_ok=True)

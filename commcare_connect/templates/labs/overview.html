@@ -26,23 +26,48 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {% for project in labs_projects %}
-        <a href="{{ project.url }}" class="group">
-          <div class="border-2 border-gray-200 hover:border-{{ project.color }}-500 rounded-lg p-5 transition-all hover:shadow-md bg-gray-50 hover:bg-white">
+        {% if project.buttons %}
+        {# Card with custom buttons instead of simple link #}
+        <div class="border-2 border-gray-200 rounded-lg p-5 bg-gray-50 h-full flex flex-col">
+          <div class="flex items-center mb-3">
+            <div class="w-10 h-10 bg-{{ project.color }}-100 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
+              <i class="fa-solid {{ project.icon }} text-lg text-{{ project.color }}-600"></i>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900">
+              {{ project.name }}
+            </h3>
+          </div>
+          <p class="text-sm text-gray-600 leading-snug mb-4 flex-grow">{{ project.description }}</p>
+          <div class="flex flex-wrap gap-2 mt-auto">
+            {% for button in project.buttons %}
+            <a href="{{ button.url }}"
+               class="inline-flex items-center px-3 py-1.5 bg-{{ project.color }}-600 hover:bg-{{ project.color }}-700 text-white text-sm font-medium rounded-md transition-colors shadow-sm">
+              <i class="fa-solid fa-external-link-alt mr-1.5 text-xs"></i>
+              {{ button.label }}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% else %}
+        {# Standard clickable card #}
+        <a href="{{ project.url }}" class="group h-full">
+          <div class="border-2 border-gray-200 hover:border-{{ project.color }}-500 rounded-lg p-5 transition-all hover:shadow-md bg-gray-50 hover:bg-white h-full flex flex-col">
             <div class="flex items-center mb-3">
-              <div class="w-10 h-10 bg-{{ project.color }}-100 rounded-lg flex items-center justify-center mr-3">
+              <div class="w-10 h-10 bg-{{ project.color }}-100 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
                 <i class="fa-solid {{ project.icon }} text-lg text-{{ project.color }}-600"></i>
               </div>
               <h3 class="text-lg font-bold text-gray-900 group-hover:text-{{ project.color }}-600">
                 {{ project.name }}
               </h3>
             </div>
-            <p class="text-sm text-gray-600 leading-snug mb-3">{{ project.description }}</p>
-            <div class="flex items-center text-{{ project.color }}-600 text-sm font-semibold">
+            <p class="text-sm text-gray-600 leading-snug mb-3 flex-grow">{{ project.description }}</p>
+            <div class="flex items-center text-{{ project.color }}-600 text-sm font-semibold mt-auto">
               <span>Open</span>
               <i class="fa-solid fa-chevron-right ml-1 text-xs group-hover:translate-x-1 transition-transform"></i>
             </div>
           </div>
         </a>
+        {% endif %}
         {% endfor %}
       </div>
     </div>
@@ -93,6 +118,65 @@
         <span><i class="fa-solid fa-sitemap mr-1"></i> {{ user.programs|length }} programs</span>
         <span class="text-gray-300">|</span>
         <span><i class="fa-solid fa-clipboard mr-1"></i> {{ user.opportunities|length }} opportunities</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Session Controls -->
+  <div class="mt-6 flex justify-center">
+    <div class="inline-flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-xs">
+      <!-- Connect OAuth -->
+      <div class="flex items-center gap-2">
+        <span class="font-medium text-gray-600">Connect:</span>
+        {% if connect_oauth_active %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+          <i class="fa-solid fa-check-circle mr-1"></i>Authorized
+        </span>
+        <a href="{% url 'labs:logout' %}" class="text-red-600 hover:text-red-700 hover:underline">Logout</a>
+        {% else %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
+          <i class="fa-solid fa-times-circle mr-1"></i>Not authorized
+        </span>
+        <a href="{% url 'labs:oauth_initiate' %}" class="text-indigo-600 hover:text-indigo-700 hover:underline">Authorize</a>
+        {% endif %}
+      </div>
+
+      <span class="text-gray-300">|</span>
+
+      <!-- CommCare OAuth -->
+      <div class="flex items-center gap-2">
+        <span class="font-medium text-gray-600">CommCare:</span>
+        {% if commcare_oauth_active %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+          <i class="fa-solid fa-check-circle mr-1"></i>Authorized
+        </span>
+        <a href="{% url 'labs:commcare_logout' %}" class="text-red-600 hover:text-red-700 hover:underline">Logout</a>
+        {% else %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
+          <i class="fa-solid fa-times-circle mr-1"></i>Not authorized
+        </span>
+        <a href="{% url 'labs:commcare_initiate' %}?next=/labs/overview/" class="text-indigo-600 hover:text-indigo-700 hover:underline">Authorize</a>
+        {% endif %}
+      </div>
+
+      <span class="text-gray-300">|</span>
+
+      <!-- Clear Context -->
+      <div class="flex items-center gap-2">
+        <span class="font-medium text-gray-600">Context:</span>
+        {% if has_labs_context %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+          <i class="fa-solid fa-layer-group mr-1"></i>Active
+        </span>
+        <form action="{% url 'labs:clear_context' %}" method="post" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="text-red-600 hover:text-red-700 hover:underline">Clear</button>
+        </form>
+        {% else %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
+          <i class="fa-solid fa-layer-group mr-1"></i>None
+        </span>
+        {% endif %}
       </div>
     </div>
   </div>

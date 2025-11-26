@@ -4,7 +4,7 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext as _
 
-from commcare_connect.utils.tables import DMYTColumn, IndexColumn
+from commcare_connect.utils.tables import IndexColumn
 
 
 class AuditTable(tables.Table):
@@ -60,11 +60,6 @@ class AuditTable(tables.Table):
         empty_values=(),
     )
 
-    date_created = DMYTColumn(
-        verbose_name=_("Created"),
-        attrs={"td": {"class": "text-sm text-gray-500 whitespace-nowrap"}},
-    )
-
     actions = tables.Column(
         verbose_name="",
         orderable=False,
@@ -84,11 +79,10 @@ class AuditTable(tables.Table):
             "overall_result",
             "visit_count",
             "progress",
-            "date_created",
             "actions",
         )
         sequence = fields
-        order_by = ("-date_created",)
+        order_by = ("-pk",)
         attrs = {
             "class": "base-table-full",
         }

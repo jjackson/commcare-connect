@@ -11,9 +11,29 @@ import pandas as pd
 
 from commcare_connect.labs.analysis.base import LocalUserVisit
 from commcare_connect.labs.analysis.config import SPARKLINE_CHARS, FieldComputation, HistogramComputation
-from commcare_connect.labs.analysis.utils import extract_json_path
+from commcare_connect.labs.analysis.utils import extract_json_path, extract_json_path_multi
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_field_value(form_json: dict, field_comp: FieldComputation) -> Any:
+    """Extract value from form_json using field computation paths."""
+    paths = field_comp.get_paths()
+    if len(paths) > 1:
+        return extract_json_path_multi(form_json, paths)
+    elif paths:
+        return extract_json_path(form_json, paths[0])
+    return None
+
+
+def _extract_histogram_value(form_json: dict, hist_comp) -> Any:
+    """Extract value from form_json using histogram computation paths."""
+    paths = hist_comp.get_paths()
+    if len(paths) > 1:
+        return extract_json_path_multi(form_json, paths)
+    elif paths:
+        return extract_json_path(form_json, paths[0])
+    return None
 
 
 def compute_fields_batch(visits: list[LocalUserVisit], field_comps: list[FieldComputation]) -> dict[str, Any]:
@@ -37,8 +57,8 @@ def compute_fields_batch(visits: list[LocalUserVisit], field_comps: list[FieldCo
     # Process each field computation
     for field_comp in field_comps:
         try:
-            # Extract all values for this path at once
-            values = [extract_json_path(fj, field_comp.path) for fj in form_jsons]
+            # Extract all values for this path at once (supports multi-path fallback)
+            values = [_extract_field_value(fj, field_comp) for fj in form_jsons]
 
             # Apply transform if provided
             if field_comp.transform:
@@ -126,8 +146,8 @@ def compute_visit_fields(
 
         for field_comp in field_comps:
             try:
-                # Extract value from form_json
-                value = extract_json_path(form_json, field_comp.path)
+                # Extract value from form_json (supports multi-path fallback)
+                value = _extract_field_value(form_json, field_comp)
 
                 # Apply transform if provided
                 if value is not None and field_comp.transform:
@@ -150,7 +170,7 @@ def compute_visit_fields(
         if hist_comps:
             for hist_comp in hist_comps:
                 try:
-                    value = extract_json_path(form_json, hist_comp.path)
+                    value = _extract_histogram_value(form_json, hist_comp)
 
                     # Apply transform if provided
                     if value is not None and hist_comp.transform:
@@ -199,8 +219,8 @@ def compute_histogram(visits: list[LocalUserVisit], hist_comp: HistogramComputat
     form_jsons = [v.form_json for v in visits]
 
     try:
-        # Extract all values for this path
-        values = [extract_json_path(fj, hist_comp.path) for fj in form_jsons]
+        # Extract all values for this path (supports multi-path fallback)
+        values = [_extract_histogram_value(fj, hist_comp) for fj in form_jsons]
 
         # Apply transform if provided
         if hist_comp.transform:

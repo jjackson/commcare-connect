@@ -13,8 +13,8 @@ def clear_context(request):
     """Clear the labs context from session and redirect back."""
     clear_context_from_session(request)
 
-    # Redirect to the referrer or home
-    redirect_url = request.headers.get("referer", "/tasks/")
+    # Redirect to the referrer or labs overview
+    redirect_url = request.headers.get("referer", "/labs/overview/")
 
     # Remove any context params from the redirect URL
     from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
@@ -89,7 +89,34 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
     template_name = "labs/overview.html"
 
     def get_context_data(self, **kwargs):
+        from django.utils import timezone
+
         context = super().get_context_data(**kwargs)
+
+        # Connect OAuth status
+        labs_oauth = self.request.session.get("labs_oauth", {})
+        connect_expires_at = labs_oauth.get("expires_at", 0)
+        context["connect_oauth_active"] = bool(
+            labs_oauth.get("access_token") and timezone.now().timestamp() < connect_expires_at
+        )
+
+        # CommCare OAuth status
+        commcare_oauth = self.request.session.get("commcare_oauth", {})
+        commcare_expires_at = commcare_oauth.get("expires_at", 0)
+        context["commcare_oauth_active"] = bool(
+            commcare_oauth.get("access_token") and timezone.now().timestamp() < commcare_expires_at
+        )
+
+        # Labs context status
+        labs_context = getattr(self.request, "labs_context", {}) or {}
+        context["has_labs_context"] = bool(labs_context)
+
+        # Build Coverage button URL using current labs context opportunity
+        opportunity_id = labs_context.get("opportunity_id")
+        if opportunity_id:
+            coverage_url = f"/coverage/map/?opportunity_id={opportunity_id}&config=chc_nutrition"
+        else:
+            coverage_url = "/coverage/map/?config=chc_nutrition"
 
         # Define labs projects with descriptions
         context["labs_projects"] = [
@@ -120,6 +147,12 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
                 "icon": "fa-map-marked-alt",
                 "description": "Geographic coverage analysis and mapping for Service Areas and Delivery Units",
                 "color": "green",
+                "buttons": [
+                    {
+                        "label": "CHC Nutrition View",
+                        "url": coverage_url,
+                    },
+                ],
             },
         ]
 

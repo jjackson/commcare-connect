@@ -57,6 +57,39 @@ def extract_json_path(json_obj: dict | Any, path: str) -> Any:
     return current
 
 
+def extract_json_path_multi(json_obj: dict | Any, paths: list[str]) -> Any:
+    """
+    Extract value from nested JSON, trying multiple paths in order.
+
+    Tries each path in order and returns the first non-None value found.
+    Useful for handling different form structures across opportunities.
+
+    Args:
+        json_obj: JSON object (dict) or any object
+        paths: List of dot-separated path strings to try in order
+
+    Returns:
+        First non-None value found, or None if all paths fail
+
+    Examples:
+        >>> data = {"form": {"case": {"update": {"muac_cm": 12.5}}}}
+        >>> extract_json_path_multi(data, ["form.old_path", "form.case.update.muac_cm"])
+        12.5
+
+        >>> data = {"form": {"subcase_0": {"case": {"update": {"muac": 11.0}}}}}
+        >>> extract_json_path_multi(data, [
+        ...     "form.case.update.muac_cm",  # Doesn't exist
+        ...     "form.subcase_0.case.update.muac",  # Found!
+        ... ])
+        11.0
+    """
+    for path in paths:
+        value = extract_json_path(json_obj, path)
+        if value is not None:
+            return value
+    return None
+
+
 def safe_int(value: Any, default: int = 0) -> int:
     """
     Safely convert value to integer.
