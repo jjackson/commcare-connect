@@ -72,7 +72,7 @@ class TestBackfillUserAnalyticsData:
         first_cw = CompletedWork.objects.filter(opportunity_access__user=user).order_by("date_created").first()
         assert analytics_data.has_ever_earned_payment == first_cw.status_modified_date
         assert analytics_data.has_started_job == first_cw.date_created
-        assert analytics_data.has_paid == payment.date_paid
+        assert analytics_data.has_been_paid == payment.date_paid
         assert analytics_data.has_completed_opp == completed_work.status_modified_date
         assert analytics_data.has_offered_multiple_opps == access.invited_date
         assert analytics_data.has_accepted_multiple_opps == access.invited_date
@@ -94,7 +94,7 @@ class TestBackfillUserAnalyticsData:
         assert analytics_data.has_completed_assessment is None
         assert analytics_data.has_claimed_job is None
         assert analytics_data.has_started_job is None
-        assert analytics_data.has_paid is None
+        assert analytics_data.has_been_paid is None
         assert analytics_data.has_completed_opp is None
         assert analytics_data.has_offered_multiple_opps is None
         assert analytics_data.has_accepted_multiple_opps is None
