@@ -2589,6 +2589,7 @@ def add_api_key(request, org_slug):
 
 @require_POST
 @opportunity_required
+@org_member_required
 def invoice_items(request, *args, **kwargs):
     body = json.loads(request.body)
     start_date_str = body.get("start_date", None)
