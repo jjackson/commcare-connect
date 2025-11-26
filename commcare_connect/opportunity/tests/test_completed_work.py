@@ -20,10 +20,11 @@ class TestUninvoicedVisitItems:
     def test_items_without_prior_invoice(self):
         opp_access = OpportunityAccessFactory()
         CompletedWorkFactory(status=CompletedWorkStatus.pending, opportunity_access=opp_access)
-        assert len(get_uninvoiced_visit_items(opp_access.opportunity)) == 0
+        items, _ = get_uninvoiced_visit_items(opp_access.opportunity)
+        assert len(items) == 0
 
         completed_work = CompletedWorkFactory(status=CompletedWorkStatus.approved, opportunity_access=opp_access)
-        items = get_uninvoiced_visit_items(opp_access.opportunity)
+        items, _ = get_uninvoiced_visit_items(opp_access.opportunity)
         assert len(items) == 1
 
         invoice_item = items[0]
@@ -40,13 +41,14 @@ class TestUninvoicedVisitItems:
             opportunity_access=opp_access,
             invoice=invoice,
         )
-        assert len(get_uninvoiced_visit_items(opp_access.opportunity)) == 0
+        items, _ = get_uninvoiced_visit_items(opp_access.opportunity)
+        assert len(items) == 0
 
         completed_work = CompletedWorkFactory(
             status=CompletedWorkStatus.approved,
             opportunity_access=opp_access,
         )
-        items = get_uninvoiced_visit_items(opp_access.opportunity)
+        items, _ = get_uninvoiced_visit_items(opp_access.opportunity)
         assert len(items) == 1
 
         invoice_item = items[0]
@@ -81,7 +83,7 @@ class TestUninvoicedVisitItems:
         self._create_completed_work(opp_access, one_month_ago, payment_unit, n=1)
         self._create_completed_work(opp_access, today, payment_unit, n=1)
 
-        items = get_uninvoiced_visit_items(opp_access.opportunity)
+        items, _ = get_uninvoiced_visit_items(opp_access.opportunity)
         assert len(items) == 3
 
         for item in items:
@@ -146,7 +148,7 @@ class TestUninvoicedVisitItems:
         self._create_completed_work(opp_access, today, payment_unit1, n=1)
         self._create_completed_work(opp_access, today, payment_unit2, n=1)
 
-        items = get_uninvoiced_visit_items(opp_access.opportunity)
+        items, _ = get_uninvoiced_visit_items(opp_access.opportunity)
         assert len(items) == 5
 
         for item in items:

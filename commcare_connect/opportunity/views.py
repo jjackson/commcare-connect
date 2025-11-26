@@ -2600,7 +2600,10 @@ def invoice_items(request, *args, **kwargs):
     start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
     end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
 
-    line_items = get_uninvoiced_visit_items(request.opportunity, start_date, end_date)
+    preview_size = 25
+    line_items, total_items_count = get_uninvoiced_visit_items(
+        request.opportunity, start_date, end_date, limit=preview_size
+    )
     total_local_amount = sum(item["total_amount_local"] for item in line_items)
     total_usd_amount = sum(item["total_amount_usd"] for item in line_items)
 
@@ -2615,6 +2618,8 @@ def invoice_items(request, *args, **kwargs):
             "line_items_table_html": html,
             "total_amount": total_local_amount,
             "total_usd_amount": total_usd_amount,
+            "preview_items_count": preview_size,
+            "total_items_count": total_items_count,
         }
     )
 
@@ -2632,7 +2637,7 @@ def download_invoice_line_items_preview(request, org_slug, opp_id):
     start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
     end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
 
-    line_items = get_uninvoiced_visit_items(request.opportunity, start_date, end_date)
+    line_items, _total_count = get_uninvoiced_visit_items(request.opportunity, start_date, end_date)
 
     output = StringIO()
     writer = csv.writer(output)
