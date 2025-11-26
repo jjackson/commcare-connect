@@ -16,7 +16,7 @@ from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
 from waffle import switch_is_active
 
-from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
+from commcare_connect.flags.switch_names import AUTOMATED_INVOICES, OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.models import (
     CommCareApp,
     CredentialConfiguration,
@@ -1350,7 +1350,7 @@ class PaymentInvoiceForm(forms.ModelForm):
 
     @property
     def is_automated_invoice(self):
-        return waffle.switch_is_active("automated_invoices")
+        return waffle.switch_is_active(AUTOMATED_INVOICES)
 
     def invoice_form_fields(self):
         invoice_number_attrs = {}
