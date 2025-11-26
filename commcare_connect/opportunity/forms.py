@@ -1,6 +1,6 @@
 import datetime
 import json
-import uuid
+import secrets
 from urllib.parse import urlencode
 
 import waffle
@@ -1388,7 +1388,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         ]
 
     def generate_invoice_number(self):
-        return uuid.uuid4().hex[:10].upper()
+        return secrets.token_hex(5).upper()
 
     def clean_invoice_number(self):
         invoice_number = self.cleaned_data["invoice_number"]
