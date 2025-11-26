@@ -3,7 +3,7 @@ from datetime import datetime
 
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.db import models
-from django.db.models.functions import Coalesce, ExtractDay, Greatest, TruncMonth
+from django.db.models.functions import Coalesce, ExtractDay, Least, TruncMonth
 from django.utils.timezone import now
 
 from commcare_connect.connect_id_client import fetch_user_counts
@@ -228,7 +228,7 @@ def get_table_data_for_year_month(
         UserAnalyticsData.objects.filter(
             models.Q(has_ever_earned_payment__isnull=False) | models.Q(has_sso_on_hq_app__isnull=False)
         )
-        .annotate(month_group=TruncMonth(Greatest("has_ever_earned_payment", "has_sso_on_hq_app")))
+        .annotate(month_group=TruncMonth(Least("has_ever_earned_payment", "has_sso_on_hq_app")))
         .values("month_group")
         .annotate(users=models.Count("username"))
     )
