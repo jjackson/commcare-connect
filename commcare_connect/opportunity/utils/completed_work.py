@@ -301,9 +301,9 @@ def get_uninvoiced_visit_items(opportunity, start_date=None, end_date=None, limi
 
     monthly_pu_records = (
         completed_works_qs.annotate(
-            month_created=TruncMonth("status_modified_date"),
+            month_approved=TruncMonth("status_modified_date"),
         )
-        .values("payment_unit", "month_created")
+        .values("payment_unit", "month_approved")
         .annotate(
             payment_unit_name=F("payment_unit__name"),
             payment_unit_amount=F("payment_unit__amount"),
@@ -318,10 +318,10 @@ def get_uninvoiced_visit_items(opportunity, start_date=None, end_date=None, limi
     invoice_items = []
 
     for record in limited_pu_records:
-        exchange_rate = get_exchange_rate(opportunity.currency, record["month_created"])
+        exchange_rate = get_exchange_rate(opportunity.currency, record["month_approved"])
         invoice_items.append(
             {
-                "month": record["month_created"],
+                "month": record["month_approved"],
                 "payment_unit_name": record["payment_unit_name"],
                 "number_approved": record["record_count"],
                 "amount_per_unit": record["payment_unit_amount"],
