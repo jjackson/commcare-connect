@@ -10,4 +10,5 @@ app_name = "chc_nutrition"
 
 urlpatterns = [
     path("", views.CHCNutritionAnalysisView.as_view(), name="analysis"),
+    path("api/data/", views.CHCNutritionDataView.as_view(), name="api_data"),
 ]

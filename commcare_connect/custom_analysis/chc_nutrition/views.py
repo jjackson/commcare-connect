@@ -13,6 +13,9 @@ The visit_result is kept in context for potential drill-down views.
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import JsonResponse
+from django.urls import reverse
+from django.views import View
 from django.views.generic import TemplateView
 
 from commcare_connect.custom_analysis.chc_nutrition.analysis_config import CHC_NUTRITION_CONFIG
@@ -27,7 +30,8 @@ class CHCNutritionAnalysisView(LoginRequiredMixin, TemplateView):
     Main analysis view for CHC Nutrition project.
 
     Displays one row per FLW with aggregated nutrition and health metrics.
-    The visit-level result is also available for drill-down views.
+    Uses progressive loading: the page loads quickly with a loading indicator,
+    then fetches data asynchronously via the CHCNutritionDataView API.
     """
 
     template_name = "custom_analysis/chc_nutrition/analysis.html"
@@ -47,68 +51,112 @@ class CHCNutritionAnalysisView(LoginRequiredMixin, TemplateView):
             context["error"] = "No opportunity selected. Please select an opportunity from the labs context."
             return context
 
+        # Provide the API endpoint URL for async data loading
+        context["data_api_url"] = reverse("chc_nutrition:api_data")
+
+        return context
+
+
+class CHCNutritionDataView(LoginRequiredMixin, View):
+    """API endpoint to load CHC Nutrition data asynchronously."""
+
+    def get(self, request):
+        """Return CHC Nutrition analysis data as JSON for progressive loading."""
         try:
-            # Pipeline: Get visit-level analysis (cached)
-            logger.info(f"Getting visit analysis for opportunity {opportunity_id}")
-            visit_result = compute_visit_analysis(request=self.request, config=CHC_NUTRITION_CONFIG, use_cache=True)
+            # Check labs context
+            labs_context = getattr(request, "labs_context", {})
+            opportunity_id = labs_context.get("opportunity_id")
 
-            # Pipeline: Aggregate to FLW level
-            logger.info(f"Aggregating {len(visit_result.rows)} visits to FLW level")
-            analyzer = FLWAnalyzer(self.request, CHC_NUTRITION_CONFIG)
+            if not opportunity_id:
+                return JsonResponse(
+                    {"error": "No opportunity selected. Please select an opportunity from the labs context."},
+                    status=400,
+                )
+
+            logger.info(f"[CHC Nutrition API] Starting analysis for opportunity {opportunity_id}")
+
+            # Step 1: Compute visit-level analysis
+            logger.info("[CHC Nutrition API] Step 1/4: Fetching visit data from Connect...")
+            visit_result = compute_visit_analysis(request=request, config=CHC_NUTRITION_CONFIG, use_cache=True)
+            logger.info(f"[CHC Nutrition API] Loaded {len(visit_result.rows)} visits")
+
+            # Step 2: Aggregate to FLW level
+            logger.info("[CHC Nutrition API] Step 2/4: Aggregating visits to FLW level...")
+            analyzer = FLWAnalyzer(request, CHC_NUTRITION_CONFIG)
             flw_result = analyzer.from_visit_result(visit_result)
+            logger.info(f"[CHC Nutrition API] Aggregated to {len(flw_result.rows)} FLWs")
 
-            logger.info(
-                f"Analysis complete: {len(flw_result.rows)} FLWs, "
-                f"{flw_result.metadata.get('total_visits', 0)} visits"
-            )
-
-            # Get FLW display names from CommCare
+            # Step 3: Get FLW display names
+            logger.info("[CHC Nutrition API] Step 3/4: Fetching FLW display names...")
             try:
-                flw_names = get_flw_names_for_opportunity(self.request)
-                logger.info(f"Loaded display names for {len(flw_names)} FLWs")
+                flw_names = get_flw_names_for_opportunity(request)
+                logger.info(f"[CHC Nutrition API] Loaded display names for {len(flw_names)} FLWs")
             except Exception as e:
                 logger.warning(f"Failed to fetch FLW names: {e}")
                 flw_names = {}
 
-            # FLW-level results for summary table
-            context["result"] = flw_result
-            context["summary"] = flw_result.get_summary_stats()
-            context["from_cache"] = not self.request.GET.get("refresh")
+            # Step 4: Build response data
+            logger.info("[CHC Nutrition API] Step 4/4: Building response...")
 
-            # Add display names to FLW rows and calculate gender split
+            # Process FLW rows
+            flws_data = []
             for flw in flw_result.rows:
-                flw.display_name = flw_names.get(flw.username, flw.username)
+                display_name = flw_names.get(flw.username, flw.username)
 
-                # Calculate gender split (female percentage of total gendered children)
+                # Calculate gender split
                 male_count = flw.custom_fields.get("male_count") or 0
                 female_count = flw.custom_fields.get("female_count") or 0
                 total_gendered = male_count + female_count
+                gender_split_female_pct = (
+                    round((female_count / total_gendered) * 100, 1) if total_gendered > 0 else None
+                )
 
-                if total_gendered > 0:
-                    flw.gender_split_female_pct = round((female_count / total_gendered) * 100, 1)
-                else:
-                    flw.gender_split_female_pct = None
+                flw_data = {
+                    "username": flw.username,
+                    "display_name": display_name,
+                    "total_visits": flw.total_visits,
+                    "approved_visits": flw.approved_visits,
+                    "approval_rate": round(flw.approval_rate, 1) if flw.approval_rate else 0,
+                    "days_active": flw.days_active,
+                    "custom_fields": flw.custom_fields,
+                    "gender_split_female_pct": gender_split_female_pct,
+                    "male_count": male_count,
+                    "female_count": female_count,
+                }
+                flws_data.append(flw_data)
 
-            context["flws"] = flw_result.rows
+            # Calculate summary stats
+            summary = flw_result.get_summary_stats()
 
-            # Get deliver app info from opportunity for audit button
+            # Calculate nutrition summary
+            nutrition_summary = self._get_nutrition_summary(flw_result)
+
+            # Get opportunity info for audit button
             opportunity = labs_context.get("opportunity", {})
             deliver_app = opportunity.get("deliver_app", {})
-            context["deliver_app_cc_app_id"] = deliver_app.get("cc_app_id")
-            context["deliver_app_cc_domain"] = deliver_app.get("cc_domain")
 
-            # Visit-level results for potential drill-down
-            context["visit_result"] = visit_result
-            context["total_visits"] = len(visit_result.rows)
+            response_data = {
+                "success": True,
+                "flws": flws_data,
+                "summary": summary,
+                "nutrition_summary": nutrition_summary,
+                "total_visits": len(visit_result.rows),
+                "opportunity_id": opportunity_id,
+                "opportunity_name": labs_context.get("opportunity_name"),
+                "deliver_app_cc_app_id": deliver_app.get("cc_app_id"),
+                "deliver_app_cc_domain": deliver_app.get("cc_domain"),
+                "from_cache": request.GET.get("refresh") != "1",
+            }
 
-            # Additional nutrition-specific summaries
-            context["nutrition_summary"] = self._get_nutrition_summary(flw_result)
+            logger.info(
+                f"[CHC Nutrition API] Complete! Returning {len(flws_data)} FLWs, "
+                f"{nutrition_summary.get('total_muac_measurements', 0)} MUAC measurements"
+            )
+            return JsonResponse(response_data)
 
         except Exception as e:
-            logger.error(f"Failed to compute CHC Nutrition analysis: {e}", exc_info=True)
-            context["error"] = f"Analysis failed: {str(e)}"
-
-        return context
+            logger.error(f"[CHC Nutrition API] Failed to compute analysis: {e}", exc_info=True)
+            return JsonResponse({"error": str(e)}, status=500)
 
     def _get_nutrition_summary(self, result) -> dict:
         """
@@ -125,24 +173,18 @@ class CHCNutritionAnalysisView(LoginRequiredMixin, TemplateView):
 
         # Aggregate across all FLWs (handle None values explicitly)
         total_muac_measurements = sum(row.custom_fields.get("muac_measurements_count") or 0 for row in result.rows)
-
         total_muac_consents = sum(row.custom_fields.get("muac_consent_count") or 0 for row in result.rows)
-
         total_children_unwell = sum(row.custom_fields.get("children_unwell_count") or 0 for row in result.rows)
-
         total_malnutrition_diagnosed = sum(
             row.custom_fields.get("malnutrition_diagnosed_count") or 0 for row in result.rows
         )
-
         total_under_treatment = sum(
             row.custom_fields.get("under_malnutrition_treatment_count") or 0 for row in result.rows
         )
-
         total_va_doses = sum(row.custom_fields.get("received_va_dose_before_count") or 0 for row in result.rows)
 
         # SAM and MAM counts
         total_sam = sum(row.custom_fields.get("sam_count") or 0 for row in result.rows)
-
         total_mam = sum(row.custom_fields.get("mam_count") or 0 for row in result.rows)
 
         # Calculate averages

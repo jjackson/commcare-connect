@@ -21,6 +21,7 @@ def fetch_user_visits_cached(
     request: HttpRequest,
     opportunity_id: int,
     api_call_func: Callable,
+    force_refresh: bool = False,
 ) -> list[dict]:
     """
     Fetch user visits with automatic caching.
@@ -32,6 +33,7 @@ def fetch_user_visits_cached(
         request: HttpRequest with labs_context (for visit count validation)
         opportunity_id: Opportunity ID
         api_call_func: Function that makes the API call (should return httpx.Response)
+        force_refresh: If True, skip cache and fetch fresh data from API
 
     Returns:
         List of visit dicts
@@ -58,11 +60,15 @@ def fetch_user_visits_cached(
         opportunity = labs_context.get("opportunity", {})
         current_visit_count = opportunity.get("visit_count")
 
-    # Try to get from cache
-    cached_data = cache.get("user_visits")
-    if cached_data and cache.is_valid(cached_data, current_visit_count):
-        logger.info(f"Cache HIT for user_visits (opportunity {opportunity_id})")
-        return cached_data["data"]
+    # Skip cache if force_refresh is True
+    if not force_refresh:
+        # Try to get from cache
+        cached_data = cache.get("user_visits")
+        if cached_data and cache.is_valid(cached_data, current_visit_count):
+            logger.info(f"Cache HIT for user_visits (opportunity {opportunity_id})")
+            return cached_data["data"]
+    else:
+        logger.info(f"Force refresh requested - bypassing cache (opportunity {opportunity_id})")
 
     # Cache miss - fetch from API
     logger.info(f"Cache MISS for user_visits (opportunity {opportunity_id}) - fetching from API")
@@ -96,16 +102,28 @@ def fetch_user_visits_cached(
                     pass
 
             # Extract xform_id and form_json from CSV
+            # NOTE: The API returns form_json as Python repr format (single quotes, Python literals)
+            # not valid JSON (double quotes, null/true/false). We try JSON first, then ast.literal_eval.
             xform_id = None
             form_json = {}
             if "form_json" in row and pd.notna(row["form_json"]):
-                try:
-                    import json
+                import ast
+                import json
 
-                    form_json = json.loads(row["form_json"])
-                    xform_id = form_json.get("id")
+                raw_json = row["form_json"]
+                # First try json.loads for valid JSON
+                try:
+                    form_json = json.loads(raw_json)
                 except (json.JSONDecodeError, TypeError):
-                    pass
+                    # Fall back to ast.literal_eval for Python dict repr format
+                    try:
+                        form_json = ast.literal_eval(raw_json)
+                    except (ValueError, SyntaxError):
+                        logger.warning(f"Failed to parse form_json: {str(raw_json)[:100]}...")
+                        form_json = {}
+
+                if form_json:
+                    xform_id = form_json.get("id")
 
             # Extract images from CSV
             images = []
