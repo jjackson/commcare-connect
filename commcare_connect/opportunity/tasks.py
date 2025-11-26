@@ -404,9 +404,11 @@ def bulk_update_visit_status_task(
             rows = list(dataset)
 
         status = bulk_update_visit_status(opportunity_id, headers, rows)
-        messages = [f"Visit status updated successfully for {len(status)} visits."]
+        messages = [f"Visit status updated successfully for {len(status)} visits.<br>"]
         if status.missing_visits:
             messages.append(status.get_missing_message())
+        if status.locked_visits:
+            messages.append(status.get_locked_message())
 
         if tracking_info:
             tracking_info = GATrackingInfo.from_dict(tracking_info)
