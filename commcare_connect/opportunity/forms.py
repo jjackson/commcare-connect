@@ -1335,8 +1335,10 @@ class PaymentInvoiceForm(forms.ModelForm):
         if self.is_automated_invoice:
             self.fields["invoice_number"].initial = self.generate_invoice_number()
             self.fields["date"].initial = str(datetime.date.today())
-            self.fields["start_date"].initial = str(self.get_earliest_uninvoiced_date())
-            self.fields["end_date"].initial = str(datetime.date.today() - relativedelta(days=1))
+
+            start_date = self.get_earliest_uninvoiced_date()
+            self.fields["start_date"].initial = str(start_date)
+            self.fields["end_date"].initial = str(self.get_end_date_for_invoice(start_date))
 
         self.helper = FormHelper(self)
 
@@ -1413,6 +1415,13 @@ class PaymentInvoiceForm(forms.ModelForm):
             return self.opportunity.start_date
 
         return date.date()
+
+    def get_end_date_for_invoice(self, start_date):
+        last_day_previous_month = datetime.date.today().replace(day=1) - datetime.timedelta(days=1)
+
+        if start_date > last_day_previous_month:
+            return datetime.date.today() - datetime.timedelta(days=1)
+        return last_day_previous_month
 
     @property
     def is_automated_invoice(self):
