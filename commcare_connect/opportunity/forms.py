@@ -1489,14 +1489,14 @@ class PaymentInvoiceForm(forms.ModelForm):
         if amount is None or date is None:
             return cleaned_data  # Let individual field errors handle missing values
 
-        exchange_rate = ExchangeRate.latest_exchange_rate(self.opportunity.currency, date)
-        if not exchange_rate:
-            raise ValidationError("Exchange rate not available for selected date.")
-
-        cleaned_data["exchange_rate"] = exchange_rate
-        cleaned_data["amount_usd"] = round(amount / exchange_rate.rate, 2)
-
         if not self.is_service_delivery:
+            exchange_rate = ExchangeRate.latest_exchange_rate(self.opportunity.currency, date)
+            if not exchange_rate:
+                raise ValidationError("Exchange rate not available for selected date.")
+
+            cleaned_data["exchange_rate"] = exchange_rate
+            cleaned_data["amount_usd"] = round(amount / exchange_rate.rate, 2)
+
             cleaned_data["title"] = None
             cleaned_data["start_date"] = None
             cleaned_data["end_date"] = None
@@ -1520,7 +1520,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         instance.opportunity = self.opportunity
         instance.amount_usd = self.cleaned_data["amount_usd"]
         instance.amount = self.cleaned_data["amount"]
-        instance.exchange_rate = self.cleaned_data["exchange_rate"]
+        instance.exchange_rate = self.cleaned_data.get("exchange_rate")
         instance.service_delivery = self.invoice_type == PaymentInvoice.InvoiceType.service_delivery
 
         if commit:
