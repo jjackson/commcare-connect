@@ -537,6 +537,7 @@ class TestAutomatedPaymentInvoiceForm:
 
         form = AutomatedPaymentInvoiceForm(
             opportunity=valid_opportunity,
+            invoice_type="custom",
             data={
                 "invoice_number": "INV-001",
                 "date": "2025-11-06",
@@ -546,7 +547,6 @@ class TestAutomatedPaymentInvoiceForm:
                 "end_date": None,
                 "notes": "",
                 "title": "",
-                "invoice_type": "custom",
             },
         )
         assert not form.is_valid()
@@ -557,6 +557,7 @@ class TestAutomatedPaymentInvoiceForm:
 
         form = AutomatedPaymentInvoiceForm(
             opportunity=valid_opportunity,
+            invoice_type="custom",
             data={
                 "date": "2025-11-06",
                 "usd_currency": False,
@@ -565,7 +566,6 @@ class TestAutomatedPaymentInvoiceForm:
                 "end_date": None,
                 "notes": "",
                 "title": "",
-                "invoice_type": "custom",
             },
         )
         assert form.is_valid()
@@ -584,7 +584,6 @@ class TestAutomatedPaymentInvoiceForm:
                 "date": "2025-11-06",
                 "usd_currency": False,
                 "amount": 100.0,
-                "invoice_type": "custom",
                 "title": "Consulting Services Invoice",
                 "start_date": "2025-10-01",
                 "end_date": "2025-10-31",
@@ -604,12 +603,12 @@ class TestAutomatedPaymentInvoiceForm:
 
         form = AutomatedPaymentInvoiceForm(
             opportunity=valid_opportunity,
+            invoice_type="service_delivery",
             data={
                 "invoice_number": "INV-001",
                 "amount": 100.0,
                 "date": "2025-11-06",
                 "usd_currency": False,
-                "invoice_type": "service_delivery",
                 "title": "Consulting Services Invoice",
                 "start_date": "2025-10-01",
                 "end_date": "2025-10-31",
