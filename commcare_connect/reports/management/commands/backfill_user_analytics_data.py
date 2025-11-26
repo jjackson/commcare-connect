@@ -100,6 +100,7 @@ class Command(BaseCommand):
         for data in chain(access_objects, personalid_analytics_data):
             username = data.get("username")
             if username is not None:
+                user_data_map[username]["has_sso_on_hq_app"] = data.pop("hq_sso_date")
                 user_data_map[username].update(data)
 
         UserAnalyticsData.objects.bulk_create(
