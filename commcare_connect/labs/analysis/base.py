@@ -228,6 +228,7 @@ class AnalysisDataAccess:
         Fetch all UserVisits for the opportunity from Connect API.
 
         Uses centralized Labs caching to avoid repeated API calls.
+        Respects ?refresh=1 URL parameter to force cache bypass.
 
         Returns:
             List of LocalUserVisit proxies
@@ -238,6 +239,9 @@ class AnalysisDataAccess:
         from commcare_connect.labs.api_cache import fetch_user_visits_cached
 
         logger.info(f"Fetching user visits for opportunity {self.opportunity_id}")
+
+        # Check for force refresh from URL parameter
+        force_refresh = self.request.GET.get("refresh") == "1"
 
         # Define the API call function
         def make_api_call():
@@ -255,6 +259,7 @@ class AnalysisDataAccess:
             request=self.request,
             opportunity_id=self.opportunity_id,
             api_call_func=make_api_call,
+            force_refresh=force_refresh,
         )
 
         # Convert dicts to LocalUserVisit proxies
