@@ -1,6 +1,6 @@
 import datetime
 import json
-import uuid
+import secrets
 from urllib.parse import urlencode
 
 import waffle
@@ -16,7 +16,7 @@ from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
 from waffle import switch_is_active
 
-from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
+from commcare_connect.flags.switch_names import AUTOMATED_INVOICES, OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.models import (
     CommCareApp,
     CompletedWork,
@@ -1416,7 +1416,7 @@ class PaymentInvoiceForm(forms.ModelForm):
 
     @property
     def is_automated_invoice(self):
-        return waffle.switch_is_active("automated_invoices")
+        return waffle.switch_is_active(AUTOMATED_INVOICES)
 
     def invoice_form_fields(self):
         invoice_number_attrs = {}
@@ -1457,7 +1457,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         ]
 
     def generate_invoice_number(self):
-        return uuid.uuid4().hex[:10].upper()
+        return secrets.token_hex(5).upper()
 
     def clean_invoice_number(self):
         invoice_number = self.cleaned_data["invoice_number"]
