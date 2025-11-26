@@ -7,9 +7,9 @@ from waffle.testutils import override_switch
 from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.forms import (
     AddBudgetNewUsersForm,
+    AutomatedPaymentInvoiceForm,
     OpportunityChangeForm,
     OpportunityInitUpdateForm,
-    PaymentInvoiceForm,
 )
 from commcare_connect.opportunity.models import CredentialConfiguration, PaymentUnit
 from commcare_connect.opportunity.tests.factories import (
@@ -530,12 +530,12 @@ class TestAddBudgetNewUsersForm:
 
 
 @pytest.mark.django_db
-class TestPaymentInvoiceForm:
+class TestAutomatedPaymentInvoiceForm:
     def test_duplicate_invoice_number(self, valid_opportunity):
         ExchangeRateFactory()
         PaymentInvoiceFactory(opportunity=valid_opportunity, invoice_number="INV-001")
 
-        form = PaymentInvoiceForm(
+        form = AutomatedPaymentInvoiceForm(
             opportunity=valid_opportunity,
             data={
                 "invoice_number": "INV-001",
@@ -555,12 +555,12 @@ class TestPaymentInvoiceForm:
     def test_valid_form(self, valid_opportunity):
         ExchangeRateFactory()
 
-        form = PaymentInvoiceForm(
+        form = AutomatedPaymentInvoiceForm(
             opportunity=valid_opportunity,
             data={
                 "date": "2025-11-06",
                 "usd_currency": False,
-                "local_amount": 100.0,
+                "amount": 100.0,
                 "start_date": None,
                 "end_date": None,
                 "notes": "",
@@ -576,14 +576,14 @@ class TestPaymentInvoiceForm:
     def test_non_service_delivery_form(self, valid_opportunity):
         ExchangeRateFactory()
 
-        form = PaymentInvoiceForm(
+        form = AutomatedPaymentInvoiceForm(
             opportunity=valid_opportunity,
             invoice_type="custom",
             data={
                 "invoice_number": "INV-001",
                 "date": "2025-11-06",
                 "usd_currency": False,
-                "local_amount": 100.0,
+                "amount": 100.0,
                 "invoice_type": "custom",
                 "title": "Consulting Services Invoice",
                 "start_date": "2025-10-01",
@@ -599,40 +599,14 @@ class TestPaymentInvoiceForm:
         assert invoice.notes is None
         assert invoice.title is None
 
-    @override_switch("automated_invoices", active=False)
-    def test_service_delivery_form_switch_inactive(self, valid_opportunity):
+    def test_service_delivery_form(self, valid_opportunity):
         ExchangeRateFactory()
 
-        form = PaymentInvoiceForm(
+        form = AutomatedPaymentInvoiceForm(
             opportunity=valid_opportunity,
             data={
                 "invoice_number": "INV-001",
-                "local_amount": 100.0,
-                "date": "2025-11-06",
-                "usd_currency": False,
-                "invoice_type": "service_delivery",
-                "title": "Consulting Services Invoice",
-                "start_date": "2025-10-01",
-                "end_date": "2025-10-31",
-                "notes": "Monthly consulting services rendered.",
-            },
-        )
-        assert form.is_valid()
-        invoice = form.save()
-        assert invoice.service_delivery
-        assert invoice.start_date is None
-        assert invoice.end_date is None
-        assert invoice.notes is None
-
-    @override_switch("automated_invoices", active=True)
-    def test_service_delivery_form_switch_active(self, valid_opportunity):
-        ExchangeRateFactory()
-
-        form = PaymentInvoiceForm(
-            opportunity=valid_opportunity,
-            data={
-                "invoice_number": "INV-001",
-                "local_amount": 100.0,
+                "amount": 100.0,
                 "date": "2025-11-06",
                 "usd_currency": False,
                 "invoice_type": "service_delivery",
