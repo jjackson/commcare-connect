@@ -1447,6 +1447,18 @@ class PaymentInvoiceForm(forms.ModelForm):
             )
             second_row.append(Field("end_date", **{"x-model": "endDate", "x-on:change": "fetchInvoiceLineItems()"}))
 
+        amount_field_attrs = {
+            "x-ref": "amount",
+            "x-model": "amount",
+            "x-on:input.debounce.300ms": "convert()",
+        }
+        amount_usd_field_attrs = {
+            "x-model": "usdAmount",
+        }
+        if self.is_service_delivery:
+            amount_field_attrs["readonly"] = "readonly"
+            amount_usd_field_attrs["readonly"] = "readonly"
+
         return [
             Div(
                 Div(*first_row, css_class="grid grid-cols-3 gap-6"),
@@ -1455,13 +1467,12 @@ class PaymentInvoiceForm(forms.ModelForm):
                     Field(
                         "amount",
                         label=f"Amount ({self.opportunity.currency})",
-                        **{
-                            "x-ref": "amount",
-                            "x-model": "amount",
-                            "x-on:input.debounce.300ms": "convert()",
-                        },
+                        **amount_field_attrs,
                     ),
-                    Field("amount_usd", **{"x-model": "usdAmount"}),
+                    Field(
+                        "amount_usd",
+                        **amount_usd_field_attrs,
+                    ),
                     Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
                     css_class="grid grid-cols-3 gap-6",
                 ),
