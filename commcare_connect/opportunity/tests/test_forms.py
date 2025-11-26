@@ -8,9 +8,9 @@ from waffle.testutils import override_switch
 from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.forms import (
     AddBudgetNewUsersForm,
+    AutomatedPaymentInvoiceForm,
     OpportunityChangeForm,
     OpportunityInitUpdateForm,
-    PaymentInvoiceForm,
 )
 from commcare_connect.opportunity.models import (
     CompletedWork,
@@ -537,17 +537,15 @@ class TestAddBudgetNewUsersForm:
 
 
 @pytest.mark.django_db
-class TestPaymentInvoiceForm:
-    @override_switch("automated_invoices", active=True)
+class TestAutomatedPaymentInvoiceForm:
     def test_form_initialization(self, valid_opportunity):
-        form = PaymentInvoiceForm(opportunity=valid_opportunity)
+        form = AutomatedPaymentInvoiceForm(opportunity=valid_opportunity)
 
         assert form.fields["invoice_number"].initial
         assert form.fields["date"].initial == str(datetime.date.today())
         assert form.fields["start_date"].initial == str(valid_opportunity.start_date.replace(day=1))
         assert form.fields["end_date"].initial == str(datetime.date.today() - datetime.timedelta(days=1))
 
-    @override_switch("automated_invoices", active=True)
     def test_start_date_equal_to_first_uninvoiced_completed_work_month_start(self, valid_opportunity):
         cw = CompletedWorkFactory(
             status=CompletedWorkStatus.approved,
@@ -556,7 +554,7 @@ class TestPaymentInvoiceForm:
         cw.status_modified_date = datetime.date(2025, 10, 1)
         cw.save()
 
-        form = PaymentInvoiceForm(opportunity=valid_opportunity)
+        form = AutomatedPaymentInvoiceForm(opportunity=valid_opportunity)
         assert form.fields["start_date"].initial == str(datetime.date(2025, 10, 1))
 
         invoice = PaymentInvoiceFactory(opportunity=valid_opportunity)
@@ -570,14 +568,14 @@ class TestPaymentInvoiceForm:
         cw.status_modified_date = datetime.date(2025, 10, 20)
         cw.save()
 
-        form = PaymentInvoiceForm(opportunity=valid_opportunity)
+        form = AutomatedPaymentInvoiceForm(opportunity=valid_opportunity)
         assert form.fields["start_date"].initial == str(datetime.date(2025, 10, 1))
 
     def test_duplicate_invoice_number(self, valid_opportunity):
         ExchangeRateFactory()
         PaymentInvoiceFactory(opportunity=valid_opportunity, invoice_number="INV-001")
 
-        form = PaymentInvoiceForm(
+        form = AutomatedPaymentInvoiceForm(
             opportunity=valid_opportunity,
             data={
                 "invoice_number": "INV-001",
@@ -597,10 +595,11 @@ class TestPaymentInvoiceForm:
     def test_valid_form(self, valid_opportunity):
         ExchangeRateFactory()
 
-        form = PaymentInvoiceForm(
+        form = AutomatedPaymentInvoiceForm(
             opportunity=valid_opportunity,
             data={
                 "date": "2025-11-06",
+                "usd_currency": False,
                 "amount": 100.0,
                 "start_date": None,
                 "end_date": None,
@@ -609,7 +608,6 @@ class TestPaymentInvoiceForm:
                 "invoice_type": "custom",
             },
         )
-
         assert form.is_valid()
         invoice = form.save()
         assert invoice.amount == 100.0
@@ -619,12 +617,13 @@ class TestPaymentInvoiceForm:
     def test_non_service_delivery_form(self, mock_link_invoice, valid_opportunity):
         ExchangeRateFactory()
 
-        form = PaymentInvoiceForm(
+        form = AutomatedPaymentInvoiceForm(
             opportunity=valid_opportunity,
             invoice_type="custom",
             data={
                 "invoice_number": "INV-001",
                 "date": "2025-11-06",
+                "usd_currency": False,
                 "amount": 100.0,
                 "invoice_type": "custom",
                 "title": "Consulting Services Invoice",
@@ -640,42 +639,13 @@ class TestPaymentInvoiceForm:
         assert invoice.end_date is None
         assert invoice.notes is None
         assert invoice.title is None
-
         mock_link_invoice.assert_not_called()
 
-    @override_switch("automated_invoices", active=False)
     @patch("commcare_connect.opportunity.forms.link_invoice_to_completed_works")
-    def test_service_delivery_form_switch_inactive(self, mock_link_invoice, valid_opportunity):
+    def test_service_delivery_form(self, mock_link_invoice, valid_opportunity):
         ExchangeRateFactory()
 
-        form = PaymentInvoiceForm(
-            opportunity=valid_opportunity,
-            data={
-                "invoice_number": "INV-001",
-                "amount": 100.0,
-                "date": "2025-11-06",
-                "usd_currency": False,
-                "invoice_type": "service_delivery",
-                "title": "Consulting Services Invoice",
-                "start_date": "2025-10-01",
-                "end_date": "2025-10-31",
-                "notes": "Monthly consulting services rendered.",
-            },
-        )
-        assert form.is_valid()
-        invoice = form.save()
-        assert invoice.service_delivery
-        assert invoice.start_date is None
-        assert invoice.end_date is None
-        assert invoice.notes is None
-        mock_link_invoice.assert_not_called()
-
-    @override_switch("automated_invoices", active=True)
-    @patch("commcare_connect.opportunity.forms.link_invoice_to_completed_works")
-    def test_service_delivery_form_switch_active(self, mock_link_invoice, valid_opportunity):
-        ExchangeRateFactory()
-
-        form = PaymentInvoiceForm(
+        form = AutomatedPaymentInvoiceForm(
             opportunity=valid_opportunity,
             data={
                 "invoice_number": "INV-001",
@@ -697,8 +667,8 @@ class TestPaymentInvoiceForm:
 
         mock_link_invoice.assert_called_once()
 
-    @override_switch("automated_invoices", active=True)
-    def test_invoice_linkage(self, valid_opportunity):
+    @patch("commcare_connect.opportunity.forms.link_invoice_to_completed_works")
+    def test_invoice_linkage(self, mock_link_invoice, valid_opportunity):
         ExchangeRateFactory()
         cw = CompletedWorkFactory(
             opportunity_access__opportunity=valid_opportunity,
@@ -709,7 +679,7 @@ class TestPaymentInvoiceForm:
 
         assert CompletedWork.objects.get(id=cw.id).invoice is None
 
-        form = PaymentInvoiceForm(
+        form = AutomatedPaymentInvoiceForm(
             opportunity=valid_opportunity,
             data={
                 "invoice_number": "INV-001",
@@ -725,5 +695,6 @@ class TestPaymentInvoiceForm:
 
         assert form.is_valid()
         invoice = form.save()
+        mock_link_invoice.assert_called_once()
 
         assert CompletedWork.objects.get(id=cw.id).invoice == invoice
