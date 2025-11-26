@@ -435,7 +435,7 @@ class OpportunityDashboard(OpportunityObjectMixin, OrganizationUserMixin, Detail
 @org_member_required
 @opportunity_required
 def export_user_visits(request, org_slug, opp_id):
-    form = VisitExportForm(data=request.POST, opportunity=request.opportunity)
+    form = VisitExportForm(data=request.POST, opportunity=request.opportunity, org_slug=org_slug)
     if not form.is_valid():
         messages.error(request, form.errors)
         return redirect("opportunity:worker_list", request.org.slug, opp_id)
@@ -453,7 +453,7 @@ def export_user_visits(request, org_slug, opp_id):
 @org_member_required
 @opportunity_required
 def review_visit_export(request, org_slug, opp_id):
-    form = VisitExportForm(data=request.POST, opportunity=request.opportunity, review_export=True)
+    form = VisitExportForm(data=request.POST, opportunity=request.opportunity, org_slug=org_slug, review_export=True)
     redirect_url = reverse("opportunity:worker_deliver", args=(org_slug, opp_id))
     if not form.is_valid():
         messages.error(request, form.errors)
@@ -536,10 +536,11 @@ def review_visit_import(request, org_slug=None, opp_id=None):
     except ImportException as e:
         messages.error(request, e.message)
     else:
-        message = f"Visit review updated successfully for {len(status)} visits."
         if status.missing_visits:
-            message += status.get_missing_message()
-        messages.success(request, mark_safe(message))
+            messages.warning(request, mark_safe(status.get_missing_message()))
+        if status.locked_visits:
+            messages.warning(request, mark_safe(status.get_locked_message()))
+        messages.success(request, mark_safe(f"Visit review updated successfully for {len(status)} visits."))
     return redirect(redirect_url)
 
 
@@ -971,7 +972,7 @@ def reject_visits(request, org_slug=None, opp_id=None):
 
     updated_count = (
         UserVisit.objects.filter(id__in=visit_ids, opportunity=request.opportunity)
-        .exclude(status=VisitValidationStatus.rejected)
+        .exclude(Q(status=VisitValidationStatus.rejected) | Q(review_status=VisitReviewStatus.agree))
         .update(status=VisitValidationStatus.rejected, reason=reason)
     )
     if visit_ids:
@@ -1237,7 +1238,7 @@ def user_visit_review(request, org_slug, opp_id):
     if request.POST and request.is_opportunity_pm:
         review_status = request.POST.get("review_status").lower()
         updated_reviews = request.POST.getlist("pk")
-        user_visits = UserVisit.objects.filter(pk__in=updated_reviews)
+        user_visits = UserVisit.objects.filter(pk__in=updated_reviews).exclude(review_status=VisitReviewStatus.agree)
         if review_status in [VisitReviewStatus.agree.value, VisitReviewStatus.disagree.value]:
             user_visits.update(review_status=review_status)
             update_payment_accrued(opportunity=request.opportunity, users=[visit.user for visit in user_visits])
@@ -2077,8 +2078,10 @@ class WorkerDeliverView(BaseWorkerListView, FilterMixin):
 
     def get_extra_context(self, opportunity, org_slug):
         context = {
-            "visit_export_form": VisitExportForm(opportunity=opportunity),
-            "review_visit_export_form": VisitExportForm(opportunity=opportunity, review_export=True),
+            "visit_export_form": VisitExportForm(opportunity=opportunity, org_slug=org_slug),
+            "review_visit_export_form": VisitExportForm(
+                opportunity=opportunity, org_slug=org_slug, review_export=True
+            ),
             "import_export_delivery_urls": {
                 "export_url_for_pm": reverse(
                     "opportunity:review_visit_export",
