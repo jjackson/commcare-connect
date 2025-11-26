@@ -3,7 +3,7 @@
 @tailwind utilities;
 @import '@fortawesome/fontawesome-free/css/all.min.css';
 
-@source "./safelist.txt";
+@source "./safelists.txt";
 
 @custom-variant dark (&:is(.dark *));
 
