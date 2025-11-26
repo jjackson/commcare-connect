@@ -1,4 +1,3 @@
-import csv
 import datetime
 import json
 import sys
@@ -6,7 +5,6 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from http import HTTPStatus
-from io import BytesIO, StringIO
 from urllib.parse import urlencode, urlparse
 
 from celery.result import AsyncResult
@@ -98,6 +96,7 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.tables import (
     CompletedWorkTable,
     DeliverUnitTable,
+    InvoiceLineItemsTable,
     LearnModuleTable,
     OpportunityTable,
     PaymentInvoiceTable,
@@ -2607,10 +2606,9 @@ def invoice_items(request, *args, **kwargs):
     )
     total_local_amount = sum(item["total_amount_local"] for item in line_items)
     total_usd_amount = sum(item["total_amount_usd"] for item in line_items)
-
     html = render_to_string(
         "opportunity/partials/invoice_line_items.html",
-        {"line_items": line_items},
+        {"table": InvoiceLineItemsTable(line_items)},
         request=request,
     )
 
@@ -2640,38 +2638,13 @@ def download_invoice_line_items(request, org_slug, opp_id):
 
     line_items, _total_count = get_uninvoiced_visit_items(request.opportunity, start_date, end_date)
 
-    output = StringIO()
-    writer = csv.writer(output)
+    table = InvoiceLineItemsTable(line_items)
 
-    writer.writerow(
-        [
-            _("Month"),
-            _("Payment Unit"),
-            _("Number Approved"),
-            _("Payment Unit Amount (local)"),
-            _("Total Amount (local)"),
-            _("Exchange Rate"),
-            _("Total Amount (USD)"),
-        ]
-    )
+    export_format = "csv"
+    exporter = TableExport(export_format, table)
+    filename = f"invoice_line_items_{start_date}_{end_date}.csv"
 
-    for item in line_items:
-        writer.writerow(
-            [
-                item["month"].strftime("%B %Y"),
-                item["payment_unit_name"],
-                item["number_approved"],
-                item["amount_per_unit"],
-                item["total_amount_local"],
-                item["exchange_rate"],
-                item["total_amount_usd"],
-            ]
-        )
-
-    buffer = BytesIO(output.getvalue().encode("utf-8"))
-
-    filename = f"invoice_preview_line_items_{start_date}_{end_date}.csv"
-    return FileResponse(buffer, as_attachment=True, filename=filename, content_type="text/csv")
+    return exporter.response(filename=filename)
 
 
 @login_required
