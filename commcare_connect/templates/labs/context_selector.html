@@ -6,7 +6,7 @@
 {{ user.opportunities|json_script:"opportunity-data"}}
 
 {# Button only - no wrapper #}
-<div x-data="labsContextSelector()" x-init="init()">
+<div x-data="labsContextSelector()">
   {% if request.labs_context.organization or request.labs_context.program or request.labs_context.opportunity %}
     {# Context is selected - show in order: org, program, opp #}
     <button @click="open = !open"
@@ -25,7 +25,7 @@
         {% if request.labs_context.opportunity %}
           {% if request.labs_context.organization or request.labs_context.program %}<span class="text-gray-400">|</span>{% endif %}
           <span class="font-medium text-gray-700">Opp:</span>
-          <span class="text-gray-900">{{ request.labs_context.opportunity.name }}</span>
+          <span class="text-gray-900">{{ request.labs_context.opportunity.name }} <span class="text-gray-500">(id: {{ request.labs_context.opportunity.id }} visits: {{ request.labs_context.opportunity.visit_count|default:0 }})</span></span>
         {% endif %}
       </div>
       <svg class="w-4 h-4 text-gray-500" :class="{'rotate-180': open}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -267,16 +267,37 @@ function labsContextSelector() {
       }
     },
 
+    // Configuration: which filters each labs project supports
+    // Format: path prefix -> [supported filters]
+    pathFilters: {
+      '/labs/overview': ['orgs', 'programs', 'opps'],
+      '/solicitations/': ['orgs', 'programs'],
+      '/explorer/': ['orgs', 'programs', 'opps'],
+      '/audit/': ['programs', 'opps'],
+      '/tasks/': ['programs', 'opps'],
+      '/coverage/': ['opps'],
+      '/custom_analysis/': ['opps'],
+    },
+
+    pathSupports(filter) {
+      for (const [path, filters] of Object.entries(this.pathFilters)) {
+        if (this.currentPath.includes(path) && filters.includes(filter)) {
+          return true;
+        }
+      }
+      return false;
+    },
+
     get showOrgs() {
-      return this.currentPath.includes('/solicitations/') || this.currentPath.includes('/explorer/');
+      return this.pathSupports('orgs');
     },
 
     get showPrograms() {
-      return this.currentPath.includes('/solicitations/') || this.currentPath.includes('/audit/') || this.currentPath.includes('/tasks/') || this.currentPath.includes('/explorer/');
+      return this.pathSupports('programs');
     },
 
     get showOpps() {
-      return this.currentPath.includes('/tasks/') || this.currentPath.includes('/audit/') || this.currentPath.includes('/explorer/') || this.currentPath.includes('/coverage/') || this.currentPath.includes('/custom_analysis/');
+      return this.pathSupports('opps');
     },
 
     get hasSelection() {
@@ -313,27 +334,10 @@ function labsContextSelector() {
 
     selectProgram(program) {
       this.selectedProgram = {id: program.id, name: program.name};
-      // Auto-select parent org
-      if (program.organization && !this.selectedOrg) {
-        const org = this.orgData.find(o => o.slug === program.organization);
-        if (org) this.selectedOrg = {slug: org.slug, name: org.name};
-      }
     },
 
     selectOpp(opp) {
       this.selectedOpp = {id: opp.id, name: opp.name};
-      // Auto-select parent program
-      if (opp.program && !this.selectedProgram) {
-        const program = this.programData.find(p => p.id === opp.program);
-        if (program) {
-          this.selectedProgram = {id: program.id, name: program.name};
-          // Auto-select parent org
-          if (program.organization && !this.selectedOrg) {
-            const org = this.orgData.find(o => o.slug === program.organization);
-            if (org) this.selectedOrg = {slug: org.slug, name: org.name};
-          }
-        }
-      }
     },
 
     clearSelection() {

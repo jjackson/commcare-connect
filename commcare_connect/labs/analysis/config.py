@@ -14,6 +14,7 @@ Becomes:
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Literal
 
 AggregationType = Literal["sum", "avg", "count", "min", "max", "list", "first", "last", "count_unique"]
@@ -22,10 +23,26 @@ AggregationType = Literal["sum", "avg", "count", "min", "max", "list", "first", 
 SPARKLINE_CHARS = " _.-=oO#"  # 8 levels from empty to full
 
 
+class CacheStage(Enum):
+    """
+    Pipeline stages for analysis caching.
+
+    Determines which stage is the "terminal" output for a given analysis:
+    - VISIT_LEVEL: VisitAnalysisResult is the final output (one row per visit)
+    - AGGREGATED: FLWAnalysisResult is the final output (one row per FLW/entity)
+    """
+
+    VISIT_LEVEL = "visit_level"
+    AGGREGATED = "aggregated"
+
+
 @dataclass
 class FieldComputation:
     """
     Configuration for extracting and aggregating a field from UserVisit form_json.
+
+    Supports multiple fallback paths for handling different form structures.
+    When `paths` is provided, each path is tried in order until a non-None value is found.
 
     Examples:
         # Simple sum of numeric field
@@ -41,6 +58,17 @@ class FieldComputation:
             name="child_age_months",
             path="form.additional_case_info.childs_age_in_month",
             aggregation="first"
+        )
+
+        # Multiple fallback paths (for different form structures)
+        FieldComputation(
+            name="muac_cm",
+            path="form.case.update.soliciter_muac_cm",  # Primary path (opp 814)
+            paths=[
+                "form.case.update.soliciter_muac_cm",   # opp 814
+                "form.subcase_0.case.update.soliciter_muac",  # opp 822
+            ],
+            aggregation="avg"
         )
 
         # Complex transformation
@@ -65,13 +93,14 @@ class FieldComputation:
     default: Any = None
     transform: Callable[[Any], Any] | None = None
     description: str = ""
+    paths: list[str] | None = None  # Optional list of fallback paths to try in order
 
     def __post_init__(self):
         """Validate configuration."""
         if not self.name:
             raise ValueError("Field name is required")
-        if not self.path:
-            raise ValueError("Field path is required")
+        if not self.path and not self.paths:
+            raise ValueError("Field path or paths is required")
         if self.aggregation not in [
             "sum",
             "avg",
@@ -85,6 +114,12 @@ class FieldComputation:
         ]:
             raise ValueError(f"Invalid aggregation type: {self.aggregation}")
 
+    def get_paths(self) -> list[str]:
+        """Get list of paths to try (paths if set, otherwise [path])."""
+        if self.paths:
+            return self.paths
+        return [self.path] if self.path else []
+
 
 @dataclass
 class HistogramComputation:
@@ -96,10 +131,16 @@ class HistogramComputation:
     - A sparkline string showing the distribution
     - Summary statistics (mean, std, etc.)
 
+    Supports multiple fallback paths for handling different form structures.
+
     Example:
         HistogramComputation(
             name="muac_distribution",
             path="form.case.update.soliciter_muac_cm",
+            paths=[
+                "form.case.update.soliciter_muac_cm",  # opp 814
+                "form.subcase_0.case.update.soliciter_muac",  # opp 822
+            ],
             lower_bound=9.5,
             upper_bound=21.5,
             num_bins=12,
@@ -122,17 +163,24 @@ class HistogramComputation:
     transform: Callable[[Any], Any] | None = None
     description: str = ""
     include_out_of_range: bool = True  # Count values outside bounds in first/last bin
+    paths: list[str] | None = None  # Optional list of fallback paths to try in order
 
     def __post_init__(self):
         """Validate configuration."""
         if not self.name:
             raise ValueError("Histogram name is required")
-        if not self.path:
-            raise ValueError("Field path is required")
+        if not self.path and not self.paths:
+            raise ValueError("Field path or paths is required")
         if self.lower_bound >= self.upper_bound:
             raise ValueError("lower_bound must be less than upper_bound")
         if self.num_bins < 1:
             raise ValueError("num_bins must be at least 1")
+
+    def get_paths(self) -> list[str]:
+        """Get list of paths to try (paths if set, otherwise [path])."""
+        if self.paths:
+            return self.paths
+        return [self.path] if self.path else []
 
     @property
     def bin_width(self) -> float:
@@ -176,11 +224,14 @@ class HistogramComputation:
 
 
 @dataclass
-class AnalysisConfig:
+class AnalysisPipelineConfig:
     """
-    Configuration for an analysis computation.
+    Unified configuration for analysis computation and pipeline behavior.
 
-    Defines what fields to extract, how to aggregate them, and how to group visits.
+    Combines:
+    - What fields to extract and how to aggregate them
+    - How to group visits
+    - Pipeline metadata for caching (experiment name, terminal stage)
 
     Attributes:
         grouping_key: Field to group by (e.g., "username", "user_id", "deliver_unit_id")
@@ -188,21 +239,17 @@ class AnalysisConfig:
         histograms: List of HistogramComputations to apply
         filters: Optional dict of filters to apply to visits
         date_field: Field name for date filtering (default: "visit_date")
+        experiment: Name of the experiment/project (e.g., "chc_nutrition", "coverage")
+        terminal_stage: Which stage is the final output for LabsRecord caching
 
     Example:
-        config = AnalysisConfig(
+        config = AnalysisPipelineConfig(
             grouping_key="username",
             fields=[
                 FieldComputation(
                     name="total_muac_measurements",
                     path="form.case.update.soliciter_muac_cm",
                     aggregation="count"
-                ),
-                FieldComputation(
-                    name="avg_child_age",
-                    path="form.additional_case_info.childs_age_in_month",
-                    aggregation="avg",
-                    transform=lambda x: int(x) if x else None
                 ),
             ],
             histograms=[
@@ -215,7 +262,9 @@ class AnalysisConfig:
                     bin_name_prefix="muac",
                 )
             ],
-            filters={"status": ["approved"]}
+            filters={"status": ["approved"]},
+            experiment="chc_nutrition",
+            terminal_stage=CacheStage.AGGREGATED,
         )
     """
 
@@ -224,6 +273,10 @@ class AnalysisConfig:
     histograms: list[HistogramComputation] = field(default_factory=list)
     filters: dict[str, Any] = field(default_factory=dict)
     date_field: str = "visit_date"
+
+    # Pipeline metadata (optional, backwards compatible with defaults)
+    experiment: str = ""
+    terminal_stage: CacheStage = CacheStage.AGGREGATED
 
     def __post_init__(self):
         """Validate configuration."""
@@ -252,3 +305,7 @@ class AnalysisConfig:
             if hist_comp.name == name:
                 return hist_comp
         return None
+
+
+# Backwards compatibility alias
+AnalysisConfig = AnalysisPipelineConfig

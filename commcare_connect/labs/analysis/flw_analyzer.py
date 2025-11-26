@@ -200,7 +200,6 @@ class FLWAnalyzer(Analyzer):
             # Then aggregate to FLW level (no re-fetch needed)
             flw_result = FLWAnalyzer(request, config).from_visit_result(visit_result)
         """
-        logger.info(f"Aggregating {len(visit_result.rows)} visits into FLW analysis")
 
         # Group visit rows by username
         groups: dict[str, list[VisitRow]] = defaultdict(list)
@@ -433,7 +432,7 @@ def compute_flw_analysis(
             print(f"{flw.username}: {flw.total_visits} visits")
     """
     from commcare_connect.labs.analysis.base import AnalysisDataAccess
-    from commcare_connect.labs.analysis.file_cache import AnalysisCacheManager
+    from commcare_connect.labs.analysis.cache import AnalysisCacheManager
     from commcare_connect.labs.analysis.visit_analyzer import compute_visit_analysis
 
     opportunity_id = getattr(request, "labs_context", {}).get("opportunity_id")
@@ -444,7 +443,7 @@ def compute_flw_analysis(
 
     # Extract tolerance from request if not explicitly provided
     if cache_tolerance_minutes is None:
-        from commcare_connect.labs.analysis.file_cache import get_cache_tolerance_from_request
+        from commcare_connect.labs.analysis.cache import get_cache_tolerance_from_request
 
         cache_tolerance_minutes = get_cache_tolerance_from_request(request)
 
@@ -479,20 +478,8 @@ def compute_flw_analysis(
         logger.info(f"Cached FLW results for opp {opportunity_id}")
 
         # Sync labs_context with actual visit count to prevent future cache misses
-        if hasattr(request, "labs_context") and request.labs_context.get("opportunity"):
-            old_count = request.labs_context["opportunity"].get("visit_count", 0)
-            if old_count != visit_count:
-                logger.info(
-                    f"[FLW Analysis] Syncing labs_context visit count: "
-                    f"{old_count} -> {visit_count} (opp {opportunity_id})"
-                )
-                request.labs_context["opportunity"]["visit_count"] = visit_count
+        from commcare_connect.labs.analysis.cache import sync_labs_context_visit_count
 
-                # Also update session so it persists across requests
-                if hasattr(request, "session") and "labs_context" in request.session:
-                    session_context = request.session["labs_context"]
-                    if "opportunity" in session_context and isinstance(session_context["opportunity"], dict):
-                        session_context["opportunity"]["visit_count"] = visit_count
-                        request.session.modified = True
+        sync_labs_context_visit_count(request, visit_count, opportunity_id)
 
     return flw_result

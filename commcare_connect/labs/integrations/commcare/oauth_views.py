@@ -158,3 +158,20 @@ def labs_commcare_callback(request: HttpRequest) -> HttpResponseRedirect:
         logger.exception(f"Error during CommCare OAuth callback: {e}")
         messages.error(request, f"Error connecting to CommCare: {str(e)}")
         return redirect("/audit/")
+
+
+def labs_commcare_logout(request: HttpRequest) -> HttpResponseRedirect:
+    """
+    Log out of CommCare HQ by clearing CommCare OAuth session data.
+
+    Redirects back to the referring page or labs overview.
+    """
+    # Clear CommCare OAuth data from session
+    request.session.pop("commcare_oauth", None)
+
+    logger.info(f"User {request.user.username} disconnected from CommCare")
+    messages.info(request, "Disconnected from CommCare.")
+
+    # Redirect back to referrer or labs overview
+    redirect_url = request.headers.get("referer", "/labs/overview/")
+    return redirect(redirect_url)

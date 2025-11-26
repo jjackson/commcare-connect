@@ -143,8 +143,10 @@ class Command(BaseCommand):
                 self.stdout.write(f"  - {key}")
 
             # Show nested structure for key paths we're looking for
+            # Includes paths for both opp 814 and opp 822 form structures
             paths_to_check = [
                 "form",
+                # opp 814 paths
                 "form.additional_case_info",
                 "form.case",
                 "form.case.update",
@@ -152,6 +154,15 @@ class Command(BaseCommand):
                 "form.ors_group",
                 "form.pictures",
                 "form.immunization_photo_group",
+                # opp 822 paths
+                "form.case_info",
+                "form.child_registration",
+                "form.subcase_0",
+                "form.subcase_0.case",
+                "form.subcase_0.case.update",
+                "form.service_delivery",
+                "form.service_delivery.muac_group",
+                "form.service_delivery.ors_group",
             ]
 
             self.stdout.write("\nChecking expected paths:")
@@ -216,7 +227,7 @@ class Command(BaseCommand):
 
     def test_cache_functionality(self, request, opportunity_id):
         """Test cache functionality with real data."""
-        from commcare_connect.labs.analysis.file_cache import AnalysisCacheManager
+        from commcare_connect.labs.analysis.cache import AnalysisCacheManager
 
         self.stdout.write("")
         self.stdout.write("=" * 80)

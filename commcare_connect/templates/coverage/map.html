@@ -44,15 +44,15 @@
           </div>
           <div x-show="loadingStep >= 2" class="flex items-center gap-2">
             <i class="fa-solid" :class="loadingStep > 2 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
-            <span>Fetching delivery units from CommCare HQ...</span>
+            <span>Fetching data from CommCare HQ and Connect (this may take a while)...</span>
           </div>
           <div x-show="loadingStep >= 3" class="flex items-center gap-2">
             <i class="fa-solid" :class="loadingStep > 3 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
-            <span>Loading visit data from Connect (this may take 30-60 seconds)...</span>
+            <span>Data received, processing...</span>
           </div>
           <div x-show="loadingStep >= 4" class="flex items-center gap-2">
             <i class="fa-solid" :class="loadingStep > 4 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
-            <span>Processing geographic data and building map layers...</span>
+            <span>Building map layers...</span>
           </div>
           <div x-show="loadingStep >= 5" class="flex items-center gap-2">
             <i class="fa-solid fa-check text-green-600"></i>
@@ -262,13 +262,8 @@ function coverageMap() {
         this.loadingStep = 1;
         await new Promise(resolve => setTimeout(resolve, 200));
 
-        // Step 2: Start fetching (show this before the long API call)
+        // Step 2: Fetching data (this is where most time is spent)
         this.loadingStep = 2;
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Step 3: The actual long API call (fetching from Connect)
-        // This is where most time is spent - the UI will show step 3 during this
-        this.loadingStep = 3;
         console.log(`[Coverage Map] Starting API fetch - ID: ${callId}`);
         const response = await fetch(this.mapDataUrl + window.location.search + `&call_id=${callId}`);
 
@@ -279,9 +274,12 @@ function coverageMap() {
 
         const data = await response.json();
 
-        // Step 4: Processing received data
-        this.loadingStep = 4;
+        // Step 3: Data received, processing
+        this.loadingStep = 3;
         await new Promise(resolve => setTimeout(resolve, 200));
+
+        // Step 4: Building map layers
+        this.loadingStep = 4;
 
         // Parse GeoJSON data
         this.duData = JSON.parse(data.delivery_units_geojson);
@@ -296,10 +294,17 @@ function coverageMap() {
         // Step 5: Initialize map and complete
         this.loadingStep = 5;
         this.$nextTick(() => {
-          this.initMap();
-          setTimeout(() => {
-            this.loading = false;
-          }, 300);
+          this.loading = false;
+          this.$nextTick(() => {
+            this.initMap();
+            // Force Leaflet to recalculate container size and fit bounds after render
+            setTimeout(() => {
+              if (this.map) {
+                this.map.invalidateSize();
+                this.fitMapToDUs();
+              }
+            }, 100);
+          });
         });
 
       } catch (error) {
@@ -348,15 +353,19 @@ function coverageMap() {
       // Load data
       this.loadDUData();
       this.loadPointsData();
+    },
 
-      // Fit map to DUs
-      if (this.duData.features.length > 0) {
-        try {
-          const bounds = L.geoJSON(this.duData).getBounds();
+    // Fit map to show all delivery units
+    fitMapToDUs() {
+      if (!this.duData || this.duData.features.length === 0) return;
+
+      try {
+        const bounds = L.geoJSON(this.duData).getBounds();
+        if (bounds.isValid()) {
           this.map.fitBounds(bounds, {padding: [20, 20]});
-        } catch (e) {
-          console.warn('Could not fit bounds:', e);
         }
+      } catch (e) {
+        console.warn('Could not fit bounds:', e);
       }
     },
 

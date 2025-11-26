@@ -67,7 +67,7 @@ class ExperimentAuditCreateView(LoginRequiredMixin, TemplateView):
         # Quick creation URL parameters for pre-filling the wizard
         # These allow other pages to link directly to audit creation with params
         quick_params = {
-            "username": self.request.GET.get("username", ""),
+            "usernames": self.request.GET.get("usernames", ""),  # FLW usernames (comma-separated)
             "user_id": self.request.GET.get("user_id", ""),
             "audit_type": self.request.GET.get("audit_type", ""),  # date_range, last_n_per_flw, etc.
             "granularity": self.request.GET.get("granularity", ""),  # combined, per_opp, per_flw
@@ -292,15 +292,34 @@ class ExperimentBulkAssessmentView(LoginRequiredMixin, DetailView):
             data_access.close()
 
     def get_context_data(self, **kwargs):
+        from django.conf import settings
+
         context = super().get_context_data(**kwargs)
         question_filter = self.request.GET.get("question_id", "").strip()
         status_filter = self.request.GET.get("status", "all").strip().lower() or "all"
+
+        session = context["session"]
+        opportunity_id = session.opportunity_id
+
+        # Look up org_slug from user's OAuth data (opportunities list)
+        # Each opportunity in _org_data has an "organization" field with the org slug
+        org_slug = ""
+        if opportunity_id:
+            org_data = getattr(self.request.user, "_org_data", {})
+            opportunities = org_data.get("opportunities", [])
+            for opp in opportunities:
+                if opp.get("id") == opportunity_id:
+                    org_slug = opp.get("organization", "")
+                    break
 
         context.update(
             {
                 "selected_question_id": question_filter,
                 "selected_status": status_filter,
-                "bulk_data_url": reverse("audit:bulk_assessment_data", kwargs={"session_id": context["session"].pk}),
+                "bulk_data_url": reverse("audit:bulk_assessment_data", kwargs={"session_id": session.pk}),
+                "org_slug": org_slug,
+                "opportunity_id": opportunity_id,
+                "connect_url": settings.CONNECT_PRODUCTION_URL,
             }
         )
 
@@ -949,47 +968,142 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 opportunity_ids=opportunity_ids, audit_type=audit_type, criteria=normalized_criteria
             )
 
-            # Filter by selected FLW identifiers if provided
-            selected_flw_user_ids = normalized_criteria.get("selected_flw_user_ids", [])
-            if selected_flw_user_ids and visit_ids:
-                # Fetch visits and filter by username
-                filtered_visit_ids = []
-                for opp_id in opportunity_ids:
-                    visits = data_access.get_visits_batch(visit_ids, opp_id)
-                    filtered_visit_ids.extend(
-                        [
-                            v["id"]
-                            for v in visits
-                            if v.get("username") in selected_flw_user_ids or v.get("user_id") in selected_flw_user_ids
-                        ]
-                    )
-                visit_ids = filtered_visit_ids
-
-            if not visit_ids:
-                return JsonResponse({"error": "No visits found matching criteria"}, status=400)
-
-            # Create template
-            template = data_access.create_audit_template(
-                username=username,
-                opportunity_ids=opportunity_ids,
-                audit_type=audit_type,
-                granularity=criteria.get("granularity", "combined"),
-                criteria=criteria,
-                preview_data=[],
-            )
-
             # Fetch all visits once for this request to build in-memory cache
             # This prevents multiple fetches even if RawAPICache isn't working
             all_visits_cache = {}
             for opp_id in opportunity_ids:
                 all_visits_cache[opp_id] = data_access._fetch_visits_for_opportunity(opp_id)
 
+            # Get all visits with their FLW info for filtering
+            all_visits_with_info = []
+            for opp_id in opportunity_ids:
+                visits = data_access.get_visits_batch(visit_ids, opp_id)
+                all_visits_with_info.extend(visits)
+
+            # Filter by selected FLW identifiers if provided
+            selected_flw_user_ids = normalized_criteria.get("selected_flw_user_ids", [])
+            granularity = criteria.get("granularity", "combined")
+
+            # Get FLW names mapping for title construction
+            flw_names = {}
+            try:
+                flw_names = get_flw_names_for_opportunity(request)
+            except Exception:
+                pass  # Fall back to using FLW IDs
+
+            # Get opportunity name for title construction
+            opp_name = None
+            if opportunity_ids:
+                try:
+                    opps = data_access.search_opportunities("", limit=1000)
+                    for opp in opps:
+                        if opp.get("id") == opportunity_ids[0]:
+                            opp_name = opp.get("name")
+                            break
+                except Exception:
+                    pass  # Fall back to no prefix
+
+            # User-provided title suffix
+            title_suffix = criteria.get("title", "").strip()
+
+            # For per_flw granularity with multiple FLWs, create separate sessions
+            if granularity == "per_flw" and selected_flw_user_ids and len(selected_flw_user_ids) > 1:
+                # Create one session per FLW
+                sessions_created = []
+
+                for flw_id in selected_flw_user_ids:
+                    # Filter visits to just this FLW
+                    flw_visit_ids = [
+                        v["id"]
+                        for v in all_visits_with_info
+                        if v.get("username") == flw_id or v.get("user_id") == flw_id
+                    ]
+
+                    if not flw_visit_ids:
+                        continue  # Skip FLWs with no visits
+
+                    # Construct title: FLW Name - suffix
+                    flw_display_name = flw_names.get(flw_id, flw_id)
+                    session_title = f"{flw_display_name} - {title_suffix}" if title_suffix else flw_display_name
+
+                    # Create template for this FLW
+                    template = data_access.create_audit_template(
+                        username=username,
+                        opportunity_ids=opportunity_ids,
+                        audit_type=audit_type,
+                        granularity=granularity,
+                        criteria=criteria,
+                        preview_data=[],
+                    )
+
+                    # Create session for this FLW
+                    session = data_access.create_audit_session(
+                        template_id=template.id,
+                        username=username,
+                        visit_ids=flw_visit_ids,
+                        title=session_title,
+                        tag=criteria.get("tag", ""),
+                        opportunity_id=opportunity_ids[0] if opportunity_ids else None,
+                        audit_type=audit_type,
+                        criteria=normalized_criteria,
+                        visits_cache=all_visits_cache.get(opportunity_ids[0], []) if opportunity_ids else None,
+                    )
+                    sessions_created.append({"session_id": session.id, "flw_id": flw_id, "visits": len(flw_visit_ids)})
+
+                if not sessions_created:
+                    return JsonResponse({"error": "No visits found matching criteria"}, status=400)
+
+                return JsonResponse(
+                    {
+                        "success": True,
+                        "redirect_url": str(reverse_lazy("audit:session_list")),
+                        "sessions_created": len(sessions_created),
+                        "sessions": sessions_created,
+                        "stats": {"total_visits": sum(s["visits"] for s in sessions_created)},
+                    }
+                )
+
+            # For combined/per_opp granularity or single FLW, create one session
+            if selected_flw_user_ids:
+                # Filter visits to selected FLWs
+                visit_ids = [
+                    v["id"]
+                    for v in all_visits_with_info
+                    if v.get("username") in selected_flw_user_ids or v.get("user_id") in selected_flw_user_ids
+                ]
+
+            if not visit_ids:
+                return JsonResponse({"error": "No visits found matching criteria"}, status=400)
+
+            # Construct title based on granularity
+            if granularity == "per_flw" and selected_flw_user_ids and len(selected_flw_user_ids) == 1:
+                # Single FLW selected
+                flw_id = selected_flw_user_ids[0]
+                flw_display_name = flw_names.get(flw_id, flw_id)
+                session_title = f"{flw_display_name} - {title_suffix}" if title_suffix else flw_display_name
+            elif opp_name:
+                # Use opportunity name as prefix
+                session_title = f"{opp_name} - {title_suffix}" if title_suffix else opp_name
+            else:
+                # Fallback to just suffix or date
+                session_title = title_suffix if title_suffix else f"Audit {timezone.now().strftime('%Y-%m-%d')}"
+
+            # Create template
+            template = data_access.create_audit_template(
+                username=username,
+                opportunity_ids=opportunity_ids,
+                audit_type=audit_type,
+                granularity=granularity,
+                criteria=criteria,
+                preview_data=[],
+            )
+
             # Create session (passing visits cache to avoid re-fetch)
             session = data_access.create_audit_session(
                 template_id=template.id,
                 username=username,
                 visit_ids=visit_ids,
-                title=criteria.get("title", f"Audit {timezone.now().strftime('%Y-%m-%d')}"),
+                title=session_title,
                 tag=criteria.get("tag", ""),
                 opportunity_id=opportunity_ids[0] if opportunity_ids else None,
                 audit_type=audit_type,

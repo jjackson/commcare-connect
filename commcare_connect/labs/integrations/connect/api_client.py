@@ -218,36 +218,13 @@ class LabsRecordAPIClient:
             payload["labs_record_id"] = labs_record_id
 
         try:
-            # Use new endpoint without opportunity_id in URL
             url = f"{self.base_url}/export/labs_record/"
-            logger.info(f"POST {url} with payload: {payload}")
-
-            # DEBUG: Print exact API call details
-            import json
-
-            print("\n" + "=" * 80)
-            print("API WRITE CALL - CREATE RECORD")
-            print("=" * 80)
-            print(f"URL: {url}")
-            print("Method: POST")
-            print(f"Headers: Authorization: Bearer {self.access_token[:20]}...")
-            print("Payload (will be sent as list):")
-            print(json.dumps([payload], indent=2))
-            print("=" * 80 + "\n")
+            logger.info(f"POST {url}")
 
             response = self.http_client.post(url, json=[payload])
-
-            # DEBUG: Print response details
-            print(f"Response Status: {response.status_code}")
-            if response.status_code >= 400:
-                print(f"Error Response Body: {response.text}")
-
             response.raise_for_status()
 
-            # API returns list, get first item
             result = response.json()
-            print(f"Success Response: {json.dumps(result, indent=2)}")
-
             if not result:
                 raise LabsAPIError("API returned empty response after create")
 
@@ -255,11 +232,6 @@ class LabsRecordAPIClient:
 
         except httpx.HTTPError as e:
             logger.error(f"Failed to create record: {e}", exc_info=True)
-            print("\nERROR DETAILS:")
-            print(f"Exception: {e}")
-            if hasattr(e, "response") and e.response is not None:
-                print(f"Response Status: {e.response.status_code}")
-                print(f"Response Body: {e.response.text}")
             raise LabsAPIError(f"Failed to create record in production API: {e}") from e
 
     def update_record(
@@ -331,36 +303,13 @@ class LabsRecordAPIClient:
             payload["labs_record_id"] = current.labs_record_id
 
         try:
-            # Use new endpoint without opportunity_id in URL
             url = f"{self.base_url}/export/labs_record/"
-            logger.info(f"POST {url} (update) with payload: {payload}")
-
-            # DEBUG: Print exact API call details
-            import json
-
-            print("\n" + "=" * 80)
-            print("API WRITE CALL - UPDATE RECORD")
-            print("=" * 80)
-            print(f"URL: {url}")
-            print("Method: POST")
-            print(f"Headers: Authorization: Bearer {self.access_token[:20]}...")
-            print("Payload (will be sent as list):")
-            print(json.dumps([payload], indent=2))
-            print("=" * 80 + "\n")
+            logger.info(f"POST {url} (update)")
 
             response = self.http_client.post(url, json=[payload])
-
-            # DEBUG: Print response details
-            print(f"Response Status: {response.status_code}")
-            if response.status_code >= 400:
-                print(f"Error Response Body: {response.text}")
-
             response.raise_for_status()
 
-            # API returns list, get first item
             result = response.json()
-            print(f"Success Response: {json.dumps(result, indent=2)}")
-
             if not result:
                 raise LabsAPIError("API returned empty response after update")
 
@@ -368,11 +317,6 @@ class LabsRecordAPIClient:
 
         except httpx.HTTPError as e:
             logger.error(f"Failed to update record: {e}", exc_info=True)
-            print("\nERROR DETAILS:")
-            print(f"Exception: {e}")
-            if hasattr(e, "response") and e.response is not None:
-                print(f"Response Status: {e.response.status_code}")
-                print(f"Response Body: {e.response.text}")
             raise LabsAPIError(f"Failed to update record in production API: {e}") from e
 
     def delete_record(self, record_id: int) -> None:
@@ -399,40 +343,14 @@ class LabsRecordAPIClient:
             return
 
         try:
-            # Build payload with record IDs
             payload = [{"id": record_id} for record_id in record_ids]
 
             url = f"{self.base_url}/export/labs_record/"
             logger.info(f"DELETE {url} with {len(record_ids)} record(s)")
 
-            # DEBUG: Print exact API call details
-            import json
-
-            print("\n" + "=" * 80)
-            print("API DELETE CALL - DELETE RECORD(S)")
-            print("=" * 80)
-            print(f"URL: {url}")
-            print("Method: DELETE")
-            print(f"Headers: Authorization: Bearer {self.access_token[:20]}...")
-            print("Payload:")
-            print(json.dumps(payload, indent=2))
-            print("=" * 80 + "\n")
-
             response = self.http_client.request("DELETE", url, json=payload)
-
-            # DEBUG: Print response details
-            print(f"Response Status: {response.status_code}")
-            if response.status_code >= 400:
-                print(f"Error Response Body: {response.text}")
-
             response.raise_for_status()
-            print(f"Successfully deleted {len(record_ids)} record(s)")
 
         except httpx.HTTPError as e:
             logger.error(f"Failed to delete records: {e}", exc_info=True)
-            print("\nERROR DETAILS:")
-            print(f"Exception: {e}")
-            if hasattr(e, "response") and e.response is not None:
-                print(f"Response Status: {e.response.status_code}")
-                print(f"Response Body: {e.response.text}")
             raise LabsAPIError(f"Failed to delete records in production API: {e}") from e

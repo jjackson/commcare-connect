@@ -621,7 +621,7 @@
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          <template x-for="flw in previewResults" :key="flw.username">
+          <template x-for="flw in previewResults" :key="flw.connect_id || flw.username">
             <tr class="hover:bg-gray-50">
               <td class="px-2 py-2 text-center whitespace-nowrap">
                 <input type="checkbox" :checked="isFlwSelected(flw)" @change="toggleFlwSelection(flw)" class="h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300 rounded">
@@ -660,7 +660,7 @@
     <div class="grid grid-cols-2 gap-4 mb-6">
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-2">
-          Audit Title <span class="text-gray-500 text-xs">(optional)</span>
+          Title Suffix <span class="text-gray-500 text-xs">(appended to FLW/Opportunity name)</span>
         </label>
         <input
           type="text"
@@ -932,17 +932,23 @@ function auditCreationPage() {
     },
 
     // FLW selection methods
+    // Use connect_id as the canonical identifier (always present, equals Connect username)
+    getFlwId(flw) {
+      return flw.connect_id || flw.username;
+    },
+
     isFlwSelected(flw) {
-      return this.selectedFlwUserIds.includes(flw.username);
+      const flwId = this.getFlwId(flw);
+      return this.selectedFlwUserIds.includes(flwId);
     },
 
     toggleFlwSelection(flw) {
-      const username = flw.username;
-      const index = this.selectedFlwUserIds.indexOf(username);
+      const flwId = this.getFlwId(flw);
+      const index = this.selectedFlwUserIds.indexOf(flwId);
       if (index >= 0) {
         this.selectedFlwUserIds.splice(index, 1);
       } else {
-        this.selectedFlwUserIds.push(username);
+        this.selectedFlwUserIds.push(flwId);
       }
     },
 
@@ -955,14 +961,14 @@ function auditCreationPage() {
         this.selectedFlwUserIds = [];
       } else {
         // Select all FLWs
-        this.selectedFlwUserIds = this.previewResults.map(flw => flw.username);
+        this.selectedFlwUserIds = this.previewResults.map(flw => this.getFlwId(flw));
       }
     },
 
     areAllFlwsSelected() {
       if (!this.previewResults || this.previewResults.length === 0) return false;
       return this.previewResults.every(flw =>
-        this.selectedFlwUserIds.includes(flw.username)
+        this.selectedFlwUserIds.includes(this.getFlwId(flw))
       );
     },
 
@@ -1064,16 +1070,23 @@ function auditCreationPage() {
         } else {
           // Populate preview results with FLW data
           this.previewResults = preview.flws;
+          // Use connect_id as canonical identifier (always present, equals Connect username)
+          const previewIds = preview.flws.map(flw => flw.connect_id || flw.username);
 
-          // If quick filter username is set, only select that FLW
-          if (this.quickFilterUsername) {
+          // If FLWs were pre-selected from URL params, filter to those that exist in preview
+          if (this.selectedFlwUserIds.length > 0) {
+            // Keep only the pre-selected FLWs that actually appear in the preview
+            this.selectedFlwUserIds = this.selectedFlwUserIds.filter(u => previewIds.includes(u));
+          } else if (this.quickFilterUsername) {
+            // Fallback: single username filter (backward compatibility)
             const matchingFlws = preview.flws.filter(flw => {
-              return flw.username === this.quickFilterUsername || flw.name === this.quickFilterUsername;
+              const flwId = flw.connect_id || flw.username;
+              return flwId === this.quickFilterUsername || flw.name === this.quickFilterUsername;
             });
-            this.selectedFlwUserIds = matchingFlws.map(flw => flw.username);
+            this.selectedFlwUserIds = matchingFlws.map(flw => flw.connect_id || flw.username);
           } else {
             // Auto-select all FLWs by default
-            this.selectedFlwUserIds = preview.flws.map(flw => flw.username);
+            this.selectedFlwUserIds = previewIds;
           }
         }
 
@@ -1133,9 +1146,9 @@ function auditCreationPage() {
               this.previewResults.forEach(result => {
                 if (result.flws && result.flws.length > 0) {
                   result.flws.forEach(flw => {
-                    const username = flw.username;
-                    if (username && !this.selectedFlwUserIds.includes(username)) {
-                      this.selectedFlwUserIds.push(username);
+                    const flwId = flw.connect_id || flw.username;
+                    if (flwId && !this.selectedFlwUserIds.includes(flwId)) {
+                      this.selectedFlwUserIds.push(flwId);
                     }
                   });
                 }
@@ -1325,10 +1338,18 @@ function auditCreationPage() {
 
       // Pre-populate selected FLW IDs from URL params
       // This allows creating a session without generating a preview first
-      // We only need username since that's what visits are keyed by
-      if (params.username) {
-        this.quickFilterUsername = params.username;
-        this.selectedFlwUserIds.push(params.username);
+      // Handle usernames (comma-separated) from CHC Nutrition or other dashboards
+      if (params.usernames) {
+        const usernames = params.usernames.split(',').map(u => u.trim()).filter(u => u);
+        usernames.forEach(u => {
+          if (!this.selectedFlwUserIds.includes(u)) {
+            this.selectedFlwUserIds.push(u);
+          }
+        });
+        // Store first username as quickFilterUsername for display purposes
+        if (usernames.length > 0) {
+          this.quickFilterUsername = usernames[0];
+        }
       }
 
       return false;  // Never auto-create

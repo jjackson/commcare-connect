@@ -161,6 +161,64 @@ class FLWAnalysisResult(AnalysisResult):
 
     rows: list[FLWRow] = field(default_factory=list)
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "FLWAnalysisResult":
+        """Create from dictionary, properly deserializing FLWRow objects."""
+        rows = []
+        for row_data in data.get("rows", []):
+            if isinstance(row_data, FLWRow):
+                rows.append(row_data)
+            elif isinstance(row_data, dict):
+                # Reconstruct FLWRow from dict
+                rows.append(
+                    FLWRow(
+                        username=row_data.get("username", ""),
+                        user_id=row_data.get("user_id"),
+                        flw_name=row_data.get("flw_name"),
+                        total_visits=row_data.get("total_visits", 0),
+                        approved_visits=row_data.get("approved_visits", 0),
+                        pending_visits=row_data.get("pending_visits", 0),
+                        rejected_visits=row_data.get("rejected_visits", 0),
+                        flagged_visits=row_data.get("flagged_visits", 0),
+                        first_visit_date=date.fromisoformat(row_data["first_visit_date"])
+                        if row_data.get("first_visit_date")
+                        else None,
+                        last_visit_date=date.fromisoformat(row_data["last_visit_date"])
+                        if row_data.get("last_visit_date")
+                        else None,
+                        dates_active=[date.fromisoformat(d) for d in row_data.get("dates_active", [])],
+                        custom_fields={
+                            k: v
+                            for k, v in row_data.items()
+                            if k
+                            not in [
+                                "username",
+                                "user_id",
+                                "flw_name",
+                                "total_visits",
+                                "approved_visits",
+                                "pending_visits",
+                                "rejected_visits",
+                                "flagged_visits",
+                                "first_visit_date",
+                                "last_visit_date",
+                                "dates_active",
+                                "days_active",
+                                "date_range_days",
+                                "approval_rate",
+                            ]
+                        },
+                    )
+                )
+
+        return cls(
+            opportunity_id=data.get("opportunity_id"),
+            opportunity_name=data.get("opportunity_name"),
+            rows=rows,
+            metadata=data.get("metadata", {}),
+            computed_at=datetime.fromisoformat(data["computed_at"]) if "computed_at" in data else datetime.now(),
+        )
+
     def get_flw(self, username: str) -> FLWRow | None:
         """Get FLW row by username."""
         for row in self.rows:
@@ -295,6 +353,71 @@ class VisitAnalysisResult(AnalysisResult):
 
     rows: list[VisitRow] = field(default_factory=list)
     field_metadata: list[dict] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "VisitAnalysisResult":
+        """Create from dictionary, properly deserializing VisitRow objects."""
+        rows = []
+        for row_data in data.get("rows", []):
+            if isinstance(row_data, VisitRow):
+                rows.append(row_data)
+            elif isinstance(row_data, dict):
+                # Reconstruct VisitRow from dict
+                computed = {
+                    k: v
+                    for k, v in row_data.items()
+                    if k
+                    not in [
+                        "id",
+                        "user_id",
+                        "username",
+                        "commcare_userid",
+                        "visit_date",
+                        "status",
+                        "flagged",
+                        "latitude",
+                        "longitude",
+                        "accuracy_in_m",
+                        "deliver_unit_id",
+                        "deliver_unit_name",
+                        "entity_id",
+                        "entity_name",
+                        "service_area_id",
+                        "has_gps",
+                    ]
+                }
+
+                rows.append(
+                    VisitRow(
+                        id=row_data.get("id", ""),
+                        user_id=row_data.get("user_id"),
+                        username=row_data.get("username", ""),
+                        commcare_userid=row_data.get("commcare_userid", ""),
+                        visit_date=datetime.fromisoformat(row_data["visit_date"])
+                        if row_data.get("visit_date")
+                        else None,
+                        status=row_data.get("status", ""),
+                        flagged=row_data.get("flagged", False),
+                        latitude=row_data.get("latitude"),
+                        longitude=row_data.get("longitude"),
+                        accuracy_in_m=row_data.get("accuracy_in_m"),
+                        deliver_unit_id=row_data.get("deliver_unit_id"),
+                        deliver_unit_name=row_data.get("deliver_unit_name", ""),
+                        entity_id=row_data.get("entity_id", ""),
+                        entity_name=row_data.get("entity_name", ""),
+                        service_area_id=row_data.get("service_area_id", ""),
+                        computed=computed,
+                    )
+                )
+
+        return cls(
+            opportunity_id=data.get("opportunity_id"),
+            opportunity_name=data.get("opportunity_name"),
+            rows=rows,
+            metadata=data.get("metadata", {}),
+            computed_at=datetime.fromisoformat(data["computed_at"]) if "computed_at" in data else datetime.now(),
+            field_metadata=data.get("field_metadata", []),
+        )
 
     def get_visit(self, visit_id: str) -> VisitRow | None:
         """Get visit row by ID."""

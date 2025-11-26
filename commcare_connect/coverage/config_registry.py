@@ -16,28 +16,28 @@ Usage:
 
 import logging
 
-from commcare_connect.labs.analysis.config import AnalysisConfig
+from commcare_connect.labs.analysis.config import AnalysisPipelineConfig
 
 logger = logging.getLogger(__name__)
 
 # Registry mapping config names to config objects
-_CONFIG_REGISTRY: dict[str, AnalysisConfig] = {}
+_CONFIG_REGISTRY: dict[str, AnalysisPipelineConfig] = {}
 
 
-def register_config(name: str, config: AnalysisConfig) -> None:
+def register_config(name: str, config: AnalysisPipelineConfig) -> None:
     """
     Register an analysis config by name.
 
     Args:
         name: Unique name for the config (used in URL params)
-        config: AnalysisConfig object to register
+        config: AnalysisPipelineConfig object to register
     """
     if name in _CONFIG_REGISTRY:
         logger.warning(f"Overwriting existing config registration: {name}")
     _CONFIG_REGISTRY[name] = config
 
 
-def get_config(name: str) -> AnalysisConfig | None:
+def get_config(name: str) -> AnalysisPipelineConfig | None:
     """
     Look up a config by name.
 
@@ -45,7 +45,7 @@ def get_config(name: str) -> AnalysisConfig | None:
         name: Config name to look up
 
     Returns:
-        AnalysisConfig if found, None otherwise
+        AnalysisPipelineConfig if found, None otherwise
     """
     return _CONFIG_REGISTRY.get(name)
 

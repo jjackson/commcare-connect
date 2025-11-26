@@ -1,0 +1,68 @@
+{% comment %}
+Shared async loading indicator for labs projects that fetch data from Connect.
+
+Use this for pages that only fetch from Connect API. For pages with multiple
+data sources (e.g., coverage map fetches from both CommCare HQ and Connect),
+create a custom loading indicator with page-specific steps.
+
+Usage:
+    {% include "labs/includes/async_loading.html" with title="Loading Analysis" %}
+
+Required Alpine.js state in parent component:
+    - loading: boolean
+    - loadingStep: number (1-5)
+    - loadError: string|null
+    - loadData(): function to call on retry
+
+Optional context variables:
+    - title: Header text (default: "Loading Data")
+{% endcomment %}
+
+<!-- Loading Indicator -->
+<div class="mb-6 p-6 bg-blue-50 border border-blue-200 rounded-lg" x-show="loading" x-cloak>
+    <div class="flex items-start gap-4">
+        <i class="fa-solid fa-spinner fa-spin text-blue-600 text-2xl mt-1"></i>
+        <div class="flex-1">
+            <h3 class="text-lg font-semibold text-blue-900 mb-2">{{ title|default:"Loading Data" }}</h3>
+            <div class="space-y-1 text-sm text-blue-800">
+                <div x-show="loadingStep >= 1" class="flex items-center gap-2">
+                    <i class="fa-solid" :class="loadingStep > 1 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
+                    <span>Initializing request...</span>
+                </div>
+                <div x-show="loadingStep >= 2" class="flex items-center gap-2">
+                    <i class="fa-solid" :class="loadingStep > 2 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
+                    <span>Fetching data from Connect (this may take a while)...</span>
+                </div>
+                <div x-show="loadingStep >= 3" class="flex items-center gap-2">
+                    <i class="fa-solid" :class="loadingStep > 3 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
+                    <span>Data received, processing...</span>
+                </div>
+                <div x-show="loadingStep >= 4" class="flex items-center gap-2">
+                    <i class="fa-solid" :class="loadingStep > 4 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
+                    <span>Building results...</span>
+                </div>
+                <div x-show="loadingStep >= 5" class="flex items-center gap-2">
+                    <i class="fa-solid fa-check text-green-600"></i>
+                    <span>Complete!</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Error Display -->
+<div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg" x-show="loadError" x-cloak>
+    <div class="flex items-center justify-between">
+        <div class="flex items-center">
+            <i class="fa-solid fa-circle-exclamation text-red-600 mr-3"></i>
+            <div>
+                <strong class="text-red-800">Error:</strong>
+                <span class="ml-2 text-red-700" x-text="loadError"></span>
+            </div>
+        </div>
+        <button @click="loadData()"
+                class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium">
+            <i class="fa-solid fa-rotate mr-1"></i>Retry
+        </button>
+    </div>
+</div>
