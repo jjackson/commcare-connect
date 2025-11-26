@@ -42,29 +42,29 @@ class Command(BaseCommand):
             )
             .annotate(
                 username=F("user__username"),
-                has_opp_invite=Max("invited_date"),
+                has_opp_invite=Min("invited_date"),
                 has_ever_earned_payment=Min(
                     "completedwork__status_modified_date",
                     filter=Q(completedwork__status=CompletedWorkStatus.approved),
                 ),
-                has_started_learning=Max("date_learn_started"),
-                has_completed_learning=Max("completed_learn_date"),
-                has_completed_assessment=Max("assessment__date", filter=Q(assessment__passed=True)),
-                has_claimed_job=Max("opportunityclaim__date_claimed"),
+                has_started_learning=Min("date_learn_started"),
+                has_completed_learning=Min("completed_learn_date"),
+                has_completed_assessment=Min("assessment__date", filter=Q(assessment__passed=True)),
+                has_claimed_job=Min("opportunityclaim__date_claimed"),
                 has_started_job=Min("completedwork__date_created"),
-                has_paid=Max("payment__date_paid"),
+                has_paid=Min("payment__date_paid"),
                 has_completed_opp=Case(
                     When(Q(completed_count__gte=1), then=Max("completedwork__status_modified_date")),
                     default=None,
                     output_field=DateTimeField(),
                 ),
                 has_offered_multiple_opps=Case(
-                    When(Q(total__gt=1), then=Max("invited_date")),
+                    When(Q(total__gt=1), then=Min("invited_date")),
                     default=None,
                     output_field=DateTimeField(),
                 ),
                 has_accepted_multiple_opps=Case(
-                    When(Q(accepted_count__gt=1), then=Max("invited_date", filter=Q(accepted=True))),
+                    When(Q(accepted_count__gt=1), then=Min("invited_date", filter=Q(accepted=True))),
                     default=None,
                     output_field=DateTimeField(),
                 ),
