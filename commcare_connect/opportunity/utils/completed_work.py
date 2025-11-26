@@ -294,7 +294,7 @@ def get_uninvoiced_completed_works_qs(opportunity, start_date=None, end_date=Non
     return query
 
 
-def get_uninvoiced_visit_items(opportunity, start_date=None, end_date=None):
+def get_uninvoiced_visit_items(opportunity, start_date=None, end_date=None, limit=None):
     from commcare_connect.opportunity.visit_import import get_exchange_rate
 
     completed_works_qs = get_uninvoiced_completed_works_qs(opportunity, start_date, end_date)
@@ -312,8 +312,10 @@ def get_uninvoiced_visit_items(opportunity, start_date=None, end_date=None):
         )
     )
 
+    limited_pu_records = monthly_pu_records[:limit] if limit else monthly_pu_records
     invoice_items = []
-    for record in monthly_pu_records:
+
+    for record in limited_pu_records:
         exchange_rate = get_exchange_rate(opportunity.currency, record["month_created"])
         total_local_amount = record["payment_unit_amount"] * record["record_count"]
         amount_accrued_usd = round(total_local_amount / exchange_rate, 2)
@@ -330,7 +332,7 @@ def get_uninvoiced_visit_items(opportunity, start_date=None, end_date=None):
             }
         )
 
-    return invoice_items
+    return invoice_items, completed_works_qs.count()
 
 
 def link_invoice_to_completed_works(invoice, start_date=None, end_date=None):
