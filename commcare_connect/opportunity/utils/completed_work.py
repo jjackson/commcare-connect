@@ -320,12 +320,13 @@ def get_uninvoiced_visit_items(opportunity, start_date=None, end_date=None):
     for record in monthly_pu_records:
         month = record["month_approved"]
         currency = record["currency"]
+        exchange_rate_cache_key = (currency, month)
 
-        if month not in exchange_rates_by_month:
+        if exchange_rate_cache_key not in exchange_rates_by_month:
             exchange_rate = get_exchange_rate(currency, month)
-            exchange_rates_by_month[month] = exchange_rate
+            exchange_rates_by_month[exchange_rate_cache_key] = exchange_rate
 
-        exchange_rate = exchange_rates_by_month[month]
+        exchange_rate = exchange_rates_by_month[exchange_rate_cache_key]
         invoice_items.append(
             {
                 "month": record["month_approved"],
