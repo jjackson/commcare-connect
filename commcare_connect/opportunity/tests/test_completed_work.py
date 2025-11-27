@@ -20,14 +20,14 @@ class TestUninvoicedVisitItems:
     def test_items_without_prior_invoice(self):
         opp_access = OpportunityAccessFactory()
         CompletedWorkFactory(status=CompletedWorkStatus.pending, opportunity_access=opp_access)
-        items, _ = get_uninvoiced_visit_items(opp_access.opportunity)
+        items = get_uninvoiced_visit_items(opp_access.opportunity)
         assert len(items) == 0
 
         completed_work = CompletedWorkFactory(status=CompletedWorkStatus.approved, opportunity_access=opp_access)
         completed_work.saved_payment_accrued = completed_work.payment_unit.amount
         completed_work.save()
 
-        items, _ = get_uninvoiced_visit_items(opp_access.opportunity)
+        items = get_uninvoiced_visit_items(opp_access.opportunity)
         assert len(items) == 1
 
         invoice_item = items[0]
@@ -44,7 +44,7 @@ class TestUninvoicedVisitItems:
             opportunity_access=opp_access,
             invoice=invoice,
         )
-        items, _ = get_uninvoiced_visit_items(opp_access.opportunity)
+        items = get_uninvoiced_visit_items(opp_access.opportunity)
         assert len(items) == 0
 
         completed_work = CompletedWorkFactory(
@@ -54,7 +54,7 @@ class TestUninvoicedVisitItems:
         completed_work.saved_payment_accrued = completed_work.payment_unit.amount
         completed_work.save()
 
-        items, _ = get_uninvoiced_visit_items(opp_access.opportunity)
+        items = get_uninvoiced_visit_items(opp_access.opportunity)
         assert len(items) == 1
 
         invoice_item = items[0]
@@ -89,7 +89,7 @@ class TestUninvoicedVisitItems:
         self._create_completed_work(opp_access, one_month_ago, payment_unit, exchange_rate=0.50, n=1)
         self._create_completed_work(opp_access, today, payment_unit, exchange_rate=0.75, n=1)
 
-        items, _ = get_uninvoiced_visit_items(opp_access.opportunity)
+        items = get_uninvoiced_visit_items(opp_access.opportunity)
         assert len(items) == 3
 
         for item in items:
@@ -154,7 +154,7 @@ class TestUninvoicedVisitItems:
         self._create_completed_work(opp_access, today, payment_unit1, exchange_rate=rate_today, n=1)
         self._create_completed_work(opp_access, today, payment_unit2, exchange_rate=rate_today, n=1)
 
-        items, _ = get_uninvoiced_visit_items(opp_access.opportunity)
+        items = get_uninvoiced_visit_items(opp_access.opportunity)
         assert len(items) == 5
 
         for item in items:
