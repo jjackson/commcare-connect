@@ -1481,16 +1481,6 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
                         ),
                         HTML(
                             """
-                            <div x-cloak x-show="totalLineItemsCount > 0" class="mt-2 mb-2">
-                                <span
-                                    class="text-sm text-gray-600"
-                                    x-text="`Showing ${previewLineItemsCount} of ${totalLineItemsCount} items`"
-                                ></span>
-                            </div>
-                            """
-                        ),
-                        HTML(
-                            """
                             <div id="download-line-items-wrapper" x-cloak x-show="showDownloadButton" class="my-4">
                                 <a type="button"
                                 class="button button-md outline-style"
