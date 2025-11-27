@@ -9,7 +9,9 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.core.mail import send_mail
 from django.db import transaction
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.timezone import now
 from django.utils.translation import gettext
@@ -38,6 +40,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     OpportunityClaim,
     Payment,
+    PaymentInvoice,
     UserInvite,
     UserInviteStatus,
     UserVisit,
@@ -51,6 +54,7 @@ from commcare_connect.utils.analytics import Event, GATrackingInfo, _serialize_e
 from commcare_connect.utils.celery import set_task_progress
 from commcare_connect.utils.datetime import is_date_before
 from commcare_connect.utils.sms import send_sms
+from commcare_connect.utils.tables import DEFAULT_PAGE_SIZE
 from config import celery_app
 
 logger = logging.getLogger(__name__)
@@ -477,3 +481,55 @@ def issue_user_credentials():
 @celery_app.task()
 def submit_credentials_to_personalid_task():
     UserCredentialIssuer.submit_user_credentials()
+
+
+@celery_app.task()
+def send_invoice_paid_notification(opportunity_id, invoice_ids):
+    logger.info(f"Sending invoice paid notification for opportunity {opportunity_id} and invoices {invoice_ids}")
+    opportunity = Opportunity.objects.get(pk=opportunity_id)
+    nm_org = opportunity.organization
+    recipient_emails = nm_org.get_member_emails()
+    if not recipient_emails:
+        logger.info(f"No recipient emails found for organization {nm_org.slug}. Skipping invoice paid email.")
+        return
+
+    invoices = PaymentInvoice.objects.filter(id__in=invoice_ids)
+
+    base_invoice_list_url = build_absolute_uri(
+        None,
+        reverse(
+            "opportunity:invoice_list",
+            kwargs={"org_slug": nm_org.slug, "opp_id": opportunity.id},
+        ),
+    )
+
+    invoice_ids = list(
+        PaymentInvoice.objects.filter(opportunity=opportunity).order_by("-date").values_list("id", flat=True)
+    )
+
+    for invoice in invoices:
+        index = invoice_ids.index(invoice.id)
+        page_number = (index // DEFAULT_PAGE_SIZE) + 1
+        subject = f"[{opportunity.name}] Invoice {invoice.invoice_number} Has Been Paid"
+        invoice_url = f"{base_invoice_list_url}?page={page_number}" f"&highlight={invoice.invoice_number}"
+        context = {
+            "invoice": invoice,
+            "invoice_url": invoice_url,
+            "opportunity": opportunity,
+        }
+
+        text_body = render_to_string(
+            "opportunity/email/invoice_paid.txt",
+            context,
+        )
+        html_body = render_to_string(
+            "opportunity/email/invoice_paid.html",
+            context,
+        )
+        send_mail(
+            subject=subject,
+            message=text_body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=recipient_emails,
+            html_message=html_body,
+        )
