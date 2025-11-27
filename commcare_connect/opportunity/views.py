@@ -123,6 +123,7 @@ from commcare_connect.opportunity.tasks import (
     generate_work_status_export,
     get_payment_upload_key,
     invite_user,
+    send_invoice_paid_notification,
     send_push_notification_task,
     update_user_and_send_invite,
 )
@@ -1315,6 +1316,8 @@ def invoice_list(request, org_slug, opp_id):
 
     filter_kwargs = dict(opportunity=request.opportunity)
 
+    highlight_invoice_number = request.GET.get("highlight")
+
     queryset = PaymentInvoice.objects.filter(**filter_kwargs).order_by("date")
     csrf_token = get_token(request)
 
@@ -1324,6 +1327,7 @@ def invoice_list(request, org_slug, opp_id):
         opportunity=request.opportunity,
         exclude=("actions",) if not request.is_opportunity_pm else tuple(),
         csrf_token=csrf_token,
+        highlight_invoice_number=highlight_invoice_number,
     )
 
     form = PaymentInvoiceForm(opportunity=request.opportunity)
@@ -1377,6 +1381,7 @@ def invoice_approve(request, org_slug, opp_id):
             invoice=invoice,
         )
         payment.save()
+    send_invoice_paid_notification(request.opportunity.id, [id for id in invoice_ids])
     return redirect("opportunity:invoice_list", org_slug, opp_id)
 
 
