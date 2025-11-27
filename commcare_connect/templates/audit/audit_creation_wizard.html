@@ -823,6 +823,8 @@ function auditCreationPage() {
 
     // Preview state
     previewResults: [],
+    precomputedVisitIds: [],  // Pre-computed visit IDs from preview (optimization)
+    precomputedFlwVisitIds: {},  // {username: [visit_ids]} mapping (optimization)
     auditDefinitionId: null,  // Stores the audit definition ID from preview
     updating: false,
     creating: false,
@@ -1067,9 +1069,20 @@ function auditCreationPage() {
           alert('No visits found matching the criteria. Try adjusting the date range or audit type.');
           this.previewResults = [];
           this.selectedFlwUserIds = [];
+          this.precomputedVisitIds = [];
+          this.precomputedFlwVisitIds = {};
         } else {
           // Populate preview results with FLW data
           this.previewResults = preview.flws;
+          // Store pre-computed visit IDs to skip re-fetch during create
+          this.precomputedVisitIds = preview.visit_ids || [];
+          this.precomputedFlwVisitIds = {};
+          for (const flw of preview.flws) {
+            const username = flw.connect_id || flw.username;
+            if (flw.visit_ids) {
+              this.precomputedFlwVisitIds[username] = flw.visit_ids;
+            }
+          }
           // Use connect_id as canonical identifier (always present, equals Connect username)
           const previewIds = preview.flws.map(flw => flw.connect_id || flw.username);
 
@@ -1248,6 +1261,14 @@ function auditCreationPage() {
       this.creating = true;
 
       try {
+        // Build FLW visit IDs mapping for selected FLWs only
+        const selectedFlwVisitIds = {};
+        for (const username of this.selectedFlwUserIds) {
+          if (this.precomputedFlwVisitIds[username]) {
+            selectedFlwVisitIds[username] = this.precomputedFlwVisitIds[username];
+          }
+        }
+
         const payload = {
           opportunities: this.selectedOpportunities.map(o => o.id),
           criteria: {
@@ -1262,7 +1283,10 @@ function auditCreationPage() {
             title: this.auditTitle,
             tag: this.auditTag,
             selected_flw_user_ids: this.selectedFlwUserIds  // Include FLW selections
-          }
+          },
+          // Pass pre-computed data from preview (optimization: skip CSV re-parsing)
+          visit_ids: this.precomputedVisitIds,
+          flw_visit_ids: selectedFlwVisitIds
         };
 
         const response = await fetch('{% url "audit:create_session" %}', {

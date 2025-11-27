@@ -39,13 +39,15 @@ class CacheStage(Enum):
 @dataclass
 class FieldComputation:
     """
-    Configuration for extracting and aggregating a field from UserVisit form_json.
+    Configuration for extracting and aggregating a field from UserVisit data.
 
-    Supports multiple fallback paths for handling different form structures.
-    When `paths` is provided, each path is tried in order until a non-None value is found.
+    Supports three extraction modes:
+    1. Path-based: Extract from form_json using dot notation (e.g., "form.case.update.field")
+    2. Multi-path: Try multiple paths in order until a value is found
+    3. Custom extractor: A function that receives the full visit dict and returns a value
 
     Examples:
-        # Simple sum of numeric field
+        # Simple path extraction
         FieldComputation(
             name="buildings_visited",
             path="form.building_count",
@@ -53,17 +55,10 @@ class FieldComputation:
             default=0
         )
 
-        # Extract nested field and take first value
-        FieldComputation(
-            name="child_age_months",
-            path="form.additional_case_info.childs_age_in_month",
-            aggregation="first"
-        )
-
         # Multiple fallback paths (for different form structures)
         FieldComputation(
             name="muac_cm",
-            path="form.case.update.soliciter_muac_cm",  # Primary path (opp 814)
+            path="form.case.update.soliciter_muac_cm",
             paths=[
                 "form.case.update.soliciter_muac_cm",   # opp 814
                 "form.subcase_0.case.update.soliciter_muac",  # opp 822
@@ -71,7 +66,7 @@ class FieldComputation:
             aggregation="avg"
         )
 
-        # Complex transformation
+        # Path with transform
         FieldComputation(
             name="avg_accuracy",
             path="metadata.location",
@@ -79,28 +74,29 @@ class FieldComputation:
             transform=lambda loc: float(loc.split()[3]) if loc and len(loc.split()) > 3 else None
         )
 
-        # Count non-null values
+        # Custom extractor (receives full visit dict)
         FieldComputation(
-            name="consent_count",
-            path="form.case.update.MUAC_consent",
-            aggregation="count"
+            name="images_with_questions",
+            extractor=extract_images_with_question_ids,  # fn(visit_dict) -> Any
+            aggregation="first",
         )
     """
 
     name: str
-    path: str
-    aggregation: AggregationType
+    path: str = ""
+    aggregation: AggregationType = "first"
     default: Any = None
     transform: Callable[[Any], Any] | None = None
     description: str = ""
-    paths: list[str] | None = None  # Optional list of fallback paths to try in order
+    paths: list[str] | None = None
+    extractor: Callable[[dict], Any] | None = None  # Custom extractor receives full visit dict
 
     def __post_init__(self):
         """Validate configuration."""
         if not self.name:
             raise ValueError("Field name is required")
-        if not self.path and not self.paths:
-            raise ValueError("Field path or paths is required")
+        if not self.path and not self.paths and not self.extractor:
+            raise ValueError("Field requires path, paths, or extractor")
         if self.aggregation not in [
             "sum",
             "avg",
@@ -119,6 +115,11 @@ class FieldComputation:
         if self.paths:
             return self.paths
         return [self.path] if self.path else []
+
+    @property
+    def uses_extractor(self) -> bool:
+        """Check if this field uses a custom extractor."""
+        return self.extractor is not None
 
 
 @dataclass
