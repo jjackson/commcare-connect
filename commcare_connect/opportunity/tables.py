@@ -1561,3 +1561,25 @@ class InvoiceLineItemsTable(tables.Table):
 
     def render_month(self, value):
         return value.strftime("%B %Y")
+
+
+class InvoiceDeliveriesTable(tables.Table):
+    date_approved = DMYTColumn(verbose_name="Date Approved", accessor="status_modified_date")
+    opportunity = tables.Column(verbose_name="Opportunity", accessor="payment_unit__opportunity__name")
+
+    class Meta:
+        model = CompletedWork
+        fields = (
+            "payment_unit",
+            "saved_approved_count",
+            "saved_payment_accrued",
+            "saved_payment_accrued_usd",
+        )
+        sequence = (
+            "payment_unit",
+            "opportunity",
+            "date_approved",
+            "saved_approved_count",
+            "saved_payment_accrued",
+            "saved_payment_accrued_usd",
+        )

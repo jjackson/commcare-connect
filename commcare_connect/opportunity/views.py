@@ -99,6 +99,7 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.tables import (
     CompletedWorkTable,
     DeliverUnitTable,
+    InvoiceDeliveriesTable,
     InvoiceLineItemsTable,
     LearnModuleTable,
     OpportunityTable,
@@ -132,7 +133,10 @@ from commcare_connect.opportunity.tasks import (
     send_push_notification_task,
     update_user_and_send_invite,
 )
-from commcare_connect.opportunity.utils.completed_work import get_uninvoiced_visit_items
+from commcare_connect.opportunity.utils.completed_work import (
+    get_uninvoiced_completed_works_qs,
+    get_uninvoiced_visit_items,
+)
 from commcare_connect.opportunity.visit_import import (
     ImportException,
     bulk_update_catchments,
@@ -2647,9 +2651,8 @@ def download_invoice_line_items(request, org_slug, opp_id):
     start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
     end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
 
-    line_items, _total_count = get_uninvoiced_visit_items(request.opportunity, start_date, end_date)
-
-    table = InvoiceLineItemsTable(line_items)
+    deliveries = get_uninvoiced_completed_works_qs(request.opportunity, start_date, end_date)
+    table = InvoiceDeliveriesTable(deliveries)
 
     export_format = "csv"
     exporter = TableExport(export_format, table)
