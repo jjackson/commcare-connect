@@ -11,6 +11,7 @@ from django.db.models import F, Q, Sum, TextChoices
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.timezone import now
+from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 from waffle import switch_is_active
 
@@ -88,8 +89,12 @@ class OpportunityUserInviteForm(forms.Form):
         if user_data and self.opportunity and not self.opportunity.is_setup_complete:
             raise ValidationError("Please finish setting up the opportunity before inviting users.")
 
-        split_users = [line.strip() for line in user_data.splitlines() if line.strip()]
-        return split_users
+        user_numbers = [line.strip() for line in user_data.splitlines() if line.strip()]
+        for user_number in user_numbers:
+            if not user_number.startswith("+"):
+                raise ValidationError(gettext("Phone numbers should include the country code starting with '+'."))
+
+        return user_numbers
 
 
 class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
