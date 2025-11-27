@@ -314,10 +314,10 @@ def get_uninvoiced_visit_items(opportunity, start_date=None, end_date=None, limi
         )
     )
 
-    limited_pu_records = monthly_pu_records[:limit] if limit else monthly_pu_records
+    limited_pu_records_by_month = monthly_pu_records[:limit] if limit else monthly_pu_records
     invoice_items = []
 
-    for record in limited_pu_records:
+    for record in limited_pu_records_by_month:
         exchange_rate = get_exchange_rate(opportunity.currency, record["month_approved"])
         invoice_items.append(
             {
