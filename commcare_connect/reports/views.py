@@ -5,11 +5,9 @@ import django_tables2 as tables
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Column, Layout, Row
 from django import forms
-from django.conf import settings
 from django.db.models import Count, Sum
 from django.db.models.functions import TruncDate
 from django.http import JsonResponse
-from django.shortcuts import render
 from django.urls import reverse
 from django.utils.functional import cached_property
 from django.views.decorators.http import require_GET
@@ -104,20 +102,6 @@ class DashboardFilters(django_filters.FilterSet):
     class Meta:
         model = UserVisit
         fields = ["program", "organization", "from_date", "to_date"]
-
-
-@require_GET
-@kpi_report_access_required
-def program_dashboard_report(request):
-    filterset = DashboardFilters(request.GET)
-    return render(
-        request,
-        "reports/dashboard.html",
-        context={
-            "mapbox_token": settings.MAPBOX_TOKEN,
-            "filter": filterset,
-        },
-    )
 
 
 @kpi_report_access_required
