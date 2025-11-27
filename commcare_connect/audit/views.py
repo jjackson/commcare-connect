@@ -12,7 +12,7 @@ import json
 from collections import defaultdict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import FileResponse, HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -133,10 +133,6 @@ class ExperimentAuditListView(LoginRequiredMixin, SingleTableView):
                 )
             else:
                 context["token_expires_at"] = None
-
-            # Check for CommCare OAuth token
-            commcare_oauth = self.request.session.get("commcare_oauth", {})
-            context["has_commcare_token"] = bool(commcare_oauth.get("access_token"))
         else:
             # Normal mode: check database for SocialAccount
             from allauth.socialaccount.models import SocialAccount, SocialToken
@@ -149,9 +145,6 @@ class ExperimentAuditListView(LoginRequiredMixin, SingleTableView):
             except (SocialAccount.DoesNotExist, SocialToken.DoesNotExist):
                 context["has_connect_token"] = False
                 context["token_expires_at"] = None
-
-            # In normal mode, CommCare OAuth not supported yet
-            context["has_commcare_token"] = False
 
         return context
 
@@ -367,44 +360,39 @@ class ExperimentAuditVisitDataView(LoginRequiredMixin, View):
 
             visit_data = data_access.get_visit_data(visit_id, opportunity_id=opportunity_id)
 
-            try:
-                opportunity_details = data_access.get_opportunity_details(opportunity_id) if opportunity_id else None
-                cc_domain = opportunity_details.get("cc_domain") if opportunity_details else None
-            except Exception:
-                cc_domain = None
-
-            blob_metadata = {}
-            if cc_domain and visit_data and visit_data.get("xform_id"):
-                try:
-                    blob_metadata = data_access.get_blob_metadata_for_visit(visit_data["xform_id"], cc_domain)
-                except Exception:
-                    blob_metadata = {}
-
             assessments_map = session.get_assessments(visit_id)
 
+            # Get images from session's visit_images (extracted during session creation)
+            visit_images = session.data.get("visit_images", {}).get(str(visit_id), [])
+
             def build_image_url(blob_id: str) -> str:
-                url = reverse("audit:audit_image", kwargs={"blob_id": blob_id})
-                if cc_domain and visit_data and visit_data.get("xform_id"):
-                    url = f"{url}?xform_id={visit_data['xform_id']}&domain={cc_domain}"
-                return url
+                return reverse("audit:audit_image_connect", kwargs={"opp_id": opportunity_id, "blob_id": blob_id})
 
             assessments = []
-            for blob_id, metadata in blob_metadata.items():
+            seen_blob_ids = set()
+
+            # Add images from session's visit_images
+            for image in visit_images:
+                blob_id = image.get("blob_id")
+                if not blob_id:
+                    continue
+                seen_blob_ids.add(blob_id)
                 assessment_data = assessments_map.get(blob_id, {})
                 assessments.append(
                     {
                         "id": f"{visit_id}:{blob_id}",
                         "blob_id": blob_id,
-                        "question_id": metadata.get("question_id") or "",
-                        "filename": metadata.get("filename") or "",
+                        "question_id": image.get("question_id") or "",
+                        "filename": image.get("name") or "",
                         "image_url": build_image_url(blob_id),
                         "result": assessment_data.get("result"),
                         "notes": assessment_data.get("notes", ""),
                     }
                 )
 
+            # Add any assessments for images not in visit_images (legacy data)
             for blob_id, assessment_data in assessments_map.items():
-                if blob_id in blob_metadata:
+                if blob_id in seen_blob_ids:
                     continue
                 assessments.append(
                     {
@@ -852,54 +840,6 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
             data_access.close()
 
 
-class ExperimentAuditImageView(LoginRequiredMixin, View):
-    """Serve audit visit images (experiment-based)"""
-
-    def get(self, request, blob_id):
-        try:
-            # Get xform_id and domain from query params
-            xform_id = request.GET.get("xform_id")
-            domain = request.GET.get("domain")
-
-            if not xform_id or not domain:
-                return HttpResponse("Missing xform_id or domain", status=400)
-
-            # Initialize data access
-            data_access = AuditDataAccess(request=request)
-
-            try:
-                # Get blob metadata
-                blob_metadata = data_access.get_blob_metadata_for_visit(xform_id, domain)
-
-                if blob_id not in blob_metadata:
-                    return HttpResponse(f"Blob {blob_id} not found in form", status=404)
-
-                blob_info = blob_metadata[blob_id]
-                blob_url = blob_info.get("url")
-
-                if not blob_url:
-                    return HttpResponse("Blob URL not found", status=404)
-
-                # Download blob
-                blob_content = data_access.download_blob(blob_url)
-
-                # Return as file response
-                content_type = blob_info.get("content_type", "image/jpeg")
-                filename = blob_info.get("filename", blob_id)
-
-                response = FileResponse(blob_content, content_type=content_type, filename=filename)
-                return response
-
-            finally:
-                data_access.close()
-
-        except Exception as e:
-            import traceback
-
-            print(f"[ERROR] {traceback.format_exc()}")
-            return HttpResponse(f"Image not found: {e}", status=404)
-
-
 class ExperimentAuditImageConnectView(LoginRequiredMixin, View):
     """Serve audit visit images from Connect API (no CommCare HQ)"""
 
@@ -963,22 +903,38 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 "selected_flw_user_ids": criteria.get("selected_flw_user_ids", []),
             }
 
-            # Get visit IDs based on criteria (uses cached visits automatically)
-            visit_ids = data_access.get_visit_ids_for_audit(
-                opportunity_ids=opportunity_ids, audit_type=audit_type, criteria=normalized_criteria
-            )
+            # Check if preview passed pre-computed visit IDs (optimization: skip re-fetch)
+            precomputed_visit_ids = data.get("visit_ids")
+            precomputed_flw_data = data.get("flw_visit_ids")  # {username: [visit_ids]}
 
-            # Fetch all visits once for this request to build in-memory cache
-            # This prevents multiple fetches even if RawAPICache isn't working
-            all_visits_cache = {}
-            for opp_id in opportunity_ids:
-                all_visits_cache[opp_id] = data_access._fetch_visits_for_opportunity(opp_id)
+            if precomputed_visit_ids and precomputed_flw_data:
+                # Use pre-computed data from preview (no CSV parsing needed!)
+                import logging
 
-            # Get all visits with their FLW info for filtering
-            all_visits_with_info = []
-            for opp_id in opportunity_ids:
-                visits = data_access.get_visits_batch(visit_ids, opp_id)
-                all_visits_with_info.extend(visits)
+                logging.info(
+                    f"[OPTIMIZATION] Using precomputed data: {len(precomputed_visit_ids)} visit_ids, "
+                    f"{len(precomputed_flw_data)} FLWs"
+                )
+                visit_ids = precomputed_visit_ids
+                # Build all_visits_with_info from precomputed data (minimal info needed for grouping)
+                all_visits_with_info = []
+                for flw_username, flw_visit_ids in precomputed_flw_data.items():
+                    for vid in flw_visit_ids:
+                        all_visits_with_info.append({"id": vid, "username": flw_username})
+            else:
+                # Fallback: compute visit IDs (slower path, requires CSV parsing)
+                import logging
+
+                logging.info(
+                    f"[FALLBACK] Precomputed data not available - "
+                    f"visit_ids={bool(precomputed_visit_ids)}, flw_data={bool(precomputed_flw_data)}"
+                )
+                visit_ids, all_visits_with_info = data_access.get_visit_ids_for_audit(
+                    opportunity_ids=opportunity_ids,
+                    audit_type=audit_type,
+                    criteria=normalized_criteria,
+                    return_visits=True,
+                )
 
             # Filter by selected FLW identifiers if provided
             selected_flw_user_ids = normalized_criteria.get("selected_flw_user_ids", [])
@@ -1008,50 +964,60 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
 
             # For per_flw granularity with multiple FLWs, create separate sessions
             if granularity == "per_flw" and selected_flw_user_ids and len(selected_flw_user_ids) > 1:
-                # Create one session per FLW
-                sessions_created = []
-
+                # OPTIMIZATION: Pre-compute all FLW visit IDs to batch operations
+                flw_visit_id_map = {}
+                all_flw_visit_ids = []
                 for flw_id in selected_flw_user_ids:
-                    # Filter visits to just this FLW
                     flw_visit_ids = [
                         v["id"]
                         for v in all_visits_with_info
                         if v.get("username") == flw_id or v.get("user_id") == flw_id
                     ]
+                    if flw_visit_ids:
+                        flw_visit_id_map[flw_id] = flw_visit_ids
+                        all_flw_visit_ids.extend(flw_visit_ids)
 
-                    if not flw_visit_ids:
-                        continue  # Skip FLWs with no visits
+                if not flw_visit_id_map:
+                    return JsonResponse({"error": "No visits found matching criteria"}, status=400)
 
+                # OPTIMIZATION: Extract images for ALL visits at once (1 CSV parse instead of N)
+                opp_id = opportunity_ids[0] if opportunity_ids else None
+                all_visit_images = data_access.extract_images_for_visits(all_flw_visit_ids, opp_id)
+
+                # OPTIMIZATION: Create ONE template for all sessions (1 POST instead of N)
+                template = data_access.create_audit_template(
+                    username=username,
+                    opportunity_ids=opportunity_ids,
+                    audit_type=audit_type,
+                    granularity=granularity,
+                    criteria=criteria,
+                    preview_data=[],
+                )
+
+                # Create one session per FLW, reusing template and pre-extracted data
+                sessions_created = []
+                for flw_id, flw_visit_ids in flw_visit_id_map.items():
                     # Construct title: FLW Name - suffix
                     flw_display_name = flw_names.get(flw_id, flw_id)
                     session_title = f"{flw_display_name} - {title_suffix}" if title_suffix else flw_display_name
 
-                    # Create template for this FLW
-                    template = data_access.create_audit_template(
-                        username=username,
-                        opportunity_ids=opportunity_ids,
-                        audit_type=audit_type,
-                        granularity=granularity,
-                        criteria=criteria,
-                        preview_data=[],
-                    )
+                    # Filter pre-extracted images to just this FLW's visits
+                    flw_images = {str(vid): all_visit_images.get(str(vid), []) for vid in flw_visit_ids}
 
-                    # Create session for this FLW
+                    # Create session with pre-computed data (no redundant API calls)
                     session = data_access.create_audit_session(
                         template_id=template.id,
                         username=username,
                         visit_ids=flw_visit_ids,
                         title=session_title,
                         tag=criteria.get("tag", ""),
-                        opportunity_id=opportunity_ids[0] if opportunity_ids else None,
+                        opportunity_id=opp_id,
                         audit_type=audit_type,
                         criteria=normalized_criteria,
-                        visits_cache=all_visits_cache.get(opportunity_ids[0], []) if opportunity_ids else None,
+                        opportunity_name=opp_name or "",
+                        visit_images=flw_images,
                     )
                     sessions_created.append({"session_id": session.id, "flw_id": flw_id, "visits": len(flw_visit_ids)})
-
-                if not sessions_created:
-                    return JsonResponse({"error": "No visits found matching criteria"}, status=400)
 
                 return JsonResponse(
                     {
@@ -1088,6 +1054,10 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 # Fallback to just suffix or date
                 session_title = title_suffix if title_suffix else f"Audit {timezone.now().strftime('%Y-%m-%d')}"
 
+            # OPTIMIZATION: Extract images for all visits at once (1 CSV parse)
+            opp_id = opportunity_ids[0] if opportunity_ids else None
+            all_visit_images = data_access.extract_images_for_visits(visit_ids, opp_id)
+
             # Create template
             template = data_access.create_audit_template(
                 username=username,
@@ -1098,17 +1068,18 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 preview_data=[],
             )
 
-            # Create session (passing visits cache to avoid re-fetch)
+            # Create session with pre-computed data (no redundant API calls)
             session = data_access.create_audit_session(
                 template_id=template.id,
                 username=username,
                 visit_ids=visit_ids,
                 title=session_title,
                 tag=criteria.get("tag", ""),
-                opportunity_id=opportunity_ids[0] if opportunity_ids else None,
+                opportunity_id=opp_id,
                 audit_type=audit_type,
                 criteria=normalized_criteria,
-                visits_cache=all_visits_cache.get(opportunity_ids[0], []) if opportunity_ids else None,
+                opportunity_name=opp_name or "",
+                visit_images=all_visit_images,
             )
 
             # Determine redirect URL
@@ -1235,18 +1206,12 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
                 "sample_percentage": criteria.get("sample_percentage", criteria.get("samplePercentage", 100)),
             }
 
-            # Fetch all visits ONCE for this request to build in-memory cache
-            # This prevents multiple fetches even if RawAPICache isn't working
-            all_visits_cache = {}
-            for opp_id in opportunity_ids:
-                all_visits_cache[opp_id] = data_access._fetch_visits_for_opportunity(opp_id)
-
-            # Get visit IDs based on criteria (passing visits cache to avoid re-fetch)
-            visit_ids = data_access.get_visit_ids_for_audit(
+            # Get visit IDs AND filtered visits in one call (avoids redundant fetches)
+            visit_ids, filtered_visits = data_access.get_visit_ids_for_audit(
                 opportunity_ids=opportunity_ids,
                 audit_type=audit_type,
                 criteria=normalized_criteria,
-                visits_cache=all_visits_cache,
+                return_visits=True,
             )
 
             # Fetch FLW names mapping (username -> display name)
@@ -1258,38 +1223,32 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
 
                 logging.warning(f"Could not fetch FLW names: {e}")
 
-            # Fetch detailed visit data and group by FLW (using cached visits)
+            # Group filtered visits by FLW
             flw_data = {}
-            for opp_id in opportunity_ids:
-                # Use cached visits instead of fetching again
-                all_visits = all_visits_cache.get(opp_id, [])
-                visit_id_set = set(visit_ids)
-                visits = [v for v in all_visits if v["id"] in visit_id_set]
+            for visit in filtered_visits:
+                # Use username as primary identifier
+                username = visit.get("username")
+                if not username:
+                    continue
 
-                for visit in visits:
-                    # Use username as primary identifier
-                    username = visit.get("username")
-                    if not username:
-                        continue
+                if username not in flw_data:
+                    flw_data[username] = {
+                        "user_id": visit.get("user_id"),  # May be None
+                        "name": flw_names.get(username, username),  # Use proper name, fallback to username
+                        "connect_id": username,
+                        "visit_count": 0,
+                        "visits": [],
+                        "opportunity_id": visit.get("opportunity_id"),
+                        "opportunity_name": visit.get("opportunity_name", ""),
+                    }
 
-                    if username not in flw_data:
-                        flw_data[username] = {
-                            "user_id": visit.get("user_id"),  # May be None
-                            "name": flw_names.get(username, username),  # Use proper name, fallback to username
-                            "connect_id": username,
-                            "visit_count": 0,
-                            "visits": [],
-                            "opportunity_id": opp_id,
-                            "opportunity_name": visit.get("opportunity_name", ""),
-                        }
-
-                    flw_data[username]["visit_count"] += 1
-                    flw_data[username]["visits"].append(
-                        {
-                            "id": visit.get("id"),
-                            "visit_date": visit.get("visit_date"),
-                        }
-                    )
+                flw_data[username]["visit_count"] += 1
+                flw_data[username]["visits"].append(
+                    {
+                        "id": visit.get("id"),
+                        "visit_date": visit.get("visit_date"),
+                    }
+                )
 
             # Calculate date ranges and format for frontend
             preview_results = []
@@ -1306,6 +1265,7 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
                         "name": flw["name"],
                         "connect_id": flw["connect_id"],
                         "visit_count": flw["visit_count"],
+                        "visit_ids": [v["id"] for v in flw["visits"]],  # For create to skip re-fetch
                         "earliest_visit": earliest,
                         "latest_visit": latest,
                         "opportunity_id": flw["opportunity_id"],
@@ -1321,6 +1281,7 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
                         "total_visits": len(visit_ids),
                         "total_flws": len(preview_results),
                         "flws": preview_results,
+                        "visit_ids": visit_ids,  # Pass to create to skip re-computation
                     },
                 }
             )

@@ -17,13 +17,38 @@ logger = logging.getLogger(__name__)
 
 
 def _extract_field_value(form_json: dict, field_comp: FieldComputation) -> Any:
-    """Extract value from form_json using field computation paths."""
+    """Extract value from form_json using field computation paths.
+
+    Note: This does NOT handle custom extractors - those need the full visit dict.
+    Use _extract_field_value_from_visit for fields that may have extractors.
+    """
     paths = field_comp.get_paths()
     if len(paths) > 1:
         return extract_json_path_multi(form_json, paths)
     elif paths:
         return extract_json_path(form_json, paths[0])
     return None
+
+
+def _extract_field_value_from_visit(visit: LocalUserVisit, field_comp: FieldComputation) -> Any:
+    """
+    Extract value from visit using field computation.
+
+    Handles both path-based extraction and custom extractors.
+
+    Args:
+        visit: LocalUserVisit object (has form_json, images, etc.)
+        field_comp: Field computation configuration
+
+    Returns:
+        Extracted value (before transform)
+    """
+    # Custom extractor takes precedence - receives full visit data dict
+    if field_comp.uses_extractor and field_comp.extractor:
+        return field_comp.extractor(visit._data)
+
+    # Path-based extraction from form_json
+    return _extract_field_value(visit.form_json, field_comp)
 
 
 def _extract_histogram_value(form_json: dict, hist_comp) -> Any:
@@ -41,6 +66,7 @@ def compute_fields_batch(visits: list[LocalUserVisit], field_comps: list[FieldCo
     Compute all fields for a list of visits at once using pandas.
 
     This is much faster than looping through each field and each visit separately.
+    Supports both path-based extraction and custom extractors.
 
     Args:
         visits: List of visits for one FLW
@@ -51,26 +77,29 @@ def compute_fields_batch(visits: list[LocalUserVisit], field_comps: list[FieldCo
     """
     results = {}
 
-    # Extract all form_json at once
-    form_jsons = [v.form_json for v in visits]
-
     # Process each field computation
     for field_comp in field_comps:
         try:
-            # Extract all values for this path at once (supports multi-path fallback)
-            values = [_extract_field_value(fj, field_comp) for fj in form_jsons]
+            # Extract values - use appropriate method based on field type
+            if field_comp.uses_extractor:
+                # Custom extractor needs full visit data
+                values = [_extract_field_value_from_visit(v, field_comp) for v in visits]
+            else:
+                # Path-based extraction from form_json
+                form_jsons = [v.form_json for v in visits]
+                values = [_extract_field_value(fj, field_comp) for fj in form_jsons]
 
-            # Apply transform if provided
-            if field_comp.transform:
-                transformed = []
-                for v in values:
-                    try:
-                        transformed.append(field_comp.transform(v) if v is not None else None)
-                    except Exception:
-                        transformed.append(None)
-                values = transformed
+                # Apply transform if provided (extractors do their own transformation)
+                if field_comp.transform:
+                    transformed = []
+                    for v in values:
+                        try:
+                            transformed.append(field_comp.transform(v) if v is not None else None)
+                        except Exception:
+                            transformed.append(None)
+                    values = transformed
 
-            # Filter out None values for pandas
+            # Filter out None values for aggregation
             non_none_values = [v for v in values if v is not None]
 
             # Compute aggregation using pandas for better performance
@@ -79,13 +108,18 @@ def compute_fields_batch(visits: list[LocalUserVisit], field_comps: list[FieldCo
             elif field_comp.aggregation == "count":
                 result = len(non_none_values)
             elif field_comp.aggregation == "count_unique":
-                result = len(set(non_none_values))
+                # Handle unhashable types (like lists/dicts)
+                try:
+                    result = len(set(non_none_values))
+                except TypeError:
+                    result = len(non_none_values)
             elif field_comp.aggregation == "first":
                 result = non_none_values[0]
             elif field_comp.aggregation == "last":
                 result = non_none_values[-1]
             elif field_comp.aggregation == "list":
-                result = list(dict.fromkeys(non_none_values))  # Preserve order, remove dups
+                # For list aggregation, just return the list (may contain complex objects)
+                result = non_none_values
             elif field_comp.aggregation in ["sum", "avg", "min", "max"]:
                 # Use pandas Series for numeric aggregations
                 try:
@@ -127,12 +161,16 @@ def compute_visit_fields(
     Unlike compute_fields_batch which aggregates values across visits,
     this returns one result dict per visit with the extracted/transformed values.
 
+    Supports both path-based extraction and custom extractors.
+    Custom extractors receive the full visit data dict, enabling complex
+    extractions like combining images array with form_json data.
+
     Also extracts histogram raw values (prefixed with _hist_) so they can be
     aggregated into histogram bins at the FLW level.
 
     Args:
         visits: List of visits to process
-        field_comps: List of field computations (aggregation is ignored)
+        field_comps: List of field computations (aggregation is ignored for visit-level)
         hist_comps: Optional list of histogram computations to extract values for
 
     Returns:
@@ -146,11 +184,12 @@ def compute_visit_fields(
 
         for field_comp in field_comps:
             try:
-                # Extract value from form_json (supports multi-path fallback)
-                value = _extract_field_value(form_json, field_comp)
+                # Extract value - handles both path-based and custom extractors
+                value = _extract_field_value_from_visit(visit, field_comp)
 
-                # Apply transform if provided
-                if value is not None and field_comp.transform:
+                # Apply transform if provided (for path-based extraction)
+                # Note: extractors typically do their own transformation
+                if value is not None and field_comp.transform and not field_comp.uses_extractor:
                     try:
                         value = field_comp.transform(value)
                     except Exception:
