@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from itertools import chain
 
@@ -10,6 +11,8 @@ from commcare_connect.opportunity.models import CompletedWorkStatus, Opportunity
 from commcare_connect.reports.models import UserAnalyticsData
 from commcare_connect.users.models import User
 
+logger = logging.getLogger(__name__)
+
 
 class Command(BaseCommand):
     help = "Backfills User Analytics Data"
@@ -19,6 +22,7 @@ class Command(BaseCommand):
             "id", "username"
         )
         personalid_analytics_data = fetch_user_analytics()
+        logger.info(f"Fetched data for {len(personalid_analytics_data)} PersonalID users.")
 
         access_objects = (
             OpportunityAccess.objects.filter(user_id__in=[user_id for user_id, _ in users])
@@ -103,7 +107,7 @@ class Command(BaseCommand):
                 user_data_map[username]["has_sso_on_hq_app"] = data.pop("hq_sso_date", None)
                 user_data_map[username].update(data)
 
-        UserAnalyticsData.objects.bulk_create(
+        result = UserAnalyticsData.objects.bulk_create(
             [UserAnalyticsData(**data) for data in user_data_map.values()],
             update_conflicts=True,
             update_fields=[
@@ -124,3 +128,5 @@ class Command(BaseCommand):
             unique_fields=["username"],
             batch_size=500,
         )
+
+        logger.info(f"Updated UserAnalyticsData for {len(result)} users.")
