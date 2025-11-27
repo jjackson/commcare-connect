@@ -87,7 +87,7 @@ class OpportunityUserInviteForm(forms.Form):
         user_data = self.cleaned_data["users"]
 
         if user_data and self.opportunity and not self.opportunity.is_setup_complete:
-            raise ValidationError("Please finish setting up the opportunity before inviting users.")
+            raise ValidationError(gettext("Please finish setting up the opportunity before inviting users."))
 
         user_numbers = [line.strip() for line in user_data.splitlines() if line.strip()]
         for user_number in user_numbers:
