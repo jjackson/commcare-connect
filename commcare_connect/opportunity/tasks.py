@@ -54,7 +54,6 @@ from commcare_connect.utils.analytics import Event, GATrackingInfo, _serialize_e
 from commcare_connect.utils.celery import set_task_progress
 from commcare_connect.utils.datetime import is_date_before
 from commcare_connect.utils.sms import send_sms
-from commcare_connect.utils.tables import DEFAULT_PAGE_SIZE
 from config import celery_app
 
 logger = logging.getLogger(__name__)
@@ -484,7 +483,7 @@ def submit_credentials_to_personalid_task():
 
 
 @celery_app.task()
-def send_invoice_paid_notification(opportunity_id, invoice_ids):
+def send_invoice_paid_mail(opportunity_id, invoice_ids):
     logger.info(f"Sending invoice paid notification for opportunity {opportunity_id} and invoices {invoice_ids}")
     opportunity = Opportunity.objects.get(pk=opportunity_id)
     nm_org = opportunity.organization
@@ -503,15 +502,9 @@ def send_invoice_paid_notification(opportunity_id, invoice_ids):
         ),
     )
 
-    invoice_ids = list(
-        PaymentInvoice.objects.filter(opportunity=opportunity).order_by("-date").values_list("id", flat=True)
-    )
-
     for invoice in invoices:
-        index = invoice_ids.index(invoice.id)
-        page_number = (index // DEFAULT_PAGE_SIZE) + 1
         subject = f"[{opportunity.name}] Invoice {invoice.invoice_number} Has Been Paid"
-        invoice_url = f"{base_invoice_list_url}?page={page_number}" f"&highlight={invoice.invoice_number}"
+        invoice_url = f"{base_invoice_list_url}?highlight={invoice.invoice_number}"
         context = {
             "invoice": invoice,
             "invoice_url": invoice_url,
