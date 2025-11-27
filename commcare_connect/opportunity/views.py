@@ -2111,10 +2111,20 @@ def worker_learn_status_view(request, org_slug, opp_id, access_id):
 
     table = WorkerLearnStatusTable(completed_modules)
 
+    path = [
+        {"title": "Opportunities", "url": reverse("opportunity:list", kwargs={"org_slug": org_slug})},
+        {"title": request.opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opp_id))},
+        {
+            "title": "Connect Workers",
+            "url": reverse("opportunity:worker_learn", args=(org_slug, opp_id)),
+        },
+        {"title": access.user.name, "url": request.path},
+    ]
+
     return render(
         request,
         "opportunity/opportunity_worker_learn.html",
-        {"total_learn_duration": total_duration, "table": table, "access": access},
+        {"total_learn_duration": total_duration, "table": table, "access": access, "path": path},
     )
 
 
