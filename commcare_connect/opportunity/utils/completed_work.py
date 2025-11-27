@@ -312,6 +312,7 @@ def get_uninvoiced_visit_items(opportunity, start_date=None, end_date=None):
             total_amount_usd=Sum("saved_payment_accrued_usd"),
             total_amount_local=Sum("saved_payment_accrued"),
         )
+        .order_by("month_approved")
     )
 
     exchange_rates_by_month = {}
