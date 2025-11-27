@@ -2615,12 +2615,10 @@ def invoice_items(request, *args, **kwargs):
     start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
     end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
 
-    preview_size = 25
-    line_items, total_items_count = get_uninvoiced_visit_items(
-        request.opportunity, start_date, end_date, limit=preview_size
-    )
+    line_items = get_uninvoiced_visit_items(request.opportunity, start_date, end_date)
     total_local_amount = sum(item["total_amount_local"] for item in line_items)
     total_usd_amount = sum(item["total_amount_usd"] for item in line_items)
+
     html = render_to_string(
         "opportunity/partials/invoice_line_items.html",
         {"table": InvoiceLineItemsTable(line_items)},
@@ -2632,8 +2630,6 @@ def invoice_items(request, *args, **kwargs):
             "line_items_table_html": html,
             "total_amount": total_local_amount,
             "total_usd_amount": total_usd_amount,
-            "preview_items_count": len(line_items),
-            "total_items_count": total_items_count,
         }
     )
 
