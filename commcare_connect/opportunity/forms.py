@@ -93,7 +93,7 @@ class OpportunityUserInviteForm(forms.Form):
         for user_number in user_numbers:
             if not user_number.startswith("+") or not user_number[1:].isdigit():
                 raise ValidationError(
-                    gettext("Phone numbers must contain only digits and include the country code starting with ‘+’")
+                    gettext("Phone numbers must contain only digits and include the country code starting with '+'")
                 )
 
         return user_numbers
