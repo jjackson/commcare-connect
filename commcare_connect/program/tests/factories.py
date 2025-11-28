@@ -1,4 +1,4 @@
-from factory import Faker, LazyAttribute, SubFactory
+from factory import Faker, LazyFunction, SubFactory
 from factory.django import DjangoModelFactory
 
 from commcare_connect.opportunity.models import Currency
@@ -12,13 +12,7 @@ class ProgramFactory(DjangoModelFactory):
     description = Faker("text", max_nb_chars=200)
     delivery_type = SubFactory(DeliveryTypeFactory)
     budget = Faker("random_int", min=1000, max=100000)
-    currency = Faker("currency_code")
-    currency_fk = LazyAttribute(
-        lambda o: Currency.objects.get_or_create(
-            code=o.currency,
-            defaults={"name": o.currency, "is_valid": True},
-        )[0]
-    )
+    currency_fk = LazyFunction(lambda: Currency.objects.get(code="USD"))
     start_date = Faker("date_this_decade", before_today=True, after_today=False)
     end_date = Faker("date_this_decade", before_today=False, after_today=True)
     organization = SubFactory(OrganizationFactory)
