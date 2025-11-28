@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from factory import DictFactory, Faker, LazyAttribute, SelfAttribute, SubFactory
+from factory import DictFactory, Faker, LazyAttribute, LazyFunction, SelfAttribute, SubFactory
 from factory.django import DjangoModelFactory
 
 from commcare_connect.commcarehq.tests.factories import HQServerFactory
@@ -57,13 +57,7 @@ class OpportunityFactory(DjangoModelFactory):
     total_budget = Faker("pyint", min_value=1000, max_value=10000)
     api_key = SubFactory(HQApiKeyFactory)
     delivery_type = SubFactory(DeliveryTypeFactory)
-    currency = "USD"
-    currency_fk = LazyAttribute(
-        lambda o: Currency.objects.get_or_create(
-            code=o.currency,
-            defaults={"name": o.currency, "is_valid": True},
-        )[0]
-    )
+    currency_fk = LazyFunction(lambda: Currency.objects.get(code="USD"))
     hq_server = SubFactory(HQServerFactory)
 
     class Meta:
