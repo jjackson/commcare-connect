@@ -33,8 +33,10 @@ from django.views.generic import CreateView, DetailView, UpdateView
 from django_tables2 import RequestConfig, SingleTableView
 from django_tables2.export import TableExport
 from geopy import distance
+from waffle import switch_is_active
 
 from commcare_connect.connect_id_client import fetch_users
+from commcare_connect.flags.switch_names import USER_VISIT_FILTERS
 from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.api.serializers import remove_opportunity_access_cache
 from commcare_connect.opportunity.app_xml import AppNoBuildException
@@ -1542,6 +1544,7 @@ def user_visit_verification(request, org_slug, opp_id):
         request=request,
         opportunity=opportunity,
     )
+    user_visit_filters_enabled = switch_is_active(USER_VISIT_FILTERS)
 
     if filter_set.form.is_valid():
         cleaned_data = filter_set.form.cleaned_data
@@ -1561,6 +1564,17 @@ def user_visit_verification(request, org_slug, opp_id):
         filtered_queryset = base_queryset
         selected_user_id = None
         selected_flags = set()
+
+    selected_opportunity_access = None
+    if selected_user_id:
+        selected_opportunity_access = (
+            OpportunityAccess.objects.filter(opportunity=opportunity, user_id=selected_user_id)
+            .select_related("user")
+            .first()
+        )
+
+    if not user_visit_filters_enabled and not selected_opportunity_access:
+        raise Http404("A valid worker must be specified.")
 
     user_visit_counts = get_user_visit_counts(opportunity, filtered_queryset)
     visits = filtered_queryset.filter(flagged=True, flag_reason__isnull=False)
@@ -1585,13 +1599,6 @@ def user_visit_verification(request, org_slug, opp_id):
             flagged_info[flag_label]["name"] = flag_label
     flagged_info = flagged_info.values()
 
-    selected_opportunity_access = None
-    if selected_user_id:
-        selected_opportunity_access = (
-            OpportunityAccess.objects.filter(opportunity=opportunity, user_id=selected_user_id)
-            .select_related("user")
-            .first()
-        )
     access_filter = Q(opportunity=opportunity)
     if selected_opportunity_access:
         access_filter &= Q(id=selected_opportunity_access.id)
@@ -1656,8 +1663,9 @@ def user_visit_verification(request, org_slug, opp_id):
             "pending_completed_work_count": pending_completed_work_count,
             "pending_payment": pending_payment,
             "selected_opportunity_access": selected_opportunity_access,
-            "filter_form": filter_set.form,
+            "filter_form": filter_set.form if user_visit_filters_enabled else None,
             "filters_applied_count": filters_applied_count,
+            "user_visit_filters_enabled": user_visit_filters_enabled,
             "path": path,
         },
     )

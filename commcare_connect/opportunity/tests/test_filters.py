@@ -1,5 +1,7 @@
 import pytest
+from waffle.testutils import override_switch
 
+from commcare_connect.flags.switch_names import USER_VISIT_FILTERS
 from commcare_connect.opportunity.filters import UserVisitFilterSet
 from commcare_connect.opportunity.models import UserVisit
 from commcare_connect.opportunity.tests.factories import (
@@ -15,6 +17,7 @@ from commcare_connect.utils.flags import Flags
 
 
 @pytest.mark.django_db
+@override_switch(USER_VISIT_FILTERS, active=True)
 def test_uservisit_filterset_filters_by_flags():
     opportunity = OpportunityFactory()
     OpportunityVerificationFlagsFactory(
@@ -63,3 +66,18 @@ def test_uservisit_filterset_filters_by_flags():
     filtered_visits = set(filterset.qs.values_list("id", flat=True))
     assert flagged_visit.id in filtered_visits
     assert clean_visit.id not in filtered_visits
+
+
+@pytest.mark.django_db
+@override_switch(USER_VISIT_FILTERS, active=False)
+def test_uservisit_filterset_user_only_when_switch_disabled():
+    opportunity = OpportunityFactory()
+    OpportunityAccessFactory(opportunity=opportunity)
+
+    filterset = UserVisitFilterSet(
+        data={},
+        queryset=UserVisit.objects.filter(opportunity=opportunity),
+        opportunity=opportunity,
+    )
+
+    assert list(filterset.filters.keys()) == ["user"]
