@@ -408,7 +408,7 @@ CURRENCIES = [
     ("Somoni", "TJS"),
     ("Tanzanian Shilling", "TZS"),
     ("Baht", "THB"),
-    ("Pa’anga", "TOP"),
+    ("Pa'anga", "TOP"),
     ("Trinidad and Tobago Dollar", "TTD"),
     ("Tunisian Dinar", "TND"),
     ("Turkish Lira", "TRY"),
@@ -461,7 +461,7 @@ def load_currency_and_country_data(apps, schema_editor):
             )
         )
 
-    Country.objects.bulk_create(country_objs)
+    Country.objects.bulk_create(country_objs, ignore_conflicts=True)
 
 
 
