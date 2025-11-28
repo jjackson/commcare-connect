@@ -1,7 +1,9 @@
 import django_filters
 from crispy_forms.helper import FormHelper
 from django import forms
+from waffle import switch_is_active
 
+from commcare_connect.flags.switch_names import USER_VISIT_FILTERS
 from commcare_connect.opportunity.models import (
     DeliverUnitFlagRules,
     OpportunityAccess,
@@ -192,7 +194,10 @@ class UserVisitFilterSet(django_filters.FilterSet):
         opportunity = kwargs.pop("opportunity", None)
         super().__init__(*args, **kwargs)
 
-        if opportunity:
+        if not switch_is_active(USER_VISIT_FILTERS):
+            self._restrict_to_user_filter()
+
+        if opportunity and "user" in self.filters:
             user_filter = self.filters["user"]
             user_queryset = (
                 User.objects.filter(opportunityaccess__opportunity=opportunity).distinct().order_by("name", "username")
@@ -200,6 +205,7 @@ class UserVisitFilterSet(django_filters.FilterSet):
             user_choices = [(str(user.id), f"{user.name} ({user.username})") for user in user_queryset]
             user_filter.extra["choices"] = user_choices
 
+        if opportunity and "flags" in self.filters:
             flag_choices = self._get_flag_choices(opportunity)
             if flag_choices:
                 self.filters["flags"].extra["choices"] = flag_choices
@@ -210,6 +216,11 @@ class UserVisitFilterSet(django_filters.FilterSet):
         if not value:
             return queryset
         return queryset.with_any_flags(value)
+
+    def _restrict_to_user_filter(self):
+        for filter_name in list(self.filters.keys()):
+            if filter_name != "user":
+                del self.filters[filter_name]
 
     def _get_flag_choices(self, opportunity):
         verification_flags = OpportunityVerificationFlags.objects.filter(opportunity=opportunity).first()

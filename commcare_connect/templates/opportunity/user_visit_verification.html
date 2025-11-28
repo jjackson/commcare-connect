@@ -183,41 +183,43 @@
           <div class="flex flex-col gap-2 h-full">
             <div class="flex items-center justify-between px-4 bg-white rounded-lg shadow-sm h-14">
               <p class="text-sm font-normal text-brand-deep-purple">Details</p>
-              <div class="relative" x-data="{ showFilterModal: false }">
-                <button type="button" @click="showFilterModal = true" class="relative button-icon">
-                  <i class="fa-solid fa-sliders text-brand-deep-purple"></i>
-                  {% if filters_applied_count %}
-                    <span class="absolute flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-brand-marigold border-2 border-white rounded-full transform translate-x-1/2 -translate-y-1/2">
-                      {{ filters_applied_count }}
-                    </span>
-                  {% endif %}
-                </button>
-                <div x-show="showFilterModal" class="modal-backdrop" style="display: none;">
-                  <div class="modal">
-                    <div class="header text-lg font-semibold text-brand-deep-purple flex justify-between items-center">
-                      <h1>Filters</h1>
-                      <button @click="showFilterModal = false">
-                        <i class="fa-solid fa-xmark text-xl"></i>
-                      </button>
-                    </div>
-
-                    <form class="content space-y-4" method="get" id="filterForm">
-                      <div class="modal-body space-y-4">
-                        {% crispy filter_form %}
+              {% if user_visit_filters_enabled %}
+                <div class="relative" x-data="{ showFilterModal: false }">
+                  <button type="button" @click="showFilterModal = true" class="relative button-icon">
+                    <i class="fa-solid fa-sliders text-brand-deep-purple"></i>
+                    {% if filters_applied_count %}
+                      <span class="absolute flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-brand-marigold border-2 border-white rounded-full transform translate-x-1/2 -translate-y-1/2">
+                        {{ filters_applied_count }}
+                      </span>
+                    {% endif %}
+                  </button>
+                  <div x-show="showFilterModal" class="modal-backdrop" style="display: none;">
+                    <div class="modal">
+                      <div class="header text-lg font-semibold text-brand-deep-purple flex justify-between items-center">
+                        <h1>Filters</h1>
+                        <button @click="showFilterModal = false">
+                          <i class="fa-solid fa-xmark text-xl"></i>
+                        </button>
                       </div>
-                    </form>
 
-                    <div class="footer flex justify-end gap-3">
-                      <button type="button" @click="showFilterModal = false" class="button button-md outline-style">
-                        Close
-                      </button>
-                      <button type="submit" form="filterForm" @click="showFilterModal = false" class="button button-md primary-dark">
-                        Apply
-                      </button>
+                      <form class="content space-y-4" method="get" id="filterForm">
+                        <div class="modal-body space-y-4">
+                          {% crispy filter_form %}
+                        </div>
+                      </form>
+
+                      <div class="footer flex justify-end gap-3">
+                        <button type="button" @click="showFilterModal = false" class="button button-md outline-style">
+                          Close
+                        </button>
+                        <button type="submit" form="filterForm" @click="showFilterModal = false" class="button button-md primary-dark">
+                          Apply
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              {% endif %}
             </div>
             <div class="p-4 rounded-lg shadow-sm flex-1 bg-white overflow-y-auto scrollbar-hide scrollbar-default">
               <div id="visit-details" hx-on:before-swap="removeMap()" hx-on::after-settle="loadMap()">
