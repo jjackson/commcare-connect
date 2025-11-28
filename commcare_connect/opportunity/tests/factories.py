@@ -251,3 +251,29 @@ class PaymentInvoiceFactory(DjangoModelFactory):
 
     class Meta:
         model = "opportunity.PaymentInvoice"
+
+
+class CredentialConfigurationFactory(DjangoModelFactory):
+    opportunity = SubFactory(OpportunityFactory)
+
+    class Meta:
+        model = "opportunity.CredentialConfiguration"
+
+
+class UserCredentialFactory(DjangoModelFactory):
+    user = SubFactory("commcare_connect.users.tests.factories.UserFactory")
+    opportunity = SubFactory(OpportunityFactory)
+    delivery_type = SubFactory(DeliveryTypeFactory)
+
+    class Meta:
+        model = "users.UserCredential"
+
+
+class BlobMetaFactory(DjangoModelFactory):
+    blob_id = Faker("uuid4")
+    parent_id = Faker("uuid4")
+    content_type = Faker("mime_type")
+    content_length = Faker("pyint", min_value=100, max_value=10000)
+
+    class Meta:
+        model = "opportunity.BlobMeta"
