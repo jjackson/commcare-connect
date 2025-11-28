@@ -12,11 +12,12 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.humanize.templatetags.humanize import intcomma
+from django.core.cache import cache
 from django.core.files.storage import default_storage, storages
 from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
-from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, HttpResponseNotFound
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -46,19 +47,18 @@ from commcare_connect.opportunity.filters import (
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     AddBudgetNewUsersForm,
-    DateRanges,
     DeliverUnitFlagsForm,
     FormJsonValidationRulesForm,
     HQApiKeyCreateForm,
     OpportunityChangeForm,
     OpportunityFinalizeForm,
     OpportunityInitForm,
+    OpportunityInitUpdateForm,
     OpportunityUserInviteForm,
     OpportunityVerificationFlagsConfigForm,
     PaymentExportForm,
     PaymentInvoiceForm,
     PaymentUnitForm,
-    ReviewVisitExportForm,
     SendMessageMobileUsersForm,
     VisitExportForm,
 )
@@ -126,6 +126,7 @@ from commcare_connect.opportunity.tasks import (
     generate_user_status_export,
     generate_visit_export,
     generate_work_status_export,
+    get_payment_upload_key,
     invite_user,
     send_push_notification_task,
     update_user_and_send_invite,
@@ -145,14 +146,17 @@ from commcare_connect.organization.decorators import (
     org_member_required,
     org_viewer_required,
 )
+from commcare_connect.program.forms import ManagedOpportunityInitUpdateForm
 from commcare_connect.program.models import ManagedOpportunity
 from commcare_connect.program.utils import is_program_manager
 from commcare_connect.users.models import User
-from commcare_connect.utils.analytics import Event, GATrackingInfo, send_event_to_ga
+from commcare_connect.utils.analytics import GA_CUSTOM_DIMENSIONS, Event, GATrackingInfo, send_event_to_ga
 from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.flags import FlagLabels, Flags
 from commcare_connect.utils.tables import PAGE_SIZE_OPTIONS, get_duration_min, get_validated_page_size
+
+EXPORT_ROW_LIMIT = 10_000
 
 
 def get_opportunity_or_404(pk, org_slug):
@@ -232,12 +236,50 @@ class OpportunityInit(OrganizationUserMemberRoleMixin, CreateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["api_key_form"] = HQApiKeyCreateForm(auto_id="api_key_form_id_for_%s")
+        context["is_update"] = False
         return context
 
     def form_valid(self, form: OpportunityInitForm):
         response = super().form_valid(form)
         create_learn_modules_and_deliver_units(self.object.id)
         return response
+
+
+class OpportunityInitUpdate(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
+    model = Opportunity
+    template_name = "opportunity/opportunity_init.html"
+    form_class = OpportunityInitUpdateForm
+    context_object_name = "opportunity"
+
+    def get_form_class(self):
+        opportunity = getattr(self, "object", None)
+        if opportunity is None:
+            opportunity = self.get_object()
+            self.object = opportunity
+        if getattr(opportunity, "managed", False):
+            return ManagedOpportunityInitUpdateForm
+        return super().get_form_class()
+
+    def get_success_url(self):
+        return reverse("opportunity:add_payment_units", args=(self.request.org.slug, self.object.id))
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        opportunity = getattr(self, "object", None)
+        if opportunity is None:
+            opportunity = self.get_object()
+            self.object = opportunity
+        kwargs["user"] = self.request.user
+        kwargs["org_slug"] = self.request.org.slug
+        if getattr(opportunity, "managed", False):
+            kwargs["program"] = opportunity.managedopportunity.program
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["api_key_form"] = HQApiKeyCreateForm(auto_id="api_key_form_id_for_%s")
+        context["is_update"] = True
+        return context
 
 
 class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
@@ -395,16 +437,17 @@ class OpportunityDashboard(OpportunityObjectMixin, OrganizationUserMixin, Detail
 @org_member_required
 @opportunity_required
 def export_user_visits(request, org_slug, opp_id):
-    form = VisitExportForm(data=request.POST)
+    form = VisitExportForm(data=request.POST, opportunity=request.opportunity, org_slug=org_slug)
     if not form.is_valid():
         messages.error(request, form.errors)
         return redirect("opportunity:worker_list", request.org.slug, opp_id)
 
     export_format = form.cleaned_data["format"]
-    date_range = DateRanges(form.cleaned_data["date_range"])
+    from_date = form.cleaned_data["from_date"]
+    to_date = form.cleaned_data["to_date"]
     status = form.cleaned_data["status"]
     flatten = form.cleaned_data["flatten_form_data"]
-    result = generate_visit_export.delay(opp_id, date_range, status, export_format, flatten)
+    result = generate_visit_export.delay(opp_id, from_date, to_date, status, export_format, flatten)
     redirect_url = reverse("opportunity:worker_deliver", args=(request.org.slug, opp_id))
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 
@@ -412,17 +455,18 @@ def export_user_visits(request, org_slug, opp_id):
 @org_member_required
 @opportunity_required
 def review_visit_export(request, org_slug, opp_id):
-    form = ReviewVisitExportForm(data=request.POST)
+    form = VisitExportForm(data=request.POST, opportunity=request.opportunity, org_slug=org_slug, review_export=True)
     redirect_url = reverse("opportunity:worker_deliver", args=(org_slug, opp_id))
     if not form.is_valid():
         messages.error(request, form.errors)
         return redirect(redirect_url)
 
     export_format = form.cleaned_data["format"]
-    date_range = DateRanges(form.cleaned_data["date_range"])
+    from_date = form.cleaned_data["from_date"]
+    to_date = form.cleaned_data["to_date"]
     status = form.cleaned_data["status"]
 
-    result = generate_review_visit_export.delay(opp_id, date_range, status, export_format)
+    result = generate_review_visit_export.delay(opp_id, from_date, to_date, status, export_format)
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 
 
@@ -494,10 +538,11 @@ def review_visit_import(request, org_slug=None, opp_id=None):
     except ImportException as e:
         messages.error(request, e.message)
     else:
-        message = f"Visit review updated successfully for {len(status)} visits."
         if status.missing_visits:
-            message += status.get_missing_message()
-        messages.success(request, mark_safe(message))
+            messages.warning(request, mark_safe(status.get_missing_message()))
+        if status.locked_visits:
+            messages.warning(request, mark_safe(status.get_locked_message()))
+        messages.success(request, mark_safe(f"Visit review updated successfully for {len(status)} visits."))
     return redirect(redirect_url)
 
 
@@ -638,10 +683,18 @@ def payment_import(request, org_slug=None, opp_id=None):
     if file_format not in ("csv", "xlsx"):
         raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")
 
+    redirect_url = reverse("opportunity:worker_payments", args=(org_slug, opp_id))
+
+    lock = cache.lock(get_payment_upload_key(request.opportunity.pk))
+
+    if lock.locked():
+        messages.error(request, "Another payment import is in progress. Please try again later.")
+        return redirect(f"{redirect_url}?{request.GET.copy().urlencode()}")
+
     file_path = f"{request.opportunity.pk}_{datetime.datetime.now().isoformat}_payment_import"
     saved_path = default_storage.save(file_path, file)
+
     result = bulk_update_payments_task.delay(request.opportunity.pk, saved_path, file_format)
-    redirect_url = reverse("opportunity:worker_payments", args=(org_slug, opp_id))
     return redirect(f"{redirect_url}?export_task_id={result.id}")
 
 
@@ -927,9 +980,9 @@ def reject_visits(request, org_slug=None, opp_id=None):
             headers={"HX-Trigger": "form_error"},
         )
 
-    updated_count = visits.exclude(status=VisitValidationStatus.rejected).update(
-        status=VisitValidationStatus.rejected, reason=reason
-    )
+    updated_count = visits.exclude(
+        Q(status=VisitValidationStatus.rejected) | Q(review_status=VisitReviewStatus.agree)
+    ).update(status=VisitValidationStatus.rejected, reason=reason)
     if visits.exists():
         user_ids = visits.values_list("user_id", flat=True).distinct()
         update_payment_accrued(opportunity=request.opportunity, users=user_ids)
@@ -940,9 +993,20 @@ def reject_visits(request, org_slug=None, opp_id=None):
 
 
 @org_member_required
-def fetch_attachment(self, org_slug, blob_id):
-    blob_meta = BlobMeta.objects.get(blob_id=blob_id)
-    attachment = storages["default"].open(blob_id)
+@opportunity_required
+def fetch_attachment(request, org_slug, opp_id, blob_id):
+    blob_meta = get_object_or_404(BlobMeta, blob_id=blob_id)
+
+    if not UserVisit.objects.filter(
+        opportunity=request.opportunity,
+        xform_id=blob_meta.parent_id,
+    ).exists():
+        return HttpResponseNotFound()
+
+    try:
+        attachment = storages["default"].open(blob_id)
+    except FileNotFoundError:
+        return HttpResponseNotFound()
     return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
 
 
@@ -1183,7 +1247,7 @@ def user_visit_review(request, org_slug, opp_id):
     if request.POST and request.is_opportunity_pm:
         review_status = request.POST.get("review_status").lower()
         updated_reviews = request.POST.getlist("pk")
-        user_visits = UserVisit.objects.filter(pk__in=updated_reviews)
+        user_visits = UserVisit.objects.filter(pk__in=updated_reviews).exclude(review_status=VisitReviewStatus.agree)
         if review_status in [VisitReviewStatus.agree.value, VisitReviewStatus.disagree.value]:
             user_visits.update(review_status=review_status)
             update_payment_accrued(opportunity=request.opportunity, users=[visit.user for visit in user_visits])
@@ -1349,6 +1413,16 @@ def delete_user_invites(request, org_slug, opp_id):
     cannot_delete_count = len(invite_ids) - deleted_count
     user_invites.delete()
     OpportunityAccess.objects.filter(id__in=opportunity_access_ids).delete()
+
+    event = Event(
+        name="user_invites_deleted",
+        params={
+            GA_CUSTOM_DIMENSIONS.TOTAL.value: len(invite_ids),
+            GA_CUSTOM_DIMENSIONS.SUCCESS_COUNT.value: deleted_count,
+        },
+    )
+    send_event_to_ga(request, event)
+
     if deleted_count > 0:
         messages.success(request, mark_safe(f"Successfully deleted {deleted_count} invite(s)."))
     if cannot_delete_count > 0:
@@ -1403,6 +1477,15 @@ def resend_user_invites(request, org_slug, opp_id):
             not_found_phone_numbers.remove(found_user.phone_number)
             update_user_and_send_invite(found_user, opp_id)
             resent_count += 1
+
+    event = Event(
+        name="user_invites_resent",
+        params={
+            GA_CUSTOM_DIMENSIONS.TOTAL.value: len(invite_ids),
+            GA_CUSTOM_DIMENSIONS.SUCCESS_COUNT.value: resent_count,
+        },
+    )
+    send_event_to_ga(request, event)
 
     if resent_count > 0:
         messages.success(request, mark_safe(f"Successfully resent {resent_count} invite(s)."))
@@ -2030,8 +2113,10 @@ class WorkerDeliverView(BaseWorkerListView, FilterMixin):
 
     def get_extra_context(self, opportunity, org_slug):
         context = {
-            "visit_export_form": VisitExportForm(),
-            "review_visit_export_form": ReviewVisitExportForm(),
+            "visit_export_form": VisitExportForm(opportunity=opportunity, org_slug=org_slug),
+            "review_visit_export_form": VisitExportForm(
+                opportunity=opportunity, org_slug=org_slug, review_export=True
+            ),
             "import_export_delivery_urls": {
                 "export_url_for_pm": reverse(
                     "opportunity:review_visit_export",
@@ -2107,10 +2192,20 @@ def worker_learn_status_view(request, org_slug, opp_id, access_id):
 
     table = WorkerLearnStatusTable(completed_modules)
 
+    path = [
+        {"title": "Opportunities", "url": reverse("opportunity:list", kwargs={"org_slug": org_slug})},
+        {"title": request.opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opp_id))},
+        {
+            "title": "Connect Workers",
+            "url": reverse("opportunity:worker_learn", args=(org_slug, opp_id)),
+        },
+        {"title": access.user.name, "url": request.path},
+    ]
+
     return render(
         request,
         "opportunity/opportunity_worker_learn.html",
-        {"total_learn_duration": total_duration, "table": table, "access": access},
+        {"total_learn_duration": total_duration, "table": table, "access": access, "path": path},
     )
 
 
@@ -2539,3 +2634,61 @@ def add_api_key(request, org_slug):
         api_key.save()
         form = HQApiKeyCreateForm(auto_id="api_key_form_id_for_%s")
     return HttpResponse(render_crispy_form(form))
+
+
+@login_required
+@require_GET
+@org_member_required
+@opportunity_required
+def visit_export_count(request, org_slug, opp_id):
+    from_date = request.GET.get("from_date")
+    if not from_date:
+        return HttpResponse({"error": "Please select a From Date first."}, status=400)
+
+    to_date = request.GET.get("to_date", datetime.date.today())
+    status = request.GET.get("status", None)
+    review_export = request.GET.get("review_export") == "true"
+    format = request.GET.get("format", "csv")
+
+    visits = UserVisit.objects.filter(opportunity_id=opp_id, visit_date__gte=from_date, visit_date__lte=to_date)
+
+    if review_export:
+        visits = visits.filter(review_created_on__isnull=False)
+        if status in VisitReviewStatus:
+            visits = visits.filter(review_status=status)
+    else:
+        if status in VisitValidationStatus:
+            visits = visits.filter(status=status)
+
+    count = visits.count()
+
+    message_class = "text-green-600"
+    message = f"{count:,} visits match your filters."
+    button_disabled = ""
+
+    if format == "xlsx" and count > EXPORT_ROW_LIMIT:
+        button_disabled = "disabled"
+        message = (
+            f"You have {count} visits matching your filters. "
+            f"The maximum export limit for Excel is {EXPORT_ROW_LIMIT}. Please narrow your filters."
+        )
+        message_class = "text-red-600"
+
+    html = format_html(
+        """
+        <div class='{message_class} mb-3'>{message}</div>
+        <button id="export-submit-btn"
+                type="submit"
+                {button_disabled}
+                class="button button-md primary-dark"
+                hx-swap-oob="true">
+            <i class="bi bi-filetype-xls"></i>
+            Export
+        </button>
+        """,
+        message_class=message_class,
+        message=message,
+        button_disabled=button_disabled,
+    )
+
+    return HttpResponse(html)
