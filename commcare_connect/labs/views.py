@@ -107,6 +107,13 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
             commcare_oauth.get("access_token") and timezone.now().timestamp() < commcare_expires_at
         )
 
+        # Open Chat Studio OAuth status
+        ocs_oauth = self.request.session.get("ocs_oauth", {})
+        ocs_expires_at = ocs_oauth.get("expires_at", 0)
+        context["ocs_oauth_active"] = bool(
+            ocs_oauth.get("access_token") and timezone.now().timestamp() < ocs_expires_at
+        )
+
         # Labs context status
         labs_context = getattr(self.request, "labs_context", {}) or {}
         context["has_labs_context"] = bool(labs_context)

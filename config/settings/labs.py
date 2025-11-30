@@ -45,5 +45,10 @@ COMMCARE_OAUTH_CLIENT_ID = env("COMMCARE_OAUTH_CLIENT_ID", default="")  # noqa: 
 COMMCARE_OAUTH_CLIENT_SECRET = env("COMMCARE_OAUTH_CLIENT_SECRET", default="")  # noqa: F405
 COMMCARE_OAUTH_CLI_CLIENT_ID = env("COMMCARE_OAUTH_CLI_CLIENT_ID", default="")  # noqa: F405
 
+# Open Chat Studio OAuth configuration (for accessing OCS APIs)
+OCS_URL = env("OCS_URL", default="https://www.openchatstudio.com")  # noqa: F405
+OCS_OAUTH_CLIENT_ID = env("OCS_OAUTH_CLIENT_ID", default="")  # noqa: F405
+OCS_OAUTH_CLIENT_SECRET = env("OCS_OAUTH_CLIENT_SECRET", default="")  # noqa: F405
+
 # Labs apps configuration
 # No longer need hardcoded opportunity_id - API now supports organization_id/program_id

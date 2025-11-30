@@ -15,9 +15,9 @@
       <p class="text-xs opacity-75"
          x-text="(bulkStartDate && bulkEndDate) ? bulkStartDate + ' to ' + bulkEndDate : (loading ? 'Loading...' : '')"></p>
       <div class="flex gap-2 mt-2">
-        <a href="{% url 'audit:session_detail' session.pk %}"
+        <a href="{% url 'audit:session_list' %}"
            class="px-2 py-1 text-xs bg-white/20 hover:bg-white/30 text-white rounded transition-colors">
-          ← Back to Session
+          <- Back to List
         </a>
       </div>
     </div>
@@ -522,9 +522,9 @@
         </div>
         <h3 class="text-lg font-bold text-gray-900 mb-2">Results Applied Successfully</h3>
         <p class="text-sm text-gray-600 mb-4" x-text="applyResultMessage"></p>
-        <button @click="showSuccessModal = false; window.location.href = '{% url 'audit:session_detail' session.pk %}'"
+        <button @click="showSuccessModal = false; window.location.reload()"
                 class="px-4 py-2 bg-brand-indigo text-white rounded-lg hover:bg-brand-deep-purple transition-colors">
-          Return to Session
+          Continue
         </button>
       </div>
     </div>
@@ -968,7 +968,7 @@ function bulkAssessmentInterface() {
           throw new Error(data.error || 'Failed to complete audit');
         }
         this.hasUnsavedChanges = false;
-        window.location.reload();
+        window.location.href = '{% url "audit:session_list" %}';
       } catch (error) {
         alert('Error completing audit: ' + error.message);
       } finally {

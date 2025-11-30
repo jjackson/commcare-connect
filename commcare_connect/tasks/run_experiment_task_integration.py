@@ -166,12 +166,9 @@ def test_experiment_task_flow():
         task = data_access.create_task(
             username=selected_user["username"],
             opportunity_id=selected_opp["id"],
-            created_by_id=oauth_user.id,
-            task_type="warning",
             priority="high",
             title=f"Test Task - Photo Quality Issue for {selected_user['username']}",
             description="Photos submitted show poor lighting and framing. Follow-up required.",
-            learning_assignment_text="Please review the photo quality guidelines module.",
             creator_name=oauth_user.username,
             # user_id not available from /export/opportunity/<id>/user_data/ API
         )
@@ -180,7 +177,6 @@ def test_experiment_task_flow():
         print(f"    - Username: {task.username} (primary identifier)")
         print(f"    - User ID: {task.user_id} (not available from API)")
         print(f"    - Opportunity ID: {task.opportunity_id}")
-        print(f"    - Type: {task.task_type}")
         print(f"    - Status: {task.status}")
         print(f"    - Priority: {task.priority}")
         print(f"    - Events: {len(task.events)}")
@@ -200,9 +196,7 @@ def test_experiment_task_flow():
             task,
             event_type="pattern_detected",
             actor=oauth_user.username,
-            actor_user_id=oauth_user.id,
             description="Detected pattern: 3rd quality issue in past 2 weeks",
-            metadata={"pattern_count": 3, "time_window_days": 14},
         )
         print(f"[OK] Event added. Total events: {len(task.events)}")
 
@@ -215,11 +209,9 @@ def test_experiment_task_flow():
     # Step 9: Add a comment
     print("\n[9] Adding a comment...")
     try:
-        data_access.add_comment(
-            task, oauth_user.id, oauth_user.username, "Following up with Network Manager on this case."
-        )
+        data_access.add_comment(task, oauth_user.username, "Following up with Network Manager on this case.")
 
-        print(f"[OK] Comment added. Total comments: {len(task.comments)}")
+        print(f"[OK] Comment added. Total comment events: {len(task.get_comment_events())}")
 
     except Exception as e:
         print(f"[ERROR] Failed to add comment: {e}")
@@ -230,7 +222,7 @@ def test_experiment_task_flow():
     # Step 10: Update task status
     print("\n[10] Updating task status...")
     try:
-        data_access.update_status(task, "network_manager", oauth_user.username, oauth_user.id)
+        data_access.update_status(task, "review_needed", oauth_user.username)
 
         print(f"[OK] Status updated to: {task.status}")
         print(f"    - Total events: {len(task.events)}")
@@ -244,9 +236,9 @@ def test_experiment_task_flow():
     # Step 11: Assign task
     print("\n[11] Assigning task...")
     try:
-        data_access.assign_task(task, oauth_user.id, oauth_user.username, oauth_user.id)
+        data_access.assign_task(task, oauth_user.username, "self", oauth_user.username)
 
-        print(f"[OK] Task assigned to user: {task.assigned_to_id}")
+        print(f"[OK] Task assigned to: {task.assigned_to_name}")
         print(f"    - Total events: {len(task.events)}")
 
     except Exception as e:
@@ -258,14 +250,16 @@ def test_experiment_task_flow():
     # Step 12: Add AI session (mock)
     print("\n[12] Adding AI session...")
     try:
+        session_params = {"platform": "commcare_connect", "experiment": "test-bot"}
         data_access.add_ai_session(
             task,
-            ocs_session_id="test-session-123",
+            actor=oauth_user.username,
+            session_params=session_params,
+            session_id="test-session-123",
             status="completed",
-            metadata={"platform": "commcare_connect", "bot_id": "test-bot"},
         )
 
-        print(f"[OK] AI session added. Total sessions: {len(task.ai_sessions)}")
+        print(f"[OK] AI session added. Total sessions: {len(task.get_ai_session_events())}")
 
     except Exception as e:
         print(f"[ERROR] Failed to add AI session: {e}")
@@ -280,13 +274,12 @@ def test_experiment_task_flow():
         print(f"    - username: {task.username} (primary identifier)")
         print(f"    - user_id: {task.user_id}")
         print(f"    - opportunity_id: {task.opportunity_id}")
-        print(f"    - task_type: {task.task_type}")
         print(f"    - status: {task.status}")
         print(f"    - priority: {task.priority}")
         print(f"    - title: {task.title}")
         print(f"    - events: {len(task.events)} items")
-        print(f"    - comments: {len(task.comments)} items")
-        print(f"    - ai_sessions: {len(task.ai_sessions)} items")
+        print(f"    - comment events: {len(task.get_comment_events())} items")
+        print(f"    - ai_session events: {len(task.get_ai_session_events())} items")
 
         # Verify events structure
         if task.events:
@@ -294,14 +287,16 @@ def test_experiment_task_flow():
             print(f"[OK] Sample event keys: {list(sample_event.keys())}")
 
         # Verify comments structure
-        if task.comments:
-            sample_comment = task.comments[0]
-            print(f"[OK] Sample comment keys: {list(sample_comment.keys())}")
+        comment_events = task.get_comment_events()
+        if comment_events:
+            sample_comment = comment_events[0]
+            print(f"[OK] Sample comment event keys: {list(sample_comment.keys())}")
 
         # Verify AI sessions structure
-        if task.ai_sessions:
-            sample_session = task.ai_sessions[0]
-            print(f"[OK] Sample AI session keys: {list(sample_session.keys())}")
+        ai_session_events = task.get_ai_session_events()
+        if ai_session_events:
+            sample_session = ai_session_events[0]
+            print(f"[OK] Sample AI session event keys: {list(sample_session.keys())}")
 
     except Exception as e:
         print(f"[ERROR] Failed to verify data structure: {e}")
@@ -328,15 +323,11 @@ def test_experiment_task_flow():
     print("\n[15] Querying tasks...")
     try:
         all_tasks = data_access.get_tasks()
-        print(f"[OK] Found {all_tasks.count()} total tasks")
+        print(f"[OK] Found {len(all_tasks)} total tasks")
 
         # Query by status
         network_tasks = data_access.get_tasks(status="network_manager")
-        print(f"[OK] Found {network_tasks.count()} tasks with status 'network_manager'")
-
-        # Query by username (primary identifier)
-        user_tasks = data_access.get_tasks(username=selected_user["username"])
-        print(f"[OK] Found {user_tasks.count()} tasks for username {selected_user['username']}")
+        print(f"[OK] Found {len(network_tasks)} tasks with status 'network_manager'")
 
     except Exception as e:
         print(f"[ERROR] Failed to query tasks: {e}")
@@ -359,8 +350,8 @@ def test_experiment_task_flow():
     print("=" * 80)
     print(f"Task ID: {task.id}")
     print(f"Events: {len(task.events)}")
-    print(f"Comments: {len(task.comments)}")
-    print(f"AI Sessions: {len(task.ai_sessions)}")
+    print(f"Comment Events: {len(task.get_comment_events())}")
+    print(f"AI Session Events: {len(task.get_ai_session_events())}")
     print(f"Timeline Items: {len(task.get_timeline())}")
     print("=" * 80)
     print("[SUCCESS] Integration test completed successfully!")

@@ -37,13 +37,6 @@
               </div>
             </div>
             <div class="flex items-center gap-3">
-              <!-- Previous Issues Button -->
-              <button @click="showPreviousIssues = !showPreviousIssues"
-                      class="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm border border-white/20 transition-colors">
-                <i class="fa-solid fa-history mr-1"></i>
-                Previous Issues (1)
-              </button>
-
               {% if task.action_type == "warning" %}
               <span class="inline-flex items-center px-3 py-1 rounded-full text-sm bg-yellow-400 text-yellow-900 font-medium">
                 <i class="fa-solid fa-exclamation-triangle mr-1"></i> Warning Issued
@@ -53,27 +46,6 @@
                 <i class="fa-solid fa-ban mr-1"></i> Temporarily Deactivated
               </span>
               {% endif %}
-            </div>
-          </div>
-
-          <!-- Previous Issues Dropdown -->
-          <div x-show="showPreviousIssues"
-               x-transition:enter="transition ease-out duration-200"
-               x-transition:enter-start="opacity-0 -translate-y-2"
-               x-transition:enter-end="opacity-100 translate-y-0"
-               class="mt-4 bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-            <div class="text-sm font-medium mb-2">Past 90 Days</div>
-            <div class="space-y-2">
-              {% for issue in task.flw_history %}
-              <a href="{% url 'tasks:detail' issue.id %}"
-                 class="flex items-center justify-between p-2 bg-white/10 hover:bg-white/20 rounded text-sm transition-colors">
-                <div class="flex items-center gap-2">
-                  <i class="fa-solid fa-circle-check text-green-300"></i>
-                  <span>{{ issue.issue }}</span>
-                </div>
-                <span class="text-xs opacity-75">{{ issue.date|timesince }} ago</span>
-              </a>
-              {% endfor %}
             </div>
           </div>
         </div>
@@ -566,14 +538,56 @@
 
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700 mb-2">
-          Bot ID (Experiment UUID)
+          Bot
           <span class="text-red-500">*</span>
         </label>
-        <input type="text"
-               x-model="aiParams.experiment"
-               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
-               placeholder="e.g., 123e4567-e89b-12d3-a456-426614174000">
-        <p class="text-xs text-gray-500 mt-1">The experiment/bot ID to use from OCS</p>
+
+        <!-- Loading state -->
+        <div x-show="botsLoading" class="flex items-center gap-2 text-sm text-gray-500 py-2">
+          <i class="fa-solid fa-spinner fa-spin"></i>
+          <span>Loading bots from Open Chat Studio...</span>
+        </div>
+
+        <!-- OCS not connected state -->
+        <div x-show="!botsLoading && botsNeedsOAuth" class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div class="flex items-start gap-2">
+            <i class="fa-solid fa-exclamation-triangle text-yellow-600 mt-0.5"></i>
+            <div>
+              <p class="text-sm text-yellow-800 font-medium">Open Chat Studio not connected</p>
+              <p class="text-xs text-yellow-700 mt-1">Connect to OCS to select from available bots.</p>
+              <a href="{% url 'labs:ocs_initiate' %}?next={{ request.path }}"
+                 class="inline-flex items-center gap-1 mt-2 px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-medium rounded transition-colors">
+                <i class="fa-solid fa-link"></i>
+                Connect to OCS
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bot selector dropdown -->
+        <div x-show="!botsLoading && !botsNeedsOAuth && availableBots.length > 0">
+          <select x-model="aiParams.experiment"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent">
+            <option value="">-- Select a bot --</option>
+            <template x-for="bot in availableBots" :key="bot.id">
+              <option :value="bot.id" x-text="bot.name + (bot.version_number ? ' (v' + bot.version_number + ')' : '')"></option>
+            </template>
+          </select>
+          <p class="text-xs text-gray-500 mt-1">Select the bot to use for this conversation</p>
+        </div>
+
+        <!-- No bots available -->
+        <div x-show="!botsLoading && !botsNeedsOAuth && availableBots.length === 0 && !botsError" class="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+          <p class="text-sm text-gray-600">No bots available in your OCS account.</p>
+        </div>
+
+        <!-- Error state -->
+        <div x-show="botsError" class="p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p class="text-sm text-red-800" x-text="botsError"></p>
+          <button @click="loadBots()" class="mt-2 text-xs text-red-600 hover:text-red-800 underline">
+            Try again
+          </button>
+        </div>
       </div>
 
       <div class="mb-4">
@@ -677,7 +691,6 @@
     return {
       newComment: '',
       showHistory: false,
-      showPreviousIssues: false,
       showAIConversation: false,
       showAssign: false,
       showAI: false,
@@ -706,8 +719,44 @@
       showToast: false,
       toastMessage: '',
 
+      // OCS bot selection
+      availableBots: [],
+      botsLoading: false,
+      botsNeedsOAuth: false,
+      botsError: null,
+      botsLoaded: false,
+
       init() {
         // Simple, no keyboard shortcuts
+      },
+
+      async loadBots() {
+        if (this.botsLoaded && this.availableBots.length > 0) {
+          return; // Already loaded
+        }
+
+        this.botsLoading = true;
+        this.botsError = null;
+        this.botsNeedsOAuth = false;
+
+        try {
+          const response = await fetch('{% url "tasks:ocs_bots" %}');
+          const data = await response.json();
+
+          if (response.status === 401 && data.needs_oauth) {
+            this.botsNeedsOAuth = true;
+          } else if (data.success) {
+            this.availableBots = data.bots || [];
+            this.botsLoaded = true;
+          } else {
+            this.botsError = data.error || 'Failed to load bots';
+          }
+        } catch (error) {
+          console.error('Error loading bots:', error);
+          this.botsError = 'Network error loading bots';
+        } finally {
+          this.botsLoading = false;
+        }
       },
 
       showAssignModal(role) {
@@ -731,6 +780,9 @@
         // Pre-populate with the username for this task's user
         this.aiParams.identifier = '{{ task.flw_username }}';
         this.showAI = true;
+
+        // Load available bots from OCS
+        this.loadBots();
       },
 
       cancelAI() {

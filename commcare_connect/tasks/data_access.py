@@ -10,6 +10,8 @@ It handles:
 This is a pure API client with no local database storage.
 """
 
+from datetime import datetime
+
 import httpx
 from django.conf import settings
 from django.http import HttpRequest
@@ -106,12 +108,11 @@ class TaskDataAccess:
         self,
         username: str,
         opportunity_id: int,
-        created_by_id: int,
-        task_type: str = "warning",
         priority: str = "medium",
         title: str = "",
         description: str = "",
         user_id: int | None = None,
+        flw_name: str | None = None,
         **kwargs,
     ) -> TaskRecord:
         """
@@ -120,13 +121,12 @@ class TaskDataAccess:
         Args:
             username: FLW username (primary identifier in Connect)
             opportunity_id: Opportunity ID this task relates to
-            created_by_id: User ID who created this task
-            task_type: Type of task (warning, deactivation)
             priority: Priority (low, medium, high)
             title: Task title
             description: Task description
             user_id: FLW user ID (optional, may not be available from API)
-            **kwargs: Additional fields (learning_assignment_text, audit_session_id, assigned_to_id, status)
+            flw_name: FLW display name (optional, falls back to username)
+            **kwargs: Additional fields (audit_session_id, creator_name, status, assigned_to_type, assigned_to_name)
 
         Returns:
             TaskRecord instance with initial "created" event
@@ -144,22 +144,36 @@ class TaskDataAccess:
 
             logger = logging.getLogger(__name__)
             logger.warning(f"Creating task with unusually long username (len={len(username)}): {username[:50]}...")
+
+        # Build initial "created" event
+        creator_name = kwargs.get("creator_name", "Unknown")
+        initial_event = {
+            "event_type": "created",
+            "actor": creator_name,
+            "description": f"Task created by {creator_name}",
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        # Task details first, events last
         data = {
-            "username": username,
-            "user_id": user_id,
-            "opportunity_id": opportunity_id,
-            "created_by_id": created_by_id,
-            "task_type": task_type,
-            "status": kwargs.get("status", "unassigned"),
-            "priority": priority,
+            # Task details
             "title": title,
             "description": description,
-            "learning_assignment_text": kwargs.get("learning_assignment_text", ""),
+            "priority": priority,
+            "status": kwargs.get("status", "investigating"),
+            # FLW info
+            "username": username,
+            "flw_name": flw_name or username,
+            "user_id": user_id,
+            "opportunity_id": opportunity_id,
+            # Assignment
+            "assigned_to_type": kwargs.get("assigned_to_type", "self"),
+            "assigned_to_name": kwargs.get("assigned_to_name", creator_name),
+            # Optional references
             "audit_session_id": kwargs.get("audit_session_id"),
-            "assigned_to_id": kwargs.get("assigned_to_id"),
-            "events": [],
-            "comments": [],
-            "ai_sessions": [],
+            "resolution_details": {},
+            # Events (timeline)
+            "events": [initial_event],
         }
 
         record = self.labs_api.create_record(
@@ -169,16 +183,16 @@ class TaskDataAccess:
             username=username,  # Use username not user_id
         )
 
-        # Add initial "created" event
-        creator_name = kwargs.get("creator_name", f"User {created_by_id}")
-        record.add_event(
-            event_type="created",
-            actor=creator_name,
-            actor_user_id=created_by_id,
-            description=f"Task created by {creator_name}",
+        return TaskRecord(
+            {
+                "id": record.id,
+                "experiment": record.experiment,
+                "type": record.type,
+                "data": record.data,
+                "username": record.username,
+                "opportunity_id": record.opportunity_id,
+            }
         )
-        # Save changes via API
-        return self.labs_api.update_record(record.id, record.data)
 
     def get_task(self, task_id: int) -> TaskRecord | None:
         """
@@ -196,36 +210,35 @@ class TaskDataAccess:
 
     def get_tasks(
         self,
-        username: str | None = None,
         status: str | None = None,
         assigned_to_id: int | None = None,
     ) -> list[TaskRecord]:
         """
-        Query tasks with filters.
+        Query tasks for the current opportunity.
 
         Args:
-            username: Filter by FLW username (from data field, not parent username)
-            status: Filter by status
-            assigned_to_id: Filter by assigned user ID
+            status: Filter by status (client-side)
+            assigned_to_id: Filter by assigned user ID (client-side)
 
         Returns:
             List of TaskRecord instances
         """
-        # Pass filters as kwargs for data filters
-        kwargs = {}
-        if status:
-            kwargs["status"] = status
-        if assigned_to_id:
-            kwargs["assigned_to_id"] = assigned_to_id
-        if username:
-            kwargs["username"] = username
-
-        return self.labs_api.get_records(
+        all_tasks = self.labs_api.get_records(
             experiment="tasks",
             type="Task",
             model_class=TaskRecord,
-            **kwargs,
         )
+
+        # Apply filters client-side if needed
+        if status or assigned_to_id:
+            filtered = all_tasks
+            if status:
+                filtered = [t for t in filtered if t.data.get("status") == status]
+            if assigned_to_id:
+                filtered = [t for t in filtered if t.data.get("assigned_to_id") == assigned_to_id]
+            return filtered
+
+        return all_tasks
 
     def save_task(self, task_record: TaskRecord) -> TaskRecord:
         """
@@ -237,7 +250,12 @@ class TaskDataAccess:
         Returns:
             Saved TaskRecord instance
         """
-        return self.labs_api.update_record(task_record.id, task_record.data)
+        return self.labs_api.update_record(
+            record_id=task_record.id,
+            experiment="tasks",
+            type="Task",
+            data=task_record.data,
+        )
 
     # Task Operation Methods
 
@@ -246,7 +264,6 @@ class TaskDataAccess:
         task: TaskRecord,
         event_type: str,
         actor: str,
-        actor_user_id: int,
         description: str,
         **kwargs,
     ) -> TaskRecord:
@@ -257,48 +274,47 @@ class TaskDataAccess:
             task: TaskRecord instance
             event_type: Type of event (created, status_changed, assigned, etc.)
             actor: Name of actor
-            actor_user_id: User ID of actor
             description: Event description
-            **kwargs: Additional metadata
+            **kwargs: Additional fields for specific event types
 
         Returns:
             Updated TaskRecord
         """
-        task.add_event(event_type, actor, actor_user_id, description, **kwargs)
+        task.add_event(event_type, actor, description, **kwargs)
         return self.labs_api.update_record(task.id, task.data)
 
-    def add_comment(self, task: TaskRecord, author_id: int, author_name: str, content: str) -> TaskRecord:
+    def add_comment(self, task: TaskRecord, actor: str, content: str) -> TaskRecord:
         """
         Add a comment to a task and save it.
 
         Args:
             task: TaskRecord instance
-            author_id: Comment author user ID
-            author_name: Comment author display name
+            actor: Comment author display name
             content: Comment text
 
         Returns:
             Updated TaskRecord
         """
-        task.add_comment(author_id, author_name, content)
+        task.add_comment(actor, content)
         return self.labs_api.update_record(task.id, task.data)
 
-    def add_ai_session(self, task: TaskRecord, ocs_session_id: str, **kwargs) -> TaskRecord:
+    def add_ai_session(self, task: TaskRecord, actor: str, session_params: dict, **kwargs) -> TaskRecord:
         """
         Add an AI session to a task and save it.
 
         Args:
             task: TaskRecord instance
-            ocs_session_id: OCS session ID
-            **kwargs: Additional session metadata
+            actor: Name of person who triggered the AI session
+            session_params: Dict with session parameters
+            **kwargs: Additional fields (session_id, status)
 
         Returns:
             Updated TaskRecord
         """
-        task.add_ai_session(ocs_session_id, **kwargs)
+        task.add_ai_session(actor, session_params, **kwargs)
         return self.labs_api.update_record(task.id, task.data)
 
-    def update_status(self, task: TaskRecord, new_status: str, actor: str, actor_user_id: int) -> TaskRecord:
+    def update_status(self, task: TaskRecord, new_status: str, actor: str) -> TaskRecord:
         """
         Update task status and add event.
 
@@ -306,7 +322,6 @@ class TaskDataAccess:
             task: TaskRecord instance
             new_status: New status value
             actor: Name of actor making the change
-            actor_user_id: User ID of actor
 
         Returns:
             Updated TaskRecord
@@ -318,38 +333,32 @@ class TaskDataAccess:
         task.add_event(
             event_type="status_changed",
             actor=actor,
-            actor_user_id=actor_user_id,
             description=f"Status changed from {old_status} to {new_status}",
         )
 
         return self.labs_api.update_record(task.id, task.data)
 
-    def assign_task(self, task: TaskRecord, assigned_to_id: int | None, actor: str, actor_user_id: int) -> TaskRecord:
+    def assign_task(self, task: TaskRecord, assigned_to_name: str, assigned_to_type: str, actor: str) -> TaskRecord:
         """
-        Assign task to a user and add event.
+        Assign task and add event.
 
         Args:
             task: TaskRecord instance
-            assigned_to_id: User ID to assign to (None for unassign)
+            assigned_to_name: Display name of assignee
+            assigned_to_type: Type of assignee (self, network_manager, program_manager)
             actor: Name of actor making the assignment
-            actor_user_id: User ID of actor
 
         Returns:
             Updated TaskRecord
         """
-        task.data["assigned_to_id"] = assigned_to_id
+        task.data["assigned_to_type"] = assigned_to_type
+        task.data["assigned_to_name"] = assigned_to_name
 
         # Add event
-        if assigned_to_id:
-            description = f"Assigned to user {assigned_to_id}"
-        else:
-            description = "Unassigned"
-
         task.add_event(
             event_type="assigned",
             actor=actor,
-            actor_user_id=actor_user_id,
-            description=description,
+            description=f"Assigned to {assigned_to_name}",
         )
 
         return self.labs_api.update_record(task.id, task.data)

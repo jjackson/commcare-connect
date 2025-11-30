@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic import RedirectView
 
 from commcare_connect.audit import views
 
@@ -8,7 +9,8 @@ urlpatterns = [
     # Experiment-based audit routes (ExperimentRecord implementation)
     path("", views.ExperimentAuditListView.as_view(), name="session_list"),
     path("create/", views.ExperimentAuditCreateView.as_view(), name="creation_wizard"),
-    path("<int:pk>/", views.ExperimentAuditDetailView.as_view(), name="session_detail"),
+    # session_detail redirects to bulk_assessment (single view removed)
+    path("<int:pk>/", RedirectView.as_view(pattern_name="audit:bulk_assessment"), name="session_detail"),
     path("<int:pk>/bulk/", views.ExperimentBulkAssessmentView.as_view(), name="bulk_assessment"),
     # API endpoints
     path(
@@ -19,12 +21,7 @@ urlpatterns = [
     path("api/audit/create/", views.ExperimentAuditCreateAPIView.as_view(), name="create_session"),
     path("api/audit/preview/", views.ExperimentAuditPreviewAPIView.as_view(), name="preview_audit"),
     path("api/audit/progress/", views.ExperimentAuditProgressAPIView.as_view(), name="audit_progress"),
-    # API endpoints for session interaction during auditing
-    path(
-        "api/<int:session_id>/visit-data/",
-        views.ExperimentAuditVisitDataView.as_view(),
-        name="visit_data",
-    ),
+    # API endpoints for session interaction during auditing (bulk assessment)
     path(
         "api/<int:session_id>/save/",
         views.ExperimentSaveAuditView.as_view(),

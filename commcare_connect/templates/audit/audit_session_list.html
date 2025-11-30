@@ -22,20 +22,9 @@
         <span class="text-xs text-gray-500">(expires {{ token_expires_at|date:"M d, Y" }})</span>
         {% endif %}
       </div>
-      {% if has_commcare_token %}
-      <div class="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-md">
-        <i class="fa-solid fa-check-circle text-green-600"></i>
-        <span class="text-xs text-green-700">CommCare Connected</span>
-      </div>
-      {% else %}
-      <a href="{% url 'labs:commcare_initiate' %}" class="button button-sm outline-style text-orange-600 hover:bg-orange-50 border-orange-300 hover:border-orange-400">
-        <i class="fa-solid fa-link mr-2"></i>
-        Connect CommCare
-      </a>
-      {% endif %}
       <a href="{% url 'labs:overview' %}" class="button button-sm outline-style text-blue-600 hover:bg-blue-50 border-blue-300 hover:border-blue-400">
         <i class="fa-solid fa-flask mr-2"></i>
-        Labs Home
+        Labs Overview
       </a>
       {% endif %}
       {% if has_context %}

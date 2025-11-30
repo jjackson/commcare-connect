@@ -123,7 +123,7 @@
           <i class="fa-solid fa-key mr-1"></i> Get Connect OAuth Token
         </a>
         {% endif %}
-        <a href="{% url 'tasks:create' %}"
+        <a href="{% url 'tasks:new' %}"
            class="px-4 py-2 text-sm bg-brand-indigo hover:bg-brand-deep-purple text-white rounded-md transition-colors">
           <i class="fa-solid fa-plus mr-1"></i> Create Task
         </a>
@@ -174,12 +174,11 @@
               #{{ task.id }}
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
-              <div class="text-sm font-medium text-gray-900">{{ task.user.name }}</div>
-              <div class="text-xs text-gray-500">{{ task.user.email }}</div>
+              <div class="text-sm font-medium text-gray-900">{{ task.flw_name }}</div>
+              <div class="text-xs text-gray-500">{{ task.task_username }}</div>
             </td>
             <td class="px-6 py-4">
-              <div class="text-sm text-gray-900 max-w-xs truncate">{{ task.opportunity.name }}</div>
-              <div class="text-xs text-gray-500">{{ task.get_task_type_display }}</div>
+              <div class="text-sm text-gray-900 max-w-xs truncate">Opportunity #{{ task.opportunity_id }}</div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
               {% if task.status == "unassigned" %}
@@ -224,16 +223,20 @@
               {% endif %}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {% if task.date_created %}
               {{ task.date_created|date:"M d, Y" }}
               <div class="text-xs text-gray-400">{{ task.date_created|date:"h:i A" }}</div>
+              {% else %}
+              -
+              {% endif %}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {% if task.assigned_to %}{{ task.assigned_to.name }}{% else %}-{% endif %}
+              {% if task.assigned_to_name %}{{ task.assigned_to_name }}{% else %}-{% endif %}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm">
-              <a href="{% url 'tasks:detail' task.id %}"
+              <a href="{% url 'tasks:edit' task.id %}"
                  class="inline-flex items-center px-3 py-1.5 text-sm bg-brand-indigo hover:bg-brand-deep-purple text-white rounded transition-colors font-medium">
-                View
+                <i class="fa-solid fa-edit mr-1"></i> Edit
               </a>
             </td>
           </tr>
@@ -258,48 +261,6 @@
   <!-- Summary Footer -->
   <div class="mt-4 text-sm text-gray-600 text-center">
     Showing {{ tasks|length }} of {{ stats.total }} task{{ stats.total|pluralize }}
-  </div>
-
-  <!-- Database Status Panel -->
-  <div class="mt-6 bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-6" x-data="databaseStatus()">
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-semibold text-gray-900">
-        <i class="fa-solid fa-database mr-2"></i>
-        Database Status
-      </h3>
-      <div class="flex gap-x-3">
-        <button
-          @click="resetDatabase()"
-          class="button button-md outline-style text-red-600 hover:bg-red-50 border-red-300 hover:border-red-400">
-          <i class="fa-solid fa-trash mr-2"></i>
-          Clear Tasks Database
-        </button>
-      </div>
-    </div>
-
-    <div class="flex flex-row gap-3 flex-nowrap">
-      <div class="bg-white p-3 rounded-lg border border-gray-200 flex-1 min-w-0">
-        <div class="text-xl font-bold text-brand-indigo" x-text="stats.tasks || '-'"></div>
-        <div class="text-xs text-gray-600">Tasks</div>
-      </div>
-      <div class="bg-white p-3 rounded-lg border border-gray-200 flex-1 min-w-0">
-        <div class="text-xl font-bold text-brand-indigo" x-text="stats.events || '-'"></div>
-        <div class="text-xs text-gray-600">Events</div>
-      </div>
-      <div class="bg-white p-3 rounded-lg border border-gray-200 flex-1 min-w-0">
-        <div class="text-xl font-bold text-brand-indigo" x-text="stats.comments || '-'"></div>
-        <div class="text-xs text-gray-600">Comments</div>
-      </div>
-      <div class="bg-white p-3 rounded-lg border border-gray-200 flex-1 min-w-0">
-        <div class="text-xl font-bold text-brand-indigo" x-text="stats.ai_sessions || '-'"></div>
-        <div class="text-xs text-gray-600">AI Sessions</div>
-      </div>
-    </div>
-
-    <div class="mt-4 text-xs text-gray-500">
-      <i class="fa-solid fa-info-circle mr-1"></i>
-      Clear will remove all tasks, events, comments, and AI sessions. Users, organizations, and opportunities are preserved.
-    </div>
   </div>
 </div>
 
@@ -332,76 +293,6 @@
 
       clearFilters() {
         window.location.href = '{% url "tasks:list" %}';
-      }
-    }
-  }
-
-  function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-      const cookies = document.cookie.split(';');
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim();
-        if (cookie.substring(0, name.length + 1) === (name + '=')) {
-          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-          break;
-        }
-      }
-    }
-    return cookieValue;
-  }
-
-  function databaseStatus() {
-    return {
-      stats: {
-        tasks: '-',
-        events: '-',
-        comments: '-',
-        ai_sessions: '-'
-      },
-
-      async loadStats() {
-        try {
-          const response = await fetch('{% url "tasks:database_stats" %}');
-          const data = await response.json();
-          if (data.success) {
-            this.stats = data.stats;
-          }
-        } catch (error) {
-          console.error('Failed to load stats:', error);
-        }
-      },
-
-      async resetDatabase() {
-        if (!confirm('WARNING: This will delete all tasks, events, comments, and AI sessions.\\n\\nUsers, organizations, and opportunities will be preserved.\\n\\nAre you sure you want to continue?')) {
-          return;
-        }
-
-        try {
-          const response = await fetch('{% url "tasks:reset_database" %}', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': getCookie('csrftoken')
-            }
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            alert(`Database cleared successfully!\\n\\nDeleted:\\n- ${data.deleted.tasks} task(s)\\n- ${data.deleted.events} event(s)\\n- ${data.deleted.comments} comment(s)\\n- ${data.deleted.ai_sessions} AI session(s)`);
-            window.location.reload();
-          } else {
-            alert('Failed to clear database: ' + (data.error || 'Unknown error'));
-          }
-        } catch (error) {
-          console.error('Clear database error:', error);
-          alert('Failed to clear database. Please try again.');
-        }
-      },
-
-      init() {
-        this.loadStats();
       }
     }
   }

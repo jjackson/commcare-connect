@@ -3,6 +3,7 @@ from django.urls import include, path
 from commcare_connect.labs import views
 from commcare_connect.labs.integrations.commcare import oauth_views as commcare_oauth_views
 from commcare_connect.labs.integrations.connect import oauth_views as connect_oauth_views
+from commcare_connect.labs.integrations.ocs import oauth_views as ocs_oauth_views
 
 app_name = "labs"
 
@@ -22,6 +23,10 @@ urlpatterns = [
     path("commcare/initiate/", commcare_oauth_views.labs_commcare_initiate, name="commcare_initiate"),
     path("commcare/callback/", commcare_oauth_views.labs_commcare_callback, name="commcare_callback"),
     path("commcare/logout/", commcare_oauth_views.labs_commcare_logout, name="commcare_logout"),
+    # Open Chat Studio OAuth (for OCS API access)
+    path("ocs/initiate/", ocs_oauth_views.labs_ocs_initiate, name="ocs_initiate"),
+    path("ocs/callback/", ocs_oauth_views.labs_ocs_callback, name="ocs_callback"),
+    path("ocs/logout/", ocs_oauth_views.labs_ocs_logout, name="ocs_logout"),
     # Dashboard Prototypes
     path("", include("commcare_connect.labs.dashboards.urls")),
 ]
