@@ -1,22 +1,22 @@
 """
-Data access layer for fetching DUs from CommCare and UserVisits from Connect.
+Data access layer for fetching DUs from CommCare.
+
+Note: User visits should be fetched via AnalysisDataAccess.fetch_user_visits()
+which uses efficient CSV caching (same pathway as UI views).
 """
 
-import json
 import logging
-from io import StringIO
 
 import httpx
-import pandas as pd
 from django.conf import settings
 
-from commcare_connect.coverage.models import FLW, CoverageData, DeliveryUnit, LocalUserVisit, ServiceArea
+from commcare_connect.coverage.models import FLW, CoverageData, DeliveryUnit, ServiceArea
 
 logger = logging.getLogger(__name__)
 
 
 class CoverageDataAccess:
-    """Fetch DUs from CommCare and UserVisits from Connect"""
+    """Fetch DUs from CommCare. User visits are fetched via AnalysisDataAccess."""
 
     def __init__(self, request):
         self.request = request
@@ -109,25 +109,6 @@ class CoverageDataAccess:
         logger.info(f"[Coverage] Fetched {len(all_cases)} DUs from CommCare ({page} pages)")
         return all_cases
 
-    def fetch_user_visits_from_connect(self) -> pd.DataFrame:
-        """Fetch UserVisits via Connect export API"""
-        url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{self.opportunity_id}/user_visits/"
-
-        response = httpx.get(url, headers={"Authorization": f"Bearer {self.access_token}"}, timeout=120.0)
-        response.raise_for_status()
-
-        # CSV response
-        df = pd.read_csv(StringIO(response.text))
-
-        # Parse form_json if it's a string
-        if "form_json" in df.columns and len(df) > 0:
-            # Check if first row's form_json is a string
-            if isinstance(df.iloc[0]["form_json"], str):
-                df["form_json"] = df["form_json"].apply(lambda x: json.loads(x) if isinstance(x, str) and x else {})
-
-        logger.info(f"[Coverage] Fetched {len(df)} visits from Connect API")
-        return df
-
     def build_coverage_dus_only(self) -> CoverageData:
         """
         Build CoverageData with DUs only (no visits).
@@ -213,109 +194,5 @@ class CoverageDataAccess:
                 )
         else:
             logger.warning("[Coverage] No service areas found! Check if DUs have service_area_id set.")
-
-        return coverage
-
-    def build_coverage_data(self) -> CoverageData:
-        """Build complete CoverageData object"""
-        from commcare_connect.coverage.field_mappings import get_unmapped_properties
-
-        coverage = CoverageData()
-
-        # Get opportunity metadata
-        opp_data = self.get_opportunity_metadata()
-        coverage.opportunity_id = self.opportunity_id
-        coverage.opportunity_name = opp_data.get("name")
-        coverage.commcare_domain = self.commcare_domain
-
-        logger.info(f"[Coverage] Building data for: {coverage.opportunity_name} (opp {self.opportunity_id})")
-
-        # Fetch DUs from CommCare
-        du_cases = self.fetch_delivery_units_from_commcare()
-
-        # Track unmapped properties across all DUs
-        all_unmapped_properties = set()
-
-        for case_data in du_cases:
-            try:
-                du = DeliveryUnit.from_commcare_case(case_data)
-                coverage.delivery_units[du.du_name] = du
-
-                # Track unmapped properties for debugging
-                properties = case_data.get("properties", {})
-                unmapped = get_unmapped_properties(properties)
-                all_unmapped_properties.update(unmapped)
-
-                # Group by service area
-                sa_id = du.service_area_id
-                if sa_id and sa_id not in coverage.service_areas:
-                    coverage.service_areas[sa_id] = ServiceArea(id=sa_id)
-                if sa_id:
-                    coverage.service_areas[sa_id].delivery_units.append(du)
-
-                # Track FLWs
-                if du.flw_commcare_id and du.flw_commcare_id not in coverage.flws:
-                    coverage.flws[du.flw_commcare_id] = FLW(id=du.flw_commcare_id, name=du.flw_commcare_id)
-
-                if du.flw_commcare_id and du.flw_commcare_id in coverage.flws:
-                    flw = coverage.flws[du.flw_commcare_id]
-                    flw.assigned_units += 1
-                    if du.status == "completed":
-                        flw.completed_units += 1
-                    if sa_id and sa_id not in flw.service_areas:
-                        flw.service_areas.append(sa_id)
-                    flw.delivery_units.append(du)
-
-            except Exception as e:
-                logger.warning(f"Failed to process delivery unit {case_data.get('case_id')}: {e}")
-                continue
-
-        # Populate SA metadata from DUs
-        for sa in coverage.service_areas.values():
-            sa.aggregate_metadata_from_dus()
-
-        # Log unmapped properties for future schema updates
-        if all_unmapped_properties:
-            logger.info(
-                f"[Coverage] Found {len(all_unmapped_properties)} unmapped properties: "
-                f"{sorted(all_unmapped_properties)}"
-            )
-
-        # Fetch visits from Connect
-        visits_df = self.fetch_user_visits_from_connect()
-
-        for _, row in visits_df.iterrows():
-            try:
-                point = LocalUserVisit(row.to_dict())
-                coverage.service_points.append(point)
-
-                # Update FLW visit tracking
-                user_id = point.user_id
-                if user_id:
-                    if user_id not in coverage.flws:
-                        # Create FLW if not already exists from DU data
-                        coverage.flws[user_id] = FLW(id=user_id, name=point.username)
-
-                    flw = coverage.flws[user_id]
-                    flw.total_visits += 1
-                    flw.service_points.append(point)
-
-                    # Track active dates
-                    if point.visit_date:
-                        visit_date = point.visit_date.date()
-                        if visit_date not in flw.dates_active:
-                            flw.dates_active.append(visit_date)
-            except Exception as e:
-                logger.warning(f"Failed to process visit: {e}")
-                continue
-
-        # Compute metadata
-        coverage._compute_metadata()
-
-        logger.info(
-            f"[Coverage] Complete: {len(coverage.delivery_units)} DUs, "
-            f"{len(coverage.service_areas)} SAs, {len(coverage.flws)} FLWs, "
-            f"{len(coverage.service_points)} visits"
-        )
 
         return coverage

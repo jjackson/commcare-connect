@@ -190,25 +190,19 @@ class AuditTable(tables.Table):
 
     def render_actions(self, record):
         """Render action buttons for the audit session."""
-        session_url = reverse("audit:session_detail", kwargs={"pk": record.pk})
         bulk_url = reverse("audit:bulk_assessment", kwargs={"pk": record.pk})
 
         # Include opportunity_id in URLs to avoid searching all opportunities
         if record.opportunity_id:
-            session_url = f"{session_url}?opportunity_id={record.opportunity_id}"
             bulk_url = f"{bulk_url}?opportunity_id={record.opportunity_id}"
 
-        button_label = _("Review") if record.status == "completed" else _("Resume")
+        button_label = _("Review") if record.status == "completed" else _("Open")
         return format_html(
             '<div class="flex gap-2 justify-end">'
-            '<a href="{}" class="button button-sm outline-style">'
-            '<i class="fa-solid fa-layer-group mr-1"></i>{}</a>'
             '<a href="{}" class="button button-sm primary-light">'
             '<i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>{}'
             "</a>"
             "</div>",
             bulk_url,
-            _("Bulk"),
-            session_url,
             button_label,
         )

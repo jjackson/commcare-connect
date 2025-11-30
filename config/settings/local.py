@@ -53,6 +53,11 @@ COMMCARE_HQ_URL = env("COMMCARE_HQ_URL", default="https://www.commcarehq.org")
 COMMCARE_OAUTH_CLIENT_ID = env("COMMCARE_OAUTH_CLIENT_ID", default="")
 COMMCARE_OAUTH_CLIENT_SECRET = env("COMMCARE_OAUTH_CLIENT_SECRET", default="")
 
+# Open Chat Studio OAuth Configuration (for OCS API access)
+OCS_URL = env("OCS_URL", default="https://www.openchatstudio.com")
+OCS_OAUTH_CLIENT_ID = env("OCS_OAUTH_CLIENT_ID", default="")
+OCS_OAUTH_CLIENT_SECRET = env("OCS_OAUTH_CLIENT_SECRET", default="")
+
 # Disable local registration
 ACCOUNT_ALLOW_REGISTRATION = False
 

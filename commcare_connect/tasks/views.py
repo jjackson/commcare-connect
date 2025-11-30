@@ -7,19 +7,19 @@ implementation using TaskDataAccess for OAuth-based API access.
 
 import json
 import logging
+from datetime import datetime
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
-from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 
+from commcare_connect.labs.integrations.ocs.api_client import OCSAPIError, OCSDataAccess
 from commcare_connect.tasks.data_access import TaskDataAccess
 from commcare_connect.tasks.models import TaskRecord
-from commcare_connect.tasks.ocs_client import OCSClientError, get_recent_session, get_transcript, trigger_bot
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +49,6 @@ class TaskListView(LoginRequiredMixin, ListView):
         status_filter = self.request.GET.get("status")
         if status_filter and status_filter != "all":
             tasks = [t for t in tasks if t.status == status_filter]
-
-        action_type_filter = self.request.GET.get("action_type")
-        if action_type_filter and action_type_filter != "all":
-            tasks = [t for t in tasks if t.task_type == action_type_filter]
 
         search_query = self.request.GET.get("search")
         if search_query:
@@ -161,50 +157,18 @@ class TaskDetailView(LoginRequiredMixin, DetailView):
         # Get timeline (events + comments combined)
         timeline = task.get_timeline()
 
-        # Get FLW history (past tasks for the same user) - returns list, not QuerySet
-        data_access = TaskDataAccess(user=self.request.user, request=self.request)
-        formatted_history = []
-
-        # Try to get FLW history, but handle errors gracefully (e.g., invalid username)
-        try:
-            if task.task_username:
-                all_flw_tasks = data_access.get_tasks(username=task.task_username)
-
-                # Filter out current task and sort by id descending
-                flw_history = [t for t in all_flw_tasks if t.id != task.id]
-                flw_history = sorted(flw_history, key=lambda x: x.id, reverse=True)[:5]
-
-                # Format history for template
-                for hist in flw_history:
-                    formatted_history.append(
-                        {
-                            "id": hist.id,
-                            "task_type": hist.task_type,
-                            "status": hist.status,
-                            "title": hist.title,
-                        }
-                    )
-        except Exception as e:
-            # Log the error but don't crash the page
-            logger.error(f"Failed to fetch FLW history for task {task.id}: {e}", exc_info=True)
-
         context.update(
             {
                 "task": {
                     "id": task.id,
                     "user_id": task.user_id,
                     "opportunity_id": task.opportunity_id,
-                    "task_type": task.task_type,
                     "status": task.status,
                     "priority": task.priority,
                     "title": task.title,
                     "description": task.description,
-                    "learning_assignment_text": task.learning_assignment_text,
                     "audit_session_id": task.audit_session_id,
-                    "assigned_to_id": task.assigned_to_id,
-                    "created_by_id": task.created_by_id,
                     "timeline": timeline,
-                    "flw_history": formatted_history,
                 },
             }
         )
@@ -240,10 +204,170 @@ class TaskCreationWizardView(LoginRequiredMixin, TemplateView):
             except (SocialAccount.DoesNotExist, SocialToken.DoesNotExist):
                 pass
 
+        # Pass labs_context to template for pre-selection
+        labs_context = getattr(self.request, "labs_context", {})
+        context["default_opportunity_id"] = labs_context.get("opportunity_id") or ""
+        context["default_program_id"] = labs_context.get("program_id") or ""
+
+        # Pass opportunities from user's org_data (already fetched from opp_org_program API)
+        org_data = getattr(self.request.user, "_org_data", {})
+        opportunities = org_data.get("opportunities", [])
+
+        # Filter by program if one is selected in labs_context
+        program_id = labs_context.get("program_id")
+        if program_id:
+            opportunities = [o for o in opportunities if o.get("program") == program_id]
+
+        # Format for template
+        context["opportunities_json"] = json.dumps(
+            [
+                {
+                    "id": opp.get("id"),
+                    "name": opp.get("name"),
+                    "organization_name": opp.get("organization", ""),
+                    "program_name": "",
+                    "visit_count": opp.get("visit_count", 0),
+                    "end_date": opp.get("end_date"),
+                    "active": opp.get("is_active", True),
+                }
+                for opp in opportunities
+            ]
+        )
+
         context.update(
             {
                 "has_connect_token": has_token,
                 "token_expires_at": token_expires_at,
+            }
+        )
+
+        return context
+
+
+class TaskCreateEditView(LoginRequiredMixin, TemplateView):
+    """Combined create/edit view for single-FLW tasks.
+
+    This is the main workhorse page for task management:
+    - Create mode: Select FLW, fill task details, create task
+    - Edit mode: Load existing task, edit details, manage timeline/comments/actions
+    """
+
+    template_name = "tasks/task_create_edit.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Get task_id from URL if editing
+        task_id = self.kwargs.get("task_id")
+        is_edit_mode = task_id is not None
+
+        # Get labs_context for opportunity
+        labs_context = getattr(self.request, "labs_context", {})
+        opportunity_id = labs_context.get("opportunity_id")
+
+        # Get opportunity name from user's org_data
+        org_data = getattr(self.request.user, "_org_data", {})
+        opportunities = org_data.get("opportunities", [])
+        opportunity_name = ""
+        for opp in opportunities:
+            if opp.get("id") == opportunity_id:
+                opportunity_name = opp.get("name", "")
+                break
+
+        # Load FLW list if we have an opportunity
+        flw_list = []
+        if opportunity_id:
+            try:
+                data_access = TaskDataAccess(user=self.request.user, request=self.request)
+                flw_list = data_access.get_users_from_opportunity(opportunity_id)
+                data_access.close()
+            except Exception as e:
+                logger.warning(f"Failed to load FLW list for opportunity {opportunity_id}: {e}")
+
+        # Check for Connect OAuth token
+        has_token = False
+        token_expires_at = None
+        if hasattr(self.request.user, "is_labs_user") and self.request.user.is_labs_user:
+            has_token = True
+        else:
+            from allauth.socialaccount.models import SocialAccount, SocialToken
+
+            try:
+                social_account = SocialAccount.objects.get(user=self.request.user, provider="connect")
+                social_token = SocialToken.objects.get(account=social_account)
+                has_token = True
+                token_expires_at = social_token.expires_at
+            except (SocialAccount.DoesNotExist, SocialToken.DoesNotExist):
+                pass
+
+        # If editing, load the existing task
+        task_data = None
+        timeline = []
+        if is_edit_mode:
+            try:
+                data_access = TaskDataAccess(user=self.request.user, request=self.request)
+                task = data_access.get_task(task_id)
+                if task:
+                    timeline = task.get_timeline()
+                    task_data = {
+                        "id": task.id,
+                        "username": task.task_username,
+                        "flw_name": task.flw_name,
+                        "user_id": task.user_id,
+                        "opportunity_id": task.opportunity_id,
+                        "status": task.status,
+                        "priority": task.priority,
+                        "title": task.title,
+                        "description": task.description,
+                        "audit_session_id": task.audit_session_id,
+                        "assigned_to_type": task.assigned_to_type,
+                        "assigned_to_name": task.assigned_to_name,
+                        "resolution_details": task.resolution_details,
+                    }
+                data_access.close()
+            except Exception as e:
+                logger.error(f"Failed to load task {task_id}: {e}")
+
+        # Get current user info for assignment dropdown
+        current_user_name = self.request.user.get_display_name()
+
+        # Get manager names from opportunity's org/program references
+        labs_context = getattr(self.request, "labs_context", {})
+        opportunity = labs_context.get("opportunity", {})
+        org_data = getattr(self.request.user, "_org_data", {})
+
+        # Look up organization name (Network Manager) by slug
+        org_slug = opportunity.get("organization")
+        network_manager_name = "Network Manager"
+        for org in org_data.get("organizations", []):
+            if org.get("slug") == org_slug:
+                network_manager_name = org.get("name", "Network Manager")
+                break
+
+        # Look up program name (Program Manager) by ID
+        program_id = opportunity.get("program")
+        program_manager_name = "Program Manager"
+        for prog in org_data.get("programs", []):
+            if prog.get("id") == program_id:
+                program_manager_name = prog.get("name", "Program Manager")
+                break
+
+        context.update(
+            {
+                "is_edit_mode": is_edit_mode,
+                "task_id": task_id,
+                "task_data": json.dumps(task_data) if task_data else "null",
+                "task": task_data,  # Also pass as dict for template access
+                "timeline_json": json.dumps(timeline),
+                "opportunity_id": opportunity_id,
+                "opportunity_name": opportunity_name,
+                "flw_list_json": json.dumps(flw_list),
+                "has_connect_token": has_token,
+                "token_expires_at": token_expires_at,
+                "has_context": bool(opportunity_id),
+                "current_user_name": current_user_name,
+                "network_manager_name": network_manager_name,
+                "program_manager_name": program_manager_name,
             }
         )
 
@@ -286,43 +410,6 @@ class OpportunityWorkersAPIView(LoginRequiredMixin, View):
             return JsonResponse({"error": str(e)}, status=500)
 
 
-# Database Management API Views
-
-
-class DatabaseStatsAPIView(LoginRequiredMixin, View):
-    """Get database statistics for tasks."""
-
-    def get(self, request):
-        try:
-            # TODO: Update to use LabsRecordAPIClient with opportunity_id
-            stats = {
-                "tasks": 0,  # Would need to query API
-                "events": 0,
-                "comments": 0,
-                "ai_sessions": 0,
-            }
-
-            return JsonResponse({"success": True, "stats": stats})
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=500)
-
-
-@method_decorator(csrf_exempt, name="dispatch")
-class DatabaseResetAPIView(LoginRequiredMixin, View):
-    """Reset tasks database (delete all experiment records)."""
-
-    def post(self, request):
-        try:
-            # TODO: Update to use LabsRecordAPIClient with opportunity_id for deletion
-            deleted = (0, {})
-
-            return JsonResponse({"success": True, "deleted": deleted})
-        except Exception as e:
-            import traceback
-
-            return JsonResponse({"error": str(e), "traceback": traceback.format_exc()}, status=500)
-
-
 # Task Bulk Creation API
 
 
@@ -335,11 +422,10 @@ def task_bulk_create(request):
         body = json.loads(request.body)
         opportunity_id = body.get("opportunity_id")
         flw_ids = body.get("flw_ids", [])
-        task_type = body.get("task_type", "warning")
+        flw_names = body.get("flw_names", {})  # Optional mapping: {username: display_name}
         priority = body.get("priority", "medium")
         title = body.get("title", "")
         description = body.get("description", "")
-        learning_assignment_text = body.get("learning_assignment_text", "")
 
         if not opportunity_id:
             return JsonResponse({"success": False, "error": "opportunity_id is required"}, status=400)
@@ -347,23 +433,26 @@ def task_bulk_create(request):
         if not flw_ids:
             return JsonResponse({"success": False, "error": "At least one FLW must be selected"}, status=400)
 
+        # Get a display name for the creator
+        creator_name = request.user.get_display_name()
+
         data_access = TaskDataAccess(user=request.user, request=request)
         created_count = 0
         errors = []
 
         for flw_id in flw_ids:
             try:
+                username = str(flw_id)
+                flw_name = flw_names.get(username, username)  # Use display name if provided
                 # Create task for each FLW
                 data_access.create_task(
-                    username=str(flw_id),  # Using flw_id as username for now
+                    username=username,
+                    flw_name=flw_name,
                     opportunity_id=opportunity_id,
-                    created_by_id=request.user.id if hasattr(request.user, "id") else 0,
-                    task_type=task_type,
                     priority=priority,
                     title=title,
                     description=description,
-                    learning_assignment_text=learning_assignment_text,
-                    creator_name=request.user.get_full_name() if hasattr(request.user, "get_full_name") else "User",
+                    creator_name=creator_name,
                 )
                 created_count += 1
             except Exception as e:
@@ -379,6 +468,249 @@ def task_bulk_create(request):
     except Exception as e:
         logger.error(f"Error in bulk task creation: {e}", exc_info=True)
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+# Single Task Creation API (for combined create/edit page)
+
+
+@login_required
+@csrf_exempt
+@require_POST
+def task_single_create(request):
+    """Create a single task for one FLW. Used by combined create/edit page."""
+    try:
+        body = json.loads(request.body)
+        username = body.get("username")
+        flw_name = body.get("flw_name", username)
+        priority = body.get("priority", "medium")
+        title = body.get("title", "")
+        description = body.get("description", "")
+
+        if not username:
+            return JsonResponse({"success": False, "error": "username is required"}, status=400)
+
+        if not title:
+            return JsonResponse({"success": False, "error": "title is required"}, status=400)
+
+        # Get opportunity from labs_context
+        labs_context = getattr(request, "labs_context", {})
+        opportunity_id = labs_context.get("opportunity_id")
+
+        if not opportunity_id:
+            return JsonResponse({"success": False, "error": "No opportunity selected in labs context"}, status=400)
+
+        data_access = TaskDataAccess(user=request.user, request=request)
+
+        try:
+            # Get a display name for the creator
+            creator_name = request.user.get_display_name()
+
+            task = data_access.create_task(
+                username=username,
+                flw_name=flw_name,
+                opportunity_id=opportunity_id,
+                priority=priority,
+                title=title,
+                description=description,
+                creator_name=creator_name,
+            )
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "task_id": task.id,
+                    "message": f"Task created successfully for {flw_name}",
+                }
+            )
+        finally:
+            data_access.close()
+
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Error in single task creation: {e}", exc_info=True)
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@login_required
+@csrf_exempt
+@require_POST
+def task_update(request, task_id):
+    """Update an existing task."""
+    try:
+        body = json.loads(request.body)
+
+        data_access = TaskDataAccess(user=request.user, request=request)
+        task = data_access.get_task(task_id)
+
+        if not task:
+            return JsonResponse({"success": False, "error": "Task not found"}, status=404)
+
+        # Get actor name for event logging
+        actor_name = request.user.get_display_name()
+
+        # Track what changed for event logging
+        changes = []
+
+        # Update allowed fields
+        if "title" in body and body["title"] != task.title:
+            task.data["title"] = body["title"]
+            changes.append("title")
+
+        if "description" in body and body["description"] != task.description:
+            task.data["description"] = body["description"]
+            changes.append("description")
+
+        if "priority" in body and body["priority"] != task.priority:
+            task.data["priority"] = body["priority"]
+            changes.append("priority")
+
+        if "status" in body and body["status"] != task.status:
+            old_status = task.status
+            task.data["status"] = body["status"]
+            changes.append(f"status from {old_status} to {body['status']}")
+
+        if "assigned_to_type" in body and body["assigned_to_type"] != task.assigned_to_type:
+            task.data["assigned_to_type"] = body["assigned_to_type"]
+            # Set assigned_to_name based on type - look up actual names from labs_context
+            labs_context = getattr(request, "labs_context", {})
+            opportunity = labs_context.get("opportunity", {})
+            org_data = getattr(request.user, "_org_data", {})
+
+            if body["assigned_to_type"] == "self":
+                task.data["assigned_to_name"] = actor_name
+            elif body["assigned_to_type"] == "network_manager":
+                # Look up organization name by slug
+                org_slug = opportunity.get("organization")
+                assigned_name = "Network Manager"
+                for org in org_data.get("organizations", []):
+                    if org.get("slug") == org_slug:
+                        assigned_name = org.get("name", "Network Manager")
+                        break
+                task.data["assigned_to_name"] = assigned_name
+            elif body["assigned_to_type"] == "program_manager":
+                # Look up program name by ID
+                program_id = opportunity.get("program")
+                assigned_name = "Program Manager"
+                for prog in org_data.get("programs", []):
+                    if prog.get("id") == program_id:
+                        assigned_name = prog.get("name", "Program Manager")
+                        break
+                task.data["assigned_to_name"] = assigned_name
+            changes.append(f"assignment to {task.data.get('assigned_to_name')}")
+
+        if "resolution_details" in body:
+            task.data["resolution_details"] = body["resolution_details"]
+            if body.get("status") == "closed":
+                changes.append("closed task")
+
+        # Add event for the changes
+        if changes:
+            task.add_event(
+                event_type="updated",
+                actor=actor_name,
+                description=f"Updated {', '.join(changes)}",
+            )
+
+        # Save via API
+        data_access.save_task(task)
+        data_access.close()
+
+        return JsonResponse({"success": True, "message": "Task updated successfully"})
+
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Error updating task {task_id}: {e}", exc_info=True)
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@login_required
+@csrf_exempt
+@require_POST
+def task_add_comment(request, task_id):
+    """Add a comment to a task."""
+    try:
+        body = json.loads(request.body)
+        content = body.get("content", "").strip()
+
+        if not content:
+            return JsonResponse({"success": False, "error": "Comment content is required"}, status=400)
+
+        data_access = TaskDataAccess(user=request.user, request=request)
+        task = data_access.get_task(task_id)
+
+        if not task:
+            return JsonResponse({"success": False, "error": "Task not found"}, status=404)
+
+        # Add comment using the actor's display name
+        actor_name = request.user.get_display_name()
+        task.add_comment(actor=actor_name, content=content)
+
+        # Save via API
+        data_access.save_task(task)
+        data_access.close()
+
+        # Return the new comment event for the UI to display
+        comment_events = task.get_comment_events()
+        new_comment = comment_events[-1] if comment_events else None
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": "Comment added successfully",
+                "comment": new_comment,
+            }
+        )
+
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Error adding comment to task {task_id}: {e}", exc_info=True)
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+# OCS Integration API Views
+
+
+class OCSBotsListAPIView(LoginRequiredMixin, View):
+    """List available OCS bots (experiments) via OAuth API."""
+
+    def get(self, request):
+        try:
+            ocs_client = OCSDataAccess(request=request)
+
+            if not ocs_client.check_token_valid():
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": "OCS not connected. Please connect to Open Chat Studio first.",
+                        "needs_oauth": True,
+                    },
+                    status=401,
+                )
+
+            experiments = ocs_client.list_experiments()
+            ocs_client.close()
+
+            # Format for frontend dropdown
+            bots = [
+                {
+                    "id": exp.get("id"),
+                    "name": exp.get("name"),
+                    "version_number": exp.get("version_number"),
+                }
+                for exp in experiments
+            ]
+
+            return JsonResponse({"success": True, "bots": bots})
+
+        except OCSAPIError as e:
+            logger.error(f"OCS API error listing bots: {e}")
+            return JsonResponse({"success": False, "error": str(e)}, status=500)
+        except Exception as e:
+            logger.error(f"Error listing OCS bots: {e}", exc_info=True)
+            return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
 # AI Assistant Integration Views
@@ -420,42 +752,36 @@ def task_initiate_ai(request, task_id):
         # Prepare session data to link back to Connect
         session_data = {
             "task_id": str(task.id),
-            "task_type": task.task_type,
             "opportunity_id": str(task.opportunity_id),
             "username": task.username,
             "created_by": request.user.username if hasattr(request.user, "username") else "unknown",
         }
 
-        # Trigger bot with OCS
-        trigger_bot(
+        # Trigger bot with OCS using OAuth
+        ocs_client = OCSDataAccess(request=request)
+        ocs_client.trigger_bot(
             identifier=identifier,
             platform=platform,
-            bot_id=experiment,
+            experiment_id=experiment,
             prompt_text=prompt_text,
             start_new_session=start_new_session,
             session_data=session_data,
         )
+        ocs_client.close()
 
-        # Add AI session to task using nested JSON
+        # Add AI session event - session_id will be linked via polling after OCS creates it
+        actor_name = request.user.get_display_name()
+        session_params = {
+            "identifier": identifier,
+            "experiment": experiment,
+            "platform": platform,
+            "prompt_text": prompt_text,
+        }
         task.add_ai_session(
-            ocs_session_id=None,  # Will be populated later via manual linking
+            actor=actor_name,
+            session_params=session_params,
+            session_id=None,
             status="pending",
-            metadata={
-                "parameters": {
-                    "identifier": identifier,
-                    "experiment": experiment,
-                    "platform": platform,
-                    "prompt_text": prompt_text,
-                }
-            },
-        )
-
-        # Add event for AI conversation initiation
-        task.add_event(
-            event_type="ai_initiated",
-            actor=request.user.username if hasattr(request.user, "username") else "system",
-            actor_user_id=request.user.id if hasattr(request.user, "id") else 0,
-            description=f"Triggered AI assistant for {identifier}",
         )
 
         # Save task via data access
@@ -469,7 +795,7 @@ def task_initiate_ai(request, task_id):
             }
         )
 
-    except OCSClientError as e:
+    except OCSAPIError as e:
         logger.error(f"OCS error when initiating AI for task {task_id}: {e}")
         return JsonResponse({"error": str(e)}, status=500)
     except json.JSONDecodeError:
@@ -481,7 +807,7 @@ def task_initiate_ai(request, task_id):
 
 @login_required
 def task_ai_sessions(request, task_id):
-    """Get AI sessions for a task and try to populate session_id from OCS if missing."""
+    """Get AI session events and try to link session_id from OCS for pending sessions."""
     try:
         data_access = TaskDataAccess(user=request.user, request=request)
         task = data_access.get_task(task_id)
@@ -490,51 +816,65 @@ def task_ai_sessions(request, task_id):
     except Exception:
         return JsonResponse({"error": "Task not found"}, status=404)
 
-    # Get all AI sessions from task's nested data
-    ai_sessions = task.ai_sessions or []
+    # Get AI session events from the events array
+    ai_sessions = task.get_ai_session_events()
 
-    # Get the specific session ID from query params (if polling for a specific session)
-    session_index = request.GET.get("session_index")
-
+    # Find pending session to try linking (most recent without session_id)
     pending_session = None
-    if session_index is not None:
-        try:
-            idx = int(session_index)
-            if 0 <= idx < len(ai_sessions):
-                session = ai_sessions[idx]
-                if not session.get("session_id"):
-                    pending_session = session
-        except (ValueError, IndexError):
-            pass
+    for session in reversed(ai_sessions):
+        if not session.get("session_id"):
+            pending_session = session
+            break
+
+    logger.info(f"Task {task_id} has {len(ai_sessions)} AI sessions, pending_session={pending_session is not None}")
 
     # Try to fetch and populate session_id from OCS
-    if pending_session and pending_session.get("session_metadata"):
-        params = pending_session["session_metadata"].get("parameters", {})
+    if pending_session:
+        params = pending_session.get("session_params", {})
         experiment = params.get("experiment")
         identifier = params.get("identifier")
+        logger.info(f"Attempting to link session for task {task_id}: experiment={experiment}, identifier={identifier}")
 
         if experiment and identifier:
             try:
-                # Query OCS for recent sessions
-                sessions = get_recent_session(experiment_id=experiment, identifier=identifier, limit=5)
+                # Query OCS for recent sessions using OAuth
+                ocs_client = OCSDataAccess(request=request)
+                sessions = ocs_client.list_sessions(experiment_id=experiment, limit=5)
+                ocs_client.close()
+                logger.info(f"OCS returned {len(sessions) if sessions else 0} sessions: {sessions}")
+
+                # Filter by identifier (case-insensitive)
+                if sessions and identifier:
+                    identifier_lower = identifier.lower()
+                    filtered_sessions = [
+                        s
+                        for s in sessions
+                        if s.get("participant", {}).get("identifier", "").lower() == identifier_lower
+                    ]
+                    logger.info(f"After filtering by identifier '{identifier}': {len(filtered_sessions)} sessions")
+                    sessions = filtered_sessions
 
                 if sessions:
-                    # Get the most recent session
+                    # Get the most recent session - OCS returns 'id' as the session identifier
                     most_recent = sessions[0]
-                    session_id = most_recent.get("external_id")
+                    session_id = most_recent.get("id")
+                    logger.info(f"Most recent session id={session_id}")
 
                     if session_id:
-                        # Update the session in the nested data
+                        # Update the session event in the events array
                         pending_session["session_id"] = session_id
                         pending_session["status"] = "completed"
                         data_access.save_task(task)
+                        logger.info(f"Auto-linked OCS session {session_id} to task {task_id}")
+                else:
+                    logger.info(f"No matching sessions found for identifier '{identifier}'")
 
-            except OCSClientError as e:
+            except OCSAPIError as e:
                 logger.error(f"Error fetching OCS sessions: {e}")
 
-        data_access.close()
+    data_access.close()
 
-    # Return the AI sessions
+    # Return the AI session events
     return JsonResponse({"success": True, "sessions": ai_sessions})
 
 
@@ -556,26 +896,24 @@ def task_add_ai_session(request, task_id):
     if not session_id:
         return JsonResponse({"success": False, "error": "Session ID is required"}, status=400)
 
-    # Check if we already have an AI session
-    existing_sessions = task.ai_sessions or []
+    # Check if we already have an AI session event without a session_id
+    ai_sessions = task.get_ai_session_events()
+    created = False
 
-    if existing_sessions:
-        # Update the most recent session
-        existing_sessions[-1]["session_id"] = session_id
-        existing_sessions[-1]["status"] = "completed"
-        created = False
+    if ai_sessions:
+        # Update the most recent session event
+        ai_sessions[-1]["session_id"] = session_id
+        ai_sessions[-1]["status"] = "completed"
     else:
-        # Create new AI session
-        task.add_ai_session(ocs_session_id=session_id, status="completed")
+        # Create new AI session event
+        actor_name = request.user.get_display_name()
+        task.add_ai_session(
+            actor=actor_name,
+            session_params={},
+            session_id=session_id,
+            status="completed",
+        )
         created = True
-
-    # Add event for AI conversation linked
-    task.add_event(
-        event_type="ai_linked",
-        actor=request.user.username if hasattr(request.user, "username") else "system",
-        actor_user_id=request.user.id if hasattr(request.user, "id") else 0,
-        description=f"Linked OCS session: {session_id}",
-    )
 
     # Save task via data access
     data_access.save_task(task)
@@ -586,49 +924,135 @@ def task_add_ai_session(request, task_id):
 
 @login_required
 def task_ai_transcript(request, task_id):
-    """Fetch AI conversation transcript from OCS."""
+    """Fetch AI conversation transcript - from saved history or OCS."""
     try:
         data_access = TaskDataAccess(user=request.user, request=request)
         task = data_access.get_task(task_id)
+        if not task:
+            data_access.close()
+            return JsonResponse({"error": "Task not found"}, status=404)
+    except Exception:
+        return JsonResponse({"error": "Task not found"}, status=404)
+
+    session_id = request.GET.get("session_id")
+    force_refresh = request.GET.get("refresh") == "true"
+
+    # Find the session event
+    ai_sessions = task.get_ai_session_events()
+    target_session = None
+
+    if session_id:
+        for session in ai_sessions:
+            if session.get("session_id") == session_id:
+                target_session = session
+                break
+    elif ai_sessions:
+        target_session = ai_sessions[-1]
+        session_id = target_session.get("session_id") if target_session else None
+
+    if not session_id:
         data_access.close()
+        return JsonResponse({"success": False, "error": "No session ID available yet"}, status=404)
+
+    # Check for saved history first (unless force refresh)
+    if not force_refresh and target_session and target_session.get("saved_transcript"):
+        saved = target_session["saved_transcript"]
+        data_access.close()
+        return JsonResponse(
+            {
+                "success": True,
+                "messages": saved.get("messages", []),
+                "session_id": session_id,
+                "from_saved": True,
+                "saved_at": saved.get("saved_at"),
+            }
+        )
+
+    # Fetch transcript from OCS using OAuth
+    try:
+        ocs_client = OCSDataAccess(request=request)
+        session_data = ocs_client.get_session(session_id)
+        ocs_client.close()
+
+        if session_data and session_data.get("messages"):
+            formatted_messages = []
+            for msg in session_data["messages"]:
+                formatted_messages.append(
+                    {
+                        "role": msg.get("role", "user"),
+                        "content": msg.get("content", ""),
+                        "created_at": msg.get("created_at", ""),
+                    }
+                )
+
+            data_access.close()
+            return JsonResponse(
+                {
+                    "success": True,
+                    "messages": formatted_messages,
+                    "session_id": session_id,
+                    "from_saved": False,
+                    "ended_at": session_data.get("ended_at"),
+                }
+            )
+        else:
+            data_access.close()
+            return JsonResponse({"success": False, "error": "Invalid transcript format from OCS"}, status=500)
+
+    except OCSAPIError as e:
+        logger.error(f"Error fetching transcript from OCS: {e}")
+        data_access.close()
+        return JsonResponse({"success": False, "error": f"Failed to fetch transcript: {str(e)}"}, status=500)
+
+
+@login_required
+@csrf_exempt
+@require_POST
+def task_ai_save_transcript(request, task_id):
+    """Save AI transcript to the task for offline access."""
+    try:
+        data_access = TaskDataAccess(user=request.user, request=request)
+        task = data_access.get_task(task_id)
         if not task:
             return JsonResponse({"error": "Task not found"}, status=404)
     except Exception:
         return JsonResponse({"error": "Task not found"}, status=404)
 
-    # Get AI sessions from nested data
-    ai_sessions = task.ai_sessions or []
-
-    if not ai_sessions:
-        return JsonResponse({"success": False, "error": "No AI session found for this task"}, status=404)
-
-    # Get the most recent session
-    latest_session = ai_sessions[-1]
-    session_id = latest_session.get("session_id")
-
-    if not session_id:
-        return JsonResponse({"success": False, "error": "No session ID available yet"}, status=404)
-
-    # Fetch transcript from OCS
     try:
-        transcript = get_transcript(session_id)
+        body = json.loads(request.body)
+        session_id = body.get("session_id")
+        messages = body.get("messages", [])
 
-        # Transform OCS format to UI format
-        if isinstance(transcript, dict) and transcript.get("messages"):
-            formatted_messages = []
-            for msg in transcript["messages"]:
-                formatted_messages.append(
-                    {
-                        "actor": "AI Assistant" if msg.get("role") == "assistant" else task.username,
-                        "message": msg.get("content", ""),
-                        "timestamp": msg.get("created_at", ""),
-                    }
-                )
+        if not session_id:
+            data_access.close()
+            return JsonResponse({"success": False, "error": "session_id is required"}, status=400)
 
-            return JsonResponse({"success": True, "messages": formatted_messages, "session_id": session_id})
-        else:
-            return JsonResponse({"success": False, "error": "Invalid transcript format from OCS"}, status=500)
+        # Find and update the session event
+        ai_sessions = task.get_ai_session_events()
+        updated = False
+        for session in ai_sessions:
+            if session.get("session_id") == session_id:
+                session["saved_transcript"] = {
+                    "messages": messages,
+                    "saved_at": datetime.now().isoformat(),
+                    "saved_by": request.user.get_display_name(),
+                }
+                updated = True
+                break
 
-    except OCSClientError as e:
-        logger.error(f"Error fetching transcript from OCS: {e}")
-        return JsonResponse({"success": False, "error": f"Failed to fetch transcript: {str(e)}"}, status=500)
+        if not updated:
+            data_access.close()
+            return JsonResponse({"success": False, "error": "Session not found"}, status=404)
+
+        data_access.save_task(task)
+        data_access.close()
+
+        return JsonResponse({"success": True, "message": "Transcript saved"})
+
+    except json.JSONDecodeError:
+        data_access.close()
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Error saving transcript: {e}")
+        data_access.close()
+        return JsonResponse({"success": False, "error": str(e)}, status=500)

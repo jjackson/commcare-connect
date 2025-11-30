@@ -121,6 +121,15 @@ class AuditSessionRecord(LocalLabsRecord):
         return self.data.get("opportunity_name", "")
 
     @property
+    def flw_username(self):
+        """FLW username extracted from first visit's images (same pattern as bulk assessment)."""
+        visit_images = self.data.get("visit_images", {})
+        for visit_id, images in visit_images.items():
+            if images:
+                return images[0].get("username", "")
+        return ""
+
+    @property
     def description(self):
         """Human-readable description of how this audit session was created."""
         return self.data.get("description", "")

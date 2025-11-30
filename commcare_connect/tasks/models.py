@@ -24,19 +24,35 @@ class TaskRecord(LocalLabsRecord):
         return self.data.get("username")
 
     @property
+    def flw_name(self):
+        """Display name of the FLW this task is about."""
+        return self.data.get("flw_name") or self.data.get("username", "")
+
+    @property
     def user_id(self):
         """User ID of the FLW this task is about (may be None if not available from API)."""
         return self.data.get("user_id")
 
     @property
-    def task_type(self):
-        """Type of task: warning, deactivation."""
-        return self.data.get("task_type", "warning")
+    def status(self):
+        """Current workflow status: investigating, flw_action_in_progress, flw_action_completed,
+        review_needed, closed."""
+        return self.data.get("status", "investigating")
 
     @property
-    def status(self):
-        """Current status: unassigned, network_manager, program_manager, action_underway, resolved, closed."""
-        return self.data.get("status", "unassigned")
+    def assigned_to_type(self):
+        """Who the task is assigned to: self, network_manager, program_manager."""
+        return self.data.get("assigned_to_type", "self")
+
+    @property
+    def assigned_to_name(self):
+        """Display name of assignee."""
+        return self.data.get("assigned_to_name", "")
+
+    @property
+    def resolution_details(self):
+        """Resolution details when task is closed: {official_action, resolution_note}."""
+        return self.data.get("resolution_details", {})
 
     @property
     def priority(self):
@@ -54,51 +70,38 @@ class TaskRecord(LocalLabsRecord):
         return self.data.get("description", "")
 
     @property
-    def learning_assignment_text(self):
-        """Text description of learning modules or training assigned."""
-        return self.data.get("learning_assignment_text", "")
-
-    @property
     def audit_session_id(self):
         """Reference to audit session that triggered this task (optional)."""
         return self.data.get("audit_session_id")
 
     @property
-    def assigned_to_id(self):
-        """ID of user currently assigned to handle this task."""
-        return self.data.get("assigned_to_id")
-
-    @property
-    def created_by_id(self):
-        """ID of user who created this task."""
-        return self.data.get("created_by_id")
+    def date_created(self):
+        """Date the task was created (from first 'created' event, or None)."""
+        for event in self.data.get("events", []):
+            if event.get("event_type") == "created":
+                timestamp = event.get("timestamp")
+                if timestamp:
+                    try:
+                        return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                    except (ValueError, TypeError):
+                        return None
+        return None
 
     @property
     def events(self):
-        """List of timeline events."""
+        """List of timeline events (includes comments and AI sessions)."""
         return self.data.get("events", [])
 
-    @property
-    def comments(self):
-        """List of user comments."""
-        return self.data.get("comments", [])
-
-    @property
-    def ai_sessions(self):
-        """List of AI assistant sessions."""
-        return self.data.get("ai_sessions", [])
-
     # Helper methods for managing nested data
-    def add_event(self, event_type, actor, actor_user_id, description, **kwargs):
+    def add_event(self, event_type, actor, description, **kwargs):
         """
         Add an event to the task timeline.
 
         Args:
-            event_type: Type of event (created, status_changed, assigned, etc.)
+            event_type: Type of event (created, updated, comment, ai_session, etc.)
             actor: Name of person/system performing the action
-            actor_user_id: User ID of actor (if applicable)
             description: Human-readable description of the event
-            **kwargs: Additional metadata (ai_session_id, etc.)
+            **kwargs: Additional fields for specific event types (content, session_id, etc.)
 
         Returns:
             Updated task record (not saved to DB)
@@ -109,126 +112,116 @@ class TaskRecord(LocalLabsRecord):
         event = {
             "event_type": event_type,
             "actor": actor,
-            "actor_user_id": actor_user_id,
             "description": description,
             "timestamp": datetime.now().isoformat(),
-            "metadata": kwargs.get("metadata", {}),
-            "ai_session_id": kwargs.get("ai_session_id"),
         }
+
+        # Add any additional fields from kwargs (for comment content, ai_session fields, etc.)
+        for key, value in kwargs.items():
+            if value is not None:
+                event[key] = value
 
         self.data["events"].append(event)
         return self
 
-    def add_comment(self, author_id, author_name, content):
+    def add_comment(self, actor, content):
         """
-        Add a comment to the task.
+        Add a comment to the task as an event.
 
         Args:
-            author_id: User ID of comment author
-            author_name: Display name of author
+            actor: Display name of comment author
             content: Comment text
 
         Returns:
             Updated task record (not saved to DB)
         """
-        if "comments" not in self.data:
-            self.data["comments"] = []
+        return self.add_event(
+            event_type="comment",
+            actor=actor,
+            description="Added a comment",
+            content=content,
+        )
 
-        comment = {
-            "author_id": author_id,
-            "author_name": author_name,
-            "content": content,
-            "timestamp": datetime.now().isoformat(),
-        }
-
-        self.data["comments"].append(comment)
-        return self
-
-    def add_ai_session(self, ocs_session_id, **kwargs):
+    def add_ai_session(self, actor, session_params, session_id=None, status="initiated"):
         """
-        Add an AI assistant session to the task.
+        Add an AI assistant session to the task as an event.
 
         Args:
-            ocs_session_id: Session ID from OCS API
-            **kwargs: Additional session metadata (status, parameters, etc.)
+            actor: Name of person who triggered the AI session
+            session_params: Dict with session parameters (platform, experiment, identifier, prompt_text)
+            session_id: OCS session ID (may be None initially, linked later)
+            status: Session status (initiated, pending, completed)
 
         Returns:
             Updated task record (not saved to DB)
         """
-        if "ai_sessions" not in self.data:
-            self.data["ai_sessions"] = []
-
-        session = {
-            "session_id": kwargs.get("session_id"),
-            "ocs_session_id": ocs_session_id,
-            "status": kwargs.get("status", "initiated"),
-            "timestamp": datetime.now().isoformat(),
-            "metadata": kwargs.get("metadata", {}),
-        }
-
-        self.data["ai_sessions"].append(session)
-        return self
+        identifier = session_params.get("identifier", "FLW")
+        return self.add_event(
+            event_type="ai_session",
+            actor=actor,
+            description=f"AI assistant triggered for {identifier}",
+            session_id=session_id,
+            status=status,
+            session_params=session_params,
+        )
 
     def get_timeline(self):
         """
-        Get combined timeline of events and comments, sorted by timestamp.
+        Get timeline of events sorted by timestamp.
+
+        All events (including comments and AI sessions) are stored in the events array.
 
         Returns:
-            List of timeline items sorted by timestamp (newest first)
+            List of events sorted by timestamp (newest first)
         """
-        timeline = []
-
-        # Add events
-        for event in self.events:
-            timeline.append(
-                {
-                    "type": "event",
-                    "timestamp": event.get("timestamp"),
-                    "event_type": event.get("event_type"),
-                    "actor": event.get("actor"),
-                    "actor_user_id": event.get("actor_user_id"),
-                    "description": event.get("description"),
-                    "metadata": event.get("metadata", {}),
-                    "ai_session_id": event.get("ai_session_id"),
-                }
-            )
-
-        # Add comments
-        for comment in self.comments:
-            timeline.append(
-                {
-                    "type": "comment",
-                    "timestamp": comment.get("timestamp"),
-                    "author_id": comment.get("author_id"),
-                    "author_name": comment.get("author_name"),
-                    "content": comment.get("content"),
-                }
-            )
-
-        # Sort by timestamp (newest first)
+        timeline = list(self.events)
         timeline.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-
         return timeline
+
+    def get_ai_session_events(self):
+        """
+        Get AI session events from the timeline.
+
+        Returns:
+            List of ai_session events
+        """
+        return [e for e in self.events if e.get("event_type") == "ai_session"]
+
+    def get_comment_events(self):
+        """
+        Get comment events from the timeline.
+
+        Returns:
+            List of comment events
+        """
+        return [e for e in self.events if e.get("event_type") == "comment"]
 
     def get_status_display(self):
         """Get human-readable status label."""
         status_labels = {
-            "unassigned": "Unassigned",
-            "network_manager": "Network Manager",
-            "program_manager": "Program Manager",
-            "action_underway": "Action Underway",
-            "resolved": "Resolved",
+            "investigating": "Investigating",
+            "flw_action_in_progress": "FLW Action In Progress",
+            "flw_action_completed": "FLW Action Completed",
+            "review_needed": "Review Needed",
             "closed": "Closed",
+            # Legacy values for backwards compatibility
+            "unassigned": "Investigating",
+            "network_manager": "Investigating",
+            "program_manager": "Investigating",
+            "action_underway": "FLW Action In Progress",
+            "resolved": "Closed",
         }
-        return status_labels.get(self.status, self.status.title())
+        return status_labels.get(self.status, self.status.replace("_", " ").title())
 
-    def get_task_type_display(self):
-        """Get human-readable task type label."""
-        type_labels = {
-            "warning": "Warning",
-            "deactivation": "Deactivation",
-        }
-        return type_labels.get(self.task_type, self.task_type.title())
+    def get_assigned_to_display(self):
+        """Get human-readable assigned to label."""
+        if self.assigned_to_type == "self":
+            return self.assigned_to_name or "Me"
+        elif self.assigned_to_type == "network_manager":
+            return "Network Manager"
+        elif self.assigned_to_type == "program_manager":
+            return "Program Manager"
+        return self.assigned_to_name or "Unassigned"
 
     def get_priority_display(self):
         """Get human-readable priority label."""

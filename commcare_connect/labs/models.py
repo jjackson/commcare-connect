@@ -90,6 +90,10 @@ class LabsUser:
         """Return the short name for the user."""
         return self.first_name
 
+    def get_display_name(self) -> str:
+        """Return display name for UI and event logging."""
+        return self.username
+
     def save(self, *args: Any, **kwargs: Any) -> None:
         """Prevent saving to database."""
         raise NotImplementedError("LabsUser cannot be saved to database")

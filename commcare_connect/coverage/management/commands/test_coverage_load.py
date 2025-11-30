@@ -2,8 +2,8 @@
 Management command to test coverage data loading.
 
 This replicates the same loading process as the web UI but can be run from CLI.
+Uses the same AnalysisDataAccess pathway that the UI views use.
 """
-import json
 import logging
 from datetime import datetime, timedelta
 from unittest.mock import Mock
@@ -11,6 +11,7 @@ from unittest.mock import Mock
 from django.core.management.base import BaseCommand
 
 from commcare_connect.coverage.data_access import CoverageDataAccess
+from commcare_connect.labs.analysis.base import AnalysisDataAccess
 from commcare_connect.labs.integrations.connect.cli import TokenManager
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,8 @@ class Command(BaseCommand):
             },
         }
         mock_request.labs_context = {"opportunity_id": opportunity_id}
+        # GET attribute needed for AnalysisDataAccess refresh check
+        mock_request.GET = {}
         self.stdout.write(self.style.SUCCESS("  Mock request created"))
 
         # Step 3: Fetch opportunity metadata
@@ -162,44 +165,31 @@ class Command(BaseCommand):
             logger.exception("Full error:")
             return
 
-        # Step 5: Fetch user visits from Connect
+        # Step 5: Fetch user visits from Connect (using same pathway as UI views)
         if not skip_visits:
-            self.stdout.write("\n[5/5] Fetching user visits from Connect...")
+            self.stdout.write("\n[5/5] Fetching user visits from Connect (via AnalysisDataAccess)...")
             try:
-                visits_df = data_access.fetch_user_visits_from_connect()
-                self.stdout.write(self.style.SUCCESS(f"  Fetched {len(visits_df)} user visits"))
+                # Use AnalysisDataAccess - same pathway as UI views
+                # This uses fetch_user_visits_cached() for efficient CSV caching
+                analysis_data_access = AnalysisDataAccess(mock_request)
+                visits = analysis_data_access.fetch_user_visits()
+                self.stdout.write(self.style.SUCCESS(f"  Fetched {len(visits)} user visits"))
 
-                if len(visits_df) > 0:
-                    self.stdout.write(f"  Columns: {list(visits_df.columns)}")
-
-                    # Check for problematic form_json
-                    if "form_json" in visits_df.columns:
-                        self.stdout.write("\n  Checking form_json column...")
-
-                        # Sample first few values
-                        for idx, val in enumerate(visits_df["form_json"].head(5)):
+                if len(visits) > 0:
+                    # Show sample visit data
+                    self.stdout.write("\n  Sample visit data (first 3):")
+                    for idx, visit in enumerate(visits[:3]):
+                        self.stdout.write(f"    Visit {idx}: id={visit.id}, username={visit.username}")
+                        self.stdout.write(f"      status={visit.status}, date={visit.visit_date}")
+                        if verbose:
+                            form_json = visit.form_json
                             self.stdout.write(
-                                f"    Row {idx}: type={type(val).__name__}, value preview: {str(val)[:100]}"
+                                f"      form_json keys: {list(form_json.keys()) if form_json else 'empty'}"
                             )
 
-                        # Find problematic rows
-                        problem_rows = []
-                        for idx, val in enumerate(visits_df["form_json"]):
-                            if isinstance(val, str) and val:
-                                try:
-                                    json.loads(val)
-                                except json.JSONDecodeError as e:
-                                    problem_rows.append((idx, val, str(e)))
-                                    if len(problem_rows) <= 3:  # Show first 3 problematic rows
-                                        self.stdout.write(self.style.WARNING(f"\n    Problem at row {idx}: {str(e)}"))
-                                        self.stdout.write(f"    Value: {val[:200]}")
-
-                        if problem_rows:
-                            self.stdout.write(
-                                self.style.ERROR(f"\n  Found {len(problem_rows)} rows with invalid JSON")
-                            )
-                        else:
-                            self.stdout.write(self.style.SUCCESS("  All form_json values are valid JSON"))
+                    # Count visits with GPS
+                    visits_with_gps = sum(1 for v in visits if v.has_gps)
+                    self.stdout.write(f"\n  Visits with GPS: {visits_with_gps}/{len(visits)}")
 
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"Failed to fetch user visits: {e}"))
@@ -215,4 +205,4 @@ class Command(BaseCommand):
         self.stdout.write(f"  Opportunity: {opp_data.get('name')}")
         self.stdout.write(f"  Delivery Units: {len(du_cases)}")
         if not skip_visits:
-            self.stdout.write(f"  User Visits: {len(visits_df)}")
+            self.stdout.write(f"  User Visits: {len(visits)}")

@@ -161,6 +161,24 @@
 
       <span class="text-gray-300">|</span>
 
+      <!-- Open Chat Studio OAuth -->
+      <div class="flex items-center gap-2">
+        <span class="font-medium text-gray-600">OCS:</span>
+        {% if ocs_oauth_active %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+          <i class="fa-solid fa-check-circle mr-1"></i>Authorized
+        </span>
+        <a href="{% url 'labs:ocs_logout' %}" class="text-red-600 hover:text-red-700 hover:underline">Logout</a>
+        {% else %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
+          <i class="fa-solid fa-times-circle mr-1"></i>Not authorized
+        </span>
+        <a href="{% url 'labs:ocs_initiate' %}?next=/labs/overview/" class="text-indigo-600 hover:text-indigo-700 hover:underline">Authorize</a>
+        {% endif %}
+      </div>
+
+      <span class="text-gray-300">|</span>
+
       <!-- Clear Context -->
       <div class="flex items-center gap-2">
         <span class="font-medium text-gray-600">Context:</span>

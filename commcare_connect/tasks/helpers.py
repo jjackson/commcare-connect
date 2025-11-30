@@ -24,11 +24,10 @@ def get_user_tasks_queryset(user):
 
 def create_task_from_audit(
     audit_session_id: int,
-    user_id: int,
+    username: str,
     opportunity_id: int,
-    task_type: str,
     description: str,
-    created_by_id: int,
+    creator_name: str = "System",
     **kwargs,
 ):
     """
@@ -39,12 +38,11 @@ def create_task_from_audit(
 
     Args:
         audit_session_id: ID of the audit session that triggered this task
-        user_id: The FLW user ID this task is about
+        username: The FLW username this task is about
         opportunity_id: The opportunity ID this task relates to
-        task_type: Type of task (warning/deactivation)
         description: Description of what happened
-        created_by_id: User ID creating the task (or system user)
-        **kwargs: Additional fields (priority, assigned_to_id, title, status, etc.)
+        creator_name: Name of creator (or "System" for automated tasks)
+        **kwargs: Additional fields (priority, title, status, assigned_to_type, assigned_to_name)
 
     Returns:
         The created TaskRecord instance
@@ -52,16 +50,14 @@ def create_task_from_audit(
     data_access = TaskDataAccess()
 
     return data_access.create_task(
-        user_id=user_id,
+        username=username,
         opportunity_id=opportunity_id,
-        created_by_id=created_by_id,
-        task_type=task_type,
         description=description,
         audit_session_id=audit_session_id,
-        title=kwargs.get("title", f"{task_type.title()} for user {user_id}"),
+        title=kwargs.get("title", f"Task for {username}"),
         priority=kwargs.get("priority", "medium"),
-        status=kwargs.get("status", "unassigned"),
-        assigned_to_id=kwargs.get("assigned_to_id"),
-        learning_assignment_text=kwargs.get("learning_assignment_text", ""),
-        creator_name=kwargs.get("creator_name", f"User {created_by_id}"),
+        status=kwargs.get("status", "investigating"),
+        creator_name=creator_name,
+        assigned_to_type=kwargs.get("assigned_to_type", "self"),
+        assigned_to_name=kwargs.get("assigned_to_name", creator_name),
     )
