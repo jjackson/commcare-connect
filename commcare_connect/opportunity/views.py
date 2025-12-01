@@ -2621,7 +2621,7 @@ def invoice_items(request, *args, **kwargs):
 
     html = render_to_string(
         "opportunity/partials/invoice_line_items.html",
-        {"table": InvoiceLineItemsTable(line_items)},
+        {"table": InvoiceLineItemsTable(request.opportunity.currency, line_items)},
         request=request,
     )
 

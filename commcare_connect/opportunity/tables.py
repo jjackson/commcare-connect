@@ -1553,6 +1553,13 @@ class InvoiceLineItemsTable(tables.Table):
         verbose_name="Total Amount (USD)",
     )
 
+    def __init__(self, currency, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if currency:
+            self.columns["amount_per_unit"].column.verbose_name = f"Payment Unit Amount ({currency})"
+            self.columns["total_amount_local"].column.verbose_name = f"Total Amount ({currency})"
+
     class Meta:
         orderable = False
         empty_text = "No invoice items found."
