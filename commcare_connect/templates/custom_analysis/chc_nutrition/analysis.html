@@ -61,7 +61,98 @@
         </div>
     {% else %}
 
-    {% include "labs/includes/async_loading.html" with title="Loading CHC Nutrition Analysis" %}
+    <!-- Loading Indicator with Real-Time Progress -->
+    <div class="mb-6 p-6 bg-blue-50 border border-blue-200 rounded-lg" x-show="loading" x-cloak>
+        <div class="flex items-start gap-4">
+            <i class="fa-solid fa-spinner fa-spin text-blue-600 text-2xl mt-1"></i>
+            <div class="flex-1">
+                <h3 class="text-lg font-semibold text-blue-900 mb-2">Loading CHC Nutrition Analysis</h3>
+                <div class="space-y-1 text-sm">
+                    <!-- Step 1: Checking cache -->
+                    <div class="flex items-center gap-2" :class="loadingStep >= 1 ? 'text-blue-800' : 'text-gray-400'">
+                        <i class="fa-solid" :class="{
+                            'fa-check text-green-600': loadingStep > 1,
+                            'fa-spinner fa-spin text-blue-600': loadingStep === 1,
+                            'fa-circle text-gray-300': loadingStep < 1
+                        }"></i>
+                        <span>Checking cache...</span>
+                    </div>
+                    <!-- Step 2: Fetching data -->
+                    <div class="flex items-center gap-2" :class="loadingStep >= 2 ? 'text-blue-800' : 'text-gray-400'">
+                        <i class="fa-solid" :class="{
+                            'fa-check text-green-600': loadingStep > 2,
+                            'fa-spinner fa-spin text-blue-600': loadingStep === 2,
+                            'fa-circle text-gray-300': loadingStep < 2
+                        }"></i>
+                        <span>Fetching visit data from Connect API (this may take a while)...</span>
+                    </div>
+                    <!-- Step 3: Processing -->
+                    <div class="flex items-center gap-2" :class="loadingStep >= 3 ? 'text-blue-800' : 'text-gray-400'">
+                        <i class="fa-solid" :class="{
+                            'fa-check text-green-600': loadingStep > 3,
+                            'fa-spinner fa-spin text-blue-600': loadingStep === 3,
+                            'fa-circle text-gray-300': loadingStep < 3
+                        }"></i>
+                        <span x-text="visitCount ? 'Processing ' + visitCount + ' visits...' : 'Processing visits...'"></span>
+                    </div>
+                    <!-- Step 4: Aggregating -->
+                    <div class="flex items-center gap-2" :class="loadingStep >= 4 ? 'text-blue-800' : 'text-gray-400'">
+                        <i class="fa-solid" :class="{
+                            'fa-check text-green-600': loadingStep > 4,
+                            'fa-spinner fa-spin text-blue-600': loadingStep === 4,
+                            'fa-circle text-gray-300': loadingStep < 4
+                        }"></i>
+                        <span>Aggregating to FLW level...</span>
+                    </div>
+                    <!-- Step 5: FLW names -->
+                    <div class="flex items-center gap-2" :class="loadingStep >= 5 ? 'text-blue-800' : 'text-gray-400'">
+                        <i class="fa-solid" :class="{
+                            'fa-check text-green-600': loadingStep > 5,
+                            'fa-spinner fa-spin text-blue-600': loadingStep === 5,
+                            'fa-circle text-gray-300': loadingStep < 5
+                        }"></i>
+                        <span>Fetching FLW display names...</span>
+                    </div>
+                    <!-- Step 6: Building response -->
+                    <div class="flex items-center gap-2" :class="loadingStep >= 6 ? 'text-blue-800' : 'text-gray-400'">
+                        <i class="fa-solid" :class="{
+                            'fa-check text-green-600': loadingStep > 6,
+                            'fa-spinner fa-spin text-blue-600': loadingStep === 6,
+                            'fa-circle text-gray-300': loadingStep < 6
+                        }"></i>
+                        <span>Building response...</span>
+                    </div>
+                    <!-- Step 7: Complete -->
+                    <div class="flex items-center gap-2" :class="loadingStep >= 7 ? 'text-blue-800' : 'text-gray-400'">
+                        <i class="fa-solid" :class="{
+                            'fa-check text-green-600': loadingStep >= 7,
+                            'fa-circle text-gray-300': loadingStep < 7
+                        }"></i>
+                        <span>Complete!</span>
+                    </div>
+                </div>
+                <!-- Current status message from server -->
+                <div class="mt-3 text-sm text-blue-700 italic" x-show="progressMessage && loadingStep < 7" x-text="progressMessage"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Display -->
+    <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg" x-show="loadError" x-cloak>
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <i class="fa-solid fa-circle-exclamation text-red-600 mr-3"></i>
+                <div>
+                    <strong class="text-red-800">Error:</strong>
+                    <span class="ml-2 text-red-700" x-text="loadError"></span>
+                </div>
+            </div>
+            <button @click="loadData()"
+                    class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium">
+                <i class="fa-solid fa-rotate mr-1"></i>Retry
+            </button>
+        </div>
+    </div>
 
     <!-- Main Content (shown after loading) -->
     <div x-show="!loading && !loadError" x-cloak>
@@ -339,6 +430,8 @@ function chcNutritionAnalysis() {
         loading: true,
         loadingStep: 0,
         loadError: null,
+        progressMessage: '',
+        visitCount: null,  // Updated from server during step 3
 
         // UI state
         showAllFields: false,
@@ -356,11 +449,17 @@ function chcNutritionAnalysis() {
 
         // URLs
         dataApiUrl: '{{ data_api_url|default:"" }}',
+        streamApiUrl: '{{ stream_api_url|default:"" }}',
         auditUrl: '{% url "audit:creation_wizard" %}',
+
+        // EventSource reference
+        eventSource: null,
 
         // Initialize
         init() {
-            if (this.dataApiUrl) {
+            if (this.streamApiUrl) {
+                this.loadDataWithSSE();
+            } else if (this.dataApiUrl) {
                 this.loadData();
             }
         },
@@ -373,7 +472,84 @@ function chcNutritionAnalysis() {
             window.location.href = url.toString();
         },
 
-        // Load data asynchronously
+        // Load data using Server-Sent Events for real-time progress
+        loadDataWithSSE() {
+            this.loading = true;
+            this.loadError = null;
+            this.loadingStep = 0;
+            this.progressMessage = '';
+
+            // Close any existing connection
+            if (this.eventSource) {
+                this.eventSource.close();
+            }
+
+            // Build URL with query params
+            const url = this.streamApiUrl + window.location.search;
+            console.log('[CHC Nutrition] Starting SSE connection:', url);
+
+            this.eventSource = new EventSource(url);
+
+            this.eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('[CHC Nutrition] SSE event:', data);
+
+                    // Update progress
+                    this.loadingStep = data.step;
+                    this.progressMessage = data.message;
+
+                    // Extract visit count from message if present (e.g., "Processing 50000 visits...")
+                    const visitMatch = data.message.match(/(\d+)\s*visits/i);
+                    if (visitMatch) {
+                        this.visitCount = parseInt(visitMatch[1], 10);
+                    }
+
+                    // Check for error
+                    if (data.error) {
+                        this.loadError = data.error;
+                        this.loading = false;
+                        this.eventSource.close();
+                        return;
+                    }
+
+                    // Check for completion
+                    if (data.complete && data.data) {
+                        const responseData = data.data;
+
+                        // Populate data
+                        this.flws = responseData.flws || [];
+                        this.summary = responseData.summary || {};
+                        this.nutritionSummary = responseData.nutrition_summary || {};
+                        this.opportunityId = responseData.opportunity_id;
+                        this.opportunityName = responseData.opportunity_name || '';
+                        this.fromCache = responseData.from_cache;
+
+                        this.loading = false;
+                        this.eventSource.close();
+                        console.log(`[CHC Nutrition] Loaded ${this.flws.length} FLWs via SSE`);
+                    }
+                } catch (e) {
+                    console.error('[CHC Nutrition] Error parsing SSE event:', e);
+                }
+            };
+
+            this.eventSource.onerror = (error) => {
+                console.error('[CHC Nutrition] SSE error:', error);
+                this.eventSource.close();
+
+                // If we haven't received any data, fall back to regular fetch
+                if (this.loadingStep === 0) {
+                    console.log('[CHC Nutrition] Falling back to regular fetch');
+                    this.loadData();
+                } else {
+                    this.loadError = 'Connection lost. Please try again.';
+                    this.loading = false;
+                }
+            };
+        },
+
+        // Fallback: Load data asynchronously with fetch (no real-time progress)
         async loadData() {
             this.loading = true;
             this.loadError = null;
@@ -382,11 +558,12 @@ function chcNutritionAnalysis() {
             try {
                 // Step 1: Initializing
                 this.loadingStep = 1;
-                await new Promise(resolve => setTimeout(resolve, 200));
+                this.progressMessage = 'Initializing...';
 
                 // Step 2: Fetching data (this is where most time is spent)
                 this.loadingStep = 2;
-                console.log('[CHC Nutrition] Starting API fetch');
+                this.progressMessage = 'Fetching data from Connect...';
+                console.log('[CHC Nutrition] Starting API fetch (fallback)');
                 const response = await fetch(this.dataApiUrl + window.location.search);
 
                 if (!response.ok) {
@@ -396,13 +573,11 @@ function chcNutritionAnalysis() {
 
                 const data = await response.json();
 
-                // Step 3: Processing
-                this.loadingStep = 3;
-                await new Promise(resolve => setTimeout(resolve, 200));
-
-                // Step 4: Calculating metrics
-                this.loadingStep = 4;
-                await new Promise(resolve => setTimeout(resolve, 200));
+                // Step 3-6: Quick progress through remaining steps
+                for (let step = 3; step <= 6; step++) {
+                    this.loadingStep = step;
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
 
                 // Populate data
                 this.flws = data.flws || [];
@@ -412,12 +587,13 @@ function chcNutritionAnalysis() {
                 this.opportunityName = data.opportunity_name || '';
                 this.fromCache = data.from_cache;
 
-                // Step 5: Complete
-                this.loadingStep = 5;
-                await new Promise(resolve => setTimeout(resolve, 300));
+                // Step 7: Complete
+                this.loadingStep = 7;
+                this.progressMessage = 'Complete!';
+                await new Promise(resolve => setTimeout(resolve, 200));
 
                 this.loading = false;
-                console.log(`[CHC Nutrition] Loaded ${this.flws.length} FLWs`);
+                console.log(`[CHC Nutrition] Loaded ${this.flws.length} FLWs (fallback)`);
 
             } catch (error) {
                 console.error('Failed to load analysis data:', error);

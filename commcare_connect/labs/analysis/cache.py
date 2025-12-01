@@ -454,14 +454,17 @@ class AnalysisCacheManager:
         Validate cached data with optional time-based tolerance.
 
         Validation rules:
-        1. If visit counts match -> VALID (always)
-        2. If tolerance_minutes is None -> check must match exactly
+        1. If cached_count >= current_visit_count -> VALID (cache has at least as much data)
+        2. If tolerance_minutes is None -> check must pass rule 1
         3. If tolerance_minutes is set:
            - If cache age < tolerance_minutes -> VALID (accept stale data)
            - Otherwise -> INVALID
 
+        Note: We use >= instead of == because sometimes the API returns more visits
+        than what's reported in the opportunity metadata (opp_org_opp endpoint).
+
         Args:
-            current_visit_count: Current visit count from API
+            current_visit_count: Expected visit count from labs_context
             cached_data: Cached data dict with 'visit_count' and 'cached_at'
             tolerance_minutes: Max age (in minutes) to accept mismatched counts
 
@@ -473,14 +476,14 @@ class AnalysisCacheManager:
 
         cached_count = cached_data.get("visit_count", 0)
 
-        # Perfect match - always valid
-        if cached_count == current_visit_count:
-            logger.debug(f"Cache valid: counts match ({cached_count})")
+        # Cache has at least as much data as expected - valid
+        if cached_count >= current_visit_count:
+            logger.debug(f"Cache valid: cached={cached_count} >= expected={current_visit_count}")
             return True
 
-        # Count mismatch - check tolerance
+        # Cache has fewer visits than expected - check tolerance
         if tolerance_minutes is None:
-            logger.info(f"Cache invalid: cached={cached_count}, current={current_visit_count}, no tolerance")
+            logger.info(f"Cache invalid: cached={cached_count} < expected={current_visit_count}, no tolerance")
             return False
 
         # Check cache age
@@ -497,14 +500,14 @@ class AnalysisCacheManager:
             if age_minutes <= tolerance_minutes:
                 logger.info(
                     f"Cache ACCEPTED with tolerance: "
-                    f"cached={cached_count}, current={current_visit_count}, "
+                    f"cached={cached_count}, expected={current_visit_count}, "
                     f"age={age_minutes:.1f}min, tolerance={tolerance_minutes}min"
                 )
                 return True
             else:
                 logger.info(
                     f"Cache REJECTED (too old): "
-                    f"cached={cached_count}, current={current_visit_count}, "
+                    f"cached={cached_count}, expected={current_visit_count}, "
                     f"age={age_minutes:.1f}min > tolerance={tolerance_minutes}min"
                 )
                 return False
@@ -626,9 +629,12 @@ class RawAPICacheManager:
         """
         Check if cached data is still valid.
 
+        Cache is valid if cached_count >= expected_count, because sometimes
+        the API returns more visits than what's reported in opportunity metadata.
+
         Args:
             cached_data: Cached data dict
-            current_visit_count: Current visit count for validation (optional)
+            current_visit_count: Expected visit count for validation (optional)
 
         Returns:
             True if cache is valid
@@ -640,12 +646,14 @@ class RawAPICacheManager:
         if current_visit_count is None:
             return True
 
-        # If cache has visit count, it must match
+        # If cache has visit count, it must be >= expected
         cached_count = cached_data.get("visit_count")
         if cached_count is not None:
-            if cached_count != current_visit_count:
-                logger.info(f"Cache invalid: cached_count={cached_count}, current_count={current_visit_count}")
+            if cached_count < current_visit_count:
+                logger.info(f"Cache invalid: cached_count={cached_count} < expected={current_visit_count}")
                 return False
+            else:
+                logger.debug(f"Cache valid: cached_count={cached_count} >= expected={current_visit_count}")
 
         return True
 
@@ -830,9 +838,12 @@ class LabsRecordCacheManager:
         """
         Check if cached data is still valid based on visit count.
 
+        Cache is valid if cached_count >= expected_count, because sometimes
+        the API returns more visits than what's reported in opportunity metadata.
+
         Args:
             cached_data: Cached data dict from get()
-            current_visit_count: Current visit count for validation
+            current_visit_count: Expected visit count for validation
 
         Returns:
             True if cache is valid
@@ -844,13 +855,18 @@ class LabsRecordCacheManager:
         if current_visit_count is None:
             return True
 
-        # Visit count must match
+        # Cached count must be >= expected count
         cached_count = cached_data.get("visit_count")
-        if cached_count is not None and cached_count != current_visit_count:
+        if cached_count is not None and cached_count < current_visit_count:
             logger.info(
-                f"LabsRecordCacheManager invalid: cached_count={cached_count}, " f"current_count={current_visit_count}"
+                f"LabsRecordCacheManager invalid: cached_count={cached_count} < expected={current_visit_count}"
             )
             return False
+
+        if cached_count is not None:
+            logger.debug(
+                f"LabsRecordCacheManager valid: cached_count={cached_count} >= expected={current_visit_count}"
+            )
 
         return True
 
