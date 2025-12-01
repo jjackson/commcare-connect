@@ -16,7 +16,21 @@ from django.contrib.humanize.templatetags.humanize import intcomma
 from django.core.cache import cache
 from django.core.files.storage import default_storage, storages
 from django.db import transaction
-from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
+from django.db.models import (
+    Case,
+    Count,
+    DecimalField,
+    FloatField,
+    Func,
+    IntegerField,
+    Max,
+    OuterRef,
+    Q,
+    Subquery,
+    Sum,
+    Value,
+    When,
+)
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, HttpResponseNotFound
@@ -1323,11 +1337,13 @@ def invoice_list(request, org_slug, opp_id):
     queryset = PaymentInvoice.objects.filter(**filter_kwargs).order_by("date")
 
     if highlight_invoice_number:  # make sure highlighted invoice is on page 1
-        try:
-            highlighted_invoice = queryset.get(invoice_number=highlight_invoice_number)
-            queryset = [highlighted_invoice] + list(queryset.exclude(pk=highlighted_invoice.pk))
-        except PaymentInvoice.DoesNotExist:
-            pass
+        queryset = queryset.annotate(
+            _highlight_order=Case(
+                When(invoice_number=highlight_invoice_number, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            )
+        ).order_by("_highlight_order", "date")
 
     csrf_token = get_token(request)
 
