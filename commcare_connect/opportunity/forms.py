@@ -116,6 +116,8 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.opportunity = self.instance
 
+        self.fields["users"].required = False
+
         layout_fields = [
             Row(
                 HTML(
