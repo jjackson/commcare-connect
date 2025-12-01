@@ -396,9 +396,6 @@ class PaymentInvoiceTable(OpportunityContextTable):
             "class": lambda record, table: (
                 "bg-yellow-100" if record.invoice_number == table.highlight_invoice_number else ""
             ),
-            "id": lambda record, table: "highlight-row"
-            if record.invoice_number == table.highlight_invoice_number
-            else "",
         }
 
     def __init__(self, *args, **kwargs):
