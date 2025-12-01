@@ -2564,7 +2564,7 @@ def visit_export_count(request, org_slug, opp_id):
     if not from_date:
         return HttpResponse({"error": "Please select a From Date first."}, status=400)
 
-    to_date = request.GET.get("to_date", datetime.date.today())
+    to_date = request.GET.get("to_date") or datetime.date.today()
     status = request.GET.get("status", None)
     review_export = request.GET.get("review_export") == "true"
     format = request.GET.get("format", "csv")
