@@ -1566,20 +1566,22 @@ class InvoiceLineItemsTable(tables.Table):
 class InvoiceDeliveriesTable(tables.Table):
     date_approved = DMYTColumn(verbose_name="Date Approved", accessor="status_modified_date")
     opportunity = tables.Column(verbose_name="Opportunity", accessor="payment_unit__opportunity__name")
+    approved_count = tables.Column(verbose_name="Approved Deliveries", accessor="saved_approved_count")
+    payment_accrued = tables.Column(verbose_name="Payment Accrued", accessor="saved_payment_accrued")
+    payment_accrued_usd = tables.Column(verbose_name="Payment Accrued (USD)", accessor="saved_payment_accrued_usd")
+    entity_name = tables.Column(verbose_name="User Name", accessor="entity_name")
+    currency = tables.Column(verbose_name="Currency", accessor="payment_unit__opportunity__currency")
 
     class Meta:
         model = CompletedWork
-        fields = (
-            "payment_unit",
-            "saved_approved_count",
-            "saved_payment_accrued",
-            "saved_payment_accrued_usd",
-        )
+        fields = ("payment_unit",)
         sequence = (
             "payment_unit",
             "opportunity",
+            "entity_name",
             "date_approved",
-            "saved_approved_count",
-            "saved_payment_accrued",
-            "saved_payment_accrued_usd",
+            "approved_count",
+            "payment_accrued",
+            "currency",
+            "payment_accrued_usd",
         )
