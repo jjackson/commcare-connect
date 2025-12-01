@@ -1,14 +1,13 @@
 <p>Hi,</p>
 
 <p>
-    Your invoice for <strong>{{ opportunity.name }}</strong> under the
-    <strong>{{ opportunity.program_name }}</strong> program has been <strong>paid</strong>.
+    Your invoice for the Opportunity <strong>{{ opportunity.name }}</strong> has been <strong>paid</strong>.
 </p>
 
 <p><strong>Invoice Details</strong></p>
 <ul>
     <li><strong>Invoice Number:</strong> {{ invoice.invoice_number }}</li>
-    <li><strong>Amount Paid:</strong> {{ invoice.amount }}</li>
+    <li><strong>Amount Paid:</strong> {{opportunity.currency}} {{ invoice.amount }}</li>
     <li><strong>Invoice Date:</strong> {{ invoice.date }}</li>
     <li><strong>Payment Date:</strong> {{ invoice.payment.created_at}}</li>
 </ul>

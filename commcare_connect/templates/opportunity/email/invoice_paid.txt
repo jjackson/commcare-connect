@@ -1,15 +1,18 @@
-Hello,
+Hi,
 
-Your invoice for {{ opportunity.name }} under the {{ program.name }} program has been paid.
+Your invoice for the Opportunity {{ opportunity.name }} has been paid.
 
 Invoice Details:
-- Invoice Number: {{ invoice.invoice_number }}
-- Amount Paid: {{ invoice.amount }}
-- Invoice Date: {{ invoice.date }}
-- Payment Date: {{ invoice.payment_date }}
 
-Review the paid invoice here:
-{{ invoice_url }}
+Invoice Number: {{ invoice.invoice_number }}
+
+Amount Paid: {{ invoice.amount }}
+
+Invoice Date: {{ invoice.date }}
+
+Payment Date: {{ invoice.payment.created_at }}
+
+You can view the invoice here: {{ invoice_url }}
 
 If you have any questions, please contact your Program Manager.
 
