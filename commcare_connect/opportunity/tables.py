@@ -1577,6 +1577,8 @@ class InvoiceDeliveriesTable(tables.Table):
     payment_accrued = tables.Column(verbose_name=_("Payment Accrued"), accessor="saved_payment_accrued")
     payment_accrued_usd = tables.Column(verbose_name=_("Payment Accrued (USD)"), accessor="saved_payment_accrued_usd")
     entity_name = tables.Column(verbose_name=_("Beneficiary"), accessor="entity_name")
+    date_created = DMYTColumn(verbose_name=_("Date of Delivery"), accessor="date_created")
+    username = tables.Column(verbose_name=_("Worker"), accessor="opportunity_access__user__name")
 
     def __init__(self, currency, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1589,6 +1591,8 @@ class InvoiceDeliveriesTable(tables.Table):
             "payment_unit",
             "opportunity",
             "entity_name",
+            "username",
+            "date_created",
             "date_approved",
             "approved_count",
             "payment_accrued",
