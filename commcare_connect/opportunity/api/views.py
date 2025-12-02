@@ -1,6 +1,6 @@
 import datetime
+import logging
 
-import sentry_sdk
 from django.db import transaction
 from django.utils.timezone import now
 from rest_framework import viewsets
@@ -25,6 +25,8 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.users.helpers import create_hq_user_and_link
 
+logger = logging.getLogger(__name__)
+
 
 class OpportunityViewSetPermission(IsAuthenticated):
     def has_permission(self, request, view):
@@ -35,7 +37,7 @@ class OpportunityViewSetPermission(IsAuthenticated):
             if hasattr(request, "successful_authenticator")
             else "None",
         )
-        sentry_sdk.capture_message(message=message)
+        logger.info(message)
 
         return bool(request.user and request.user.is_authenticated)
 
