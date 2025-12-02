@@ -232,7 +232,9 @@ def get_table_data_for_year_month(
         .values("month_group")
         .annotate(users=models.Count("username"))
     )
-    activated_personalid_accounts_data = {item["month_group"]: item["users"] for item in activated_personalid_accounts}
+    activated_personalid_accounts_data = {
+        item["month_group"].strftime("%Y-%m"): item["users"] for item in activated_personalid_accounts
+    }
 
     for group_key in visit_data_dict.keys():
         month_group = group_key[0]
@@ -241,7 +243,7 @@ def get_table_data_for_year_month(
                 "connectid_users": connectid_user_count.get(month_group, 0),
                 "total_eligible_users": total_eligible_user_counts.get(month_group, 0),
                 "non_preregistered_users": non_invited_user_counts.get(month_group, 0),
-                "activated_personalid_acccounts": activated_personalid_accounts_data.get(month_group, 0),
+                "activated_personalid_accounts": activated_personalid_accounts_data.get(month_group, 0),
             }
         )
     return list(visit_data_dict.values())
