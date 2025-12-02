@@ -485,7 +485,7 @@ def submit_credentials_to_personalid_task():
 @celery_app.task()
 def send_invoice_paid_mail(opportunity_id, invoice_ids):
     logger.info(f"Sending invoice paid notification for opportunity {opportunity_id} and invoices {invoice_ids}")
-    opportunity = Opportunity.objects.get(pk=opportunity_id)
+    opportunity = Opportunity.objects.select_related("organization").get(pk=opportunity_id)
     nm_org = opportunity.organization
     recipient_emails = nm_org.get_member_emails()
     if not recipient_emails:
