@@ -1576,7 +1576,7 @@ class InvoiceDeliveriesTable(tables.Table):
     approved_count = tables.Column(verbose_name=_("Approved Deliveries"), accessor="saved_approved_count")
     payment_accrued = tables.Column(verbose_name=_("Payment Accrued"), accessor="saved_payment_accrued")
     payment_accrued_usd = tables.Column(verbose_name=_("Payment Accrued (USD)"), accessor="saved_payment_accrued_usd")
-    entity_name = tables.Column(verbose_name=_("User Name"), accessor="entity_name")
+    entity_name = tables.Column(verbose_name=_("Beneficiary"), accessor="entity_name")
 
     def __init__(self, currency, *args, **kwargs):
         super().__init__(*args, **kwargs)
