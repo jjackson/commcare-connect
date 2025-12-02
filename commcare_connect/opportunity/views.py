@@ -3,6 +3,7 @@ import sys
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
+from functools import partial
 from http import HTTPStatus
 from urllib.parse import urlencode, urlparse
 
@@ -14,7 +15,22 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.core.cache import cache
 from django.core.files.storage import default_storage, storages
-from django.db.models import Count, DecimalField, FloatField, Func, Max, OuterRef, Q, Subquery, Sum, Value
+from django.db import transaction
+from django.db.models import (
+    Case,
+    Count,
+    DecimalField,
+    FloatField,
+    Func,
+    IntegerField,
+    Max,
+    OuterRef,
+    Q,
+    Subquery,
+    Sum,
+    Value,
+    When,
+)
 from django.db.models.functions import Cast, Coalesce
 from django.forms import modelformset_factory
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, HttpResponseNotFound
@@ -123,6 +139,7 @@ from commcare_connect.opportunity.tasks import (
     generate_work_status_export,
     get_payment_upload_key,
     invite_user,
+    send_invoice_paid_mail,
     send_push_notification_task,
     update_user_and_send_invite,
 )
@@ -1316,7 +1333,19 @@ def invoice_list(request, org_slug, opp_id):
 
     filter_kwargs = dict(opportunity=request.opportunity)
 
+    highlight_invoice_number = request.GET.get("highlight")
+
     queryset = PaymentInvoice.objects.filter(**filter_kwargs).order_by("date")
+
+    if highlight_invoice_number:  # make sure highlighted invoice is on page 1
+        queryset = queryset.annotate(
+            _highlight_order=Case(
+                When(invoice_number=highlight_invoice_number, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            )
+        ).order_by("_highlight_order", "date")
+
     csrf_token = get_token(request)
 
     table = PaymentInvoiceTable(
@@ -1325,6 +1354,7 @@ def invoice_list(request, org_slug, opp_id):
         opportunity=request.opportunity,
         exclude=("actions",) if not request.is_opportunity_pm else tuple(),
         csrf_token=csrf_token,
+        highlight_invoice_number=highlight_invoice_number,
     )
 
     form = PaymentInvoiceForm(opportunity=request.opportunity)
@@ -1370,14 +1400,21 @@ def invoice_approve(request, org_slug, opp_id):
     invoice_ids = request.POST.getlist("pk")
     invoices = PaymentInvoice.objects.filter(opportunity=request.opportunity, pk__in=invoice_ids, payment__isnull=True)
 
-    for invoice in invoices:
-        payment = Payment(
-            amount=invoice.amount,
-            organization=request.opportunity.organization,
-            amount_usd=invoice.amount_usd,
-            invoice=invoice,
+    paid_invoice_ids = []
+    payments = []
+    for inv in invoices:
+        paid_invoice_ids.append(inv.id)
+        payments.append(
+            Payment(
+                amount=inv.amount,
+                organization=request.opportunity.organization,
+                amount_usd=inv.amount_usd,
+                invoice=inv,
+            )
         )
-        payment.save()
+    Payment.objects.bulk_create(payments)
+
+    transaction.on_commit(partial(send_invoice_paid_mail.delay, request.opportunity.id, paid_invoice_ids))
     return redirect("opportunity:invoice_list", org_slug, opp_id)
 
 
