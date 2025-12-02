@@ -1571,13 +1571,16 @@ class InvoiceLineItemsTable(tables.Table):
 
 
 class InvoiceDeliveriesTable(tables.Table):
-    date_approved = DMYTColumn(verbose_name="Date Approved", accessor="status_modified_date")
-    opportunity = tables.Column(verbose_name="Opportunity", accessor="payment_unit__opportunity__name")
-    approved_count = tables.Column(verbose_name="Approved Deliveries", accessor="saved_approved_count")
-    payment_accrued = tables.Column(verbose_name="Payment Accrued", accessor="saved_payment_accrued")
-    payment_accrued_usd = tables.Column(verbose_name="Payment Accrued (USD)", accessor="saved_payment_accrued_usd")
-    entity_name = tables.Column(verbose_name="User Name", accessor="entity_name")
-    currency = tables.Column(verbose_name="Currency", accessor="payment_unit__opportunity__currency")
+    date_approved = DMYTColumn(verbose_name=_("Date Approved"), accessor="status_modified_date")
+    opportunity = tables.Column(verbose_name=_("Opportunity"), accessor="payment_unit__opportunity__name")
+    approved_count = tables.Column(verbose_name=_("Approved Deliveries"), accessor="saved_approved_count")
+    payment_accrued = tables.Column(verbose_name=_("Payment Accrued"), accessor="saved_payment_accrued")
+    payment_accrued_usd = tables.Column(verbose_name=_("Payment Accrued (USD)"), accessor="saved_payment_accrued_usd")
+    entity_name = tables.Column(verbose_name=_("User Name"), accessor="entity_name")
+
+    def __init__(self, currency, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.columns["payment_accrued"].column.verbose_name = f"Payment Accrued ({currency})"
 
     class Meta:
         model = CompletedWork
@@ -1589,6 +1592,5 @@ class InvoiceDeliveriesTable(tables.Table):
             "date_approved",
             "approved_count",
             "payment_accrued",
-            "currency",
             "payment_accrued_usd",
         )

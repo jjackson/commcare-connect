@@ -2648,7 +2648,7 @@ def download_invoice_line_items(request, org_slug, opp_id):
     end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
 
     deliveries = get_uninvoiced_completed_works_qs(request.opportunity, start_date, end_date)
-    table = InvoiceDeliveriesTable(deliveries)
+    table = InvoiceDeliveriesTable(request.opportunity.currency, deliveries)
 
     export_format = "csv"
     exporter = TableExport(export_format, table)
