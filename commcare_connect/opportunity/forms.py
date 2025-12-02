@@ -178,9 +178,10 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                                     "Configure credential requirements for learning and delivery. For more "
                                     "information, please refer to the {link_start}following documentation{link_end}."
                                 ),
-                                # TODO: Fill out documentation link when documentation becomes available
                                 link_start=format_html(
-                                    '<a href="{}" target="_blank" class="text-blue-600 hover:underline">', "#"
+                                    '<a href="{}" target="_blank" class="text-blue-600 hover:underline">',
+                                    "https://dimagi.atlassian.net/wiki/spaces/connectpublic/"
+                                    "pages/3383132164/Managing+Credentials",
                                 ),
                                 link_end=format_html("</a>"),
                             ),
