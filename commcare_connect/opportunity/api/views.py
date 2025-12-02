@@ -1,5 +1,6 @@
 import datetime
 
+import sentry_sdk
 from django.db import transaction
 from django.utils.timezone import now
 from rest_framework import viewsets
@@ -25,9 +26,23 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.users.helpers import create_hq_user_and_link
 
 
+class OpportunityViewSetPermission(IsAuthenticated):
+    def has_permission(self, request, view):
+        message = "User (ID: {user_id}) accessed with headers {headers} using auth method {auth_method}".format(
+            user_id=request.user.id if request.user.is_authenticated else "Anonymous",
+            headers=request.headers,
+            auth_method=request.successful_authenticator.__class__.__name__
+            if hasattr(request, "successful_authenticator")
+            else "None",
+        )
+        sentry_sdk.capture_message(message=message)
+
+        return bool(request.user and request.user.is_authenticated)
+
+
 class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = OpportunitySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [OpportunityViewSetPermission]
 
     def get_queryset(self):
         return Opportunity.objects.filter(opportunityaccess__user=self.request.user)
