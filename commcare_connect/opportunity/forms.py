@@ -1292,7 +1292,7 @@ class PaymentInvoiceForm(forms.ModelForm):
     usd_currency = forms.BooleanField(
         required=False,
         initial=False,
-        label="USD Currency",
+        label=_("Specify in USD"),
         widget=forms.CheckboxInput(),
     )
 
@@ -1414,7 +1414,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
     usd_currency = forms.BooleanField(
         required=False,
         initial=False,
-        label="USD Currency",
+        label=_("Specify in USD"),
         widget=forms.CheckboxInput(),
     )
 
