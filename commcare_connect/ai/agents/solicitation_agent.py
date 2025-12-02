@@ -52,8 +52,6 @@ class SolicitationData(BaseModel):
             expected_end_date=record.expected_end_date,
             estimated_scale=record.estimated_scale,
             contact_email=record.contact_email,
-            date_created=record.date_created,
-            date_modified=record.date_modified,
         )
 
 
