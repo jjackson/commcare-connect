@@ -1,0 +1,26 @@
+{
+  "cluster": "labs-jj-cluster",
+  "taskDefinition": "labs-jj-web:13",
+  "launchType": "FARGATE",
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": ["subnet-06646effb09be2f42"],
+      "securityGroups": ["sg-0666a5ed512c97d9d"],
+      "assignPublicIp": "ENABLED"
+    }
+  },
+  "overrides": {
+    "containerOverrides": [
+      {
+        "name": "web",
+        "command": [
+          "python",
+          "manage.py",
+          "shell",
+          "-c",
+          "import logging; logger = logging.getLogger('test_sentry'); logger.error('Test logger.error from labs - this should appear in Sentry'); print('Logger test sent')"
+        ]
+      }
+    ]
+  }
+}
