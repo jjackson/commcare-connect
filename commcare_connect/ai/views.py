@@ -7,6 +7,7 @@ import uuid
 from celery.result import AsyncResult
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
+from django.shortcuts import render
 from django.views.decorators.http import require_GET, require_POST
 
 from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
@@ -152,3 +153,12 @@ def ai_demo_history(request):
     except Exception as e:
         logger.error(f"Error retrieving history for session {session_id}: {e}")
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_GET
+def vibes(request):
+    """
+    Simple hello world page for the vibes endpoint.
+    """
+    return render(request, "ai/vibes.html")
