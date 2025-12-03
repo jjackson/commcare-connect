@@ -8,7 +8,7 @@ import logging
 
 from django.http import HttpRequest
 
-from commcare_connect.labs.analysis.base import Analyzer
+from commcare_connect.labs.analysis.base import Analyzer, LocalUserVisit
 from commcare_connect.labs.analysis.computations import compute_visit_fields
 from commcare_connect.labs.analysis.config import AnalysisConfig, FieldComputation
 from commcare_connect.labs.analysis.models import VisitAnalysisResult, VisitRow
@@ -59,17 +59,27 @@ class VisitAnalyzer(Analyzer):
 
         super().__init__(request, config)
 
-    def compute(self) -> VisitAnalysisResult:
+    def compute(self, prefetched_visits: list[LocalUserVisit] | None = None) -> VisitAnalysisResult:
         """
         Compute visit-level analysis.
+
+        Args:
+            prefetched_visits: Optional pre-fetched visits to use instead of fetching.
+                              This allows callers to provide visits they already have in memory,
+                              avoiding redundant API calls or cache reads.
 
         Returns:
             VisitAnalysisResult with one VisitRow per visit
         """
         logger.info("Starting visit-level analysis computation")
 
-        # Fetch and filter visits
-        all_visits = self.fetch_visits()
+        # Use prefetched visits if provided, otherwise fetch from API/cache
+        if prefetched_visits is not None:
+            logger.info(f"Using {len(prefetched_visits)} prefetched visits (skipping fetch)")
+            all_visits = prefetched_visits
+        else:
+            all_visits = self.fetch_visits()
+
         filtered_visits = self.filter_visits(all_visits)
 
         # Compute fields for each visit (include histogram raw values for later aggregation)
