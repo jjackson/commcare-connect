@@ -1,4 +1,5 @@
 import datetime
+import logging
 
 from django.db import transaction
 from django.utils.timezone import now
@@ -24,10 +25,27 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.users.helpers import create_hq_user_and_link
 
+logger = logging.getLogger(__name__)
+
+
+class OpportunityViewSetPermission(IsAuthenticated):
+    def has_permission(self, request, view):
+        user_has_permission = bool(request.user and request.user.is_authenticated)
+        if not user_has_permission:
+            message = "User (ID: {user_id}) accessed with headers {headers} using auth method {auth_method}".format(
+                user_id=request.user.id if request.user.is_authenticated else "Anonymous",
+                headers=request.headers,
+                auth_method=request.successful_authenticator.__class__.__name__
+                if hasattr(request, "successful_authenticator")
+                else "None",
+            )
+            logger.info(message)
+        return user_has_permission
+
 
 class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = OpportunitySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [OpportunityViewSetPermission]
 
     def get_queryset(self):
         return Opportunity.objects.filter(opportunityaccess__user=self.request.user)
