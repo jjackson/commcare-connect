@@ -247,8 +247,8 @@ class AnalysisDataAccess:
         def make_api_call():
             url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{self.opportunity_id}/user_visits/"
             try:
-                # Use 280s timeout to stay under ALB's 300s timeout (large datasets can be 300MB+)
-                response = httpx.get(url, headers={"Authorization": f"Bearer {self.access_token}"}, timeout=280.0)
+                # Use 580s timeout to stay under ALB's 600s timeout (large datasets can be 300MB+)
+                response = httpx.get(url, headers={"Authorization": f"Bearer {self.access_token}"}, timeout=580.0)
                 response.raise_for_status()
                 return response
             except httpx.TimeoutException as e:
