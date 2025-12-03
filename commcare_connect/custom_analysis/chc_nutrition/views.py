@@ -260,6 +260,7 @@ class CHCNutritionStreamView(LoginRequiredMixin, View):
         Generator that yields SSE events as analysis progresses.
 
         Each yield sends a Server-Sent Event to the client.
+        Uses streaming download for real-time progress during data fetch.
         """
         total_steps = 7
 
@@ -274,6 +275,11 @@ class CHCNutritionStreamView(LoginRequiredMixin, View):
             if data is not None:
                 event_data["data"] = data
             return f"data: {json.dumps(event_data)}\n\n"
+
+        def format_bytes(num_bytes: int) -> str:
+            """Format bytes as human-readable string (e.g., '15.2 MB')."""
+            mb = num_bytes / (1024 * 1024)
+            return f"{mb:.1f} MB"
 
         try:
             # Step 1: Checking cache
@@ -312,20 +318,67 @@ class CHCNutritionStreamView(LoginRequiredMixin, View):
                 yield send_progress(7, "Complete!", response_data)
                 return
 
-            # Step 2: Fetching data from Connect API
-            yield send_progress(2, "Fetching visit data from Connect API...")
-            logger.info(f"[CHC Nutrition Stream] Step 2/{total_steps}: Fetching data from Connect")
+            # Step 2: Fetching data from Connect API with streaming progress
+            yield send_progress(2, "Connecting to Connect API...")
+            logger.info(f"[CHC Nutrition Stream] Step 2/{total_steps}: Streaming download from Connect")
 
+            # Get access token and visit count for cache validation
+            access_token = request.session.get("labs_oauth", {}).get("access_token")
+            opportunity = labs_context.get("opportunity", {})
+            current_visit_count = opportunity.get("visit_count")
+
+            # Use streaming download with progress updates
+            from commcare_connect.labs.analysis.base import LocalUserVisit
+            from commcare_connect.labs.api_cache import _parse_csv_bytes, stream_user_visits_with_progress
+
+            csv_bytes = None
+
+            for event in stream_user_visits_with_progress(
+                opportunity_id=opportunity_id,
+                access_token=access_token,
+                current_visit_count=current_visit_count,
+                force_refresh=force_refresh,
+            ):
+                event_type = event[0]
+
+                if event_type == "cached":
+                    # Raw CSV was in cache - no download needed
+                    csv_bytes = event[1]
+                    yield send_progress(2, f"Using cached data ({format_bytes(len(csv_bytes))})...")
+                    logger.info(f"[CHC Nutrition Stream] Raw CSV cache hit: {len(csv_bytes)} bytes")
+
+                elif event_type == "progress":
+                    # Download progress update
+                    _, bytes_downloaded, total_bytes = event
+                    if total_bytes > 0:
+                        pct = int(bytes_downloaded / total_bytes * 100)
+                        msg = f"Downloading... {format_bytes(bytes_downloaded)} / {format_bytes(total_bytes)} ({pct}%)"
+                    else:
+                        msg = f"Downloading... {format_bytes(bytes_downloaded)}"
+                    yield send_progress(2, msg)
+
+                elif event_type == "complete":
+                    # Download complete
+                    csv_bytes = event[1]
+                    yield send_progress(2, f"Download complete ({format_bytes(len(csv_bytes))})")
+                    logger.info(f"[CHC Nutrition Stream] Download complete: {len(csv_bytes)} bytes")
+
+            # Step 3: Parse CSV data directly (no re-fetch!)
+            yield send_progress(3, "Parsing visit data...")
+            logger.info(f"[CHC Nutrition Stream] Step 3/{total_steps}: Parsing {len(csv_bytes)} bytes")
+
+            # Parse CSV bytes directly into visit dicts, then wrap as LocalUserVisit
+            visit_dicts = _parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
+            all_visits = [LocalUserVisit(data) for data in visit_dicts]
+
+            yield send_progress(3, f"Processing {len(all_visits)} visits...")
+            logger.info(f"[CHC Nutrition Stream] Parsed {len(all_visits)} visits")
+
+            # Compute visit-level analysis using prefetched visits (no re-fetch)
             from commcare_connect.labs.analysis.visit_analyzer import VisitAnalyzer
 
             visit_analyzer = VisitAnalyzer(request, CHC_NUTRITION_CONFIG)
-            all_visits = visit_analyzer.fetch_visits()
-
-            # Step 3: Filtering and parsing data
-            yield send_progress(3, f"Processing {len(all_visits)} visits...")
-            logger.info(f"[CHC Nutrition Stream] Step 3/{total_steps}: Processing {len(all_visits)} visits")
-
-            visit_result = visit_analyzer.compute()
+            visit_result = visit_analyzer.compute(prefetched_visits=all_visits)
             visit_count = visit_result.metadata.get("total_visits", 0)
 
             # Cache visit results

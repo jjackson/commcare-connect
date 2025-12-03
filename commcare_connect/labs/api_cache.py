@@ -345,3 +345,110 @@ def clear_opportunity_cache(opportunity_id: int, endpoint: str = "user_visits_cs
     """
     cache = RawAPICacheManager(opportunity_id)
     return cache.clear(endpoint)
+
+
+def stream_user_visits_with_progress(
+    opportunity_id: int,
+    access_token: str,
+    current_visit_count: int | None = None,
+    force_refresh: bool = False,
+    chunk_size: int = 5 * 1024 * 1024,  # 5MB chunks
+):
+    """
+    Stream download of user visits with progress updates.
+
+    Generator that yields progress events during download. Use this when you need
+    real-time download progress (e.g., for SSE streaming to frontend).
+
+    Yields:
+        ("cached", csv_bytes) - If cache hit, yields cached data immediately
+        ("progress", bytes_downloaded, total_bytes) - Progress during download (total_bytes may be 0 if unknown)
+        ("complete", csv_bytes) - When download completes, yields the full data
+
+    After yielding "complete", the data is automatically cached for future requests.
+
+    Args:
+        opportunity_id: Opportunity ID
+        access_token: OAuth access token for Connect API
+        current_visit_count: Expected visit count for cache validation (optional)
+        force_refresh: If True, skip cache and download fresh
+        chunk_size: Size of chunks to yield progress for (default 5MB)
+
+    Example:
+        for event in stream_user_visits_with_progress(opp_id, token):
+            if event[0] == "cached":
+                csv_bytes = event[1]
+                break
+            elif event[0] == "progress":
+                _, downloaded, total = event
+                print(f"Downloaded {downloaded / 1024 / 1024:.1f} MB")
+            elif event[0] == "complete":
+                csv_bytes = event[1]
+    """
+    import httpx
+    from django.conf import settings
+
+    cache = RawAPICacheManager(opportunity_id)
+
+    # Check cache first (unless force refresh)
+    if not force_refresh:
+        cached_data = cache.get("user_visits_csv")
+        if cached_data and cache.is_valid(cached_data, current_visit_count):
+            logger.info(f"[Streaming] Cache HIT for user_visits_csv (opportunity {opportunity_id})")
+            yield ("cached", cached_data["data"])
+            return
+
+    # Cache miss - stream download from API
+    logger.info(f"[Streaming] Cache MISS - streaming download for opportunity {opportunity_id}")
+
+    url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_visits/"
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    chunks = []
+    bytes_downloaded = 0
+
+    try:
+        # Use httpx streaming to get chunks as they arrive
+        with httpx.stream("GET", url, headers=headers, timeout=580.0) as response:
+            response.raise_for_status()
+
+            # Get total size from Content-Length header (may be absent for chunked encoding)
+            total_bytes = int(response.headers.get("content-length", 0))
+            logger.info(
+                f"[Streaming] Starting download: total_bytes={total_bytes or 'unknown'} "
+                f"for opportunity {opportunity_id}"
+            )
+
+            # Track when to yield progress (every chunk_size bytes)
+            last_progress_at = 0
+
+            for chunk in response.iter_bytes(chunk_size=65536):  # Read in 64KB chunks for efficiency
+                chunks.append(chunk)
+                bytes_downloaded += len(chunk)
+
+                # Yield progress every chunk_size bytes (e.g., every 5MB)
+                if bytes_downloaded - last_progress_at >= chunk_size:
+                    yield ("progress", bytes_downloaded, total_bytes)
+                    last_progress_at = bytes_downloaded
+
+            # Final progress update if we haven't sent one recently
+            if bytes_downloaded > last_progress_at:
+                yield ("progress", bytes_downloaded, total_bytes)
+
+    except httpx.TimeoutException as e:
+        logger.error(f"[Streaming] Timeout downloading for opportunity {opportunity_id}: {e}")
+        raise RuntimeError("Connect API timeout - the download took too long. Please try again.") from e
+    except httpx.HTTPStatusError as e:
+        logger.error(f"[Streaming] HTTP error downloading for opportunity {opportunity_id}: {e}")
+        raise
+
+    # Combine chunks into full response
+    csv_bytes = b"".join(chunks)
+    logger.info(f"[Streaming] Download complete: {len(csv_bytes)} bytes for opportunity {opportunity_id}")
+
+    # Cache the raw bytes for future requests
+    visit_count = csv_bytes.count(b"\n") - 1 if csv_bytes else 0
+    cache.set("user_visits_csv", csv_bytes, visit_count)
+    logger.info(f"[Streaming] Cached {len(csv_bytes)} bytes (~{visit_count} visits) for opportunity {opportunity_id}")
+
+    yield ("complete", csv_bytes)
