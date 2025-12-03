@@ -191,18 +191,25 @@ class AuditTable(tables.Table):
     def render_actions(self, record):
         """Render action buttons for the audit session."""
         bulk_url = reverse("audit:bulk_assessment", kwargs={"pk": record.pk})
+        task_url = reverse("tasks:new")
 
         # Include opportunity_id in URLs to avoid searching all opportunities
         if record.opportunity_id:
             bulk_url = f"{bulk_url}?opportunity_id={record.opportunity_id}"
+            task_url = f"{task_url}?audit_session_id={record.pk}"
 
         button_label = _("Review") if record.status == "completed" else _("Open")
         return format_html(
             '<div class="flex gap-2 justify-end">'
+            '<a href="{}" class="button button-sm outline-style text-green-700 border-green-300 hover:bg-green-50">'
+            '<i class="fa-solid fa-clipboard-list mr-1"></i>{}'
+            "</a>"
             '<a href="{}" class="button button-sm primary-light">'
             '<i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>{}'
             "</a>"
             "</div>",
+            task_url,
+            _("Create Task"),
             bulk_url,
             button_label,
         )

@@ -567,8 +567,15 @@ function chcNutritionAnalysis() {
                 const response = await fetch(this.dataApiUrl + window.location.search);
 
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to load analysis data');
+                    // Check if response is JSON before trying to parse
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to load analysis data');
+                    } else {
+                        // Server returned HTML error page (502, 500, etc.)
+                        throw new Error(`Server error (${response.status}): The Connect API may be temporarily unavailable. Please try again.`);
+                    }
                 }
 
                 const data = await response.json();
