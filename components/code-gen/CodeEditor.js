@@ -7,7 +7,7 @@ const ReportBuilder = () => {
   <div class="flex justify-between items-center mb-6">
     <div>
       <h1 class="text-2xl font-bold text-gray-800">FLW Performance Report</h1>
-      <p class="text-sm text-gray-500">Total visits per FLW</p>
+      <p class="text-sm text-gray-500">FLW-level analysis summary</p>
     </div>
     <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">LIVE DATA</span>
   </div>
@@ -20,12 +20,30 @@ const ReportBuilder = () => {
     <p id="error-message"></p>
   </div>
 
-  <div id="chart-container" class="hidden h-96 bg-gray-50 rounded p-6 border border-gray-300">
-    <div class="flex items-end justify-around gap-2 h-full" id="bars-container"></div>
-  </div>
-
-  <div id="chart-info" class="hidden mt-4 text-sm text-gray-600 text-center">
-    <p id="info-text"></p>
+  <div id="table-container" class="hidden">
+    <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <h2 class="text-xl font-semibold text-gray-900">
+          FLW Analysis
+          <span class="text-sm text-gray-600 font-normal" id="flw-count"></span>
+        </h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">FLW Name</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Visits</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Approved</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Days Active</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200" id="table-body">
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div id="table-info" class="mt-4 text-sm text-gray-600 text-center"></div>
   </div>
 </div>`,
   );
@@ -36,10 +54,10 @@ async function loadFLWData() {
   const loadingEl = document.getElementById('loading');
   const errorEl = document.getElementById('error');
   const errorMsgEl = document.getElementById('error-message');
-  const chartContainer = document.getElementById('chart-container');
-  const chartInfo = document.getElementById('chart-info');
-  const infoText = document.getElementById('info-text');
-  const barsContainer = document.getElementById('bars-container');
+  const tableContainer = document.getElementById('table-container');
+  const tableBody = document.getElementById('table-body');
+  const tableInfo = document.getElementById('table-info');
+  const flwCount = document.getElementById('flw-count');
 
   try {
     console.log('Fetching FLW analysis data...');
@@ -91,14 +109,13 @@ async function loadFLWData() {
       throw new Error('No FLW data available');
     }
 
-    // Hide loading, show chart
+    // Hide loading, show table
     loadingEl.classList.add('hidden');
     errorEl.classList.add('hidden');
-    chartContainer.classList.remove('hidden');
-    chartInfo.classList.remove('hidden');
+    tableContainer.classList.remove('hidden');
 
-    // Clear existing bars
-    barsContainer.innerHTML = '';
+    // Clear existing table rows
+    tableBody.innerHTML = '';
 
     // Extract FLW data and sort by total_visits (descending)
     const flws = data.rows
@@ -108,64 +125,65 @@ async function loadFLWData() {
         total_visits: row.total_visits || 0,
         approved_visits: row.approved_visits || 0,
         pending_visits: row.pending_visits || 0,
+        days_active: row.days_active || 0,
+        approval_rate: row.total_visits > 0 ? Math.round((row.approved_visits / row.total_visits) * 100) : 0,
       }))
       .sort((a, b) => b.total_visits - a.total_visits);
 
     console.log(\`Processing \${flws.length} FLWs\`);
 
-    // Calculate max visits for scaling
-    const maxVisits = Math.max(...flws.map(f => f.total_visits), 1);
+    // Create table rows for each FLW
+    flws.forEach((flw) => {
+      const row = document.createElement('tr');
+      row.className = 'hover:bg-gray-50';
 
-    // Create bars for each FLW
-    flws.forEach((flw, index) => {
-      const barWrapper = document.createElement('div');
-      barWrapper.className = 'flex flex-col items-center flex-1 min-w-0';
+      // FLW Name
+      const nameCell = document.createElement('td');
+      nameCell.className = 'px-4 py-3 text-sm';
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'font-medium text-gray-900';
+      nameDiv.textContent = flw.flw_name;
+      nameCell.appendChild(nameDiv);
+      if (flw.flw_name !== flw.username) {
+        const usernameDiv = document.createElement('div');
+        usernameDiv.className = 'text-xs text-gray-500';
+        usernameDiv.textContent = flw.username;
+        nameCell.appendChild(usernameDiv);
+      }
+      row.appendChild(nameCell);
 
-      const bar = document.createElement('div');
-      bar.className = 'w-full bg-blue-500 hover:bg-blue-600 transition-all duration-300 rounded-t shadow-md relative group cursor-pointer';
+      // Total Visits
+      const visitsCell = document.createElement('td');
+      visitsCell.className = 'px-4 py-3 whitespace-nowrap text-sm text-gray-900';
+      visitsCell.textContent = flw.total_visits;
+      row.appendChild(visitsCell);
 
-      // Calculate height percentage
-      const heightPercent = maxVisits > 0 ? (flw.total_visits / maxVisits) * 100 : 0;
-      bar.style.height = heightPercent + '%';
-      bar.style.minHeight = '4px'; // Ensure even small values are visible
+      // Approved (with percentage)
+      const approvedCell = document.createElement('td');
+      approvedCell.className = 'px-4 py-3 whitespace-nowrap text-sm text-gray-900';
+      approvedCell.innerHTML = \`<span>\${flw.approval_rate}%</span> <span class="text-gray-500">(\${flw.approved_visits})</span>\`;
+      row.appendChild(approvedCell);
 
-      // Tooltip with detailed info
-      const tooltip = \`<div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-gray-800 text-white text-xs py-2 px-3 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-        <div class="font-semibold">\${flw.flw_name}</div>
-        <div class="text-gray-300">Total: \${flw.total_visits}</div>
-        <div class="text-green-300">Approved: \${flw.approved_visits}</div>
-        <div class="text-yellow-300">Pending: \${flw.pending_visits}</div>
-      </div>\`;
-      bar.innerHTML = tooltip;
+      // Days Active
+      const daysCell = document.createElement('td');
+      daysCell.className = 'px-4 py-3 whitespace-nowrap text-sm text-gray-900';
+      daysCell.textContent = flw.days_active;
+      row.appendChild(daysCell);
 
-      // Label below bar
-      const label = document.createElement('div');
-      label.className = 'mt-2 text-xs text-gray-700 truncate w-full text-center';
-      label.textContent = flw.flw_name || flw.username;
-      label.title = flw.flw_name || flw.username; // Full name on hover
-
-      // Value label on bar
-      const valueLabel = document.createElement('div');
-      valueLabel.className = 'absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs font-semibold text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity';
-      valueLabel.textContent = flw.total_visits;
-
-      bar.appendChild(valueLabel);
-      barWrapper.appendChild(bar);
-      barWrapper.appendChild(label);
-      barsContainer.appendChild(barWrapper);
+      tableBody.appendChild(row);
     });
 
-    // Update info text
+    // Update header count and info
+    flwCount.textContent = \`(\${flws.length} FLWs)\`;
     const totalVisits = flws.reduce((sum, f) => sum + f.total_visits, 0);
-    infoText.textContent = \`\${flws.length} FLWs • \${totalVisits} total visits • Opportunity: \${data.opportunity_name || data.opportunity_id || 'N/A'}\`;
+    tableInfo.textContent = \`\${flws.length} FLWs • \${totalVisits} total visits • Opportunity: \${data.opportunity_name || data.opportunity_id || 'N/A'}\`;
 
-    console.log(\`Chart generated with \${flws.length} FLWs, \${totalVisits} total visits\`);
+    console.log(\`Table generated with \${flws.length} FLWs, \${totalVisits} total visits\`);
 
   } catch (error) {
     console.error('Error loading FLW data:', error);
     loadingEl.classList.add('hidden');
-    chartContainer.classList.add('hidden');
-    chartInfo.classList.add('hidden');
+    tableContainer.classList.add('hidden');
     errorEl.classList.remove('hidden');
     errorMsgEl.textContent = \`Error: \${error.message}\`;
   }
