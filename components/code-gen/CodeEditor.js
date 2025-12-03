@@ -2,195 +2,127 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Printer, RefreshCw, Terminal, Play, Layout } from 'lucide-react';
 
 const ReportBuilder = () => {
-  const [htmlCode, setHtmlCode] = useState(
-    `<div class="p-6 bg-white rounded-lg border border-gray-200 shadow-sm">
-  <div class="flex justify-between items-center mb-6">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-800">FLW Performance Report</h1>
-      <p class="text-sm text-gray-500">FLW-level analysis summary</p>
-    </div>
-    <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">LIVE DATA</span>
-  </div>
-
-  <div id="loading" class="text-center py-8 text-gray-500">
-    <p>Loading FLW data...</p>
-  </div>
-
-  <div id="error" class="hidden text-center py-8 text-red-600">
-    <p id="error-message"></p>
-  </div>
-
-  <div id="table-container" class="hidden">
-    <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-        <h2 class="text-xl font-semibold text-gray-900">
-          FLW Analysis
-          <span class="text-sm text-gray-600 font-normal" id="flw-count"></span>
-        </h2>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">FLW Name</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Visits</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Approved</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Days Active</th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200" id="table-body">
-          </tbody>
-        </table>
-      </div>
-    </div>
-    <div id="table-info" class="mt-4 text-sm text-gray-600 text-center"></div>
-  </div>
-</div>`,
-  );
+  const [htmlCode, setHtmlCode] = useState(`<div id="react-root"></div>`);
 
   const [jsCode, setJsCode] = useState(
-    `// Fetch FLW analysis data from API
-async function loadFLWData() {
-  const loadingEl = document.getElementById('loading');
-  const errorEl = document.getElementById('error');
-  const errorMsgEl = document.getElementById('error-message');
-  const tableContainer = document.getElementById('table-container');
-  const tableBody = document.getElementById('table-body');
-  const tableInfo = document.getElementById('table-info');
-  const flwCount = document.getElementById('flw-count');
+    `// React + JSX Example: Fetch FLW analysis data and render with React
+const { useState, useEffect } = React;
 
-  try {
-    console.log('Fetching FLW analysis data...');
+function FLWTable() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [flws, setFlws] = useState([]);
+  const [summary, setSummary] = useState(null);
 
-    // Extract opportunity_id from parent page URL (injected by parent component)
-    // Since iframe uses srcDoc, window.location is the blob URL, not the parent page
-    // The parent component injects PARENT_URL_PARAMS and PARENT_OPPORTUNITY_ID
-    let opportunityId = window.PARENT_OPPORTUNITY_ID;
-    let urlParams = window.PARENT_URL_PARAMS;
-
-    // Fallback: try to get from window.location if available (shouldn't work in iframe, but just in case)
-    if (!opportunityId && window.location.search) {
-      const localParams = new URLSearchParams(window.location.search);
-      opportunityId = localParams.get('opportunity_id');
-      urlParams = localParams;
-    }
-
-    if (!opportunityId) {
-      throw new Error('No opportunity_id found. The CodeEditor must be accessed from a page with ?opportunity_id=123 in the URL.');
-    }
-
-    // Build API URL with opportunity_id and any other query params
-    const apiParams = new URLSearchParams();
-    apiParams.set('opportunity_id', opportunityId);
-
-    // Preserve other query params from parent (like config, refresh, etc.)
-    if (urlParams) {
-      urlParams.forEach((value, key) => {
-        if (key !== 'opportunity_id') {
-          apiParams.set(key, value);
+  useEffect(() => {
+    async function loadData() {
+      try {
+        // Get opportunity_id from parent page
+        const opportunityId = window.PARENT_OPPORTUNITY_ID;
+        if (!opportunityId) {
+          throw new Error('No opportunity_id found in URL');
         }
-      });
-    }
 
-    const apiUrl = '/labs/api/analysis/flw/?' + apiParams.toString();
-    console.log('API URL:', apiUrl);
+        const apiUrl = '/labs/api/analysis/flw/?opportunity_id=' + opportunityId;
+        const response = await fetch(apiUrl);
 
-    const response = await fetch(apiUrl);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(errorData.error || 'Failed to load data');
+        }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(errorData.error || \`HTTP \${response.status}: \${response.statusText}\`);
-    }
+        const data = await response.json();
+        const sortedFlws = (data.rows || [])
+          .map(row => ({
+            ...row,
+            approval_rate: row.total_visits > 0
+              ? Math.round((row.approved_visits / row.total_visits) * 100)
+              : 0
+          }))
+          .sort((a, b) => b.total_visits - a.total_visits);
 
-    const data = await response.json();
-    console.log('Data received:', data);
-
-    if (!data.rows || data.rows.length === 0) {
-      throw new Error('No FLW data available');
-    }
-
-    // Hide loading, show table
-    loadingEl.classList.add('hidden');
-    errorEl.classList.add('hidden');
-    tableContainer.classList.remove('hidden');
-
-    // Clear existing table rows
-    tableBody.innerHTML = '';
-
-    // Extract FLW data and sort by total_visits (descending)
-    const flws = data.rows
-      .map(row => ({
-        username: row.username || 'Unknown',
-        flw_name: row.flw_name || row.username || 'Unknown',
-        total_visits: row.total_visits || 0,
-        approved_visits: row.approved_visits || 0,
-        pending_visits: row.pending_visits || 0,
-        days_active: row.days_active || 0,
-        approval_rate: row.total_visits > 0 ? Math.round((row.approved_visits / row.total_visits) * 100) : 0,
-      }))
-      .sort((a, b) => b.total_visits - a.total_visits);
-
-    console.log(\`Processing \${flws.length} FLWs\`);
-
-    // Create table rows for each FLW
-    flws.forEach((flw) => {
-      const row = document.createElement('tr');
-      row.className = 'hover:bg-gray-50';
-
-      // FLW Name
-      const nameCell = document.createElement('td');
-      nameCell.className = 'px-4 py-3 text-sm';
-      const nameDiv = document.createElement('div');
-      nameDiv.className = 'font-medium text-gray-900';
-      nameDiv.textContent = flw.flw_name;
-      nameCell.appendChild(nameDiv);
-      if (flw.flw_name !== flw.username) {
-        const usernameDiv = document.createElement('div');
-        usernameDiv.className = 'text-xs text-gray-500';
-        usernameDiv.textContent = flw.username;
-        nameCell.appendChild(usernameDiv);
+        setFlws(sortedFlws);
+        setSummary({
+          total_flws: sortedFlws.length,
+          total_visits: sortedFlws.reduce((sum, f) => sum + f.total_visits, 0),
+          opportunity_name: data.opportunity_name || data.opportunity_id
+        });
+        setLoading(false);
+      } catch (err) {
+        setError(err.message);
+        setLoading(false);
       }
-      row.appendChild(nameCell);
+    }
+    loadData();
+  }, []);
 
-      // Total Visits
-      const visitsCell = document.createElement('td');
-      visitsCell.className = 'px-4 py-3 whitespace-nowrap text-sm text-gray-900';
-      visitsCell.textContent = flw.total_visits;
-      row.appendChild(visitsCell);
-
-      // Approved (with percentage)
-      const approvedCell = document.createElement('td');
-      approvedCell.className = 'px-4 py-3 whitespace-nowrap text-sm text-gray-900';
-      approvedCell.innerHTML = \`<span>\${flw.approval_rate}%</span> <span class="text-gray-500">(\${flw.approved_visits})</span>\`;
-      row.appendChild(approvedCell);
-
-      // Days Active
-      const daysCell = document.createElement('td');
-      daysCell.className = 'px-4 py-3 whitespace-nowrap text-sm text-gray-900';
-      daysCell.textContent = flw.days_active;
-      row.appendChild(daysCell);
-
-      tableBody.appendChild(row);
-    });
-
-    // Update header count and info
-    flwCount.textContent = \`(\${flws.length} FLWs)\`;
-    const totalVisits = flws.reduce((sum, f) => sum + f.total_visits, 0);
-    tableInfo.textContent = \`\${flws.length} FLWs • \${totalVisits} total visits • Opportunity: \${data.opportunity_name || data.opportunity_id || 'N/A'}\`;
-
-    console.log(\`Table generated with \${flws.length} FLWs, \${totalVisits} total visits\`);
-
-  } catch (error) {
-    console.error('Error loading FLW data:', error);
-    loadingEl.classList.add('hidden');
-    tableContainer.classList.add('hidden');
-    errorEl.classList.remove('hidden');
-    errorMsgEl.textContent = \`Error: \${error.message}\`;
+  if (loading) {
+    return <div className="text-center py-8 text-gray-500">Loading FLW data...</div>;
   }
+
+  if (error) {
+    return <div className="text-center py-8 text-red-600">Error: {error}</div>;
+  }
+
+  return (
+    <div className="p-6 bg-white rounded-lg border border-gray-200 shadow-sm">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">FLW Performance Report</h1>
+          <p className="text-sm text-gray-500">FLW-level analysis summary</p>
+        </div>
+        <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">LIVE DATA</span>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+          <h2 className="text-xl font-semibold text-gray-900">
+            FLW Analysis ({flws.length} FLWs)
+          </h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">FLW Name</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Visits</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Approved</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Days Active</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {flws.map((flw) => (
+                <tr key={flw.username} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm">
+                    <div className="font-medium text-gray-900">{flw.flw_name || flw.username}</div>
+                    {flw.flw_name !== flw.username && (
+                      <div className="text-xs text-gray-500">{flw.username}</div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{flw.total_visits}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                    {flw.approval_rate}% <span className="text-gray-500">({flw.approved_visits})</span>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{flw.days_active || 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {summary && (
+        <div className="mt-4 text-sm text-gray-600 text-center">
+          {summary.total_flws} FLWs • {summary.total_visits} total visits • Opportunity: {summary.opportunity_name}
+        </div>
+      )}
+    </div>
+  );
 }
 
-// Load data when page loads
-loadFLWData();`,
+// Render the React component
+const root = ReactDOM.createRoot(document.getElementById('react-root'));
+root.render(<FLWTable />);`,
   );
 
   const [cssCode, setCssCode] = useState(
@@ -279,6 +211,14 @@ body {
       </script>
     `;
 
+    // Inject React, ReactDOM, and Babel Standalone for JSX support
+    // Babel Standalone automatically transforms JSX when script type="text/babel" is used
+    const reactInjection = `
+      <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+      <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+      <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    `;
+
     // HERE IS THE CHANGE: We inject the Tailwind CDN script
     // In a real app, you might link to your local '/styles/main.css' instead
     const stylesInjection = `
@@ -286,17 +226,24 @@ body {
       <style>${cssCode}</style>
     `;
 
+    // Use type="text/babel" to enable automatic JSX transformation
+    // This works for both regular JS and JSX - Babel only transforms if it detects JSX
     const fullHtml = `
       <!DOCTYPE html>
       <html>
         <head>
+          ${reactInjection}
           ${stylesInjection}
           ${logInterceptor}
           ${urlParamsInjection}
         </head>
         <body>
           ${htmlCode}
-          <script>
+          <div id="react-root"></div>
+          <script type="text/babel">
+            // React and ReactDOM are available globally
+            const { React, ReactDOM } = window;
+
             try {
               ${jsCode}
             } catch (err) {
