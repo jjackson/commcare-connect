@@ -766,6 +766,9 @@ function taskCreateEditPage() {
     showToast: false,
     toastMessage: '',
 
+    // Quick params from URL (for pre-filling form from audit page, etc.)
+    quickParams: {{ quick_params|safe }},
+
     // Computed
     get canCreate() {
       return this.selectedFlw && this.taskForm.title && this.taskForm.description;
@@ -799,6 +802,22 @@ function taskCreateEditPage() {
           name: taskData.flw_name || taskData.username
         };
         this.originalForm = { ...this.taskForm };
+      } else if (this.quickParams && Object.keys(this.quickParams).length > 0) {
+        // Apply URL params for create mode (e.g., from audit session list)
+        this.applyQuickParams();
+      }
+    },
+
+    applyQuickParams() {
+      if (this.quickParams.username) {
+        this.selectedFlwUsername = this.quickParams.username;
+        this.onFlwSelect();
+      }
+      if (this.quickParams.title) {
+        this.taskForm.title = this.quickParams.title;
+      }
+      if (this.quickParams.description) {
+        this.taskForm.description = this.quickParams.description;
       }
     },
 

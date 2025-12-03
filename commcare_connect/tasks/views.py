@@ -352,6 +352,17 @@ class TaskCreateEditView(LoginRequiredMixin, TemplateView):
                 program_manager_name = prog.get("name", "Program Manager")
                 break
 
+        # Quick creation URL parameters for pre-filling the form
+        # These allow other pages (e.g., audit session list) to link directly with params
+        quick_params = {
+            "audit_session_id": self.request.GET.get("audit_session_id", ""),
+            "username": self.request.GET.get("username", ""),
+            "title": self.request.GET.get("title", ""),
+            "description": self.request.GET.get("description", ""),
+        }
+        # Filter out empty values
+        quick_params = {k: v for k, v in quick_params.items() if v}
+
         context.update(
             {
                 "is_edit_mode": is_edit_mode,
@@ -368,6 +379,7 @@ class TaskCreateEditView(LoginRequiredMixin, TemplateView):
                 "current_user_name": current_user_name,
                 "network_manager_name": network_manager_name,
                 "program_manager_name": program_manager_name,
+                "quick_params": json.dumps(quick_params),
             }
         )
 

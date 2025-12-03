@@ -247,9 +247,13 @@ class AnalysisDataAccess:
         def make_api_call():
             url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{self.opportunity_id}/user_visits/"
             try:
-                response = httpx.get(url, headers={"Authorization": f"Bearer {self.access_token}"}, timeout=120.0)
+                # Use 280s timeout to stay under ALB's 300s timeout (large datasets can be 300MB+)
+                response = httpx.get(url, headers={"Authorization": f"Bearer {self.access_token}"}, timeout=280.0)
                 response.raise_for_status()
                 return response
+            except httpx.TimeoutException as e:
+                logger.error(f"Timeout fetching user visits for opportunity {self.opportunity_id}: {e}")
+                raise RuntimeError("Connect API timeout - the request took too long. Please try again.") from e
             except httpx.HTTPStatusError as e:
                 logger.error(f"Failed to fetch user visits: {e}")
                 raise
@@ -505,6 +509,9 @@ def get_flw_names_for_opportunity(request: HttpRequest) -> dict[str, str]:
     try:
         response = httpx.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=30.0)
         response.raise_for_status()
+    except httpx.TimeoutException as e:
+        logger.error(f"Timeout fetching FLW names for opportunity {opportunity_id}: {e}")
+        raise RuntimeError("Connect API timeout while fetching FLW names") from e
     except httpx.HTTPStatusError as e:
         logger.error(f"Failed to fetch FLW names: {e}")
         raise
