@@ -179,14 +179,29 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             layout_fields.append(
                 Row(
                     HTML(
-                        f"""
-                        <div class='col-span-2'>
-                            <h6 class='title-sm'>{_("Manage Credentials")}</h6>
-                            <span class='hint'>
-                                {_("Configure credential requirements for learning and delivery.")}
-                            </span>
-                        </div>
-                    """
+                        format_html(
+                            """
+                            <div class='col-span-2'>
+                                <h6 class='title-sm'>{}</h6>
+                                <span class='hint'>
+                                    {}
+                                </span>
+                            </div>
+                            """,
+                            _("Manage Credentials"),
+                            format_html(
+                                _(
+                                    "Configure credential requirements for learning and delivery. For more "
+                                    "information, please refer to the {link_start}following documentation{link_end}."
+                                ),
+                                link_start=format_html(
+                                    '<a href="{}" target="_blank" class="text-blue-600 hover:underline">',
+                                    "https://dimagi.atlassian.net/wiki/spaces/connectpublic/"
+                                    "pages/3383132164/Managing+Credentials",
+                                ),
+                                link_end=format_html("</a>"),
+                            ),
+                        )
                     ),
                     Column(
                         Field("learn_level"),
