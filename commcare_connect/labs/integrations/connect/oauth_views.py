@@ -116,7 +116,7 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
     if not state or state != saved_state:
         logger.warning("OAuth callback with invalid state parameter", extra={"received_state": state})
         messages.error(request, "Invalid authentication state. Please try logging in again.")
-        return redirect("labs:oauth_login")
+        return redirect("labs:oauth_initiate")
 
     # Get authorization code
     code = request.GET.get("code")
@@ -125,14 +125,14 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
         error_description = request.GET.get("error_description", "")
         logger.error(f"OAuth error: {error}", extra={"description": error_description})
         messages.error(request, f"Authentication failed: {error_description or error}")
-        return redirect("labs:oauth_login")
+        return redirect("labs:oauth_initiate")
 
     # Get PKCE code verifier from session
     code_verifier = request.session.get("oauth_code_verifier")
     if not code_verifier:
         logger.error("OAuth callback missing code verifier in session")
         messages.error(request, "Session expired. Please try logging in again.")
-        return redirect("labs:oauth_login")
+        return redirect("labs:oauth_initiate")
 
     # Exchange code for token with PKCE
     callback_url = request.build_absolute_uri(reverse("labs:oauth_callback"))
@@ -154,11 +154,11 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
     except httpx.HTTPStatusError as e:
         logger.error(f"OAuth token exchange failed with status {e.response.status_code}", exc_info=True)
         messages.error(request, "Failed to authenticate with Connect. Please try again.")
-        return redirect("labs:oauth_login")
+        return redirect("labs:oauth_initiate")
     except Exception as e:
         logger.error(f"OAuth token exchange failed: {str(e)}", exc_info=True)
         messages.error(request, "Authentication service unavailable. Please try again later.")
-        return redirect("labs:oauth_login")
+        return redirect("labs:oauth_initiate")
 
     # Get user info from Connect production
     access_token = token_json["access_token"]
@@ -174,7 +174,7 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
     if not profile_data:
         logger.error("Could not retrieve user information from token introspection")
         messages.error(request, "Could not retrieve your profile from Connect. Please try again.")
-        return redirect("labs:oauth_login")
+        return redirect("labs:oauth_initiate")
 
     # Calculate token expiration
     expires_in = token_json.get("expires_in", 1209600)  # Default 2 weeks
