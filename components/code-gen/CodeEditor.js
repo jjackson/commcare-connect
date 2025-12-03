@@ -6,42 +6,173 @@ const ReportBuilder = () => {
     `<div class="p-6 bg-white rounded-lg border border-gray-200 shadow-sm">
   <div class="flex justify-between items-center mb-6">
     <div>
-      <h1 class="text-2xl font-bold text-gray-800">Q3 Performance Report</h1>
-      <p class="text-sm text-gray-500">Generated dynamically via JS</p>
+      <h1 class="text-2xl font-bold text-gray-800">FLW Performance Report</h1>
+      <p class="text-sm text-gray-500">Total visits per FLW</p>
     </div>
-    <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">CONFIDENTIAL</span>
+    <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">LIVE DATA</span>
   </div>
 
-  <div id="chart-container" class="h-64 bg-gray-50 rounded flex items-end justify-around p-4 border border-dashed border-gray-300"></div>
+  <div id="loading" class="text-center py-8 text-gray-500">
+    <p>Loading FLW data...</p>
+  </div>
+
+  <div id="error" class="hidden text-center py-8 text-red-600">
+    <p id="error-message"></p>
+  </div>
+
+  <div id="chart-container" class="hidden h-96 bg-gray-50 rounded p-6 border border-gray-300">
+    <div class="flex items-end justify-around gap-2 h-full" id="bars-container"></div>
+  </div>
+
+  <div id="chart-info" class="hidden mt-4 text-sm text-gray-600 text-center">
+    <p id="info-text"></p>
+  </div>
 </div>`,
   );
 
   const [jsCode, setJsCode] = useState(
-    `// Simple data visualization
-const data = [120, 250, 90, 400, 180, 320];
-const container = document.getElementById('chart-container');
+    `// Fetch FLW analysis data from API
+async function loadFLWData() {
+  const loadingEl = document.getElementById('loading');
+  const errorEl = document.getElementById('error');
+  const errorMsgEl = document.getElementById('error-message');
+  const chartContainer = document.getElementById('chart-container');
+  const chartInfo = document.getElementById('chart-info');
+  const infoText = document.getElementById('info-text');
+  const barsContainer = document.getElementById('bars-container');
 
-// Max value for scaling
-const max = Math.max(...data);
+  try {
+    console.log('Fetching FLW analysis data...');
 
-data.forEach(value => {
-  const bar = document.createElement('div');
-  // We can now use Tailwind classes inside the JS-generated elements too!
-  bar.className = 'w-12 bg-blue-500 hover:bg-blue-600 transition-all duration-300 rounded-t shadow-md relative group';
+    // Extract opportunity_id from parent page URL (injected by parent component)
+    // Since iframe uses srcDoc, window.location is the blob URL, not the parent page
+    // The parent component injects PARENT_URL_PARAMS and PARENT_OPPORTUNITY_ID
+    let opportunityId = window.PARENT_OPPORTUNITY_ID;
+    let urlParams = window.PARENT_URL_PARAMS;
 
-  // Calculate height percentage
-  const heightParams = (value / max) * 100;
-  bar.style.height = heightParams + '%';
+    // Fallback: try to get from window.location if available (shouldn't work in iframe, but just in case)
+    if (!opportunityId && window.location.search) {
+      const localParams = new URLSearchParams(window.location.search);
+      opportunityId = localParams.get('opportunity_id');
+      urlParams = localParams;
+    }
 
-  // Add tooltip
-  bar.innerHTML = \`<div class="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity">\${value}</div>\`;
+    if (!opportunityId) {
+      throw new Error('No opportunity_id found. The CodeEditor must be accessed from a page with ?opportunity_id=123 in the URL.');
+    }
 
-  container.appendChild(bar);
-});
-console.log('Chart generated with ' + data.length + ' items');
+    // Build API URL with opportunity_id and any other query params
+    const apiParams = new URLSearchParams();
+    apiParams.set('opportunity_id', opportunityId);
 
-// Example: Since we are now "Same Origin", we could do this:
-// fetch('/api/user/profile').then(res => res.json()).then(console.log);`,
+    // Preserve other query params from parent (like config, refresh, etc.)
+    if (urlParams) {
+      urlParams.forEach((value, key) => {
+        if (key !== 'opportunity_id') {
+          apiParams.set(key, value);
+        }
+      });
+    }
+
+    const apiUrl = '/labs/api/analysis/flw/?' + apiParams.toString();
+    console.log('API URL:', apiUrl);
+
+    const response = await fetch(apiUrl);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || \`HTTP \${response.status}: \${response.statusText}\`);
+    }
+
+    const data = await response.json();
+    console.log('Data received:', data);
+
+    if (!data.rows || data.rows.length === 0) {
+      throw new Error('No FLW data available');
+    }
+
+    // Hide loading, show chart
+    loadingEl.classList.add('hidden');
+    errorEl.classList.add('hidden');
+    chartContainer.classList.remove('hidden');
+    chartInfo.classList.remove('hidden');
+
+    // Clear existing bars
+    barsContainer.innerHTML = '';
+
+    // Extract FLW data and sort by total_visits (descending)
+    const flws = data.rows
+      .map(row => ({
+        username: row.username || 'Unknown',
+        flw_name: row.flw_name || row.username || 'Unknown',
+        total_visits: row.total_visits || 0,
+        approved_visits: row.approved_visits || 0,
+        pending_visits: row.pending_visits || 0,
+      }))
+      .sort((a, b) => b.total_visits - a.total_visits);
+
+    console.log(\`Processing \${flws.length} FLWs\`);
+
+    // Calculate max visits for scaling
+    const maxVisits = Math.max(...flws.map(f => f.total_visits), 1);
+
+    // Create bars for each FLW
+    flws.forEach((flw, index) => {
+      const barWrapper = document.createElement('div');
+      barWrapper.className = 'flex flex-col items-center flex-1 min-w-0';
+
+      const bar = document.createElement('div');
+      bar.className = 'w-full bg-blue-500 hover:bg-blue-600 transition-all duration-300 rounded-t shadow-md relative group cursor-pointer';
+
+      // Calculate height percentage
+      const heightPercent = maxVisits > 0 ? (flw.total_visits / maxVisits) * 100 : 0;
+      bar.style.height = heightPercent + '%';
+      bar.style.minHeight = '4px'; // Ensure even small values are visible
+
+      // Tooltip with detailed info
+      const tooltip = \`<div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-gray-800 text-white text-xs py-2 px-3 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+        <div class="font-semibold">\${flw.flw_name}</div>
+        <div class="text-gray-300">Total: \${flw.total_visits}</div>
+        <div class="text-green-300">Approved: \${flw.approved_visits}</div>
+        <div class="text-yellow-300">Pending: \${flw.pending_visits}</div>
+      </div>\`;
+      bar.innerHTML = tooltip;
+
+      // Label below bar
+      const label = document.createElement('div');
+      label.className = 'mt-2 text-xs text-gray-700 truncate w-full text-center';
+      label.textContent = flw.flw_name || flw.username;
+      label.title = flw.flw_name || flw.username; // Full name on hover
+
+      // Value label on bar
+      const valueLabel = document.createElement('div');
+      valueLabel.className = 'absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs font-semibold text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity';
+      valueLabel.textContent = flw.total_visits;
+
+      bar.appendChild(valueLabel);
+      barWrapper.appendChild(bar);
+      barWrapper.appendChild(label);
+      barsContainer.appendChild(barWrapper);
+    });
+
+    // Update info text
+    const totalVisits = flws.reduce((sum, f) => sum + f.total_visits, 0);
+    infoText.textContent = \`\${flws.length} FLWs • \${totalVisits} total visits • Opportunity: \${data.opportunity_name || data.opportunity_id || 'N/A'}\`;
+
+    console.log(\`Chart generated with \${flws.length} FLWs, \${totalVisits} total visits\`);
+
+  } catch (error) {
+    console.error('Error loading FLW data:', error);
+    loadingEl.classList.add('hidden');
+    chartContainer.classList.add('hidden');
+    chartInfo.classList.add('hidden');
+    errorEl.classList.remove('hidden');
+    errorMsgEl.textContent = \`Error: \${error.message}\`;
+  }
+}
+
+// Load data when page loads
+loadFLWData();`,
   );
 
   const [cssCode, setCssCode] = useState(
@@ -76,6 +207,10 @@ body {
   const generatePreview = () => {
     setLogs([]); // Clear logs on run
 
+    // Extract opportunity_id from parent page URL to inject into iframe
+    const parentUrlParams = new URLSearchParams(window.location.search);
+    const opportunityId = parentUrlParams.get('opportunity_id');
+
     // We inject a script to catch console logs and send them to the parent
     const logInterceptor = `
       <script>
@@ -108,6 +243,24 @@ body {
       </script>
     `;
 
+    // Inject parent page URL params into iframe's JavaScript context
+    // This allows the iframe code to access opportunity_id from the parent page
+    const urlParamsInjection = `
+      <script>
+        // Inject parent page URL params into iframe context
+        // Since iframe uses srcDoc, window.location is the blob URL, not the parent
+        // So we inject the parent's URL params here
+        window.PARENT_URL_PARAMS = new URLSearchParams('${
+          window.location.search
+        }');
+        ${
+          opportunityId
+            ? `window.PARENT_OPPORTUNITY_ID = '${opportunityId}';`
+            : ''
+        }
+      </script>
+    `;
+
     // HERE IS THE CHANGE: We inject the Tailwind CDN script
     // In a real app, you might link to your local '/styles/main.css' instead
     const stylesInjection = `
@@ -121,6 +274,7 @@ body {
         <head>
           ${stylesInjection}
           ${logInterceptor}
+          ${urlParamsInjection}
         </head>
         <body>
           ${htmlCode}

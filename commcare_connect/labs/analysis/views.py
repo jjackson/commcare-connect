@@ -47,7 +47,7 @@ class FLWAnalysisAPIView(LoginRequiredMixin, View):
     def get(self, request):
         """Return FLW analysis results as JSON."""
         try:
-            # Check labs context
+            # Check labs context (set by middleware)
             labs_context = getattr(request, "labs_context", {})
             opportunity_id = labs_context.get("opportunity_id")
 
