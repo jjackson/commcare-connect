@@ -27,19 +27,21 @@ except ImportError:
 
 
 @celery_app.task(bind=True)
-def simple_echo_task(
+def run_agent(
     self,
     prompt: str,
+    agent: str,
     session_id: str | None = None,
     user_id: int | None = None,
     access_token: str | None = None,
     program_id: int | None = None,
 ):
     """
-    Run the solicitation agent with the user's prompt and optional message history.
+    Run an AI agent with the user's prompt and optional message history.
 
     Args:
         prompt: The user's prompt
+        agent: The agent type to use (e.g., "solicitations")
         session_id: Optional session ID for history tracking
         user_id: The user ID for authentication
         access_token: OAuth access token for API access
@@ -151,17 +153,18 @@ def simple_echo_task(
     mock_request = MockRequest(access_token, user=request_user, program_id=program_id)
 
     # Create dependencies - use the same user object for consistency
-    # program_id is required for UserDependencies
-    if program_id is None:
-        raise ValueError(
-            "program_id is required to run the AI agent. "
-            "Please provide program_id in the request or ensure it's set in labs_context."
-        )
+    # program_id is optional for UserDependencies
     deps = UserDependencies(user=request_user, request=mock_request, program_id=program_id)
 
-    async def run_agent():
-        # Get the agent instance (lazy-loaded)
-        agent = get_solicitation_agent()
+    async def run_agent_task():
+        # Get the agent instance based on agent parameter
+        if agent == "solicitations":
+            agent_instance = get_solicitation_agent()
+        else:
+            # Default to solicitation agent for unknown agent types
+            logger.warning(f"[AI TASK] Unknown agent type: {agent}, defaulting to solicitation agent")
+            agent_instance = get_solicitation_agent()
+
         # Pass message_history to maintain conversation context
         if history:
             logger.warning(f"[AI TASK] Running agent with {len(history)} previous messages")
@@ -170,20 +173,20 @@ def simple_echo_task(
                 # Convert history to Pydantic AI format
                 pydantic_history = convert_history_to_pydantic_format(history)
                 logger.warning(f"[AI TASK] Converted history format, length: {len(pydantic_history)}")
-                result = await agent.run(prompt, message_history=pydantic_history, deps=deps)
+                result = await agent_instance.run(prompt, message_history=pydantic_history, deps=deps)
                 logger.warning("[AI TASK] Agent completed with history")
             except Exception as e:
                 logger.error(f"[AI TASK] Error running agent with history: {e}", exc_info=True)
                 # Fallback to running without history if there's a format issue
                 logger.warning("[AI TASK] Falling back to running without message history")
-                result = await agent.run(prompt, deps=deps)
+                result = await agent_instance.run(prompt, deps=deps)
         else:
             logger.warning("[AI TASK] Running agent without message history")
-            result = await agent.run(prompt, deps=deps)
+            result = await agent_instance.run(prompt, deps=deps)
         return result.output
 
     try:
-        response = asyncio.run(run_agent())
+        response = asyncio.run(run_agent_task())
 
         # Save messages to history if session_id is provided
         if session_id:

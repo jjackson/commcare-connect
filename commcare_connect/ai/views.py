@@ -13,7 +13,7 @@ from django.views.decorators.http import require_GET, require_POST
 from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
 
 from .session_store import get_message_history
-from .tasks import simple_echo_task
+from .tasks import run_agent
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +28,13 @@ def ai_demo_submit(request):
     prompt = request.POST.get("prompt", "").strip()
     session_id = request.POST.get("session_id", "").strip()
     program_id = request.POST.get("program_id", "").strip()
+    agent = request.POST.get("agent", "").strip()
 
     if not prompt:
         return JsonResponse({"error": "Prompt is required"}, status=400)
+
+    if not agent:
+        return JsonResponse({"error": "Agent is required"}, status=400)
 
     # Validate session_id format if provided
     if session_id:
@@ -41,7 +45,7 @@ def ai_demo_submit(request):
             session_id = None
 
     # Get program_id from POST or from labs_context (set by middleware)
-    # program_id is required for the agent to function
+    # program_id is optional
     program_id_int = None
     if program_id:
         try:
@@ -50,12 +54,6 @@ def ai_demo_submit(request):
             logger.warning(f"Invalid program_id format: {program_id}")
     elif hasattr(request, "labs_context"):
         program_id_int = request.labs_context.get("program_id")
-
-    if program_id_int is None:
-        return JsonResponse(
-            {"error": "program_id is required."},
-            status=400,
-        )
 
     # Extract OAuth token from session for the task
     access_token = None
@@ -67,14 +65,15 @@ def ai_demo_submit(request):
         if timezone.now().timestamp() < expires_at:
             access_token = labs_oauth.get("access_token")
 
-    # Trigger the Celery task with prompt, session_id, user_id, access_token, and program_id
+    # Trigger the Celery task with prompt, session_id, user_id, access_token, program_id, and agent
     # The task will retrieve history itself
-    result = simple_echo_task.delay(
+    result = run_agent.delay(
         prompt,
         session_id=session_id,
         user_id=request.user.id,
         access_token=access_token,
         program_id=program_id_int,
+        agent=agent,
     )
 
     return JsonResponse(

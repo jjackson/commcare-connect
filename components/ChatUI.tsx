@@ -79,6 +79,14 @@ export function ChatUI({
     return container?.dataset.historyUrl || '/ai/demo/history/';
   };
 
+  const getAgent = () => {
+    const container = document.getElementById(containerId);
+    // Try dataset first (for data-agent), then fallback to getAttribute
+    return (
+      container?.dataset.agent || container?.getAttribute('data-agent') || null
+    );
+  };
+
   const stopPolling = useCallback(() => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
@@ -271,6 +279,10 @@ export function ChatUI({
         if (programId) {
           bodyParams.program_id = programId;
         }
+
+        const agent = getAgent();
+        // Agent is required, so always include it (even if empty, backend will validate)
+        bodyParams.agent = agent || '';
 
         const response = await fetch(getSubmitUrl(), {
           method: 'POST',
