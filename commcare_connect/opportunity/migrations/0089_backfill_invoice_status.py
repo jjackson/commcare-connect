@@ -1,11 +1,10 @@
 from django.db import migrations
-from commcare_connect.opportunity.models import InvoiceStatus
 
 
 def backfill_invoice_status(apps, schema_editor):
     PaymentInvoice = apps.get_model("opportunity", "PaymentInvoice")
-    PaymentInvoice.objects.filter(payment__isnull=False).update(status=InvoiceStatus.APPROVED)
-    PaymentInvoice.objects.filter(payment__isnull=True).update(status=InvoiceStatus.SUBMITTED)
+    PaymentInvoice.objects.filter(payment__isnull=False).update(status="approved")
+    PaymentInvoice.objects.filter(payment__isnull=True).update(status="submitted")
 
 
 class Migration(migrations.Migration):

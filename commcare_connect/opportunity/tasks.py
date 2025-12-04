@@ -35,6 +35,7 @@ from commcare_connect.opportunity.models import (
     CompletedWorkStatus,
     DeliverUnit,
     ExchangeRate,
+    InvoiceStatus,
     LearnModule,
     Opportunity,
     OpportunityAccess,
@@ -47,7 +48,12 @@ from commcare_connect.opportunity.models import (
     VisitReviewStatus,
     VisitValidationStatus,
 )
-from commcare_connect.opportunity.utils.completed_work import update_status
+from commcare_connect.opportunity.utils.completed_work import get_uninvoiced_visit_items, update_status
+from commcare_connect.opportunity.utils.invoice import (
+    generate_invoice_number,
+    get_end_date_for_invoice,
+    get_start_date_for_invoice,
+)
 from commcare_connect.users.models import User
 from commcare_connect.users.user_credentials import UserCredentialIssuer
 from commcare_connect.utils.analytics import Event, GATrackingInfo, _serialize_events, send_event_task
@@ -528,3 +534,27 @@ def send_invoice_paid_mail(opportunity_id, invoice_ids):
             recipient_list=recipient_emails,
             html_message=html_body,
         )
+
+
+@celery_app.task()
+def generate_automated_service_delivery_invoice():
+    for opportunity in Opportunity.objects.filter(active=True, managed=True):
+        start_date = get_start_date_for_invoice(opportunity)
+        end_date = get_end_date_for_invoice(start_date)
+        invoice_number = generate_invoice_number()
+        line_items = get_uninvoiced_visit_items(opportunity, start_date, end_date)
+        total_local_amount = sum(item["total_amount_local"] for item in line_items)
+        total_usd_amount = sum(item["total_amount_usd"] for item in line_items)
+
+        payment_invoice = PaymentInvoice(
+            opportunity=opportunity,
+            amount=total_local_amount,
+            amount_usd=total_usd_amount,
+            date=datetime.datetime.utcnow(),
+            start_date=start_date,
+            end_date=end_date,
+            status=InvoiceStatus.PENDING,
+            invoice_number=invoice_number,
+            service_delivery=True,
+        )
+        payment_invoice.save()
