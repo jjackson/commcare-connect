@@ -29,6 +29,7 @@ def ai_demo_submit(request):
     session_id = request.POST.get("session_id", "").strip()
     program_id = request.POST.get("program_id", "").strip()
     agent = request.POST.get("agent", "").strip()
+    current_code = request.POST.get("current_code", "").strip()
 
     if not prompt:
         return JsonResponse({"error": "Prompt is required"}, status=400)
@@ -65,7 +66,7 @@ def ai_demo_submit(request):
         if timezone.now().timestamp() < expires_at:
             access_token = labs_oauth.get("access_token")
 
-    # Trigger the Celery task with prompt, session_id, user_id, access_token, program_id, and agent
+    # Trigger the Celery task with prompt, session_id, user_id, access_token, program_id, agent, and current_code
     # The task will retrieve history itself
     result = run_agent.delay(
         prompt,
@@ -74,6 +75,7 @@ def ai_demo_submit(request):
         access_token=access_token,
         program_id=program_id_int,
         agent=agent,
+        current_code=current_code,
     )
 
     return JsonResponse(
@@ -98,37 +100,6 @@ def ai_demo_status(request):
         return JsonResponse({"error": "task_id is required"}, status=400)
 
     try:
-        # TEMPORARY: Hardcoded test response for vibes agent
-        # This allows testing the code editor integration without backend changes
-        agent = request.GET.get("agent", "").strip()
-        if agent == "vibes":
-            # Return a simple hello-world code response immediately for testing
-            hello_world_code = """// Hello World Example
-function HelloWorld() {
-  return (
-    <div className="p-6 bg-white rounded-lg border border-gray-200 shadow-sm">
-      <h1 className="text-2xl font-bold text-gray-800 mb-4">Hello World!</h1>
-      <p className="text-gray-600">This is a test response from the AI chat.</p>
-    </div>
-  );
-}
-
-// Render the React component
-const root = ReactDOM.createRoot(document.getElementById('react-root'));
-root.render(<HelloWorld />);"""
-
-            return JsonResponse(
-                {
-                    "status": "SUCCESS",
-                    "complete": True,
-                    "message": "Test response",
-                    "result": {
-                        "message": "Here's a simple hello world component for testing!",
-                        "code": hello_world_code,
-                    },
-                }
-            )
-
         task = AsyncResult(task_id)
         task_meta = task._get_task_meta()
         status = task_meta.get("status")
