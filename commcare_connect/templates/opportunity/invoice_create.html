@@ -21,7 +21,7 @@
       endDate: "{{  form.end_date.value|default:'' }}",
       amount: null,
       usdAmount: null,
-      isServiceDelivery: "{{ is_service_delivery|yesno:'true,false' }}",
+      isServiceDelivery: "{{ is_service_delivery|yesno:'true,false' }}" == 'true',
       showDownloadButton: false,
 
       init() {
