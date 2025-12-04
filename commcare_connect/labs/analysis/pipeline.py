@@ -1,32 +1,37 @@
 """
-Analysis pipeline with streaming and backend abstraction.
+Analysis pipeline - the single entry point for all analysis data access.
 
-Provides stream_analysis_pipeline() - the main entry point for all analysis.
-Yields progress events as analysis progresses, enabling real-time UI updates.
+Usage:
+    from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
+
+    # Raw data access (replaces api_cache.py)
+    pipeline = AnalysisPipeline(request)
+    visits = pipeline.fetch_raw_visits(opportunity_id=814)
+    visits_slim = pipeline.fetch_raw_visits(opportunity_id=814, skip_form_json=True)
+
+    # Analysis with streaming progress
+    for event_type, event_data in pipeline.stream_analysis(config):
+        if event_type == "status":
+            yield format_sse(event_data["message"])
+        elif event_type == "result":
+            return event_data
+
+    # Synchronous analysis
+    result = pipeline.run_analysis(config)
 
 Backend selection is based on settings.LABS_ANALYSIS_BACKEND:
 - "python_redis" (default): Redis/file caching with pandas computation
 - "sql": PostgreSQL table caching with SQL computation
-
-Usage:
-    from commcare_connect.labs.analysis.pipeline import stream_analysis_pipeline
-
-    for event_type, event_data in stream_analysis_pipeline(request, config):
-        if event_type == "status":
-            yield format_sse(event_data["message"])
-        elif event_type == "download":
-            yield format_download_progress(event_data["bytes"], event_data["total"])
-        elif event_type == "result":
-            return event_data
 """
 
 import logging
 from collections.abc import Generator
-from typing import Any, Protocol
+from typing import Any
 
 from django.conf import settings
 from django.http import HttpRequest
 
+from commcare_connect.labs.analysis.backends.protocol import AnalysisBackend
 from commcare_connect.labs.analysis.config import AnalysisPipelineConfig, CacheStage
 from commcare_connect.labs.analysis.models import FLWAnalysisResult, VisitAnalysisResult
 
@@ -37,32 +42,6 @@ EVENT_STATUS = "status"
 EVENT_DOWNLOAD = "download"
 EVENT_RESULT = "result"
 EVENT_ERROR = "error"
-
-
-class AnalysisBackend(Protocol):
-    """Protocol defining the interface for analysis backends."""
-
-    def get_cached_flw_result(
-        self, opportunity_id: int, config: AnalysisPipelineConfig, visit_count: int
-    ) -> FLWAnalysisResult | None:
-        """Get cached FLW result if valid."""
-        ...
-
-    def get_cached_visit_result(
-        self, opportunity_id: int, config: AnalysisPipelineConfig, visit_count: int
-    ) -> VisitAnalysisResult | None:
-        """Get cached visit result if valid."""
-        ...
-
-    def process_and_cache(
-        self,
-        request: HttpRequest,
-        config: AnalysisPipelineConfig,
-        opportunity_id: int,
-        visit_dicts: list[dict],
-    ) -> FLWAnalysisResult | VisitAnalysisResult:
-        """Process visits and cache results. Returns appropriate result based on terminal_stage."""
-        ...
 
 
 def _get_backend_name() -> str:
@@ -84,6 +63,227 @@ def _get_backend() -> AnalysisBackend:
         return PythonRedisBackend()
 
 
+# Expose get_backend for callers that need direct backend access
+def get_backend() -> AnalysisBackend:
+    """
+    Get the configured backend instance.
+
+    Most callers should use AnalysisPipeline instead.
+    """
+    return _get_backend()
+
+
+class AnalysisPipeline:
+    """
+    Single entry point for all analysis data access.
+
+    Facade that hides backend implementation details from callers.
+    Use this instead of importing from api_cache.py or backends directly.
+    """
+
+    def __init__(self, request: HttpRequest):
+        """
+        Initialize pipeline with request context.
+
+        Args:
+            request: HttpRequest with labs_oauth and labs_context
+        """
+        self.request = request
+        self.backend = _get_backend()
+        self.backend_name = _get_backend_name()
+
+        # Extract context
+        self.access_token = request.session.get("labs_oauth", {}).get("access_token")
+        self.labs_context = getattr(request, "labs_context", {})
+
+        if not self.access_token:
+            raise ValueError("No labs OAuth token found in session")
+
+    @property
+    def opportunity_id(self) -> int | None:
+        """Get opportunity ID from labs context."""
+        return self.labs_context.get("opportunity_id")
+
+    @property
+    def visit_count(self) -> int:
+        """Get expected visit count from labs context."""
+        opportunity = self.labs_context.get("opportunity", {})
+        return opportunity.get("visit_count", 0)
+
+    # -------------------------------------------------------------------------
+    # Raw Data Access (replaces api_cache.py)
+    # -------------------------------------------------------------------------
+
+    def fetch_raw_visits(
+        self,
+        opportunity_id: int | None = None,
+        skip_form_json: bool = False,
+        filter_visit_ids: set[int] | None = None,
+        force_refresh: bool = False,
+    ) -> list[dict]:
+        """
+        Fetch raw visit data. Backend handles caching internally.
+
+        Args:
+            opportunity_id: Opportunity ID (defaults to labs_context)
+            skip_form_json: If True, exclude form_json (slim mode for audit selection)
+            filter_visit_ids: If provided, only return visits with these IDs
+            force_refresh: If True, bypass cache and fetch fresh data
+
+        Returns:
+            List of visit dicts
+
+        Examples:
+            # Full visits with form_json
+            visits = pipeline.fetch_raw_visits()
+
+            # Slim mode (no form_json) for audit selection
+            visits = pipeline.fetch_raw_visits(skip_form_json=True)
+
+            # Specific visits with form_json for audit extraction
+            visits = pipeline.fetch_raw_visits(filter_visit_ids={1, 2, 3})
+        """
+        opp_id = opportunity_id or self.opportunity_id
+        if not opp_id:
+            raise ValueError("No opportunity_id provided and none in labs_context")
+
+        # Check URL param for force refresh
+        if self.request.GET.get("refresh") == "1":
+            force_refresh = True
+
+        return self.backend.fetch_raw_visits(
+            opportunity_id=opp_id,
+            access_token=self.access_token,
+            expected_visit_count=self.visit_count,
+            force_refresh=force_refresh,
+            skip_form_json=skip_form_json,
+            filter_visit_ids=filter_visit_ids,
+        )
+
+    def has_valid_raw_cache(self, opportunity_id: int | None = None) -> bool:
+        """Check if valid raw cache exists for the opportunity."""
+        opp_id = opportunity_id or self.opportunity_id
+        if not opp_id:
+            return False
+        return self.backend.has_valid_raw_cache(opp_id, self.visit_count)
+
+    # -------------------------------------------------------------------------
+    # Analysis
+    # -------------------------------------------------------------------------
+
+    def run_analysis(
+        self,
+        config: AnalysisPipelineConfig,
+        opportunity_id: int | None = None,
+    ) -> FLWAnalysisResult | VisitAnalysisResult:
+        """
+        Run analysis synchronously.
+
+        Args:
+            config: Analysis configuration
+            opportunity_id: Opportunity ID (defaults to labs_context)
+
+        Returns:
+            FLWAnalysisResult or VisitAnalysisResult based on config.terminal_stage
+        """
+        for event_type, data in self.stream_analysis(config, opportunity_id):
+            if event_type == EVENT_RESULT:
+                return data
+            elif event_type == EVENT_ERROR:
+                raise RuntimeError(f"Analysis pipeline failed: {data.get('message', 'Unknown error')}")
+
+        raise RuntimeError("Analysis pipeline completed without returning a result")
+
+    def stream_analysis(
+        self,
+        config: AnalysisPipelineConfig,
+        opportunity_id: int | None = None,
+    ) -> Generator[tuple[str, Any], None, None]:
+        """
+        Stream analysis pipeline with progress events.
+
+        Yields:
+            Tuples of (event_type, event_data):
+            - ("status", {"message": "..."}) - progress updates
+            - ("download", {"bytes": N, "total": M}) - download progress
+            - ("result", FLWAnalysisResult|VisitAnalysisResult) - final result
+            - ("error", {"message": "..."}) - error (terminates stream)
+
+        Args:
+            config: Analysis configuration
+            opportunity_id: Opportunity ID (defaults to labs_context)
+        """
+        opp_id = opportunity_id or self.opportunity_id
+        if not opp_id:
+            yield (EVENT_ERROR, {"message": "No opportunity_id provided"})
+            return
+
+        force_refresh = self.request.GET.get("refresh") == "1"
+        terminal_stage = config.terminal_stage
+
+        try:
+            # Check cache first
+            yield (EVENT_STATUS, {"message": "Checking cache..."})
+
+            if not force_refresh:
+                cached_result = None
+                if terminal_stage == CacheStage.AGGREGATED:
+                    cached_result = self.backend.get_cached_flw_result(opp_id, config, self.visit_count)
+                else:
+                    cached_result = self.backend.get_cached_visit_result(opp_id, config, self.visit_count)
+
+                if cached_result:
+                    yield (EVENT_STATUS, {"message": "Cache hit!"})
+                    logger.info(f"[Pipeline/{self.backend_name}] Cache HIT for opp {opp_id}")
+                    yield (EVENT_RESULT, cached_result)
+                    return
+
+            # Stream raw data fetch with progress
+            yield (EVENT_STATUS, {"message": "Connecting to API..."})
+            logger.info(f"[Pipeline/{self.backend_name}] Fetching data for opp {opp_id}")
+
+            visit_dicts = None
+            for event in self.backend.stream_raw_visits(
+                opportunity_id=opp_id,
+                access_token=self.access_token,
+                expected_visit_count=self.visit_count,
+                force_refresh=force_refresh,
+            ):
+                event_type = event[0]
+                if event_type == "cached":
+                    visit_dicts = event[1]
+                    yield (EVENT_STATUS, {"message": "Using cached data..."})
+                elif event_type == "progress":
+                    _, bytes_downloaded, total_bytes = event
+                    yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
+                elif event_type == "complete":
+                    visit_dicts = event[1]
+                    yield (EVENT_STATUS, {"message": "Download complete"})
+
+            if visit_dicts is None:
+                raise RuntimeError("No data received from API")
+
+            # Process with backend
+            yield (EVENT_STATUS, {"message": f"Processing {len(visit_dicts)} visits..."})
+            logger.info(f"[Pipeline/{self.backend_name}] Processing {len(visit_dicts)} visits")
+
+            result = self.backend.process_and_cache(self.request, config, opp_id, visit_dicts)
+
+            yield (EVENT_STATUS, {"message": "Complete!"})
+            logger.info(f"[Pipeline/{self.backend_name}] Complete: {len(result.rows)} rows")
+
+            yield (EVENT_RESULT, result)
+
+        except Exception as e:
+            logger.error(f"[Pipeline/{self.backend_name}] Error: {e}", exc_info=True)
+            yield (EVENT_ERROR, {"message": str(e)})
+
+
+# =============================================================================
+# Legacy Functions (for backward compatibility during migration)
+# =============================================================================
+
+
 def stream_analysis_pipeline(
     request: HttpRequest,
     config: AnalysisPipelineConfig,
@@ -92,91 +292,10 @@ def stream_analysis_pipeline(
     """
     Stream analysis pipeline with progress events.
 
-    Yields:
-        Tuples of (event_type, event_data):
-        - ("status", {"message": "..."}) - progress updates
-        - ("download", {"bytes": N, "total": M}) - download progress
-        - ("result", FLWAnalysisResult|VisitAnalysisResult) - final result
-        - ("error", {"message": "..."}) - error (terminates stream)
+    DEPRECATED: Use AnalysisPipeline(request).stream_analysis(config) instead.
     """
-    from commcare_connect.labs.api_cache import _parse_csv_bytes, stream_user_visits_with_progress
-
-    backend = _get_backend()
-    backend_name = _get_backend_name()
-
-    # Extract context
-    labs_context = getattr(request, "labs_context", {})
-    if opportunity_id is None:
-        opportunity_id = labs_context.get("opportunity_id")
-
-    force_refresh = request.GET.get("refresh") == "1"
-    terminal_stage = config.terminal_stage
-
-    try:
-        # Check cache
-        yield (EVENT_STATUS, {"message": "Checking cache..."})
-
-        opportunity = labs_context.get("opportunity", {})
-        current_visit_count = opportunity.get("visit_count", 0)
-
-        if not force_refresh:
-            cached_result = None
-            if terminal_stage == CacheStage.AGGREGATED:
-                cached_result = backend.get_cached_flw_result(opportunity_id, config, current_visit_count)
-            else:
-                cached_result = backend.get_cached_visit_result(opportunity_id, config, current_visit_count)
-
-            if cached_result:
-                yield (EVENT_STATUS, {"message": "Cache hit!"})
-                logger.info(f"[Pipeline/{backend_name}] Cache HIT for opp {opportunity_id}")
-                yield (EVENT_RESULT, cached_result)
-                return
-
-        # Download data
-        yield (EVENT_STATUS, {"message": "Connecting to API..."})
-        logger.info(f"[Pipeline/{backend_name}] Downloading data for opp {opportunity_id}")
-
-        access_token = request.session.get("labs_oauth", {}).get("access_token")
-        csv_bytes = None
-
-        for event in stream_user_visits_with_progress(
-            opportunity_id=opportunity_id,
-            access_token=access_token,
-            current_visit_count=current_visit_count,
-            force_refresh=force_refresh,
-        ):
-            event_type = event[0]
-            if event_type == "cached":
-                csv_bytes = event[1]
-                yield (EVENT_STATUS, {"message": "Using cached data..."})
-            elif event_type == "progress":
-                _, bytes_downloaded, total_bytes = event
-                yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
-            elif event_type == "complete":
-                csv_bytes = event[1]
-                yield (EVENT_STATUS, {"message": "Download complete"})
-
-        if csv_bytes is None:
-            raise RuntimeError("No data received from API")
-
-        # Parse data
-        yield (EVENT_STATUS, {"message": "Parsing visit data..."})
-        visit_dicts = _parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
-
-        # Process with backend
-        yield (EVENT_STATUS, {"message": f"Processing {len(visit_dicts)} visits..."})
-        logger.info(f"[Pipeline/{backend_name}] Processing {len(visit_dicts)} visits")
-
-        result = backend.process_and_cache(request, config, opportunity_id, visit_dicts)
-
-        yield (EVENT_STATUS, {"message": "Complete!"})
-        logger.info(f"[Pipeline/{backend_name}] Complete: {len(result.rows)} rows")
-
-        yield (EVENT_RESULT, result)
-
-    except Exception as e:
-        logger.error(f"[Pipeline/{backend_name}] Error: {e}", exc_info=True)
-        yield (EVENT_ERROR, {"message": str(e)})
+    pipeline = AnalysisPipeline(request)
+    yield from pipeline.stream_analysis(config, opportunity_id)
 
 
 def run_analysis_pipeline(
@@ -187,12 +306,7 @@ def run_analysis_pipeline(
     """
     Synchronous wrapper around stream_analysis_pipeline.
 
-    Consumes the stream and returns the final result.
+    DEPRECATED: Use AnalysisPipeline(request).run_analysis(config) instead.
     """
-    for event_type, data in stream_analysis_pipeline(request, config, opportunity_id):
-        if event_type == EVENT_RESULT:
-            return data
-        elif event_type == EVENT_ERROR:
-            raise RuntimeError(f"Analysis pipeline failed: {data.get('message', 'Unknown error')}")
-
-    raise RuntimeError("Analysis pipeline completed without returning a result")
+    pipeline = AnalysisPipeline(request)
+    return pipeline.run_analysis(config, opportunity_id)

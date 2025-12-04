@@ -1,7 +1,8 @@
 """
 Data access layer for analysis framework.
 
-Provides AnalysisDataAccess for fetching UserVisit data from Connect API.
+Provides AnalysisDataAccess for fetching UserVisit data.
+Uses AnalysisPipeline internally for backend-agnostic data access.
 """
 
 import logging
@@ -13,6 +14,7 @@ from django.conf import settings
 from django.http import HttpRequest
 
 from commcare_connect.labs.analysis.models import LocalUserVisit
+from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,7 @@ class AnalysisDataAccess:
     """
     Fetches UserVisit data from Connect API.
 
+    Uses AnalysisPipeline for backend-agnostic caching.
     Handles pagination, parsing, and returns list of LocalUserVisit proxies.
     """
 
@@ -42,48 +45,26 @@ class AnalysisDataAccess:
         if not self.opportunity_id:
             raise ValueError("No opportunity selected in labs context")
 
+        # Use AnalysisPipeline for data access
+        self._pipeline = AnalysisPipeline(request)
+
     def fetch_user_visits(self) -> list[LocalUserVisit]:
         """
         Fetch all UserVisits for the opportunity from Connect API.
 
-        Uses centralized Labs caching to avoid repeated API calls.
+        Uses AnalysisPipeline for backend-agnostic caching.
         Respects ?refresh=1 URL parameter to force cache bypass.
 
         Returns:
             List of LocalUserVisit proxies
 
         Raises:
-            httpx.HTTPStatusError: If API request fails
+            RuntimeError: If API request fails
         """
-        from commcare_connect.labs.api_cache import fetch_user_visits_cached
-
         logger.info(f"Fetching user visits for opportunity {self.opportunity_id}")
 
-        # Check for force refresh from URL parameter
-        force_refresh = self.request.GET.get("refresh") == "1"
-
-        # Define the API call function
-        def make_api_call():
-            url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{self.opportunity_id}/user_visits/"
-            try:
-                # Use 580s timeout to stay under ALB's 600s timeout (large datasets can be 300MB+)
-                response = httpx.get(url, headers={"Authorization": f"Bearer {self.access_token}"}, timeout=580.0)
-                response.raise_for_status()
-                return response
-            except httpx.TimeoutException as e:
-                logger.error(f"Timeout fetching user visits for opportunity {self.opportunity_id}: {e}")
-                raise RuntimeError("Connect API timeout - the request took too long. Please try again.") from e
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Failed to fetch user visits: {e}")
-                raise
-
-        # Use centralized caching (returns list of dicts with parsed form_json)
-        visits_data = fetch_user_visits_cached(
-            request=self.request,
-            opportunity_id=self.opportunity_id,
-            api_call_func=make_api_call,
-            force_refresh=force_refresh,
-        )
+        # Use AnalysisPipeline for raw data access
+        visits_data = self._pipeline.fetch_raw_visits()
 
         # Convert dicts to LocalUserVisit proxies
         visits = [LocalUserVisit(data) for data in visits_data]

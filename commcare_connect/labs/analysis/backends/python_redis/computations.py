@@ -1,7 +1,8 @@
 """
-Field and histogram computations for analysis framework.
+Field and histogram computations for python_redis backend.
 
-Provides functions to extract values from form_json and compute aggregations.
+Provides functions to extract values from form_json and compute aggregations
+using Python/pandas.
 """
 
 import logging
@@ -104,7 +105,13 @@ def compute_fields_batch(visits: list[LocalUserVisit], field_comps: list[FieldCo
 
             # Compute aggregation using pandas for better performance
             if not non_none_values:
-                result = field_comp.default
+                # For count/sum, return 0 (not None) when no values
+                if field_comp.aggregation in ["count", "count_unique", "sum"]:
+                    result = 0
+                elif field_comp.aggregation == "list":
+                    result = []
+                else:
+                    result = field_comp.default
             elif field_comp.aggregation == "count":
                 result = len(non_none_values)
             elif field_comp.aggregation == "count_unique":

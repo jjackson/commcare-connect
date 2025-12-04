@@ -27,47 +27,11 @@ CHC_NUTRITION_CONFIG = AnalysisPipelineConfig(
     experiment="chc_nutrition",
     terminal_stage=CacheStage.AGGREGATED,
     fields=[
-        # Delivery Unit - REQUIRED for coverage enrichment
-        # NOTE: Named "du_name" not "deliver_unit_name" to avoid shadowing VisitRow field
-        FieldComputation(
-            name="du_name",
-            path="form.case.update.du_name",
-            paths=[
-                "form.case.update.du_name",  # opp 814
-                "form.subcase_0.case.update.du_name",  # opp 822
-                "form.service_delivery.du_name",  # opp 822 alt
-                "form.case_info.du_name",  # opp 822 alt
-            ],
-            aggregation="first",
-            description="CommCare delivery unit name (from form JSON)",
-        ),
         FieldComputation(
             name="commcare_userid",
             path="form.meta.userID",
             aggregation="first",
             description="CommCare user ID from form metadata",
-        ),
-        # Core Demographics (first occurrence per FLW)
-        FieldComputation(
-            name="child_age_months",
-            path="form.additional_case_info.childs_age_in_month",
-            paths=[
-                "form.additional_case_info.childs_age_in_month",  # opp 814
-                "form.case_info.childs_age_in_months",  # opp 822 (note: plural)
-            ],
-            aggregation="first",
-            description="Child age in months (first visit)",
-        ),
-        FieldComputation(
-            name="child_gender",
-            path="form.additional_case_info.childs_gender",
-            paths=[
-                "form.additional_case_info.childs_gender",  # opp 814
-                "form.child_registration.childs_gender",  # opp 822
-                "form.subcase_0.case.update.childs_gender",  # opp 822 alt
-            ],
-            aggregation="first",
-            description="Child gender (first visit)",
         ),
         # Gender counts for calculating gender split
         FieldComputation(
@@ -251,26 +215,6 @@ CHC_NUTRITION_CONFIG = AnalysisPipelineConfig(
             aggregation="count",
             transform=lambda x: 1 if str(x).lower() in ["yes", "1", "true"] else None,
             description="Number who received any vaccine",
-        ),
-        FieldComputation(
-            name="immunization_no_capture_reasons",
-            path="form.immunization_photo_group.immunization_no_capture_reason",
-            paths=[
-                "form.immunization_photo_group.immunization_no_capture_reason",  # opp 814
-                "form.service_delivery.immunization_photo_group.immunization_no_capture_reason",  # opp 822 guess
-            ],
-            aggregation="list",
-            description="Reasons for not capturing immunization photo",
-        ),
-        FieldComputation(
-            name="vaccine_not_provided_reasons",
-            path="form.pictures.vaccine_not_provided_reason",
-            paths=[
-                "form.pictures.vaccine_not_provided_reason",  # opp 814
-                "form.service_delivery.pictures.vaccine_not_provided_reason",  # opp 822 guess
-            ],
-            aggregation="list",
-            description="Reasons vaccine was not provided",
         ),
     ],
     histograms=[

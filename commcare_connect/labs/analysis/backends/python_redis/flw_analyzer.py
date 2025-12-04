@@ -12,7 +12,7 @@ from typing import Any
 import pandas as pd
 from django.http import HttpRequest
 
-from commcare_connect.labs.analysis.computations import (
+from commcare_connect.labs.analysis.backends.python_redis.computations import (
     aggregate_histogram_from_values,
     compute_fields_batch,
     compute_histograms_batch,
@@ -374,7 +374,13 @@ class FLWAnalyzer:
             values = [v.computed.get(field_name) for v in visit_rows if v.computed.get(field_name) is not None]
 
             if not values:
-                result[field_name] = field_comp.default
+                # For count/sum, return 0 (not None) when no values
+                if field_comp.aggregation in ["count", "count_unique", "sum"]:
+                    result[field_name] = 0
+                elif field_comp.aggregation == "list":
+                    result[field_name] = []
+                else:
+                    result[field_name] = field_comp.default
                 continue
 
             # Apply aggregation
