@@ -1,13 +1,74 @@
 """
 Utility functions for analysis framework.
 
-Provides JSON path extraction, type coercion, and aggregation helpers.
+Provides JSON path extraction, type coercion, aggregation helpers,
+and shared cache utilities.
 """
 
+import hashlib
 import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# Cache Constants and Utilities
+# =============================================================================
+
+# TTL for Django cache backend (1 hour)
+DJANGO_CACHE_TTL = 3600
+
+
+def get_config_hash(config) -> str:
+    """
+    Generate a hash of the analysis config to detect changes.
+
+    Includes field paths, aggregations, histograms, and filters.
+    Changes to any of these will produce a different hash.
+
+    Args:
+        config: AnalysisPipelineConfig instance
+
+    Returns:
+        12-character hash string
+    """
+    # Build a string representation of the config
+    parts = []
+
+    # Add field computations
+    for field in config.fields:
+        parts.append(f"field:{field.name}:{field.path}:{field.aggregation}")
+        # Include transform function bytecode if present (detects lambda changes)
+        if field.transform:
+            try:
+                parts.append(f"transform:{field.transform.__code__.co_code.hex()}")
+            except AttributeError:
+                parts.append(f"transform:{str(field.transform)}")
+
+    # Add histogram computations
+    for hist in config.histograms:
+        parts.append(f"hist:{hist.name}:{hist.path}:{hist.lower_bound}:{hist.upper_bound}:{hist.num_bins}")
+        if hist.transform:
+            try:
+                parts.append(f"hist_transform:{hist.transform.__code__.co_code.hex()}")
+            except AttributeError:
+                parts.append(f"hist_transform:{str(hist.transform)}")
+
+    # Add filters
+    for key, value in sorted(config.filters.items()):
+        parts.append(f"filter:{key}:{value}")
+
+    # Add grouping key
+    parts.append(f"grouping:{config.grouping_key}")
+
+    # Generate hash
+    config_str = "|".join(parts)
+    return hashlib.md5(config_str.encode()).hexdigest()[:12]
+
+
+# =============================================================================
+# JSON Path Extraction
+# =============================================================================
 
 
 def extract_json_path(json_obj: dict | Any, path: str) -> Any:

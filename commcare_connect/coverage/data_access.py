@@ -1,7 +1,7 @@
 """
 Data access layer for fetching DUs from CommCare.
 
-Note: User visits should be fetched via AnalysisDataAccess.fetch_user_visits()
+Note: User visits should be fetched via AnalysisPipeline.fetch_raw_visits()
 which uses efficient CSV caching (same pathway as UI views).
 """
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class CoverageDataAccess:
-    """Fetch DUs from CommCare. User visits are fetched via AnalysisDataAccess."""
+    """Fetch DUs from CommCare. User visits are fetched via AnalysisPipeline."""
 
     def __init__(self, request):
         self.request = request

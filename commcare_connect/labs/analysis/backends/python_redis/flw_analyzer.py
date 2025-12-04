@@ -18,7 +18,6 @@ from commcare_connect.labs.analysis.backends.python_redis.computations import (
     compute_histograms_batch,
 )
 from commcare_connect.labs.analysis.config import AnalysisPipelineConfig
-from commcare_connect.labs.analysis.data_access import AnalysisDataAccess
 from commcare_connect.labs.analysis.models import (
     FLWAnalysisResult,
     FLWRow,
@@ -26,6 +25,7 @@ from commcare_connect.labs.analysis.models import (
     VisitAnalysisResult,
     VisitRow,
 )
+from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class FLWAnalyzer:
         """
         self.request = request
         self.config = config
-        self.data_access = AnalysisDataAccess(request)
+        self._pipeline = AnalysisPipeline(request)
 
         # Validate grouping key for FLW analysis
         if config.grouping_key not in ["username", "user_id"]:
@@ -138,7 +138,8 @@ class FLWAnalyzer:
         logger.info("Starting FLW analysis computation")
 
         # Fetch and filter visits
-        all_visits = self.data_access.fetch_user_visits()
+        visit_dicts = self._pipeline.fetch_raw_visits()
+        all_visits = [LocalUserVisit(d) for d in visit_dicts]
         filtered_visits = self.filter_visits(all_visits)
 
         # Group by FLW
@@ -156,8 +157,8 @@ class FLWAnalyzer:
         rows.sort(key=lambda r: r.total_visits, reverse=True)
 
         # Create result
-        opportunity_id = self.data_access.opportunity_id
-        opportunity_name = self.data_access.labs_context.get("opportunity_name")
+        opportunity_id = self._pipeline.opportunity_id
+        opportunity_name = self._pipeline.labs_context.get("opportunity_name")
 
         result = FLWAnalysisResult(
             opportunity_id=opportunity_id,
@@ -478,7 +479,6 @@ def compute_flw_analysis(
         sync_labs_context_visit_count,
     )
     from commcare_connect.labs.analysis.backends.python_redis.visit_analyzer import compute_visit_analysis
-    from commcare_connect.labs.analysis.data_access import AnalysisDataAccess
 
     opportunity_id = getattr(request, "labs_context", {}).get("opportunity_id")
     force_refresh = request.GET.get("refresh") == "1"
@@ -493,8 +493,8 @@ def compute_flw_analysis(
     # Check FLW cache first (fastest path)
     if use_cache and not force_refresh:
         try:
-            data_access = AnalysisDataAccess(request)
-            current_visit_count = data_access.fetch_visit_count()
+            pipeline = AnalysisPipeline(request)
+            current_visit_count = pipeline.visit_count
 
             cached_flw = cache_manager.get_results_cache()
             if cached_flw and cache_manager.validate_cache(current_visit_count, cached_flw, cache_tolerance_minutes):

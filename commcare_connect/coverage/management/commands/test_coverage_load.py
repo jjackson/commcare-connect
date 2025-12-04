@@ -2,7 +2,7 @@
 Management command to test coverage data loading.
 
 This replicates the same loading process as the web UI but can be run from CLI.
-Uses the same AnalysisDataAccess pathway that the UI views use.
+Uses the same AnalysisPipeline pathway that the UI views use.
 """
 import logging
 from datetime import datetime, timedelta
@@ -11,7 +11,8 @@ from unittest.mock import Mock
 from django.core.management.base import BaseCommand
 
 from commcare_connect.coverage.data_access import CoverageDataAccess
-from commcare_connect.labs.analysis.data_access import AnalysisDataAccess
+from commcare_connect.labs.analysis.models import LocalUserVisit
+from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.integrations.connect.cli import TokenManager
 
 logger = logging.getLogger(__name__)
@@ -134,7 +135,7 @@ class Command(BaseCommand):
             },
         }
         mock_request.labs_context = {"opportunity_id": opportunity_id}
-        # GET attribute needed for AnalysisDataAccess refresh check
+        # GET attribute needed for AnalysisPipeline refresh check
         mock_request.GET = {}
         self.stdout.write(self.style.SUCCESS("  Mock request created"))
 
@@ -167,12 +168,12 @@ class Command(BaseCommand):
 
         # Step 5: Fetch user visits from Connect (using same pathway as UI views)
         if not skip_visits:
-            self.stdout.write("\n[5/5] Fetching user visits from Connect (via AnalysisDataAccess)...")
+            self.stdout.write("\n[5/5] Fetching user visits from Connect (via AnalysisPipeline)...")
             try:
-                # Use AnalysisDataAccess - same pathway as UI views
-                # This uses fetch_user_visits_cached() for efficient CSV caching
-                analysis_data_access = AnalysisDataAccess(mock_request)
-                visits = analysis_data_access.fetch_user_visits()
+                # Use AnalysisPipeline - same pathway as UI views
+                pipeline = AnalysisPipeline(mock_request)
+                visit_dicts = pipeline.fetch_raw_visits()
+                visits = [LocalUserVisit(d) for d in visit_dicts]
                 self.stdout.write(self.style.SUCCESS(f"  Fetched {len(visits)} user visits"))
 
                 if len(visits) > 0:
