@@ -98,6 +98,37 @@ def ai_demo_status(request):
         return JsonResponse({"error": "task_id is required"}, status=400)
 
     try:
+        # TEMPORARY: Hardcoded test response for vibes agent
+        # This allows testing the code editor integration without backend changes
+        agent = request.GET.get("agent", "").strip()
+        if agent == "vibes":
+            # Return a simple hello-world code response immediately for testing
+            hello_world_code = """// Hello World Example
+function HelloWorld() {
+  return (
+    <div className="p-6 bg-white rounded-lg border border-gray-200 shadow-sm">
+      <h1 className="text-2xl font-bold text-gray-800 mb-4">Hello World!</h1>
+      <p className="text-gray-600">This is a test response from the AI chat.</p>
+    </div>
+  );
+}
+
+// Render the React component
+const root = ReactDOM.createRoot(document.getElementById('react-root'));
+root.render(<HelloWorld />);"""
+
+            return JsonResponse(
+                {
+                    "status": "SUCCESS",
+                    "complete": True,
+                    "message": "Test response",
+                    "result": {
+                        "message": "Here's a simple hello world component for testing!",
+                        "code": hello_world_code,
+                    },
+                }
+            )
+
         task = AsyncResult(task_id)
         task_meta = task._get_task_meta()
         status = task_meta.get("status")
