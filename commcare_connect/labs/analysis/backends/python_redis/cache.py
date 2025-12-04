@@ -1,5 +1,5 @@
 """
-Labs Analysis Caching
+Redis/file-based caching for python_redis backend.
 
 Multi-tier caching system for analysis results with auto-detected backend.
 
@@ -151,7 +151,9 @@ def sync_labs_context_visit_count(request: HttpRequest, visit_count: int, opport
         for opp in opportunities:
             if opp.get("id") == target_opp_id:
                 opp["visit_count"] = visit_count
-                request.session.modified = True
+                # Mark session as modified if it's a real Django session
+                if hasattr(request.session, "modified"):
+                    request.session.modified = True
                 logger.debug(f"[Cache] Updated session OAuth data with visit_count={visit_count}")
                 break
 
@@ -903,12 +905,3 @@ class LabsRecordCacheManager:
         except Exception as e:
             logger.warning(f"LabsRecordCacheManager.clear() failed: {e}")
             return False
-
-
-# =============================================================================
-# Backwards Compatibility Aliases
-# =============================================================================
-
-# Old names for backwards compatibility
-RawAPICache = RawAPICacheManager
-LabsRecordCache = LabsRecordCacheManager

@@ -1,28 +1,36 @@
 """
-FLW-level analysis implementation.
+FLW-level analysis implementation for python_redis backend.
 
 Provides one-row-per-FLW analysis with aggregated visit computations.
+Uses pandas for data processing.
 """
 
 import logging
 from collections import defaultdict
 from typing import Any
 
+import pandas as pd
 from django.http import HttpRequest
 
-from commcare_connect.labs.analysis.base import Analyzer, LocalUserVisit
 from commcare_connect.labs.analysis.computations import (
     aggregate_histogram_from_values,
     compute_fields_batch,
     compute_histograms_batch,
 )
-from commcare_connect.labs.analysis.config import AnalysisConfig
-from commcare_connect.labs.analysis.models import FLWAnalysisResult, FLWRow, VisitAnalysisResult, VisitRow
+from commcare_connect.labs.analysis.config import AnalysisPipelineConfig
+from commcare_connect.labs.analysis.data_access import AnalysisDataAccess
+from commcare_connect.labs.analysis.models import (
+    FLWAnalysisResult,
+    FLWRow,
+    LocalUserVisit,
+    VisitAnalysisResult,
+    VisitRow,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class FLWAnalyzer(Analyzer):
+class FLWAnalyzer:
     """
     Analyzes visits at FLW level: one row per worker with aggregated visit data.
 
@@ -33,19 +41,21 @@ class FLWAnalyzer(Analyzer):
     - Approval rate
 
     Custom metrics from config:
-    - Any fields defined in AnalysisConfig.fields
+    - Any fields defined in AnalysisPipelineConfig.fields
     - Aggregated according to specified rules
     """
 
-    def __init__(self, request: HttpRequest, config: AnalysisConfig):
+    def __init__(self, request: HttpRequest, config: AnalysisPipelineConfig):
         """
         Initialize FLW analyzer.
 
         Args:
             request: HttpRequest with labs context
-            config: AnalysisConfig with field computations (grouping_key should be "username")
+            config: AnalysisPipelineConfig with field computations (grouping_key should be "username")
         """
-        super().__init__(request, config)
+        self.request = request
+        self.config = config
+        self.data_access = AnalysisDataAccess(request)
 
         # Validate grouping key for FLW analysis
         if config.grouping_key not in ["username", "user_id"]:
@@ -53,6 +63,70 @@ class FLWAnalyzer(Analyzer):
                 f"FLW analysis typically uses 'username' or 'user_id' as grouping key, "
                 f"but got '{config.grouping_key}'. Results may be unexpected."
             )
+
+    def filter_visits(self, visits: list[LocalUserVisit]) -> list[LocalUserVisit]:
+        """
+        Apply filters from config to visits.
+
+        Args:
+            visits: List of visits to filter
+
+        Returns:
+            Filtered list of visits
+        """
+        filtered = visits
+
+        # Apply status filter
+        if "status" in self.config.filters:
+            statuses = self.config.filters["status"]
+            if not isinstance(statuses, list):
+                statuses = [statuses]
+            filtered = [v for v in filtered if v.status in statuses]
+
+        # Apply date range filter
+        if "date_from" in self.config.filters:
+            date_from = pd.to_datetime(self.config.filters["date_from"])
+            filtered = [v for v in filtered if v.visit_date and v.visit_date >= date_from]
+
+        if "date_to" in self.config.filters:
+            date_to = pd.to_datetime(self.config.filters["date_to"])
+            filtered = [v for v in filtered if v.visit_date and v.visit_date <= date_to]
+
+        # Apply flagged filter
+        if "flagged" in self.config.filters:
+            flagged = self.config.filters["flagged"]
+            filtered = [v for v in filtered if v.flagged == flagged]
+
+        return filtered
+
+    def group_visits(self, visits: list[LocalUserVisit]) -> dict[Any, list[LocalUserVisit]]:
+        """
+        Group visits by the configured grouping key.
+
+        Args:
+            visits: List of visits to group
+
+        Returns:
+            Dictionary mapping grouping key values to lists of visits
+        """
+        groups = {}
+
+        for visit in visits:
+            # Get grouping key value from visit
+            key_value = getattr(visit, self.config.grouping_key, None)
+
+            if key_value is None:
+                logger.warning(f"Visit {visit.id} has no value for grouping key {self.config.grouping_key}")
+                continue
+
+            if key_value not in groups:
+                groups[key_value] = []
+
+            groups[key_value].append(visit)
+
+        logger.info(f"Grouped {len(visits)} visits into {len(groups)} groups by {self.config.grouping_key}")
+
+        return groups
 
     def compute(self) -> FLWAnalysisResult:
         """
@@ -64,7 +138,7 @@ class FLWAnalyzer(Analyzer):
         logger.info("Starting FLW analysis computation")
 
         # Fetch and filter visits
-        all_visits = self.fetch_visits()
+        all_visits = self.data_access.fetch_user_visits()
         filtered_visits = self.filter_visits(all_visits)
 
         # Group by FLW
@@ -166,18 +240,6 @@ class FLWAnalyzer(Analyzer):
 
         return row
 
-    def get_result_summary(self, result: FLWAnalysisResult) -> dict:
-        """
-        Get summary statistics from result.
-
-        Args:
-            result: FLWAnalysisResult to summarize
-
-        Returns:
-            Dictionary of summary statistics
-        """
-        return result.get_summary_stats()
-
     def from_visit_result(self, visit_result: VisitAnalysisResult) -> FLWAnalysisResult:
         """
         Aggregate a pre-computed VisitAnalysisResult into FLW rows.
@@ -190,15 +252,6 @@ class FLWAnalyzer(Analyzer):
 
         Returns:
             FLWAnalysisResult with one FLWRow per worker
-
-        Example:
-            from commcare_connect.labs.analysis import VisitAnalyzer, FLWAnalyzer
-
-            # First, get cached visit-level result
-            visit_result = compute_visit_analysis(request, config)
-
-            # Then aggregate to FLW level (no re-fetch needed)
-            flw_result = FLWAnalyzer(request, config).from_visit_result(visit_result)
         """
 
         # Group visit rows by username
@@ -380,11 +433,11 @@ class FLWAnalyzer(Analyzer):
         return result
 
 
-# Convenience function for quick analysis
-
-
 def compute_flw_analysis(
-    request: HttpRequest, config: AnalysisConfig, use_cache: bool = True, cache_tolerance_minutes: int | None = None
+    request: HttpRequest,
+    config: AnalysisPipelineConfig,
+    use_cache: bool = True,
+    cache_tolerance_minutes: int | None = None,
 ) -> FLWAnalysisResult:
     """
     Compute FLW analysis using the pipeline pattern.
@@ -406,34 +459,20 @@ def compute_flw_analysis(
 
     Args:
         request: HttpRequest with labs context
-        config: AnalysisConfig defining computations
+        config: AnalysisPipelineConfig defining computations
         use_cache: Whether to use file/Redis cache (default: True)
         cache_tolerance_minutes: Accept cache if age < N minutes (even if counts mismatch)
 
     Returns:
         FLWAnalysisResult
-
-    Example:
-        from commcare_connect.labs.analysis import compute_flw_analysis, AnalysisConfig, FieldComputation
-
-        config = AnalysisConfig(
-            grouping_key="username",
-            fields=[
-                FieldComputation(
-                    name="total_muac_measurements",
-                    path="form.case.update.soliciter_muac_cm",
-                    aggregation="count"
-                )
-            ]
-        )
-
-        result = compute_flw_analysis(request, config)
-        for flw in result.rows:
-            print(f"{flw.username}: {flw.total_visits} visits")
     """
-    from commcare_connect.labs.analysis.base import AnalysisDataAccess
-    from commcare_connect.labs.analysis.cache import AnalysisCacheManager
-    from commcare_connect.labs.analysis.visit_analyzer import compute_visit_analysis
+    from commcare_connect.labs.analysis.backends.python_redis.cache import (
+        AnalysisCacheManager,
+        get_cache_tolerance_from_request,
+        sync_labs_context_visit_count,
+    )
+    from commcare_connect.labs.analysis.backends.python_redis.visit_analyzer import compute_visit_analysis
+    from commcare_connect.labs.analysis.data_access import AnalysisDataAccess
 
     opportunity_id = getattr(request, "labs_context", {}).get("opportunity_id")
     force_refresh = request.GET.get("refresh") == "1"
@@ -443,8 +482,6 @@ def compute_flw_analysis(
 
     # Extract tolerance from request if not explicitly provided
     if cache_tolerance_minutes is None:
-        from commcare_connect.labs.analysis.cache import get_cache_tolerance_from_request
-
         cache_tolerance_minutes = get_cache_tolerance_from_request(request)
 
     # Check FLW cache first (fastest path)
@@ -478,8 +515,6 @@ def compute_flw_analysis(
         logger.info(f"Cached FLW results for opp {opportunity_id}")
 
         # Sync labs_context with actual visit count to prevent future cache misses
-        from commcare_connect.labs.analysis.cache import sync_labs_context_visit_count
-
         sync_labs_context_visit_count(request, visit_count, opportunity_id)
 
     return flw_result

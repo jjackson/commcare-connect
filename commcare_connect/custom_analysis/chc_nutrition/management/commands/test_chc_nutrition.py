@@ -21,7 +21,7 @@ from django.core.management.base import BaseCommand
 
 from commcare_connect.custom_analysis.chc_nutrition.analysis_config import CHC_NUTRITION_CONFIG
 from commcare_connect.labs.analysis import compute_flw_analysis
-from commcare_connect.labs.analysis.base import AnalysisDataAccess
+from commcare_connect.labs.analysis.data_access import AnalysisDataAccess
 from commcare_connect.labs.integrations.connect.cli import create_cli_request
 
 logger = logging.getLogger(__name__)
@@ -227,7 +227,7 @@ class Command(BaseCommand):
 
     def test_cache_functionality(self, request, opportunity_id):
         """Test cache functionality with real data."""
-        from commcare_connect.labs.analysis.cache import AnalysisCacheManager
+        from commcare_connect.labs.analysis.backends.python_redis.cache import AnalysisCacheManager
 
         self.stdout.write("")
         self.stdout.write("=" * 80)

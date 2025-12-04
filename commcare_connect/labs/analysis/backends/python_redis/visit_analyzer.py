@@ -1,63 +1,86 @@
 """
-Visit-level analysis implementation.
+Visit-level analysis implementation for python_redis backend.
 
 Provides one-row-per-visit analysis with computed fields (no aggregation).
+Uses pandas for data processing.
 """
 
 import logging
 
+import pandas as pd
 from django.http import HttpRequest
 
-from commcare_connect.labs.analysis.base import Analyzer, LocalUserVisit
 from commcare_connect.labs.analysis.computations import compute_visit_fields
-from commcare_connect.labs.analysis.config import AnalysisConfig, FieldComputation
-from commcare_connect.labs.analysis.models import VisitAnalysisResult, VisitRow
+from commcare_connect.labs.analysis.config import AnalysisPipelineConfig, FieldComputation
+from commcare_connect.labs.analysis.data_access import AnalysisDataAccess
+from commcare_connect.labs.analysis.models import LocalUserVisit, VisitAnalysisResult, VisitRow
 
 logger = logging.getLogger(__name__)
 
 
-class VisitAnalyzer(Analyzer):
+class VisitAnalyzer:
     """
     Analyzes visits at individual level: one row per visit with computed fields.
 
     Unlike FLWAnalyzer which aggregates visits by worker, this preserves each
     visit and computes field values individually from form_json.
-
-    Usage:
-        from commcare_connect.labs.analysis import VisitAnalyzer, AnalysisConfig, FieldComputation
-
-        config = AnalysisConfig(
-            grouping_key="username",  # Not used for visit-level, but required
-            fields=[
-                FieldComputation(
-                    name="muac_cm",
-                    path="form.case.update.soliciter_muac_cm",
-                    aggregation="first"  # Aggregation ignored for visit-level
-                )
-            ]
-        )
-
-        analyzer = VisitAnalyzer(request, config)
-        result = analyzer.compute()
-
-        for visit in result.rows:
-            print(f"Visit {visit.id}: muac={visit.computed.get('muac_cm')}")
     """
 
-    def __init__(self, request: HttpRequest, config: AnalysisConfig | None = None):
+    def __init__(self, request: HttpRequest, config: AnalysisPipelineConfig | None = None):
         """
         Initialize visit analyzer.
 
         Args:
             request: HttpRequest with labs context
-            config: Optional AnalysisConfig with field computations.
+            config: Optional AnalysisPipelineConfig with field computations.
                     If None, only base visit properties are included.
         """
         # Use empty config if none provided
         if config is None:
-            config = AnalysisConfig(grouping_key="username", fields=[])
+            config = AnalysisPipelineConfig(grouping_key="username", fields=[])
 
-        super().__init__(request, config)
+        self.request = request
+        self.config = config
+        self.data_access = AnalysisDataAccess(request)
+
+    def fetch_visits(self) -> list[LocalUserVisit]:
+        """Fetch user visits from API."""
+        return self.data_access.fetch_user_visits()
+
+    def filter_visits(self, visits: list[LocalUserVisit]) -> list[LocalUserVisit]:
+        """
+        Apply filters from config to visits.
+
+        Args:
+            visits: List of visits to filter
+
+        Returns:
+            Filtered list of visits
+        """
+        filtered = visits
+
+        # Apply status filter
+        if "status" in self.config.filters:
+            statuses = self.config.filters["status"]
+            if not isinstance(statuses, list):
+                statuses = [statuses]
+            filtered = [v for v in filtered if v.status in statuses]
+
+        # Apply date range filter
+        if "date_from" in self.config.filters:
+            date_from = pd.to_datetime(self.config.filters["date_from"])
+            filtered = [v for v in filtered if v.visit_date and v.visit_date >= date_from]
+
+        if "date_to" in self.config.filters:
+            date_to = pd.to_datetime(self.config.filters["date_to"])
+            filtered = [v for v in filtered if v.visit_date and v.visit_date <= date_to]
+
+        # Apply flagged filter
+        if "flagged" in self.config.filters:
+            flagged = self.config.filters["flagged"]
+            filtered = [v for v in filtered if v.flagged == flagged]
+
+        return filtered
 
     def compute(self, prefetched_visits: list[LocalUserVisit] | None = None) -> VisitAnalysisResult:
         """
@@ -185,7 +208,10 @@ class VisitAnalyzer(Analyzer):
 
 
 def compute_visit_analysis(
-    request: HttpRequest, config: AnalysisConfig, use_cache: bool = True, cache_tolerance_minutes: int | None = None
+    request: HttpRequest,
+    config: AnalysisPipelineConfig,
+    use_cache: bool = True,
+    cache_tolerance_minutes: int | None = None,
 ) -> VisitAnalysisResult:
     """
     Compute visit-level analysis with caching.
@@ -201,27 +227,18 @@ def compute_visit_analysis(
 
     Args:
         request: HttpRequest with labs context
-        config: AnalysisConfig defining field computations
+        config: AnalysisPipelineConfig defining field computations
         use_cache: Whether to use caching (default: True)
         cache_tolerance_minutes: Accept cache if age < N minutes (even if counts mismatch)
 
     Returns:
         VisitAnalysisResult with one VisitRow per visit
-
-    Example:
-        from commcare_connect.labs.analysis import compute_visit_analysis, AnalysisConfig
-
-        config = AnalysisConfig(
-            grouping_key="username",
-            fields=[FieldComputation(name="muac_cm", path="form.case.update.muac_cm")]
-        )
-
-        result = compute_visit_analysis(request, config)
-        for visit in result.rows:
-            print(f"{visit.username}: muac={visit.computed.get('muac_cm')}")
     """
-    from commcare_connect.labs.analysis.base import AnalysisDataAccess
-    from commcare_connect.labs.analysis.cache import AnalysisCacheManager
+    from commcare_connect.labs.analysis.backends.python_redis.cache import (
+        AnalysisCacheManager,
+        get_cache_tolerance_from_request,
+        sync_labs_context_visit_count,
+    )
 
     opportunity_id = getattr(request, "labs_context", {}).get("opportunity_id")
     force_refresh = request.GET.get("refresh") == "1"
@@ -239,10 +256,6 @@ def compute_visit_analysis(
             cache_manager = AnalysisCacheManager(opportunity_id, config)
             visit_count = result.metadata.get("total_visits", 0)
             cache_manager.set_visit_results_cache(visit_count, result)
-
-            # Sync labs_context with actual visit count
-            from commcare_connect.labs.analysis.cache import sync_labs_context_visit_count
-
             sync_labs_context_visit_count(request, visit_count, opportunity_id)
 
         return result
@@ -253,8 +266,6 @@ def compute_visit_analysis(
 
     # Extract tolerance from request if not explicitly provided
     if cache_tolerance_minutes is None:
-        from commcare_connect.labs.analysis.cache import get_cache_tolerance_from_request
-
         cache_tolerance_minutes = get_cache_tolerance_from_request(request)
 
     # Get current visit count for validation
@@ -285,8 +296,6 @@ def compute_visit_analysis(
     logger.info(f"[Analysis] Cached {visit_count} visits for next time")
 
     # Sync labs_context with actual visit count to prevent future cache misses
-    from commcare_connect.labs.analysis.cache import sync_labs_context_visit_count
-
     sync_labs_context_visit_count(request, visit_count, opportunity_id)
 
     return result

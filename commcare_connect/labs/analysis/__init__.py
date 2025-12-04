@@ -7,50 +7,29 @@ Two main analysis patterns:
 - FLW Analysis: One row per FLW with aggregated computations
 - Visit Analysis: One row per visit with computed fields (no aggregation)
 
+Backends (configured via settings.LABS_ANALYSIS_BACKEND):
+- python_redis: Redis/file caching with pandas computation (default)
+- sql: PostgreSQL table caching with SQL computation
+
 Usage:
-    # Using the unified pipeline (recommended)
-    from commcare_connect.labs.analysis import AnalysisPipelineConfig, CacheStage
+    # Using the streaming pipeline (recommended for dashboards)
+    from commcare_connect.labs.analysis.pipeline import stream_analysis_pipeline
+
+    for event_type, data in stream_analysis_pipeline(request, config):
+        if event_type == "status":
+            yield format_sse(data)
+        elif event_type == "result":
+            return data
+
+    # Synchronous use (tests, Celery, management commands)
     from commcare_connect.labs.analysis.pipeline import run_analysis_pipeline
 
-    config = AnalysisPipelineConfig(
-        grouping_key="username",
-        fields=[
-            FieldComputation(
-                name="buildings_visited",
-                path="form.building_count",
-                aggregation="sum"
-            )
-        ],
-        experiment="my_project",
-        terminal_stage=CacheStage.AGGREGATED,
-    )
-
     result = run_analysis_pipeline(request, config)
-
-    # FLW-level analysis (aggregated) - legacy pattern
-    from commcare_connect.labs.analysis import FLWAnalyzer, AnalysisConfig, FieldComputation
-
-    config = AnalysisConfig(
-        grouping_key="username",
-        fields=[
-            FieldComputation(
-                name="buildings_visited",
-                path="form.building_count",
-                aggregation="sum"
-            )
-        ]
-    )
-
-    analyzer = FLWAnalyzer(request=request, config=config)
-    result = analyzer.compute()
-
-    # Visit-level analysis (per-visit)
-    from commcare_connect.labs.analysis import VisitAnalyzer
-
-    analyzer = VisitAnalyzer(request=request, config=config)
-    result = analyzer.compute()  # One row per visit
 """
 
+# Import from python_redis backend for direct access when needed
+from commcare_connect.labs.analysis.backends.python_redis.flw_analyzer import FLWAnalyzer, compute_flw_analysis
+from commcare_connect.labs.analysis.backends.python_redis.visit_analyzer import VisitAnalyzer, compute_visit_analysis
 from commcare_connect.labs.analysis.config import (
     AnalysisConfig,
     AnalysisPipelineConfig,
@@ -58,17 +37,34 @@ from commcare_connect.labs.analysis.config import (
     FieldComputation,
     HistogramComputation,
 )
-from commcare_connect.labs.analysis.flw_analyzer import FLWAnalyzer, compute_flw_analysis
+from commcare_connect.labs.analysis.data_access import AnalysisDataAccess, get_flw_names_for_opportunity
 from commcare_connect.labs.analysis.models import (
     AnalysisResult,
     FLWAnalysisResult,
     FLWRow,
+    LocalUserVisit,
     VisitAnalysisResult,
     VisitRow,
 )
-from commcare_connect.labs.analysis.visit_analyzer import VisitAnalyzer, compute_visit_analysis
+
+# Pipeline - main entry points (backend-agnostic)
+from commcare_connect.labs.analysis.pipeline import (
+    EVENT_DOWNLOAD,
+    EVENT_ERROR,
+    EVENT_RESULT,
+    EVENT_STATUS,
+    run_analysis_pipeline,
+    stream_analysis_pipeline,
+)
 
 __all__ = [
+    # Pipeline (recommended entry points)
+    "stream_analysis_pipeline",
+    "run_analysis_pipeline",
+    "EVENT_STATUS",
+    "EVENT_DOWNLOAD",
+    "EVENT_RESULT",
+    "EVENT_ERROR",
     # Config
     "AnalysisConfig",  # Backwards compatibility alias
     "AnalysisPipelineConfig",
@@ -85,6 +81,10 @@ __all__ = [
     "VisitAnalysisResult",
     "VisitRow",
     "compute_visit_analysis",
-    # Base
+    # Data models
     "AnalysisResult",
+    "LocalUserVisit",
+    # Data access
+    "AnalysisDataAccess",
+    "get_flw_names_for_opportunity",
 ]

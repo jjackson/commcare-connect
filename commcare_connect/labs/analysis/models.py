@@ -1,12 +1,196 @@
 """
 Result container models for analysis framework.
 
-Provides dataclasses for storing analysis results.
+Provides dataclasses for storing analysis results and the LocalUserVisit proxy.
 """
 
+import ast
+import json
+import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
+
+import pandas as pd
+
+from commcare_connect.labs.analysis.utils import extract_json_path
+
+logger = logging.getLogger(__name__)
+
+
+class LocalUserVisit:
+    """
+    Proxy wrapper for UserVisit data from API.
+
+    Provides property-based access to visit fields including form_json.
+    Includes lazy-parsed GPS coordinates from form_json.metadata.location.
+    """
+
+    def __init__(self, data: dict):
+        """
+        Initialize from CSV row or dict.
+
+        Args:
+            data: Dictionary of visit data from API
+        """
+        self._data = data
+        # GPS fields (lazy parsed)
+        self._latitude: float | None = None
+        self._longitude: float | None = None
+        self._accuracy: float | None = None
+        self._gps_parsed: bool = False
+
+    @property
+    def id(self) -> str:
+        return str(self._data.get("id", ""))
+
+    @property
+    def user_id(self) -> int | None:
+        user_id = self._data.get("user_id")
+        return int(user_id) if user_id else None
+
+    @property
+    def username(self) -> str:
+        return self._data.get("username", "")
+
+    @property
+    def commcare_userid(self) -> str:
+        """CommCare user ID from form.meta.userID in form_json."""
+        form_json = self.form_json
+        return form_json.get("form", {}).get("meta", {}).get("userID", "")
+
+    @property
+    def deliver_unit_id(self) -> int | None:
+        du_id = self._data.get("deliver_unit_id")
+        return int(du_id) if du_id else None
+
+    @property
+    def deliver_unit_name(self) -> str:
+        return self._data.get("deliver_unit", "")
+
+    @property
+    def entity_id(self) -> str:
+        return str(self._data.get("entity_id", ""))
+
+    @property
+    def entity_name(self) -> str:
+        return self._data.get("entity_name", "")
+
+    @property
+    def visit_date(self) -> pd.Timestamp | None:
+        date_str = self._data.get("visit_date")
+        if date_str:
+            return pd.to_datetime(date_str)
+        return None
+
+    @property
+    def status(self) -> str:
+        return self._data.get("status", "")
+
+    @property
+    def flagged(self) -> bool:
+        return bool(self._data.get("flagged", False))
+
+    def _parse_gps(self) -> None:
+        """
+        Lazy parse GPS coordinates from form_json.metadata.location.
+
+        Location format: "latitude longitude altitude accuracy"
+        Example: "12.9716 77.5946 0.0 10.0"
+        """
+        if self._gps_parsed:
+            return
+
+        self._gps_parsed = True
+
+        try:
+            form_json = self.form_json
+            location_str = form_json.get("metadata", {}).get("location", "")
+
+            if location_str:
+                parts = location_str.split()
+                self._latitude = float(parts[0]) if len(parts) > 0 else None
+                self._longitude = float(parts[1]) if len(parts) > 1 else None
+                self._accuracy = float(parts[3]) if len(parts) > 3 else None
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.debug(f"Failed to parse GPS for visit {self.id}: {e}")
+
+    @property
+    def latitude(self) -> float | None:
+        """Latitude from form_json.metadata.location (lazy parsed)."""
+        self._parse_gps()
+        return self._latitude
+
+    @property
+    def longitude(self) -> float | None:
+        """Longitude from form_json.metadata.location (lazy parsed)."""
+        self._parse_gps()
+        return self._longitude
+
+    @property
+    def accuracy_in_m(self) -> float | None:
+        """GPS accuracy in meters from form_json.metadata.location (lazy parsed)."""
+        self._parse_gps()
+        return self._accuracy
+
+    @property
+    def has_gps(self) -> bool:
+        """Check if visit has valid GPS coordinates."""
+        self._parse_gps()
+        return self._latitude is not None and self._longitude is not None
+
+    @property
+    def form_json(self) -> dict:
+        """
+        Get parsed form_json.
+
+        Handles both dict (already parsed) and string (needs parsing).
+        NOTE: API may return Python repr format (single quotes) instead of JSON.
+        """
+        form_json = self._data.get("form_json", {})
+        if isinstance(form_json, str):
+            # First try json.loads for valid JSON
+            try:
+                form_json = json.loads(form_json)
+            except json.JSONDecodeError:
+                # Fall back to ast.literal_eval for Python dict repr format
+                try:
+                    form_json = ast.literal_eval(form_json)
+                except (ValueError, SyntaxError):
+                    logger.warning(f"Failed to parse form_json for visit {self.id}")
+                    form_json = {}
+        return form_json
+
+    def extract_field(self, path: str) -> Any:
+        """
+        Extract field from form_json using dot notation path.
+
+        Args:
+            path: Dot-separated path (e.g., "form.building_count")
+
+        Returns:
+            Extracted value or None
+        """
+        return extract_json_path(self.form_json, path)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "username": self.username,
+            "deliver_unit_id": self.deliver_unit_id,
+            "deliver_unit_name": self.deliver_unit_name,
+            "entity_id": self.entity_id,
+            "entity_name": self.entity_name,
+            "visit_date": self.visit_date.isoformat() if self.visit_date else None,
+            "status": self.status,
+            "flagged": self.flagged,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "accuracy_in_m": self.accuracy_in_m,
+            "form_json": self.form_json,
+        }
 
 
 @dataclass

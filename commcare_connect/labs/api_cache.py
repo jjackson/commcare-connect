@@ -20,7 +20,7 @@ from collections.abc import Callable
 import pandas as pd
 from django.http import HttpRequest
 
-from commcare_connect.labs.analysis.cache import RawAPICacheManager
+from commcare_connect.labs.analysis.backends.python_redis.cache import RawAPICacheManager
 
 logger = logging.getLogger(__name__)
 

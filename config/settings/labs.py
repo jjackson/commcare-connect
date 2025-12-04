@@ -52,3 +52,8 @@ OCS_OAUTH_CLIENT_SECRET = env("OCS_OAUTH_CLIENT_SECRET", default="")  # noqa: F4
 
 # Labs apps configuration
 # No longer need hardcoded opportunity_id - API now supports organization_id/program_id
+
+# Analysis backend: "python_redis" (default) or "sql"
+# python_redis: Redis/file caching with pandas computation
+# sql: PostgreSQL table caching with SQL computation
+LABS_ANALYSIS_BACKEND = env("LABS_ANALYSIS_BACKEND", default="python_redis")  # noqa: F405

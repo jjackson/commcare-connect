@@ -274,7 +274,7 @@ CHC_NUTRITION_CONFIG = AnalysisPipelineConfig(
         ),
     ],
     histograms=[
-        # MUAC distribution histogram with sparkline
+        # MUAC distribution histogram
         # Bins: 9.5-10.5, 10.5-11.5, ..., 20.5-21.5 (12 bins of width 1.0)
         HistogramComputation(
             name="muac_distribution",

@@ -22,7 +22,7 @@ from django_tables2 import SingleTableView
 from commcare_connect.audit.data_access import AuditDataAccess
 from commcare_connect.audit.models import AuditSessionRecord
 from commcare_connect.audit.tables import AuditTable
-from commcare_connect.labs.analysis.base import get_flw_names_for_opportunity
+from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
 
 
 class ExperimentAuditCreateView(LoginRequiredMixin, TemplateView):
