@@ -1,6 +1,7 @@
 from django.urls import include, path
 
 from commcare_connect.labs import views
+from commcare_connect.labs.analysis import views as analysis_views
 from commcare_connect.labs.integrations.commcare import oauth_views as commcare_oauth_views
 from commcare_connect.labs.integrations.connect import oauth_views as connect_oauth_views
 from commcare_connect.labs.integrations.ocs import oauth_views as ocs_oauth_views
@@ -27,6 +28,8 @@ urlpatterns = [
     path("ocs/initiate/", ocs_oauth_views.labs_ocs_initiate, name="ocs_initiate"),
     path("ocs/callback/", ocs_oauth_views.labs_ocs_callback, name="ocs_callback"),
     path("ocs/logout/", ocs_oauth_views.labs_ocs_logout, name="ocs_logout"),
+    # Analysis API
+    path("api/analysis/flw/", analysis_views.FLWAnalysisAPIView.as_view(), name="api_flw_analysis"),
     # Dashboard Prototypes
     path("", include("commcare_connect.labs.dashboards.urls")),
 ]
