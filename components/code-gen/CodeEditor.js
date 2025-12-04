@@ -94,15 +94,19 @@ root.render(<FLWTable />);`,
   const iframeRef = useRef(null);
 
   // Function to build the HTML blob for the iframe
-  const generatePreview = useCallback(() => {
-    setLogs([]); // Clear logs on run
+  const generatePreview = useCallback(
+    (codeOverride = null) => {
+      setLogs([]); // Clear logs on run
 
-    // Extract opportunity_id from parent page URL to inject into iframe
-    const parentUrlParams = new URLSearchParams(window.location.search);
-    const opportunityId = parentUrlParams.get('opportunity_id');
+      // Use provided code or fall back to current jsCode state
+      const codeToUse = codeOverride !== null ? codeOverride : jsCode;
 
-    // We inject a script to catch console logs and send them to the parent
-    const logInterceptor = `
+      // Extract opportunity_id from parent page URL to inject into iframe
+      const parentUrlParams = new URLSearchParams(window.location.search);
+      const opportunityId = parentUrlParams.get('opportunity_id');
+
+      // We inject a script to catch console logs and send them to the parent
+      const logInterceptor = `
       <script>
         const originalLog = console.log;
         const originalError = console.error;
@@ -133,9 +137,9 @@ root.render(<FLWTable />);`,
       </script>
     `;
 
-    // Inject parent page URL params into iframe's JavaScript context
-    // This allows the iframe code to access opportunity_id from the parent page
-    const urlParamsInjection = `
+      // Inject parent page URL params into iframe's JavaScript context
+      // This allows the iframe code to access opportunity_id from the parent page
+      const urlParamsInjection = `
       <script>
         // Inject parent page URL params into iframe context
         // Since iframe uses srcDoc, window.location is the blob URL, not the parent
@@ -151,28 +155,28 @@ root.render(<FLWTable />);`,
       </script>
     `;
 
-    // Inject React, ReactDOM, and Babel Standalone for JSX support
-    // Babel Standalone automatically transforms JSX when script type="text/babel" is used
-    const reactInjection = `
+      // Inject React, ReactDOM, and Babel Standalone for JSX support
+      // Babel Standalone automatically transforms JSX when script type="text/babel" is used
+      const reactInjection = `
       <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
       <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
       <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     `;
 
-    // Inject Tailwind CDN script
-    const stylesInjection = `
+      // Inject Tailwind CDN script
+      const stylesInjection = `
       <script src="https://cdn.tailwindcss.com"></script>
     `;
 
-    // Load library from separate static file
-    // This keeps the library code separate and maintainable
-    const libraryInjection = `
+      // Load library from separate static file
+      // This keeps the library code separate and maintainable
+      const libraryInjection = `
       <script src="/static/js/report-builder-library.js"></script>
     `;
 
-    // Use type="text/babel" to enable automatic JSX transformation
-    // This works for both regular JS and JSX - Babel only transforms if it detects JSX
-    const fullHtml = `
+      // Use type="text/babel" to enable automatic JSX transformation
+      // This works for both regular JS and JSX - Babel only transforms if it detects JSX
+      const fullHtml = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -190,7 +194,7 @@ root.render(<FLWTable />);`,
             // Helper functions available via window.labsApi and window.hooks
 
             try {
-              ${jsCode}
+              ${codeToUse}
             } catch (err) {
               console.error(err.toString());
             }
@@ -199,8 +203,10 @@ root.render(<FLWTable />);`,
       </html>
     `;
 
-    setSrcDoc(fullHtml);
-  }, [jsCode]);
+      setSrcDoc(fullHtml);
+    },
+    [jsCode],
+  );
 
   // Run initial preview
   useEffect(() => {
@@ -231,11 +237,10 @@ root.render(<FLWTable />);`,
     // Listen for code update events from chat widget
     const handleCodeUpdate = (event) => {
       if (event.detail && event.detail.code !== undefined) {
-        setJsCode(event.detail.code);
-        // Auto-regenerate preview when code is updated
-        setTimeout(() => {
-          generatePreview();
-        }, 100);
+        const newCode = event.detail.code;
+        setJsCode(newCode);
+        // Immediately regenerate preview with the new code
+        generatePreview(newCode);
       }
     };
 
