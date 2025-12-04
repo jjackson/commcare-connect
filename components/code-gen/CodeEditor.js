@@ -2,8 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Printer, RefreshCw, Terminal, Play, Layout } from 'lucide-react';
 
 const ReportBuilder = () => {
-  const [htmlCode, setHtmlCode] = useState(`<div id="react-root"></div>`);
-
   const [jsCode, setJsCode] = useState(
     `// React + JSX Example: Fetch FLW analysis data and render with React
 const { useState, useEffect } = React;
@@ -125,30 +123,6 @@ const root = ReactDOM.createRoot(document.getElementById('react-root'));
 root.render(<FLWTable />);`,
   );
 
-  const [cssCode, setCssCode] = useState(
-    `/* Since we injected Tailwind, we only need custom CSS
-   for things Tailwind can't easily do.
-*/
-body {
-  background-color: #f3f4f6; /* matches bg-gray-100 */
-}
-
-/* Custom scrollbar to match app feel */
-::-webkit-scrollbar {
-  width: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}`,
-  );
-
   const [logs, setLogs] = useState([]);
   const [srcDoc, setSrcDoc] = useState('');
   const iframeRef = useRef(null);
@@ -219,11 +193,9 @@ body {
       <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     `;
 
-    // HERE IS THE CHANGE: We inject the Tailwind CDN script
-    // In a real app, you might link to your local '/styles/main.css' instead
+    // Inject Tailwind CDN script
     const stylesInjection = `
       <script src="https://cdn.tailwindcss.com"></script>
-      <style>${cssCode}</style>
     `;
 
     // Use type="text/babel" to enable automatic JSX transformation
@@ -238,7 +210,6 @@ body {
           ${urlParamsInjection}
         </head>
         <body>
-          ${htmlCode}
           <div id="react-root"></div>
           <script type="text/babel">
             // React and ReactDOM are available globally
@@ -312,46 +283,17 @@ body {
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Editors Column */}
+        {/* JS Editor Column */}
         <div className="w-1/3 flex flex-col border-r border-gray-300 bg-gray-50">
-          {/* HTML Editor */}
-          <div className="flex-1 flex flex-col min-h-0 border-b border-gray-200">
-            <div className="px-4 py-2 bg-gray-200 text-xs font-semibold text-gray-600 uppercase flex justify-between">
-              <span>HTML Structure</span>
-            </div>
-            <textarea
-              className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
-              value={htmlCode}
-              onChange={(e) => setHtmlCode(e.target.value)}
-              spellCheck="false"
-            />
+          <div className="px-4 py-2 bg-gray-200 text-xs font-semibold text-gray-600 uppercase">
+            <span>JavaScript (React + JSX)</span>
           </div>
-
-          {/* CSS Editor */}
-          <div className="flex-1 flex flex-col min-h-0 border-b border-gray-200">
-            <div className="px-4 py-2 bg-gray-200 text-xs font-semibold text-gray-600 uppercase">
-              <span>CSS Styles</span>
-            </div>
-            <textarea
-              className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
-              value={cssCode}
-              onChange={(e) => setCssCode(e.target.value)}
-              spellCheck="false"
-            />
-          </div>
-
-          {/* JS Editor */}
-          <div className="flex-1 flex flex-col min-h-0">
-            <div className="px-4 py-2 bg-gray-200 text-xs font-semibold text-gray-600 uppercase">
-              <span>JavaScript Logic</span>
-            </div>
-            <textarea
-              className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
-              value={jsCode}
-              onChange={(e) => setJsCode(e.target.value)}
-              spellCheck="false"
-            />
-          </div>
+          <textarea
+            className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+            value={jsCode}
+            onChange={(e) => setJsCode(e.target.value)}
+            spellCheck="false"
+          />
         </div>
 
         {/* Preview Column */}
