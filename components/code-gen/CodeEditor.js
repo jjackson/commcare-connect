@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Printer,
   RefreshCw,
@@ -94,7 +94,7 @@ root.render(<FLWTable />);`,
   const iframeRef = useRef(null);
 
   // Function to build the HTML blob for the iframe
-  const generatePreview = () => {
+  const generatePreview = useCallback(() => {
     setLogs([]); // Clear logs on run
 
     // Extract opportunity_id from parent page URL to inject into iframe
@@ -200,12 +200,12 @@ root.render(<FLWTable />);`,
     `;
 
     setSrcDoc(fullHtml);
-  };
+  }, [jsCode]);
 
   // Run initial preview
   useEffect(() => {
     generatePreview();
-  }, []);
+  }, [generatePreview]);
 
   // Listen for messages from the iframe (console logs)
   useEffect(() => {
@@ -220,6 +220,34 @@ root.render(<FLWTable />);`,
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
   }, []);
+
+  // Expose current code to chat widget and listen for code updates
+  useEffect(() => {
+    // Expose a function to get current code
+    window.codeEditorApi = {
+      getCurrentCode: () => jsCode,
+    };
+
+    // Listen for code update events from chat widget
+    const handleCodeUpdate = (event) => {
+      if (event.detail && event.detail.code !== undefined) {
+        setJsCode(event.detail.code);
+        // Auto-regenerate preview when code is updated
+        setTimeout(() => {
+          generatePreview();
+        }, 100);
+      }
+    };
+
+    window.addEventListener('codeEditor:updateCode', handleCodeUpdate);
+
+    return () => {
+      window.removeEventListener('codeEditor:updateCode', handleCodeUpdate);
+      if (window.codeEditorApi) {
+        delete window.codeEditorApi;
+      }
+    };
+  }, [jsCode, generatePreview]);
 
   // Handle Printing the Iframe
   const handlePrint = () => {
