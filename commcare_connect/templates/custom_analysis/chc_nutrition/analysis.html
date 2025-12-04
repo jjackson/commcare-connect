@@ -302,19 +302,34 @@
                                     <!-- MUAC Distribution Sparkline -->
                                     <template x-if="flw.custom_fields.muac_distribution_count">
                                         <div class="inline-flex items-end gap-0.5 overflow-hidden cursor-help" style="height: 32px;"
-                                             :title="'MUAC: ' + (flw.custom_fields.muac_distribution_mean || 0).toFixed(1) + ' cm avg (n=' + flw.custom_fields.muac_distribution_count + ')'">
-                                            <span class="w-1 rounded-sm" :style="'background-color: #ef4444; height: ' + Math.min(32, (flw.custom_fields.muac_9_5_10_5_visits || 0) / 250 * 32) + 'px'"></span>
-                                            <span class="w-1 rounded-sm" :style="'background-color: #ef4444; height: ' + Math.min(32, (flw.custom_fields.muac_10_5_11_5_visits || 0) / 250 * 32) + 'px'"></span>
-                                            <span class="w-1 rounded-sm" :style="'background-color: #facc15; height: ' + Math.min(32, (flw.custom_fields.muac_11_5_12_5_visits || 0) / 250 * 32) + 'px'"></span>
-                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + Math.min(32, (flw.custom_fields.muac_12_5_13_5_visits || 0) / 250 * 32) + 'px'"></span>
-                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + Math.min(32, (flw.custom_fields.muac_13_5_14_5_visits || 0) / 250 * 32) + 'px'"></span>
-                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + Math.min(32, (flw.custom_fields.muac_14_5_15_5_visits || 0) / 250 * 32) + 'px'"></span>
-                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + Math.min(32, (flw.custom_fields.muac_15_5_16_5_visits || 0) / 250 * 32) + 'px'"></span>
-                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + Math.min(32, (flw.custom_fields.muac_16_5_17_5_visits || 0) / 250 * 32) + 'px'"></span>
-                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + Math.min(32, (flw.custom_fields.muac_17_5_18_5_visits || 0) / 250 * 32) + 'px'"></span>
-                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + Math.min(32, (flw.custom_fields.muac_18_5_19_5_visits || 0) / 250 * 32) + 'px'"></span>
-                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + Math.min(32, (flw.custom_fields.muac_19_5_20_5_visits || 0) / 250 * 32) + 'px'"></span>
-                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + Math.min(32, (flw.custom_fields.muac_20_5_21_5_visits || 0) / 250 * 32) + 'px'"></span>
+                                             :title="'MUAC: ' + (flw.custom_fields.muac_distribution_mean || 0).toFixed(1) + ' cm avg (n=' + flw.custom_fields.muac_distribution_count + ')'"
+                                             x-data="{ maxBin: Math.max(
+                                                 flw.custom_fields.muac_9_5_10_5_visits || 0,
+                                                 flw.custom_fields.muac_10_5_11_5_visits || 0,
+                                                 flw.custom_fields.muac_11_5_12_5_visits || 0,
+                                                 flw.custom_fields.muac_12_5_13_5_visits || 0,
+                                                 flw.custom_fields.muac_13_5_14_5_visits || 0,
+                                                 flw.custom_fields.muac_14_5_15_5_visits || 0,
+                                                 flw.custom_fields.muac_15_5_16_5_visits || 0,
+                                                 flw.custom_fields.muac_16_5_17_5_visits || 0,
+                                                 flw.custom_fields.muac_17_5_18_5_visits || 0,
+                                                 flw.custom_fields.muac_18_5_19_5_visits || 0,
+                                                 flw.custom_fields.muac_19_5_20_5_visits || 0,
+                                                 flw.custom_fields.muac_20_5_21_5_visits || 0,
+                                                 1
+                                             ) }">
+                                            <span class="w-1 rounded-sm" :style="'background-color: #ef4444; height: ' + ((flw.custom_fields.muac_9_5_10_5_visits || 0) / maxBin * 32) + 'px'"></span>
+                                            <span class="w-1 rounded-sm" :style="'background-color: #ef4444; height: ' + ((flw.custom_fields.muac_10_5_11_5_visits || 0) / maxBin * 32) + 'px'"></span>
+                                            <span class="w-1 rounded-sm" :style="'background-color: #facc15; height: ' + ((flw.custom_fields.muac_11_5_12_5_visits || 0) / maxBin * 32) + 'px'"></span>
+                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + ((flw.custom_fields.muac_12_5_13_5_visits || 0) / maxBin * 32) + 'px'"></span>
+                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + ((flw.custom_fields.muac_13_5_14_5_visits || 0) / maxBin * 32) + 'px'"></span>
+                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + ((flw.custom_fields.muac_14_5_15_5_visits || 0) / maxBin * 32) + 'px'"></span>
+                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + ((flw.custom_fields.muac_15_5_16_5_visits || 0) / maxBin * 32) + 'px'"></span>
+                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + ((flw.custom_fields.muac_16_5_17_5_visits || 0) / maxBin * 32) + 'px'"></span>
+                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + ((flw.custom_fields.muac_17_5_18_5_visits || 0) / maxBin * 32) + 'px'"></span>
+                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + ((flw.custom_fields.muac_18_5_19_5_visits || 0) / maxBin * 32) + 'px'"></span>
+                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + ((flw.custom_fields.muac_19_5_20_5_visits || 0) / maxBin * 32) + 'px'"></span>
+                                            <span class="w-1 rounded-sm" :style="'background-color: #22c55e; height: ' + ((flw.custom_fields.muac_20_5_21_5_visits || 0) / maxBin * 32) + 'px'"></span>
                                         </div>
                                     </template>
                                     <template x-if="!flw.custom_fields.muac_distribution_count">

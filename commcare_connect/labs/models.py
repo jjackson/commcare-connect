@@ -154,10 +154,10 @@ class LocalLabsRecord:
             "type": self.type,
             "data": self.data,
             "username": self.username,
-            "program_id": self.program_id,  # Will be supported shortly
+            "program_id": self.program_id,
             "labs_record_id": self.labs_record_id,
-            # opportunity_id set by API endpoint URL
-            # organization_id inferred from username in production
+            "opportunity_id": self.opportunity_id,
+            "organization_id": self.organization_id,
         }
 
     def save(self, *args: Any, **kwargs: Any) -> None:

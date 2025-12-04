@@ -76,7 +76,7 @@ class TaskRecord(LocalLabsRecord):
 
     @property
     def date_created(self):
-        """Date the task was created (from first 'created' event, or None)."""
+        """Date the task was created (from first 'created' event)."""
         for event in self.data.get("events", []):
             if event.get("event_type") == "created":
                 timestamp = event.get("timestamp")
