@@ -270,9 +270,7 @@ root.render(<FLWTable />);`,
       <header className="bg-white border-b border-gray-200 p-4 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-2">
           <Layout className="w-6 h-6 text-blue-600" />
-          <h1 className="text-xl font-bold text-gray-800">
-            Report Builder Playground
-          </h1>
+          <h1 className="text-xl font-bold text-gray-800">Report Builder</h1>
         </div>
         <div className="flex gap-2">
           <button
@@ -296,7 +294,7 @@ root.render(<FLWTable />);`,
         {editorExpanded && (
           <div className="w-1/3 flex flex-col border-r border-gray-300 bg-gray-50">
             <div className="px-4 py-2 bg-gray-200 text-xs font-semibold text-gray-600 uppercase flex justify-between items-center">
-              <span>JavaScript (React + JSX)</span>
+              <span>Code Editor</span>
               <button
                 onClick={() => setEditorExpanded(false)}
                 className="p-1 hover:bg-gray-300 rounded transition-colors"
@@ -333,11 +331,8 @@ root.render(<FLWTable />);`,
             </div>
           )}
           <div className="flex-1 relative bg-white">
-            <div className="absolute top-0 left-0 right-0 px-4 py-2 bg-gray-100 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase flex justify-between items-center">
-              <span>Report Preview</span>
-              <span className="text-gray-400 text-[10px]">
-                Trusted Iframe (Tailwind Injected)
-              </span>
+            <div className="absolute top-0 left-0 right-0 px-4 py-2 bg-gray-100 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase">
+              <span>Preview</span>
             </div>
 
             <iframe
