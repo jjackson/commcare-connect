@@ -187,7 +187,7 @@ root.render(<FLWTable />);`,
           <script type="text/babel">
             // React and ReactDOM are available globally
             const { React, ReactDOM } = window;
-            // Helper functions available via window.api and window.hooks
+            // Helper functions available via window.labsApi and window.hooks
 
             try {
               ${jsCode}

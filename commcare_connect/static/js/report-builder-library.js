@@ -3,14 +3,14 @@
  *
  * Provides helper functions and React hooks for building reports.
  * This library is automatically loaded in the iframe and available
- * to user code via window.api and window.hooks.
+ * to user code via window.labsApi and window.hooks.
  */
 
 (function () {
   'use strict';
 
   // Library functions available to user code but hidden from editor
-  window.api = {
+  window.labsApi = {
     // Fetch FLW analysis data
     async fetchFLWData(config = {}) {
       const opportunityId = window.PARENT_OPPORTUNITY_ID;
@@ -78,7 +78,7 @@
           try {
             setLoading(true);
             setError(null);
-            const result = await window.api.fetchFLWData(config);
+            const result = await window.labsApi.fetchFLWData(config);
             setData(result);
           } catch (err) {
             setError(err.message);
