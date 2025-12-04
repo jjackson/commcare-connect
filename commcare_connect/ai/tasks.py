@@ -6,6 +6,7 @@ import logging
 
 from django.contrib.auth import get_user_model
 
+from commcare_connect.ai.agents.coding_agent import get_coding_agent
 from commcare_connect.ai.agents.solicitation_agent import get_solicitation_agent
 from commcare_connect.ai.session_store import add_message_to_history, get_message_history
 from commcare_connect.ai.types import UserDependencies
@@ -35,6 +36,7 @@ def run_agent(
     user_id: int | None = None,
     access_token: str | None = None,
     program_id: int | None = None,
+    current_code: str | None = None,
 ):
     """
     Run an AI agent with the user's prompt and optional message history.
@@ -160,29 +162,64 @@ def run_agent(
         # Get the agent instance based on agent parameter
         if agent == "solicitations":
             agent_instance = get_solicitation_agent()
+            actual_prompt = prompt
+        elif agent == "vibes":
+            agent_instance = get_coding_agent()
+            # For coding agent, construct a prompt that includes the current code
+            if current_code:
+                prompt_with_code = f"""Current code:
+```javascript
+{current_code}
+```
+
+User request: {prompt}
+
+Please modify the code to fulfill the user's request. Return the complete, updated code."""
+            else:
+                prompt_with_code = f"""User request: {prompt}
+
+Please generate React code to fulfill the user's request. The code should be complete and runnable."""
+            # Use the modified prompt for coding agent
+            actual_prompt = prompt_with_code
         else:
             # Default to solicitation agent for unknown agent types
             logger.warning(f"[AI TASK] Unknown agent type: {agent}, defaulting to solicitation agent")
             agent_instance = get_solicitation_agent()
+            actual_prompt = prompt
 
         # Pass message_history to maintain conversation context
+        # Note: For coding agent with structured output, we may want to handle history differently
+        # For now, we'll use the same pattern for all agents
         if history:
             logger.warning(f"[AI TASK] Running agent with {len(history)} previous messages")
-            logger.warning(f"[AI TASK] Prompt: {prompt[:100]}...")
+            logger.warning(f"[AI TASK] Prompt: {actual_prompt[:100]}...")
             try:
                 # Convert history to Pydantic AI format
                 pydantic_history = convert_history_to_pydantic_format(history)
                 logger.warning(f"[AI TASK] Converted history format, length: {len(pydantic_history)}")
-                result = await agent_instance.run(prompt, message_history=pydantic_history, deps=deps)
+                result = await agent_instance.run(actual_prompt, message_history=pydantic_history, deps=deps)
                 logger.warning("[AI TASK] Agent completed with history")
             except Exception as e:
                 logger.error(f"[AI TASK] Error running agent with history: {e}", exc_info=True)
                 # Fallback to running without history if there's a format issue
                 logger.warning("[AI TASK] Falling back to running without message history")
-                result = await agent_instance.run(prompt, deps=deps)
+                result = await agent_instance.run(actual_prompt, deps=deps)
         else:
             logger.warning("[AI TASK] Running agent without message history")
-            result = await agent_instance.run(prompt, deps=deps)
+            result = await agent_instance.run(actual_prompt, deps=deps)
+
+        # Handle structured output for coding agent
+        # result.output will be a CodeResponse instance when using structured output
+        if agent == "vibes":
+            from commcare_connect.ai.agents.coding_agent import CodeResponse
+
+            if isinstance(result.output, CodeResponse):
+                # Return as dict with message and code for frontend
+                return {
+                    "message": result.output.message,
+                    "code": result.output.code,
+                }
+
         return result.output
 
     try:
@@ -193,7 +230,11 @@ def run_agent(
             # Add user message
             add_message_to_history(session_id, "user", prompt)
             # Add assistant response
-            add_message_to_history(session_id, "assistant", response)
+            # For structured output, save the message part
+            if isinstance(response, dict) and "message" in response:
+                add_message_to_history(session_id, "assistant", response["message"])
+            else:
+                add_message_to_history(session_id, "assistant", response)
             logger.warning(f"[AI TASK] Saved messages to history for session {session_id}")
 
         return response
