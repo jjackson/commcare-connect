@@ -165,7 +165,7 @@ class LabsRecordAPIClient:
         Returns:
             LocalLabsRecord instance (or proxy model) or None if not found
         """
-        # Fetch all records and filter by ID
+        # Fetch records using current context and filter by ID
         records = self.get_records(experiment=experiment, type=type, model_class=model_class)
         for record in records:
             if record.id == record_id:

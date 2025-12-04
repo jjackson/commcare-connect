@@ -46,7 +46,9 @@
                             <p class="text-gray-600 mb-3">{{ solicitation.data.description|truncatewords:40 }}</p>
                             <div class="text-sm text-gray-500 space-y-1">
                                 <div><strong>Program ID:</strong> {{ solicitation.program_id }}</div>
-                                <div><strong>Created:</strong> {{ solicitation.date_created|date:"M d, Y" }}</div>
+                                {% if solicitation.date_created %}
+                                    <div><strong>Created:</strong> {{ solicitation.date_created|date:"M d, Y" }}</div>
+                                {% endif %}
                                 {% if solicitation.data.application_deadline %}
                                     <div><strong>Deadline:</strong> {{ solicitation.data.application_deadline }}</div>
                                 {% endif %}

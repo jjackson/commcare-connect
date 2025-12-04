@@ -690,12 +690,13 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
         context["has_program_context"] = bool(program_id)
 
         # Build question context inline (no helper needed)
+        # JSON serialize for JavaScript consumption in template
         if self.object and hasattr(self.object, "questions"):
             # Edit mode - load existing questions from JSON
-            context["existing_questions"] = self.object.questions or []
+            context["existing_questions"] = json.dumps(self.object.questions or [])
         else:
             # Create mode - empty questions
-            context["existing_questions"] = []
+            context["existing_questions"] = json.dumps([])
 
         # Add simple breadcrumb navigation for labs
         action_title = "Edit Solicitation" if self.object else "Create Solicitation"

@@ -223,7 +223,11 @@ class SolicitationDataAccess:
         )
 
     def create_response(
-        self, solicitation_record: SolicitationRecord, username: str, data_dict: dict
+        self,
+        solicitation_record: SolicitationRecord,
+        username: str,
+        data_dict: dict,
+        organization_id: str | None = None,
     ) -> ResponseRecord:
         """
         Create a new response via production API.
@@ -232,11 +236,16 @@ class SolicitationDataAccess:
             solicitation_record: Solicitation being responded to
             username: Username submitting the response
             data_dict: Dictionary containing response data
+            organization_id: Organization slug submitting the response (stored in data)
 
         Returns:
             ResponseRecord instance
         """
-        return self.labs_api.create_record(
+        # Store organization_id in data dict for tracking
+        if organization_id:
+            data_dict["organization_id"] = organization_id
+
+        record = self.labs_api.create_record(
             experiment="solicitations",
             type="SolicitationResponse",
             data=data_dict,
@@ -244,6 +253,74 @@ class SolicitationDataAccess:
             username=username,
             program_id=solicitation_record.program_id,
         )
+        # Cast to ResponseRecord for proper typing
+        return ResponseRecord(record.to_api_dict() if hasattr(record, "to_api_dict") else record.__dict__)
+
+    def update_solicitation(
+        self, record_id: int, data_dict: dict, program_id: int | None = None
+    ) -> SolicitationRecord:
+        """
+        Update an existing solicitation via production API.
+
+        Args:
+            record_id: ID of the solicitation record to update
+            data_dict: Dictionary containing updated solicitation data
+            program_id: Program ID (optional, uses existing if not provided)
+
+        Returns:
+            Updated SolicitationRecord instance
+        """
+        record = self.labs_api.update_record(
+            record_id=record_id,
+            experiment="solicitations",
+            type="Solicitation",
+            data=data_dict,
+            program_id=program_id,
+        )
+        return SolicitationRecord(record.to_api_dict() if hasattr(record, "to_api_dict") else record.__dict__)
+
+    def update_response(self, record_id: int, data_dict: dict, organization_id: str | None = None) -> ResponseRecord:
+        """
+        Update an existing response via production API.
+
+        Args:
+            record_id: ID of the response record to update
+            data_dict: Dictionary containing updated response data
+            organization_id: Organization slug (stored in data for tracking)
+
+        Returns:
+            Updated ResponseRecord instance
+        """
+        # Store organization_id in data dict for tracking
+        if organization_id:
+            data_dict["organization_id"] = organization_id
+
+        record = self.labs_api.update_record(
+            record_id=record_id,
+            experiment="solicitations",
+            type="SolicitationResponse",
+            data=data_dict,
+        )
+        return ResponseRecord(record.to_api_dict() if hasattr(record, "to_api_dict") else record.__dict__)
+
+    def update_review(self, record_id: int, data_dict: dict) -> ReviewRecord:
+        """
+        Update an existing review via production API.
+
+        Args:
+            record_id: ID of the review record to update
+            data_dict: Dictionary containing updated review data
+
+        Returns:
+            Updated ReviewRecord instance
+        """
+        record = self.labs_api.update_record(
+            record_id=record_id,
+            experiment="solicitations",
+            type="SolicitationReview",
+            data=data_dict,
+        )
+        return ReviewRecord(record.to_api_dict() if hasattr(record, "to_api_dict") else record.__dict__)
 
     def get_review_by_user(self, response_record: ResponseRecord, username: str) -> ReviewRecord | None:
         """

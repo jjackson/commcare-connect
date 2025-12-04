@@ -190,26 +190,46 @@ class AuditTable(tables.Table):
 
     def render_actions(self, record):
         """Render action buttons for the audit session."""
+        from urllib.parse import urlencode
+
         bulk_url = reverse("audit:bulk_assessment", kwargs={"pk": record.pk})
         task_url = reverse("tasks:new")
 
         # Include opportunity_id in URLs to avoid searching all opportunities
         if record.opportunity_id:
             bulk_url = f"{bulk_url}?opportunity_id={record.opportunity_id}"
-            task_url = f"{task_url}?audit_session_id={record.pk}"
+
+            # Build task URL with FLW info from audit session
+            # Only pass username if there's exactly one unique FLW in the session
+            task_params = {"audit_session_id": record.pk}
+
+            # Collect unique usernames from visit_images
+            visit_images = record.data.get("visit_images", {})
+            unique_usernames = set()
+            for images in visit_images.values():
+                for img in images:
+                    username = img.get("username")
+                    if username:
+                        unique_usernames.add(username)
+
+            # Only pass username if exactly one FLW
+            if len(unique_usernames) == 1:
+                task_params["username"] = unique_usernames.pop()
+
+            task_url = f"{task_url}?{urlencode(task_params)}"
 
         button_label = _("Review") if record.status == "completed" else _("Open")
         return format_html(
             '<div class="flex gap-2 justify-end">'
-            '<a href="{}" class="button button-sm outline-style text-green-700 border-green-300 hover:bg-green-50">'
-            '<i class="fa-solid fa-clipboard-list mr-1"></i>{}'
-            "</a>"
             '<a href="{}" class="button button-sm primary-light">'
             '<i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>{}'
             "</a>"
+            '<a href="{}" class="button button-sm outline-style text-green-700 border-green-300 hover:bg-green-50">'
+            '<i class="fa-solid fa-clipboard-list mr-1"></i>{}'
+            "</a>"
             "</div>",
-            task_url,
-            _("Create Task"),
             bulk_url,
             button_label,
+            task_url,
+            _("Create Task"),
         )

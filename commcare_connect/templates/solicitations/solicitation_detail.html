@@ -36,7 +36,7 @@
                 {% if solicitation.can_accept_responses %}
                     {% if has_submitted_response %}
                         <div class="text-right">
-                            <a href="{% url 'solicitations:user_response_detail' pk=submitted_response.pk %}"
+                            <a href="{% url 'solicitations:response_detail' pk=submitted_response.pk %}"
                                class="button button-md primary-dark">
                                 <i class="fa-solid fa-eye mr-2"></i>
                                 View Response
