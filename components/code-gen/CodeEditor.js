@@ -1,7 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Printer, RefreshCw, Terminal, Play, Layout } from 'lucide-react';
+import {
+  Printer,
+  RefreshCw,
+  Terminal,
+  Play,
+  Layout,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 
 const ReportBuilder = () => {
+  const [editorExpanded, setEditorExpanded] = useState(true);
   const [jsCode, setJsCode] = useState(
     `// React + JSX Example: Fetch FLW analysis data and render with React
 const { useState, useEffect } = React;
@@ -284,20 +293,45 @@ root.render(<FLWTable />);`,
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* JS Editor Column */}
-        <div className="w-1/3 flex flex-col border-r border-gray-300 bg-gray-50">
-          <div className="px-4 py-2 bg-gray-200 text-xs font-semibold text-gray-600 uppercase">
-            <span>JavaScript (React + JSX)</span>
+        {editorExpanded && (
+          <div className="w-1/3 flex flex-col border-r border-gray-300 bg-gray-50">
+            <div className="px-4 py-2 bg-gray-200 text-xs font-semibold text-gray-600 uppercase flex justify-between items-center">
+              <span>JavaScript (React + JSX)</span>
+              <button
+                onClick={() => setEditorExpanded(false)}
+                className="p-1 hover:bg-gray-300 rounded transition-colors"
+                title="Collapse editor"
+              >
+                <ChevronLeft size={16} />
+              </button>
+            </div>
+            <textarea
+              className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+              value={jsCode}
+              onChange={(e) => setJsCode(e.target.value)}
+              spellCheck="false"
+            />
           </div>
-          <textarea
-            className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
-            value={jsCode}
-            onChange={(e) => setJsCode(e.target.value)}
-            spellCheck="false"
-          />
-        </div>
+        )}
 
         {/* Preview Column */}
-        <div className="flex-1 flex flex-col bg-white">
+        <div
+          className={`flex flex-col bg-white ${
+            editorExpanded ? 'flex-1' : 'w-full'
+          } relative`}
+        >
+          {!editorExpanded && (
+            <div className="absolute top-2 left-2 z-10">
+              <button
+                onClick={() => setEditorExpanded(true)}
+                className="p-2 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-50 transition-colors flex items-center gap-2"
+                title="Expand editor"
+              >
+                <ChevronRight size={16} />
+                <span className="text-xs font-medium">Code</span>
+              </button>
+            </div>
+          )}
           <div className="flex-1 relative bg-white">
             <div className="absolute top-0 left-0 right-0 px-4 py-2 bg-gray-100 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase flex justify-between items-center">
               <span>Report Preview</span>
