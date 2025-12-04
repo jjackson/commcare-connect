@@ -22,6 +22,10 @@ module.exports = {
       __dirname,
       '../commcare_connect/static/js/chat-widget.tsx',
     ),
+    'code-editor': path.resolve(
+      __dirname,
+      '../commcare_connect/static/js/code-editor.tsx',
+    ),
   },
   output: {
     path: path.resolve(__dirname, '../commcare_connect/static/bundles/'),
