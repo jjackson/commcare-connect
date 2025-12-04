@@ -79,6 +79,14 @@ export function ChatUI({
     return container?.dataset.historyUrl || '/ai/demo/history/';
   };
 
+  const getAgent = () => {
+    const container = document.getElementById(containerId);
+    // Try dataset first (for data-agent), then fallback to getAttribute
+    return (
+      container?.dataset.agent || container?.getAttribute('data-agent') || null
+    );
+  };
+
   const stopPolling = useCallback(() => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
@@ -107,7 +115,13 @@ export function ChatUI({
         }
 
         try {
-          const response = await fetch(`${getStatusUrl()}?task_id=${taskId}`);
+          const agent = getAgent();
+          const statusUrl = agent
+            ? `${getStatusUrl()}?task_id=${taskId}&agent=${encodeURIComponent(
+                agent,
+              )}`
+            : `${getStatusUrl()}?task_id=${taskId}`;
+          const response = await fetch(statusUrl);
           const data = await response.json();
 
           if (data.error) {
@@ -149,6 +163,28 @@ export function ChatUI({
                   ? data.result
                   : data.result?.message || JSON.stringify(data.result)
                 : data.message || 'Task completed';
+
+            // Handle code update if present in response
+            // Backend can return { message: "...", code: "..." } structure
+            let codeToUpdate: string | null = null;
+            if (
+              data.result &&
+              typeof data.result === 'object' &&
+              data.result.code
+            ) {
+              codeToUpdate = data.result.code;
+            } else if (data.code) {
+              codeToUpdate = data.code;
+            }
+
+            if (codeToUpdate) {
+              // Dispatch event to update code editor
+              window.dispatchEvent(
+                new CustomEvent('codeEditor:updateCode', {
+                  detail: { code: codeToUpdate },
+                }),
+              );
+            }
 
             setMessages((prev) => {
               // Replace the "Thinking..." message with the actual result
@@ -263,6 +299,9 @@ export function ChatUI({
         const urlParams = new URLSearchParams(window.location.search);
         const programId = urlParams.get('program_id');
 
+        // Get current code from code editor if available
+        const currentCode = window.codeEditorApi?.getCurrentCode?.() || '';
+
         const bodyParams: Record<string, string> = {
           prompt: prompt,
           session_id: currentSessionId,
@@ -271,6 +310,15 @@ export function ChatUI({
         if (programId) {
           bodyParams.program_id = programId;
         }
+
+        // Include current code in the request
+        if (currentCode) {
+          bodyParams.current_code = currentCode;
+        }
+
+        const agent = getAgent();
+        // Agent is required, so always include it (even if empty, backend will validate)
+        bodyParams.agent = agent || '';
 
         const response = await fetch(getSubmitUrl(), {
           method: 'POST',
