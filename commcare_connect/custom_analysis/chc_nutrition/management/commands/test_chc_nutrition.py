@@ -21,7 +21,8 @@ from django.core.management.base import BaseCommand
 
 from commcare_connect.custom_analysis.chc_nutrition.analysis_config import CHC_NUTRITION_CONFIG
 from commcare_connect.labs.analysis import compute_flw_analysis
-from commcare_connect.labs.analysis.data_access import AnalysisDataAccess
+from commcare_connect.labs.analysis.models import LocalUserVisit
+from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.integrations.connect.cli import create_cli_request
 
 logger = logging.getLogger(__name__)
@@ -114,8 +115,9 @@ class Command(BaseCommand):
         self.stdout.write("")
 
         self.stdout.write("Fetching visits...")
-        data_access = AnalysisDataAccess(request)
-        visits = data_access.fetch_user_visits()
+        pipeline = AnalysisPipeline(request)
+        visit_dicts = pipeline.fetch_raw_visits()
+        visits = [LocalUserVisit(d) for d in visit_dicts]
 
         self.stdout.write(self.style.SUCCESS(f"[OK] Fetched {len(visits)} visits"))
         self.stdout.write("")
@@ -195,8 +197,9 @@ class Command(BaseCommand):
         self.stdout.write("")
 
         self.stdout.write("Fetching visits...")
-        data_access = AnalysisDataAccess(request)
-        visits = data_access.fetch_user_visits()
+        pipeline = AnalysisPipeline(request)
+        visit_dicts = pipeline.fetch_raw_visits()
+        visits = [LocalUserVisit(d) for d in visit_dicts]
 
         self.stdout.write(self.style.SUCCESS(f"[OK] Fetched {len(visits)} visits"))
         self.stdout.write("")
@@ -238,7 +241,7 @@ class Command(BaseCommand):
         # Initialize cache manager
         cache_manager = AnalysisCacheManager(opportunity_id, CHC_NUTRITION_CONFIG)
         self.stdout.write(f"Cache config hash: {cache_manager.config_hash}")
-        self.stdout.write(f"Cache backend: {'Django (Redis)' if cache_manager.use_django else 'File-based'}")
+        self.stdout.write("Cache backend: Django (Redis)")
         self.stdout.write("")
 
         # Clear existing cache
@@ -295,9 +298,9 @@ class Command(BaseCommand):
         self.stdout.write("Step 4: Testing cache validation behavior...")
         original_count = request.labs_context["opportunity"]["visit_count"]
 
-        # Check current actual count from API
-        data_access = AnalysisDataAccess(request)
-        actual_count = data_access.fetch_visit_count()
+        # Check current actual count from context
+        pipeline = AnalysisPipeline(request)
+        actual_count = pipeline.visit_count
 
         self.stdout.write(f"  - Original cached count: {original_count}")
         self.stdout.write(f"  - Current actual count: {actual_count}")

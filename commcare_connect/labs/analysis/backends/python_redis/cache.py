@@ -1,114 +1,33 @@
 """
-Redis/file-based caching for python_redis backend.
+Redis caching for python_redis backend.
 
-Multi-tier caching system for analysis results with auto-detected backend.
+Uses Django cache (Redis) for analysis results.
 
-Cache tiers (in order of preference):
-1. LabsRecordCacheManager - Persistent in production DB, cross-user shareable
-2. AnalysisCacheManager - Redis (preferred) or file-based pickle cache
-3. RawAPICacheManager - Raw API response caching (Redis or file)
+Cache tiers:
+1. AnalysisCacheManager - Analysis results with config-based keys
+2. RawAPICacheManager - Raw API response caching
 
 Cache invalidation based on:
 - Visit count changes (data freshness)
 - Config hash changes (analysis approach changes)
 """
 
-import hashlib
 import logging
-import pickle
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
-from django.conf import settings
+from django.core.cache import cache
 from django.http import HttpRequest
 
 from commcare_connect.labs.analysis.config import AnalysisPipelineConfig
+from commcare_connect.labs.analysis.utils import DJANGO_CACHE_TTL, get_config_hash
 
 logger = logging.getLogger(__name__)
 
-# Cache directory for local file-based caching
-CACHE_DIR = Path(settings.BASE_DIR) / ".analysis_cache"
-
-# TTL for Django cache backend (1 hour)
-DJANGO_CACHE_TTL = 3600
-
 
 # =============================================================================
-# Utility Functions
+# Request Utility Functions
 # =============================================================================
-
-
-def get_config_hash(config: AnalysisPipelineConfig) -> str:
-    """
-    Generate a hash of the analysis config to detect changes.
-
-    Includes field paths, aggregations, histograms, and filters.
-    Changes to any of these will produce a different hash.
-    """
-    # Build a string representation of the config
-    parts = []
-
-    # Add field computations
-    for field in config.fields:
-        parts.append(f"field:{field.name}:{field.path}:{field.aggregation}")
-        # Include transform function bytecode if present (detects lambda changes)
-        if field.transform:
-            try:
-                parts.append(f"transform:{field.transform.__code__.co_code.hex()}")
-            except AttributeError:
-                parts.append(f"transform:{str(field.transform)}")
-
-    # Add histogram computations
-    for hist in config.histograms:
-        parts.append(f"hist:{hist.name}:{hist.path}:{hist.lower_bound}:{hist.upper_bound}:{hist.num_bins}")
-        if hist.transform:
-            try:
-                parts.append(f"hist_transform:{hist.transform.__code__.co_code.hex()}")
-            except AttributeError:
-                parts.append(f"hist_transform:{str(hist.transform)}")
-
-    # Add filters
-    for key, value in sorted(config.filters.items()):
-        parts.append(f"filter:{key}:{value}")
-
-    # Add grouping key
-    parts.append(f"grouping:{config.grouping_key}")
-
-    # Generate hash
-    config_str = "|".join(parts)
-    return hashlib.md5(config_str.encode()).hexdigest()[:12]
-
-
-def _use_django_cache() -> bool:
-    """
-    Determine if we should use Django cache (Redis) or file cache.
-
-    Prefers Django cache (Redis) whenever it's available and working.
-    Falls back to file-based cache only if Redis is unavailable.
-    """
-    # Always try Redis first (works in labs AND local dev if Redis is running)
-    try:
-        from django.core.cache import cache
-
-        # Test if cache backend is working
-        test_key = "_cache_backend_test"
-        test_value = "test_value"
-        cache.set(test_key, test_value, 1)
-        result = cache.get(test_key)
-
-        if result == test_value:
-            logger.debug("Using Django cache backend (Redis)")
-            cache.delete(test_key)  # Clean up test key
-            return True
-        else:
-            logger.debug("Django cache test failed - value mismatch")
-    except Exception as e:
-        logger.debug(f"Django cache not available: {e}")
-
-    # Fall back to file-based cache
-    logger.debug("Using file-based cache")
-    return False
 
 
 def sync_labs_context_visit_count(request: HttpRequest, visit_count: int, opportunity_id: int | None = None) -> None:
@@ -190,28 +109,6 @@ def get_cache_tolerance_from_request(request: HttpRequest) -> int | None:
     return None
 
 
-def clear_all_analysis_caches() -> int:
-    """
-    Clear all file-based analysis caches.
-
-    Returns:
-        Number of cache files deleted
-    """
-    if not CACHE_DIR.exists():
-        return 0
-
-    count = 0
-    for cache_file in CACHE_DIR.glob("*.pkl"):
-        try:
-            cache_file.unlink()
-            count += 1
-        except Exception as e:
-            logger.warning(f"Failed to delete {cache_file}: {e}")
-
-    logger.info(f"Cleared {count} analysis cache files")
-    return count
-
-
 # =============================================================================
 # Cache Managers
 # =============================================================================
@@ -219,16 +116,12 @@ def clear_all_analysis_caches() -> int:
 
 class AnalysisCacheManager:
     """
-    Manages multi-level caching for analysis results.
+    Manages caching for analysis results using Django cache (Redis).
 
     Levels:
     - Level 1: Extracted visit data (allows re-aggregation)
     - Level 2: Visit-level results (VisitAnalysisResult)
     - Level 3: Aggregated FLW results (FLWAnalysisResult)
-
-    Backend is auto-selected based on availability:
-    - If Redis is available: Django cache (Redis) - preferred
-    - If Redis is unavailable: File pickle cache - fallback
     """
 
     def __init__(self, opportunity_id: int, config: AnalysisPipelineConfig):
@@ -242,91 +135,37 @@ class AnalysisCacheManager:
         self.opportunity_id = opportunity_id
         self.config = config
         self.config_hash = get_config_hash(config)
-        self.use_django = _use_django_cache()
 
-        logger.debug(
-            f"AnalysisCacheManager initialized: opp={opportunity_id}, "
-            f"hash={self.config_hash}, backend={'django' if self.use_django else 'file'}"
-        )
+        logger.debug(f"AnalysisCacheManager initialized: opp={opportunity_id}, hash={self.config_hash}")
 
     def _get_cache_key(self, level: str) -> str:
         """Generate cache key for a given level."""
         return f"analysis_{self.opportunity_id}_{self.config_hash}_{level}"
 
-    def _get_file_path(self, level: str) -> Path:
-        """Get file path for file-based cache."""
-        return CACHE_DIR / f"{self.opportunity_id}_{self.config_hash}_{level}.pkl"
-
-    # -------------------------------------------------------------------------
-    # Django Cache Backend
-    # -------------------------------------------------------------------------
-
-    def _django_get(self, key: str) -> Any | None:
+    def _cache_get(self, key: str) -> Any | None:
         """Get from Django cache."""
-        from django.core.cache import cache
-
         try:
             return cache.get(key)
         except Exception as e:
-            logger.warning(f"Django cache get failed for {key}: {e}")
+            logger.warning(f"Cache get failed for {key}: {e}")
             return None
 
-    def _django_set(self, key: str, value: Any) -> bool:
+    def _cache_set(self, key: str, value: Any) -> bool:
         """Set in Django cache with TTL."""
-        from django.core.cache import cache
-
         try:
             cache.set(key, value, DJANGO_CACHE_TTL)
             return True
         except Exception as e:
-            logger.warning(f"Django cache set failed for {key}: {e}")
+            logger.warning(f"Cache set failed for {key}: {e}")
             return False
 
-    def _django_delete(self, key: str) -> bool:
+    def _cache_delete(self, key: str) -> bool:
         """Delete from Django cache."""
-        from django.core.cache import cache
-
         try:
             cache.delete(key)
             return True
         except Exception as e:
-            logger.warning(f"Django cache delete failed for {key}: {e}")
-            return False
-
-    # -------------------------------------------------------------------------
-    # File Cache Backend
-    # -------------------------------------------------------------------------
-
-    def _file_get(self, path: Path) -> Any | None:
-        """Get from file cache."""
-        if not path.exists():
-            return None
-        try:
-            with open(path, "rb") as f:
-                return pickle.load(f)
-        except Exception as e:
-            logger.warning(f"File cache read failed for {path}: {e}")
-            return None
-
-    def _file_set(self, path: Path, value: Any) -> bool:
-        """Set in file cache."""
-        try:
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            with open(path, "wb") as f:
-                pickle.dump(value, f)
-            return True
-        except Exception as e:
-            logger.warning(f"File cache write failed for {path}: {e}")
-            return False
-
-    def _file_delete(self, path: Path) -> bool:
-        """Delete from file cache."""
-        try:
-            if path.exists():
-                path.unlink()
-            return True
-        except Exception as e:
-            logger.warning(f"File cache delete failed for {path}: {e}")
+            logger.warning(f"Cache delete failed for {key}: {e}")
             return False
 
     # -------------------------------------------------------------------------
@@ -340,11 +179,7 @@ class AnalysisCacheManager:
         Returns:
             Dict with 'visit_count', 'cached_at', 'visits' or None if not cached
         """
-        key = self._get_cache_key("visits")
-        if self.use_django:
-            return self._django_get(key)
-        else:
-            return self._file_get(self._get_file_path("visits"))
+        return self._cache_get(self._get_cache_key("visits"))
 
     def set_visits_cache(self, visit_count: int, visits: list[dict]) -> bool:
         """
@@ -362,11 +197,7 @@ class AnalysisCacheManager:
             "cached_at": datetime.utcnow().isoformat(),
             "visits": visits,
         }
-        key = self._get_cache_key("visits")
-        if self.use_django:
-            return self._django_set(key, data)
-        else:
-            return self._file_set(self._get_file_path("visits"), data)
+        return self._cache_set(self._get_cache_key("visits"), data)
 
     def get_visit_results_cache(self) -> dict | None:
         """
@@ -375,11 +206,7 @@ class AnalysisCacheManager:
         Returns:
             Dict with 'visit_count', 'cached_at', 'result' or None if not cached
         """
-        key = self._get_cache_key("visit_results")
-        if self.use_django:
-            return self._django_get(key)
-        else:
-            return self._file_get(self._get_file_path("visit_results"))
+        return self._cache_get(self._get_cache_key("visit_results"))
 
     def set_visit_results_cache(self, visit_count: int, result: Any) -> bool:
         """
@@ -397,11 +224,7 @@ class AnalysisCacheManager:
             "cached_at": datetime.utcnow().isoformat(),
             "result": result,
         }
-        key = self._get_cache_key("visit_results")
-        if self.use_django:
-            return self._django_set(key, data)
-        else:
-            return self._file_set(self._get_file_path("visit_results"), data)
+        return self._cache_set(self._get_cache_key("visit_results"), data)
 
     def get_results_cache(self) -> dict | None:
         """
@@ -410,11 +233,7 @@ class AnalysisCacheManager:
         Returns:
             Dict with 'visit_count', 'cached_at', 'result' or None if not cached
         """
-        key = self._get_cache_key("results")
-        if self.use_django:
-            return self._django_get(key)
-        else:
-            return self._file_get(self._get_file_path("results"))
+        return self._cache_get(self._get_cache_key("results"))
 
     def set_results_cache(self, visit_count: int, result: Any) -> bool:
         """
@@ -432,20 +251,12 @@ class AnalysisCacheManager:
             "cached_at": datetime.utcnow().isoformat(),
             "result": result,
         }
-        key = self._get_cache_key("results")
-        if self.use_django:
-            return self._django_set(key, data)
-        else:
-            return self._file_set(self._get_file_path("results"), data)
+        return self._cache_set(self._get_cache_key("results"), data)
 
     def clear_cache(self) -> None:
         """Clear all cache levels for this opportunity/config."""
         for level in ["visits", "visit_results", "results"]:
-            key = self._get_cache_key(level)
-            if self.use_django:
-                self._django_delete(key)
-            else:
-                self._file_delete(self._get_file_path(level))
+            self._cache_delete(self._get_cache_key(level))
 
         logger.info(f"Cleared cache for opp={self.opportunity_id}, hash={self.config_hash}")
 
@@ -522,11 +333,7 @@ class RawAPICacheManager:
     """
     Caching for raw API responses (like user_visits CSV data).
 
-    Uses the same backend detection as AnalysisCacheManager:
-    - Prefers Django cache (Redis) when available
-    - Falls back to file-based pickle cache
-
-    Cache invalidation based on visit count changes.
+    Uses Django cache (Redis) with visit count-based invalidation.
     """
 
     def __init__(self, opportunity_id: int):
@@ -537,23 +344,14 @@ class RawAPICacheManager:
             opportunity_id: Opportunity ID for cache scoping
         """
         self.opportunity_id = opportunity_id
-        self.use_django = _use_django_cache()
 
-        logger.debug(
-            f"RawAPICacheManager initialized: opp={opportunity_id}, "
-            f"backend={'django' if self.use_django else 'file'}"
-        )
+        logger.debug(f"RawAPICacheManager initialized: opp={opportunity_id}")
 
     def _get_cache_key(self, api_endpoint: str) -> str:
         """Generate cache key for an API endpoint."""
         # Clean endpoint to make it filesystem-safe
         endpoint_clean = api_endpoint.replace("/", "_").replace(":", "")
         return f"raw_api_{self.opportunity_id}_{endpoint_clean}"
-
-    def _get_file_path(self, api_endpoint: str) -> Path:
-        """Get file path for file-based cache."""
-        endpoint_clean = api_endpoint.replace("/", "_").replace(":", "")
-        return CACHE_DIR / f"raw_api_{self.opportunity_id}_{endpoint_clean}.pkl"
 
     def get(self, api_endpoint: str) -> dict | None:
         """
@@ -566,24 +364,11 @@ class RawAPICacheManager:
             Dict with 'visit_count', 'cached_at', 'data' or None if not cached
         """
         key = self._get_cache_key(api_endpoint)
-        if self.use_django:
-            from django.core.cache import cache
-
-            try:
-                return cache.get(key)
-            except Exception as e:
-                logger.warning(f"Django cache get failed for {key}: {e}")
-                return None
-        else:
-            path = self._get_file_path(api_endpoint)
-            if not path.exists():
-                return None
-            try:
-                with open(path, "rb") as f:
-                    return pickle.load(f)
-            except Exception as e:
-                logger.warning(f"File cache read failed for {path}: {e}")
-                return None
+        try:
+            return cache.get(key)
+        except Exception as e:
+            logger.warning(f"Cache get failed for {key}: {e}")
+            return None
 
     def set(self, api_endpoint: str, data: Any, visit_count: int | None = None) -> bool:
         """
@@ -605,27 +390,13 @@ class RawAPICacheManager:
             cache_data["visit_count"] = visit_count
 
         key = self._get_cache_key(api_endpoint)
-        if self.use_django:
-            from django.core.cache import cache
-
-            try:
-                cache.set(key, cache_data, DJANGO_CACHE_TTL)
-                logger.info(f"Cached API response: {api_endpoint} for opp {self.opportunity_id}")
-                return True
-            except Exception as e:
-                logger.warning(f"Django cache set failed for {key}: {e}")
-                return False
-        else:
-            path = self._get_file_path(api_endpoint)
-            try:
-                CACHE_DIR.mkdir(parents=True, exist_ok=True)
-                with open(path, "wb") as f:
-                    pickle.dump(cache_data, f)
-                logger.info(f"Cached API response: {api_endpoint} for opp {self.opportunity_id}")
-                return True
-            except Exception as e:
-                logger.warning(f"File cache write failed for {path}: {e}")
-                return False
+        try:
+            cache.set(key, cache_data, DJANGO_CACHE_TTL)
+            logger.info(f"Cached API response: {api_endpoint} for opp {self.opportunity_id}")
+            return True
+        except Exception as e:
+            logger.warning(f"Cache set failed for {key}: {e}")
+            return False
 
     def is_valid(self, cached_data: dict | None, current_visit_count: int | None = None) -> bool:
         """
@@ -670,238 +441,9 @@ class RawAPICacheManager:
             True if cleared successfully
         """
         key = self._get_cache_key(api_endpoint)
-        if self.use_django:
-            from django.core.cache import cache
-
-            try:
-                cache.delete(key)
-                return True
-            except Exception as e:
-                logger.warning(f"Django cache delete failed for {key}: {e}")
-                return False
-        else:
-            path = self._get_file_path(api_endpoint)
-            try:
-                if path.exists():
-                    path.unlink()
-                return True
-            except Exception as e:
-                logger.warning(f"File cache delete failed for {path}: {e}")
-                return False
-
-
-class LabsRecordCacheManager:
-    """
-    Cache backend using LabsRecord API for persistent cross-session storage.
-
-    Third-tier cache after Redis and file:
-    - Redis: Fast, in-memory, TTL-based (1 hour)
-    - File: Local disk, survives restarts
-    - LabsRecord: Persistent in production DB, cross-user shareable
-
-    Uses the LabsRecordAPIClient to store/retrieve serialized analysis results.
-    Cache entries are identified by experiment + analysis_type + opportunity_id.
-
-    Cache invalidation is based on visit_count stored in the record metadata.
-    """
-
-    def __init__(self, request: HttpRequest, experiment: str):
-        """
-        Initialize LabsRecord cache.
-
-        Args:
-            request: HttpRequest with labs OAuth and context
-            experiment: Experiment name (e.g., "chc_nutrition", "coverage")
-        """
-        self.request = request
-        self.experiment = experiment
-        self.access_token = request.session.get("labs_oauth", {}).get("access_token")
-        self.labs_context = getattr(request, "labs_context", {})
-        self.opportunity_id = self.labs_context.get("opportunity_id")
-
-        logger.debug(f"LabsRecordCacheManager initialized: experiment={experiment}, opp={self.opportunity_id}")
-
-    def _get_api_client(self):
-        """Get LabsRecordAPIClient instance."""
-        from commcare_connect.labs.integrations.connect.api_client import LabsRecordAPIClient
-
-        return LabsRecordAPIClient(
-            access_token=self.access_token,
-            opportunity_id=self.opportunity_id,
-        )
-
-    def get(self, analysis_type: str) -> dict | None:
-        """
-        Load cached result from LabsRecord.
-
-        Args:
-            analysis_type: Type of analysis (e.g., "flw_analysis", "visit_analysis")
-
-        Returns:
-            Dict with 'visit_count', 'cached_at', 'result' or None if not found
-        """
-        if not self.access_token or not self.opportunity_id:
-            logger.debug("LabsRecordCacheManager.get() skipped - missing auth or context")
-            return None
-
         try:
-            client = self._get_api_client()
-            records = client.get_records(
-                experiment=self.experiment,
-                type=f"cache_{analysis_type}",
-            )
-
-            if not records:
-                logger.info(
-                    f"LabsRecordCacheManager MISS: no record for {self.experiment}/{analysis_type} "
-                    f"(opp {self.opportunity_id})"
-                )
-                return None
-
-            # Get the most recent record
-            record = records[0]
-            data = record.data
-
-            logger.info(
-                f"LabsRecordCacheManager HIT: found record for {self.experiment}/{analysis_type} "
-                f"(opp {self.opportunity_id}, visit_count={data.get('visit_count')})"
-            )
-
-            return data
-
-        except Exception as e:
-            logger.warning(f"LabsRecordCacheManager.get() failed: {e}")
-            return None
-
-    def set(self, analysis_type: str, result: Any, visit_count: int) -> bool:
-        """
-        Save result to LabsRecord.
-
-        Args:
-            analysis_type: Type of analysis (e.g., "flw_analysis", "visit_analysis")
-            result: Analysis result object to cache
-            visit_count: Visit count for cache invalidation
-
-        Returns:
-            True if saved successfully
-        """
-        if not self.access_token or not self.opportunity_id:
-            logger.debug("LabsRecordCacheManager.set() skipped - missing auth or context")
-            return False
-
-        try:
-            # Serialize the result
-            cache_data = {
-                "visit_count": visit_count,
-                "cached_at": datetime.utcnow().isoformat(),
-                "result": result.to_dict() if hasattr(result, "to_dict") else result,
-            }
-
-            client = self._get_api_client()
-
-            # Check if record already exists
-            existing = client.get_records(
-                experiment=self.experiment,
-                type=f"cache_{analysis_type}",
-            )
-
-            if existing:
-                # Update existing record
-                record = existing[0]
-                client.update_record(
-                    record_id=record.id,
-                    experiment=self.experiment,
-                    type=f"cache_{analysis_type}",
-                    data=cache_data,
-                )
-                logger.info(
-                    f"LabsRecordCacheManager updated: {self.experiment}/{analysis_type} "
-                    f"(opp {self.opportunity_id}, visit_count={visit_count})"
-                )
-            else:
-                # Create new record
-                client.create_record(
-                    experiment=self.experiment,
-                    type=f"cache_{analysis_type}",
-                    data=cache_data,
-                )
-                logger.info(
-                    f"LabsRecordCacheManager created: {self.experiment}/{analysis_type} "
-                    f"(opp {self.opportunity_id}, visit_count={visit_count})"
-                )
-
+            cache.delete(key)
             return True
-
         except Exception as e:
-            logger.warning(f"LabsRecordCacheManager.set() failed: {e}")
-            return False
-
-    def is_valid(self, cached_data: dict | None, current_visit_count: int | None = None) -> bool:
-        """
-        Check if cached data is still valid based on visit count.
-
-        Cache is valid if cached_count >= expected_count, because sometimes
-        the API returns more visits than what's reported in opportunity metadata.
-
-        Args:
-            cached_data: Cached data dict from get()
-            current_visit_count: Expected visit count for validation
-
-        Returns:
-            True if cache is valid
-        """
-        if not cached_data:
-            return False
-
-        # If no visit count validation needed, cache is valid
-        if current_visit_count is None:
-            return True
-
-        # Cached count must be >= expected count
-        cached_count = cached_data.get("visit_count")
-        if cached_count is not None and cached_count < current_visit_count:
-            logger.info(
-                f"LabsRecordCacheManager invalid: cached_count={cached_count} < expected={current_visit_count}"
-            )
-            return False
-
-        if cached_count is not None:
-            logger.debug(
-                f"LabsRecordCacheManager valid: cached_count={cached_count} >= expected={current_visit_count}"
-            )
-
-        return True
-
-    def clear(self, analysis_type: str) -> bool:
-        """
-        Clear cached record for an analysis type.
-
-        Args:
-            analysis_type: Type of analysis to clear
-
-        Returns:
-            True if cleared successfully
-        """
-        if not self.access_token or not self.opportunity_id:
-            return False
-
-        try:
-            client = self._get_api_client()
-            records = client.get_records(
-                experiment=self.experiment,
-                type=f"cache_{analysis_type}",
-            )
-
-            if records:
-                record_ids = [r.id for r in records]
-                client.delete_records(record_ids)
-                logger.info(
-                    f"LabsRecordCacheManager cleared: {self.experiment}/{analysis_type} "
-                    f"(opp {self.opportunity_id}, deleted {len(record_ids)} records)"
-                )
-
-            return True
-
-        except Exception as e:
-            logger.warning(f"LabsRecordCacheManager.clear() failed: {e}")
+            logger.warning(f"Cache delete failed for {key}: {e}")
             return False

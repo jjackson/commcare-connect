@@ -40,7 +40,7 @@ IS_LABS_ENVIRONMENT = True
 # Analysis backend: "python_redis" (default) or "sql"
 # python_redis: Redis/file caching with pandas computation
 # sql: PostgreSQL table caching with SQL computation
-LABS_ANALYSIS_BACKEND = env("LABS_ANALYSIS_BACKEND", default="python_redis")
+LABS_ANALYSIS_BACKEND = env("LABS_ANALYSIS_BACKEND", default="sql")
 
 # OAuth configuration
 LABS_OAUTH_SCOPES = ["export"]

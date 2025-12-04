@@ -37,7 +37,7 @@ from commcare_connect.labs.analysis.config import (
     FieldComputation,
     HistogramComputation,
 )
-from commcare_connect.labs.analysis.data_access import AnalysisDataAccess, get_flw_names_for_opportunity
+from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
 from commcare_connect.labs.analysis.models import (
     AnalysisResult,
     FLWAnalysisResult,
@@ -53,12 +53,14 @@ from commcare_connect.labs.analysis.pipeline import (
     EVENT_ERROR,
     EVENT_RESULT,
     EVENT_STATUS,
+    AnalysisPipeline,
     run_analysis_pipeline,
     stream_analysis_pipeline,
 )
 
 __all__ = [
     # Pipeline (recommended entry points)
+    "AnalysisPipeline",
     "stream_analysis_pipeline",
     "run_analysis_pipeline",
     "EVENT_STATUS",
@@ -85,6 +87,5 @@ __all__ = [
     "AnalysisResult",
     "LocalUserVisit",
     # Data access
-    "AnalysisDataAccess",
     "get_flw_names_for_opportunity",
 ]

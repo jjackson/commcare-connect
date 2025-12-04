@@ -11,7 +11,8 @@ import logging
 from django.core.management.base import BaseCommand
 
 from commcare_connect.custom_analysis.chc_nutrition.analysis_config import CHC_NUTRITION_CONFIG
-from commcare_connect.labs.analysis.data_access import AnalysisDataAccess
+from commcare_connect.labs.analysis.models import LocalUserVisit
+from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.integrations.connect.cli import create_cli_request
 
 logger = logging.getLogger(__name__)
@@ -48,8 +49,9 @@ class Command(BaseCommand):
 
         # Fetch visits
         self.stdout.write("\nFetching visits...")
-        data_access = AnalysisDataAccess(request)
-        visits = data_access.fetch_user_visits()[:sample_size]
+        pipeline = AnalysisPipeline(request)
+        visit_dicts = pipeline.fetch_raw_visits()[:sample_size]
+        visits = [LocalUserVisit(d) for d in visit_dicts]
 
         self.stdout.write(self.style.SUCCESS(f"✓ Fetched {len(visits)} visits\n"))
 

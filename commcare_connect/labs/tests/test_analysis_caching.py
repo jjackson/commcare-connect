@@ -5,7 +5,7 @@ Tests the complete caching infrastructure with real cache read/write operations:
 - AnalysisCacheManager: 3-level caching (visits, visit_results, flw_results)
 - Cache invalidation: visit count changes, config hash changes
 - Cache validation: exact matching and time-based tolerance
-- Both Django cache (Redis) and file-based backends
+- Django cache (Redis) backend
 - Multi-opportunity cache isolation
 
 Optimized for speed (~2 seconds):
@@ -21,13 +21,9 @@ from django.core.cache import cache
 from django.test import RequestFactory
 
 from commcare_connect.labs.analysis import AnalysisConfig, FieldComputation
-from commcare_connect.labs.analysis.backends.python_redis.cache import (
-    CACHE_DIR,
-    AnalysisCacheManager,
-    clear_all_analysis_caches,
-    get_config_hash,
-)
+from commcare_connect.labs.analysis.backends.python_redis.cache import AnalysisCacheManager
 from commcare_connect.labs.analysis.models import FLWAnalysisResult, VisitAnalysisResult
+from commcare_connect.labs.analysis.utils import get_config_hash
 
 
 @pytest.fixture
@@ -72,11 +68,7 @@ def cache_manager(test_opportunity_id, test_config):
 
 @pytest.fixture(autouse=True)
 def clear_caches():
-    """Clear all caches before and after each test."""
-    # Clear file cache
-    clear_all_analysis_caches()
-
-    # Clear Django cache
+    """Clear Django cache before and after each test."""
     try:
         cache.clear()
     except Exception:
@@ -84,8 +76,6 @@ def clear_caches():
 
     yield
 
-    # Clean up after test
-    clear_all_analysis_caches()
     try:
         cache.clear()
     except Exception:
@@ -212,23 +202,6 @@ class TestAnalysisPipelineCaching:
 @pytest.mark.django_db
 class TestCacheBackends:
     """Test cache backend functionality."""
-
-    def test_django_cache_backend_detection(self):
-        """Test Django cache backend detection works."""
-        from commcare_connect.labs.analysis.backends.python_redis.cache import _use_django_cache
-
-        use_django = _use_django_cache()
-        assert isinstance(use_django, bool)
-
-    def test_clear_all_file_caches(self, test_opportunity_id):
-        """Test clearing all file-based caches."""
-        CACHE_DIR.mkdir(exist_ok=True)
-        test_file = CACHE_DIR / f"{test_opportunity_id}_test_hash_visits.pkl"
-        test_file.write_text("test")
-
-        cleared = clear_all_analysis_caches()
-        assert cleared >= 1
-        assert not test_file.exists()
 
     def test_cache_key_format(self, cache_manager):
         """Test cache key format is consistent."""

@@ -11,9 +11,9 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
-from commcare_connect.labs.analysis.backends.python_redis.cache import get_config_hash
 from commcare_connect.labs.analysis.backends.sql.models import ComputedFLWCache, ComputedVisitCache, RawVisitCache
 from commcare_connect.labs.analysis.config import AnalysisPipelineConfig
+from commcare_connect.labs.analysis.utils import get_config_hash
 
 logger = logging.getLogger(__name__)
 

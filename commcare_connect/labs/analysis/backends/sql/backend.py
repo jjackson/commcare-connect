@@ -14,6 +14,7 @@ import httpx
 from django.conf import settings
 from django.http import HttpRequest
 
+from commcare_connect.labs.analysis.backends.csv_parsing import parse_csv_bytes
 from commcare_connect.labs.analysis.backends.sql.cache import SQLCacheManager
 from commcare_connect.labs.analysis.backends.sql.query_builder import execute_flw_aggregation
 from commcare_connect.labs.analysis.config import AnalysisPipelineConfig
@@ -22,7 +23,7 @@ from commcare_connect.labs.analysis.models import FLWAnalysisResult, FLWRow, Vis
 logger = logging.getLogger(__name__)
 
 
-def _raw_visit_to_dict(row) -> dict:
+def _model_to_visit_dict(row) -> dict:
     """Convert RawVisitCache model instance to visit dict."""
     return {
         "id": row.visit_id,
@@ -48,131 +49,6 @@ def _raw_visit_to_dict(row) -> dict:
         "completed_work_id": row.completed_work_id,
         "images": row.images,
     }
-
-
-def _parse_csv_to_dicts(csv_bytes: bytes, opportunity_id: int, skip_form_json: bool = False) -> list[dict]:
-    """
-    Parse CSV bytes into list of visit dicts.
-
-    This is a local implementation to avoid dependency on api_cache.py.
-    """
-    import ast
-    import io
-    import json
-
-    import pandas as pd
-
-    # All columns from the CSV
-    all_columns = [
-        "id",
-        "opportunity_id",
-        "username",
-        "deliver_unit",
-        "entity_id",
-        "entity_name",
-        "visit_date",
-        "status",
-        "reason",
-        "location",
-        "flagged",
-        "flag_reason",
-        "form_json",
-        "completed_work",
-        "status_modified_date",
-        "review_status",
-        "review_created_on",
-        "justification",
-        "date_created",
-        "completed_work_id",
-        "deliver_unit_id",
-        "images",
-    ]
-    slim_columns = [col for col in all_columns if col != "form_json"]
-
-    usecols = slim_columns if skip_form_json else None
-
-    try:
-        df = pd.read_csv(io.BytesIO(csv_bytes), usecols=usecols)
-    except ValueError as e:
-        if "not in list" in str(e) and skip_form_json:
-            logger.warning(f"Some columns not found, loading all: {e}")
-            df = pd.read_csv(io.BytesIO(csv_bytes))
-        else:
-            raise
-
-    def parse_form_json(raw):
-        if not raw or pd.isna(raw):
-            return {}
-        try:
-            return json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            pass
-        try:
-            return ast.literal_eval(raw)
-        except (ValueError, SyntaxError):
-            return {}
-
-    def parse_images(raw):
-        if not raw or pd.isna(raw):
-            return []
-        try:
-            return ast.literal_eval(raw)
-        except (ValueError, SyntaxError):
-            return []
-
-    visits = []
-    for _, row in df.iterrows():
-
-        def get_str(col):
-            return str(row[col]) if col in row.index and pd.notna(row[col]) else None
-
-        def get_int(col):
-            if col in row.index and pd.notna(row[col]):
-                try:
-                    return int(row[col])
-                except (ValueError, TypeError):
-                    return None
-            return None
-
-        def get_bool(col):
-            return bool(row[col]) if col in row.index and pd.notna(row[col]) else False
-
-        form_json = {}
-        if not skip_form_json and "form_json" in row.index:
-            form_json = parse_form_json(row["form_json"])
-
-        images = []
-        if "images" in row.index:
-            images = parse_images(row["images"])
-
-        visits.append(
-            {
-                "id": get_int("id"),
-                "opportunity_id": get_int("opportunity_id") or opportunity_id,
-                "username": get_str("username"),
-                "deliver_unit": get_str("deliver_unit"),
-                "deliver_unit_id": get_int("deliver_unit_id"),
-                "entity_id": get_str("entity_id"),
-                "entity_name": get_str("entity_name"),
-                "visit_date": get_str("visit_date"),
-                "status": get_str("status"),
-                "reason": get_str("reason"),
-                "location": get_str("location"),
-                "flagged": get_bool("flagged"),
-                "flag_reason": get_str("flag_reason"),
-                "form_json": form_json,
-                "completed_work": get_str("completed_work"),
-                "status_modified_date": get_str("status_modified_date"),
-                "review_status": get_str("review_status"),
-                "review_created_on": get_str("review_created_on"),
-                "justification": get_str("justification"),
-                "date_created": get_str("date_created"),
-                "completed_work_id": get_int("completed_work_id"),
-                "images": images,
-            }
-        )
-
-    return visits
 
 
 class SQLBackend:
@@ -210,13 +86,16 @@ class SQLBackend:
         if not force_refresh and expected_visit_count:
             if cache_manager.has_valid_raw_cache(expected_visit_count):
                 logger.info(f"[SQL] Raw cache HIT for opp {opportunity_id}")
-                return self._load_from_sql_cache(cache_manager, skip_form_json, filter_visit_ids)
+                return self._load_from_cache(cache_manager, skip_form_json, filter_visit_ids)
 
         # Cache miss or force refresh - fetch from API
         logger.info(f"[SQL] Raw cache MISS for opp {opportunity_id}, fetching from API")
-        visit_dicts = self._fetch_from_api(opportunity_id, access_token, skip_form_json=False)
+        csv_bytes = self._fetch_from_api(opportunity_id, access_token)
 
-        # Store full data to SQL cache (always with form_json for reuse)
+        # Parse full data (always with form_json for storage)
+        visit_dicts = parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
+
+        # Store full data to SQL cache
         visit_count = len(visit_dicts)
         cache_manager.store_raw_visits(visit_dicts, visit_count)
         logger.info(f"[SQL] Stored {visit_count} visits to RawVisitCache")
@@ -250,7 +129,7 @@ class SQLBackend:
         if not force_refresh and expected_visit_count:
             if cache_manager.has_valid_raw_cache(expected_visit_count):
                 logger.info(f"[SQL] Raw cache HIT for opp {opportunity_id}")
-                visit_dicts = self._load_from_sql_cache(cache_manager, skip_form_json=False, filter_visit_ids=None)
+                visit_dicts = self._load_from_cache(cache_manager, skip_form_json=False, filter_visit_ids=None)
                 yield ("cached", visit_dicts)
                 return
 
@@ -286,7 +165,7 @@ class SQLBackend:
             raise RuntimeError("Connect API timeout") from e
 
         csv_bytes = b"".join(chunks)
-        visit_dicts = _parse_csv_to_dicts(csv_bytes, opportunity_id, skip_form_json=False)
+        visit_dicts = parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
 
         # Store to SQL cache
         visit_count = len(visit_dicts)
@@ -300,7 +179,7 @@ class SQLBackend:
         cache_manager = SQLCacheManager(opportunity_id, config=None)
         return cache_manager.has_valid_raw_cache(expected_visit_count)
 
-    def _load_from_sql_cache(
+    def _load_from_cache(
         self,
         cache_manager: SQLCacheManager,
         skip_form_json: bool,
@@ -318,7 +197,7 @@ class SQLBackend:
 
         visits = []
         for row in qs.iterator():
-            visit = _raw_visit_to_dict(row)
+            visit = _model_to_visit_dict(row)
             if skip_form_json:
                 visit["form_json"] = {}
             visits.append(visit)
@@ -326,24 +205,18 @@ class SQLBackend:
         logger.info(f"[SQL] Loaded {len(visits)} visits from RawVisitCache")
         return visits
 
-    def _fetch_from_api(
-        self,
-        opportunity_id: int,
-        access_token: str,
-        skip_form_json: bool = False,
-    ) -> list[dict]:
-        """Fetch visits directly from Connect API."""
+    def _fetch_from_api(self, opportunity_id: int, access_token: str) -> bytes:
+        """Fetch raw CSV bytes from Connect API."""
         url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_visits/"
         headers = {"Authorization": f"Bearer {access_token}"}
 
         try:
             response = httpx.get(url, headers=headers, timeout=580.0)
             response.raise_for_status()
+            return response.content
         except httpx.TimeoutException as e:
             logger.error(f"[SQL] Timeout fetching visits for opp {opportunity_id}: {e}")
             raise RuntimeError("Connect API timeout") from e
-
-        return _parse_csv_to_dicts(response.content, opportunity_id, skip_form_json)
 
     # -------------------------------------------------------------------------
     # Analysis Results Layer

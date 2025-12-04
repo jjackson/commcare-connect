@@ -12,8 +12,8 @@ from django.http import HttpRequest
 
 from commcare_connect.labs.analysis.backends.python_redis.computations import compute_visit_fields
 from commcare_connect.labs.analysis.config import AnalysisPipelineConfig, FieldComputation
-from commcare_connect.labs.analysis.data_access import AnalysisDataAccess
 from commcare_connect.labs.analysis.models import LocalUserVisit, VisitAnalysisResult, VisitRow
+from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -41,11 +41,12 @@ class VisitAnalyzer:
 
         self.request = request
         self.config = config
-        self.data_access = AnalysisDataAccess(request)
+        self._pipeline = AnalysisPipeline(request)
 
     def fetch_visits(self) -> list[LocalUserVisit]:
         """Fetch user visits from API."""
-        return self.data_access.fetch_user_visits()
+        visit_dicts = self._pipeline.fetch_raw_visits()
+        return [LocalUserVisit(d) for d in visit_dicts]
 
     def filter_visits(self, visits: list[LocalUserVisit]) -> list[LocalUserVisit]:
         """
@@ -147,8 +148,8 @@ class VisitAnalyzer:
             rows.append(row)
 
         # Create result
-        opportunity_id = self.data_access.opportunity_id
-        opportunity_name = self.data_access.labs_context.get("opportunity_name")
+        opportunity_id = self._pipeline.opportunity_id
+        opportunity_name = self._pipeline.labs_context.get("opportunity_name")
 
         result = VisitAnalysisResult(
             opportunity_id=opportunity_id,
@@ -270,8 +271,8 @@ def compute_visit_analysis(
 
     # Get current visit count for validation
     try:
-        data_access = AnalysisDataAccess(request)
-        current_visit_count = data_access.fetch_visit_count()
+        pipeline = AnalysisPipeline(request)
+        current_visit_count = pipeline.visit_count
         logger.info(f"[Analysis] Current visit count: {current_visit_count}")
     except Exception as e:
         logger.warning(f"[Analysis] Failed to fetch visit count: {e}")

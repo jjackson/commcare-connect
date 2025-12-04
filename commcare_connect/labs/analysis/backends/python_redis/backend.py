@@ -4,18 +4,15 @@ Python/Redis backend implementation.
 Uses Redis/file caching with pandas-based computation.
 """
 
-import ast
-import io
-import json
 import logging
 from collections.abc import Generator
 from typing import Any
 
 import httpx
-import pandas as pd
 from django.conf import settings
 from django.http import HttpRequest
 
+from commcare_connect.labs.analysis.backends.csv_parsing import parse_csv_bytes
 from commcare_connect.labs.analysis.backends.python_redis.cache import (
     AnalysisCacheManager,
     RawAPICacheManager,
@@ -27,168 +24,6 @@ from commcare_connect.labs.analysis.config import AnalysisPipelineConfig, CacheS
 from commcare_connect.labs.analysis.models import FLWAnalysisResult, LocalUserVisit, VisitAnalysisResult
 
 logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# CSV Parsing Helpers (moved from api_cache.py)
-# =============================================================================
-
-ALL_COLUMNS = [
-    "id",
-    "opportunity_id",
-    "username",
-    "deliver_unit",
-    "entity_id",
-    "entity_name",
-    "visit_date",
-    "status",
-    "reason",
-    "location",
-    "flagged",
-    "flag_reason",
-    "form_json",
-    "completed_work",
-    "status_modified_date",
-    "review_status",
-    "review_created_on",
-    "justification",
-    "date_created",
-    "completed_work_id",
-    "deliver_unit_id",
-    "images",
-]
-
-SLIM_COLUMNS = [col for col in ALL_COLUMNS if col != "form_json"]
-
-
-def _parse_form_json(raw_json: str) -> dict:
-    """Parse form_json from CSV string to Python dict."""
-    if not raw_json or pd.isna(raw_json):
-        return {}
-    try:
-        return json.loads(raw_json)
-    except (json.JSONDecodeError, TypeError):
-        pass
-    try:
-        return ast.literal_eval(raw_json)
-    except (ValueError, SyntaxError):
-        logger.warning(f"Failed to parse form_json: {str(raw_json)[:100]}...")
-        return {}
-
-
-def _parse_images(raw_images: str) -> list:
-    """Parse images column from CSV string to Python list."""
-    if not raw_images or pd.isna(raw_images):
-        return []
-    try:
-        return ast.literal_eval(raw_images)
-    except (ValueError, SyntaxError):
-        return []
-
-
-def _row_to_visit_dict(row: pd.Series, opportunity_id: int, include_form_json: bool = True) -> dict:
-    """Convert a pandas row to a visit dict."""
-
-    def get_str(col: str) -> str | None:
-        return str(row[col]) if col in row.index and pd.notna(row[col]) else None
-
-    def get_int(col: str) -> int | None:
-        if col in row.index and pd.notna(row[col]):
-            try:
-                return int(row[col])
-            except (ValueError, TypeError):
-                return None
-        return None
-
-    def get_bool(col: str) -> bool:
-        return bool(row[col]) if col in row.index and pd.notna(row[col]) else False
-
-    form_json = {}
-    xform_id = None
-    if include_form_json and "form_json" in row.index:
-        form_json = _parse_form_json(row["form_json"])
-        if form_json:
-            xform_id = form_json.get("id")
-
-    images = []
-    if "images" in row.index:
-        images = _parse_images(row["images"])
-
-    return {
-        "id": get_int("id"),
-        "xform_id": xform_id,
-        "opportunity_id": get_int("opportunity_id") or opportunity_id,
-        "username": get_str("username"),
-        "deliver_unit": get_str("deliver_unit"),
-        "entity_id": get_str("entity_id"),
-        "entity_name": get_str("entity_name"),
-        "visit_date": get_str("visit_date"),
-        "status": get_str("status"),
-        "reason": get_str("reason"),
-        "location": get_str("location"),
-        "flagged": get_bool("flagged"),
-        "flag_reason": get_str("flag_reason"),
-        "form_json": form_json,
-        "completed_work": get_str("completed_work"),
-        "status_modified_date": get_str("status_modified_date"),
-        "review_status": get_str("review_status"),
-        "review_created_on": get_str("review_created_on"),
-        "justification": get_str("justification"),
-        "date_created": get_str("date_created"),
-        "completed_work_id": get_int("completed_work_id"),
-        "deliver_unit_id": get_int("deliver_unit_id"),
-        "images": images,
-    }
-
-
-def _parse_csv_bytes(csv_bytes: bytes, opportunity_id: int, skip_form_json: bool = False) -> list[dict]:
-    """Parse CSV bytes into list of visit dicts."""
-    if skip_form_json:
-        usecols = SLIM_COLUMNS
-        logger.info("Parsing CSV without form_json column (memory-efficient mode)")
-    else:
-        usecols = None
-
-    try:
-        df = pd.read_csv(io.BytesIO(csv_bytes), usecols=usecols)
-    except ValueError as e:
-        if "not in list" in str(e) and skip_form_json:
-            logger.warning(f"Some slim columns not found in CSV, falling back to all columns: {e}")
-            df = pd.read_csv(io.BytesIO(csv_bytes))
-        else:
-            raise
-
-    visits = []
-    for _, row in df.iterrows():
-        visit_dict = _row_to_visit_dict(row, opportunity_id, include_form_json=not skip_form_json)
-        visits.append(visit_dict)
-
-    return visits
-
-
-def _parse_csv_chunked(
-    csv_bytes: bytes, opportunity_id: int, visit_ids: set[int], chunksize: int = 1000
-) -> list[dict]:
-    """Parse CSV in chunks, returning only visits matching specified IDs."""
-    matching_visits = []
-
-    for chunk in pd.read_csv(io.BytesIO(csv_bytes), chunksize=chunksize):
-        if "id" in chunk.columns:
-            filtered = chunk[chunk["id"].isin(visit_ids)]
-        else:
-            continue
-
-        for _, row in filtered.iterrows():
-            visit_dict = _row_to_visit_dict(row, opportunity_id, include_form_json=True)
-            matching_visits.append(visit_dict)
-
-    logger.info(f"Chunked parsing found {len(matching_visits)} visits matching {len(visit_ids)} requested IDs")
-    return matching_visits
-
-
-# =============================================================================
-# Backend Implementation
-# =============================================================================
 
 
 class PythonRedisBackend:
@@ -227,17 +62,19 @@ class PythonRedisBackend:
 
         if csv_bytes is None:
             logger.info(f"[PythonRedis] Raw cache MISS for opp {opportunity_id}, fetching from API")
-            csv_bytes = self._fetch_csv_from_api(opportunity_id, access_token)
+            csv_bytes = self._fetch_from_api(opportunity_id, access_token)
 
             visit_count = csv_bytes.count(b"\n") - 1 if csv_bytes else 0
             cache.set("user_visits_csv", csv_bytes, visit_count)
             logger.info(f"[PythonRedis] Cached raw CSV ({len(csv_bytes)} bytes)")
 
-        # Parse based on caller's needs
-        if filter_visit_ids:
-            return _parse_csv_chunked(csv_bytes, opportunity_id, filter_visit_ids)
-        else:
-            return _parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json)
+        # Parse with unified parser (handles both filter and skip_form_json)
+        return parse_csv_bytes(
+            csv_bytes,
+            opportunity_id,
+            skip_form_json=skip_form_json,
+            filter_visit_ids=filter_visit_ids,
+        )
 
     def stream_raw_visits(
         self,
@@ -259,7 +96,7 @@ class PythonRedisBackend:
             if cached_data and cache.is_valid(cached_data, expected_visit_count):
                 logger.info(f"[PythonRedis] Raw cache HIT for opp {opportunity_id}")
                 csv_bytes = cached_data["data"]
-                visit_dicts = _parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
+                visit_dicts = parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
                 yield ("cached", visit_dicts)
                 return
 
@@ -302,7 +139,7 @@ class PythonRedisBackend:
         logger.info(f"[PythonRedis] Cached raw CSV ({len(csv_bytes)} bytes)")
 
         # Parse and return
-        visit_dicts = _parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
+        visit_dicts = parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
         yield ("complete", visit_dicts)
 
     def has_valid_raw_cache(self, opportunity_id: int, expected_visit_count: int) -> bool:
@@ -311,7 +148,7 @@ class PythonRedisBackend:
         cached_data = cache.get("user_visits_csv")
         return cached_data is not None and cache.is_valid(cached_data, expected_visit_count)
 
-    def _fetch_csv_from_api(self, opportunity_id: int, access_token: str) -> bytes:
+    def _fetch_from_api(self, opportunity_id: int, access_token: str) -> bytes:
         """Fetch raw CSV bytes from Connect API."""
         url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_visits/"
         headers = {"Authorization": f"Bearer {access_token}"}

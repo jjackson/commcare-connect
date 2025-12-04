@@ -23,11 +23,10 @@ AUTHENTICATION_BACKENDS = [
     "commcare_connect.labs.auth_backend.LabsOAuthBackend",
 ]
 
-# Add labs app and custom_analysis, remove admin (no local ORM models in labs)
+# Add labs app and custom_analysis
 INSTALLED_APPS = list(INSTALLED_APPS)  # noqa: F405
 INSTALLED_APPS.append("commcare_connect.labs")
 INSTALLED_APPS.append("commcare_connect.custom_analysis.chc_nutrition")
-INSTALLED_APPS.remove("django.contrib.admin")
 
 # Replace default AuthenticationMiddleware with labs version
 # Remove production OrganizationMiddleware and add labs-specific middlewares
