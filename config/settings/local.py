@@ -37,6 +37,11 @@ INSTALLED_APPS += ["commcare_connect.deid"]
 # ------------------------------------------------------------------------------
 IS_LABS_ENVIRONMENT = True
 
+# Analysis backend: "python_redis" (default) or "sql"
+# python_redis: Redis/file caching with pandas computation
+# sql: PostgreSQL table caching with SQL computation
+LABS_ANALYSIS_BACKEND = env("LABS_ANALYSIS_BACKEND", default="python_redis")
+
 # OAuth configuration
 LABS_OAUTH_SCOPES = ["export"]
 

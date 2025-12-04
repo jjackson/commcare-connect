@@ -14,9 +14,9 @@ import logging
 
 from django.http import HttpRequest
 
+from commcare_connect.labs.analysis.backends.python_redis.visit_analyzer import compute_visit_analysis
 from commcare_connect.labs.analysis.config import AnalysisConfig, FieldComputation
 from commcare_connect.labs.analysis.models import VisitAnalysisResult
-from commcare_connect.labs.analysis.visit_analyzer import compute_visit_analysis
 
 logger = logging.getLogger(__name__)
 

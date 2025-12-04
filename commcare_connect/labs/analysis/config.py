@@ -19,9 +19,6 @@ from typing import Any, Literal
 
 AggregationType = Literal["sum", "avg", "count", "min", "max", "list", "first", "last", "count_unique"]
 
-# ASCII characters for sparkline rendering (avoid unicode for Windows compatibility)
-SPARKLINE_CHARS = " _.-=oO#"  # 8 levels from empty to full
-
 
 class CacheStage(Enum):
     """
@@ -149,7 +146,6 @@ class HistogramComputation:
         )
 
         Produces fields like:
-        - muac_distribution_chart: "_.--==##=-.._" (sparkline)
         - muac_9_5_10_5_visits: 5
         - muac_10_5_11_5_visits: 12
         - ... etc for each bin

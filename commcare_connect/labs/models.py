@@ -167,3 +167,11 @@ class LocalLabsRecord:
     def delete(self, *args: Any, **kwargs: Any) -> None:
         """Prevent deletion from database."""
         raise NotImplementedError("LocalLabsRecord cannot be deleted. Use LabsRecordAPIClient instead.")
+
+
+# Import SQL cache models so Django can discover them for migrations
+from commcare_connect.labs.analysis.backends.sql.models import (  # noqa: E402, F401
+    ComputedFLWCache,
+    ComputedVisitCache,
+    RawVisitCache,
+)

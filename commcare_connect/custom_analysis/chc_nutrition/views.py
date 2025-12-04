@@ -25,8 +25,14 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from commcare_connect.custom_analysis.chc_nutrition.analysis_config import CHC_NUTRITION_CONFIG
-from commcare_connect.labs.analysis.base import get_flw_names_for_opportunity
-from commcare_connect.labs.analysis.pipeline import run_analysis_pipeline
+from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
+from commcare_connect.labs.analysis.pipeline import (
+    EVENT_DOWNLOAD,
+    EVENT_RESULT,
+    EVENT_STATUS,
+    run_analysis_pipeline,
+    stream_analysis_pipeline,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -256,185 +262,34 @@ class CHCNutritionStreamView(LoginRequiredMixin, View):
         return response
 
     def _stream_analysis(self, request, labs_context: dict, opportunity_id: int) -> Generator[str, None, None]:
-        """
-        Generator that yields SSE events as analysis progresses.
+        """Stream analysis progress via SSE, delegating to the shared pipeline."""
 
-        Each yield sends a Server-Sent Event to the client.
-        Uses streaming download for real-time progress during data fetch.
-        """
-        total_steps = 7
+        def send_sse(message: str, data: dict | None = None) -> str:
+            event = {"message": message, "complete": data is not None}
+            if data:
+                event["data"] = data
+            return f"data: {json.dumps(event)}\n\n"
 
-        def send_progress(step: int, message: str, data: dict | None = None) -> str:
-            """Format and return an SSE event."""
-            event_data = {
-                "step": step,
-                "total": total_steps,
-                "message": message,
-                "complete": step == total_steps,
-            }
-            if data is not None:
-                event_data["data"] = data
-            return f"data: {json.dumps(event_data)}\n\n"
+        def format_bytes(b: int) -> str:
+            return f"{b / (1024 * 1024):.1f} MB"
 
-        def format_bytes(num_bytes: int) -> str:
-            """Format bytes as human-readable string (e.g., '15.2 MB')."""
-            mb = num_bytes / (1024 * 1024)
-            return f"{mb:.1f} MB"
+        flw_result = None
+        from_cache = False
 
-        try:
-            # Step 1: Checking cache
-            yield send_progress(1, "Checking cache...")
-            logger.info(f"[CHC Nutrition Stream] Step 1/{total_steps}: Checking cache for opp {opportunity_id}")
+        for event_type, data in stream_analysis_pipeline(request, CHC_NUTRITION_CONFIG, opportunity_id):
+            if event_type == EVENT_STATUS:
+                from_cache = from_cache or "Cache hit" in data["message"]
+                yield send_sse(data["message"])
+            elif event_type == EVENT_DOWNLOAD:
+                pct = f" ({int(data['bytes'] / data['total'] * 100)}%)" if data["total"] else ""
+                yield send_sse(f"Downloading... {format_bytes(data['bytes'])}{pct}")
+            elif event_type == EVENT_RESULT:
+                flw_result = data
 
-            # Import here to avoid circular imports
-            from commcare_connect.labs.analysis.cache import AnalysisCacheManager
-
-            force_refresh = request.GET.get("refresh") == "1"
-
-            # Check if we have cached results
-            cache_manager = AnalysisCacheManager(opportunity_id, CHC_NUTRITION_CONFIG)
-            cached = None if force_refresh else cache_manager.get_results_cache()
-
-            if cached and not force_refresh:
-                # Step 2: Cache hit - fast path
-                yield send_progress(2, "Cache hit! Loading cached results...")
-                logger.info(f"[CHC Nutrition Stream] Cache HIT for opp {opportunity_id}")
-
-                flw_result = cached["result"]
-
-                # Skip to step 5 for FLW names
-                yield send_progress(5, "Fetching FLW display names...")
-                try:
-                    flw_names = get_flw_names_for_opportunity(request)
-                except Exception as e:
-                    logger.warning(f"Failed to fetch FLW names: {e}")
-                    flw_names = {}
-
-                # Step 6: Build response
-                yield send_progress(6, "Building response...")
-                response_data = self._build_response(request, flw_result, flw_names, labs_context, from_cache=True)
-
-                # Step 7: Complete
-                yield send_progress(7, "Complete!", response_data)
-                return
-
-            # Step 2: Fetching data from Connect API with streaming progress
-            yield send_progress(2, "Connecting to Connect API...")
-            logger.info(f"[CHC Nutrition Stream] Step 2/{total_steps}: Streaming download from Connect")
-
-            # Get access token and visit count for cache validation
-            access_token = request.session.get("labs_oauth", {}).get("access_token")
-            opportunity = labs_context.get("opportunity", {})
-            current_visit_count = opportunity.get("visit_count")
-
-            # Use streaming download with progress updates
-            from commcare_connect.labs.analysis.base import LocalUserVisit
-            from commcare_connect.labs.api_cache import _parse_csv_bytes, stream_user_visits_with_progress
-
-            csv_bytes = None
-
-            for event in stream_user_visits_with_progress(
-                opportunity_id=opportunity_id,
-                access_token=access_token,
-                current_visit_count=current_visit_count,
-                force_refresh=force_refresh,
-            ):
-                event_type = event[0]
-
-                if event_type == "cached":
-                    # Raw CSV was in cache - no download needed
-                    csv_bytes = event[1]
-                    yield send_progress(2, f"Using cached data ({format_bytes(len(csv_bytes))})...")
-                    logger.info(f"[CHC Nutrition Stream] Raw CSV cache hit: {len(csv_bytes)} bytes")
-
-                elif event_type == "progress":
-                    # Download progress update
-                    _, bytes_downloaded, total_bytes = event
-                    if total_bytes > 0:
-                        pct = int(bytes_downloaded / total_bytes * 100)
-                        msg = f"Downloading... {format_bytes(bytes_downloaded)} / {format_bytes(total_bytes)} ({pct}%)"
-                    else:
-                        msg = f"Downloading... {format_bytes(bytes_downloaded)}"
-                    yield send_progress(2, msg)
-
-                elif event_type == "complete":
-                    # Download complete
-                    csv_bytes = event[1]
-                    yield send_progress(2, f"Download complete ({format_bytes(len(csv_bytes))})")
-                    logger.info(f"[CHC Nutrition Stream] Download complete: {len(csv_bytes)} bytes")
-
-            # Step 3: Parse CSV data directly (no re-fetch!)
-            yield send_progress(3, "Parsing visit data...")
-            logger.info(f"[CHC Nutrition Stream] Step 3/{total_steps}: Parsing {len(csv_bytes)} bytes")
-
-            # Parse CSV bytes directly into visit dicts, then wrap as LocalUserVisit
-            visit_dicts = _parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
-            all_visits = [LocalUserVisit(data) for data in visit_dicts]
-
-            yield send_progress(3, f"Processing {len(all_visits)} visits...")
-            logger.info(f"[CHC Nutrition Stream] Parsed {len(all_visits)} visits")
-
-            # Compute visit-level analysis using prefetched visits (no re-fetch)
-            from commcare_connect.labs.analysis.visit_analyzer import VisitAnalyzer
-
-            visit_analyzer = VisitAnalyzer(request, CHC_NUTRITION_CONFIG)
-            visit_result = visit_analyzer.compute(prefetched_visits=all_visits)
-            visit_count = visit_result.metadata.get("total_visits", 0)
-
-            # Cache visit results
-            cache_manager.set_visit_results_cache(visit_count, visit_result)
-
-            # Step 4: Aggregating to FLW level
-            yield send_progress(4, f"Aggregating {visit_count} visits to FLW level...")
-            logger.info(f"[CHC Nutrition Stream] Step 4/{total_steps}: Aggregating to FLW level")
-
-            from commcare_connect.labs.analysis.flw_analyzer import FLWAnalyzer
-
-            flw_analyzer = FLWAnalyzer(request, CHC_NUTRITION_CONFIG)
-            flw_result = flw_analyzer.from_visit_result(visit_result)
-
-            # Cache FLW results
-            cache_manager.set_results_cache(visit_count, flw_result)
-
-            # Sync context
-            from commcare_connect.labs.analysis.cache import sync_labs_context_visit_count
-
-            sync_labs_context_visit_count(request, visit_count, opportunity_id)
-
-            # Step 5: Fetching FLW display names
-            yield send_progress(5, "Fetching FLW display names...")
-            logger.info(f"[CHC Nutrition Stream] Step 5/{total_steps}: Fetching FLW names")
-
-            try:
-                flw_names = get_flw_names_for_opportunity(request)
-                logger.info(f"[CHC Nutrition Stream] Loaded display names for {len(flw_names)} FLWs")
-            except Exception as e:
-                logger.warning(f"Failed to fetch FLW names: {e}")
-                flw_names = {}
-
-            # Step 6: Building response
-            yield send_progress(6, f"Building response with {len(flw_result.rows)} FLWs...")
-            logger.info(f"[CHC Nutrition Stream] Step 6/{total_steps}: Building response")
-
-            response_data = self._build_response(request, flw_result, flw_names, labs_context, from_cache=False)
-
-            # Step 7: Complete
-            yield send_progress(7, "Complete!", response_data)
-            logger.info(
-                f"[CHC Nutrition Stream] Step 7/{total_steps}: Complete! "
-                f"{len(flw_result.rows)} FLWs, {visit_count} visits"
-            )
-
-        except Exception as e:
-            logger.error(f"[CHC Nutrition Stream] Error: {e}", exc_info=True)
-            error_event = {
-                "error": str(e),
-                "step": 0,
-                "total": total_steps,
-                "message": f"Error: {str(e)}",
-                "complete": True,
-            }
-            yield f"data: {json.dumps(error_event)}\n\n"
+        # Build response with FLW names
+        flw_names = get_flw_names_for_opportunity(request)
+        response_data = self._build_response(request, flw_result, flw_names, labs_context, from_cache)
+        yield send_sse("Complete!", response_data)
 
     def _build_response(self, request, flw_result, flw_names: dict, labs_context: dict, from_cache: bool) -> dict:
         """Build the final response data payload."""

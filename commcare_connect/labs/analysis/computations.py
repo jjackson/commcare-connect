@@ -9,8 +9,8 @@ from typing import Any
 
 import pandas as pd
 
-from commcare_connect.labs.analysis.base import LocalUserVisit
-from commcare_connect.labs.analysis.config import SPARKLINE_CHARS, FieldComputation, HistogramComputation
+from commcare_connect.labs.analysis.config import FieldComputation, HistogramComputation
+from commcare_connect.labs.analysis.models import LocalUserVisit
 from commcare_connect.labs.analysis.utils import extract_json_path, extract_json_path_multi
 
 logger = logging.getLogger(__name__)
@@ -239,7 +239,7 @@ def compute_visit_fields(
 
 def compute_histogram(visits: list[LocalUserVisit], hist_comp: HistogramComputation) -> dict[str, Any]:
     """
-    Compute histogram bins and sparkline for a numeric field.
+    Compute histogram bins for a numeric field.
 
     Args:
         visits: List of visits for one FLW
@@ -247,7 +247,6 @@ def compute_histogram(visits: list[LocalUserVisit], hist_comp: HistogramComputat
 
     Returns:
         Dictionary with:
-        - {name}_chart: sparkline string
         - {name}_mean: mean value
         - {name}_count: total valid values
         - Individual bin counts: {prefix}_{low}_{high}_visits
@@ -294,10 +293,6 @@ def compute_histogram(visits: list[LocalUserVisit], hist_comp: HistogramComputat
         for i, bin_name in enumerate(bin_names):
             results[bin_name] = bin_counts[i]
 
-        # Generate sparkline
-        sparkline = generate_sparkline(bin_counts)
-        results[f"{hist_comp.name}_chart"] = sparkline
-
         # Summary statistics
         if numeric_values:
             series = pd.Series(numeric_values)
@@ -312,42 +307,10 @@ def compute_histogram(visits: list[LocalUserVisit], hist_comp: HistogramComputat
         # Still populate bin names with zeros
         for bin_name in hist_comp.get_bin_names():
             results[bin_name] = 0
-        results[f"{hist_comp.name}_chart"] = ""
         results[f"{hist_comp.name}_mean"] = None
         results[f"{hist_comp.name}_count"] = 0
 
     return results
-
-
-def generate_sparkline(counts: list[int]) -> str:
-    """
-    Generate an ASCII sparkline string from bin counts.
-
-    Uses characters: " _.-=oO#" for 8 levels of height.
-
-    Args:
-        counts: List of bin counts
-
-    Returns:
-        Sparkline string with one character per bin
-    """
-    if not counts or max(counts) == 0:
-        return "_" * len(counts)
-
-    max_count = max(counts)
-    num_levels = len(SPARKLINE_CHARS) - 1  # Exclude space for zero
-
-    sparkline = []
-    for count in counts:
-        if count == 0:
-            sparkline.append("_")
-        else:
-            # Scale to 1-7 range (using indices 1-7 of SPARKLINE_CHARS)
-            level = int((count / max_count) * num_levels)
-            level = max(1, min(level, num_levels))  # Clamp to 1-7
-            sparkline.append(SPARKLINE_CHARS[level])
-
-    return "".join(sparkline)
 
 
 def compute_histograms_batch(visits: list[LocalUserVisit], hist_comps: list[HistogramComputation]) -> dict[str, Any]:
@@ -380,7 +343,7 @@ def aggregate_histogram_from_values(values: list[float | None], hist_comp: Histo
         hist_comp: Histogram configuration
 
     Returns:
-        Dictionary with bin counts, sparkline, mean, and count
+        Dictionary with bin counts, mean, and count
     """
     results = {}
 
@@ -400,10 +363,6 @@ def aggregate_histogram_from_values(values: list[float | None], hist_comp: Histo
     # Store individual bin counts
     for i, bin_name in enumerate(bin_names):
         results[bin_name] = bin_counts[i]
-
-    # Generate sparkline
-    sparkline = generate_sparkline(bin_counts)
-    results[f"{hist_comp.name}_chart"] = sparkline
 
     # Summary statistics
     if numeric_values:

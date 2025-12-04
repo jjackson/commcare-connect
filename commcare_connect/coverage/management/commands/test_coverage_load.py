@@ -11,7 +11,7 @@ from unittest.mock import Mock
 from django.core.management.base import BaseCommand
 
 from commcare_connect.coverage.data_access import CoverageDataAccess
-from commcare_connect.labs.analysis.base import AnalysisDataAccess
+from commcare_connect.labs.analysis.data_access import AnalysisDataAccess
 from commcare_connect.labs.integrations.connect.cli import TokenManager
 
 logger = logging.getLogger(__name__)

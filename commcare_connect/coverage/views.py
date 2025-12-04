@@ -565,7 +565,7 @@ class CoverageMapView(BaseCoverageMapView):
             # Build FLW list with colors for UI
             # FLWs are now properly merged during loading, so we just need to format them
             # Get display names for FLWs
-            from commcare_connect.labs.analysis.base import get_flw_names_for_opportunity
+            from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
 
             flw_display_names = get_flw_names_for_opportunity(self.request)
 
@@ -811,7 +811,7 @@ class CoverageMapDataView(LoginRequiredMixin, View):
             service_points_geojson = map_view.build_colored_points_geojson(visit_rows, coverage.flws, flw_colors)
 
             # Get FLW display names
-            from commcare_connect.labs.analysis.base import get_flw_names_for_opportunity
+            from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
 
             flw_display_names = get_flw_names_for_opportunity(request)
 

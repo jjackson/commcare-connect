@@ -21,7 +21,7 @@ from django.core.cache import cache
 from django.test import RequestFactory
 
 from commcare_connect.labs.analysis import AnalysisConfig, FieldComputation
-from commcare_connect.labs.analysis.cache import (
+from commcare_connect.labs.analysis.backends.python_redis.cache import (
     CACHE_DIR,
     AnalysisCacheManager,
     clear_all_analysis_caches,
@@ -215,7 +215,7 @@ class TestCacheBackends:
 
     def test_django_cache_backend_detection(self):
         """Test Django cache backend detection works."""
-        from commcare_connect.labs.analysis.cache import _use_django_cache
+        from commcare_connect.labs.analysis.backends.python_redis.cache import _use_django_cache
 
         use_django = _use_django_cache()
         assert isinstance(use_django, bool)
