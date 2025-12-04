@@ -94,12 +94,62 @@ root.render(<FLWTable />);`,
   const iframeRef = useRef(null);
 
   // Function to build the HTML blob for the iframe
+  // Use a ref to always access the latest jsCode without causing re-renders
+  // Ensure we always store a string in the ref
+  const jsCodeRef = useRef(typeof jsCode === 'string' ? jsCode : '');
+  useEffect(() => {
+    // Always ensure we're storing a string
+    if (typeof jsCode === 'string') {
+      jsCodeRef.current = jsCode;
+    } else {
+      console.error('jsCode is not a string!', { jsCode, type: typeof jsCode });
+      jsCodeRef.current = '';
+    }
+  }, [jsCode]);
+
   const generatePreview = useCallback(
     (codeOverride = null) => {
       setLogs([]); // Clear logs on run
 
-      // Use provided code or fall back to current jsCode state
-      const codeToUse = codeOverride !== null ? codeOverride : jsCode;
+      // Use provided code or fall back to current jsCode state (via ref to avoid dependency)
+      // Ensure we always have a string - handle edge cases where code might be an object
+      let codeToUse;
+      if (codeOverride !== null && codeOverride !== undefined) {
+        // If codeOverride is provided, use it (should be a string from chat widget)
+        if (typeof codeOverride === 'string') {
+          codeToUse = codeOverride;
+        } else {
+          console.error('generatePreview: codeOverride is not a string', {
+            codeOverride,
+            type: typeof codeOverride,
+          });
+          codeToUse = '';
+        }
+      } else {
+        // Fall back to ref - it should always contain a string
+        const currentCode = jsCodeRef.current;
+        if (typeof currentCode === 'string') {
+          codeToUse = currentCode;
+        } else {
+          // This should never happen if ref is properly maintained, but handle it anyway
+          console.error('generatePreview: jsCodeRef.current is not a string!', {
+            currentCode,
+            type: typeof currentCode,
+            value: currentCode,
+          });
+          // Use empty string as fallback to prevent errors
+          codeToUse = '';
+        }
+      }
+
+      // Final safety check - ensure codeToUse is definitely a string
+      if (typeof codeToUse !== 'string') {
+        console.error(
+          'generatePreview: codeToUse is still not a string after all checks!',
+          { codeToUse, type: typeof codeToUse },
+        );
+        codeToUse = '';
+      }
 
       // Extract opportunity_id from parent page URL to inject into iframe
       const parentUrlParams = new URLSearchParams(window.location.search);
@@ -194,7 +244,7 @@ root.render(<FLWTable />);`,
             // Helper functions available via window.labsApi and window.hooks
 
             try {
-              ${codeToUse}
+              ${String(codeToUse || '')}
             } catch (err) {
               console.error(err.toString());
             }
@@ -205,13 +255,14 @@ root.render(<FLWTable />);`,
 
       setSrcDoc(fullHtml);
     },
-    [jsCode],
+    [], // No dependencies - we use jsCodeRef to access latest code
   );
 
-  // Run initial preview
+  // Run initial preview only on mount
   useEffect(() => {
     generatePreview();
-  }, [generatePreview]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   // Listen for messages from the iframe (console logs)
   useEffect(() => {
@@ -231,7 +282,7 @@ root.render(<FLWTable />);`,
   useEffect(() => {
     // Expose a function to get current code
     window.codeEditorApi = {
-      getCurrentCode: () => jsCode,
+      getCurrentCode: () => jsCodeRef.current,
     };
 
     // Listen for code update events from chat widget
@@ -252,7 +303,7 @@ root.render(<FLWTable />);`,
         delete window.codeEditorApi;
       }
     };
-  }, [jsCode, generatePreview]);
+  }, [generatePreview]); // Only depend on generatePreview, not jsCode
 
   // Handle Printing the Iframe
   const handlePrint = () => {
@@ -272,7 +323,7 @@ root.render(<FLWTable />);`,
         </div>
         <div className="flex gap-2">
           <button
-            onClick={generatePreview}
+            onClick={() => generatePreview()}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
           >
             <Play size={16} /> Run Code
