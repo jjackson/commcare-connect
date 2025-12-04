@@ -12,59 +12,16 @@ import {
 const ReportBuilder = () => {
   const [editorExpanded, setEditorExpanded] = useState(true);
   const [jsCode, setJsCode] = useState(
-    `// React + JSX Example: Fetch FLW analysis data and render with React
-const { useState, useEffect } = React;
-
+    `// Example: Using the built-in useFLWData hook
 function FLWTable() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [flws, setFlws] = useState([]);
-  const [summary, setSummary] = useState(null);
+  // Use the pre-built hook - handles API calls automatically
+  const { loading, error, data } = window.hooks.useFLWData();
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        // Get opportunity_id from parent page
-        const opportunityId = window.PARENT_OPPORTUNITY_ID;
-        if (!opportunityId) {
-          throw new Error('No opportunity_id found in URL');
-        }
-
-        const apiUrl = '/labs/api/analysis/flw/?opportunity_id=' + opportunityId;
-        const response = await fetch(apiUrl);
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-          throw new Error(errorData.error || 'Failed to load data');
-        }
-
-        const data = await response.json();
-        const sortedFlws = (data.rows || [])
-          .map(row => ({
-            ...row,
-            approval_rate: row.total_visits > 0
-              ? Math.round((row.approved_visits / row.total_visits) * 100)
-              : 0
-          }))
-          .sort((a, b) => b.total_visits - a.total_visits);
-
-        setFlws(sortedFlws);
-        setSummary({
-          total_flws: sortedFlws.length,
-          total_visits: sortedFlws.reduce((sum, f) => sum + f.total_visits, 0),
-          opportunity_name: data.opportunity_name || data.opportunity_id
-        });
-        setLoading(false);
-      } catch (err) {
-        setError(err.message);
-        setLoading(false);
-      }
-    }
-    loadData();
-  }, []);
+  const flws = data?.flws || [];
+  const summary = data?.summary;
 
   if (loading) {
-    return <div className="text-center py-8 text-gray-500">Loading FLW data...</div>;
+    return <div className="text-center py-8 text-gray-500">Loading...</div>;
   }
 
   if (error) {
@@ -207,6 +164,89 @@ root.render(<FLWTable />);`,
       <script src="https://cdn.tailwindcss.com"></script>
     `;
 
+    // Inject library/helper functions that users can use but not see
+    const libraryInjection = `
+      <script>
+        // Library functions available to user code but hidden from editor
+        window.api = {
+          // Fetch FLW analysis data
+          async fetchFLWData(config = {}) {
+            const opportunityId = window.PARENT_OPPORTUNITY_ID;
+            if (!opportunityId) {
+              throw new Error('No opportunity_id found in URL');
+            }
+
+            const params = new URLSearchParams();
+            params.set('opportunity_id', opportunityId);
+
+            // Add any additional config params
+            if (config.config) params.set('config', config.config);
+            if (config.refresh) params.set('refresh', '1');
+            if (config.useLabsRecordCache) params.set('use_labs_record_cache', 'true');
+
+            const response = await fetch('/labs/api/analysis/flw/?' + params.toString());
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+              throw new Error(errorData.error || \`HTTP \${response.status}\`);
+            }
+
+            const data = await response.json();
+
+            // Process and sort FLWs
+            const flws = (data.rows || [])
+              .map(row => ({
+                ...row,
+                approval_rate: row.total_visits > 0
+                  ? Math.round((row.approved_visits / row.total_visits) * 100)
+                  : 0
+              }))
+              .sort((a, b) => b.total_visits - a.total_visits);
+
+            return {
+              flws,
+              summary: {
+                total_flws: flws.length,
+                total_visits: flws.reduce((sum, f) => sum + f.total_visits, 0),
+                opportunity_id: data.opportunity_id,
+                opportunity_name: data.opportunity_name || data.opportunity_id,
+                metadata: data.metadata || {}
+              }
+            };
+          }
+        };
+
+        // React hooks for common patterns
+        window.hooks = {
+          // Hook to fetch and manage FLW data
+          useFLWData(config = {}) {
+            const { useState, useEffect } = React;
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [data, setData] = useState(null);
+
+            useEffect(() => {
+              async function load() {
+                try {
+                  setLoading(true);
+                  setError(null);
+                  const result = await window.api.fetchFLWData(config);
+                  setData(result);
+                } catch (err) {
+                  setError(err.message);
+                } finally {
+                  setLoading(false);
+                }
+              }
+              load();
+            }, [JSON.stringify(config)]);
+
+            return { loading, error, data };
+          }
+        };
+      </script>
+    `;
+
     // Use type="text/babel" to enable automatic JSX transformation
     // This works for both regular JS and JSX - Babel only transforms if it detects JSX
     const fullHtml = `
@@ -217,12 +257,14 @@ root.render(<FLWTable />);`,
           ${stylesInjection}
           ${logInterceptor}
           ${urlParamsInjection}
+          ${libraryInjection}
         </head>
         <body>
           <div id="react-root"></div>
           <script type="text/babel">
             // React and ReactDOM are available globally
             const { React, ReactDOM } = window;
+            // Helper functions available via window.api and window.hooks
 
             try {
               ${jsCode}
