@@ -10,7 +10,7 @@ import logging
 import pandas as pd
 from django.http import HttpRequest
 
-from commcare_connect.labs.analysis.computations import compute_visit_fields
+from commcare_connect.labs.analysis.backends.python_redis.computations import compute_visit_fields
 from commcare_connect.labs.analysis.config import AnalysisPipelineConfig, FieldComputation
 from commcare_connect.labs.analysis.data_access import AnalysisDataAccess
 from commcare_connect.labs.analysis.models import LocalUserVisit, VisitAnalysisResult, VisitRow

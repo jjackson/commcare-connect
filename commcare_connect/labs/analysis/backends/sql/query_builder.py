@@ -66,9 +66,10 @@ def _get_transform_pattern(field: FieldComputation | HistogramComputation) -> st
     if "_is_valid_muac" in source:
         # Check specific patterns FIRST before generic ones
         # Order matters: check SAM/MAM before generic float conversion
-        if "< 11.5" in source and ">= 11.5" not in source:
+        # Note: MAM uses "11.5 <=" not ">= 11.5" (Python chained comparison)
+        if "< 11.5" in source and "11.5 <=" not in source:
             return "muac_sam"
-        elif ">= 11.5" in source and "< 12.5" in source:
+        elif ("11.5 <=" in source or ">= 11.5" in source) and "< 12.5" in source:
             return "muac_mam"
         elif "float(x)" in source:
             return "is_valid_muac_to_float"
@@ -186,8 +187,16 @@ def _build_histogram_fields(hist: HistogramComputation, opportunity_id: int) -> 
         bin_name = f"{hist.bin_name_prefix}_{lower_str}_{upper_str}_visits"
 
         # SQL: count values in this bin range
-        if i == hist.num_bins - 1:
-            # Last bin includes upper bound
+        # Note: include_out_of_range means values below lower_bound go to first bin,
+        # values above upper_bound go to last bin
+        if i == 0 and hist.include_out_of_range:
+            # First bin: include values below lower_bound
+            bin_sql = f"""COUNT(*) FILTER (WHERE {float_expr} < {bin_upper})"""
+        elif i == hist.num_bins - 1 and hist.include_out_of_range:
+            # Last bin: include values >= upper_bound
+            bin_sql = f"""COUNT(*) FILTER (WHERE {float_expr} >= {bin_lower})"""
+        elif i == hist.num_bins - 1:
+            # Last bin includes upper bound (but not beyond)
             bin_sql = f"""COUNT(*) FILTER (WHERE {float_expr} >= {bin_lower} AND {float_expr} <= {bin_upper})"""
         else:
             bin_sql = f"""COUNT(*) FILTER (WHERE {float_expr} >= {bin_lower} AND {float_expr} < {bin_upper})"""

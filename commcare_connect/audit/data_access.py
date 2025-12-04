@@ -1,11 +1,11 @@
 """
 Optimized Data Access Layer for Audit.
 
-Uses the analysis pipeline's FieldComputation infrastructure for field extraction,
+Uses the analysis pipeline for field extraction and raw data access,
 with optimized CSV caching that skips form_json parsing for selection operations.
 
 Key optimizations:
-1. Raw CSV caching - stores ~50MB instead of ~350MB parsed objects
+1. Backend-agnostic raw data caching (SQL or Redis based on settings)
 2. skip_form_json for selection - doesn't parse form_json for preview/filtering
 3. filter_visit_ids for extraction - only parses form_json for selected visits
 4. Uses FieldComputation with custom extractors - leverages analysis pipeline infrastructure
@@ -23,7 +23,7 @@ from commcare_connect.audit.analysis_config import AUDIT_EXTRACTION_CONFIG
 from commcare_connect.audit.models import AuditSessionRecord, AuditTemplateRecord
 from commcare_connect.labs.analysis.computations import compute_visit_fields
 from commcare_connect.labs.analysis.models import LocalUserVisit
-from commcare_connect.labs.api_cache import fetch_user_visits_cached
+from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.integrations.connect.api_client import LabsRecordAPIClient
 
 logger = logging.getLogger(__name__)
@@ -165,8 +165,8 @@ class AuditDataAccess:
     """
     Optimized data access layer for audit operations.
 
-    Uses the analysis pipeline's FieldComputation infrastructure for extraction,
-    with optimized CSV caching for memory efficiency.
+    Uses the AnalysisPipeline for raw data access (backend-agnostic),
+    with optimized caching for memory efficiency.
     """
 
     def __init__(
@@ -211,6 +211,7 @@ class AuditDataAccess:
         # Lazy-initialized clients
         self._http_client: httpx.Client | None = None
         self._labs_api: LabsRecordAPIClient | None = None
+        self._pipeline: AnalysisPipeline | None = None
 
     @property
     def http_client(self) -> httpx.Client:
@@ -232,6 +233,15 @@ class AuditDataAccess:
             )
         return self._labs_api
 
+    @property
+    def pipeline(self) -> AnalysisPipeline:
+        """Get or create AnalysisPipeline for raw data access."""
+        if self._pipeline is None:
+            if self.request is None:
+                raise ValueError("Request required for pipeline access")
+            self._pipeline = AnalysisPipeline(self.request)
+        return self._pipeline
+
     def close(self):
         if self._http_client:
             self._http_client.close()
@@ -245,15 +255,8 @@ class AuditDataAccess:
         self.close()
 
     # =========================================================================
-    # Visit Fetching (Optimized)
+    # Visit Fetching (via AnalysisPipeline)
     # =========================================================================
-
-    def _make_api_call(self, opportunity_id: int):
-        def call():
-            url = f"{self.production_url}/export/opportunity/{opportunity_id}/user_visits/"
-            return self.http_client.get(url)
-
-        return call
 
     def fetch_visits_slim(self, opportunity_id: int | None = None) -> list[dict]:
         """Fetch visits WITHOUT form_json (~20MB for 10k visits vs ~350MB)."""
@@ -261,10 +264,8 @@ class AuditDataAccess:
         if not opp_id:
             raise ValueError("opportunity_id required")
 
-        return fetch_user_visits_cached(
-            request=self.request,
+        return self.pipeline.fetch_raw_visits(
             opportunity_id=opp_id,
-            api_call_func=self._make_api_call(opp_id),
             skip_form_json=True,
         )
 
@@ -274,10 +275,8 @@ class AuditDataAccess:
         if not opp_id:
             raise ValueError("opportunity_id required")
 
-        return fetch_user_visits_cached(
-            request=self.request,
+        return self.pipeline.fetch_raw_visits(
             opportunity_id=opp_id,
-            api_call_func=self._make_api_call(opp_id),
             filter_visit_ids=set(visit_ids),
         )
 
@@ -325,32 +324,13 @@ class AuditDataAccess:
             return visit_ids, filtered_visits
         return visit_ids
 
-    # COMMENTED OUT - Not used in current implementation
-    # def get_visits_with_flw_info(
-    #     self,
-    #     visit_ids: list[int],
-    #     opportunity_id: int | None = None,
-    # ) -> list[dict]:
-    #     """Get slim visit data for specific IDs (for FLW grouping)."""
-    #     opp_id = opportunity_id or self.opportunity_id
-    #     if not opp_id:
-    #         raise ValueError("opportunity_id required")
-    #
-    #     all_visits = self.fetch_visits_slim(opp_id)
-    #     visit_id_set = set(visit_ids)
-    #     return [v for v in all_visits if v.get("id") in visit_id_set]
-
     # =========================================================================
     # Visit Data Methods
     # =========================================================================
 
     def _fetch_visits_for_opportunity(self, opportunity_id: int) -> list[dict]:
         """Fetch all visits for an opportunity (with form_json for backward compat)."""
-        return fetch_user_visits_cached(
-            request=self.request,
-            opportunity_id=opportunity_id,
-            api_call_func=self._make_api_call(opportunity_id),
-        )
+        return self.pipeline.fetch_raw_visits(opportunity_id=opportunity_id)
 
     def get_visit_data(
         self, visit_id: int, opportunity_id: int | None = None, visit_cache: dict | None = None
@@ -479,24 +459,6 @@ class AuditDataAccess:
                 "labs_record_id": record.labs_record_id,
             }
         )
-
-    # COMMENTED OUT - Not used in current implementation
-    # def get_audit_template(self, template_id: int) -> AuditTemplateRecord | None:
-    #     return self.labs_api.get_record_by_id(
-    #         record_id=template_id,
-    #         experiment="audit",
-    #         type="AuditTemplate",
-    #         model_class=AuditTemplateRecord,
-    #     )
-
-    # COMMENTED OUT - Not used in current implementation
-    # def get_audit_templates(self, username: str | None = None) -> list[AuditTemplateRecord]:
-    #     return self.labs_api.get_records(
-    #         experiment="audit",
-    #         type="AuditTemplate",
-    #         username=username,
-    #         model_class=AuditTemplateRecord,
-    #     )
 
     # =========================================================================
     # Session Management
