@@ -16,7 +16,7 @@ from shapely.geometry import mapping
 from commcare_connect.coverage.analysis import get_coverage_visit_analysis
 from commcare_connect.coverage.data_access import CoverageDataAccess
 from commcare_connect.coverage.models import CoverageData
-from commcare_connect.labs.analysis.config import AnalysisConfig
+from commcare_connect.labs.analysis.config import AnalysisPipelineConfig
 from commcare_connect.labs.analysis.models import VisitRow
 
 logger = logging.getLogger(__name__)
@@ -255,9 +255,9 @@ class BaseCoverageMapView(BaseCoverageView):
     template_name = "coverage/map.html"
 
     # Override in subclass to use a specific analysis config
-    analysis_config: AnalysisConfig | None = None
+    analysis_config: AnalysisPipelineConfig | None = None
 
-    def get_analysis_config(self) -> AnalysisConfig | None:
+    def get_analysis_config(self) -> AnalysisPipelineConfig | None:
         """
         Get the analysis config to use for computing visit fields.
 
@@ -351,7 +351,9 @@ class BaseCoverageMapView(BaseCoverageView):
 
         return context
 
-    def get_enriched_visits(self, config: AnalysisConfig, coverage: CoverageData) -> tuple[list[VisitRow], list[dict]]:
+    def get_enriched_visits(
+        self, config: AnalysisPipelineConfig, coverage: CoverageData
+    ) -> tuple[list[VisitRow], list[dict]]:
         """
         Get visit analysis with coverage context, using cached data.
 
@@ -360,7 +362,7 @@ class BaseCoverageMapView(BaseCoverageView):
         2. Enrich with DU/SA geographic context
 
         Args:
-            config: AnalysisConfig defining field computations
+            config: AnalysisPipelineConfig defining field computations
             coverage: CoverageData with DU info for service area lookup
 
         Returns:

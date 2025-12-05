@@ -158,6 +158,10 @@ class ManageSolicitationsListView(ListView):
 class MyResponsesListView(ListView):
     """
     List view of responses created by the current user's organization.
+
+    Note: Querying responses by organization is not yet supported by the production API.
+    This view shows a "coming soon" message until the API supports
+    querying records by organization without a scope filter.
     """
 
     model = ResponseRecord
@@ -166,21 +170,13 @@ class MyResponsesListView(ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        data_access = SolicitationDataAccess(request=self.request)
-
-        # Get user's organization slugs from OAuth data
-        org_slugs = []
-        if hasattr(self.request.user, "organizations") and self.request.user.organizations:
-            org_slugs = [org.get("slug") for org in self.request.user.organizations if org.get("slug")]
-
-        if org_slugs:
-            # Get responses for all user's organizations
-            all_responses = []
-            for org_slug in org_slugs:
-                responses = data_access.get_responses_for_organization(organization_id=org_slug)
-                all_responses.extend(responses)
-            return all_responses
+        # Querying responses by organization not yet supported - API requires program scope
         return []
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["coming_soon"] = True
+        return context
 
 
 class SolicitationResponsesListView(SingleTableView):
@@ -246,6 +242,10 @@ class SolicitationResponsesListView(SingleTableView):
 class SolicitationListView(ListView):
     """
     Public list view of all publicly listed solicitations using LocalLabsRecords.
+
+    Note: Public listings are not yet supported by the production API.
+    This view shows a "coming soon" message until the API supports
+    querying publicly listed records without a scope filter.
     """
 
     model = SolicitationRecord
@@ -254,24 +254,16 @@ class SolicitationListView(ListView):
     paginate_by = 12
 
     def get_queryset(self):
-        data_access = SolicitationDataAccess(request=self.request)
-        solicitation_type = self.kwargs.get("type")
-        filters = {"status": "active", "is_publicly_listed": True}
-        if solicitation_type:
-            filters["solicitation_type"] = solicitation_type
-        return data_access.get_solicitations(**filters)
+        # Public listings not yet supported - API requires org/program/opp scope
+        return []
 
     def get_context_data(self, **kwargs):
-        data_access = SolicitationDataAccess(request=self.request)
         context = super().get_context_data(**kwargs)
         context["current_type"] = self.kwargs.get("type", "all")
-        context["total_active"] = len(data_access.get_solicitations(status="active", is_publicly_listed=True))
-        context["eoi_count"] = len(
-            data_access.get_solicitations(status="active", is_publicly_listed=True, solicitation_type="eoi")
-        )
-        context["rfp_count"] = len(
-            data_access.get_solicitations(status="active", is_publicly_listed=True, solicitation_type="rfp")
-        )
+        context["coming_soon"] = True
+        context["total_active"] = 0
+        context["eoi_count"] = 0
+        context["rfp_count"] = 0
         return context
 
 
