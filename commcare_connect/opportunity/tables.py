@@ -414,7 +414,11 @@ class PaymentInvoiceTable(OpportunityContextTable):
         invoice_review_url = reverse(
             "opportunity:invoice_review", args=[self.org_slug, self.opportunity.id, record.pk]
         )
-        review_button = f'<a href="{invoice_review_url}" class="button button-md outline-style">{_("Review")}</a>'
+        review_button = (
+            f'<a href="{invoice_review_url}" '
+            f'class="button button-md outline-style !inline-flex justify-center">'
+            f'{_("Review")}</a>'
+        )
         pay_button = ""
         if self.is_pm:
             invoice_approve_url = reverse("opportunity:invoice_approve", args=[self.org_slug, self.opportunity.id])
