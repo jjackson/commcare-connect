@@ -134,6 +134,7 @@ from commcare_connect.opportunity.tasks import (
     update_user_and_send_invite,
 )
 from commcare_connect.opportunity.utils.completed_work import (
+    get_invoiced_visit_items,
     get_uninvoiced_completed_works_qs,
     get_uninvoiced_visit_items,
 )
@@ -1415,6 +1416,78 @@ class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateVie
 
     def get_success_url(self):
         return reverse("opportunity:invoice_list", args=(self.request.org.slug, self.get_opportunity().id))
+
+
+class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailView):
+    model = PaymentInvoice
+    template_name = "opportunity/invoice_detail.html"
+
+    def get_object(self, queryset=None):
+        opportunity = self.get_opportunity()
+        return get_object_or_404(
+            PaymentInvoice,
+            id=self.kwargs.get("pk"),
+            opportunity_id=opportunity.id,
+            opportunity__organization=self.request.org,
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        invoice = self.object
+        opportunity = invoice.opportunity
+        org_slug = self.request.org.slug
+        context.update(
+            {
+                "opportunity": opportunity,
+                "form": self.get_form(),
+                "is_service_delivery": invoice.service_delivery,
+                "path": [
+                    {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
+                    {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
+                    {"title": "Invoices", "url": reverse("opportunity:invoice_list", args=(org_slug, opportunity.id))},
+                    {
+                        "title": self.breadcrumb_title,
+                        "url": reverse("opportunity:invoice_review", args=(org_slug, opportunity.id, invoice.pk)),
+                    },
+                ],
+            }
+        )
+        return context
+
+    def get_form(self):
+        invoice = self.object
+        opportunity = invoice.opportunity
+        invoice_type = (
+            PaymentInvoice.InvoiceType.service_delivery
+            if invoice.service_delivery
+            else PaymentInvoice.InvoiceType.custom
+        )
+
+        if not waffle.switch_is_active(AUTOMATED_INVOICES):
+            return PaymentInvoiceForm(
+                instance=invoice,
+                opportunity=opportunity,
+                invoice_type=invoice_type,
+                read_only=True,
+            )
+
+        line_items_table = None
+        if invoice.service_delivery:
+            completed_works = get_invoiced_visit_items(invoice)
+            line_items_table = InvoiceLineItemsTable(opportunity.currency, completed_works)
+        return AutomatedPaymentInvoiceForm(
+            instance=invoice,
+            opportunity=opportunity,
+            invoice_type=invoice_type,
+            line_items_table=line_items_table,
+            read_only=True,
+        )
+
+    @property
+    def breadcrumb_title(self):
+        if self.object.service_delivery:
+            return _("Review Service Delivery Invoice")
+        return _("Review Custom Invoice")
 
 
 @org_member_required
