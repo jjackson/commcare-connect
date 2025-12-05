@@ -7,7 +7,7 @@ All analysis is done via SQL queries, not Python/pandas.
 
 import logging
 from collections.abc import Generator
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -18,9 +18,9 @@ from django.utils.dateparse import parse_date
 
 from commcare_connect.labs.analysis.backends.csv_parsing import parse_csv_bytes
 from commcare_connect.labs.analysis.backends.sql.cache import SQLCacheManager
-from commcare_connect.labs.analysis.backends.sql.query_builder import execute_flw_aggregation
-from commcare_connect.labs.analysis.config import AnalysisPipelineConfig
-from commcare_connect.labs.analysis.models import FLWAnalysisResult, FLWRow, VisitAnalysisResult
+from commcare_connect.labs.analysis.backends.sql.query_builder import execute_flw_aggregation, execute_visit_extraction
+from commcare_connect.labs.analysis.config import AnalysisPipelineConfig, CacheStage
+from commcare_connect.labs.analysis.models import FLWAnalysisResult, FLWRow, VisitAnalysisResult, VisitRow
 
 logger = logging.getLogger(__name__)
 
@@ -264,9 +264,65 @@ class SQLBackend:
         self, opportunity_id: int, config: AnalysisPipelineConfig, visit_count: int
     ) -> VisitAnalysisResult | None:
         """Get cached visit result if valid."""
-        # SQL backend focuses on FLW-level aggregation
-        # Visit-level results would require different approach
-        return None
+        cache_manager = SQLCacheManager(opportunity_id, config)
+
+        if not cache_manager.has_valid_computed_visit_cache(visit_count):
+            return None
+
+        logger.info(f"[SQL] Visit cache HIT for opp {opportunity_id}")
+
+        # Load computed visits and join with raw visits for base fields
+        computed_qs = cache_manager.get_computed_visits_queryset()
+        raw_qs = cache_manager.get_raw_visits_queryset()
+
+        # Build lookup of computed fields by visit_id
+        computed_lookup = {row.visit_id: row.computed_fields for row in computed_qs}
+
+        # Build VisitRow objects from raw visits + computed fields
+        visit_rows = []
+        for raw_row in raw_qs:
+            computed_fields = computed_lookup.get(raw_row.visit_id, {})
+
+            # Parse GPS from location string (format: "lat lon alt accuracy")
+            latitude, longitude, accuracy = None, None, None
+            if raw_row.location:
+                parts = raw_row.location.split()
+                if len(parts) >= 2:
+                    try:
+                        latitude = float(parts[0])
+                        longitude = float(parts[1])
+                        if len(parts) >= 4:
+                            accuracy = float(parts[3])
+                    except (ValueError, IndexError):
+                        pass
+
+            visit_row = VisitRow(
+                id=str(raw_row.visit_id),
+                user_id=None,  # Not stored in RawVisitCache
+                username=raw_row.username,
+                visit_date=datetime.combine(raw_row.visit_date, datetime.min.time()) if raw_row.visit_date else None,
+                status=raw_row.status,
+                flagged=raw_row.flagged,
+                latitude=latitude,
+                longitude=longitude,
+                accuracy_in_m=accuracy,
+                deliver_unit_id=raw_row.deliver_unit_id,
+                deliver_unit_name=raw_row.deliver_unit,
+                entity_id=raw_row.entity_id,
+                entity_name=raw_row.entity_name,
+                computed=computed_fields,
+            )
+            visit_rows.append(visit_row)
+
+        # Build field metadata from config
+        field_metadata = [{"name": f.name, "description": f.description} for f in config.fields]
+
+        return VisitAnalysisResult(
+            opportunity_id=opportunity_id,
+            rows=visit_rows,
+            metadata={"total_visits": len(visit_rows), "from_sql_cache": True},
+            field_metadata=field_metadata,
+        )
 
     def process_and_cache(
         self,
@@ -278,9 +334,15 @@ class SQLBackend:
         """
         Process visits using SQL and cache results.
 
-        1. Store raw visits in SQL (if not already stored)
-        2. Execute aggregation query
-        3. Cache and return results
+        For VISIT_LEVEL:
+        1. Store raw visits in SQL
+        2. Execute visit extraction query (no aggregation)
+        3. Cache computed visits and return VisitAnalysisResult
+
+        For AGGREGATED:
+        1. Store raw visits in SQL
+        2. Execute FLW aggregation query
+        3. Cache and return FLWAnalysisResult
         """
         cache_manager = SQLCacheManager(opportunity_id, config)
         visit_count = len(visit_dicts)
@@ -289,11 +351,105 @@ class SQLBackend:
         logger.info(f"[SQL] Storing {visit_count} raw visits to SQL")
         cache_manager.store_raw_visits(visit_dicts, visit_count)
 
-        # Step 2: Execute SQL aggregation query
+        # Branch based on terminal stage
+        if config.terminal_stage == CacheStage.VISIT_LEVEL:
+            return self._process_visit_level(config, opportunity_id, visit_count, cache_manager)
+        else:
+            return self._process_flw_level(config, opportunity_id, visit_count, cache_manager)
+
+    def _process_visit_level(
+        self,
+        config: AnalysisPipelineConfig,
+        opportunity_id: int,
+        visit_count: int,
+        cache_manager: SQLCacheManager,
+    ) -> VisitAnalysisResult:
+        """Process and cache visit-level analysis (no aggregation)."""
+        logger.info("[SQL] Executing visit extraction query")
+        visit_data, computed_field_names = execute_visit_extraction(config, opportunity_id)
+
+        # Build VisitRow objects
+        visit_rows = []
+        for row in visit_data:
+            # Parse GPS from location string (format: "lat lon alt accuracy")
+            latitude, longitude, accuracy = None, None, None
+            location = row.get("location") or ""
+            if location:
+                parts = location.split()
+                if len(parts) >= 2:
+                    try:
+                        latitude = float(parts[0])
+                        longitude = float(parts[1])
+                        if len(parts) >= 4:
+                            accuracy = float(parts[3])
+                    except (ValueError, IndexError):
+                        pass
+
+            # Separate computed fields from base fields
+            computed = {name: row.get(name) for name in computed_field_names}
+
+            # Parse visit_date
+            visit_date_val = row.get("visit_date")
+            if visit_date_val and isinstance(visit_date_val, date):
+                visit_date_val = datetime.combine(visit_date_val, datetime.min.time())
+
+            visit_row = VisitRow(
+                id=str(row.get("visit_id", "")),
+                user_id=None,
+                username=row.get("username", ""),
+                visit_date=visit_date_val,
+                status=row.get("status", ""),
+                flagged=row.get("flagged", False),
+                latitude=latitude,
+                longitude=longitude,
+                accuracy_in_m=accuracy,
+                deliver_unit_id=row.get("deliver_unit_id"),
+                deliver_unit_name=row.get("deliver_unit", ""),
+                entity_id=row.get("entity_id", ""),
+                entity_name=row.get("entity_name", ""),
+                computed=computed,
+            )
+            visit_rows.append(visit_row)
+
+        # Cache computed visits
+        computed_cache_data = [
+            {
+                "visit_id": int(row.id),
+                "username": row.username,
+                "computed_fields": row.computed,
+            }
+            for row in visit_rows
+        ]
+        cache_manager.store_computed_visits(computed_cache_data, visit_count)
+
+        # Build field metadata from config
+        field_metadata = [{"name": f.name, "description": f.description} for f in config.fields]
+
+        visit_result = VisitAnalysisResult(
+            opportunity_id=opportunity_id,
+            rows=visit_rows,
+            metadata={
+                "total_visits": len(visit_rows),
+                "computed_via": "sql",
+            },
+            field_metadata=field_metadata,
+        )
+
+        logger.info(f"[SQL] Processed {len(visit_rows)} visits with {len(computed_field_names)} computed fields")
+        return visit_result
+
+    def _process_flw_level(
+        self,
+        config: AnalysisPipelineConfig,
+        opportunity_id: int,
+        visit_count: int,
+        cache_manager: SQLCacheManager,
+    ) -> FLWAnalysisResult:
+        """Process and cache FLW-level aggregation."""
         logger.info("[SQL] Executing SQL aggregation query")
         flw_data = execute_flw_aggregation(config, opportunity_id)
 
-        # Step 3: Convert to FLWRow objects
+        # Convert to FLWRow objects
         flw_rows = []
         total_visits = 0
 
@@ -342,7 +498,7 @@ class SQLBackend:
             flw_rows.append(flw_row)
             total_visits += flw_row.total_visits
 
-        # Step 4: Build result
+        # Build result
         flw_result = FLWAnalysisResult(
             opportunity_id=opportunity_id,
             rows=flw_rows,
@@ -353,7 +509,7 @@ class SQLBackend:
             },
         )
 
-        # Step 5: Cache FLW results
+        # Cache FLW results
         flw_cache_data = [
             {
                 "username": row.username,
