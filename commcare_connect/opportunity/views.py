@@ -2713,16 +2713,19 @@ def invoice_items(request, *args, **kwargs):
 def download_invoice_line_items(request, org_slug, opp_id):
     start_date_str = request.GET.get("start_date", None)
     end_date_str = request.GET.get("end_date", None)
+    invoice_id = request.GET.get("invoice_id", None)
 
     if not start_date_str or not end_date_str:
         return HttpResponseBadRequest("Start date and end date are required.")
 
     start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
     end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
+    if invoice_id:
+        deliveries = CompletedWork.objects.filter(invoice_id=invoice_id)
+    else:
+        deliveries = get_uninvoiced_completed_works_qs(request.opportunity, start_date, end_date)
 
-    deliveries = get_uninvoiced_completed_works_qs(request.opportunity, start_date, end_date)
     table = InvoiceDeliveriesTable(request.opportunity.currency, deliveries)
-
     export_format = "csv"
     exporter = TableExport(export_format, table)
     filename = f"invoice_line_items_{start_date}_{end_date}.csv"
