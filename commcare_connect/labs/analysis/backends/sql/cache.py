@@ -285,3 +285,134 @@ class SQLCacheManager:
         ComputedVisitCache.objects.filter(opportunity_id=self.opportunity_id).delete()
         ComputedFLWCache.objects.filter(opportunity_id=self.opportunity_id).delete()
         logger.info(f"[SQLCache] Invalidated all cache for opp {self.opportunity_id}")
+
+    # -------------------------------------------------------------------------
+    # Visit Filtering (for Audit)
+    # -------------------------------------------------------------------------
+
+    def filter_visits(
+        self,
+        usernames: list[str] | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        last_n_per_user: int | None = None,
+        last_n_total: int | None = None,
+        sample_percentage: int = 100,
+    ):
+        """
+        Build a filtered queryset of visits using SQL.
+
+        Returns a queryset that can be further processed or converted to values.
+        Uses window functions for last_n_per_user (much faster than Python groupby).
+        """
+        from django.db.models import F, Window
+        from django.db.models.functions import RowNumber
+
+        # Start with base queryset (valid cache)
+        qs = self.get_raw_visits_queryset()
+
+        # Filter by usernames
+        if usernames:
+            qs = qs.filter(username__in=usernames)
+
+        # Filter by date range
+        if start_date:
+            qs = qs.filter(visit_date__gte=start_date)
+        if end_date:
+            qs = qs.filter(visit_date__lte=end_date)
+
+        # Apply last_n_per_user using window function
+        if last_n_per_user:
+            # Add row number partitioned by username, ordered by visit_date desc
+            qs = qs.annotate(
+                row_num=Window(
+                    expression=RowNumber(),
+                    partition_by=[F("username")],
+                    order_by=F("visit_date").desc(),
+                )
+            ).filter(row_num__lte=last_n_per_user)
+
+        # Apply last_n_total
+        if last_n_total:
+            qs = qs.order_by("-visit_date")[:last_n_total]
+
+        # Apply sampling (using random ordering)
+        # Note: For large datasets, TABLESAMPLE would be better but isn't portable
+        if sample_percentage < 100:
+            # Get count first, then limit
+            total_count = qs.count()
+            sample_size = max(1, int(total_count * sample_percentage / 100))
+            # Order by random and take sample_size
+            qs = qs.order_by("?")[:sample_size]
+
+        return qs
+
+    def get_filtered_visit_ids(
+        self,
+        usernames: list[str] | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        last_n_per_user: int | None = None,
+        last_n_total: int | None = None,
+        sample_percentage: int = 100,
+    ) -> list[int]:
+        """Get filtered visit IDs using SQL. Returns only IDs (very fast)."""
+        qs = self.filter_visits(
+            usernames=usernames,
+            start_date=start_date,
+            end_date=end_date,
+            last_n_per_user=last_n_per_user,
+            last_n_total=last_n_total,
+            sample_percentage=sample_percentage,
+        )
+        return list(qs.values_list("visit_id", flat=True))
+
+    def get_filtered_visits_slim(
+        self,
+        usernames: list[str] | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        last_n_per_user: int | None = None,
+        last_n_total: int | None = None,
+        sample_percentage: int = 100,
+    ) -> list[dict]:
+        """
+        Get filtered visits WITHOUT form_json (slim mode).
+
+        Returns visit dicts suitable for preview display.
+        """
+        qs = self.filter_visits(
+            usernames=usernames,
+            start_date=start_date,
+            end_date=end_date,
+            last_n_per_user=last_n_per_user,
+            last_n_total=last_n_total,
+            sample_percentage=sample_percentage,
+        )
+
+        # Defer heavy columns
+        qs = qs.defer("form_json", "completed_work", "flag_reason")
+
+        visits = []
+        for row in qs.iterator():
+            visits.append(
+                {
+                    "id": row.visit_id,
+                    "opportunity_id": row.opportunity_id,
+                    "username": row.username,
+                    "deliver_unit": row.deliver_unit,
+                    "deliver_unit_id": row.deliver_unit_id,
+                    "entity_id": row.entity_id,
+                    "entity_name": row.entity_name,
+                    "visit_date": row.visit_date.isoformat() if row.visit_date else None,
+                    "status": row.status,
+                    "reason": row.reason,
+                    "location": row.location,
+                    "flagged": row.flagged,
+                    "review_status": row.review_status,
+                    "images": row.images,
+                }
+            )
+
+        logger.info(f"[SQLCache] Filtered to {len(visits)} visits (slim)")
+        return visits

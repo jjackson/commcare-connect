@@ -9,6 +9,7 @@ from collections.abc import Generator
 from typing import Any
 
 import httpx
+import pandas as pd
 from django.conf import settings
 from django.http import HttpRequest
 
@@ -229,3 +230,86 @@ class PythonRedisBackend:
 
         logger.info(f"[PythonRedis] Processed {len(flw_result.rows)} FLWs, {visit_count} visits")
         return flw_result
+
+    # -------------------------------------------------------------------------
+    # Visit Filtering (for Audit)
+    # -------------------------------------------------------------------------
+
+    def filter_visits_for_audit(
+        self,
+        opportunity_id: int,
+        access_token: str,
+        expected_visit_count: int | None,
+        usernames: list[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        last_n_per_user: int | None = None,
+        last_n_total: int | None = None,
+        sample_percentage: int = 100,
+        return_visit_data: bool = False,
+    ) -> list[int] | tuple[list[int], list[dict]]:
+        """
+        Filter visits using pandas on cached data.
+
+        Fetches slim visits (no form_json) and applies filters in pandas.
+        """
+        # Fetch slim visits (no form_json for efficiency)
+        visits = self.fetch_raw_visits(
+            opportunity_id=opportunity_id,
+            access_token=access_token,
+            expected_visit_count=expected_visit_count,
+            skip_form_json=True,
+        )
+
+        if not visits:
+            return ([], []) if return_visit_data else []
+
+        # Apply pandas filtering
+        df = pd.DataFrame(visits)
+
+        if "id" not in df.columns:
+            return ([], []) if return_visit_data else []
+
+        # Parse dates for filtering
+        if "visit_date" in df.columns:
+            df["visit_date"] = pd.to_datetime(df["visit_date"], format="mixed", utc=True, errors="coerce")
+
+        # Filter by usernames
+        if usernames and "username" in df.columns:
+            df = df[df["username"].isin(usernames)]
+
+        # Filter by date range
+        if start_date and "visit_date" in df.columns:
+            start = pd.to_datetime(start_date)
+            df = df[df["visit_date"].dt.date >= start.date()]
+
+        if end_date and "visit_date" in df.columns:
+            end = pd.to_datetime(end_date)
+            df = df[df["visit_date"].dt.date <= end.date()]
+
+        # Apply last_n_per_user (window function equivalent)
+        if last_n_per_user and "visit_date" in df.columns and "username" in df.columns:
+            df = df.sort_values("visit_date", ascending=False)
+            df = df.groupby("username", dropna=False).head(last_n_per_user)
+
+        # Apply last_n_total
+        if last_n_total and "visit_date" in df.columns:
+            df = df.sort_values("visit_date", ascending=False)
+            df = df.head(last_n_total)
+
+        # Apply sampling
+        if sample_percentage < 100 and len(df) > 0:
+            sample_size = max(1, int(len(df) * sample_percentage / 100))
+            df = df.sample(n=min(sample_size, len(df)), random_state=42)
+
+        # Extract results
+        visit_ids = df["id"].dropna().astype(int).unique().tolist()
+
+        if return_visit_data:
+            # Convert visit_date back to string for JSON compatibility
+            if "visit_date" in df.columns:
+                df["visit_date"] = df["visit_date"].apply(lambda x: x.isoformat() if pd.notna(x) else None)
+            filtered_visits = df.to_dict("records")
+            return visit_ids, filtered_visits
+
+        return visit_ids

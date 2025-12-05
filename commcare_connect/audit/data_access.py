@@ -21,7 +21,7 @@ from django.http import HttpRequest
 
 from commcare_connect.audit.analysis_config import AUDIT_EXTRACTION_CONFIG
 from commcare_connect.audit.models import AuditSessionRecord, AuditTemplateRecord
-from commcare_connect.labs.analysis.computations import compute_visit_fields
+from commcare_connect.labs.analysis import compute_visit_fields
 from commcare_connect.labs.analysis.models import LocalUserVisit
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.integrations.connect.api_client import LabsRecordAPIClient
@@ -281,7 +281,7 @@ class AuditDataAccess:
         )
 
     # =========================================================================
-    # Visit Selection (uses slim fetching)
+    # Visit Selection (uses backend-optimized filtering)
     # =========================================================================
 
     def get_visit_ids_for_audit(
@@ -293,7 +293,11 @@ class AuditDataAccess:
         return_visits: bool = False,
     ) -> list[int] | tuple[list[int], list[dict]]:
         """
-        Get visit IDs matching audit criteria. Uses slim fetching (no form_json).
+        Get visit IDs matching audit criteria.
+
+        Uses backend-optimized filtering:
+        - SQL backend: Pushes filtering into PostgreSQL (much faster)
+        - Python/Redis backend: Uses pandas on cached data
 
         Supports both old signature (audit_type + criteria dict) and new (AuditCriteria).
 
@@ -309,20 +313,96 @@ class AuditDataAccess:
                 criteria["audit_type"] = audit_type
             criteria = AuditCriteria.from_dict(criteria)
 
-        all_visits = []
-        for opp_id in opportunity_ids:
-            if visits_cache and opp_id in visits_cache:
-                visits = visits_cache[opp_id]
-            else:
-                visits = self.fetch_visits_slim(opp_id)
-            all_visits.extend(visits)
+        # Convert AuditCriteria to pipeline filter parameters
+        # Map audit_type to appropriate filter parameters
+        last_n_per_user = None
+        last_n_total = None
+        start_date = criteria.start_date
+        end_date = criteria.end_date
 
-        filtered_visits = filter_visits_for_audit(all_visits, criteria, return_visits=True)
-        visit_ids = [v["id"] for v in filtered_visits]
+        if criteria.audit_type == "last_n_per_flw":
+            last_n_per_user = criteria.count_per_flw
+        elif criteria.audit_type == "last_n_across_all":
+            last_n_total = criteria.count_across_all
+        # Note: "last_n_per_opp" is handled at the aggregate level below
+
+        all_visit_ids = []
+        all_visits = []
+
+        for opp_id in opportunity_ids:
+            # Use visits_cache if available (for backward compat)
+            if visits_cache and opp_id in visits_cache:
+                # Fall back to pandas filtering for cached data
+                visits = visits_cache[opp_id]
+                filtered = filter_visits_for_audit(visits, criteria, return_visits=True)
+                visit_ids = [v["id"] for v in filtered]
+                all_visit_ids.extend(visit_ids)
+                if return_visits:
+                    all_visits.extend(filtered)
+            else:
+                # Use backend-optimized filtering (SQL or pandas depending on backend)
+                result = self.pipeline.filter_visits_for_audit(
+                    opportunity_id=opp_id,
+                    usernames=criteria.selected_flw_user_ids or None,
+                    start_date=start_date,
+                    end_date=end_date,
+                    last_n_per_user=last_n_per_user,
+                    last_n_total=last_n_total if len(opportunity_ids) == 1 else None,
+                    sample_percentage=criteria.sample_percentage if len(opportunity_ids) == 1 else 100,
+                    return_visit_data=return_visits,
+                )
+                if return_visits:
+                    visit_ids, visits = result
+                    all_visit_ids.extend(visit_ids)
+                    all_visits.extend(visits)
+                else:
+                    all_visit_ids.extend(result)
+
+        # Apply cross-opportunity limits if multiple opportunities
+        if len(opportunity_ids) > 1:
+            if criteria.audit_type == "last_n_per_opp":
+                # Group by opportunity and take N per opp
+                # This requires re-filtering since we can't do it in the backend
+                if return_visits and all_visits:
+                    df = pd.DataFrame(all_visits)
+                    if "opportunity_id" in df.columns and "visit_date" in df.columns:
+                        df["visit_date"] = pd.to_datetime(df["visit_date"], format="mixed", utc=True, errors="coerce")
+                        df = df.sort_values("visit_date", ascending=False)
+                        df = df.groupby("opportunity_id").head(criteria.count_per_opp)
+                        if "visit_date" in df.columns:
+                            df["visit_date"] = df["visit_date"].apply(lambda x: x.isoformat() if pd.notna(x) else None)
+                        all_visits = df.to_dict("records")
+                        all_visit_ids = [v["id"] for v in all_visits]
+
+            elif criteria.audit_type == "last_n_across_all":
+                # Sort by date and take top N
+                if return_visits and all_visits:
+                    df = pd.DataFrame(all_visits)
+                    if "visit_date" in df.columns:
+                        df["visit_date"] = pd.to_datetime(df["visit_date"], format="mixed", utc=True, errors="coerce")
+                        df = df.sort_values("visit_date", ascending=False).head(criteria.count_across_all)
+                        if "visit_date" in df.columns:
+                            df["visit_date"] = df["visit_date"].apply(lambda x: x.isoformat() if pd.notna(x) else None)
+                        all_visits = df.to_dict("records")
+                        all_visit_ids = [v["id"] for v in all_visits]
+                elif not return_visits:
+                    # Just limit the IDs
+                    all_visit_ids = all_visit_ids[: criteria.count_across_all]
+
+            # Apply sampling across all opportunities
+            if criteria.sample_percentage < 100 and all_visit_ids:
+                sample_size = max(1, int(len(all_visit_ids) * criteria.sample_percentage / 100))
+                import random
+
+                random.seed(42)
+                sampled_indices = random.sample(range(len(all_visit_ids)), min(sample_size, len(all_visit_ids)))
+                all_visit_ids = [all_visit_ids[i] for i in sorted(sampled_indices)]
+                if return_visits:
+                    all_visits = [all_visits[i] for i in sorted(sampled_indices)]
 
         if return_visits:
-            return visit_ids, filtered_visits
-        return visit_ids
+            return all_visit_ids, all_visits
+        return all_visit_ids
 
     # =========================================================================
     # Visit Data Methods
