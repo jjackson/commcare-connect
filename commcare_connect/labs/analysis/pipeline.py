@@ -304,9 +304,13 @@ class AnalysisPipeline:
                 elif event_type == "progress":
                     _, bytes_downloaded, total_bytes = event
                     yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
+                elif event_type == "parsing":
+                    csv_size = event[1]
+                    size_mb = csv_size / (1024 * 1024)
+                    yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data..."})
                 elif event_type == "complete":
                     visit_dicts = event[1]
-                    yield (EVENT_STATUS, {"message": "Download complete"})
+                    yield (EVENT_STATUS, {"message": f"Parsed {len(visit_dicts)} visits"})
 
             if visit_dicts is None:
                 raise RuntimeError("No data received from API")
