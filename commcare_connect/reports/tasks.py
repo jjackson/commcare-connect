@@ -2,8 +2,7 @@ import logging
 from collections import defaultdict
 from itertools import chain
 
-from allauth.utils import DateTimeField
-from django.db.models import Case, Count, F, IntegerField, Max, Min, Q, Sum, Value, When
+from django.db.models import Case, Count, DateTimeField, F, IntegerField, Max, Min, Q, Sum, Value, When
 from django.db.models.lookups import GreaterThanOrEqual
 
 from commcare_connect.connect_id_client.main import fetch_user_analytics
