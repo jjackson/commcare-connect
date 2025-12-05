@@ -464,15 +464,15 @@ function chcNutritionAnalysis() {
             const msg = message.toLowerCase();
             if (msg.includes('checking cache') || msg.includes('cache hit') || msg.includes('cached data')) {
                 this.loadingStep = 1;
-            } else if (msg.includes('connecting') || msg.includes('downloading') || msg.includes('download complete')) {
+            } else if (msg.includes('connecting') || msg.includes('downloading')) {
                 this.loadingStep = 2;
                 if (msg.includes('downloading')) {
                     this.downloadProgress = message;
                 }
-            } else if (msg.includes('processing')) {
+            } else if (msg.includes('parsing') || msg.includes('parsed') || msg.includes('processing')) {
                 this.loadingStep = 3;
                 this.processingMessage = message;
-            } else if (msg.includes('complete')) {
+            } else if (msg.includes('complete!')) {
                 this.loadingStep = 4;
             }
         },
