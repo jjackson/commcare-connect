@@ -1334,8 +1334,8 @@ def invoice_list(request, org_slug, opp_id):
         queryset,
         org_slug=org_slug,
         opportunity=request.opportunity,
-        exclude=("actions",) if not request.is_opportunity_pm else tuple(),
         csrf_token=csrf_token,
+        is_pm=request.is_opportunity_pm,
     )
 
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
