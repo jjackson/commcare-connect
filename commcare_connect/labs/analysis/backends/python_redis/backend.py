@@ -139,6 +139,9 @@ class PythonRedisBackend:
         cache.set("user_visits_csv", csv_bytes, visit_count)
         logger.info(f"[PythonRedis] Cached raw CSV ({len(csv_bytes)} bytes)")
 
+        # Yield status before slow CSV parsing so frontend can show progress
+        yield ("parsing", len(csv_bytes))
+
         # Parse and return
         visit_dicts = parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
         yield ("complete", visit_dicts)

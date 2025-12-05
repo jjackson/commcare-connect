@@ -167,12 +167,14 @@ class SQLBackend:
             raise RuntimeError("Connect API timeout") from e
 
         csv_bytes = b"".join(chunks)
+
+        # Yield status before slow CSV parsing so frontend can show progress
+        yield ("parsing", len(csv_bytes))
+
         visit_dicts = parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
 
-        # Store to SQL cache
-        visit_count = len(visit_dicts)
-        cache_manager.store_raw_visits(visit_dicts, visit_count)
-        logger.info(f"[SQL] Stored {visit_count} visits to RawVisitCache")
+        # NOTE: Don't store to SQL here - let process_and_cache handle it.
+        # Storage happens in process_and_cache after pipeline yields "Processing X visits..."
 
         yield ("complete", visit_dicts)
 
