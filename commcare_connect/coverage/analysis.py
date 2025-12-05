@@ -4,7 +4,7 @@ Coverage analysis module.
 Provides coverage-specific enrichment for visit analysis results.
 
 Uses the pipeline pattern:
-1. compute_visit_analysis() - get cached visit-level data from labs framework
+1. AnalysisPipeline.run_analysis() - get cached visit-level data from labs framework
 2. enrich_with_coverage_context() - add DU/SA geographic context
 
 This enables coverage to reuse the same cached visit data as other analysis views.
@@ -14,9 +14,9 @@ import logging
 
 from django.http import HttpRequest
 
-from commcare_connect.labs.analysis.backends.python_redis.visit_analyzer import compute_visit_analysis
-from commcare_connect.labs.analysis.config import AnalysisConfig, FieldComputation
+from commcare_connect.labs.analysis.config import AnalysisPipelineConfig, CacheStage, FieldComputation
 from commcare_connect.labs.analysis.models import VisitAnalysisResult
+from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ def enrich_with_coverage_context(
 
 def get_coverage_visit_analysis(
     request: HttpRequest,
-    config: AnalysisConfig,
+    config: AnalysisPipelineConfig,
     du_lookup: dict[str, dict] | None = None,
     use_cache: bool = True,
     cache_tolerance_minutes: int | None = None,
@@ -105,15 +105,17 @@ def get_coverage_visit_analysis(
     Get visit analysis with coverage context, using cached data.
 
     Pipeline:
-    1. Get cached VisitAnalysisResult via compute_visit_analysis()
+    1. Get cached VisitAnalysisResult via AnalysisPipeline.run_analysis()
     2. Enrich with DU/SA context
 
     Args:
         request: HttpRequest with labs context
-        config: AnalysisConfig defining field computations
+        config: AnalysisPipelineConfig defining field computations
         du_lookup: Dict mapping du_name -> {service_area_id, ...}
         use_cache: Whether to use caching (default: True)
         cache_tolerance_minutes: Accept cache if age < N minutes (even if counts mismatch)
+            NOTE: cache_tolerance_minutes is not currently used by AnalysisPipeline,
+            but kept for API compatibility. Force refresh via ?refresh=1 query param.
 
     Returns:
         VisitAnalysisResult with service_area_id populated
@@ -128,19 +130,36 @@ def get_coverage_visit_analysis(
         # Get cached analysis with coverage context
         result = get_coverage_visit_analysis(request, CHC_NUTRITION_CONFIG, du_lookup)
     """
-    # Get cached visit analysis (shared with other views)
-    visit_result = compute_visit_analysis(
-        request, config, use_cache=use_cache, cache_tolerance_minutes=cache_tolerance_minutes
-    )
+    # Ensure config requests visit-level output (not aggregated)
+    # This is important because coverage needs individual visit data
+    if config.terminal_stage != CacheStage.VISIT_LEVEL:
+        logger.warning(
+            f"[Coverage] Config has terminal_stage={config.terminal_stage.value}, "
+            "coverage analysis requires VISIT_LEVEL. Overriding."
+        )
+        # Create a modified config with correct terminal_stage
+        config = AnalysisPipelineConfig(
+            grouping_key=config.grouping_key,
+            fields=config.fields,
+            histograms=config.histograms,
+            filters=config.filters,
+            date_field=config.date_field,
+            experiment=config.experiment,
+            terminal_stage=CacheStage.VISIT_LEVEL,
+        )
+
+    # Use the AnalysisPipeline (backend-agnostic)
+    pipeline = AnalysisPipeline(request)
+    visit_result = pipeline.run_analysis(config)
 
     # Enrich with coverage context
     return enrich_with_coverage_context(visit_result, du_lookup)
 
 
 def create_coverage_analysis_config(
-    base_config: AnalysisConfig | None = None,
+    base_config: AnalysisPipelineConfig | None = None,
     additional_fields: list | None = None,
-) -> AnalysisConfig:
+) -> AnalysisPipelineConfig:
     """
     Create a coverage-specific analysis config.
 
@@ -151,7 +170,7 @@ def create_coverage_analysis_config(
         additional_fields: Optional additional field computations
 
     Returns:
-        AnalysisConfig suitable for coverage analysis
+        AnalysisPipelineConfig suitable for coverage analysis
     """
     fields = []
 
@@ -163,18 +182,19 @@ def create_coverage_analysis_config(
     if additional_fields:
         fields.extend(additional_fields)
 
-    return AnalysisConfig(
+    return AnalysisPipelineConfig(
         grouping_key="username",  # Not used for visit-level, but required
         fields=fields,
         histograms=base_config.histograms if base_config else [],
         filters=base_config.filters if base_config else {},
+        terminal_stage=CacheStage.VISIT_LEVEL,  # Coverage needs individual visit data
     )
 
 
 # Base config for coverage - SHOULD NOT BE USED
 # If this is being used, it means no proper config was specified (ERROR condition)
 # All opportunities should have a specific config registered (e.g., chc_nutrition)
-COVERAGE_BASE_CONFIG = AnalysisConfig(
+COVERAGE_BASE_CONFIG = AnalysisPipelineConfig(
     grouping_key="username",
     fields=[
         # Extract CommCare delivery unit name from form JSON
@@ -188,4 +208,5 @@ COVERAGE_BASE_CONFIG = AnalysisConfig(
     ],
     histograms=[],
     filters={},  # No filters - include all visits
+    terminal_stage=CacheStage.VISIT_LEVEL,  # Coverage needs individual visit data
 )

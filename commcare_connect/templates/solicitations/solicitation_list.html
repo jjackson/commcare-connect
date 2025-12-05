@@ -149,26 +149,35 @@
     {% else %}
         <!-- Empty State -->
         <div class="text-center py-12">
-            <i class="fa-solid fa-box-open text-5xl text-gray-400 mx-auto mb-4"></i>
-            <h3 class="card_title mb-2">
+            {% if coming_soon %}
+                <i class="fa-solid fa-rocket text-5xl text-brand-cornflower-blue mx-auto mb-4"></i>
+                <h3 class="card_title mb-2">Public listings coming soon.</h3>
+                <p class="card_description mb-6">
+                    We're working on making partnership opportunities publicly browsable.
+                    Check back soon!
+                </p>
+            {% else %}
+                <i class="fa-solid fa-box-open text-5xl text-gray-400 mx-auto mb-4"></i>
+                <h3 class="card_title mb-2">
+                    {% if search_query %}
+                        No opportunities found matching "{{ search_query }}"
+                    {% else %}
+                        No opportunities available
+                    {% endif %}
+                </h3>
+                <p class="card_description mb-6">
+                    {% if search_query %}
+                        Try adjusting your search terms or browse all opportunities.
+                    {% else %}
+                        Check back soon for new partnership opportunities.
+                    {% endif %}
+                </p>
                 {% if search_query %}
-                    No opportunities found matching "{{ search_query }}"
-                {% else %}
-                    No opportunities available
+                    <a href="{% url 'solicitations:list' %}"
+                       class="button button-md primary-dark">
+                        View All Opportunities
+                    </a>
                 {% endif %}
-            </h3>
-            <p class="card_description mb-6">
-                {% if search_query %}
-                    Try adjusting your search terms or browse all opportunities.
-                {% else %}
-                    Check back soon for new partnership opportunities.
-                {% endif %}
-            </p>
-            {% if search_query %}
-                <a href="{% url 'solicitations:list' %}"
-                   class="button button-md primary-dark">
-                    View All Opportunities
-                </a>
             {% endif %}
         </div>
     {% endif %}

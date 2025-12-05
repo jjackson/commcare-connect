@@ -12,6 +12,6 @@ class Command(BaseLabsURLTest):
     base_urls = [
         "/solicitations/",
         "/solicitations/manage/",
-        "/solicitations/opportunities/",
+        "/solicitations/browse/",
         "/solicitations/responses/",
     ]
