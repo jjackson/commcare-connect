@@ -296,3 +296,88 @@ def execute_flw_aggregation(
 
     logger.info(f"[SQL] Aggregated {len(results)} FLWs")
     return results
+
+
+# -----------------------------------------------------------------------------
+# Visit-level extraction (no aggregation)
+# -----------------------------------------------------------------------------
+
+
+def build_visit_extraction_query(
+    config: AnalysisPipelineConfig,
+    opportunity_id: int,
+) -> str:
+    """
+    Build SQL query to extract computed fields for each visit (no aggregation).
+
+    Returns one row per visit with base fields + computed fields from config.
+    """
+    # Base visit fields that map to VisitRow
+    select_parts = [
+        "visit_id",
+        "username",
+        "visit_date",
+        "status",
+        "flagged",
+        "location",
+        "deliver_unit",
+        "deliver_unit_id",
+        "entity_id",
+        "entity_name",
+    ]
+
+    # Track computed field names for JSON building
+    computed_field_names = []
+
+    # Add computed fields from config (no aggregation, just extraction + transform)
+    for field in config.fields:
+        paths = field.paths if field.paths else [field.path]
+        value_expr = _paths_to_coalesce_sql(paths)
+        transformed_expr = _transform_to_sql(field, value_expr)
+        select_parts.append(f"{transformed_expr} as {field.name}")
+        computed_field_names.append(field.name)
+
+    select_clause = ",\n    ".join(select_parts)
+
+    query = f"""
+        SELECT
+            {select_clause}
+        FROM labs_raw_visit_cache
+        WHERE opportunity_id = {opportunity_id}
+        ORDER BY visit_id
+    """
+
+    return query, computed_field_names
+
+
+def execute_visit_extraction(
+    config: AnalysisPipelineConfig,
+    opportunity_id: int,
+) -> tuple[list[dict], list[str]]:
+    """
+    Execute visit extraction query and return results.
+
+    Returns:
+        Tuple of (visit_dicts, computed_field_names):
+        - visit_dicts: List of dicts with base fields + computed fields
+        - computed_field_names: List of field names that are computed (for VisitRow.computed)
+    """
+    query, computed_field_names = build_visit_extraction_query(config, opportunity_id)
+
+    logger.info(f"[SQL] Executing visit extraction query for opp {opportunity_id}")
+    logger.debug(f"[SQL] Query:\n{query}")
+
+    with connection.cursor() as cursor:
+        cursor.execute(query)
+        columns = [col[0] for col in cursor.description]
+        rows = cursor.fetchall()
+
+    results = []
+    for row in rows:
+        row_dict = {}
+        for col, val in zip(columns, row):
+            row_dict[col] = val
+        results.append(row_dict)
+
+    logger.info(f"[SQL] Extracted {len(results)} visits with {len(computed_field_names)} computed fields")
+    return results, computed_field_names
