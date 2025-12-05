@@ -105,3 +105,44 @@ class AnalysisBackend(Protocol):
     ) -> FLWAnalysisResult | VisitAnalysisResult:
         """Process visits and cache results. Returns appropriate result based on terminal_stage."""
         ...
+
+    # -------------------------------------------------------------------------
+    # Visit Filtering (for Audit)
+    # -------------------------------------------------------------------------
+
+    def filter_visits_for_audit(
+        self,
+        opportunity_id: int,
+        access_token: str,
+        expected_visit_count: int | None,
+        usernames: list[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        last_n_per_user: int | None = None,
+        last_n_total: int | None = None,
+        sample_percentage: int = 100,
+        return_visit_data: bool = False,
+    ) -> list[int] | tuple[list[int], list[dict]]:
+        """
+        Filter visits based on audit criteria and return matching visit IDs.
+
+        Each backend implements this optimally:
+        - SQL backend: Uses database queries with indexes
+        - Python/Redis backend: Uses pandas filtering on cached data
+
+        Args:
+            opportunity_id: Opportunity to filter visits for
+            access_token: OAuth token for cache population if needed
+            expected_visit_count: For cache validation
+            usernames: Filter to specific FLW usernames (None = all)
+            start_date: Filter visits on or after this date (ISO format)
+            end_date: Filter visits on or before this date (ISO format)
+            last_n_per_user: Take only last N visits per user
+            last_n_total: Take only last N visits total
+            sample_percentage: Random sample percentage (1-100)
+            return_visit_data: If True, also return filtered visit dicts (slim, no form_json)
+
+        Returns:
+            List of visit IDs, or (visit_ids, visit_dicts) if return_visit_data=True
+        """
+        ...

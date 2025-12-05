@@ -7,12 +7,14 @@ All analysis is done via SQL queries, not Python/pandas.
 
 import logging
 from collections.abc import Generator
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
 import httpx
 from django.conf import settings
 from django.http import HttpRequest
+from django.utils.dateparse import parse_date
 
 from commcare_connect.labs.analysis.backends.csv_parsing import parse_csv_bytes
 from commcare_connect.labs.analysis.backends.sql.cache import SQLCacheManager
@@ -368,3 +370,66 @@ class SQLBackend:
 
         logger.info(f"[SQL] Processed {len(flw_rows)} FLWs, {total_visits} visits (via SQL)")
         return flw_result
+
+    # -------------------------------------------------------------------------
+    # Visit Filtering (for Audit) - SQL-optimized
+    # -------------------------------------------------------------------------
+
+    def filter_visits_for_audit(
+        self,
+        opportunity_id: int,
+        access_token: str,
+        expected_visit_count: int | None,
+        usernames: list[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        last_n_per_user: int | None = None,
+        last_n_total: int | None = None,
+        sample_percentage: int = 100,
+        return_visit_data: bool = False,
+    ) -> list[int] | tuple[list[int], list[dict]]:
+        """
+        Filter visits using SQL queries (much faster than Python/pandas).
+
+        Pushes all filtering into PostgreSQL using indexes and window functions.
+        """
+        cache_manager = SQLCacheManager(opportunity_id, config=None)
+
+        # Ensure cache is populated
+        if not cache_manager.has_valid_raw_cache(expected_visit_count or 0):
+            logger.info(f"[SQL] Cache miss during filter, populating for opp {opportunity_id}")
+            self.fetch_raw_visits(opportunity_id, access_token, expected_visit_count)
+
+        # Parse date strings to date objects
+        start_date_obj: date | None = None
+        end_date_obj: date | None = None
+        if start_date:
+            start_date_obj = parse_date(start_date)
+        if end_date:
+            end_date_obj = parse_date(end_date)
+
+        if return_visit_data:
+            # Get both IDs and slim visit data in one query
+            visits = cache_manager.get_filtered_visits_slim(
+                usernames=usernames,
+                start_date=start_date_obj,
+                end_date=end_date_obj,
+                last_n_per_user=last_n_per_user,
+                last_n_total=last_n_total,
+                sample_percentage=sample_percentage,
+            )
+            visit_ids = [v["id"] for v in visits]
+            logger.info(f"[SQL] Filtered to {len(visit_ids)} visits (with data)")
+            return visit_ids, visits
+        else:
+            # Get only IDs (fastest path)
+            visit_ids = cache_manager.get_filtered_visit_ids(
+                usernames=usernames,
+                start_date=start_date_obj,
+                end_date=end_date_obj,
+                last_n_per_user=last_n_per_user,
+                last_n_total=last_n_total,
+                sample_percentage=sample_percentage,
+            )
+            logger.info(f"[SQL] Filtered to {len(visit_ids)} visit IDs")
+            return visit_ids

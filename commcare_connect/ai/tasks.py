@@ -6,8 +6,16 @@ import logging
 
 from django.contrib.auth import get_user_model
 
-from commcare_connect.ai.agents.coding_agent import get_coding_agent
 from commcare_connect.ai.agents.solicitation_agent import get_solicitation_agent
+
+# Coding agent is optional - only needed for "vibes" agent type
+try:
+    from commcare_connect.ai.agents.coding_agent import get_coding_agent
+
+    HAS_CODING_AGENT = True
+except ImportError:
+    HAS_CODING_AGENT = False
+    get_coding_agent = None
 from commcare_connect.ai.session_store import add_message_to_history, get_message_history
 from commcare_connect.ai.types import UserDependencies
 from commcare_connect.utils.celery import set_task_progress
@@ -164,6 +172,8 @@ def run_agent(
             agent_instance = get_solicitation_agent()
             actual_prompt = prompt
         elif agent == "vibes":
+            if not HAS_CODING_AGENT:
+                raise ValueError("Coding agent not available - module not installed")
             agent_instance = get_coding_agent()
             # For coding agent, construct a prompt that includes the current code
             if current_code:
@@ -210,7 +220,7 @@ Please generate React code to fulfill the user's request. The code should be com
 
         # Handle structured output for coding agent
         # result.output will be a CodeResponse instance when using structured output
-        if agent == "vibes":
+        if agent == "vibes" and HAS_CODING_AGENT:
             from commcare_connect.ai.agents.coding_agent import CodeResponse
 
             if isinstance(result.output, CodeResponse):

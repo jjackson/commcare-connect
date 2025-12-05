@@ -167,6 +167,54 @@ class AnalysisPipeline:
             return False
         return self.backend.has_valid_raw_cache(opp_id, self.visit_count)
 
+    def filter_visits_for_audit(
+        self,
+        opportunity_id: int | None = None,
+        usernames: list[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        last_n_per_user: int | None = None,
+        last_n_total: int | None = None,
+        sample_percentage: int = 100,
+        return_visit_data: bool = False,
+    ) -> list[int] | tuple[list[int], list[dict]]:
+        """
+        Filter visits based on audit criteria.
+
+        Delegates to backend which implements optimally:
+        - SQL backend: Uses database queries with indexes and window functions
+        - Python/Redis backend: Uses pandas filtering on cached data
+
+        Args:
+            opportunity_id: Opportunity ID (defaults to labs_context)
+            usernames: Filter to specific FLW usernames (None = all)
+            start_date: Filter visits on or after this date (ISO format)
+            end_date: Filter visits on or before this date (ISO format)
+            last_n_per_user: Take only last N visits per user
+            last_n_total: Take only last N visits total
+            sample_percentage: Random sample percentage (1-100)
+            return_visit_data: If True, also return filtered visit dicts (slim, no form_json)
+
+        Returns:
+            List of visit IDs, or (visit_ids, visit_dicts) if return_visit_data=True
+        """
+        opp_id = opportunity_id or self.opportunity_id
+        if not opp_id:
+            return ([], []) if return_visit_data else []
+
+        return self.backend.filter_visits_for_audit(
+            opportunity_id=opp_id,
+            access_token=self.access_token,
+            expected_visit_count=self.visit_count,
+            usernames=usernames,
+            start_date=start_date,
+            end_date=end_date,
+            last_n_per_user=last_n_per_user,
+            last_n_total=last_n_total,
+            sample_percentage=sample_percentage,
+            return_visit_data=return_visit_data,
+        )
+
     # -------------------------------------------------------------------------
     # Analysis
     # -------------------------------------------------------------------------

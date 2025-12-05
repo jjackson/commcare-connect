@@ -28,6 +28,7 @@ Usage:
 """
 
 # Import from python_redis backend for direct access when needed
+from commcare_connect.labs.analysis.backends.python_redis.computations import compute_visit_fields
 from commcare_connect.labs.analysis.backends.python_redis.flw_analyzer import FLWAnalyzer, compute_flw_analysis
 from commcare_connect.labs.analysis.backends.python_redis.visit_analyzer import VisitAnalyzer, compute_visit_analysis
 from commcare_connect.labs.analysis.config import (
@@ -83,6 +84,7 @@ __all__ = [
     "VisitAnalysisResult",
     "VisitRow",
     "compute_visit_analysis",
+    "compute_visit_fields",
     # Data models
     "AnalysisResult",
     "LocalUserVisit",
