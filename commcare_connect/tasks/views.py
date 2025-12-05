@@ -162,12 +162,17 @@ class TaskDetailView(LoginRequiredMixin, DetailView):
                 "task": {
                     "id": task.id,
                     "user_id": task.user_id,
+                    "flw_username": task.task_username,
+                    "flw_name": task.flw_name,
                     "opportunity_id": task.opportunity_id,
+                    "opportunity": task.data.get("opportunity_name", ""),
                     "status": task.status,
                     "priority": task.priority,
                     "title": task.title,
                     "description": task.description,
                     "audit_session_id": task.audit_session_id,
+                    "action_type": task.data.get("action_type", "warning"),
+                    "created": task.date_created,
                     "timeline": timeline,
                 },
             }

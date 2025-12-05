@@ -33,6 +33,10 @@ INSTALLED_APPS.append("commcare_connect.custom_analysis.chc_nutrition")
 MIDDLEWARE = list(MIDDLEWARE)  # noqa: F405
 _auth_idx = MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddleware")
 MIDDLEWARE[_auth_idx] = "commcare_connect.labs.middleware.LabsAuthenticationMiddleware"
+
+# Silence admin.E408 - we use LabsAuthenticationMiddleware instead of Django's default
+# The custom middleware provides the same user authentication functionality
+SILENCED_SYSTEM_CHECKS = ["admin.E408"]
 MIDDLEWARE.remove("commcare_connect.users.middleware.OrganizationMiddleware")  # Remove production middleware
 MIDDLEWARE.insert(_auth_idx + 1, "commcare_connect.labs.middleware.LabsURLWhitelistMiddleware")
 MIDDLEWARE.insert(_auth_idx + 2, "commcare_connect.labs.context.LabsContextMiddleware")

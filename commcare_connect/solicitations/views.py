@@ -158,10 +158,7 @@ class ManageSolicitationsListView(ListView):
 class MyResponsesListView(ListView):
     """
     List view of responses created by the current user's organization.
-
-    Note: Querying responses by organization is not yet supported by the production API.
-    This view shows a "coming soon" message until the API supports
-    querying records by organization without a scope filter.
+    Requires program context selection.
     """
 
     model = ResponseRecord
@@ -169,14 +166,24 @@ class MyResponsesListView(ListView):
     context_object_name = "responses"
     paginate_by = 20
 
-    def get_queryset(self):
-        # Querying responses by organization not yet supported - API requires program scope
-        return []
+    def dispatch(self, request, *args, **kwargs):
+        # Verify program context is selected
+        labs_context = getattr(request, "labs_context", {})
+        if not labs_context.get("program_id"):
+            messages.error(request, "Please select a program context to view your responses.")
+            return redirect("solicitations:home")
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["coming_soon"] = True
-        return context
+        self.data_access = SolicitationDataAccess(request=request)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        # Get user's organization slug from labs_context
+        labs_context = getattr(self.request, "labs_context", {})
+        org_slug = labs_context.get("organization_slug")
+
+        if org_slug:
+            return self.data_access.get_responses_for_organization(organization_id=org_slug)
+        return []
 
 
 class SolicitationResponsesListView(SingleTableView):

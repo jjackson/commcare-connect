@@ -79,7 +79,7 @@ jobs:
             --task-definition $TASK_DEF_ARN \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[subnet-06646effb09be2f42],securityGroups=[sg-0666a5ed512c97d9d],assignPublicIp=ENABLED}" \
-            --overrides '{"containerOverrides":[{"name":"web","command":["python","manage.py","migrate_multi","--noinput"]}]}' \
+            --overrides '{"containerOverrides":[{"name":"web","command":["python","manage.py","migrate_multi","--noinput","--skip-checks"]}]}' \
             --query 'tasks[0].taskArn' \
             --output text)
 
