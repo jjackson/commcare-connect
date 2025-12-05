@@ -1254,8 +1254,9 @@ def user_visit_review(request, org_slug, opp_id):
         updated_reviews = request.POST.getlist("pk")
         user_visits = UserVisit.objects.filter(pk__in=updated_reviews).exclude(review_status=VisitReviewStatus.agree)
         if review_status in [VisitReviewStatus.agree.value, VisitReviewStatus.disagree.value]:
+            users = [visit.user for visit in user_visits]
             user_visits.update(review_status=review_status)
-            update_payment_accrued(opportunity=request.opportunity, users=[visit.user for visit in user_visits])
+            update_payment_accrued(opportunity=request.opportunity, users=users)
 
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
 
