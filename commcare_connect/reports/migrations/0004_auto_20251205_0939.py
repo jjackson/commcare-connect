@@ -14,15 +14,15 @@ def create_user_analytics_syncing_task(apps, schema_editor):
     )
     PeriodicTask.objects.update_or_create(
         crontab=schedule,
-        name="prime_report_cache",
-        task="commcare_connect.reports.tasks.update_user_analytics_data",
+        name="sync_user_analytics_data",
+        task="commcare_connect.reports.tasks.sync_user_analytics_data",
     )
 
 
 def delete_user_analytics_syncing_task(apps, schema_editor):
     PeriodicTask.objects.get(
-        name="prime_report_cache",
-        task="commcare_connect.reports.tasks.update_user_analytics_data",
+        name="sync_user_analytics_data",
+        task="commcare_connect.reports.tasks.sync_user_analytics_data",
     ).delete()
 
 
