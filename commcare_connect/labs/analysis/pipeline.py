@@ -271,7 +271,12 @@ class AnalysisPipeline:
 
         try:
             # Check cache first
-            yield (EVENT_STATUS, {"message": "Checking cache..."})
+            stage_name = "FLW" if terminal_stage == CacheStage.AGGREGATED else "visit"
+            logger.info(
+                f"[Pipeline/{self.backend_name}] Checking {stage_name}-level cache for opp {opp_id} "
+                f"(expected visits: {self.visit_count})"
+            )
+            yield (EVENT_STATUS, {"message": f"Checking {stage_name}-level cache..."})
 
             if not force_refresh:
                 cached_result = None
@@ -281,14 +286,21 @@ class AnalysisPipeline:
                     cached_result = self.backend.get_cached_visit_result(opp_id, config, self.visit_count)
 
                 if cached_result:
-                    yield (EVENT_STATUS, {"message": "Cache hit!"})
-                    logger.info(f"[Pipeline/{self.backend_name}] Cache HIT for opp {opp_id}")
+                    yield (EVENT_STATUS, {"message": f"{stage_name.capitalize()}-level cache HIT!"})
+                    logger.info(
+                        f"[Pipeline/{self.backend_name}] CACHE HIT ({stage_name}-level) for opp {opp_id}: "
+                        f"{len(cached_result.rows)} rows"
+                    )
                     yield (EVENT_RESULT, cached_result)
                     return
+                else:
+                    logger.info(f"[Pipeline/{self.backend_name}] CACHE MISS ({stage_name}-level) for opp {opp_id}")
+            else:
+                logger.info(f"[Pipeline/{self.backend_name}] Force refresh requested, skipping cache")
 
             # Stream raw data fetch with progress
-            yield (EVENT_STATUS, {"message": "Connecting to API..."})
-            logger.info(f"[Pipeline/{self.backend_name}] Fetching data for opp {opp_id}")
+            yield (EVENT_STATUS, {"message": "Connecting to Connect API..."})
+            logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
 
             visit_dicts = None
             for event in self.backend.stream_raw_visits(
@@ -300,7 +312,8 @@ class AnalysisPipeline:
                 event_type = event[0]
                 if event_type == "cached":
                     visit_dicts = event[1]
-                    yield (EVENT_STATUS, {"message": "Using cached data..."})
+                    logger.info(f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits")
+                    yield (EVENT_STATUS, {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."})
                 elif event_type == "progress":
                     _, bytes_downloaded, total_bytes = event
                     yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
@@ -310,7 +323,8 @@ class AnalysisPipeline:
                     yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data..."})
                 elif event_type == "complete":
                     visit_dicts = event[1]
-                    yield (EVENT_STATUS, {"message": f"Parsed {len(visit_dicts)} visits"})
+                    logger.info(f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits")
+                    yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
 
             if visit_dicts is None:
                 raise RuntimeError("No data received from API")

@@ -736,6 +736,8 @@ class CoverageMapDataView(LoginRequiredMixin, View):
 
     def get(self, request):
         """Return coverage map data as JSON for progressive loading."""
+        import time
+
         try:
             # Log request details to debug duplicate calls
             call_id = request.GET.get("call_id", "unknown")
@@ -771,38 +773,60 @@ class CoverageMapDataView(LoginRequiredMixin, View):
             map_view = CoverageMapView()
             map_view.request = request
 
-            # Get coverage data (DU polygons)
-            logger.info("[Coverage Map Data API] Step 1/5: Fetching delivery unit polygons from CommCare HQ...")
+            # =========================================================================
+            # STEP 1: CommCare HQ - Fetch DU polygons (always fresh, no cache)
+            # =========================================================================
+            logger.info("[Coverage Map Data API] Step 1/6: CommCare HQ - Fetching delivery unit polygons...")
+            step1_start = time.time()
             coverage = map_view.get_coverage_data()
+            step1_duration = time.time() - step1_start
             logger.info(
-                f"[Coverage Map Data API] Loaded {len(coverage.delivery_units)} DUs, "
-                f"{len(coverage.service_areas)} service areas"
+                f"[Coverage Map Data API] Step 1/6 Complete ({step1_duration:.1f}s): "
+                f"Loaded {len(coverage.delivery_units)} DUs, {len(coverage.service_areas)} service areas"
             )
 
-            # Get analysis config
+            # =========================================================================
+            # STEP 2: Select analysis config
+            # =========================================================================
             config = map_view.get_analysis_config()
             if not config:
                 from commcare_connect.coverage.analysis import COVERAGE_BASE_CONFIG
 
                 config = COVERAGE_BASE_CONFIG
 
-            logger.info(f"[Coverage Map Data API] Step 2/5: Using analysis config with {len(config.fields)} fields")
+            logger.info(f"[Coverage Map Data API] Step 2/6: Using config with {len(config.fields)} fields")
 
-            # Get enriched visits (this is the long step)
-            logger.info(
-                "[Coverage Map Data API] Step 3/5: Loading visit data from Connect (this may take 30-60 seconds)..."
-            )
+            # =========================================================================
+            # STEP 3: Connect - Check cache or download visits
+            # =========================================================================
+            logger.info("[Coverage Map Data API] Step 3/6: Connect - Checking cache / downloading visits...")
+            step3_start = time.time()
             visit_rows, field_metadata = map_view.get_enriched_visits(config, coverage)
-            logger.info(f"[Coverage Map Data API] Loaded {len(visit_rows)} visits from Connect")
+            step3_duration = time.time() - step3_start
+            logger.info(
+                f"[Coverage Map Data API] Step 3/6 Complete ({step3_duration:.1f}s): "
+                f"Loaded {len(visit_rows)} visits"
+            )
 
-            # Populate coverage with visits
-            logger.info("[Coverage Map Data API] Step 4/5: Processing geographic data and generating map layers...")
+            # =========================================================================
+            # STEP 4: Process visits into coverage data structure
+            # =========================================================================
+            logger.info("[Coverage Map Data API] Step 4/6: Processing visits into coverage structure...")
+            step4_start = time.time()
             map_view.populate_coverage_visits(coverage, visit_rows)
+            step4_duration = time.time() - step4_start
+            logger.info(f"[Coverage Map Data API] Step 4/6 Complete ({step4_duration:.1f}s)")
+
+            # =========================================================================
+            # STEP 5: Build GeoJSON layers
+            # =========================================================================
+            logger.info("[Coverage Map Data API] Step 5/6: Building GeoJSON map layers...")
+            step5_start = time.time()
 
             # Generate FLW colors
             flw_colors = generate_flw_colors(coverage.flws)
 
-            # Build mapping: commcare_userid → username from already-fetched visit_rows
+            # Build mapping: commcare_userid -> username from already-fetched visit_rows
             commcare_to_username = {}
             for visit in visit_rows:
                 if visit.commcare_userid and visit.username:
@@ -828,7 +852,18 @@ class CoverageMapDataView(LoginRequiredMixin, View):
                 for flw_id, flw in coverage.flws.items()
             ]
 
-            # Prepare response data
+            step5_duration = time.time() - step5_start
+            logger.info(f"[Coverage Map Data API] Step 5/6 Complete ({step5_duration:.1f}s)")
+
+            # =========================================================================
+            # STEP 6: Return response
+            # =========================================================================
+            total_duration = step1_duration + step3_duration + step4_duration + step5_duration
+            logger.info(
+                f"[Coverage Map Data API] Step 6/6: Complete! Total: {total_duration:.1f}s "
+                f"(CommCare: {step1_duration:.1f}s, Connect: {step3_duration:.1f}s)"
+            )
+
             response_data = {
                 "success": True,
                 "delivery_units_geojson": delivery_units_geojson,
@@ -839,10 +874,6 @@ class CoverageMapDataView(LoginRequiredMixin, View):
                 "computed_field_metadata": field_metadata,
             }
 
-            logger.info(
-                f"[Coverage Map Data API] Step 5/5: Complete! "
-                f"Returning {len(coverage.delivery_units)} DUs, {len(visit_rows)} visits"
-            )
             return JsonResponse(response_data)
 
         except Exception as e:
