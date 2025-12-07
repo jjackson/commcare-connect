@@ -1475,6 +1475,7 @@ class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailVie
                 "opportunity": opportunity,
                 "form": self.get_form(),
                 "is_service_delivery": invoice.service_delivery,
+                "invoice_status": invoice.status,
                 "path": [
                     {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
                     {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
@@ -1529,7 +1530,10 @@ class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailVie
 @require_POST
 def submit_invoice(request, org_slug, opp_id):
     if not (request.opportunity.managed and request.org_membership):
-        return redirect("opportunity:detail", org_slug, opp_id)
+        return HttpResponse(
+            status=302,
+            headers={"HX-Redirect": reverse("opportunity:detail", args=[org_slug, opp_id])},
+        )
 
     invoice_id = request.POST.get("invoice_id")
     invoice = get_object_or_404(PaymentInvoice, opportunity=request.opportunity, pk=invoice_id)
@@ -1541,8 +1545,11 @@ def submit_invoice(request, org_slug, opp_id):
     messages.success(request, _("Invoice %(invoice_number)s submitted for approval.") % {
         "invoice_number": invoice.invoice_number
     })
-    return redirect("opportunity:invoice_list", org_slug, opp_id)
 
+    return HttpResponse(
+        status=204,
+        headers={"HX-Redirect": reverse("opportunity:invoice_list", args=[org_slug, opp_id])},
+    )
 
 @org_member_required
 @opportunity_required
