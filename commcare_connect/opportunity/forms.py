@@ -1341,8 +1341,13 @@ class PaymentInvoiceForm(forms.ModelForm):
         self.status = kwargs.pop("status", InvoiceStatus.PENDING)
         super().__init__(*args, **kwargs)
         if self.read_only:
+            self.fields["status"] = forms.CharField(required=False, label="Invoice Status")
             for field in self.fields.values():
                 field.widget.attrs["readonly"] = "readonly"
+
+        if self.instance.pk:
+            self.status = self.instance.status
+            self.fields["status"].initial = self.instance.get_status_display()
 
         self.fields["usd_currency"].widget.attrs.update(
             {
@@ -1371,6 +1376,7 @@ class PaymentInvoiceForm(forms.ModelForm):
                 ),
                 Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
                 Field("invoice_number"),
+                Field("status", label="Invoice Status"),
                 Field(
                     "usd_currency",
                     css_class=CHECKBOX_CLASS,
@@ -1483,15 +1489,21 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         self.invoice_type = kwargs.pop("invoice_type", PaymentInvoice.InvoiceType.service_delivery)
         self.read_only = kwargs.pop("read_only", False)
         self.line_items_table = kwargs.pop("line_items_table", None)
+        self.status = kwargs.pop("status", InvoiceStatus.PENDING)
 
         super().__init__(*args, **kwargs)
         if self.read_only:
+            self.fields["status"] = forms.CharField(required=False, label="Invoice Status")
             for field in self.fields.values():
                 field.widget.attrs["readonly"] = "readonly"
 
         if not self.instance.pk:
             self.fields["invoice_number"].initial = generate_invoice_number()
             self.fields["date"].initial = str(datetime.date.today())
+        else:
+            self.status = self.instance.status
+            self.fields["status"].initial = self.instance.get_status_display()
+
 
         if self.is_service_delivery:
             self.fields["amount"].label = _("Amount (Local Currency)")
@@ -1543,6 +1555,8 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
 
         if self.is_service_delivery:
             first_row.append(Field("title"))
+        if self.read_only:
+            first_row.append(Field("status", label="Invoice Status"))
 
         second_row = [Field("date", **{"x-ref": "date", "x-on:change": "convert()"})]
         if self.is_service_delivery:
@@ -1666,6 +1680,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         instance.amount = self.cleaned_data["amount"]
         instance.exchange_rate = self.cleaned_data.get("exchange_rate")
         instance.service_delivery = self.invoice_type == PaymentInvoice.InvoiceType.service_delivery
+        instance.status = self.status
 
         if commit:
             instance.save()
