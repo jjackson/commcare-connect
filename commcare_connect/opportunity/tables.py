@@ -424,12 +424,15 @@ class PaymentInvoiceTable(OpportunityContextTable):
             invoice_approve_url = reverse("opportunity:invoice_approve", args=[self.org_slug, self.opportunity.id])
             disabled = "disabled" if getattr(record, "payment", None) else ""
             pay_button = f"""
-                <form method="POST" action="{invoice_approve_url}" class="inline">
-                    <input type="hidden" name="csrfmiddlewaretoken" value="{self.csrf_token}">
-                    <input type="hidden" name="pk" value="{record.pk}">
-                    <button type="submit" class="button button-md outline-style" {disabled}>
-                    {_("Pay")}</button>
-                </form>
+                <button
+                    hx-post="{invoice_approve_url}"
+                    hx-vals='{{"pk": "{record.pk}"}}'
+                    hx-headers='{{"X-CSRFToken": "{self.csrf_token}"}}'
+                    hx-target="body"
+                    class="button button-md outline-style"
+                    {disabled}>
+                    {_("Pay")}
+                </button>
             """  # noqa: E501
         return mark_safe(f'<div class="flex gap-2">{review_button}{pay_button}</div>')
 
