@@ -872,6 +872,7 @@ class CoverageMapDataView(LoginRequiredMixin, View):
                 "service_area_list": sorted(list(coverage.service_areas.keys())),
                 "service_points_count": len(visit_rows),
                 "computed_field_metadata": field_metadata,
+                "from_cache": False,  # TODO: Track cache hits when SSE is implemented
             }
 
             return JsonResponse(response_data)
