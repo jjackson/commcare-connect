@@ -1428,7 +1428,6 @@ class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailVie
             PaymentInvoice,
             id=self.kwargs.get("pk"),
             opportunity_id=opportunity.id,
-            opportunity__organization=self.request.org,
         )
 
     def get_context_data(self, **kwargs):
