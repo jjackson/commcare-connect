@@ -889,7 +889,7 @@ class TestInvoiceReviewView:
         assert path[0]["title"] == "Opportunities"
         assert path[1]["title"] == opportunity.name
         assert path[2]["title"] == "Invoices"
-        assert path[3]["title"] == "Review Invoice"
+        assert path[3]["title"] == "Review Service Delivery Invoice"
 
     def test_invoice_not_found(self, client, setup_invoice):
         opportunity = setup_invoice["opportunity"]
@@ -927,18 +927,25 @@ class TestInvoiceReviewView:
         invoice = setup_invoice["invoice"]
         opportunity = setup_invoice["opportunity"]
         user = setup_invoice["user"]
+        url = reverse(
+            "opportunity:invoice_review",
+            args=(opportunity.organization.slug, opportunity.id, invoice.pk),
+        )
+        client.force_login(user)
 
-        with override_switch(AUTOMATED_INVOICES, active=True):
-            client.force_login(user)
-            url = reverse(
-                "opportunity:invoice_review",
-                args=(opportunity.organization.slug, opportunity.id, invoice.pk),
-            )
-            response = client.get(url)
+        def assert_readonly_form(response):
             form = response.context["form"]
             assert form.read_only is True
             for field_name, field in form.fields.items():
                 assert field.widget.attrs.get("readonly") == "readonly", f"Field {field_name} should be readonly"
+
+        with override_switch(AUTOMATED_INVOICES, active=True):
+            response = client.get(url)
+            assert_readonly_form(response)
+
+        with override_switch(AUTOMATED_INVOICES, active=False):
+            response = client.get(url)
+            assert_readonly_form(response)
 
     def test_custom_invoice_no_line_items(self, client, setup_invoice):
         opportunity = setup_invoice["opportunity"]
