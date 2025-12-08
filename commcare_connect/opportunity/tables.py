@@ -2,6 +2,7 @@ import itertools
 from urllib.parse import urlencode
 
 import django_tables2 as tables
+import waffle
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -10,6 +11,7 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext as _
 from django_tables2 import columns
 
+from commcare_connect.flags.switch_names import INVOICE_REVIEW
 from commcare_connect.opportunity.models import (
     CatchmentArea,
     CompletedWork,
@@ -417,14 +419,16 @@ class PaymentInvoiceTable(OpportunityContextTable):
         return
 
     def render_actions(self, record):
-        invoice_review_url = reverse(
-            "opportunity:invoice_review", args=[self.org_slug, self.opportunity.id, record.pk]
-        )
-        review_button = (
-            f'<a href="{invoice_review_url}" '
-            f'class="button button-md outline-style !inline-flex justify-center">'
-            f'{_("Review")}</a>'
-        )
+        review_button = ""
+        if waffle.switch_is_active(INVOICE_REVIEW):
+            invoice_review_url = reverse(
+                "opportunity:invoice_review", args=[self.org_slug, self.opportunity.id, record.pk]
+            )
+            review_button = (
+                f'<a href="{invoice_review_url}" '
+                f'class="button button-md outline-style !inline-flex justify-center">'
+                f'{_("Review")}</a>'
+            )
         pay_button = ""
         if self.is_pm:
             invoice_approve_url = reverse("opportunity:invoice_approve", args=[self.org_slug, self.opportunity.id])

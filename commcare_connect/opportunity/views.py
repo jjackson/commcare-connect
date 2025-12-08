@@ -54,7 +54,7 @@ from django_tables2.export import TableExport
 from geopy import distance
 
 from commcare_connect.connect_id_client import fetch_users
-from commcare_connect.flags.switch_names import AUTOMATED_INVOICES
+from commcare_connect.flags.switch_names import AUTOMATED_INVOICES, INVOICE_REVIEW
 from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.api.serializers import remove_opportunity_access_cache
 from commcare_connect.opportunity.app_xml import AppNoBuildException
@@ -1454,6 +1454,8 @@ class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailVie
     template_name = "opportunity/invoice_detail.html"
 
     def get_object(self, queryset=None):
+        if not waffle.switch_is_active(INVOICE_REVIEW):
+            raise Http404("Invoice review feature is not available")
         opportunity = self.get_opportunity()
         return get_object_or_404(
             PaymentInvoice,
