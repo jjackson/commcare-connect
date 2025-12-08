@@ -12,6 +12,7 @@ from django.db.models import F, Min, Q, Sum, TextChoices
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.timezone import now
+from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 from waffle import switch_is_active
 
@@ -79,18 +80,27 @@ class OpportunityUserInviteForm(forms.Form):
         )
         self.fields["users"] = forms.CharField(
             widget=forms.Textarea,
-            required=False,
-            help_text="Enter the phone numbers of the users you want to add to this opportunity, one on each line.",
+            required=True,
+            help_text=_(
+                "Enter the phone numbers of the users you want to add to this opportunity with the"
+                " country code, one on each line."
+            ),
         )
 
     def clean_users(self):
         user_data = self.cleaned_data["users"]
 
         if user_data and self.opportunity and not self.opportunity.is_setup_complete:
-            raise ValidationError("Please finish setting up the opportunity before inviting users.")
+            raise ValidationError(gettext("Please finish setting up the opportunity before inviting users."))
 
-        split_users = [line.strip() for line in user_data.splitlines() if line.strip()]
-        return split_users
+        user_numbers = [line.strip() for line in user_data.splitlines() if line.strip()]
+        for user_number in user_numbers:
+            if not user_number.startswith("+") or not user_number[1:].isdigit():
+                raise ValidationError(
+                    gettext("Phone numbers must contain only digits and include the country code starting with '+'")
+                )
+
+        return user_numbers
 
 
 class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
@@ -109,6 +119,8 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.opportunity = self.instance
+
+        self.fields["users"].required = False
 
         layout_fields = [
             Row(
@@ -171,14 +183,29 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             layout_fields.append(
                 Row(
                     HTML(
-                        f"""
-                        <div class='col-span-2'>
-                            <h6 class='title-sm'>{_("Manage Credentials")}</h6>
-                            <span class='hint'>
-                                {_("Configure credential requirements for learning and delivery.")}
-                            </span>
-                        </div>
-                    """
+                        format_html(
+                            """
+                            <div class='col-span-2'>
+                                <h6 class='title-sm'>{}</h6>
+                                <span class='hint'>
+                                    {}
+                                </span>
+                            </div>
+                            """,
+                            _("Manage Credentials"),
+                            format_html(
+                                _(
+                                    "Configure credential requirements for learning and delivery. For more "
+                                    "information, please refer to the {link_start}following documentation{link_end}."
+                                ),
+                                link_start=format_html(
+                                    '<a href="{}" target="_blank" class="text-blue-600 hover:underline">',
+                                    "https://dimagi.atlassian.net/wiki/spaces/connectpublic/"
+                                    "pages/3383132164/Managing+Credentials",
+                                ),
+                                link_end=format_html("</a>"),
+                            ),
+                        )
                     ),
                     Column(
                         Field("learn_level"),
