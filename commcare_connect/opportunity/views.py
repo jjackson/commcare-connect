@@ -1542,14 +1542,15 @@ def submit_invoice(request, org_slug, opp_id):
 
     invoice.status = InvoiceStatus.SUBMITTED
     invoice.save()
-    messages.success(request, _("Invoice %(invoice_number)s submitted for approval.") % {
-        "invoice_number": invoice.invoice_number
-    })
+    messages.success(
+        request, _("Invoice %(invoice_number)s submitted for approval.") % {"invoice_number": invoice.invoice_number}
+    )
 
     return HttpResponse(
         status=204,
         headers={"HX-Redirect": reverse("opportunity:invoice_list", args=[org_slug, opp_id])},
     )
+
 
 @org_member_required
 @opportunity_required
@@ -1563,6 +1564,8 @@ def invoice_approve(request, org_slug, opp_id):
     paid_invoice_ids = []
     payments = []
     for inv in invoices:
+        if inv.status != InvoiceStatus.SUBMITTED:
+            return HttpResponseBadRequest(_("Only submitted invoice can be approved."))
         paid_invoice_ids.append(inv.id)
         payments.append(
             Payment(
@@ -1574,6 +1577,7 @@ def invoice_approve(request, org_slug, opp_id):
         )
         inv.status = InvoiceStatus.APPROVED
         inv.save()
+
     Payment.objects.bulk_create(payments)
 
     transaction.on_commit(partial(send_invoice_paid_mail.delay, request.opportunity.id, paid_invoice_ids))
