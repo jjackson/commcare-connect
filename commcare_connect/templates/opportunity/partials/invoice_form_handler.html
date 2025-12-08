@@ -79,10 +79,6 @@
           }
           return;
         }
-        if (this.isReadOnly && !this.invoiceId) {
-            alert("Invoice ID is missing. Please select invoice again.");
-            return;
-        }
 
         const url = new URL('{% url "opportunity:download_invoice_line_items" org_slug=request.org.slug opp_id=opportunity.id %}', window.location.origin);
         url.searchParams.set('start_date', this.startDate);
