@@ -12,7 +12,7 @@ from django.utils.timezone import now
 from waffle.testutils import override_switch
 
 from commcare_connect.connect_id_client.models import ConnectIdUser
-from commcare_connect.flags.switch_names import AUTOMATED_INVOICES
+from commcare_connect.flags.switch_names import AUTOMATED_INVOICES, INVOICE_REVIEW
 from commcare_connect.opportunity.forms import AutomatedPaymentInvoiceForm, PaymentInvoiceForm
 from commcare_connect.opportunity.helpers import OpportunityData, TieredQueryset
 from commcare_connect.opportunity.models import (
@@ -867,6 +867,22 @@ class TestInvoiceReviewView:
             "user": org_user_member,
         }
 
+    def test_switch_not_active(self, client, setup_invoice):
+        invoice = setup_invoice["invoice"]
+        opportunity = setup_invoice["opportunity"]
+        user = setup_invoice["user"]
+
+        client.force_login(user)
+        url = reverse(
+            "opportunity:invoice_review",
+            args=(opportunity.organization.slug, opportunity.id, invoice.pk),
+        )
+        with override_switch(INVOICE_REVIEW, active=False):
+            response = client.get(url)
+        assert response.status_code == 404
+        assert b"Invoice review feature is not available" in response.content
+
+    @override_switch(INVOICE_REVIEW, active=True)
     def test_get_invoice_review_view_success(self, client, setup_invoice):
         invoice = setup_invoice["invoice"]
         opportunity = setup_invoice["opportunity"]
@@ -891,6 +907,7 @@ class TestInvoiceReviewView:
         assert path[2]["title"] == "Invoices"
         assert path[3]["title"] == "Review Service Delivery Invoice"
 
+    @override_switch(INVOICE_REVIEW, active=True)
     def test_invoice_not_found(self, client, setup_invoice):
         opportunity = setup_invoice["opportunity"]
         user = setup_invoice["user"]
@@ -903,6 +920,7 @@ class TestInvoiceReviewView:
         response = client.get(url)
         assert response.status_code == 404
 
+    @override_switch(INVOICE_REVIEW, active=True)
     def test_invoice_wrong_opportunity(self, client, setup_invoice, organization):
         invoice = setup_invoice["invoice"]
         user = setup_invoice["user"]
@@ -923,6 +941,7 @@ class TestInvoiceReviewView:
 
         assert response.status_code == 404
 
+    @override_switch(INVOICE_REVIEW, active=True)
     def test_form_is_readonly(self, client, setup_invoice):
         invoice = setup_invoice["invoice"]
         opportunity = setup_invoice["opportunity"]
@@ -947,6 +966,7 @@ class TestInvoiceReviewView:
             response = client.get(url)
             assert_readonly_form(response)
 
+    @override_switch(INVOICE_REVIEW, active=True)
     def test_custom_invoice_no_line_items(self, client, setup_invoice):
         opportunity = setup_invoice["opportunity"]
         user = setup_invoice["user"]
@@ -969,6 +989,7 @@ class TestInvoiceReviewView:
             form = response.context["form"]
             assert form.line_items_table is None
 
+    @override_switch(INVOICE_REVIEW, active=True)
     def test_unauthorized_user_cannot_access(self, client, setup_invoice):
         invoice = setup_invoice["invoice"]
         opportunity = setup_invoice["opportunity"]
@@ -984,6 +1005,7 @@ class TestInvoiceReviewView:
         # Should redirect (permission denied) or return 403/404
         assert response.status_code in [302, 403, 404]
 
+    @override_switch(INVOICE_REVIEW, active=True)
     def test_legacy_form_when_switch_inactive(self, client, setup_invoice):
         invoice = setup_invoice["invoice"]
         opportunity = setup_invoice["opportunity"]
@@ -999,6 +1021,7 @@ class TestInvoiceReviewView:
             form = response.context["form"]
             assert isinstance(form, PaymentInvoiceForm)
 
+    @override_switch(INVOICE_REVIEW, active=True)
     def test_automated_form_when_switch_active(self, client, setup_invoice):
         invoice = setup_invoice["invoice"]
         opportunity = setup_invoice["opportunity"]
