@@ -14,7 +14,8 @@ from config import celery_app
 logger = logging.getLogger(__name__)
 
 
-def update_user_analytics_data():
+@celery_app.task()
+def sync_user_analytics_data():
     users = User.objects.filter(username__isnull=False, email__isnull=True, is_active=True).values_list(
         "id", "username"
     )
@@ -127,8 +128,3 @@ def update_user_analytics_data():
     )
 
     logger.info(f"Updated UserAnalyticsData for {len(result)} users.")
-
-
-@celery_app.task()
-def sync_user_analytics_data():
-    update_user_analytics_data()
