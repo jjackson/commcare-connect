@@ -2768,7 +2768,10 @@ def download_invoice_line_items(request, org_slug, opp_id):
     start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
     end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
     if invoice_id:
-        deliveries = CompletedWork.objects.filter(invoice_id=invoice_id)
+        deliveries = CompletedWork.objects.filter(
+            invoice_id=invoice_id,
+            opportunity_access__opportunity=request.opportunity,
+        )
     else:
         deliveries = get_uninvoiced_completed_works_qs(request.opportunity, start_date, end_date)
 
