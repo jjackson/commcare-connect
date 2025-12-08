@@ -1728,7 +1728,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
                 <div id="download-line-items-wrapper" x-cloak x-show="showDownloadButton" class="my-4">
                     <a type="button"
                     class="button button-md outline-style"
-                    :href="downloadLineItemsUrl"
+                    :href="downloadLineItemsUrl()"
                     target="_blank"
                     >
                         <i class="fa-solid fa-download mr-2"></i>
