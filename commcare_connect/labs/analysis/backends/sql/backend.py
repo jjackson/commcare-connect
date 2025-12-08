@@ -445,8 +445,31 @@ class SQLBackend:
         visit_count: int,
         cache_manager: SQLCacheManager,
     ) -> FLWAnalysisResult:
-        """Process and cache FLW-level aggregation."""
-        logger.info("[SQL] Executing SQL aggregation query")
+        """
+        Process and cache FLW-level aggregation.
+
+        Like Python/Redis backend, we ALWAYS cache visit-level first,
+        then aggregate to FLW. This allows visit-level cache to be
+        reused by coverage map and other visit-level consumers.
+        """
+        # Step 1: Extract and cache visit-level data first (for cache sharing)
+        logger.info("[SQL] Step 1: Extracting visit-level data for cache")
+        visit_data, computed_field_names = execute_visit_extraction(config, opportunity_id)
+
+        # Cache computed visits (so coverage can reuse this)
+        computed_cache_data = [
+            {
+                "visit_id": v.get("visit_id", 0),
+                "username": v.get("username", ""),
+                "computed_fields": {name: v.get(name) for name in computed_field_names},
+            }
+            for v in visit_data
+        ]
+        cache_manager.store_computed_visits(computed_cache_data, visit_count)
+        logger.info(f"[SQL] Cached {len(computed_cache_data)} visit-level rows")
+
+        # Step 2: Execute FLW aggregation query
+        logger.info("[SQL] Step 2: Executing FLW aggregation query")
         flw_data = execute_flw_aggregation(config, opportunity_id)
 
         # Convert to FLWRow objects

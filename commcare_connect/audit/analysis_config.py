@@ -7,27 +7,42 @@ from visit form_json data.
 
 from commcare_connect.labs.analysis import AnalysisPipelineConfig, FieldComputation
 
+# Keys to skip when traversing form_json (metadata, not question data)
+SKIP_KEYS = frozenset({"@xmlns", "@name", "@uiVersion", "@version", "meta", "#type", "attachments"})
 
-def _search_form_for_filename(data: dict, target: str, path: str = "") -> str | None:
-    """Recursively search form_json for a filename, returning the question path."""
+
+def _build_filename_map(data: dict, path: str = "") -> dict[str, str]:
+    """
+    Build a map of all string values to their paths in a single traversal.
+
+    This is O(m) where m = size of form_json tree, done once per visit.
+    Then each image filename lookup is O(1).
+
+    Args:
+        data: Form data dict to traverse
+        path: Current path prefix (for recursion)
+
+    Returns:
+        Dict mapping string values to their question paths
+    """
+    result = {}
     if not isinstance(data, dict):
-        return None
+        return result
 
     for key, value in data.items():
-        if key in ("@xmlns", "@name", "@uiVersion", "@version", "meta", "#type", "attachments"):
+        if key in SKIP_KEYS:
             continue
 
         current_path = f"{path}/{key}" if path else key
 
-        if isinstance(value, str) and value == target:
-            return current_path
+        if isinstance(value, str):
+            # Map this string value to its path
+            result[value] = current_path
+        elif isinstance(value, dict):
+            # Recurse into nested dict
+            result.update(_build_filename_map(value, current_path))
 
-        if isinstance(value, dict):
-            result = _search_form_for_filename(value, target, current_path)
-            if result:
-                return result
-
-    return None
+    return result
 
 
 def extract_images_with_question_ids(visit_data: dict) -> list[dict]:
@@ -36,6 +51,8 @@ def extract_images_with_question_ids(visit_data: dict) -> list[dict]:
 
     This is a custom extractor for FieldComputation - receives the full visit dict
     and extracts the images array enriched with question_ids from form_json.
+
+    Optimized: builds filename->path map in a single traversal, then O(1) lookups.
 
     Args:
         visit_data: Full visit dict with 'form_json' and 'images' fields
@@ -54,16 +71,18 @@ def extract_images_with_question_ids(visit_data: dict) -> list[dict]:
     visit_date = visit_data.get("visit_date") or ""
     entity_name = visit_data.get("entity_name") or "No Entity"
 
-    # Search form_json for question IDs
+    # Build filename->path map in a SINGLE traversal (O(m) where m=tree size)
     form_data = form_json.get("form", form_json)
+    filename_map = _build_filename_map(form_data)
 
+    # Now each lookup is O(1) instead of O(m)
     result = []
     for image in images:
         if not isinstance(image, dict):
             continue
 
         filename = image.get("name", "")
-        question_id = _search_form_for_filename(form_data, filename) if filename else None
+        question_id = filename_map.get(filename) if filename else None
 
         result.append(
             {

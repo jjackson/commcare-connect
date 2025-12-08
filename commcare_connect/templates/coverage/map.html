@@ -5,7 +5,24 @@
 
 {% block content %}
 <div class="container mx-auto p-6" x-data="coverageMap()">
-  <h1 class="text-3xl font-bold mb-6">Coverage Map</h1>
+  <!-- Header -->
+  <div class="flex justify-between items-center mb-6">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900">Coverage Map</h1>
+      <p class="text-gray-600 mt-1">Delivery unit and service point visualization</p>
+    </div>
+    <div class="flex items-center gap-3" x-show="!loading && !loadError" x-cloak>
+      <template x-if="fromCache">
+        <span class="px-3 py-1 bg-green-100 text-green-800 rounded-md text-sm font-medium">
+          <i class="fa-solid fa-clock mr-1"></i>Cached
+        </span>
+      </template>
+      <button @click="refreshData()" class="button button-sm outline-style">
+        <i class="fa-solid fa-arrows-rotate mr-1"></i>
+        Refresh
+      </button>
+    </div>
+  </div>
 
   {% if error %}
   <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
@@ -31,32 +48,65 @@
   </div>
   {% else %}
 
-  <!-- Loading Indicator -->
-  <div class="mb-4 p-6 bg-blue-50 border border-blue-200 rounded-lg" x-show="loading" x-cloak>
+  <!-- Loading Indicator with Step Progress -->
+  <div class="mb-6 p-6 bg-blue-50 border border-blue-200 rounded-lg" x-show="loading" x-cloak>
     <div class="flex items-start gap-4">
       <i class="fa-solid fa-spinner fa-spin text-blue-600 text-2xl mt-1"></i>
       <div class="flex-1">
         <h3 class="text-lg font-semibold text-blue-900 mb-2">Loading Coverage Map Data</h3>
-        <div class="space-y-1 text-sm text-blue-800">
-          <div x-show="loadingStep >= 1" class="flex items-center gap-2">
-            <i class="fa-solid" :class="loadingStep > 1 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
-            <span>Initializing map data request...</span>
+        <div class="space-y-1 text-sm">
+          <!-- Step 1: Checking cache -->
+          <div class="flex items-center gap-2" :class="loadingStep >= 1 ? 'text-blue-800' : 'text-gray-400'">
+            <i class="fa-solid" :class="{
+              'fa-check text-green-600': loadingStep > 1,
+              'fa-spinner fa-spin text-blue-600': loadingStep === 1,
+              'fa-circle text-gray-300': loadingStep < 1
+            }"></i>
+            <span>Checking cache...</span>
           </div>
-          <div x-show="loadingStep >= 2" class="flex items-center gap-2">
-            <i class="fa-solid" :class="loadingStep > 2 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
-            <span>Fetching data from CommCare HQ and Connect (this may take a while)...</span>
+          <!-- Step 2: Fetching CommCare data -->
+          <div class="flex items-center gap-2" :class="loadingStep >= 2 ? 'text-blue-800' : 'text-gray-400'">
+            <i class="fa-solid" :class="{
+              'fa-check text-green-600': loadingStep > 2,
+              'fa-spinner fa-spin text-blue-600': loadingStep === 2,
+              'fa-circle text-gray-300': loadingStep < 2
+            }"></i>
+            <span x-text="commcareProgress || 'Fetching CommCare HQ data...'"></span>
           </div>
-          <div x-show="loadingStep >= 3" class="flex items-center gap-2">
-            <i class="fa-solid" :class="loadingStep > 3 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
-            <span>Data received, processing...</span>
+          <!-- Step 3: Fetching Connect data -->
+          <div class="flex items-center gap-2" :class="loadingStep >= 3 ? 'text-blue-800' : 'text-gray-400'">
+            <i class="fa-solid" :class="{
+              'fa-check text-green-600': loadingStep > 3,
+              'fa-spinner fa-spin text-blue-600': loadingStep === 3,
+              'fa-circle text-gray-300': loadingStep < 3
+            }"></i>
+            <span x-text="connectProgress || 'Fetching Connect data (this may take a while)...'"></span>
           </div>
-          <div x-show="loadingStep >= 4" class="flex items-center gap-2">
-            <i class="fa-solid" :class="loadingStep > 4 ? 'fa-check text-green-600' : 'fa-spinner fa-spin text-blue-600'"></i>
+          <!-- Step 4: Processing -->
+          <div class="flex items-center gap-2" :class="loadingStep >= 4 ? 'text-blue-800' : 'text-gray-400'">
+            <i class="fa-solid" :class="{
+              'fa-check text-green-600': loadingStep > 4,
+              'fa-spinner fa-spin text-blue-600': loadingStep === 4,
+              'fa-circle text-gray-300': loadingStep < 4
+            }"></i>
+            <span x-text="processingMessage || 'Processing map data...'"></span>
+          </div>
+          <!-- Step 5: Building layers -->
+          <div class="flex items-center gap-2" :class="loadingStep >= 5 ? 'text-blue-800' : 'text-gray-400'">
+            <i class="fa-solid" :class="{
+              'fa-check text-green-600': loadingStep > 5,
+              'fa-spinner fa-spin text-blue-600': loadingStep === 5,
+              'fa-circle text-gray-300': loadingStep < 5
+            }"></i>
             <span>Building map layers...</span>
           </div>
-          <div x-show="loadingStep >= 5" class="flex items-center gap-2">
-            <i class="fa-solid fa-check text-green-600"></i>
-            <span>Map ready!</span>
+          <!-- Step 6: Complete -->
+          <div class="flex items-center gap-2" :class="loadingStep >= 6 ? 'text-blue-800' : 'text-gray-400'">
+            <i class="fa-solid" :class="{
+              'fa-check text-green-600': loadingStep >= 6,
+              'fa-circle text-gray-300': loadingStep < 6
+            }"></i>
+            <span>Complete!</span>
           </div>
         </div>
       </div>
@@ -64,16 +114,16 @@
   </div>
 
   <!-- Error Display -->
-  <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg" x-show="loadError" x-cloak>
+  <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg" x-show="loadError" x-cloak>
     <div class="flex items-center justify-between">
       <div class="flex items-center">
         <i class="fa-solid fa-circle-exclamation text-red-600 mr-3"></i>
         <div>
-          <strong class="text-red-800">Error Loading Map Data:</strong>
+          <strong class="text-red-800">Error:</strong>
           <span class="ml-2 text-red-700" x-text="loadError"></span>
         </div>
       </div>
-      <button @click="loadMapData()"
+      <button @click="streamApiUrl ? loadDataWithSSE() : loadMapData()"
               class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium">
         <i class="fa-solid fa-rotate mr-1"></i>Retry
       </button>
@@ -81,7 +131,7 @@
   </div>
 
   <!-- Control Panel -->
-  <div class="bg-white shadow-sm rounded-lg p-4 mb-4" x-show="!loading && !loadError" x-cloak>
+  <div class="bg-white shadow-sm rounded-lg p-4 mb-6" x-show="!loading && !loadError" x-cloak>
     <!-- Top Row: Layers, Service Area, Status -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
 
@@ -212,6 +262,11 @@ function coverageMap() {
     loading: true,
     loadingStep: 0,
     loadError: null,
+    receivedEvents: false,
+    commcareProgress: '',
+    connectProgress: '',
+    processingMessage: '',
+    fromCache: false,
 
     // State
     showDeliveryUnits: true,
@@ -236,19 +291,118 @@ function coverageMap() {
     serviceAreaList: [],
     servicePointsCount: 0,
 
-    // API endpoint
+    // API endpoints
     mapDataUrl: '{{ map_data_url }}',
+    streamApiUrl: '{{ stream_api_url|default:"" }}',
+
+    // EventSource reference
+    eventSource: null,
 
     // Initialize
     init() {
       console.log(`[Coverage Map] init() called at ${new Date().toISOString()}`);
       console.log(`[Coverage Map] window.location.search = ${window.location.search}`);
       console.log(`[Coverage Map] mapDataUrl = ${this.mapDataUrl}`);
-      console.trace('[Coverage Map] init() stack trace');
-      this.loadMapData();
+      console.log(`[Coverage Map] streamApiUrl = ${this.streamApiUrl}`);
+      if (this.streamApiUrl) {
+        this.loadDataWithSSE();
+      } else {
+        this.loadMapData();
+      }
     },
 
-    // Load map data asynchronously
+    // Refresh data (force cache bypass)
+    refreshData() {
+      const url = new URL(window.location.href);
+      url.searchParams.set('refresh', '1');
+      window.location.href = url.toString();
+    },
+
+    // Determine loading step from server message
+    updateStepFromMessage(message) {
+      const msg = message.toLowerCase();
+      if (msg.includes('checking cache') || msg.includes('cache hit') || msg.includes('cached data')) {
+        this.loadingStep = 1;
+      } else if (msg.includes('commcare') || msg.includes('hq')) {
+        this.loadingStep = 2;
+        this.commcareProgress = message;
+      } else if (msg.includes('connect') && (msg.includes('fetching') || msg.includes('downloading'))) {
+        this.loadingStep = 3;
+        this.connectProgress = message;
+      } else if (msg.includes('processing') || msg.includes('parsing')) {
+        this.loadingStep = 4;
+        this.processingMessage = message;
+      } else if (msg.includes('building') || msg.includes('layers')) {
+        this.loadingStep = 5;
+      } else if (msg.includes('complete') || msg.includes('ready')) {
+        this.loadingStep = 6;
+      }
+    },
+
+    // Load data using Server-Sent Events for real-time progress
+    loadDataWithSSE() {
+      this.loading = true;
+      this.loadingStep = 0;
+      this.loadError = null;
+      this.receivedEvents = false;
+      this.commcareProgress = '';
+      this.connectProgress = '';
+      this.processingMessage = '';
+
+      // Close any existing connection
+      if (this.eventSource) {
+        this.eventSource.close();
+      }
+
+      // Build URL with query params
+      const url = this.streamApiUrl + window.location.search;
+      console.log('[Coverage Map] Starting SSE connection:', url);
+
+      this.eventSource = new EventSource(url);
+
+      this.eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('[Coverage Map] SSE event:', data);
+          this.receivedEvents = true;
+
+          // Update step based on message content
+          this.updateStepFromMessage(data.message);
+
+          // Check for error
+          if (data.error) {
+            this.loadError = data.error;
+            this.loading = false;
+            this.eventSource.close();
+            return;
+          }
+
+          // Check for completion
+          if (data.complete && data.data) {
+            this.processLoadedData(data.data);
+            this.eventSource.close();
+          }
+        } catch (e) {
+          console.error('[Coverage Map] Error parsing SSE event:', e);
+        }
+      };
+
+      this.eventSource.onerror = (error) => {
+        console.error('[Coverage Map] SSE error:', error);
+        this.eventSource.close();
+
+        // If we haven't received any events, fall back to regular fetch
+        if (!this.receivedEvents) {
+          console.log('[Coverage Map] Falling back to regular fetch');
+          this.loadMapData();
+        } else {
+          this.loadError = 'Connection lost. Please try again.';
+          this.loading = false;
+        }
+      };
+    },
+
+    // Load map data asynchronously (fallback when SSE not available)
     async loadMapData() {
       const callId = Math.random().toString(36).substr(2, 9);
       console.log(`[Coverage Map] loadMapData() called - ID: ${callId}`);
@@ -256,62 +410,82 @@ function coverageMap() {
       this.loading = true;
       this.loadError = null;
       this.loadingStep = 0;
+      this.commcareProgress = '';
+      this.connectProgress = '';
+      this.processingMessage = '';
 
       try {
-        // Step 1: Initializing
+        // Step 1: Checking cache
         this.loadingStep = 1;
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-        // Step 2: Fetching data (this is where most time is spent)
+        // Step 2: Fetching CommCare data
         this.loadingStep = 2;
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Step 3: Fetching Connect data (this is where most time is spent)
+        this.loadingStep = 3;
         console.log(`[Coverage Map] Starting API fetch - ID: ${callId}`);
         const response = await fetch(this.mapDataUrl + window.location.search + `&call_id=${callId}`);
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to load map data');
+          // Check if response is JSON before trying to parse
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to load map data');
+          } else {
+            throw new Error(`Server error (${response.status}): The API may be temporarily unavailable. Please try again.`);
+          }
         }
 
         const data = await response.json();
-
-        // Step 3: Data received, processing
-        this.loadingStep = 3;
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        // Step 4: Building map layers
-        this.loadingStep = 4;
-
-        // Parse GeoJSON data
-        this.duData = JSON.parse(data.delivery_units_geojson);
-        this.pointsData = JSON.parse(data.service_points_geojson);
-        this.flwListColored = data.flw_list_colored || [];
-        this.serviceAreaList = data.service_area_list || [];
-        this.servicePointsCount = data.service_points_count || 0;
-
-        // Initialize selected FLWs (all selected by default)
-        this.selectedFLWs = this.flwListColored.map(flw => flw.id);
-
-        // Step 5: Initialize map and complete
-        this.loadingStep = 5;
-        this.$nextTick(() => {
-          this.loading = false;
-          this.$nextTick(() => {
-            this.initMap();
-            // Force Leaflet to recalculate container size and fit bounds after render
-            setTimeout(() => {
-              if (this.map) {
-                this.map.invalidateSize();
-                this.fitMapToDUs();
-              }
-            }, 100);
-          });
-        });
+        this.processLoadedData(data);
 
       } catch (error) {
         console.error('Failed to load map data:', error);
         this.loadError = error.message || 'Failed to load map data. Please try again.';
         this.loading = false;
       }
+    },
+
+    // Process loaded data and initialize map
+    processLoadedData(data) {
+      // Step 4: Processing data
+      this.loadingStep = 4;
+      this.fromCache = data.from_cache || false;
+
+      // Parse GeoJSON data
+      this.duData = JSON.parse(data.delivery_units_geojson);
+      this.pointsData = JSON.parse(data.service_points_geojson);
+      this.flwListColored = data.flw_list_colored || [];
+      this.serviceAreaList = data.service_area_list || [];
+      this.servicePointsCount = data.service_points_count || 0;
+
+      // Initialize selected FLWs (all selected by default)
+      this.selectedFLWs = this.flwListColored.map(flw => flw.id);
+
+      // Step 5: Building map layers
+      this.loadingStep = 5;
+
+      this.$nextTick(() => {
+        // Step 6: Complete
+        this.loadingStep = 6;
+        this.loading = false;
+
+        this.$nextTick(() => {
+          this.initMap();
+          // Force Leaflet to recalculate container size and fit bounds after render
+          setTimeout(() => {
+            if (this.map) {
+              this.map.invalidateSize();
+              this.fitMapToDUs();
+            }
+          }, 100);
+        });
+      });
+
+      console.log(`[Coverage Map] Loaded ${this.duData.features.length} DUs, ${this.pointsData.features.length} points`);
     },
 
     // Initialize map

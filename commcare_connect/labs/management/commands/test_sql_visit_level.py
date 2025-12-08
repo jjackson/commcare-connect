@@ -13,7 +13,7 @@ import time
 
 from django.core.management.base import BaseCommand
 
-from commcare_connect.coverage.analysis import COVERAGE_BASE_CONFIG, get_coverage_visit_analysis
+from commcare_connect.coverage.analysis import get_coverage_visit_analysis
 from commcare_connect.custom_analysis.chc_nutrition.analysis_config import CHC_NUTRITION_CONFIG
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.integrations.connect.cli import create_cli_request
@@ -155,18 +155,22 @@ class Command(BaseCommand):
         self.stdout.write("-" * 80)
         self.stdout.write("")
 
-        self.stdout.write("Config: COVERAGE_BASE_CONFIG")
-        self.stdout.write(f"  terminal_stage: {COVERAGE_BASE_CONFIG.terminal_stage.value}")
-        self.stdout.write(f"  fields: {len(COVERAGE_BASE_CONFIG.fields)}")
+        # Use the SAME config as Test 1 to verify visit-level cache is shared
+        # This mimics real usage where coverage uses ?config=chc_nutrition
+        self.stdout.write("Config: CHC_NUTRITION_CONFIG (same as Test 1 for cache sharing)")
+        self.stdout.write("  terminal_stage will be overridden to: visit_level")
+        self.stdout.write(f"  fields: {len(CHC_NUTRITION_CONFIG.fields)}")
         self.stdout.write("")
 
         # Use the coverage analysis function (mimics what coverage view does)
+        # This will override terminal_stage to VISIT_LEVEL internally
         self.stdout.write("Running get_coverage_visit_analysis (no DU lookup)...")
+        self.stdout.write("Expected: CACHE HIT since Test 1 should have cached visit-level data")
         start = time.time()
 
         result = get_coverage_visit_analysis(
             request=request,
-            config=COVERAGE_BASE_CONFIG,
+            config=CHC_NUTRITION_CONFIG,  # Use same config as Test 1
             du_lookup=None,  # No enrichment for this test
             use_cache=True,
         )
