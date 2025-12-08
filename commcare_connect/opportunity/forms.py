@@ -1309,6 +1309,9 @@ class PaymentInvoiceForm(forms.ModelForm):
         self.invoice_type = kwargs.pop("invoice_type", PaymentInvoice.InvoiceType.service_delivery)
         self.read_only = kwargs.pop("read_only", False)
         super().__init__(*args, **kwargs)
+        if self.read_only:
+            for field in self.fields.values():
+                field.widget.attrs["readonly"] = "readonly"
 
         self.fields["usd_currency"].widget.attrs.update(
             {
