@@ -259,6 +259,7 @@ class CompletedWorkSerializer(serializers.ModelSerializer):
             "entity_name",
             "reason",
             "flags",
+            "status_modified_date",
         ]
 
     def get_flags(self, obj):
