@@ -1469,6 +1469,8 @@ class WorkerLearnStatusTable(tables.Table):
 
 class LearnModuleTable(tables.Table):
     index = IndexColumn()
+    name = tables.Column(verbose_name=_("Module Name"))
+    description = tables.Column(verbose_name=_("Module Description"))
 
     class Meta:
         model = LearnModule
