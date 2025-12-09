@@ -2,6 +2,7 @@ import datetime
 import logging
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils.timezone import now
 from rest_framework import viewsets
 from rest_framework.generics import RetrieveAPIView, get_object_or_404
@@ -123,7 +124,13 @@ class ConfirmPaymentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, *args, **kwargs):
-        payment = get_object_or_404(Payment, pk=kwargs.get("pk"))
+        payment_query = Payment.objects.filter(
+            pk=kwargs.get("pk"),
+        ).filter(
+            Q(organization__memberships__user=self.request.user) | Q(opportunity_access__user=self.request.user),
+        )
+        payment = get_object_or_404(payment_query)
+
         confirmed_value = self.request.data["confirmed"]
         if confirmed_value == "false":
             confirmed = False
