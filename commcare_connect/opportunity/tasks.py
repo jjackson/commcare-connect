@@ -50,7 +50,11 @@ from commcare_connect.opportunity.models import (
     VisitReviewStatus,
     VisitValidationStatus,
 )
-from commcare_connect.opportunity.utils.completed_work import get_uninvoiced_visit_items, update_status
+from commcare_connect.opportunity.utils.completed_work import (
+    get_uninvoiced_visit_items,
+    link_invoice_to_completed_works,
+    update_status,
+)
 from commcare_connect.opportunity.utils.invoice import (
     generate_invoice_number,
     get_end_date_for_invoice,
@@ -563,3 +567,4 @@ def generate_automated_service_delivery_invoice():
             service_delivery=True,
         )
         payment_invoice.save()
+        link_invoice_to_completed_works(payment_invoice, start_date=start_date, end_date=end_date)
