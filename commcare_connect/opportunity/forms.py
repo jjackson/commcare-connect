@@ -1504,7 +1504,6 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
             self.status = self.instance.status
             self.fields["status"].initial = self.instance.get_status_display()
 
-
         if self.is_service_delivery:
             self.fields["amount"].label = _("Amount (Local Currency)")
             self.fields["amount"].help_text = _("Local currency is determined by the opportunity.")
