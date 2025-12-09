@@ -318,8 +318,12 @@ class ServiceArea:
 class FLW:
     """Field Level Worker stats"""
 
-    id: str  # CommCare user ID
-    name: str
+    # Identity fields
+    commcare_id: str | None = None  # CommCare user ID (from DU owner_id or form.meta.userID)
+    connect_id: str | None = None  # Connect username (from visit.username)
+    display_name: str | None = None  # Human-readable name (from get_flw_names_for_opportunity)
+
+    # Stats and relationships
     service_areas: list[str] = field(default_factory=list)
     assigned_units: int = 0
     completed_units: int = 0
@@ -327,6 +331,16 @@ class FLW:
     dates_active: list[datetime] = field(default_factory=list)
     service_points: list[LocalUserVisit] = field(default_factory=list)
     delivery_units: list[DeliveryUnit] = field(default_factory=list)
+
+    @property
+    def key(self) -> str:
+        """Return commcare_id (the consistent dictionary key for FLWs)"""
+        return self.commcare_id or "unknown"
+
+    @property
+    def name(self) -> str:
+        """Return display name if available, otherwise fall back to IDs"""
+        return self.display_name or self.connect_id or self.commcare_id or "Unknown"
 
     @property
     def completion_rate(self) -> float:

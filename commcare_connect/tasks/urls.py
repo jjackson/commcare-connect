@@ -14,7 +14,8 @@ urlpatterns = [
     path("api/single-create/", views.task_single_create, name="single_create"),  # Single task API
     path("api/<int:task_id>/update/", views.task_update, name="task_update"),  # Task update API
     path("api/<int:task_id>/comment/", views.task_add_comment, name="add_comment"),  # Add comment API
-    path("<int:task_id>/", views.TaskDetailView.as_view(), name="detail"),
+    # Removed TaskDetailView - using TaskCreateEditView as the main interface
+    # path("<int:task_id>/", views.TaskDetailView.as_view(), name="detail"),
     # AI Assistant API
     path("<int:task_id>/ai/initiate/", views.task_initiate_ai, name="ai_initiate"),
     path("<int:task_id>/ai/sessions/", views.task_ai_sessions, name="ai_sessions"),

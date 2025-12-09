@@ -37,7 +37,7 @@
                         <strong>Error:</strong> {{ error }}
                     </p>
                     {% if needs_oauth %}
-                        <a href="{% url 'labs:commcare_initiate' %}" class="button button-sm primary-dark mt-2">
+                        <a href="{% url 'labs:commcare_initiate' %}?next={{ request.get_full_path|urlencode }}" class="button button-sm primary-dark mt-2">
                             <i class="fa-solid fa-lock mr-1"></i>
                             Authorize CommCare Access
                         </a>
