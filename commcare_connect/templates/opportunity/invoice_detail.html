@@ -11,6 +11,9 @@
       {% translate "Review Custom Invoice" %}
     {% endif %}
     <span class="badge badge-sm bg-gray-200 text-gray-700 ml-2">{% translate "Read Only" %}</span>
+    {% if form.instance.payment %}
+      <span class="badge badge-sm bg-gray-200 text-gray-700 ml-2">{% translate "Paid" %}</span>
+    {% endif %}
   </div>
   <div x-data="invoiceFormHandler()">
     {% crispy form %}
