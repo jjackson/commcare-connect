@@ -1327,7 +1327,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         model = PaymentInvoice
         fields = ("amount", "date", "invoice_number", "service_delivery")
         widgets = {
-            "date": forms.DateInput(attrs={"type": "date"}),
+            "date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "amount": forms.NumberInput(attrs={"min": "0"}),
         }
 
@@ -1459,9 +1459,9 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         model = PaymentInvoice
         fields = ("title", "date", "invoice_number", "start_date", "end_date", "notes", "amount", "amount_usd")
         widgets = {
-            "date": forms.DateInput(attrs={"type": "date"}),
-            "start_date": forms.DateInput(attrs={"type": "date"}),
-            "end_date": forms.DateInput(attrs={"type": "date"}),
+            "date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "start_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "end_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "notes": forms.Textarea(
                 attrs={"rows": 3, "placeholder": _("Describe service delivery details, references, or notes...")}
             ),
