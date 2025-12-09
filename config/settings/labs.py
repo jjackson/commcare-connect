@@ -18,9 +18,10 @@ ACCOUNT_ALLOW_REGISTRATION = False
 # Override login URL to labs OAuth
 LOGIN_URL = "/labs/login/"
 
-# Custom authentication (session-based, no DB)
+# Custom authentication (session-based OAuth for users, Django auth for admin)
 AUTHENTICATION_BACKENDS = [
-    "commcare_connect.labs.auth_backend.LabsOAuthBackend",
+    "django.contrib.auth.backends.ModelBackend",  # For admin superuser login
+    "commcare_connect.labs.auth_backend.LabsOAuthBackend",  # For OAuth users
 ]
 
 # Add labs app and custom_analysis
