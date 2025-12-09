@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import httpx
 import sentry_sdk
+import waffle
 from allauth.utils import build_absolute_uri
 from django.conf import settings
 from django.core.cache import cache
@@ -20,6 +21,7 @@ from tablib import Dataset
 from commcare_connect.cache import quickcache
 from commcare_connect.connect_id_client import fetch_users, send_message, send_message_bulk
 from commcare_connect.connect_id_client.models import ConnectIdUser, Message
+from commcare_connect.flags.switch_names import AUTOMATED_INVOICES_MONTHLY
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
 from commcare_connect.opportunity.export import (
     UserVisitExporter,
@@ -538,6 +540,9 @@ def send_invoice_paid_mail(opportunity_id, invoice_ids):
 
 @celery_app.task()
 def generate_automated_service_delivery_invoice():
+    if not waffle.switch_is_active(AUTOMATED_INVOICES_MONTHLY):
+        return
+
     for opportunity in Opportunity.objects.filter(active=True, managed=True):
         start_date = get_start_date_for_invoice(opportunity)
         end_date = get_end_date_for_invoice(start_date)
