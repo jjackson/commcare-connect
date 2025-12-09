@@ -1361,11 +1361,15 @@ def invoice_list(request, org_slug, opp_id):
 
     csrf_token = get_token(request)
 
+    exclude_actions = (
+        ("actions",) if not request.is_opportunity_pm and not waffle.switch_is_active(INVOICE_REVIEW) else ()
+    )
     table = PaymentInvoiceTable(
         queryset,
         org_slug=org_slug,
         opportunity=request.opportunity,
         csrf_token=csrf_token,
+        exclude=exclude_actions,
         highlight_invoice_number=highlight_invoice_number,
         is_pm=request.is_opportunity_pm,
     )
