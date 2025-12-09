@@ -296,7 +296,6 @@ class TestConfirmPaymentView:
         program_manager_org_user_admin: User,
         program_manager_org: Organization,
         api_client: APIClient,
-        opportunity: Opportunity,
     ):
         api_client.force_authenticate(program_manager_org_user_admin)
         payment = Payment.objects.create(amount=10, date_paid=datetime.date.today(), organization=program_manager_org)
