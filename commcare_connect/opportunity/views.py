@@ -1550,6 +1550,7 @@ def invoice_approve(request, org_slug, opp_id):
     Payment.objects.bulk_create(payments)
 
     transaction.on_commit(partial(send_invoice_paid_mail.delay, request.opportunity.id, paid_invoice_ids))
+    messages.success(request, _("Invoice(s) successfully marked as paid."))
     return redirect("opportunity:invoice_list", org_slug, opp_id)
 
 
