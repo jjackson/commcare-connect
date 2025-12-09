@@ -197,6 +197,13 @@ def create_coverage_analysis_config(
 COVERAGE_BASE_CONFIG = AnalysisPipelineConfig(
     grouping_key="username",
     fields=[
+        # CommCare user ID for FLW matching
+        FieldComputation(
+            name="commcare_userid",
+            path="form.meta.userID",
+            aggregation="first",
+            description="CommCare user ID from form metadata",
+        ),
         # Extract CommCare delivery unit name from form JSON
         # This is REQUIRED for coverage enrichment to work
         # NOTE: Named "du_name" not "deliver_unit_name" to avoid shadowing VisitRow field

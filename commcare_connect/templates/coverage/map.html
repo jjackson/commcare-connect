@@ -35,7 +35,7 @@
     </div>
     {% if needs_oauth %}
     <div class="mt-3">
-      <a href="{% url 'labs:commcare_initiate' %}?next={{ request.path }}"
+      <a href="{% url 'labs:commcare_initiate' %}?next={{ request.get_full_path|urlencode }}"
          class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
         <i class="fa-solid fa-key mr-2"></i>
         Authorize CommCare Access
@@ -123,7 +123,7 @@
           <span class="ml-2 text-red-700" x-text="loadError"></span>
         </div>
       </div>
-      <button @click="streamApiUrl ? loadDataWithSSE() : loadMapData()"
+      <button @click="loadDataWithSSE()"
               class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium">
         <i class="fa-solid fa-rotate mr-1"></i>Retry
       </button>
@@ -230,8 +230,8 @@
             <span class="inline-block w-5 h-5 ml-2 rounded border border-gray-400 flex-shrink-0"
                   :style="'background-color: ' + flw.color"></span>
             <span class="ml-2 text-xs text-gray-700 truncate"
-                  :title="flw.name + ' (' + flw.visits + ')'"
-                  x-text="flw.name + ' (' + flw.visits + ')'"></span>
+                  :title="flw.name"
+                  x-text="flw.name"></span>
           </label>
         </template>
       </div>
@@ -291,9 +291,8 @@ function coverageMap() {
     serviceAreaList: [],
     servicePointsCount: 0,
 
-    // API endpoints
-    mapDataUrl: '{{ map_data_url }}',
-    streamApiUrl: '{{ stream_api_url|default:"" }}',
+    // API endpoint
+    streamApiUrl: '{{ stream_api_url }}',
 
     // EventSource reference
     eventSource: null,
@@ -302,13 +301,8 @@ function coverageMap() {
     init() {
       console.log(`[Coverage Map] init() called at ${new Date().toISOString()}`);
       console.log(`[Coverage Map] window.location.search = ${window.location.search}`);
-      console.log(`[Coverage Map] mapDataUrl = ${this.mapDataUrl}`);
       console.log(`[Coverage Map] streamApiUrl = ${this.streamApiUrl}`);
-      if (this.streamApiUrl) {
-        this.loadDataWithSSE();
-      } else {
-        this.loadMapData();
-      }
+      this.loadDataWithSSE();
     },
 
     // Refresh data (force cache bypass)
@@ -390,63 +384,9 @@ function coverageMap() {
       this.eventSource.onerror = (error) => {
         console.error('[Coverage Map] SSE error:', error);
         this.eventSource.close();
-
-        // If we haven't received any events, fall back to regular fetch
-        if (!this.receivedEvents) {
-          console.log('[Coverage Map] Falling back to regular fetch');
-          this.loadMapData();
-        } else {
-          this.loadError = 'Connection lost. Please try again.';
-          this.loading = false;
-        }
-      };
-    },
-
-    // Load map data asynchronously (fallback when SSE not available)
-    async loadMapData() {
-      const callId = Math.random().toString(36).substr(2, 9);
-      console.log(`[Coverage Map] loadMapData() called - ID: ${callId}`);
-
-      this.loading = true;
-      this.loadError = null;
-      this.loadingStep = 0;
-      this.commcareProgress = '';
-      this.connectProgress = '';
-      this.processingMessage = '';
-
-      try {
-        // Step 1: Checking cache
-        this.loadingStep = 1;
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Step 2: Fetching CommCare data
-        this.loadingStep = 2;
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Step 3: Fetching Connect data (this is where most time is spent)
-        this.loadingStep = 3;
-        console.log(`[Coverage Map] Starting API fetch - ID: ${callId}`);
-        const response = await fetch(this.mapDataUrl + window.location.search + `&call_id=${callId}`);
-
-        if (!response.ok) {
-          // Check if response is JSON before trying to parse
-          const contentType = response.headers.get('content-type');
-          if (contentType && contentType.includes('application/json')) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to load map data');
-          } else {
-            throw new Error(`Server error (${response.status}): The API may be temporarily unavailable. Please try again.`);
-          }
-        }
-
-        const data = await response.json();
-        this.processLoadedData(data);
-
-      } catch (error) {
-        console.error('Failed to load map data:', error);
-        this.loadError = error.message || 'Failed to load map data. Please try again.';
+        this.loadError = 'Connection lost. Please try again.';
         this.loading = false;
-      }
+      };
     },
 
     // Process loaded data and initialize map
@@ -648,11 +588,11 @@ function coverageMap() {
       const selectedFLWsSet = new Set(this.selectedFLWs);
       const selectedStatusesSet = new Set(this.selectedStatuses);
 
-      // Filter DUs - use username consistently
+      // Filter DUs - match by commcare_id (flw_id)
       this.duLayerGroup.clearLayers();
       Object.values(this.duLayers).forEach(({layer, feature}) => {
         const props = feature.properties;
-        const matchesFLW = selectedFLWsSet.has(props.username);
+        const matchesFLW = selectedFLWsSet.has(props.flw_id);
         const matchesSA = !this.selectedServiceArea || props.service_area === this.selectedServiceArea;
         const matchesStatus = selectedStatusesSet.has(props.status || 'unvisited');
 
@@ -661,11 +601,11 @@ function coverageMap() {
         }
       });
 
-      // Filter points - use username consistently
+      // Filter points - match by commcare_id (flw_id)
       this.pointLayerGroup.clearLayers();
       Object.values(this.pointLayers).forEach(({marker, feature}) => {
         const props = feature.properties;
-        const matchesFLW = selectedFLWsSet.has(props.username);
+        const matchesFLW = selectedFLWsSet.has(props.flw_id);
         const matchesSA = !this.selectedServiceArea || props.service_area_id === this.selectedServiceArea;
 
         if (matchesFLW && matchesSA) {

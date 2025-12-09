@@ -132,7 +132,6 @@ class VisitAnalyzer:
                 id=visit.id,
                 user_id=visit.user_id,
                 username=visit.username,
-                commcare_userid=visit.commcare_userid,
                 visit_date=visit.visit_date,
                 status=visit.status,
                 flagged=visit.flagged,

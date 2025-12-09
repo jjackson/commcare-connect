@@ -457,7 +457,6 @@ class VisitRow:
     id: str
     user_id: int | None = None
     username: str = ""
-    commcare_userid: str = ""  # CommCare user ID from form.meta.userID
 
     # Visit metadata
     visit_date: datetime | None = None
@@ -576,7 +575,6 @@ class VisitAnalysisResult(AnalysisResult):
                         id=row_data.get("id", ""),
                         user_id=row_data.get("user_id"),
                         username=row_data.get("username", ""),
-                        commcare_userid=row_data.get("commcare_userid", ""),
                         visit_date=datetime.fromisoformat(row_data["visit_date"])
                         if row_data.get("visit_date")
                         else None,

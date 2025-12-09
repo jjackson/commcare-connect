@@ -4,87 +4,28 @@ Views for coverage visualization.
 
 import json
 import logging
+import time
+from collections.abc import Generator
 
 import httpx
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.views import View
 from django.views.generic import TemplateView
-from shapely.geometry import mapping
 
-from commcare_connect.coverage.analysis import get_coverage_visit_analysis
 from commcare_connect.coverage.data_access import CoverageDataAccess
-from commcare_connect.coverage.models import CoverageData
-from commcare_connect.labs.analysis.config import AnalysisPipelineConfig
-from commcare_connect.labs.analysis.models import VisitRow
 
 logger = logging.getLogger(__name__)
 
 
-def generate_flw_colors(flw_dict: dict) -> dict:
-    """
-    Generate contrasting colors for FLWs using HSV color space.
-
-    Args:
-        flw_dict: Dictionary of FLWs {flw_id: FLW object}
-
-    Returns:
-        Dictionary mapping flw_id to hex color
-    """
-    import colorsys
-    import random
-
-    flw_ids = list(flw_dict.keys())
-    n = len(flw_ids)
-
-    # Predefined high-contrast colors for first few FLWs
-    base_colors = [
-        "#FF0000",
-        "#00FF00",
-        "#0000FF",
-        "#FFFF00",
-        "#FF00FF",
-        "#00FFFF",
-        "#FF8000",
-        "#FF0080",
-        "#80FF00",
-        "#00FF80",
-        "#8000FF",
-        "#0080FF",
-        "#804000",
-        "#FF4080",
-        "#8080FF",
-        "#80FF80",
-        "#804080",
-        "#408080",
-    ]
-
-    colors = []
-    if n <= len(base_colors):
-        colors = base_colors[:n]
-    else:
-        colors = list(base_colors)
-        needed = n - len(base_colors)
-
-        # Generate additional colors using HSV for good distribution
-        for i in range(needed):
-            hue = (i * 0.618033988749895) % 1.0  # Golden ratio
-            saturation = 0.7 + (i % 3) * 0.15
-            value = 0.6 + (i % 4) * 0.13
-
-            r, g, b = colorsys.hsv_to_rgb(hue, saturation, value)
-            color = f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
-            colors.append(color)
-
-    # Shuffle for better adjacent color contrast
-    random.shuffle(colors)
-
-    return {flw_id: colors[i] for i, flw_id in enumerate(flw_ids)}
-
-
 class BaseCoverageView(LoginRequiredMixin, TemplateView):
-    """Base view with caching"""
+    """
+    Base view for coverage app views.
+
+    Provides shared OAuth checking functionality for views that need
+    to interact with CommCare HQ APIs.
+    """
 
     def check_commcare_oauth(self) -> bool:
         """Check if CommCare OAuth is configured and not expired"""
@@ -104,91 +45,6 @@ class BaseCoverageView(LoginRequiredMixin, TemplateView):
             return False
 
         return True
-
-    def get_coverage_data(self) -> CoverageData:
-        """
-        Get or build CoverageData with session caching.
-
-        NOTE: Only fetches DUs (for polygons). Visits are fetched separately
-        via the analysis framework for consistent caching.
-        """
-        opportunity_id = getattr(self.request, "labs_context", {}).get("opportunity_id")
-
-        if not opportunity_id:
-            raise ValueError("No opportunity selected in labs context")
-
-        # Always fetch fresh - DU status can change in CommCare, no way to detect changes
-        logger.info(f"[Coverage] Fetching fresh DU data from CommCare (opp {opportunity_id})")
-        data_access = CoverageDataAccess(self.request)
-        coverage = data_access.build_coverage_dus_only()
-
-        return coverage
-
-    def populate_coverage_visits(self, coverage: CoverageData, visit_rows: list[VisitRow]) -> None:
-        """
-        Populate CoverageData with visits from VisitRows.
-
-        Converts VisitRows to LocalUserVisits and links them to DUs/FLWs.
-
-        Args:
-            coverage: CoverageData to populate
-            visit_rows: VisitRows from analysis framework
-        """
-        from commcare_connect.coverage.models import FLW, LocalUserVisit
-
-        for visit_row in visit_rows:
-            # Convert VisitRow to dict format expected by LocalUserVisit
-            visit_data = {
-                "xform_id": visit_row.id,
-                "user_id": visit_row.user_id,
-                "username": visit_row.username,
-                "visit_date": visit_row.visit_date.isoformat() if visit_row.visit_date else None,
-                "status": visit_row.status,
-                "flagged": visit_row.flagged,
-                "deliver_unit": {"name": visit_row.deliver_unit_name, "id": visit_row.deliver_unit_id},
-                "form_json": {
-                    "metadata": {
-                        "location": f"{visit_row.latitude} {visit_row.longitude} 0.0 {visit_row.accuracy_in_m or 0.0}"
-                    }
-                },
-            }
-
-            point = LocalUserVisit(visit_data)
-            coverage.service_points.append(point)
-
-            # Update FLW visit tracking (merge with existing FLW from DU data if present)
-            username = visit_row.username
-            commcare_userid = visit_row.commcare_userid
-
-            if username:
-                # Check if FLW already exists under CommCare ID (from DU data)
-                if commcare_userid and commcare_userid in coverage.flws:
-                    # Re-key existing FLW from CommCare ID to username
-                    flw = coverage.flws[commcare_userid]
-                    flw.id = username  # Update ID to username
-                    flw.name = username
-                    coverage.flws[username] = flw
-                    del coverage.flws[commcare_userid]
-                    logger.debug(f"[Coverage] Re-keyed FLW {commcare_userid} -> {username}")
-                elif username not in coverage.flws:
-                    # Create new FLW if neither username nor CommCare ID exist
-                    coverage.flws[username] = FLW(id=username, name=username)
-
-                # Update FLW with visit data (works for both new and re-keyed FLWs)
-                flw = coverage.flws[username]
-                flw.total_visits += 1
-                flw.service_points.append(point)
-
-                # Track active dates
-                if visit_row.visit_date:
-                    visit_date = visit_row.visit_date.date()
-                    if visit_date not in flw.dates_active:
-                        flw.dates_active.append(visit_date)
-
-        # Compute metadata (links visits to DUs)
-        coverage._compute_metadata()
-
-        logger.info(f"[Coverage] Populated {len(coverage.service_points)} visits into coverage data")
 
 
 class CoverageIndexView(BaseCoverageView):
@@ -210,22 +66,22 @@ class CoverageIndexView(BaseCoverageView):
                 context["needs_oauth"] = True
             else:
                 try:
+                    # Use data loader helper for consistency
+                    from commcare_connect.coverage.data_loader import CoverageMapDataLoader
+
+                    loader = CoverageMapDataLoader(self.request)
+                    data_access = CoverageDataAccess(self.request)
+
                     # Get DU data
-                    coverage = self.get_coverage_data()
+                    coverage = data_access.build_coverage_dus_only()
 
                     # Get visits via analysis framework (base config, no computed fields)
-                    from commcare_connect.coverage.analysis import COVERAGE_BASE_CONFIG, get_coverage_visit_analysis
+                    from commcare_connect.coverage.analysis import COVERAGE_BASE_CONFIG
 
-                    du_lookup = {
-                        du.du_name: {"service_area_id": du.service_area_id} for du in coverage.delivery_units.values()
-                    }
+                    visit_rows, _ = loader.get_enriched_visits(COVERAGE_BASE_CONFIG, coverage)
 
-                    result = get_coverage_visit_analysis(
-                        request=self.request, config=COVERAGE_BASE_CONFIG, du_lookup=du_lookup, use_cache=True
-                    )
-
-                    # Populate coverage with visits
-                    self.populate_coverage_visits(coverage, result.rows)
+                    # Populate coverage with visits using helper
+                    loader.populate_coverage_visits(coverage, visit_rows)
 
                     context["coverage"] = coverage
                     context["summary_stats"] = {
@@ -235,7 +91,7 @@ class CoverageIndexView(BaseCoverageView):
                         "total_visits": len(coverage.service_points),
                         "completion": round(coverage.completion_percentage, 1),
                     }
-                    context["service_points_count"] = len(result.rows)
+                    context["service_points_count"] = len(visit_rows)
                 except Exception as e:
                     logger.error(f"Failed to load coverage data: {e}", exc_info=True)
                     context["error"] = str(e)
@@ -246,243 +102,22 @@ class CoverageIndexView(BaseCoverageView):
         return context
 
 
-class BaseCoverageMapView(BaseCoverageView):
-    """Base interactive Leaflet map with optional analysis config for computed fields.
-
-    Note: This is a base class. Use CoverageMapView instead, which adds FLW color-coding.
+class CoverageMapView(BaseCoverageView):
     """
+    Interactive coverage map with FLW color-coding and real-time progress.
 
-    template_name = "coverage/map.html"
+    Uses Server-Sent Events (SSE) to stream data loading progress to the frontend.
+    Data is loaded via CoverageMapStreamView which uses helper classes:
+    - CoverageMapDataLoader: handles data processing and GeoJSON generation
+    - CoverageDataAccess: fetches DUs from CommCare
 
-    # Override in subclass to use a specific analysis config
-    analysis_config: AnalysisPipelineConfig | None = None
-
-    def get_analysis_config(self) -> AnalysisPipelineConfig | None:
-        """
-        Get the analysis config to use for computing visit fields.
-
-        Checks URL parameter first (?config=chc_nutrition), then falls back
-        to class attribute. Returns None for basic coverage view (no computed fields).
-        """
-        # Check URL parameter first
-        config_name = self.request.GET.get("config")
-        if config_name:
-            from commcare_connect.coverage.config_registry import get_config
-
-            config = get_config(config_name)
-            if config:
-                logger.info(f"[Coverage] Using analysis config: {config_name} ({len(config.fields)} fields)")
-                # Log first few field names
-                field_names = [f.name for f in config.fields[:5]]
-                logger.info(f"[Coverage] Config fields (first 5): {field_names}")
-                return config
-            # Log warning if config name not found
-            logger.warning(f"[Coverage] Config '{config_name}' not found in registry")
-
-        # Fall back to class attribute
-        return self.analysis_config
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["has_commcare_oauth"] = self.check_commcare_oauth()
-
-        if not context["has_commcare_oauth"]:
-            context["error"] = "CommCare OAuth not configured. Please authorize CommCare access."
-            context["needs_oauth"] = True
-            context["delivery_units_geojson"] = json.dumps({"type": "FeatureCollection", "features": []})
-            context["service_points_geojson"] = json.dumps({"type": "FeatureCollection", "features": []})
-            context["flw_list"] = []
-            context["service_area_list"] = []
-            context["computed_field_metadata"] = []
-        else:
-            try:
-                # Get DU data (polygons)
-                coverage = self.get_coverage_data()
-                logger.info(f"[Coverage] Loaded {len(coverage.delivery_units)} DUs, {len(coverage.service_areas)} SAs")
-                if coverage.delivery_units:
-                    sample_dus = list(coverage.delivery_units.keys())[:5]
-                    logger.info(f"[Coverage] Sample DU names from CommCare: {sample_dus}")
-                if coverage.service_areas:
-                    sample_sas = list(coverage.service_areas.keys())[:5]
-                    logger.info(f"[Coverage] Sample SA IDs from CommCare: {sample_sas}")
-                else:
-                    logger.warning("[Coverage] No service areas found in DU data!")
-
-                # Get analysis config (use base if none specified)
-                config = self.get_analysis_config()
-                if not config:
-                    from commcare_connect.coverage.analysis import COVERAGE_BASE_CONFIG
-
-                    config = COVERAGE_BASE_CONFIG
-                    logger.error(
-                        "[Coverage] ERROR: Using fallback base config! "
-                        "No proper config specified. Pass ?config=chc_nutrition in URL."
-                    )
-
-                # ALWAYS use analysis framework for visits (consistent caching)
-                visit_rows, field_metadata = self.get_enriched_visits(config, coverage)
-
-                # Populate coverage with visits from analysis
-                self.populate_coverage_visits(coverage, visit_rows)
-
-                context["coverage"] = coverage
-
-                # Build GeoJSON for map
-                context["delivery_units_geojson"] = self.build_du_geojson(coverage)
-                context["service_points_geojson"] = self.build_enriched_points_geojson(visit_rows)
-                context["computed_field_metadata"] = field_metadata
-
-                context["flw_list"] = [
-                    {"id": flw.id, "name": flw.name, "visits": flw.total_visits} for flw in coverage.flws.values()
-                ]
-                context["service_area_list"] = sorted(list(coverage.service_areas.keys()))
-                context["service_points_count"] = len(visit_rows)
-            except Exception as e:
-                logger.error(f"Failed to load coverage data for map: {e}", exc_info=True)
-                context["error"] = str(e)
-                context["delivery_units_geojson"] = json.dumps({"type": "FeatureCollection", "features": []})
-                context["service_points_geojson"] = json.dumps({"type": "FeatureCollection", "features": []})
-                context["flw_list"] = []
-                context["service_area_list"] = []
-                context["computed_field_metadata"] = []
-                # Check if error is about missing OAuth
-                if "CommCare OAuth" in str(e):
-                    context["needs_oauth"] = True
-
-        return context
-
-    def get_enriched_visits(
-        self, config: AnalysisPipelineConfig, coverage: CoverageData
-    ) -> tuple[list[VisitRow], list[dict]]:
-        """
-        Get visit analysis with coverage context, using cached data.
-
-        Uses the pipeline pattern:
-        1. Get cached VisitAnalysisResult (shared with CHC Nutrition and other views)
-        2. Enrich with DU/SA geographic context
-
-        Args:
-            config: AnalysisPipelineConfig defining field computations
-            coverage: CoverageData with DU info for service area lookup
-
-        Returns:
-            Tuple of (visit_rows, field_metadata)
-        """
-        # Build DU lookup for service area enrichment
-        # Add BOTH id and name as keys since visits might use either
-        du_lookup = {}
-        for du in coverage.delivery_units.values():
-            du_info = {"service_area_id": du.service_area_id}
-            du_lookup[du.du_name] = du_info  # Add by name
-            du_lookup[du.id] = du_info  # Add by case_id
-            try:
-                du_lookup[int(du.id)] = du_info  # Add as integer if possible
-            except (ValueError, TypeError):
-                pass
-
-        # Get cached visit analysis with coverage enrichment
-        result = get_coverage_visit_analysis(request=self.request, config=config, du_lookup=du_lookup, use_cache=True)
-
-        return result.rows, result.field_metadata
-
-    def build_du_geojson(self, coverage: CoverageData) -> str:
-        """Convert DUs to GeoJSON"""
-        features = []
-
-        for du in coverage.delivery_units.values():
-            try:
-                # Skip DUs without valid WKT
-                if not du.wkt or du.wkt == "":
-                    continue
-
-                geometry = du.geometry
-                features.append(
-                    {
-                        "type": "Feature",
-                        "geometry": mapping(geometry),
-                        "properties": {
-                            "name": du.du_name,
-                            "service_area": du.service_area_id,
-                            "status": du.status or "unvisited",
-                            "buildings": du.buildings,
-                            "visits": len(du.service_points),
-                            "flw_id": du.flw_commcare_id,
-                        },
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"Failed to process DU {du.du_name} for GeoJSON: {e}")
-                continue
-
-        return json.dumps({"type": "FeatureCollection", "features": features})
-
-    def build_points_geojson(self, coverage: CoverageData) -> str:
-        """Convert service points to GeoJSON (original, no computed fields)"""
-        features = []
-
-        for point in coverage.service_points:
-            try:
-                # Skip points with invalid coordinates
-                if point.latitude == 0.0 and point.longitude == 0.0:
-                    continue
-
-                features.append(
-                    {
-                        "type": "Feature",
-                        "geometry": {"type": "Point", "coordinates": [point.longitude, point.latitude]},
-                        "properties": {
-                            "id": point.id,
-                            "username": point.username,
-                            "du_name": point.deliver_unit_name,
-                            "status": point.status,
-                            "date": point.visit_date.isoformat() if point.visit_date else "",
-                            "flagged": point.flagged,
-                            "accuracy": point.accuracy_in_m,
-                        },
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"Failed to process visit point {point.id} for GeoJSON: {e}")
-                continue
-
-        return json.dumps({"type": "FeatureCollection", "features": features})
-
-    def build_enriched_points_geojson(self, visit_rows: list[VisitRow]) -> str:
-        """Convert visit rows to GeoJSON with computed fields"""
-        features = []
-
-        for visit in visit_rows:
-            try:
-                # Skip visits without valid GPS
-                if not visit.has_gps:
-                    continue
-
-                features.append(
-                    {
-                        "type": "Feature",
-                        "geometry": {"type": "Point", "coordinates": [visit.longitude, visit.latitude]},
-                        "properties": visit.to_geojson_properties(),
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"Failed to process enriched visit {visit.id} for GeoJSON: {e}")
-                continue
-
-        return json.dumps({"type": "FeatureCollection", "features": features})
-
-
-class CoverageMapView(BaseCoverageMapView):
-    """
-    Enhanced coverage map with FLW color-coding.
-
-    Extends BaseCoverageMapView to add:
+    Features:
+    - Real-time loading progress indicators
     - Unique colors for each FLW
     - Colored delivery unit polygons
     - Colored service point markers
     - FLW filter with color swatches
-
-    This view now uses progressive loading: the page loads quickly with a loading
-    indicator, then fetches data asynchronously via the CoverageMapDataView API.
+    - Service area filtering
     """
 
     template_name = "coverage/map.html"
@@ -500,160 +135,9 @@ class CoverageMapView(BaseCoverageMapView):
         # Provide the API endpoint URL for async data loading
         from django.urls import reverse
 
-        context["map_data_url"] = reverse("coverage:map_data")
+        context["stream_api_url"] = reverse("coverage:map_stream")
 
         return context
-
-    def get_context_data_sync(self, **kwargs):
-        """
-        Legacy synchronous data loading method (kept for reference/fallback).
-        The main get_context_data now uses async loading via API.
-        """
-        context = super().get_context_data(**kwargs)
-
-        # If we have coverage data, add FLW colors
-        if "coverage" in context and not context.get("error"):
-            coverage = context["coverage"]
-
-            # Generate colors for FLWs
-            flw_colors = generate_flw_colors(coverage.flws)
-            context["flw_colors"] = flw_colors
-
-            # Get analysis config for visit data access
-            config = self.get_analysis_config()
-            if not config:
-                from commcare_connect.coverage.analysis import COVERAGE_BASE_CONFIG
-
-                config = COVERAGE_BASE_CONFIG
-
-            # Build du_lookup
-            du_lookup = {}
-            for du in coverage.delivery_units.values():
-                du_info = {"service_area_id": du.service_area_id}
-                du_lookup[du.du_name] = du_info
-                du_lookup[du.id] = du_info
-                try:
-                    du_lookup[int(du.id)] = du_info
-                except (ValueError, TypeError):
-                    pass
-
-            # Get visit data to build CommCare ID → username mapping
-            from commcare_connect.coverage.analysis import get_coverage_visit_analysis
-
-            use_cache = self.request.GET.get("refresh") != "1"
-            result = get_coverage_visit_analysis(
-                request=self.request, config=config, du_lookup=du_lookup, use_cache=use_cache
-            )
-
-            # Build mapping: commcare_userid → username
-            commcare_to_username = {}
-            for visit in result.rows:
-                if visit.commcare_userid and visit.username:
-                    commcare_to_username[visit.commcare_userid] = visit.username
-
-            logger.info(f"[Coverage Map] Built FLW ID mapping with {len(commcare_to_username)} entries")
-            logger.info(f"[Coverage Map] FLWs after loading: {len(coverage.flws)}")
-
-            # Build colored GeoJSON with username mapping
-            context["delivery_units_geojson"] = self.build_colored_du_geojson(
-                coverage, flw_colors, commcare_to_username
-            )
-
-            # Build colored service points (using already-fetched result)
-            context["service_points_geojson"] = self.build_colored_points_geojson(
-                result.rows, coverage.flws, flw_colors
-            )
-
-            # Build FLW list with colors for UI
-            # FLWs are now properly merged during loading, so we just need to format them
-            # Get display names for FLWs
-            from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
-
-            flw_display_names = get_flw_names_for_opportunity(self.request)
-
-            context["flw_list_colored"] = [
-                {
-                    "id": flw_id,
-                    "name": f"{flw_display_names.get(flw_id, flw_id)} ({flw_id})",
-                    "visits": flw.total_visits,
-                    "color": flw_colors.get(flw_id, "#999999"),
-                }
-                for flw_id, flw in coverage.flws.items()
-            ]
-
-            # Add service area list
-            service_area_list = sorted(list(coverage.service_areas.keys()))
-            logger.info(f"[Coverage Map2] Found {len(service_area_list)} service areas: {service_area_list}")
-            context["service_area_list"] = service_area_list
-            context["service_points_count"] = len(result.rows)
-
-        return context
-
-    def build_colored_du_geojson(self, coverage: CoverageData, flw_colors: dict, commcare_to_username: dict) -> str:
-        """Build DU GeoJSON with FLW colors and username mapping"""
-        features = []
-
-        for du in coverage.delivery_units.values():
-            try:
-                if not du.wkt or du.wkt == "":
-                    continue
-
-                geometry = du.geometry
-
-                # Map CommCare owner ID to username for consistent filtering
-                flw_username = commcare_to_username.get(du.flw_commcare_id, du.flw_commcare_id)
-                flw_color = flw_colors.get(flw_username, "#999999")
-
-                features.append(
-                    {
-                        "type": "Feature",
-                        "geometry": mapping(geometry),
-                        "properties": {
-                            "name": du.du_name,
-                            "service_area": du.service_area_id,
-                            "status": du.status or "unvisited",
-                            "buildings": du.buildings,
-                            "visits": len(du.service_points),
-                            "flw_id": du.flw_commcare_id,  # Keep original for reference
-                            "username": flw_username,  # Add username for filtering
-                            "color": flw_color,
-                        },
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"Failed to process DU {du.du_name}: {e}")
-                continue
-
-        return json.dumps({"type": "FeatureCollection", "features": features})
-
-    def build_colored_points_geojson(self, visit_rows: list[VisitRow], flws: dict, flw_colors: dict) -> str:
-        """Build service points GeoJSON with FLW colors"""
-        features = []
-
-        for visit in visit_rows:
-            try:
-                if not visit.has_gps:
-                    continue
-
-                # Match by username (CommCare username hash), not user_id
-                flw_color = flw_colors.get(visit.username, "#999999")
-
-                props = visit.to_geojson_properties()
-                props["color"] = flw_color
-                props["username"] = visit.username  # Use username consistently for filtering
-
-                features.append(
-                    {
-                        "type": "Feature",
-                        "geometry": {"type": "Point", "coordinates": [visit.longitude, visit.latitude]},
-                        "properties": props,
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"Failed to process visit {visit.id}: {e}")
-                continue
-
-        return json.dumps({"type": "FeatureCollection", "features": features})
 
 
 class CoverageTokenStatusView(LoginRequiredMixin, TemplateView):
@@ -731,138 +215,134 @@ class CoverageDebugView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class CoverageMapDataView(LoginRequiredMixin, View):
-    """API endpoint to load coverage map data asynchronously."""
+class CoverageMapStreamView(LoginRequiredMixin, View):
+    """
+    SSE streaming endpoint for Coverage Map with real-time progress.
+
+    Uses Server-Sent Events to push progress updates to the frontend as each
+    step of the data loading completes. This keeps the connection alive during
+    long-running operations (CommCare HQ + Connect API calls can take 2+ minutes).
+    """
 
     def get(self, request):
-        """Return coverage map data as JSON for progressive loading."""
-        import time
+        """Stream coverage map data loading progress via Server-Sent Events."""
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Not authenticated"}, status=401)
+
+        response = StreamingHttpResponse(
+            self._stream_coverage_data(request),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
+
+    def _stream_coverage_data(self, request) -> Generator[str, None, None]:
+        """Generator that yields SSE events as coverage data loads."""
+
+        def send_sse(message: str, data: dict | None = None, error: str | None = None) -> str:
+            """Format a message as an SSE event."""
+            event = {"message": message, "complete": data is not None}
+            if data:
+                event["data"] = data
+            if error:
+                event["error"] = error
+            return f"data: {json.dumps(event)}\n\n"
 
         try:
-            # Log request details to debug duplicate calls
-            call_id = request.GET.get("call_id", "unknown")
-            config_param = request.GET.get("config", "MISSING")
-            opp_id = request.GET.get("opportunity_id", "MISSING")
-            logger.info(
-                f"[Coverage Map Data API] Request received - Call ID: {call_id}, "
-                f"opp_id: {opp_id}, config: {config_param}, "
-                f"Full query string: {request.META.get('QUERY_STRING', 'NONE')}"
-            )
-
-            # Check if user has CommCare OAuth
             from django.utils import timezone
+
+            from commcare_connect.coverage.data_loader import CoverageMapDataLoader
 
             commcare_oauth = request.session.get("commcare_oauth", {})
             access_token = commcare_oauth.get("access_token")
 
             if not access_token:
-                return JsonResponse(
-                    {"error": "CommCare OAuth not configured. Please authorize CommCare access."}, status=401
-                )
+                yield send_sse("Error", error="CommCare OAuth not configured. Please authorize CommCare access.")
+                return
 
-            # Check expiration
             expires_at = commcare_oauth.get("expires_at", 0)
             if timezone.now().timestamp() >= expires_at:
-                return JsonResponse(
-                    {"error": "CommCare OAuth token expired. Please re-authorize CommCare access."}, status=401
-                )
+                yield send_sse("Error", error="CommCare OAuth token expired. Please re-authorize CommCare access.")
+                return
 
-            # Create a temporary view instance to use helper methods
-            from commcare_connect.coverage.views import CoverageMapView
+            loader = CoverageMapDataLoader(request)
+            data_access = CoverageDataAccess(request)
+            from_cache = False
 
-            map_view = CoverageMapView()
-            map_view.request = request
+            # STEP 1: Check cache
+            yield send_sse("Checking cache...")
 
-            # =========================================================================
-            # STEP 1: CommCare HQ - Fetch DU polygons (always fresh, no cache)
-            # =========================================================================
-            logger.info("[Coverage Map Data API] Step 1/6: CommCare HQ - Fetching delivery unit polygons...")
-            step1_start = time.time()
-            coverage = map_view.get_coverage_data()
-            step1_duration = time.time() - step1_start
-            logger.info(
-                f"[Coverage Map Data API] Step 1/6 Complete ({step1_duration:.1f}s): "
-                f"Loaded {len(coverage.delivery_units)} DUs, {len(coverage.service_areas)} service areas"
-            )
+            # STEP 2: CommCare HQ - Fetch DU polygons
+            yield send_sse("Fetching CommCare HQ data (delivery units)...")
+            step2_start = time.time()
+            coverage = data_access.build_coverage_dus_only()
+            step2_duration = time.time() - step2_start
+            du_count = len(coverage.delivery_units)
+            logger.info(f"[Coverage Map Stream] CommCare HQ complete ({step2_duration:.1f}s): {du_count} DUs")
+            yield send_sse(f"CommCare HQ complete: {len(coverage.delivery_units)} delivery units")
 
-            # =========================================================================
-            # STEP 2: Select analysis config
-            # =========================================================================
-            config = map_view.get_analysis_config()
+            # STEP 3: Get analysis config
+            config = loader.get_analysis_config()
             if not config:
                 from commcare_connect.coverage.analysis import COVERAGE_BASE_CONFIG
 
                 config = COVERAGE_BASE_CONFIG
 
-            logger.info(f"[Coverage Map Data API] Step 2/6: Using config with {len(config.fields)} fields")
-
-            # =========================================================================
-            # STEP 3: Connect - Check cache or download visits
-            # =========================================================================
-            logger.info("[Coverage Map Data API] Step 3/6: Connect - Checking cache / downloading visits...")
-            step3_start = time.time()
-            visit_rows, field_metadata = map_view.get_enriched_visits(config, coverage)
-            step3_duration = time.time() - step3_start
-            logger.info(
-                f"[Coverage Map Data API] Step 3/6 Complete ({step3_duration:.1f}s): "
-                f"Loaded {len(visit_rows)} visits"
-            )
-
-            # =========================================================================
-            # STEP 4: Process visits into coverage data structure
-            # =========================================================================
-            logger.info("[Coverage Map Data API] Step 4/6: Processing visits into coverage structure...")
+            # STEP 4: Connect - Download visits
+            yield send_sse("Fetching Connect data (this may take a while)...")
             step4_start = time.time()
-            map_view.populate_coverage_visits(coverage, visit_rows)
+            visit_rows, field_metadata = loader.get_enriched_visits(config, coverage)
             step4_duration = time.time() - step4_start
-            logger.info(f"[Coverage Map Data API] Step 4/6 Complete ({step4_duration:.1f}s)")
+            logger.info(f"[Coverage Map Stream] Connect complete ({step4_duration:.1f}s): {len(visit_rows)} visits")
+            yield send_sse(f"Connect complete: {len(visit_rows)} visits loaded")
 
-            # =========================================================================
-            # STEP 5: Build GeoJSON layers
-            # =========================================================================
-            logger.info("[Coverage Map Data API] Step 5/6: Building GeoJSON map layers...")
+            if step4_duration < 5:
+                from_cache = True
+
+            # STEP 5: Process visits
+            yield send_sse("Processing visits into coverage structure...")
             step5_start = time.time()
+            loader.populate_coverage_visits(coverage, visit_rows)
+            step5_duration = time.time() - step5_start
+            logger.info(f"[Coverage Map Stream] Processing complete ({step5_duration:.1f}s)")
+            yield send_sse("Processing complete")
 
-            # Generate FLW colors
-            flw_colors = generate_flw_colors(coverage.flws)
+            # STEP 6: Build GeoJSON layers
+            yield send_sse("Building map layers...")
+            step6_start = time.time()
 
-            # Build mapping: commcare_userid -> username from already-fetched visit_rows
+            flw_colors = loader.generate_flw_colors(coverage.flws)
+
             commcare_to_username = {}
             for visit in visit_rows:
-                if visit.commcare_userid and visit.username:
-                    commcare_to_username[visit.commcare_userid] = visit.username
+                commcare_id = visit.computed.get("commcare_userid", "")
+                if commcare_id and visit.username:
+                    commcare_to_username[commcare_id] = visit.username
 
-            # Build GeoJSON data
-            delivery_units_geojson = map_view.build_colored_du_geojson(coverage, flw_colors, commcare_to_username)
-            service_points_geojson = map_view.build_colored_points_geojson(visit_rows, coverage.flws, flw_colors)
+            delivery_units_geojson = loader.build_colored_du_geojson(coverage, flw_colors, commcare_to_username)
+            service_points_geojson = loader.build_colored_points_geojson(visit_rows, coverage.flws, flw_colors)
 
-            # Get FLW display names
-            from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
-
-            flw_display_names = get_flw_names_for_opportunity(request)
-
-            # Build FLW list with colors
             flw_list_colored = [
                 {
-                    "id": flw_id,
-                    "name": f"{flw_display_names.get(flw_id, flw_id)} ({flw_id})",
+                    "id": flw_key,
+                    "name": (
+                        f"{flw.display_name or flw.commcare_id} ({flw.total_visits} visits)"
+                        if flw.total_visits > 0
+                        else f"{flw.commcare_id} (no connect visits)"
+                    ),
                     "visits": flw.total_visits,
-                    "color": flw_colors.get(flw_id, "#999999"),
+                    "color": flw_colors.get(flw_key, "#999999"),
                 }
-                for flw_id, flw in coverage.flws.items()
+                for flw_key, flw in coverage.flws.items()
             ]
 
-            step5_duration = time.time() - step5_start
-            logger.info(f"[Coverage Map Data API] Step 5/6 Complete ({step5_duration:.1f}s)")
+            step6_duration = time.time() - step6_start
+            logger.info(f"[Coverage Map Stream] Layers built ({step6_duration:.1f}s) - {len(flw_list_colored)} FLWs")
 
-            # =========================================================================
-            # STEP 6: Return response
-            # =========================================================================
-            total_duration = step1_duration + step3_duration + step4_duration + step5_duration
-            logger.info(
-                f"[Coverage Map Data API] Step 6/6: Complete! Total: {total_duration:.1f}s "
-                f"(CommCare: {step1_duration:.1f}s, Connect: {step3_duration:.1f}s)"
-            )
+            # STEP 7: Complete
+            total_duration = step2_duration + step4_duration + step5_duration + step6_duration
+            logger.info(f"[Coverage Map Stream] Complete! Total: {total_duration:.1f}s")
 
             response_data = {
                 "success": True,
@@ -872,11 +352,11 @@ class CoverageMapDataView(LoginRequiredMixin, View):
                 "service_area_list": sorted(list(coverage.service_areas.keys())),
                 "service_points_count": len(visit_rows),
                 "computed_field_metadata": field_metadata,
-                "from_cache": False,  # TODO: Track cache hits when SSE is implemented
+                "from_cache": from_cache,
             }
 
-            return JsonResponse(response_data)
+            yield send_sse("Complete!", response_data)
 
         except Exception as e:
-            logger.error(f"[Coverage Map Data API] Failed to load coverage data: {e}", exc_info=True)
-            return JsonResponse({"error": str(e)}, status=500)
+            logger.error(f"[Coverage Map Stream] Error: {e}", exc_info=True)
+            yield send_sse("Error", error=str(e))

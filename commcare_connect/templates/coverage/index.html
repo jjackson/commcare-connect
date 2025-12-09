@@ -13,7 +13,7 @@
         <strong>Error:</strong> {{ error }}
         {% if needs_oauth %}
         <br><br>
-        <a href="{% url 'labs:commcare_initiate' %}?next={{ request.path }}" class="btn btn-primary">
+        <a href="{% url 'labs:commcare_initiate' %}?next={{ request.get_full_path|urlencode }}" class="btn btn-primary">
             Authorize CommCare Access
         </a>
         {% endif %}

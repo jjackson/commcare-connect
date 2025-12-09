@@ -15,7 +15,7 @@ from django.http import JsonResponse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from django.views.generic import DetailView, ListView, TemplateView
+from django.views.generic import ListView, TemplateView
 
 from commcare_connect.labs.integrations.ocs.api_client import OCSAPIError, OCSDataAccess
 from commcare_connect.tasks.data_access import TaskDataAccess
@@ -128,57 +128,7 @@ class TaskListView(LoginRequiredMixin, ListView):
         return context
 
 
-class TaskDetailView(LoginRequiredMixin, DetailView):
-    """Detail view for a single task."""
-
-    model = TaskRecord
-    template_name = "tasks/task_detail_streamlined.html"
-    context_object_name = "task"
-    pk_url_kwarg = "task_id"
-
-    def get_object(self, queryset=None):
-        """Get task by ID."""
-        task_id = self.kwargs.get(self.pk_url_kwarg)
-        data_access = TaskDataAccess(user=self.request.user, request=self.request)
-        task = data_access.get_task(task_id)
-
-        if not task:
-            from django.http import Http404
-
-            raise Http404("Task not found")
-
-        return task
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        task = self.object
-
-        # Get timeline (events + comments combined)
-        timeline = task.get_timeline()
-
-        context.update(
-            {
-                "task": {
-                    "id": task.id,
-                    "user_id": task.user_id,
-                    "flw_username": task.task_username,
-                    "flw_name": task.flw_name,
-                    "opportunity_id": task.opportunity_id,
-                    "opportunity": task.data.get("opportunity_name", ""),
-                    "status": task.status,
-                    "priority": task.priority,
-                    "title": task.title,
-                    "description": task.description,
-                    "audit_session_id": task.audit_session_id,
-                    "action_type": task.data.get("action_type", "warning"),
-                    "created": task.date_created,
-                    "timeline": timeline,
-                },
-            }
-        )
-
-        return context
+# TaskDetailView removed - TaskCreateEditView is the main interface for viewing/editing tasks
 
 
 class TaskCreationWizardView(LoginRequiredMixin, TemplateView):

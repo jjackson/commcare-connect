@@ -151,11 +151,11 @@ class CoverageDataAccess:
                 if sa_id:
                     coverage.service_areas[sa_id].delivery_units.append(du)
 
-                # Track FLWs
-                if du.flw_commcare_id and du.flw_commcare_id not in coverage.flws:
-                    coverage.flws[du.flw_commcare_id] = FLW(id=du.flw_commcare_id, name=du.flw_commcare_id)
+                # Track FLWs from DU data (only have CommCare ID at this point)
+                if du.flw_commcare_id:
+                    if du.flw_commcare_id not in coverage.flws:
+                        coverage.flws[du.flw_commcare_id] = FLW(commcare_id=du.flw_commcare_id)
 
-                if du.flw_commcare_id and du.flw_commcare_id in coverage.flws:
                     flw = coverage.flws[du.flw_commcare_id]
                     flw.assigned_units += 1
                     if du.status == "completed":
