@@ -22,6 +22,9 @@ class LabsAuthenticationMiddleware:
     This middleware replaces Django's standard AuthenticationMiddleware in labs.
     It reads OAuth token and user profile from session and creates a transient
     LabsUser object (never saved to database).
+
+    For /admin/ URLs, it falls back to Django's standard authentication to allow
+    superuser access via traditional Django login.
     """
 
     def __init__(self, get_response):
@@ -30,6 +33,14 @@ class LabsAuthenticationMiddleware:
     def __call__(self, request: HttpRequest) -> HttpResponse:
         # Only run in labs environment
         if not getattr(settings, "IS_LABS_ENVIRONMENT", False):
+            return self.get_response(request)
+
+        # For admin URLs, use Django's standard authentication (allow superuser login)
+        if request.path.startswith("/admin/"):
+            from django.contrib.auth import get_user
+
+            # Use Django's standard authentication for admin
+            request.user = get_user(request)
             return self.get_response(request)
 
         # Check session for OAuth data
@@ -122,9 +133,11 @@ class LabsURLWhitelistMiddleware:
             logger.debug(f"Redirecting non-whitelisted path {path} to production")
             return HttpResponseRedirect(prod_url)
 
-        # Whitelisted path - require authentication (except login/oauth/logout)
+        # Whitelisted path - require authentication (except login/oauth/logout and admin)
         public_paths = ["/labs/login/", "/labs/initiate/", "/labs/callback/", "/labs/logout/"]
-        if path not in public_paths:
+
+        # Admin URLs don't require OAuth authentication (they use Django's standard auth)
+        if not path.startswith("/admin/") and path not in public_paths:
             if not request.user.is_authenticated:
                 # Redirect to labs login with next parameter
                 login_url = f"/labs/login/?next={path}"
