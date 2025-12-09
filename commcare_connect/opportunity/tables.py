@@ -2,6 +2,7 @@ import itertools
 from urllib.parse import urlencode
 
 import django_tables2 as tables
+import waffle
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -10,6 +11,7 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext as _
 from django_tables2 import columns
 
+from commcare_connect.flags.switch_names import INVOICE_REVIEW
 from commcare_connect.opportunity.models import (
     CatchmentArea,
     CompletedWork,
@@ -372,7 +374,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
     amount = tables.Column(verbose_name="Amount")
     payment_status = columns.Column(verbose_name="Payment Status", accessor="payment", empty_values=())
     payment_date = columns.Column(verbose_name="Payment Date", accessor="payment", empty_values=(None))
-    actions = tables.Column(empty_values=(), orderable=False, verbose_name="Pay")
+    actions = tables.Column(empty_values=(), orderable=False, verbose_name="Actions")
     exchange_rate = tables.Column(orderable=False, empty_values=(None,), accessor="exchange_rate__rate")
     amount_usd = tables.Column(verbose_name="Amount (USD)")
 
@@ -402,6 +404,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
         self.csrf_token = kwargs.pop("csrf_token")
         self.opportunity = kwargs.pop("opportunity")
         self.highlight_invoice_number = kwargs.pop("highlight_invoice_number", None)
+        self.is_pm = kwargs.pop("is_pm", False)
         super().__init__(*args, **kwargs)
         self.base_columns["amount"].verbose_name = f"Amount ({self.opportunity.currency})"
 
@@ -416,17 +419,32 @@ class PaymentInvoiceTable(OpportunityContextTable):
         return
 
     def render_actions(self, record):
-        invoice_approve_url = reverse("opportunity:invoice_approve", args=[self.org_slug, self.opportunity.id])
-        disabled = "disabled" if getattr(record, "payment", None) else ""
-        template_string = f"""
-            <form method="POST" action="{ invoice_approve_url  }">
-                <input type="hidden" name="csrfmiddlewaretoken" value="{ self.csrf_token }">
-                <input type="hidden" name="pk" value="{ record.pk }">
-                <button type="submit" class="button button-md outline-style" { disabled }>
-                Pay</button>
-            </form>
-        """  # noqa: E501
-        return mark_safe(template_string)
+        review_button = ""
+        if waffle.switch_is_active(INVOICE_REVIEW):
+            invoice_review_url = reverse(
+                "opportunity:invoice_review", args=[self.org_slug, self.opportunity.id, record.pk]
+            )
+            review_button = (
+                f'<a href="{invoice_review_url}" '
+                f'class="button button-md outline-style !inline-flex justify-center">'
+                f'{_("Review")}</a>'
+            )
+        pay_button = ""
+        if self.is_pm:
+            invoice_approve_url = reverse("opportunity:invoice_approve", args=[self.org_slug, self.opportunity.id])
+            disabled = "disabled" if getattr(record, "payment", None) else ""
+            pay_button = f"""
+                <button
+                    hx-post="{invoice_approve_url}"
+                    hx-vals='{{"pk": "{record.pk}"}}'
+                    hx-headers='{{"X-CSRFToken": "{self.csrf_token}"}}'
+                    hx-target="body"
+                    class="button button-md outline-style"
+                    {disabled}>
+                    {_("Pay")}
+                </button>
+            """  # noqa: E501
+        return mark_safe(f'<div class="flex gap-2">{review_button}{pay_button}</div>')
 
 
 def popup_html(value, popup_title, popup_direction="top", popup_class="", popup_attributes=""):
