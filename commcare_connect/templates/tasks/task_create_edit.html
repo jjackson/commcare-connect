@@ -98,9 +98,18 @@
           <div class="space-y-4">
             <!-- Title -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">
-                Title <span class="text-red-500">*</span>
-              </label>
+              <div class="flex justify-between items-center mb-1">
+                <label class="text-sm font-medium text-gray-700">
+                  Title <span class="text-red-500">*</span>
+                </label>
+                <a x-show="auditSessionId"
+                   :href="`{% url 'audit:bulk_assessment' pk=0 %}`.replace('/0/', `/${auditSessionId}/`)"
+                   class="text-sm text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                   target="_blank">
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                  View Audit
+                </a>
+              </div>
               <input
                 type="text"
                 x-model="taskForm.title"
@@ -733,6 +742,7 @@ function taskCreateEditPage() {
       assigned_to_name: ''
     },
     originalForm: null,
+    auditSessionId: null,
 
     // UI state
     creating: false,
@@ -818,6 +828,7 @@ function taskCreateEditPage() {
           username: taskData.username,
           name: taskData.flw_name || taskData.username
         };
+        this.auditSessionId = taskData.audit_session_id || null;
         this.originalForm = { ...this.taskForm };
       } else if (this.quickParams && Object.keys(this.quickParams).length > 0) {
         // Apply URL params for create mode (e.g., from audit session list)
@@ -838,6 +849,9 @@ function taskCreateEditPage() {
       }
       if (this.quickParams.description) {
         this.taskForm.description = this.quickParams.description;
+      }
+      if (this.quickParams.audit_session_id) {
+        this.auditSessionId = parseInt(this.quickParams.audit_session_id, 10);
       }
     },
 
