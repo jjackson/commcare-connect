@@ -317,13 +317,17 @@ class AuditDataAccess:
         # Map audit_type to appropriate filter parameters
         last_n_per_user = None
         last_n_total = None
-        start_date = criteria.start_date
-        end_date = criteria.end_date
+        start_date = None
+        end_date = None
 
         if criteria.audit_type == "last_n_per_flw":
             last_n_per_user = criteria.count_per_flw
         elif criteria.audit_type == "last_n_across_all":
             last_n_total = criteria.count_across_all
+        elif criteria.audit_type == "date_range":
+            # Only apply date filters for date_range audit type
+            start_date = criteria.start_date
+            end_date = criteria.end_date
         # Note: "last_n_per_opp" is handled at the aggregate level below
 
         all_visit_ids = []

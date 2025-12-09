@@ -1039,9 +1039,17 @@ function auditCreationPage() {
       this.auditDefinitionId = null;
 
       try {
+        // Build criteria, only including date range for date_range audit type
+        const criteria = { ...this.auditCriteria };
+        if (criteria.type !== 'date_range') {
+          // Don't send date filters for last_n audit types
+          delete criteria.startDate;
+          delete criteria.endDate;
+        }
+
         const payload = {
           opportunities: this.selectedOpportunities.map(o => o.id),
-          criteria: this.auditCriteria
+          criteria: criteria
         };
 
         const response = await fetch('{% url "audit:preview_audit" %}', {
@@ -1269,21 +1277,28 @@ function auditCreationPage() {
           }
         }
 
+        // Build criteria, only including date range for date_range audit type
+        const criteria = {
+          audit_type: this.auditCriteria.type,
+          granularity: this.auditCriteria.granularity,
+          sample_percentage: this.auditCriteria.samplePercentage,
+          countPerFlw: this.auditCriteria.countPerFlw,
+          countPerOpp: this.auditCriteria.countPerOpp,
+          countAcrossAll: this.auditCriteria.countAcrossAll,
+          title: this.auditTitle,
+          tag: this.auditTag,
+          selected_flw_user_ids: this.selectedFlwUserIds  // Include FLW selections
+        };
+
+        // Only include date filters for date_range audit type
+        if (this.auditCriteria.type === 'date_range') {
+          criteria.startDate = this.auditCriteria.startDate;
+          criteria.endDate = this.auditCriteria.endDate;
+        }
+
         const payload = {
           opportunities: this.selectedOpportunities.map(o => o.id),
-          criteria: {
-            audit_type: this.auditCriteria.type,
-            granularity: this.auditCriteria.granularity,
-            sample_percentage: this.auditCriteria.samplePercentage,
-            startDate: this.auditCriteria.startDate,
-            endDate: this.auditCriteria.endDate,
-            countPerFlw: this.auditCriteria.countPerFlw,
-            countPerOpp: this.auditCriteria.countPerOpp,
-            countAcrossAll: this.auditCriteria.countAcrossAll,
-            title: this.auditTitle,
-            tag: this.auditTag,
-            selected_flw_user_ids: this.selectedFlwUserIds  // Include FLW selections
-          },
+          criteria: criteria,
           // Pass pre-computed data from preview (optimization: skip CSV re-parsing)
           visit_ids: this.precomputedVisitIds,
           flw_visit_ids: selectedFlwVisitIds

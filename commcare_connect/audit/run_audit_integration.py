@@ -6,11 +6,16 @@ Tests the new AuditDataAccess class that uses the analysis pipeline
 for memory-efficient visit processing.
 
 Usage:
-    python commcare_connect/audit/run_audit_integration_new.py [config]
+    python commcare_connect/audit/run_audit_integration.py [config]
 
 Available configs:
-    opp385_last10 - Opp 385, last 10 visits (default)
-    opp385        - Opp 385, last 10 per FLW
+    opp385_last10          - Opp 385, last 10 visits total (default)
+    opp385                 - Opp 385, last 10 per FLW
+    opp772                 - Opp 772, last 10 per FLW
+    opp772_zero            - Opp 772, wrong FLWs (demonstrates 0 visits)
+    opp772_date            - Opp 772, wrong date range (demonstrates 0 visits)
+    opp772_lastN_with_dates - Opp 772, last 10 per FLW with old dates in criteria
+                             (dates should be ignored for lastN audit types)
 """
 
 import os
@@ -29,6 +34,9 @@ class TestConfig:
     count_across_all: int = 10
     count_per_flw: int | None = None
     sample_percentage: int = 100
+    selected_flw_user_ids: list[str] | None = None
+    start_date: str | None = None
+    end_date: str | None = None
 
 
 TEST_CONFIGS = {
@@ -45,6 +53,39 @@ TEST_CONFIGS = {
         select_count=1,
         audit_type="last_n_per_flw",
         count_per_flw=10,
+    ),
+    "opp772": TestConfig(
+        name="Opp 772 - Last 10 per FLW",
+        search_query="772",
+        select_count=1,
+        audit_type="last_n_per_flw",
+        count_per_flw=10,
+    ),
+    "opp772_zero": TestConfig(
+        name="Opp 772 - Zero Visits (Wrong FLWs)",
+        search_query="772",
+        select_count=1,
+        audit_type="last_n_per_flw",
+        count_per_flw=10,
+        selected_flw_user_ids=["nonexistent_flw1", "nonexistent_flw2"],
+    ),
+    "opp772_date": TestConfig(
+        name="Opp 772 - Zero Visits (Wrong Date Range)",
+        search_query="772",
+        select_count=1,
+        audit_type="date_range",
+        start_date="2024-01-01",
+        end_date="2024-01-31",
+    ),
+    "opp772_lastN_with_dates": TestConfig(
+        name="Opp 772 - Last 10 per FLW (ignoring old dates in criteria)",
+        search_query="772",
+        select_count=1,
+        audit_type="last_n_per_flw",
+        count_per_flw=10,
+        # These dates should be IGNORED since audit_type is last_n_per_flw
+        start_date="2024-01-01",
+        end_date="2024-01-31",
     ),
 }
 
@@ -82,6 +123,10 @@ def test_optimized_audit_flow(config_name="opp385_last10"):
     print(f"Configuration: {config.name}")
     print(f"Search: '{config.search_query}'")
     print(f"Audit Type: {config.audit_type}")
+    if config.start_date or config.end_date:
+        print(f"Date Range: {config.start_date or 'any'} to {config.end_date or 'any'}")
+    if config.selected_flw_user_ids:
+        print(f"Selected FLWs: {', '.join(config.selected_flw_user_ids)}")
     print("=" * 80)
 
     # Step 1: Get OAuth token
@@ -162,6 +207,9 @@ def test_optimized_audit_flow(config_name="opp385_last10"):
             count_across_all=config.count_across_all,
             count_per_flw=config.count_per_flw or 10,
             sample_percentage=config.sample_percentage,
+            selected_flw_user_ids=config.selected_flw_user_ids,
+            start_date=config.start_date,
+            end_date=config.end_date,
         )
 
         start = time.time()
@@ -175,11 +223,25 @@ def test_optimized_audit_flow(config_name="opp385_last10"):
         print(f"[OK] Fetched and filtered to {len(visit_ids)} visits in {elapsed:.2f}s (slim mode)")
         print(f"     Visit IDs: {visit_ids[:5]}{'...' if len(visit_ids) > 5 else ''}")
 
+        # Show FLW breakdown
         if filtered_visits:
+            from collections import Counter
+
             sample = filtered_visits[0]
             print(f"     Sample visit keys: {list(sample.keys())}")
             has_form_json = "form_json" in sample and sample["form_json"]
             print(f"     Has form_json: {has_form_json} (should be empty dict or False)")
+
+            # Show FLW distribution
+            flw_counts = Counter(v.get("username") for v in filtered_visits if v.get("username"))
+            print(f"     FLW breakdown ({len(flw_counts)} unique FLWs):")
+            for flw, count in sorted(flw_counts.items(), key=lambda x: -x[1])[:10]:
+                print(f"       - {flw}: {count} visits")
+
+            # Show date range of filtered visits
+            dates = [v.get("visit_date") for v in filtered_visits if v.get("visit_date")]
+            if dates:
+                print(f"     Date range: {min(dates)} to {max(dates)}")
 
         if not visit_ids:
             print("[WARNING] No visits match criteria")
