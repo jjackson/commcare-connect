@@ -35,7 +35,14 @@
                     {% elif message.tags == 'warning' %}bg-message-warning text-message-warning-text
                     {% elif message.tags == 'info' %}bg-blue-500 text-white
                     {% else %}bg-gray-500 text-white{% endif %}">
-            <span>{{ message }}</span>
+            <div class="flex items-center gap-2">
+              {% if message.tags == 'success' %}
+              <i class="fa-regular fa-circle-check"></i>
+              {% elif message.tags == 'warning' %}
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              {% endif %}
+              <span>{{ message }}</span>
+            </div>
             <button type="button"
                     class="ml-4 text-xl font-light hover:font-normal focus:outline-none"
                     aria-label="Close"
