@@ -11,6 +11,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     OpportunityClaimLimit,
     Payment,
+    PaymentInvoice,
     PaymentUnit,
     UserVisit,
 )
@@ -44,4 +45,5 @@ REPLICATION_ALLOWED_MODELS = [
     User,
     UserVisit,
     UserAnalyticsData,
+    PaymentInvoice,
 ]
