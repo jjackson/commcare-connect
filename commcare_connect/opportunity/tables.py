@@ -438,7 +438,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
                     hx-post="{invoice_approve_url}"
                     hx-vals='{{"pk": "{record.pk}"}}'
                     hx-headers='{{"X-CSRFToken": "{self.csrf_token}"}}'
-                    class="button button-md outline-style"
+                    class="button button-md primary-dark"
                     {disabled}>
                     {_("Pay")}
                 </button>
