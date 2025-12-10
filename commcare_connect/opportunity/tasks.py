@@ -547,25 +547,40 @@ def generate_automated_service_delivery_invoice():
     if not waffle.switch_is_active(AUTOMATED_INVOICES_MONTHLY):
         return
 
-    with transaction.atomic():
-        for opportunity in Opportunity.objects.filter(active=True, managed=True):
-            start_date = get_start_date_for_invoice(opportunity)
-            end_date = get_end_date_for_invoice(start_date)
-            invoice_number = generate_invoice_number()
-            line_items = get_uninvoiced_visit_items(opportunity, start_date, end_date)
-            total_local_amount = sum(item["total_amount_local"] for item in line_items)
-            total_usd_amount = sum(item["total_amount_usd"] for item in line_items)
+    CHUNK_SIZE = 100
+    invoices_chunk = []
 
-            payment_invoice = PaymentInvoice(
-                opportunity=opportunity,
-                amount=total_local_amount,
-                amount_usd=total_usd_amount,
-                date=datetime.datetime.utcnow(),
-                start_date=start_date,
-                end_date=end_date,
-                status=InvoiceStatus.PENDING,
-                invoice_number=invoice_number,
-                service_delivery=True,
-            )
-            payment_invoice.save()
-            link_invoice_to_completed_works(payment_invoice, start_date=start_date, end_date=end_date)
+    for opportunity in Opportunity.objects.filter(active=True, managed=True).iterator(chunk_size=CHUNK_SIZE):
+        start_date = get_start_date_for_invoice(opportunity)
+        end_date = get_end_date_for_invoice(start_date)
+        invoice_number = generate_invoice_number()
+        line_items = get_uninvoiced_visit_items(opportunity, start_date, end_date)
+        total_local_amount = sum(item["total_amount_local"] for item in line_items)
+        total_usd_amount = sum(item["total_amount_usd"] for item in line_items)
+
+        payment_invoice = PaymentInvoice(
+            opportunity=opportunity,
+            amount=total_local_amount,
+            amount_usd=total_usd_amount,
+            date=datetime.datetime.utcnow(),
+            start_date=start_date,
+            end_date=end_date,
+            status=InvoiceStatus.PENDING,
+            invoice_number=invoice_number,
+            service_delivery=True,
+        )
+        invoices_chunk.append(payment_invoice)
+
+        if len(invoices_chunk) == CHUNK_SIZE:
+            _bulk_create_and_link_invoices(invoices_chunk)
+            invoices_chunk = []
+
+    if invoices_chunk:
+        _bulk_create_and_link_invoices(invoices_chunk)
+
+
+def _bulk_create_and_link_invoices(invoices_chunk):
+    with transaction.atomic():
+        PaymentInvoice.objects.bulk_create(invoices_chunk)
+        for invoice in invoices_chunk:
+            link_invoice_to_completed_works(invoice, start_date=invoice.start_date, end_date=invoice.end_date)
