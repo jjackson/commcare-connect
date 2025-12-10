@@ -1541,7 +1541,7 @@ def submit_invoice(request, org_slug, opp_id):
         return HttpResponseBadRequest("Only invoices with status 'Pending' can be submitted for approval.")
 
     invoice.status = InvoiceStatus.SUBMITTED
-    invoice.save()
+    invoice.save(update_fields=["status"])
     messages.success(
         request, _("Invoice %(invoice_number)s submitted for approval.") % {"invoice_number": invoice.invoice_number}
     )
@@ -1576,7 +1576,7 @@ def invoice_approve(request, org_slug, opp_id):
             )
         )
         inv.status = InvoiceStatus.APPROVED
-        inv.save()
+        inv.save(update_fields=["status"])
 
     Payment.objects.bulk_create(payments)
 
