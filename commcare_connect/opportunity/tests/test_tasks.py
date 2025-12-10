@@ -228,12 +228,16 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
         invoices = PaymentInvoice.objects.all()
         assert invoices.count() == 2
 
+        completed_work1.refresh_from_db()
+        completed_work2.refresh_from_db()
+
         invoice1 = PaymentInvoice.objects.get(opportunity=opportunity1)
         assert invoice1.amount == Decimal("100.00")
         assert invoice1.status == InvoiceStatus.PENDING
         assert invoice1.start_date == datetime.date(2024, 1, 1)
         assert invoice1.end_date == datetime.date(2024, 1, 31)
         assert invoice1.invoice_number == "INV001"
+        assert completed_work1.invoice == invoice1
 
         invoice2 = PaymentInvoice.objects.get(opportunity=opportunity2)
         assert invoice2.amount == Decimal("50.00")
@@ -241,6 +245,7 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
         assert invoice2.start_date == datetime.date(2024, 1, 1)
         assert invoice2.end_date == datetime.date(2024, 1, 31)
         assert invoice2.invoice_number == "INV002"
+        assert completed_work2.invoice == invoice2
 
     @override_switch(AUTOMATED_INVOICES_MONTHLY, active=True)
     def test_no_invoice_for_inactive_opportunities(self):
@@ -258,7 +263,10 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
 
         generate_automated_service_delivery_invoice()
 
+        completed_work.refresh_from_db()
+
         assert PaymentInvoice.objects.count() == 0
+        assert completed_work.invoice is None
 
     @override_switch(AUTOMATED_INVOICES_MONTHLY, active=True)
     def test_no_invoice_for_active_unmanaged_opportunity(self):
@@ -277,6 +285,7 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
         generate_automated_service_delivery_invoice()
 
         assert PaymentInvoice.objects.count() == 0
+        assert completed_work.invoice is None
 
     @override_switch(AUTOMATED_INVOICES_MONTHLY, active=False)
     def test_no_invoice_when_switch_inactive(self):
@@ -295,6 +304,7 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
         generate_automated_service_delivery_invoice()
 
         assert PaymentInvoice.objects.count() == 0
+        assert completed_work.invoice is None
 
     @override_switch(AUTOMATED_INVOICES_MONTHLY, active=True)
     def test_invoice_with_no_approved_work(self):
