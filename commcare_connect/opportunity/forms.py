@@ -1,5 +1,6 @@
 import datetime
 import json
+import secrets
 from urllib.parse import urlencode
 
 from crispy_forms.helper import FormHelper
@@ -7,16 +8,19 @@ from crispy_forms.layout import HTML, Column, Div, Field, Fieldset, Layout, Row,
 from dateutil.relativedelta import relativedelta
 from django import forms
 from django.core.exceptions import ValidationError
-from django.db.models import F, Q, Sum, TextChoices
+from django.db.models import F, Min, Q, Sum, TextChoices
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.timezone import now
+from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 from waffle import switch_is_active
 
 from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.models import (
     CommCareApp,
+    CompletedWork,
+    CompletedWorkStatus,
     CredentialConfiguration,
     Currency,
     DeliverUnit,
@@ -34,6 +38,7 @@ from commcare_connect.opportunity.models import (
     VisitReviewStatus,
     VisitValidationStatus,
 )
+from commcare_connect.opportunity.utils.completed_work import link_invoice_to_completed_works
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import ManagedOpportunity
 from commcare_connect.users.models import User, UserCredential
@@ -76,18 +81,27 @@ class OpportunityUserInviteForm(forms.Form):
         )
         self.fields["users"] = forms.CharField(
             widget=forms.Textarea,
-            required=False,
-            help_text="Enter the phone numbers of the users you want to add to this opportunity, one on each line.",
+            required=True,
+            help_text=_(
+                "Enter the phone numbers of the users you want to add to this opportunity with the"
+                " country code, one on each line."
+            ),
         )
 
     def clean_users(self):
         user_data = self.cleaned_data["users"]
 
         if user_data and self.opportunity and not self.opportunity.is_setup_complete:
-            raise ValidationError("Please finish setting up the opportunity before inviting users.")
+            raise ValidationError(gettext("Please finish setting up the opportunity before inviting users."))
 
-        split_users = [line.strip() for line in user_data.splitlines() if line.strip()]
-        return split_users
+        user_numbers = [line.strip() for line in user_data.splitlines() if line.strip()]
+        for user_number in user_numbers:
+            if not user_number.startswith("+") or not user_number[1:].isdigit():
+                raise ValidationError(
+                    gettext("Phone numbers must contain only digits and include the country code starting with '+'")
+                )
+
+        return user_numbers
 
 
 class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
@@ -113,6 +127,8 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.opportunity = self.instance
+
+        self.fields["users"].required = False
 
         layout_fields = [
             Row(
@@ -175,14 +191,29 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             layout_fields.append(
                 Row(
                     HTML(
-                        f"""
-                        <div class='col-span-2'>
-                            <h6 class='title-sm'>{_("Manage Credentials")}</h6>
-                            <span class='hint'>
-                                {_("Configure credential requirements for learning and delivery.")}
-                            </span>
-                        </div>
-                    """
+                        format_html(
+                            """
+                            <div class='col-span-2'>
+                                <h6 class='title-sm'>{}</h6>
+                                <span class='hint'>
+                                    {}
+                                </span>
+                            </div>
+                            """,
+                            _("Manage Credentials"),
+                            format_html(
+                                _(
+                                    "Configure credential requirements for learning and delivery. For more "
+                                    "information, please refer to the {link_start}following documentation{link_end}."
+                                ),
+                                link_start=format_html(
+                                    '<a href="{}" target="_blank" class="text-blue-600 hover:underline">',
+                                    "https://dimagi.atlassian.net/wiki/spaces/connectpublic/"
+                                    "pages/3383132164/Managing+Credentials",
+                                ),
+                                link_end=format_html("</a>"),
+                            ),
+                        )
                     ),
                     Column(
                         Field("learn_level"),
@@ -766,10 +797,9 @@ class VisitExportForm(forms.Form):
         required=False,
         initial=datetime.date.today().strftime("%Y-%m-%d"),
     )
-    status = forms.ChoiceField(
+    status = forms.MultipleChoiceField(
         choices=[("all", "All")] + VisitValidationStatus.choices,
-        initial="all",
-        widget=forms.Select(
+        widget=forms.SelectMultiple(
             attrs={
                 "hx-trigger": "change",
                 "hx-target": "#visit-count-warning",
@@ -781,12 +811,11 @@ class VisitExportForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
+        self.org_slug = kwargs.pop("org_slug")
         self.review_export = kwargs.pop("review_export", False)
         super().__init__(*args, **kwargs)
 
-        visit_count_url = reverse(
-            "opportunity:visit_export_count", args=(self.opportunity.organization.slug, self.opportunity.id)
-        )
+        visit_count_url = reverse("opportunity:visit_export_count", args=(self.org_slug, self.opportunity.id))
 
         # if export is for review update the status and url
         if self.review_export:
@@ -1304,7 +1333,7 @@ class PaymentInvoiceForm(forms.ModelForm):
     usd_currency = forms.BooleanField(
         required=False,
         initial=False,
-        label="USD Currency",
+        label=_("Specify in USD"),
         widget=forms.CheckboxInput(),
     )
 
@@ -1312,13 +1341,18 @@ class PaymentInvoiceForm(forms.ModelForm):
         model = PaymentInvoice
         fields = ("amount", "date", "invoice_number", "service_delivery")
         widgets = {
-            "date": forms.DateInput(attrs={"type": "date"}),
+            "date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "amount": forms.NumberInput(attrs={"min": "0"}),
         }
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
+        self.invoice_type = kwargs.pop("invoice_type", PaymentInvoice.InvoiceType.service_delivery)
+        self.read_only = kwargs.pop("read_only", False)
         super().__init__(*args, **kwargs)
+        if self.read_only:
+            for field in self.fields.values():
+                field.widget.attrs["readonly"] = "readonly"
 
         self.fields["usd_currency"].widget.attrs.update(
             {
@@ -1331,7 +1365,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         currency_code = currency.code if currency else ""
 
         self.helper = FormHelper(self)
-        self.helper.layout = Layout(
+        layout_fields = [
             Row(
                 Field(
                     "date",
@@ -1355,14 +1389,19 @@ class PaymentInvoiceForm(forms.ModelForm):
                     css_class=CHECKBOX_CLASS,
                     wrapper_class="flex p-4 justify-between rounded-lg bg-gray-100",
                 ),
-                Field(
-                    "service_delivery",
-                    css_class=CHECKBOX_CLASS,
-                    wrapper_class="flex p-4 justify-between rounded-lg bg-gray-100",
-                ),
                 css_class="flex flex-col",
             ),
-        )
+        ]
+
+        if not self.read_only:
+            layout_fields.append(
+                Div(
+                    Submit("submit", "Submit", css_class="button button-md primary-dark"),
+                    css_class="flex justify-end mt-4",
+                )
+            )
+
+        self.helper.layout = Layout(*layout_fields)
         self.helper.form_tag = False
 
     def clean_invoice_number(self):
@@ -1404,7 +1443,316 @@ class PaymentInvoiceForm(forms.ModelForm):
         instance.opportunity = self.opportunity
         instance.amount_usd = self.cleaned_data["amount_usd"]
         instance.exchange_rate = self.cleaned_data["exchange_rate"]
+        instance.service_delivery = self.invoice_type == PaymentInvoice.InvoiceType.service_delivery
 
         if commit:
             instance.save()
         return instance
+
+
+class AutomatedPaymentInvoiceForm(forms.ModelForm):
+    amount = forms.DecimalField(
+        label=_("Amount"),
+        decimal_places=2,
+    )
+    amount_usd = forms.DecimalField(
+        label=_("Amount (USD)"),
+        required=False,
+        decimal_places=2,
+    )
+    invoice_number = forms.CharField(
+        label=_("Invoice ID"),
+        required=False,
+        widget=forms.TextInput(attrs={"placeholder": _("Auto-generated on save")}),
+        help_text=_("This value is system-generated and unique."),
+    )
+    usd_currency = forms.BooleanField(
+        required=False,
+        initial=False,
+        label=_("Specify in USD"),
+        widget=forms.CheckboxInput(),
+    )
+
+    class Meta:
+        model = PaymentInvoice
+        fields = ("title", "date", "invoice_number", "start_date", "end_date", "notes", "amount", "amount_usd")
+        widgets = {
+            "date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "start_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "end_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "notes": forms.Textarea(
+                attrs={"rows": 3, "placeholder": _("Describe service delivery details, references, or notes...")}
+            ),
+            "title": forms.TextInput(attrs={"placeholder": _("e.g. October Services")}),
+        }
+        labels = {
+            "title": _("Invoice title"),
+            "date": _("Generation date"),
+            "notes": "",
+        }
+
+    def __init__(self, *args, **kwargs):
+        self.opportunity = kwargs.pop("opportunity")
+        self.invoice_type = kwargs.pop("invoice_type", PaymentInvoice.InvoiceType.service_delivery)
+        self.read_only = kwargs.pop("read_only", False)
+        self.line_items_table = kwargs.pop("line_items_table", None)
+
+        super().__init__(*args, **kwargs)
+        if self.read_only:
+            for field in self.fields.values():
+                field.widget.attrs["readonly"] = "readonly"
+
+        if not self.instance.pk:
+            self.fields["invoice_number"].initial = self.generate_invoice_number()
+            self.fields["date"].initial = str(datetime.date.today())
+
+        if self.is_service_delivery:
+            self.fields["amount"].label = _("Amount (Local Currency)")
+            self.fields["amount"].help_text = _("Local currency is determined by the opportunity.")
+            if self.instance.pk:
+                self.fields["start_date"].initial = str(self.instance.start_date)
+                self.fields["end_date"].initial = str(self.instance.end_date)
+            else:
+                start_date = self.get_start_date_for_invoice()
+                self.fields["start_date"].initial = str(start_date)
+                self.fields["end_date"].initial = str(self.get_end_date_for_invoice(start_date))
+        else:
+            self.fields["usd_currency"].widget.attrs.update(
+                {
+                    "x-ref": "currencyToggle",
+                    "x-on:change": "currency = $event.target.checked; convert(true)",
+                }
+            )
+
+        self.helper = FormHelper(self)
+
+        invoice_form_fields = self.invoice_form_fields()
+        if self.is_service_delivery:
+            invoice_form_fields.extend(
+                [
+                    self.line_items,
+                    Fieldset(
+                        "Service Delivery Notes",
+                        Field("notes"),
+                    ),
+                ]
+            )
+
+        if not self.read_only:
+            invoice_form_fields.append(
+                Div(
+                    Submit("submit", "Submit", css_class="button button-md primary-dark"),
+                    css_class="flex justify-end mt-4",
+                )
+            )
+
+        self.helper.layout = Layout(*invoice_form_fields)
+        self.helper.form_tag = False
+
+    def get_start_date_for_invoice(self):
+        date = (
+            CompletedWork.objects.filter(
+                invoice__isnull=True,
+                opportunity_access__opportunity=self.opportunity,
+                status=CompletedWorkStatus.approved,
+            )
+            .aggregate(earliest_date=Min("status_modified_date"))
+            .get("earliest_date")
+        )
+
+        start_date = date
+        if date:
+            start_date = date.date()
+        else:
+            start_date = self.opportunity.start_date
+
+        return start_date.replace(day=1)
+
+    def get_end_date_for_invoice(self, start_date):
+        last_day_previous_month = datetime.date.today().replace(day=1) - datetime.timedelta(days=1)
+
+        if start_date > last_day_previous_month:
+            return datetime.date.today() - datetime.timedelta(days=1)
+        return last_day_previous_month
+
+    def invoice_form_fields(self):
+        invoice_number_attrs = {}
+        invoice_number_attrs["readonly"] = "readonly"
+        first_row = [Field("invoice_number", **invoice_number_attrs)]
+
+        if self.is_service_delivery:
+            first_row.append(Field("title"))
+
+        second_row = [Field("date", **{"x-ref": "date", "x-on:change": "convert()"})]
+        if self.is_service_delivery:
+            start_date_attrs = (
+                {} if self.read_only else {"x-model": "startDate", "x-on:change": "fetchInvoiceLineItems()"}
+            )
+            end_date_attrs = {} if self.read_only else {"x-model": "endDate", "x-on:change": "fetchInvoiceLineItems()"}
+            second_row.append(Field("start_date", **start_date_attrs))
+            second_row.append(Field("end_date", **end_date_attrs))
+
+        amount_field_attrs = {
+            "x-ref": "amount",
+            "x-model": "amount",
+            "x-on:input.debounce.300ms": "convert()",
+        }
+        amount_usd_field_attrs = {
+            "x-model": "usdAmount",
+        }
+        if self.is_service_delivery:
+            amount_field_attrs["readonly"] = "readonly"
+            amount_usd_field_attrs["readonly"] = "readonly"
+
+        third_row = [
+            Field(
+                "amount",
+                label=f"Amount ({self.opportunity.currency})",
+                **amount_field_attrs,
+            ),
+        ]
+        if self.is_service_delivery:
+            third_row.append(
+                Field(
+                    "amount_usd",
+                    **amount_usd_field_attrs,
+                ),
+            )
+        else:
+            third_row.append(
+                Field(
+                    "usd_currency",
+                    css_class=CHECKBOX_CLASS,
+                    wrapper_class="flex p-4 justify-between rounded-lg bg-gray-100",
+                ),
+            )
+
+        return [
+            Div(
+                Div(*first_row, css_class="grid grid-cols-3 gap-6"),
+                Div(*second_row, css_class="grid grid-cols-3 gap-6"),
+                Div(
+                    *third_row,
+                    Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
+                    css_class="grid grid-cols-3 gap-6",
+                ),
+                css_class="flex flex-col gap-4",
+            ),
+        ]
+
+    def generate_invoice_number(self):
+        return secrets.token_hex(5).upper()
+
+    def clean_invoice_number(self):
+        invoice_number = self.cleaned_data["invoice_number"]
+
+        if not invoice_number:
+            invoice_number = self.generate_invoice_number()
+
+        if PaymentInvoice.objects.filter(invoice_number=invoice_number).exists():
+            raise ValidationError(
+                "Please use a different invoice number",
+                code="invoice_number_reused",
+            )
+        return invoice_number
+
+    def clean(self):
+        cleaned_data = super().clean()
+        amount = cleaned_data.get("amount")
+        date = cleaned_data.get("date")
+
+        if amount is None or date is None:
+            return cleaned_data  # Let individual field errors handle missing values
+
+        if not self.is_service_delivery:
+            exchange_rate = ExchangeRate.latest_exchange_rate(self.opportunity.currency, date)
+            if not exchange_rate:
+                raise ValidationError("Exchange rate not available for selected date.")
+
+            cleaned_data["exchange_rate"] = exchange_rate
+            cleaned_data["amount_usd"] = round(amount / exchange_rate.rate, 2)
+
+            cleaned_data["title"] = None
+            cleaned_data["start_date"] = None
+            cleaned_data["end_date"] = None
+            cleaned_data["notes"] = None
+
+            exchange_rate = ExchangeRate.latest_exchange_rate(self.opportunity.currency, date)
+            if not exchange_rate:
+                raise ValidationError("Exchange rate not available for selected date.")
+
+            if cleaned_data.get("usd_currency"):
+                cleaned_data["amount_usd"] = amount
+                cleaned_data["amount"] = round(amount * exchange_rate.rate, 2)
+            else:
+                cleaned_data["amount"] = amount
+                cleaned_data["amount_usd"] = round(amount / exchange_rate.rate, 2)
+        else:
+            start_date = cleaned_data.get("start_date")
+            end_date = cleaned_data.get("end_date")
+
+            if not start_date:
+                raise ValidationError({"start_date": "Start date is required for service delivery invoices."})
+            if not end_date:
+                raise ValidationError({"end_date": "End date is required for service delivery invoices."})
+
+            if end_date < start_date:
+                raise ValidationError({"end_date": "End date cannot be earlier than start date."})
+
+        return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.opportunity = self.opportunity
+        instance.amount_usd = self.cleaned_data["amount_usd"]
+        instance.amount = self.cleaned_data["amount"]
+        instance.exchange_rate = self.cleaned_data.get("exchange_rate")
+        instance.service_delivery = self.invoice_type == PaymentInvoice.InvoiceType.service_delivery
+
+        if commit:
+            instance.save()
+            if self.is_service_delivery:
+                link_invoice_to_completed_works(instance, start_date=instance.start_date, end_date=instance.end_date)
+
+        return instance
+
+    @property
+    def is_service_delivery(self):
+        return self.invoice_type == PaymentInvoice.InvoiceType.service_delivery
+
+    @property
+    def line_items(self):
+        if self.line_items_table:
+            table = HTML(
+                """
+                {% load django_tables2 %}
+                <div class="overflow-x-auto mb-4">
+                    {% render_table form.line_items_table %}
+                </div>
+                """
+            )
+        else:
+            table = HTML(
+                """
+                <div id="invoice-line-items-wrapper" class="space-y-1 text-sm text-gray-500 mb-4"></div>
+            """
+            )
+
+        return Fieldset(
+            "Line Items",
+            table,
+            HTML(
+                """
+                <div id="download-line-items-wrapper" x-cloak x-show="showDownloadButton" class="my-4">
+                    <a type="button"
+                    class="button button-md outline-style"
+                    :href="downloadLineItemsUrl()"
+                    target="_blank"
+                    >
+                        <i class="fa-solid fa-download mr-2"></i>
+                        {% load i18n %}{% translate "Download All Items" %}
+                    </a>
+                </div>
+                """
+            ),
+        )

@@ -37,13 +37,13 @@ def organization_home(request, org_slug):
     form = None
     membership_form = MembershipForm(organization=org)
     if request.method == "POST":
-        form = OrganizationChangeForm(request.POST, instance=org)
+        form = OrganizationChangeForm(request.POST, instance=org, user=request.user)
         if form.is_valid():
             messages.success(request, gettext("Organization details saved!"))
             form.save()
 
     if not form:
-        form = OrganizationChangeForm(instance=org)
+        form = OrganizationChangeForm(instance=org, user=request.user)
 
     return render(
         request,
@@ -65,7 +65,7 @@ def add_members_form(request, org_slug):
     if form.is_valid():
         form.instance.organization = org
         form.save()
-        send_org_invite.delay(membership_id=form.instance.pk, host_user_id=request.user.pk)
+        send_org_invite(membership_id=form.instance.pk, host_user_id=request.user.pk)
     url = reverse("organization:home", args=(org_slug,)) + "?active_tab=members"
     return redirect(url)
 

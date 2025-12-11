@@ -471,7 +471,7 @@ def populate_currency_and_country_fk(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0086_labsrecord_program_alter_labsrecord_opportunity"),
+        ("opportunity", "0087_completedwork_invoice_paymentinvoice_end_date_and_more"),
     ]
 
     operations = [
@@ -500,14 +500,14 @@ class Migration(migrations.Migration):
             model_name="opportunity",
             name="currency_fk",
             field=models.ForeignKey(
-                null=True, on_delete=django.db.models.deletion.DO_NOTHING, to="opportunity.currency"
+                null=True, on_delete=django.db.models.deletion.PROTECT, to="opportunity.currency"
             ),
         ),
         migrations.AddField(
             model_name="opportunity",
             name="country",
             field=models.ForeignKey(
-                null=True, on_delete=django.db.models.deletion.DO_NOTHING, to="opportunity.country"
+                null=True, on_delete=django.db.models.deletion.PROTECT, to="opportunity.country"
             ),
         ),
         migrations.RunPython(
