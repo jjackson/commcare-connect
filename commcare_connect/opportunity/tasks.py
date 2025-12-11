@@ -555,6 +555,9 @@ def generate_automated_service_delivery_invoice():
         end_date = get_end_date_for_invoice(start_date)
         invoice_number = generate_invoice_number()
         line_items = get_uninvoiced_visit_items(opportunity, start_date, end_date)
+        if not line_items:
+            continue
+
         total_local_amount = sum(item["total_amount_local"] for item in line_items)
         total_usd_amount = sum(item["total_amount_usd"] for item in line_items)
 

@@ -307,12 +307,10 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
         assert completed_work.invoice is None
 
     @override_switch(AUTOMATED_INVOICES_MONTHLY, active=True)
-    def test_invoice_with_no_approved_work(self):
+    def test_no_invoice_with_no_approved_work(self):
         opportunity = OpportunityFactory(active=True, managed=True)
 
         generate_automated_service_delivery_invoice()
 
-        invoice = PaymentInvoice.objects.get(opportunity=opportunity)
-        assert invoice.amount == Decimal("0")
-        assert invoice.amount_usd == Decimal("0")
-        assert invoice.status == InvoiceStatus.PENDING
+        invoice = PaymentInvoice.objects.filter(opportunity=opportunity)
+        assert len(invoice) == 0
