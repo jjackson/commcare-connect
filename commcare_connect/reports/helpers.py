@@ -224,6 +224,12 @@ def get_table_data_for_year_month(
     connectid_user_count, non_invited_user_counts = get_connectid_user_counts_cumulative()
     total_eligible_user_counts = get_eligible_user_counts_cumulative(delivery_type)
 
+    hq_sso_users = (
+        UserAnalyticsData.objects.annotate(month_group=TruncMonth("has_sso_on_hq_app"))
+        .values("month_group")
+        .annotate(users=models.Count("username"))
+    )
+    hq_sso_users_data = {item["month_group"]: item["users"] for item in hq_sso_users}
     activated_personalid_accounts = (
         UserAnalyticsData.objects.filter(
             models.Q(has_ever_earned_payment__isnull=False) | models.Q(has_sso_on_hq_app__isnull=False)
@@ -243,6 +249,7 @@ def get_table_data_for_year_month(
                 "connectid_users": connectid_user_count.get(month_group, 0),
                 "total_eligible_users": total_eligible_user_counts.get(month_group, 0),
                 "non_preregistered_users": non_invited_user_counts.get(month_group, 0),
+                "hq_sso_users": hq_sso_users_data.get(month_group, 0),
                 "activated_personalid_accounts": activated_personalid_accounts_data.get(month_group, 0),
             }
         )
