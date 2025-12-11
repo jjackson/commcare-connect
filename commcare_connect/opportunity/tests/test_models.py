@@ -3,7 +3,7 @@ import importlib
 import pytest
 from django.apps import apps as django_apps
 
-from commcare_connect.opportunity.models import Opportunity, OpportunityClaimLimit
+from commcare_connect.opportunity.models import Opportunity, OpportunityClaimLimit, UserVisit
 from commcare_connect.opportunity.tests.factories import (
     CompletedModuleFactory,
     CompletedWorkFactory,
@@ -19,6 +19,7 @@ from commcare_connect.opportunity.tests.factories import (
 from commcare_connect.opportunity.visit_import import update_payment_accrued
 from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import MobileUserFactory
+from commcare_connect.utils.flags import Flags
 
 
 @pytest.mark.django_db
@@ -129,7 +130,7 @@ def test_access_visit_count(opportunity: Opportunity):
 @pytest.mark.django_db
 def test_populate_currency_and_country_fk():
     migration_module = importlib.import_module(
-        "commcare_connect.opportunity.migrations.0087_currency_country_opportunity_currency_fk"
+        "commcare_connect.opportunity.migrations.0088_currency_country_opportunity_currency_fk"
     )
     populate_currency_and_country_fk = migration_module.populate_currency_and_country_fk
 
@@ -182,3 +183,34 @@ def test_populate_currency_and_country_fk():
     assert opp_invalid.country_id is None
     assert CountryModel.objects.count() == initial_country_count
     assert CurrencyModel.objects.count() == initial_currency_count + 1
+
+
+@pytest.mark.parametrize(
+    "query_flags, expected_keys",
+    [
+        ([Flags.DUPLICATE.value], {"duplicate"}),
+        ([Flags.DUPLICATE.value, Flags.GPS.value], {"duplicate", "gps"}),
+        ([], {"duplicate", "gps", "clean"}),
+    ],
+)
+def test_uservisit_queryset_with_any_flags(query_flags, expected_keys):
+    visits = {
+        "duplicate": UserVisitFactory(
+            flagged=True,
+            flag_reason={"flags": [(Flags.DUPLICATE.value, "Duplicate submission")]},
+        ),
+        "gps": UserVisitFactory(
+            flagged=True,
+            flag_reason={"flags": [(Flags.GPS.value, "GPS missing")]},
+        ),
+        "clean": UserVisitFactory(
+            flagged=False,
+            flag_reason=None,
+        ),
+    }
+
+    queryset = UserVisit.objects.with_any_flags(query_flags)
+    result_ids = {visit_id for visit_id in queryset.values_list("id", flat=True)}
+    expected_ids = {visits[key].id for key in expected_keys}
+
+    assert result_ids == expected_ids
