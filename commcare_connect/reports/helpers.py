@@ -3,7 +3,7 @@ from datetime import datetime
 
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.db import models
-from django.db.models.functions import Coalesce, ExtractDay, TruncMonth
+from django.db.models.functions import Coalesce, ExtractDay, Least, TruncMonth
 from django.utils.timezone import now
 
 from commcare_connect.connect_id_client import fetch_user_counts
@@ -128,8 +128,8 @@ def get_table_data_for_year_month(
 
     max_visit_date = (
         UserVisit.objects.filter(completed_work_id=models.OuterRef("id"), status=VisitValidationStatus.approved)
-        .values_list("visit_date")
-        .order_by("-visit_date")[:1]
+        .values_list("date_created")
+        .order_by("-date_created")[:1]
     )
     time_to_payment = models.ExpressionWrapper(
         models.F("payment_date") - models.Subquery(max_visit_date), output_field=models.DurationField()
@@ -230,6 +230,17 @@ def get_table_data_for_year_month(
         .annotate(users=models.Count("username"))
     )
     hq_sso_users_data = {item["month_group"]: item["users"] for item in hq_sso_users}
+    activated_personalid_accounts = (
+        UserAnalyticsData.objects.filter(
+            models.Q(has_ever_earned_payment__isnull=False) | models.Q(has_sso_on_hq_app__isnull=False)
+        )
+        .annotate(month_group=TruncMonth(Least("has_ever_earned_payment", "has_sso_on_hq_app")))
+        .values("month_group")
+        .annotate(users=models.Count("username"))
+    )
+    activated_personalid_accounts_data = {
+        item["month_group"].strftime("%Y-%m"): item["users"] for item in activated_personalid_accounts
+    }
 
     for group_key in visit_data_dict.keys():
         month_group = group_key[0]
@@ -239,6 +250,7 @@ def get_table_data_for_year_month(
                 "total_eligible_users": total_eligible_user_counts.get(month_group, 0),
                 "non_preregistered_users": non_invited_user_counts.get(month_group, 0),
                 "hq_sso_users": hq_sso_users_data.get(month_group, 0),
+                "activated_personalid_accounts": activated_personalid_accounts_data.get(month_group, 0),
             }
         )
     return list(visit_data_dict.values())

@@ -11,6 +11,7 @@ class AdminReportTable(tables.Table):
     total_eligible_users = columns.Column(verbose_name="Total Paid Users")
     users = SumColumn(verbose_name="Paid Users")
     hq_sso_users = columns.Column("PersonalID users authenticated to CCHQ app")
+    activated_personalid_accounts = columns.Column(verbose_name="Activated PersonalID Accounts")
     avg_time_to_payment = columns.Column(verbose_name="Average Time to Payment")
     max_time_to_payment = columns.Column(verbose_name="Max Time to Payment")
     flw_amount_earned = SumColumn(verbose_name="FLW Amount Earned")
