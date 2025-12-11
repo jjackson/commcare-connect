@@ -57,7 +57,7 @@ class OpportunityDataExportSerializer(serializers.ModelSerializer):
 class OrganizationDataExportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
-        fields = ["slug", "name"]
+        fields = ["id", "slug", "name"]
 
 
 class ProgramDataExportSerializer(serializers.ModelSerializer):
@@ -71,6 +71,7 @@ class ProgramDataExportSerializer(serializers.ModelSerializer):
 
 class OpportunityUserDataSerializer(serializers.Serializer):
     username = serializers.CharField()
+    name = serializers.CharField()
     phone = serializers.CharField()
     date_learn_started = serializers.DateTimeField()
     user_invite_status = serializers.CharField()
@@ -93,10 +94,12 @@ class OpportunityUserDataSerializer(serializers.Serializer):
 
 class UserVisitDataSerialier(serializers.ModelSerializer):
     username = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
 
     class Meta:
         model = UserVisit
         fields = [
+            "id",
             "opportunity_id",
             "username",
             "deliver_unit",
@@ -117,10 +120,14 @@ class UserVisitDataSerialier(serializers.ModelSerializer):
             "date_created",
             "completed_work_id",
             "deliver_unit_id",
+            "images",
         ]
 
     def get_username(self, obj) -> str:
         return obj.username
+
+    def get_images(self, obj):
+        return [{"blob_id": blob.blob_id, "name": blob.name, "parent_id": blob.parent_id} for blob in obj.images]
 
 
 class CompletedWorkDataSerializer(serializers.ModelSerializer):

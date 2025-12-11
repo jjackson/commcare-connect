@@ -11,7 +11,7 @@ class Program(BaseModel):
     slug = models.SlugField(max_length=255, unique=True)
     description = models.CharField()
     delivery_type = models.ForeignKey(DeliveryType, on_delete=models.PROTECT)
-    budget = models.IntegerField()
+    budget = models.PositiveBigIntegerField()
     currency = models.CharField(max_length=3)
     currency_fk = models.ForeignKey(Currency, on_delete=models.PROTECT, null=True)
     country = models.ForeignKey(Country, on_delete=models.PROTECT, null=True)
