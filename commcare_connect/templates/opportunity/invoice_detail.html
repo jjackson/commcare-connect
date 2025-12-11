@@ -18,7 +18,11 @@
 
 
   <div class="mt-6 flex justify-start gap-4">
-    {% if invoice_status == 'pending' %}
+    <a href="{% url 'opportunity:invoice_list' org_slug=request.org.slug opp_id=opportunity.id %}"
+       class="button button-md outline-style">
+      {% translate "Back to Invoices" %}
+    </a>
+    {% if invoice_status == 'pending' and not request.is_opportunity_pm %}
       <a
         hx-post="{% url 'opportunity:submit_invoice' org_slug=request.org.slug opp_id=opportunity.id %}"
         hx-vals='{"invoice_id": "{{ invoice.id }}"}'
@@ -28,10 +32,6 @@
         {% translate "Submit for Approval" %}
       </a>
     {% endif %}
-    <a href="{% url 'opportunity:invoice_list' org_slug=request.org.slug opp_id=opportunity.id %}"
-       class="button button-md outline-style">
-      {% translate "Back to Invoices" %}
-    </a>
   </div>
 </div>
 
