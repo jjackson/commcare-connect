@@ -1,0 +1,115 @@
+﻿{
+  "containerDefinitions": [
+    {
+      "name": "web",
+      "image": "858923557655.dkr.ecr.us-east-1.amazonaws.com/labs-jj-commcare-connect:latest",
+      "cpu": 0,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "command": ["/start"],
+      "environment": [
+        {
+          "name": "DJANGO_SETTINGS_MODULE",
+          "value": "config.settings.labs"
+        },
+        {
+          "name": "DJANGO_ALLOWED_HOSTS",
+          "value": "*"
+        },
+        {
+          "name": "CELERY_BROKER_URL",
+          "value": "redis://labs-jj-redis.aceivh.0001.use1.cache.amazonaws.com:6379/0"
+        },
+        {
+          "name": "LABS_ANALYSIS_BACKEND",
+          "value": "sql"
+        },
+        {
+          "name": "DJANGO_DEBUG",
+          "value": "False"
+        },
+        {
+          "name": "COMMCARE_HQ_URL",
+          "value": "https://www.commcarehq.org"
+        },
+        {
+          "name": "REDIS_URL",
+          "value": "redis://labs-jj-redis.aceivh.0001.use1.cache.amazonaws.com:6379/0"
+        },
+        {
+          "name": "OCS_URL",
+          "value": "https://www.openchatstudio.com"
+        }
+      ],
+      "mountPoints": [],
+      "volumesFrom": [],
+      "secrets": [
+        {
+          "name": "DJANGO_SECRET_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:858923557655:secret:labs-jj-django-secret-key-iB1rtG"
+        },
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:858923557655:secret:labs-jj-database-url-adP4GQ"
+        },
+        {
+          "name": "CONNECT_OAUTH_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:858923557655:secret:labs-jj-connect-oauth-client-id-9obT8Q"
+        },
+        {
+          "name": "CONNECT_OAUTH_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:858923557655:secret:labs-jj-connect-oauth-client-secret-as2RFY"
+        },
+        {
+          "name": "OPENAI_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:858923557655:secret:labs-jj-openai-api-key-tjvcF2"
+        },
+        {
+          "name": "COMMCARE_OAUTH_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:858923557655:secret:labs-jj-commcare-oauth-client-id-JKsDA0"
+        },
+        {
+          "name": "COMMCARE_OAUTH_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:858923557655:secret:labs-jj-commcare-oauth-client-secret-AvOUsA"
+        },
+        {
+          "name": "SENTRY_DSN",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:858923557655:secret:labs/SENTRY_DSN-xyMCrH"
+        },
+        {
+          "name": "OCS_OAUTH_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:858923557655:secret:labs-jj-ocs-oauth-client-id-wNuzz6"
+        },
+        {
+          "name": "OCS_OAUTH_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:858923557655:secret:labs-jj-ocs-oauth-client-secret-xDfhky"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/labs-jj-web",
+          "awslogs-create-group": "true",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "web"
+        }
+      },
+      "systemControls": []
+    }
+  ],
+  "family": "labs-jj-web",
+  "taskRoleArn": "arn:aws:iam::858923557655:role/labs-jj-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::858923557655:role/labs-jj-ecs-task-execution-role",
+  "networkMode": "awsvpc",
+  "volumes": [],
+  "placementConstraints": [],
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "4096"
+}
