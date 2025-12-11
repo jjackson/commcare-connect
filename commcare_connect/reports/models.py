@@ -17,7 +17,7 @@ class UserAnalyticsData(models.Model):
     has_completed_assessment = models.DateTimeField(null=True)
     has_claimed_job = models.DateTimeField(null=True)
     has_started_job = models.DateTimeField(null=True)
-    has_paid = models.DateTimeField(null=True)
+    has_been_paid = models.DateTimeField(null=True)
     has_completed_opp = models.DateTimeField(null=True)
     has_completed_multiple_opps = models.DateTimeField(null=True)
     has_offered_multiple_opps = models.DateTimeField(null=True)
