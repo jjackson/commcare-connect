@@ -29,6 +29,16 @@ urlpatterns = [
         views.OpportunityWorkersAPIView.as_view(),
         name="opportunity_workers",
     ),
+    path(
+        "opportunities/<int:opportunity_id>/learning-modules/",
+        views.OpportunityLearningModulesAPIView.as_view(),
+        name="opportunity_learning_modules",
+    ),
+    path(
+        "opportunities/<int:opportunity_id>/completed-modules/",
+        views.CompletedModulesAPIView.as_view(),
+        name="completed_modules",
+    ),
     # OCS Integration API
     path("api/ocs/bots/", views.OCSBotsListAPIView.as_view(), name="ocs_bots"),
 ]

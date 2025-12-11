@@ -377,6 +377,41 @@ class OpportunityWorkersAPIView(LoginRequiredMixin, View):
             return JsonResponse({"error": str(e)}, status=500)
 
 
+class OpportunityLearningModulesAPIView(LoginRequiredMixin, View):
+    """Get learning modules for an opportunity via Connect OAuth API."""
+
+    def get(self, request, opportunity_id):
+        try:
+            data_access = TaskDataAccess(user=request.user, request=request)
+            modules = data_access.get_learning_modules(opportunity_id)
+            data_access.close()
+
+            return JsonResponse({"success": True, "modules": modules})
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+
+class CompletedModulesAPIView(LoginRequiredMixin, View):
+    """Get completed learning modules for a user in an opportunity via Connect OAuth API."""
+
+    def get(self, request, opportunity_id):
+        username = request.GET.get("username")
+
+        if not username:
+            return JsonResponse({"error": "username parameter is required"}, status=400)
+
+        try:
+            data_access = TaskDataAccess(user=request.user, request=request)
+            completed_modules = data_access.get_completed_modules(opportunity_id, username)
+            data_access.close()
+
+            return JsonResponse({"success": True, "completed_modules": completed_modules})
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+
 # Task Bulk Creation API
 
 

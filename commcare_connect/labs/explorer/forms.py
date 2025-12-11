@@ -6,6 +6,8 @@ from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Column, Div, Field, Layout, Row, Submit
 from django import forms
 
+from commcare_connect.labs.explorer.sql_validator import validate_where_clause
+
 
 class RecordFilterForm(forms.Form):
     """Form for filtering LabsRecord data."""
@@ -179,3 +181,54 @@ class RecordUploadForm(forms.Form):
             raise forms.ValidationError("File must be UTF-8 encoded")
         except json.JSONDecodeError as e:
             raise forms.ValidationError(f"Invalid JSON: {e}")
+
+
+class VisitInspectorFilterForm(forms.Form):
+    """Form for filtering visits with SQL WHERE clauses on form_json."""
+
+    where_clause = forms.CharField(
+        required=True,
+        label="SQL WHERE Clause",
+        max_length=1000,
+        widget=forms.Textarea(
+            attrs={
+                "rows": 4,
+                "class": "form-control font-monospace",
+                "placeholder": "form_json->>'status' = 'complete'",
+                "style": "font-size: 14px;",
+            }
+        ),
+        help_text=(
+            "Enter a SQL WHERE clause to filter visits by form_json content. "
+            "Use PostgreSQL JSONB operators: -> for object navigation, ->> for text extraction. "
+            "Example: form_json->'form'->'case'->>'update' = 'success'"
+        ),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.helper = FormHelper(self)
+        self.helper.form_method = "post"
+        self.helper.form_class = "form-horizontal"
+        self.helper.layout = Layout(
+            Div(
+                Field("where_clause", wrapper_class="mb-3"),
+                Div(
+                    Submit("query", "Run Query", css_class="btn btn-primary"),
+                    css_class="d-flex gap-2",
+                ),
+                css_class="filter-form",
+            )
+        )
+        self.helper.form_tag = True
+
+    def clean_where_clause(self):
+        """Validate WHERE clause for safety."""
+        clause = self.cleaned_data["where_clause"]
+
+        is_valid, error_msg = validate_where_clause(clause)
+        if not is_valid:
+            raise forms.ValidationError(error_msg)
+
+        return clause

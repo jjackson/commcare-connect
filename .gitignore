@@ -331,6 +331,9 @@ commcare_connect/audit/tests/test_connect_staging_api.py
 # Coverage examples (local development data)
 commcare_connect/coverage/examples/
 
+# Labs explorer downloaded visits (temporary inspection files)
+commcare_connect/labs/explorer/downloaded_visits/
+
 # Elastic Beanstalk Files
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml

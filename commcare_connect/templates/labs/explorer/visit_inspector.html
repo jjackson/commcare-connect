@@ -1,0 +1,583 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+{% load i18n %}
+{% load static %}
+
+{% block css %}
+{{ block.super }}
+<style>
+  .inspector-card {
+    background: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    padding: 1.5rem;
+  }
+
+  .badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .badge-success {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .results-table th {
+    background: #f9fafb;
+    padding: 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #e5e7eb;
+    user-select: none;
+  }
+
+  .results-table th.cursor-pointer:hover {
+    background: #f3f4f6;
+  }
+
+  .results-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .results-table tbody tr:hover {
+    background: #f9fafb;
+  }
+
+  .error-box {
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    padding: 1rem;
+    border-radius: 0.375rem;
+    margin-bottom: 1rem;
+  }
+
+  .help-section {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    padding: 1rem;
+    border-radius: 0.375rem;
+    margin-top: 1rem;
+  }
+
+  .help-section code {
+    background: white;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+  }
+
+  [x-cloak] {
+    display: none !important;
+  }
+</style>
+{% endblock css %}
+
+{% block content %}
+<div class="flex flex-col gap-4 w-full max-w-full" x-data="visitInspector()">
+  <!-- Header -->
+  <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
+    <div>
+      <a href="{% url 'labs:dashboard' %}" class="text-sm text-blue-600 hover:underline mr-2">← Labs</a>
+      <a href="{% url 'explorer:list' %}" class="text-sm text-blue-600 hover:underline mr-2">Data Explorer</a>
+      <span class="text-sm text-gray-400 mx-2">|</span>
+      <span class="text-sm text-brand-deep-purple font-semibold">Visit Inspector</span>
+    </div>
+    <div class="flex gap-x-3 items-center">
+      {% if has_connect_token %}
+      <div class="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-md">
+        <i class="fa-solid fa-check-circle text-green-600"></i>
+        <span class="text-xs text-green-700">Connected to Connect</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Status Messages -->
+  {% if messages %}
+  <div class="messages mx-4">
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Main Content -->
+  <div class="mx-4">
+    {% if not has_context %}
+    <div class="inspector-card">
+      <p class="text-gray-600">Please select an opportunity to use Visit Inspector.</p>
+    </div>
+    {% elif not has_connect_token %}
+    <div class="inspector-card">
+      <p class="text-gray-600">No OAuth token found. Please log in to Connect.</p>
+    </div>
+    {% else %}
+
+    <!-- Loading Indicator with Step Progress -->
+    <div class="mb-6 p-6 bg-blue-50 border border-blue-200 rounded-lg" x-show="loading" x-cloak>
+      <div class="flex items-start gap-4">
+        <i class="fa-solid fa-spinner fa-spin text-blue-600 text-2xl mt-1"></i>
+        <div class="flex-1">
+          <h3 class="text-lg font-semibold text-blue-900 mb-2">Loading Visit Data</h3>
+          <div class="space-y-1 text-sm">
+            <!-- Step 1: Checking cache -->
+            <div class="flex items-center gap-2" :class="loadingStep >= 1 ? 'text-blue-800' : 'text-gray-400'">
+              <i class="fa-solid" :class="{
+                'fa-check text-green-600': loadingStep > 1,
+                'fa-spinner fa-spin text-blue-600': loadingStep === 1,
+                'fa-circle text-gray-300': loadingStep < 1
+              }"></i>
+              <span>Checking cache...</span>
+            </div>
+            <!-- Step 2: Fetching data -->
+            <div class="flex items-center gap-2" :class="loadingStep >= 2 ? 'text-blue-800' : 'text-gray-400'">
+              <i class="fa-solid" :class="{
+                'fa-check text-green-600': loadingStep > 2,
+                'fa-spinner fa-spin text-blue-600': loadingStep === 2,
+                'fa-circle text-gray-300': loadingStep < 2
+              }"></i>
+              <span x-text="downloadProgress || 'Fetching data from Connect API...'"></span>
+            </div>
+            <!-- Step 3: Processing -->
+            <div class="flex items-center gap-2" :class="loadingStep >= 3 ? 'text-blue-800' : 'text-gray-400'">
+              <i class="fa-solid" :class="{
+                'fa-check text-green-600': loadingStep > 3,
+                'fa-spinner fa-spin text-blue-600': loadingStep === 3,
+                'fa-circle text-gray-300': loadingStep < 3
+              }"></i>
+              <span x-text="processingMessage || 'Processing visits...'"></span>
+            </div>
+            <!-- Step 4: Complete -->
+            <div class="flex items-center gap-2" :class="loadingStep >= 4 ? 'text-blue-800' : 'text-gray-400'">
+              <i class="fa-solid" :class="{
+                'fa-check text-green-600': loadingStep === 4,
+                'fa-circle text-gray-300': loadingStep < 4
+              }"></i>
+              <span>Complete!</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error Display -->
+    <div x-show="loadError" x-cloak class="error-box mb-4">
+      <strong>Error:</strong> <span x-text="loadError"></span>
+    </div>
+
+    <!-- Visit Count Badge (shown after loading) -->
+    <div class="mb-4" x-show="!loading && visitCount !== null" x-cloak>
+      <span class="badge badge-success">
+        <i class="fa-solid fa-database mr-2"></i>
+        <span x-text="visitCount"></span> visits cached
+      </span>
+      <template x-if="fromCache">
+        <span class="badge bg-blue-100 text-blue-800 ml-2">
+          <i class="fa-solid fa-clock mr-1"></i>From Cache
+        </span>
+      </template>
+    </div>
+
+    <!-- SQL Filter Form (shown after loading) -->
+    <div class="inspector-card mb-4" x-show="!loading && visitCount !== null" x-cloak>
+      <h3 class="text-lg font-semibold mb-4">SQL Filter</h3>
+
+      <form @submit.prevent="submitQuery">
+        {% csrf_token %}
+        <div class="mb-3">
+          <label for="id_where_clause" class="block text-sm font-medium text-gray-700 mb-2">SQL WHERE Clause</label>
+          <textarea
+            id="id_where_clause"
+            name="where_clause"
+            rows="4"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+            placeholder="form_json->>'status' = 'complete'"
+          ></textarea>
+          <p class="mt-2 text-sm text-gray-600">
+            Enter a SQL WHERE clause to filter visits by form_json content.
+            Use PostgreSQL JSONB operators: <code class="bg-gray-100 px-1 rounded">-></code> for object navigation,
+            <code class="bg-gray-100 px-1 rounded")->></code> for text extraction.
+          </p>
+        </div>
+        <div class="flex gap-2 items-center">
+          <button
+            type="submit"
+            class="button button-sm primary-dark"
+            :disabled="queryLoading"
+          >
+            <i class="fa-solid" :class="queryLoading ? 'fa-spinner fa-spin' : 'fa-play'"></i>
+            <span x-text="queryLoading ? 'Running...' : 'Run Query'"></span>
+          </button>
+          <button
+            type="button"
+            @click="showAll"
+            class="button button-sm outline-style"
+            :disabled="queryLoading"
+          >
+            <i class="fa-solid fa-list"></i>
+            <span>Show All</span>
+          </button>
+          <button
+            type="button"
+            @click="showInstructions = !showInstructions"
+            class="button button-sm outline-style ml-auto"
+          >
+            <i class="fa-solid" :class="showInstructions ? 'fa-chevron-up' : 'fa-info-circle'"></i>
+            <span x-text="showInstructions ? 'Hide Instructions' : 'Instructions'"></span>
+          </button>
+        </div>
+      </form>
+
+      <!-- Help Section (collapsible) -->
+      <div class="help-section mt-4" x-show="showInstructions" x-cloak x-transition>
+        <h4 class="font-semibold mb-2">JSONB Query Examples:</h4>
+        <ul class="list-disc list-inside space-y-1 text-sm">
+          <li><code>form_json->>'status' = 'complete'</code> - Check top-level field</li>
+          <li><code>form_json->'form'->>'name' LIKE '%test%'</code> - Nested field with pattern matching</li>
+          <li><code>form_json->'form'->'case'->'update'->>'muac_cm' IS NOT NULL</code> - Deep nested field exists</li>
+          <li><code>form_json @> '{"status": "complete"}'</code> - Contains JSON object</li>
+          <li><code>(form_json->>'flagged')::boolean = true</code> - Boolean comparison</li>
+        </ul>
+        <p class="text-xs text-gray-600 mt-2">
+          Use <code>-></code> for object navigation, <code>->></code> for text extraction.
+          Results limited to 1000 rows.
+        </p>
+      </div>
+    </div>
+
+    <!-- Results Section -->
+    <div class="inspector-card" x-show="results.length > 0" x-cloak>
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold">
+          Query Results: <span x-text="paginatedResults.length"></span> of <span x-text="results.length"></span> visits
+          <span class="text-sm text-gray-500" x-show="results.length >= 1000">(limited to 1000)</span>
+        </h3>
+        <div class="flex items-center gap-4" x-show="totalPages > 1">
+          <span class="text-sm text-gray-600">
+            Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span>
+          </span>
+          <div class="flex gap-2">
+            <button
+              @click="previousPage"
+              :disabled="currentPage === 1"
+              class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <button
+              @click="nextPage"
+              :disabled="currentPage === totalPages"
+              class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th @click="sortByColumn('visit_id')" class="cursor-pointer hover:bg-gray-100">
+                Visit ID <i class="fa-solid text-gray-400 ml-1" :class="getSortIcon('visit_id')"></i>
+              </th>
+              <th @click="sortByColumn('username')" class="cursor-pointer hover:bg-gray-100">
+                Username <i class="fa-solid text-gray-400 ml-1" :class="getSortIcon('username')"></i>
+              </th>
+              <th @click="sortByColumn('entity_id')" class="cursor-pointer hover:bg-gray-100">
+                Entity ID <i class="fa-solid text-gray-400 ml-1" :class="getSortIcon('entity_id')"></i>
+              </th>
+              <th @click="sortByColumn('deliver_unit')" class="cursor-pointer hover:bg-gray-100">
+                Delivery Unit <i class="fa-solid text-gray-400 ml-1" :class="getSortIcon('deliver_unit')"></i>
+              </th>
+              <th @click="sortByColumn('visit_date')" class="cursor-pointer hover:bg-gray-100">
+                Visit Date <i class="fa-solid text-gray-400 ml-1" :class="getSortIcon('visit_date')"></i>
+              </th>
+              <th @click="sortByColumn('status')" class="cursor-pointer hover:bg-gray-100">
+                Status <i class="fa-solid text-gray-400 ml-1" :class="getSortIcon('status')"></i>
+              </th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="visit in paginatedResults" :key="visit.visit_id">
+              <tr>
+                <td x-text="visit.visit_id"></td>
+                <td x-text="visit.username"></td>
+                <td x-text="visit.entity_id || '—'"></td>
+                <td x-text="visit.deliver_unit || '—'"></td>
+                <td x-text="visit.visit_date || 'N/A'"></td>
+                <td x-text="visit.status"></td>
+                <td class="flex gap-3">
+                  <a :href="`/labs/explorer/visit-inspector/view/${visit.visit_id}/`"
+                     class="text-blue-600 hover:underline">
+                    <i class="fa-solid fa-eye mr-1"></i>View
+                  </a>
+                  <a :href="`/labs/explorer/visit-inspector/download/${visit.visit_id}/`"
+                     class="text-blue-600 hover:underline"
+                     download>
+                    <i class="fa-solid fa-download mr-1"></i>Download
+                  </a>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Query Error Display -->
+    <div x-show="queryError" x-cloak class="error-box">
+      <strong>Query Error:</strong> <span x-text="queryError"></span>
+    </div>
+
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  function visitInspector() {
+    return {
+      // Loading state
+      loading: true,
+      loadingStep: 0,
+      loadError: null,
+      downloadProgress: '',
+      processingMessage: '',
+
+      // Data state
+      visitCount: null,
+      fromCache: false,
+
+      // Query state
+      queryLoading: false,
+      queryError: null,
+      results: [],
+
+      // Pagination
+      currentPage: 1,
+      pageSize: 50,
+
+      // Sorting
+      sortBy: null,
+      sortDirection: 'asc',
+
+      // UI state
+      showInstructions: false,
+
+      // SSE
+      eventSource: null,
+      receivedEvents: false,
+
+      // Computed properties
+      get sortedResults() {
+        if (!this.sortBy) return this.results;
+
+        return [...this.results].sort((a, b) => {
+          let aVal = a[this.sortBy];
+          let bVal = b[this.sortBy];
+
+          // Handle null/undefined
+          if (aVal == null) aVal = '';
+          if (bVal == null) bVal = '';
+
+          // Compare
+          if (aVal < bVal) return this.sortDirection === 'asc' ? -1 : 1;
+          if (aVal > bVal) return this.sortDirection === 'asc' ? 1 : -1;
+          return 0;
+        });
+      },
+
+      get paginatedResults() {
+        const start = (this.currentPage - 1) * this.pageSize;
+        const end = start + this.pageSize;
+        return this.sortedResults.slice(start, end);
+      },
+
+      get totalPages() {
+        return Math.ceil(this.results.length / this.pageSize);
+      },
+
+      init() {
+        console.log('[VisitInspector] Initializing...');
+        this.loadDataViaSSE();
+      },
+
+      // Pagination methods
+      nextPage() {
+        if (this.currentPage < this.totalPages) {
+          this.currentPage++;
+        }
+      },
+
+      previousPage() {
+        if (this.currentPage > 1) {
+          this.currentPage--;
+        }
+      },
+
+      resetPagination() {
+        this.currentPage = 1;
+      },
+
+      // Sorting methods
+      sortByColumn(column) {
+        if (this.sortBy === column) {
+          // Toggle direction if same column
+          this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+          // New column, default to ascending
+          this.sortBy = column;
+          this.sortDirection = 'asc';
+        }
+        this.resetPagination();
+      },
+
+      getSortIcon(column) {
+        if (this.sortBy !== column) return 'fa-sort';
+        return this.sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down';
+      },
+
+      loadDataViaSSE() {
+        const streamUrl = '{{ stream_api_url }}';
+        console.log('[VisitInspector] Connecting to SSE:', streamUrl);
+
+        this.loading = true;
+        this.loadingStep = 0;
+        this.loadError = null;
+        this.receivedEvents = false;
+
+        this.eventSource = new EventSource(streamUrl);
+
+        this.eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            console.log('[VisitInspector] SSE event:', data);
+            this.receivedEvents = true;
+
+            // Update step based on message content
+            this.updateStepFromMessage(data.message);
+
+            // Check for error
+            if (data.error) {
+              this.loadError = data.error;
+              this.loading = false;
+              this.eventSource.close();
+              return;
+            }
+
+            // Check for completion
+            if (data.complete && data.data) {
+              const responseData = data.data;
+
+              this.visitCount = responseData.visit_count;
+              this.fromCache = responseData.from_cache;
+
+              this.loadingStep = 4;
+              this.loading = false;
+              this.eventSource.close();
+              console.log(`[VisitInspector] Loaded ${this.visitCount} visits via SSE`);
+            }
+          } catch (e) {
+            console.error('[VisitInspector] Error parsing SSE event:', e);
+          }
+        };
+
+        this.eventSource.onerror = (error) => {
+          console.error('[VisitInspector] SSE error:', error);
+          this.eventSource.close();
+
+          if (!this.receivedEvents) {
+            this.loadError = 'Connection failed. Please refresh the page.';
+            this.loading = false;
+          } else {
+            this.loadError = 'Connection lost. Please try again.';
+            this.loading = false;
+          }
+        };
+      },
+
+      updateStepFromMessage(message) {
+        if (!message) return;
+
+        const msg = message.toLowerCase();
+
+        if (msg.includes('checking cache')) {
+          this.loadingStep = 1;
+        } else if (msg.includes('download') || msg.includes('fetching')) {
+          this.loadingStep = 2;
+          this.downloadProgress = message;
+        } else if (msg.includes('processing') || msg.includes('parsing')) {
+          this.loadingStep = 3;
+          this.processingMessage = message;
+        } else if (msg.includes('complete')) {
+          this.loadingStep = 4;
+        }
+      },
+
+      showAll() {
+        // Set the where clause to show all visits
+        const textarea = document.getElementById('id_where_clause');
+        textarea.value = 'form_json IS NOT NULL';
+
+        // Directly call submitQuery with a fake event containing the form
+        const form = textarea.closest('form');
+        this.submitQuery({ target: form, preventDefault: () => {} });
+      },
+
+      async submitQuery(event) {
+        const formData = new FormData(event.target);
+        const whereClause = formData.get('where_clause');
+
+        if (!whereClause || !whereClause.trim()) {
+          this.queryError = 'Please enter a WHERE clause';
+          return;
+        }
+
+        this.queryLoading = true;
+        this.queryError = null;
+        this.results = [];
+        this.resetPagination();
+
+        try {
+          const response = await fetch('{% url "explorer:visit_inspector_query" %}', {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': formData.get('csrfmiddlewaretoken'),
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams(formData)
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            this.results = data.results;
+            console.log(`[VisitInspector] Query returned ${this.results.length} results`);
+          } else {
+            this.queryError = data.errors.join(', ');
+          }
+        } catch (err) {
+          console.error('[VisitInspector] Query failed:', err);
+          this.queryError = 'Network error: ' + err.message;
+        } finally {
+          this.queryLoading = false;
+        }
+      }
+    };
+  }
+</script>
+
+{% endblock content %}

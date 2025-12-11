@@ -465,40 +465,140 @@
        x-transition:enter-end="opacity-100"
        @click.away="showLearning = false"
        class="fixed inset-0 bg-gray-900/30 flex items-center justify-center z-50 p-4">
-    <div @click.stop class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+    <div @click.stop class="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold text-gray-900">Assign Learning Modules</h3>
+        <h3 class="text-lg font-semibold text-gray-900">Learning Modules</h3>
         <button @click="showLearning = false" class="text-gray-400 hover:text-gray-600">
           <i class="fa-solid fa-times"></i>
         </button>
       </div>
-      <p class="text-sm text-gray-600 mb-4">Select one or more learning modules to assign:</p>
 
-      <div class="space-y-2 mb-4">
-        <template x-for="module in learningModules" :key="module">
-          <label class="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-            <input type="checkbox"
-                   :value="module"
-                   x-model="selectedModules"
-                   class="mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-            <div class="flex-1">
-              <div class="font-medium text-sm text-gray-900" x-text="module"></div>
-            </div>
-          </label>
-        </template>
+      <!-- Tab Navigation -->
+      <div class="flex gap-2 mb-4 border-b border-gray-200">
+        <button @click="showHistory = false"
+                :class="!showHistory ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600 hover:text-gray-900'"
+                class="px-4 py-2 font-medium text-sm transition-colors">
+          <i class="fa-solid fa-graduation-cap mr-2"></i>Assign Modules
+        </button>
+        <button @click="showHistory = true"
+                :class="showHistory ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600 hover:text-gray-900'"
+                class="px-4 py-2 font-medium text-sm transition-colors">
+          <i class="fa-solid fa-history mr-2"></i>Learning History
+        </button>
       </div>
 
-      <div class="flex gap-3">
-        <button @click="showLearning = false" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-          Cancel
-        </button>
-        <button @click="assignLearning()"
-                :disabled="selectedModules.length === 0"
-                :class="selectedModules.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'"
-                class="flex-1 px-4 py-2 rounded-lg transition-colors">
-          <i class="fa-solid fa-graduation-cap mr-2"></i>
-          Assign (<span x-text="selectedModules.length"></span>)
-        </button>
+      <!-- Assign Modules Tab -->
+      <div x-show="!showHistory">
+        <p class="text-sm text-gray-600 mb-4">Select one or more learning modules to assign:</p>
+
+        <!-- Loading state -->
+        <template x-if="learningModulesLoading">
+          <div class="flex items-center justify-center py-8">
+            <i class="fa-solid fa-spinner fa-spin text-gray-400 text-xl mr-2"></i>
+            <span class="text-gray-500">Loading modules...</span>
+          </div>
+        </template>
+
+        <!-- No modules state -->
+        <template x-if="!learningModulesLoading && learningModules.length === 0">
+          <div class="text-center py-8">
+            <i class="fa-solid fa-graduation-cap text-gray-300 text-3xl mb-2"></i>
+            <p class="text-gray-500 text-sm">No learning modules found for this opportunity</p>
+          </div>
+        </template>
+
+        <!-- Modules list -->
+        <div class="space-y-2 mb-4" x-show="!learningModulesLoading && learningModules.length > 0">
+          <template x-for="module in learningModules" :key="module.id">
+            <label class="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+              <input type="checkbox"
+                     :value="module.id"
+                     x-model="selectedModules"
+                     class="mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+              <div class="flex-1">
+                <div class="font-medium text-sm text-gray-900" x-text="module.name"></div>
+                <template x-if="module.description">
+                  <div class="text-xs text-gray-500 mt-1">
+                    <span class="font-medium">Description:</span>
+                    <span x-text="module.description"></span>
+                  </div>
+                </template>
+                <template x-if="module.time_estimate">
+                  <div class="text-xs text-gray-400 mt-1">
+                    <i class="fa-solid fa-clock"></i>
+                    <span x-text="module.time_estimate + ' hour' + (module.time_estimate !== 1 ? 's' : '')"></span>
+                  </div>
+                </template>
+              </div>
+            </label>
+          </template>
+        </div>
+
+        <div class="flex gap-3">
+          <button @click="showLearning = false" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+            Cancel
+          </button>
+          <button @click="assignLearning()"
+                  :disabled="selectedModules.length === 0"
+                  :class="selectedModules.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'"
+                  class="flex-1 px-4 py-2 rounded-lg transition-colors">
+            <i class="fa-solid fa-graduation-cap mr-2"></i>
+            Assign (<span x-text="selectedModules.length"></span>)
+          </button>
+        </div>
+      </div>
+
+      <!-- Learning History Tab -->
+      <div x-show="showHistory">
+        <p class="text-sm text-gray-600 mb-4" x-show="selectedFlw">
+          Learning history for <span class="font-medium" x-text="selectedFlw?.name || selectedFlw?.username"></span>:
+        </p>
+
+        <!-- Loading state -->
+        <template x-if="completedModulesLoading">
+          <div class="flex items-center justify-center py-8">
+            <i class="fa-solid fa-spinner fa-spin text-gray-400 text-xl mr-2"></i>
+            <span class="text-gray-500">Loading history...</span>
+          </div>
+        </template>
+
+        <!-- No history state -->
+        <template x-if="!completedModulesLoading && completedModules.length === 0">
+          <div class="text-center py-8">
+            <i class="fa-solid fa-clock-rotate-left text-gray-300 text-3xl mb-2"></i>
+            <p class="text-gray-500 text-sm">No completed modules found</p>
+          </div>
+        </template>
+
+        <!-- History list -->
+        <div class="space-y-3" x-show="!completedModulesLoading && completedModules.length > 0">
+          <template x-for="cm in completedModules" :key="cm.date + '-' + cm.module">
+            <div class="flex items-start gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50">
+              <div class="flex-shrink-0 mt-1">
+                <i class="fa-solid fa-check-circle text-green-600"></i>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="font-medium text-sm text-gray-900" x-text="cm.module_name"></div>
+                <div class="text-xs text-gray-500 mt-1">
+                  <i class="fa-solid fa-calendar"></i>
+                  <span x-text="new Date(cm.date).toLocaleString()"></span>
+                </div>
+                <template x-if="cm.duration">
+                  <div class="text-xs text-gray-500 mt-1">
+                    <i class="fa-solid fa-stopwatch"></i>
+                    Duration: <span x-text="formatDuration(cm.duration)"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div class="flex gap-3 mt-4">
+          <button @click="showLearning = false" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+            Close
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -757,7 +857,11 @@ function taskCreateEditPage() {
     showClose: false,
     showAI: false,
     selectedModules: [],
-    learningModules: ['Working Hours', 'Visit Duration', 'Screening Process', 'Reading Fit Process', 'Image Capture'],
+    learningModules: [],
+    learningModulesLoading: false,
+    completedModules: [],
+    completedModulesLoading: false,
+    showHistory: false,
 
     // Close task form
     closeForm: {
@@ -833,6 +937,12 @@ function taskCreateEditPage() {
       } else if (this.quickParams && Object.keys(this.quickParams).length > 0) {
         // Apply URL params for create mode (e.g., from audit session list)
         this.applyQuickParams();
+      }
+
+      // Load learning modules if we have an opportunity
+      const opportunityId = {{ opportunity_id|default:"null" }};
+      if (opportunityId) {
+        this.loadLearningModules(opportunityId);
       }
     },
 
@@ -970,7 +1080,14 @@ function taskCreateEditPage() {
     // Modal methods
     showLearningModal() {
       this.selectedModules = [];
+      this.showHistory = false;
       this.showLearning = true;
+
+      // Load completed modules for this FLW
+      const opportunityId = {{ opportunity_id|default:"null" }};
+      if (opportunityId && this.selectedFlw?.username) {
+        this.loadCompletedModules(opportunityId, this.selectedFlw.username);
+      }
     },
 
     showCloseModal() {
@@ -988,7 +1105,56 @@ function taskCreateEditPage() {
       this.loadBots();
     },
 
+    async loadLearningModules(opportunityId) {
+      this.learningModulesLoading = true;
+      try {
+        const response = await fetch(`/tasks/opportunities/${opportunityId}/learning-modules/`);
+        const data = await response.json();
+        if (data.success) {
+          this.learningModules = data.modules || [];
+        } else {
+          console.error('Failed to load learning modules:', data.error);
+        }
+      } catch (error) {
+        console.error('Error loading learning modules:', error);
+      } finally {
+        this.learningModulesLoading = false;
+      }
+    },
+
+    async loadCompletedModules(opportunityId, username) {
+      this.completedModulesLoading = true;
+      try {
+        const response = await fetch(`/tasks/opportunities/${opportunityId}/completed-modules/?username=${encodeURIComponent(username)}`);
+        const data = await response.json();
+        if (data.success) {
+          this.completedModules = data.completed_modules || [];
+          // Enrich with module names from learningModules
+          this.completedModules = this.completedModules.map(cm => {
+            const module = this.learningModules.find(m => m.id === cm.module);
+            return {
+              ...cm,
+              module_name: module ? module.name : `Module ${cm.module}`,
+              module_obj: module
+            };
+          });
+        } else {
+          console.error('Failed to load completed modules:', data.error);
+        }
+      } catch (error) {
+        console.error('Error loading completed modules:', error);
+      } finally {
+        this.completedModulesLoading = false;
+      }
+    },
+
     assignLearning() {
+      // TODO: Implement code to take action - assign selected learning modules to the FLW
+      // This will need to:
+      // 1. Create task event for learning module assignment
+      // 2. Potentially trigger notification to FLW
+      // 3. Update task timeline with assignment details
+
       this.showToastMessage(`Assigned ${this.selectedModules.length} learning module(s)`);
       this.showLearning = false;
     },
@@ -1274,6 +1440,31 @@ function taskCreateEditPage() {
         minute: '2-digit',
         hour12: true
       });
+    },
+
+    formatDuration(duration) {
+      if (!duration) return '';
+
+      // Parse duration string like "00:00:08.913000" (HH:MM:SS.microseconds)
+      const parts = duration.split(':');
+      if (parts.length !== 3) return duration;
+
+      const hours = parseInt(parts[0]);
+      const minutes = parseInt(parts[1]);
+      const seconds = Math.floor(parseFloat(parts[2]));
+
+      const timeParts = [];
+      if (hours > 0) {
+        timeParts.push(`${hours} hour${hours !== 1 ? 's' : ''}`);
+      }
+      if (minutes > 0) {
+        timeParts.push(`${minutes} min${minutes !== 1 ? 's' : ''}`);
+      }
+      if (seconds > 0 || timeParts.length === 0) {
+        timeParts.push(`${seconds} sec${seconds !== 1 ? 's' : ''}`);
+      }
+
+      return timeParts.join(' ');
     },
 
     showToastMessage(message) {

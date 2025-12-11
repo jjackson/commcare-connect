@@ -496,3 +496,94 @@ class TaskDataAccess:
 
         finally:
             os.unlink(tmp_path)
+
+    def get_learning_modules(self, opportunity_id: int) -> list[dict]:
+        """
+        Get learning modules for an opportunity from Connect API.
+
+        Args:
+            opportunity_id: Opportunity ID
+
+        Returns:
+            List of learning module dicts with id, slug, name, description, time_estimate
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Get full opportunity details including learn_app
+        endpoint = f"/export/opportunity/{opportunity_id}/"
+        response = self._call_connect_api(endpoint)
+        opp_data = response.json()
+
+        logger.info(f"Fetched opportunity {opportunity_id} details for learning modules")
+
+        # Extract learn_app and its modules
+        learn_app = opp_data.get("learn_app")
+        if not learn_app:
+            logger.warning(f"No learn_app found for opportunity {opportunity_id}")
+            return []
+
+        modules = learn_app.get("learn_modules", [])
+        logger.info(f"Found {len(modules)} learning modules for opportunity {opportunity_id}")
+
+        return modules
+
+    def get_completed_modules(self, opportunity_id: int, username: str | None = None) -> list[dict]:
+        """
+        Get completed learning modules for an opportunity from Connect API.
+
+        Args:
+            opportunity_id: Opportunity ID
+            username: Optional username to filter by specific user
+
+        Returns:
+            List of completed module dicts with username, module, opportunity_id, date, duration
+        """
+        import logging
+        import os
+        import tempfile
+
+        import pandas as pd
+
+        logger = logging.getLogger(__name__)
+
+        # Download completed modules CSV
+        endpoint = f"/export/opportunity/{opportunity_id}/completed_module/"
+        response = self._call_connect_api(endpoint)
+
+        # Save to temp file
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".csv")
+        try:
+            with os.fdopen(tmp_fd, "wb") as f:
+                f.write(response.content)
+
+            # Parse CSV
+            df = pd.read_csv(tmp_path)
+
+            logger.info(f"CSV columns for completed modules: {list(df.columns)}")
+            logger.info(f"CSV has {len(df)} completed module records")
+
+            # Filter by username if provided
+            if username:
+                df = df[df["username"] == username]
+                logger.info(f"Filtered to {len(df)} records for user {username}")
+
+            completed_modules = []
+            for idx, row in df.iterrows():
+                module_dict = {
+                    "username": str(row["username"]) if pd.notna(row.get("username")) else None,
+                    "module": int(row["module"]) if pd.notna(row.get("module")) else None,
+                    "opportunity_id": int(row["opportunity_id"]) if pd.notna(row.get("opportunity_id")) else None,
+                    "date": str(row["date"]) if pd.notna(row.get("date")) else None,
+                    "duration": str(row["duration"]) if pd.notna(row.get("duration")) else None,
+                }
+                completed_modules.append(module_dict)
+
+            # Sort by date descending (most recent first)
+            completed_modules.sort(key=lambda x: x.get("date") or "", reverse=True)
+
+            return completed_modules
+
+        finally:
+            os.unlink(tmp_path)

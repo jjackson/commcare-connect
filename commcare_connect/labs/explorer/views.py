@@ -4,18 +4,29 @@ Views for Labs Data Explorer
 
 import json
 import logging
+from collections.abc import Generator
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse
+from django.db import connection
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
+from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
+from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, BaseSSEStreamView, send_sse_event
+from commcare_connect.labs.explorer.analysis_config import VISIT_INSPECTOR_CONFIG
 from commcare_connect.labs.explorer.data_access import RecordExplorerDataAccess
-from commcare_connect.labs.explorer.forms import RecordEditForm, RecordFilterForm, RecordUploadForm
+from commcare_connect.labs.explorer.forms import (
+    RecordEditForm,
+    RecordFilterForm,
+    RecordUploadForm,
+    VisitInspectorFilterForm,
+)
+from commcare_connect.labs.explorer.sql_validator import build_safe_query
 from commcare_connect.labs.explorer.tables import LabsRecordTable
 from commcare_connect.labs.explorer.utils import (
     export_records_to_json,
@@ -319,3 +330,301 @@ class DeleteRecordsView(LoginRequiredMixin, View):
             messages.error(request, f"Failed to delete records: {e}")
 
         return redirect(reverse("explorer:list"))
+
+
+class VisitInspectorView(LoginRequiredMixin, TemplateView):
+    """Visit Inspector page for downloading and querying raw visit data."""
+
+    template_name = "labs/explorer/visit_inspector.html"
+
+    def get_context_data(self, **kwargs):
+        """Provide initial page context - actual data loading happens via SSE."""
+        context = super().get_context_data(**kwargs)
+
+        # Check for context
+        labs_context = getattr(self.request, "labs_context", {})
+        opportunity_id = labs_context.get("opportunity_id")
+
+        context["has_context"] = bool(opportunity_id)
+        context["opportunity_id"] = opportunity_id
+
+        # Check for OAuth token
+        labs_oauth = self.request.session.get("labs_oauth", {})
+        context["has_connect_token"] = bool(labs_oauth.get("access_token"))
+
+        # Provide the SSE stream API URL
+        context["stream_api_url"] = reverse("explorer:visit_inspector_stream")
+
+        # Create filter form
+        context["filter_form"] = VisitInspectorFilterForm()
+
+        return context
+
+
+class VisitInspectorQueryView(LoginRequiredMixin, View):
+    """Handle SQL query execution for visit filtering."""
+
+    def post(self, request):
+        """Execute user's SQL WHERE clause and return results."""
+        form = VisitInspectorFilterForm(data=request.POST)
+
+        if not form.is_valid():
+            # Return errors as JSON
+            errors = []
+            for field, field_errors in form.errors.items():
+                for error in field_errors:
+                    errors.append(f"{field}: {error}")
+            return JsonResponse({"success": False, "errors": errors}, status=400)
+
+        # Get validated WHERE clause
+        where_clause = form.cleaned_data["where_clause"]
+
+        # Get opportunity_id from context
+        labs_context = getattr(request, "labs_context", {})
+        opportunity_id = labs_context.get("opportunity_id")
+
+        if not opportunity_id:
+            return JsonResponse({"success": False, "errors": ["No opportunity selected"]}, status=400)
+
+        try:
+            # Build safe query
+            query, params = build_safe_query(opportunity_id, where_clause, limit=1000)
+
+            # Execute query in read-only mode
+            with connection.cursor() as cursor:
+                cursor.execute(query, params)
+                columns = [col[0] for col in cursor.description]
+                rows = cursor.fetchall()
+
+            # Convert to list of dicts
+            results = []
+            for row in rows:
+                row_dict = {}
+                for col, val in zip(columns, row):
+                    # Convert date/datetime to string for JSON serialization
+                    if hasattr(val, "isoformat"):
+                        row_dict[col] = val.isoformat()
+                    else:
+                        row_dict[col] = val
+                results.append(row_dict)
+
+            logger.info(f"[VisitInspector] Query returned {len(results)} results")
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "count": len(results),
+                    "results": results,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"[VisitInspector] Query failed: {e}")
+            return JsonResponse({"success": False, "errors": [f"Query failed: {str(e)}"]}, status=500)
+
+
+class VisitViewView(LoginRequiredMixin, TemplateView):
+    """View a single visit's data in a formatted page."""
+
+    template_name = "labs/explorer/visit_view.html"
+
+    def get_context_data(self, **kwargs):
+        """Load visit and display in formatted view."""
+        context = super().get_context_data(**kwargs)
+        visit_id = kwargs.get("visit_id")
+
+        # Get opportunity_id from context
+        labs_context = getattr(self.request, "labs_context", {})
+        opportunity_id = labs_context.get("opportunity_id")
+
+        if not opportunity_id:
+            messages.error(self.request, "No opportunity selected")
+            return context
+
+        try:
+            # Query the SQL cache for this visit
+            query = """
+                SELECT visit_id, username, visit_date, status, deliver_unit,
+                       entity_id, entity_name, flagged, form_json
+                FROM labs_raw_visit_cache
+                WHERE opportunity_id = %s AND visit_id = %s
+                LIMIT 1
+            """
+
+            with connection.cursor() as cursor:
+                cursor.execute(query, [opportunity_id, visit_id])
+                row = cursor.fetchone()
+
+            if not row:
+                messages.error(self.request, f"Visit {visit_id} not found")
+                return context
+
+            # Extract data
+            context["visit_id"] = row[0]
+            context["username"] = row[1]
+            context["visit_date"] = row[2]
+            context["status"] = row[3]
+            context["deliver_unit"] = row[4]
+            context["entity_id"] = row[5]
+            context["entity_name"] = row[6]
+            context["flagged"] = row[7]
+            form_json = row[8]
+
+            # Format JSON for display
+            if isinstance(form_json, str):
+                form_json = json.loads(form_json)
+
+            context["visit_json"] = json.dumps(form_json, indent=2, ensure_ascii=False, separators=(",", ": "))
+            context["visit_data"] = True
+
+            logger.info(f"[VisitInspector] Viewing visit {visit_id}")
+
+        except Exception as e:
+            logger.error(f"[VisitInspector] Failed to load visit {visit_id}: {e}")
+            messages.error(self.request, f"Failed to load visit: {e}")
+            context["visit_data"] = False
+
+        return context
+
+
+class DownloadVisitView(LoginRequiredMixin, View):
+    """Download a single visit's form_json as a .json file."""
+
+    def get(self, request, visit_id):
+        """Retrieve visit and return as downloadable JSON."""
+        # Get opportunity_id from context
+        labs_context = getattr(request, "labs_context", {})
+        opportunity_id = labs_context.get("opportunity_id")
+
+        if not opportunity_id:
+            messages.error(request, "No opportunity selected")
+            return redirect(reverse("explorer:visit_inspector"))
+
+        try:
+            # Query the SQL cache for this visit
+            query = """
+                SELECT visit_id, username, visit_date, status, form_json
+                FROM labs_raw_visit_cache
+                WHERE opportunity_id = %s AND visit_id = %s
+                LIMIT 1
+            """
+
+            with connection.cursor() as cursor:
+                cursor.execute(query, [opportunity_id, visit_id])
+                row = cursor.fetchone()
+
+            if not row:
+                messages.error(request, f"Visit {visit_id} not found")
+                return redirect(reverse("explorer:visit_inspector"))
+
+            # Extract form_json (5th column)
+            form_json = row[4]
+
+            # Check if form_json is already a dict or needs parsing
+            if isinstance(form_json, str):
+                # If it's a string, parse it first
+                form_json = json.loads(form_json)
+
+            # Format as pretty JSON with minimal escaping
+            json_content = json.dumps(form_json, indent=2, ensure_ascii=False, separators=(",", ": "))
+
+            # Create response with download header and UTF-8 encoding
+            response = HttpResponse(json_content, content_type="application/json; charset=utf-8")
+            response["Content-Disposition"] = f'attachment; filename="opp{opportunity_id}-visit_{visit_id}.json"'
+
+            logger.info(f"[VisitInspector] Downloaded visit {visit_id}")
+            return response
+
+        except Exception as e:
+            logger.error(f"[VisitInspector] Failed to download visit {visit_id}: {e}")
+            messages.error(request, f"Failed to download visit: {e}")
+            return redirect(reverse("explorer:visit_inspector"))
+
+
+class VisitInspectorStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
+    """
+    SSE streaming endpoint for Visit Inspector with real-time progress.
+
+    Uses the base SSE infrastructure to stream analysis pipeline events.
+    """
+
+    def stream_data(self, request) -> Generator[str, None, None]:
+        """Stream visit data loading progress via SSE."""
+        try:
+            # Check for context
+            labs_context = getattr(request, "labs_context", {})
+            opportunity_id = labs_context.get("opportunity_id")
+
+            if not opportunity_id:
+                yield send_sse_event("Error", error="No opportunity selected")
+                return
+
+            # Check for OAuth token
+            labs_oauth = request.session.get("labs_oauth", {})
+            if not labs_oauth.get("access_token"):
+                yield send_sse_event("Error", error="No OAuth token found. Please log in to Connect.")
+                return
+
+            # Initial status
+            yield send_sse_event("Checking cache...")
+
+            # Run analysis pipeline with streaming
+            pipeline = AnalysisPipeline(request)
+            pipeline_stream = pipeline.stream_analysis(VISIT_INSPECTOR_CONFIG)
+
+            # Use mixin to convert pipeline events to SSE
+            result = None
+            from_cache = False
+
+            for sse_event, cache_flag in self.stream_pipeline_events(pipeline_stream):
+                from_cache = cache_flag
+                yield sse_event
+
+                # Check if we got a result (mixin returns it)
+                if cache_flag is not False:  # This means we've processed all events
+                    result = sse_event  # Actually need to get result differently
+                    break
+
+            # Alternative: manually process to get result
+            result = None
+            from_cache = False
+            pipeline_stream = pipeline.stream_analysis(VISIT_INSPECTOR_CONFIG)
+
+            for event_type, event_data in pipeline_stream:
+                if event_type == "status":
+                    message = event_data.get("message", "Processing...")
+                    from_cache = from_cache or "cache" in message.lower()
+                    yield send_sse_event(message)
+
+                elif event_type == "download":
+                    bytes_dl = event_data.get("bytes", 0)
+                    total_bytes = event_data.get("total", 0)
+                    if total_bytes > 0:
+                        mb_dl = bytes_dl / (1024 * 1024)
+                        mb_total = total_bytes / (1024 * 1024)
+                        pct = int(bytes_dl / total_bytes * 100)
+                        yield send_sse_event(f"Downloading: {mb_dl:.1f} / {mb_total:.1f} MB ({pct}%)")
+                    else:
+                        yield send_sse_event("Downloading visit data...")
+
+                elif event_type == "result":
+                    result = event_data
+                    break
+
+            # Build completion response
+            if result:
+                visit_count = len(result.rows) if hasattr(result, "rows") else 0
+                logger.info(f"[VisitInspector] Cached {visit_count} visits for opportunity {opportunity_id}")
+
+                yield send_sse_event(
+                    "Complete",
+                    data={
+                        "visit_count": visit_count,
+                        "opportunity_id": opportunity_id,
+                        "from_cache": from_cache,
+                    },
+                )
+
+        except Exception as e:
+            logger.error(f"[VisitInspector] Stream failed: {e}")
+            yield send_sse_event("Error", error=f"Failed to load visit data: {str(e)}")

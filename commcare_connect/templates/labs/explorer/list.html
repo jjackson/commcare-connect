@@ -61,6 +61,8 @@
     <div>
       <a href="{% url 'labs:dashboard' %}" class="text-sm text-blue-600 hover:underline mr-2">← Labs</a>
       <span class="text-sm text-brand-deep-purple font-semibold">Data Explorer</span>
+      <span class="text-sm text-gray-400 mx-2">|</span>
+      <a href="{% url 'explorer:visit_inspector' %}" class="text-sm text-blue-600 hover:underline">Visit Inspector</a>
     </div>
     <div class="flex gap-x-3 items-center">
       {% if has_connect_token %}

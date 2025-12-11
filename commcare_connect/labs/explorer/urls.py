@@ -14,4 +14,10 @@ urlpatterns = [
     path("download/", views.DownloadRecordsView.as_view(), name="download"),
     path("upload/", views.UploadRecordsView.as_view(), name="upload"),
     path("delete/", views.DeleteRecordsView.as_view(), name="delete"),
+    # Visit Inspector
+    path("visit-inspector/", views.VisitInspectorView.as_view(), name="visit_inspector"),
+    path("visit-inspector/stream/", views.VisitInspectorStreamView.as_view(), name="visit_inspector_stream"),
+    path("visit-inspector/query/", views.VisitInspectorQueryView.as_view(), name="visit_inspector_query"),
+    path("visit-inspector/view/<int:visit_id>/", views.VisitViewView.as_view(), name="view_visit"),
+    path("visit-inspector/download/<int:visit_id>/", views.DownloadVisitView.as_view(), name="download_visit"),
 ]
