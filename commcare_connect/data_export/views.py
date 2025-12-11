@@ -238,9 +238,14 @@ class CompletedModuleDataView(OpportunityScopedDataView):
     serializer_class = CompletedModuleDataSerializer
 
     def get_queryset(self, request, opp_id):
-        return CompletedModule.objects.filter(opportunity=self.opportunity).annotate(
+        queryset = CompletedModule.objects.filter(opportunity=self.opportunity)
+        username = request.query_params.get("username")
+        if username:
+            queryset = queryset.filter(opportunity_access__user__username=username)
+        queryset = queryset.annotate(
             username=F("opportunity_access__user__username"),
         )
+        return queryset
 
 
 class AssessmentDataView(OpportunityScopedDataView):
