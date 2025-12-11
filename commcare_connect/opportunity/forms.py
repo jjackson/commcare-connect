@@ -1341,7 +1341,7 @@ class PaymentInvoiceForm(forms.ModelForm):
         self.status = kwargs.pop("status", InvoiceStatus.PENDING)
         super().__init__(*args, **kwargs)
         if self.read_only:
-            self.fields["status"] = forms.CharField(required=False, label="Invoice Status")
+            self.fields["status"] = forms.CharField(required=False, label=gettext("Invoice Status"))
             for field in self.fields.values():
                 field.widget.attrs["readonly"] = "readonly"
 
@@ -1376,7 +1376,7 @@ class PaymentInvoiceForm(forms.ModelForm):
                 ),
                 Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
                 Field("invoice_number"),
-                Field("status", label="Invoice Status"),
+                Field("status"),
                 Field(
                     "usd_currency",
                     css_class=CHECKBOX_CLASS,
@@ -1493,7 +1493,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
         if self.read_only:
-            self.fields["status"] = forms.CharField(required=False, label="Invoice Status")
+            self.fields["status"] = forms.CharField(required=False, label=gettext("Invoice Status"))
             for field in self.fields.values():
                 field.widget.attrs["readonly"] = "readonly"
 
@@ -1555,7 +1555,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         if self.is_service_delivery:
             first_row.append(Field("title"))
         if self.read_only:
-            first_row.append(Field("status", label="Invoice Status"))
+            first_row.append(Field("status"))
 
         second_row = [Field("date", **{"x-ref": "date", "x-on:change": "convert()"})]
         if self.is_service_delivery:
