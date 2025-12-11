@@ -21,6 +21,7 @@ from commcare_connect.opportunity.models import (
     CommCareApp,
     CompletedWork,
     CompletedWorkStatus,
+    Country,
     CredentialConfiguration,
     Currency,
     DeliverUnit,
@@ -111,6 +112,12 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
         widget=forms.Select(attrs={"data-tomselect": "1"}),
         empty_label=_("Select a currency"),
     )
+    country = forms.ModelChoiceField(
+        label=_("Country"),
+        queryset=Country.objects.order_by("name"),
+        widget=forms.Select(attrs={"data-tomselect": "1"}),
+        empty_label=_("Select a country"),
+    )
 
     class Meta:
         model = Opportunity
@@ -119,6 +126,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             "description",
             "active",
             "currency_fk",
+            "country",
             "short_description",
             "is_test",
             "delivery_type",
@@ -178,6 +186,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                     Field("end_date"),
                 ),
                 Column(Field("currency_fk")),
+                Column(Field("country")),
                 css_class="grid grid-cols-2 gap-4 p-6 card_bg",
             ),
             Row(
@@ -307,6 +316,12 @@ class OpportunityInitForm(forms.ModelForm):
         widget=forms.Select(attrs={"data-tomselect": "1"}),
         empty_label=_("Select a currency"),
     )
+    country = forms.ModelChoiceField(
+        label=_("Country"),
+        queryset=Country.objects.order_by("name"),
+        widget=forms.Select(attrs={"data-tomselect": "1"}),
+        empty_label=_("Select a country"),
+    )
 
     class Meta:
         model = Opportunity
@@ -315,6 +330,7 @@ class OpportunityInitForm(forms.ModelForm):
             "description",
             "short_description",
             "currency_fk",
+            "country",
             "hq_server",
         ]
 
@@ -348,6 +364,7 @@ class OpportunityInitForm(forms.ModelForm):
                 ),
                 Column(
                     Field("currency_fk"),
+                    Field("country"),
                     Field("hq_server"),
                     Column(
                         Field("api_key", wrapper_class="flex-1"),
@@ -565,7 +582,7 @@ class OpportunityInitUpdateForm(OpportunityInitForm):
         if not getattr(opportunity, "pk", None):
             return
 
-        for field_name in ("name", "short_description", "description", "currency_fk"):
+        for field_name in ("name", "short_description", "description", "currency_fk", "country"):
             if field_name in self.fields:
                 self.fields[field_name].initial = getattr(opportunity, field_name)
 

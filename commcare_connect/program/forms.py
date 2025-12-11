@@ -3,7 +3,7 @@ from crispy_forms.layout import Button, Column, Field, Layout, Row, Submit
 from django import forms
 
 from commcare_connect.opportunity.forms import OpportunityInitForm, OpportunityInitUpdateForm
-from commcare_connect.opportunity.models import Currency
+from commcare_connect.opportunity.models import Country, Currency
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplicationStatus
 
@@ -17,6 +17,12 @@ class ProgramForm(forms.ModelForm):
         widget=forms.Select(attrs={"data-tomselect": "1"}),
         empty_label="Select a currency",
     )
+    country = forms.ModelChoiceField(
+        label="Country",
+        queryset=Country.objects.order_by("name"),
+        widget=forms.Select(attrs={"data-tomselect": "1"}),
+        empty_label="Select a country",
+    )
 
     class Meta:
         model = Program
@@ -26,6 +32,7 @@ class ProgramForm(forms.ModelForm):
             "delivery_type",
             "budget",
             "currency_fk",
+            "country",
             "start_date",
             "end_date",
         ]
@@ -43,6 +50,7 @@ class ProgramForm(forms.ModelForm):
             Row(
                 Field("budget"),
                 Field("currency_fk"),
+                Field("country"),
                 css_class="grid grid-cols-2 gap-2",
             ),
             Row(
@@ -86,11 +94,12 @@ class BaseManagedOpportunityInitForm:
         self.program = kwargs.pop("program")
         super().__init__(*args, **kwargs)
 
-        # Managed opportunities should use the currency specified in the program.
-        currency_field = self.fields["currency_fk"]
-        currency_field.initial = self.program.currency_fk
-        currency_field.widget.attrs.update({"readonly": "readonly", "disabled": True})
-        currency_field.required = False
+        # Managed opportunities should use the currency/country specified in the program.
+        for field_name in ["currency_fk", "country"]:
+            form_field = self.fields[field_name]
+            form_field.initial = getattr(self.program, field_name)
+            form_field.widget.attrs.update({"readonly": "readonly", "disabled": True})
+            form_field.required = False
 
         program_members = Organization.objects.filter(
             programapplication__program=self.program, programapplication__status=ProgramApplicationStatus.ACCEPTED
