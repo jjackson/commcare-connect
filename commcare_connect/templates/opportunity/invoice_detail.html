@@ -25,7 +25,7 @@
     {% if invoice_status == 'pending' and not request.is_opportunity_pm %}
       <a
         hx-post="{% url 'opportunity:submit_invoice' org_slug=request.org.slug opp_id=opportunity.id %}"
-        hx-vals='{"invoice_id": "{{ invoice.id }}"}'
+        hx-vals='{"invoice_id": "{{ form.instance.id }}"}'
         hx-swap="innerHTML"
         class="button button-md primary-dark"
       >
