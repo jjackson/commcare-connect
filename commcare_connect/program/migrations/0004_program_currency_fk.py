@@ -12,8 +12,8 @@ def populate_program_currency_and_country_fk(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0087_currency_country_opportunity_currency_fk"),
-        ("program", "0002_update_delivery_type"),
+        ("opportunity", "0088_currency_country_opportunity_currency_fk"),
+        ("program", "0003_alter_program_budget"),
     ]
 
     operations = [
@@ -21,14 +21,14 @@ class Migration(migrations.Migration):
             model_name="program",
             name="currency_fk",
             field=models.ForeignKey(
-                null=True, on_delete=django.db.models.deletion.DO_NOTHING, to="opportunity.currency"
+                null=True, on_delete=django.db.models.deletion.PROTECT, to="opportunity.currency"
             ),
         ),
         migrations.AddField(
             model_name="program",
             name="country",
             field=models.ForeignKey(
-                null=True, on_delete=django.db.models.deletion.DO_NOTHING, to="opportunity.country"
+                null=True, on_delete=django.db.models.deletion.PROTECT, to="opportunity.country"
             ),
         ),
         migrations.RunPython(
