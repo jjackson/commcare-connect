@@ -73,6 +73,9 @@ class Country(models.Model):
     name = models.CharField(max_length=128)
     currency = models.ForeignKey(Currency, on_delete=models.SET_NULL, null=True, blank=True)
 
+    def __str__(self):
+        return self.name
+
 
 class Opportunity(BaseModel):
     organization = models.ForeignKey(
