@@ -55,16 +55,12 @@ from commcare_connect.opportunity.utils.completed_work import (
     link_invoice_to_completed_works,
     update_status,
 )
-from commcare_connect.opportunity.utils.invoice import (
-    generate_invoice_number,
-    get_end_date_for_invoice,
-    get_start_date_for_invoice,
-)
+from commcare_connect.opportunity.utils.invoice import generate_invoice_number, get_start_date_for_invoice
 from commcare_connect.users.models import User
 from commcare_connect.users.user_credentials import UserCredentialIssuer
 from commcare_connect.utils.analytics import Event, GATrackingInfo, _serialize_events, send_event_task
 from commcare_connect.utils.celery import set_task_progress
-from commcare_connect.utils.datetime import is_date_before
+from commcare_connect.utils.datetime import get_end_date_previous_month, is_date_before
 from commcare_connect.utils.sms import send_sms
 from config import celery_app
 
@@ -549,12 +545,16 @@ def generate_automated_service_delivery_invoice():
 
     CHUNK_SIZE = 100
     invoices_chunk = []
+    end_date_prev_month = get_end_date_previous_month()
 
     for opportunity in Opportunity.objects.filter(active=True, managed=True).iterator(chunk_size=CHUNK_SIZE):
         start_date = get_start_date_for_invoice(opportunity)
-        end_date = get_end_date_for_invoice(start_date)
+        # Below indicates there are no uninvoiced completed works to invoice in previous month or earlier
+        if start_date > end_date_prev_month:
+            continue
+
         invoice_number = generate_invoice_number()
-        line_items = get_uninvoiced_visit_items(opportunity, start_date, end_date)
+        line_items = get_uninvoiced_visit_items(opportunity, start_date, end_date_prev_month)
         if not line_items:
             continue
 
@@ -567,7 +567,7 @@ def generate_automated_service_delivery_invoice():
             amount_usd=total_usd_amount,
             date=datetime.datetime.utcnow(),
             start_date=start_date,
-            end_date=end_date,
+            end_date=end_date_prev_month,
             status=InvoiceStatus.PENDING,
             invoice_number=invoice_number,
             service_delivery=True,
