@@ -97,6 +97,11 @@ class FLWAnalyzer:
             flagged = self.config.filters["flagged"]
             filtered = [v for v in filtered if v.flagged == flagged]
 
+        # Apply entity_id filter
+        if "entity_id" in self.config.filters:
+            entity_id = self.config.filters["entity_id"]
+            filtered = [v for v in filtered if v.entity_id == entity_id]
+
         return filtered
 
     def group_visits(self, visits: list[LocalUserVisit]) -> dict[Any, list[LocalUserVisit]]:

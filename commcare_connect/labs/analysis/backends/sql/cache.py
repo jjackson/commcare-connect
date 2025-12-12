@@ -165,7 +165,7 @@ class SQLCacheManager:
         Store computed visit results.
 
         Args:
-            visits_data: List of dicts with visit_id, username, computed_fields
+            visits_data: List of dicts with visit_id, username, base fields, and computed_fields
             visit_count: Total visit count for invalidation
         """
         if not self.config_hash:
@@ -187,6 +187,16 @@ class SQLCacheManager:
                 expires_at=expires_at,
                 visit_id=v["visit_id"],
                 username=v["username"],
+                # Base fields (allow None/NULL for missing values)
+                visit_date=v.get("visit_date"),
+                status=v.get("status") or None,
+                flagged=v.get("flagged", False),
+                location=v.get("location") or None,
+                deliver_unit=v.get("deliver_unit") or None,
+                deliver_unit_id=v.get("deliver_unit_id"),
+                entity_id=v.get("entity_id") or None,
+                entity_name=v.get("entity_name") or None,
+                # Computed fields
                 computed_fields=v["computed_fields"],
             )
             for v in visits_data

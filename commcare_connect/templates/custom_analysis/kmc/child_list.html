@@ -73,16 +73,46 @@
             </div>
         </div>
 
-        <table class="min-w-full divide-y divide-gray-200">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Child Name</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entity Name</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">FLW Name</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Visits</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Starting Weight</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Weight</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Visit</th>
+                    <th @click="sortBy('child_name')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                        <div class="flex items-center gap-2">
+                            <span>Child Name</span>
+                            <i class="fa-solid" :class="getSortIcon('child_name')"></i>
+                        </div>
+                    </th>
+                    <th @click="sortBy('flw_display_name')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                        <div class="flex items-center gap-2">
+                            <span>FLW Name</span>
+                            <i class="fa-solid" :class="getSortIcon('flw_display_name')"></i>
+                        </div>
+                    </th>
+                    <th @click="sortBy('visit_count')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                        <div class="flex items-center gap-2">
+                            <span>Visits</span>
+                            <i class="fa-solid" :class="getSortIcon('visit_count')"></i>
+                        </div>
+                    </th>
+                    <th @click="sortBy('starting_weight')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                        <div class="flex items-center gap-2">
+                            <span>Starting Weight</span>
+                            <i class="fa-solid" :class="getSortIcon('starting_weight')"></i>
+                        </div>
+                    </th>
+                    <th @click="sortBy('current_weight')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                        <div class="flex items-center gap-2">
+                            <span>Current Weight</span>
+                            <i class="fa-solid" :class="getSortIcon('current_weight')"></i>
+                        </div>
+                    </th>
+                    <th @click="sortBy('last_visit_date')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                        <div class="flex items-center gap-2">
+                            <span>Last Visit</span>
+                            <i class="fa-solid" :class="getSortIcon('last_visit_date')"></i>
+                        </div>
+                    </th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
             </thead>
@@ -90,7 +120,6 @@
                 <template x-for="child in children" :key="child.child_id">
                     <tr class="hover:bg-gray-50">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="child.child_name || 'Unknown'"></td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="child.entity_name || '-'"></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="child.flw_display_name || child.flw_username || '-'"></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="child.visit_count"></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -101,7 +130,7 @@
                             <span x-show="child.current_weight" x-text="child.current_weight + 'g'"></span>
                             <span x-show="!child.current_weight" class="text-gray-400">-</span>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="child.last_visit_date || '-'"></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="child.last_visit_date ? child.last_visit_date.split('T')[0] : '-'"></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
                             <a :href="`/custom_analysis/kmc/children/${child.child_id}/`"
                                class="inline-flex items-center px-3 py-1 border border-blue-300 rounded-md text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition-colors">
@@ -113,13 +142,14 @@
                 </template>
                 <template x-if="children.length === 0 && !loading">
                     <tr>
-                        <td colspan="8" class="px-6 py-8 text-center text-sm text-gray-500">
+                        <td colspan="7" class="px-6 py-8 text-center text-sm text-gray-500">
                             No children found for this opportunity
                         </td>
                     </tr>
                 </template>
             </tbody>
         </table>
+        </div>
     </div>
 
     {% endif %}
@@ -133,10 +163,48 @@ function kmcChildList() {
         statusMessage: 'Initializing...',
         children: [],
         fromCache: false,
+        sortColumn: 'child_name',
+        sortDirection: 'asc',
 
         async init() {
             console.log('[KMC] Initializing child list...');
             await this.loadData();
+        },
+
+        sortBy(column) {
+            if (this.sortColumn === column) {
+                this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.sortColumn = column;
+                this.sortDirection = 'asc';
+            }
+            this.sortChildren();
+        },
+
+        sortChildren() {
+            this.children.sort((a, b) => {
+                let aVal = a[this.sortColumn];
+                let bVal = b[this.sortColumn];
+
+                // Handle null/undefined values
+                if (aVal == null) aVal = '';
+                if (bVal == null) bVal = '';
+
+                // Convert to lowercase for string comparison
+                if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+                if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
+                let comparison = 0;
+                if (aVal < bVal) comparison = -1;
+                if (aVal > bVal) comparison = 1;
+
+                return this.sortDirection === 'asc' ? comparison : -comparison;
+            });
+        },
+
+        getSortIcon(column) {
+            if (this.sortColumn !== column) return 'fa-sort text-gray-300';
+            return this.sortDirection === 'asc' ? 'fa-sort-up text-blue-600' : 'fa-sort-down text-blue-600';
         },
 
         async loadData() {
@@ -166,6 +234,7 @@ function kmcChildList() {
                         if (data.complete && data.data) {
                             this.children = data.data.children || [];
                             this.fromCache = data.data.from_cache || false;
+                            this.sortChildren();
                             this.loading = false;
                             eventSource.close();
                             console.log(`[KMC] Loaded ${this.children.length} children`);

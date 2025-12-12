@@ -91,6 +91,16 @@ class ComputedVisitCache(models.Model):
     visit_id = models.IntegerField(db_index=True)
     username = models.CharField(max_length=255, db_index=True)
 
+    # Base visit fields (denormalized from RawVisitCache to avoid joins)
+    visit_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=50, blank=True, null=True)
+    flagged = models.BooleanField(default=False)
+    location = models.CharField(max_length=255, blank=True, null=True)
+    deliver_unit = models.CharField(max_length=500, blank=True, null=True)
+    deliver_unit_id = models.IntegerField(null=True, blank=True)
+    entity_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
+    entity_name = models.CharField(max_length=500, blank=True, null=True)
+
     # Computed data
     computed_fields = models.JSONField(default=dict, help_text="Computed field values from config")
 

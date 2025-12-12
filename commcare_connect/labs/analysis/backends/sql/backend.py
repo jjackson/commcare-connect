@@ -271,22 +271,16 @@ class SQLBackend:
 
         logger.info(f"[SQL] Visit cache HIT for opp {opportunity_id}")
 
-        # Load computed visits and join with raw visits for base fields
+        # Load computed visits (no join needed - all fields are in ComputedVisitCache now)
         computed_qs = cache_manager.get_computed_visits_queryset()
-        raw_qs = cache_manager.get_raw_visits_queryset()
 
-        # Build lookup of computed fields by visit_id
-        computed_lookup = {row.visit_id: row.computed_fields for row in computed_qs}
-
-        # Build VisitRow objects from raw visits + computed fields
+        # Build VisitRow objects directly from ComputedVisitCache
         visit_rows = []
-        for raw_row in raw_qs:
-            computed_fields = computed_lookup.get(raw_row.visit_id, {})
-
+        for cached_row in computed_qs:
             # Parse GPS from location string (format: "lat lon alt accuracy")
             latitude, longitude, accuracy = None, None, None
-            if raw_row.location:
-                parts = raw_row.location.split()
+            if cached_row.location:
+                parts = cached_row.location.split()
                 if len(parts) >= 2:
                     try:
                         latitude = float(parts[0])
@@ -297,20 +291,22 @@ class SQLBackend:
                         pass
 
             visit_row = VisitRow(
-                id=str(raw_row.visit_id),
-                user_id=None,  # Not stored in RawVisitCache
-                username=raw_row.username,
-                visit_date=datetime.combine(raw_row.visit_date, datetime.min.time()) if raw_row.visit_date else None,
-                status=raw_row.status,
-                flagged=raw_row.flagged,
+                id=str(cached_row.visit_id),
+                user_id=None,
+                username=cached_row.username,
+                visit_date=datetime.combine(cached_row.visit_date, datetime.min.time())
+                if cached_row.visit_date
+                else None,
+                status=cached_row.status,
+                flagged=cached_row.flagged,
                 latitude=latitude,
                 longitude=longitude,
                 accuracy_in_m=accuracy,
-                deliver_unit_id=raw_row.deliver_unit_id,
-                deliver_unit_name=raw_row.deliver_unit,
-                entity_id=raw_row.entity_id,
-                entity_name=raw_row.entity_name,
-                computed=computed_fields,
+                deliver_unit_id=cached_row.deliver_unit_id,
+                deliver_unit_name=cached_row.deliver_unit,
+                entity_id=cached_row.entity_id,
+                entity_name=cached_row.entity_name,
+                computed=cached_row.computed_fields,
             )
             visit_rows.append(visit_row)
 
@@ -388,6 +384,46 @@ class SQLBackend:
             # Separate computed fields from base fields
             computed = {name: row.get(name) for name in computed_field_names}
 
+            # Apply post-processing transforms that need full visit context
+            # (e.g., extract_images_with_question_ids needs both form_json and images)
+            for field in config.fields:
+                if field.name not in computed_field_names:
+                    continue
+
+                if field.transform and callable(field.transform):
+                    # Check if this transform needs full visit data (has form_json/images params)
+                    import inspect
+
+                    sig = inspect.signature(field.transform)
+                    params = list(sig.parameters.keys())
+
+                    # If transform takes 'visit_data' param, it needs full context
+                    if "visit_data" in params or len(params) == 0:
+                        try:
+                            import json
+
+                            # Build full visit dict for transform
+                            # Note: form_json and images come back as JSON strings from SQL
+                            form_json = row.get("form_json", {})
+                            if isinstance(form_json, str):
+                                form_json = json.loads(form_json) if form_json else {}
+
+                            images = row.get("images", [])
+                            if isinstance(images, str):
+                                images = json.loads(images) if images else []
+
+                            visit_dict = {
+                                "form_json": form_json,
+                                "images": images,
+                                "username": row.get("username"),
+                                "visit_date": row.get("visit_date"),
+                                "entity_name": row.get("entity_name"),
+                            }
+                            computed[field.name] = field.transform(visit_dict)
+                        except Exception as e:
+                            logger.warning(f"Transform for {field.name} failed: {e}")
+                            computed[field.name] = None
+
             # Parse visit_date
             visit_date_val = row.get("visit_date")
             if visit_date_val and isinstance(visit_date_val, date):
@@ -411,11 +447,21 @@ class SQLBackend:
             )
             visit_rows.append(visit_row)
 
-        # Cache computed visits
+        # Cache computed visits (store base fields as columns to avoid joins later)
         computed_cache_data = [
             {
                 "visit_id": int(row.id),
                 "username": row.username,
+                "visit_date": row.visit_date.date() if row.visit_date else None,
+                "status": row.status,
+                "flagged": row.flagged,
+                "location": row.location
+                if hasattr(row, "location")
+                else (f"{row.latitude} {row.longitude}" if row.latitude and row.longitude else ""),
+                "deliver_unit": row.deliver_unit_name,
+                "deliver_unit_id": row.deliver_unit_id,
+                "entity_id": row.entity_id,
+                "entity_name": row.entity_name,
                 "computed_fields": row.computed,
             }
             for row in visit_rows

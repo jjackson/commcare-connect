@@ -3,14 +3,11 @@
 
 {% block title %}Child Timeline{% endblock %}
 
-{% block extra_css %}
+{% block content %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
     [x-cloak] { display: none !important; }
 </style>
-{% endblock %}
-
-{% block content %}
 <div class="container mx-auto p-6" x-data="caseTimeline()" x-cloak>
     <!-- Loading State -->
     <div x-show="loading" class="flex items-center justify-center py-12">
@@ -66,9 +63,7 @@
         </template>
     </div>
 </div>
-{% endblock %}
 
-{% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -83,6 +78,7 @@ function caseTimeline() {
         widgetConfigs: {},
         chart: null,
         map: null,
+        opportunityId: '{{ opportunity_id }}',
 
         async init() {
             await this.loadData();
@@ -139,11 +135,22 @@ function caseTimeline() {
                 const isSelected = this.selectedVisit?.visit_id === visit.visit_id;
                 const visitLabel = data.visit_number || (index === 0 ? 'Registration' : `Visit ${index}`);
 
+                // Find weight photo from visit images (question_id contains 'anthropometric' and 'upload_weight_image')
+                const weightPhoto = visit.images?.find(img =>
+                    img.question_id && (
+                        img.question_id.includes('upload_weight_image') ||
+                        img.question_id.includes('anthropometric')
+                    )
+                );
+                const photoUrl = weightPhoto ?
+                    `/custom_analysis/kmc/image/${weightPhoto.blob_id}/?opportunity_id=${this.opportunityId}` :
+                    null;
+
                 html += `
                     <div onclick="Alpine.store('timeline').selectVisit(${visit.visit_id})"
                          class="bg-white border rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow ${isSelected ? 'ring-2 ring-blue-500' : ''}">
                         <div class="flex items-center gap-3">
-                            ${data.photo_url ? `<img src="${data.photo_url}" class="w-16 h-16 rounded object-cover" />` : '<div class="w-16 h-16 bg-gray-200 rounded"></div>'}
+                            ${photoUrl ? `<img src="${photoUrl}" class="w-16 h-16 rounded object-cover" />` : '<div class="w-16 h-16 bg-gray-200 rounded"></div>'}
                             <div class="flex-1">
                                 <div class="font-medium">${visitLabel}</div>
                                 <div class="text-sm text-gray-600">${data.visit_date || '-'}</div>
@@ -163,7 +170,9 @@ function caseTimeline() {
             return `
                 <div class="bg-white border rounded-lg p-6">
                     <h2 class="font-semibold text-lg mb-4">${config.title}</h2>
-                    <canvas id="${widgetId}_canvas" style="height: 300px;"></canvas>
+                    <div style="height: 300px; max-height: 300px; position: relative;">
+                        <canvas id="${widgetId}_canvas"></canvas>
+                    </div>
                 </div>
             `;
         },
@@ -341,4 +350,5 @@ document.addEventListener('alpine:init', () => {
     });
 });
 </script>
-{% endblock %}
+
+{% endblock content %}
