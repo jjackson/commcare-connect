@@ -182,7 +182,7 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
     def setup_mocks(self):
         with (
             mock.patch("commcare_connect.opportunity.tasks.get_start_date_for_invoice") as mock_start_date,
-            mock.patch("commcare_connect.opportunity.tasks.get_end_date_for_invoice") as mock_end_date,
+            mock.patch("commcare_connect.opportunity.tasks.get_end_date_previous_month") as mock_end_date,
             mock.patch("commcare_connect.opportunity.tasks.generate_invoice_number") as mock_invoice_number,
         ):
             mock_start_date.return_value = datetime.date(2024, 1, 1)
