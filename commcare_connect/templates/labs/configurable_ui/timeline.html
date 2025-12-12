@@ -36,11 +36,13 @@
     </div>
 
     <!-- Dynamic Three Column Layout -->
-    <div x-show="!loading" class="grid gap-4" style="grid-template-columns: repeat(12, minmax(0, 1fr))">
+    <div x-show="!loading" class="grid gap-4" style="grid-template-columns: repeat(12, minmax(0, 1fr))"
+         @visit-selected.window="handleVisitSelection($event.detail)"
+         @visit-selected-by-index.window="selectVisitByIndex($event.detail)">
         <!-- Left Column - Timeline -->
         <div class="col-span-2 space-y-4">
             <template x-for="widgetId in layout.left" :key="widgetId">
-                <div x-html="renderWidget(widgetId)"></div>
+                <div :key="`${widgetId}-${selectedVisit?.visit_id || 'none'}`" x-html="renderWidget(widgetId)"></div>
             </template>
         </div>
 
@@ -54,7 +56,7 @@
         <!-- Right Column - Details -->
         <div class="col-span-4 space-y-4">
             <template x-for="widgetId in layout.right" :key="widgetId">
-                <div x-html="renderWidget(widgetId)"></div>
+                <div :key="`${widgetId}-${selectedVisit?.visit_id || 'none'}`" x-html="renderWidget(widgetId)"></div>
             </template>
         </div>
     </div>
@@ -65,6 +67,11 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
+// Store chart and map outside Alpine reactivity to avoid infinite loops
+let timelineChart = null;
+let timelineMap = null;
+let timelineMapMarkers = [];
+
 function caseTimeline() {
     return {
         loading: true,
@@ -73,9 +80,6 @@ function caseTimeline() {
         selectedVisit: null,
         layout: {},
         widgetConfigs: {},
-        chart: null,
-        map: null,
-        mapMarkers: [],
         opportunityId: '{{ opportunity_id }}',
 
         async init() {
@@ -164,7 +168,7 @@ function caseTimeline() {
                 }
 
                 html += `
-                    <div onclick="Alpine.store('timeline').selectVisit(${visit.visit_id})"
+                    <div onclick="window.dispatchEvent(new CustomEvent('visit-selected-by-index', { detail: ${index} }))"
                          class="bg-white border rounded p-2 cursor-pointer hover:border-blue-400 transition-all ${isSelected ? 'ring-2 ring-blue-500 border-blue-500' : ''}">
                         <div class="flex gap-2">
                             ${photoUrl ? `<img src="${photoUrl}" class="w-12 h-12 rounded object-cover flex-shrink-0" />` : '<div class="w-12 h-12 bg-gray-200 rounded flex-shrink-0"></div>'}
@@ -240,21 +244,47 @@ function caseTimeline() {
         },
 
         selectVisit(visitId) {
-            this.selectedVisit = this.visits.find(v => v.visit_id === visitId);
+            window.dispatchEvent(new CustomEvent('visit-selected', { detail: visitId }));
+        },
 
-            // Update chart highlighting
-            if (this.chart) {
-                const selectedIndex = this.visits.findIndex(v => v.visit_id === visitId);
-                this.chart.data.datasets[0].pointRadius = this.visits.map((_, i) => i === selectedIndex ? 8 : 4);
-                this.chart.data.datasets[0].pointBorderWidth = this.visits.map((_, i) => i === selectedIndex ? 3 : 0);
-                this.chart.data.datasets[0].pointBorderColor = '#3b82f6';
-                this.chart.update('none');
+        selectVisitByIndex(index) {
+            if (this.visits[index]) {
+                this.handleVisitSelection(this.visits[index].visit_id);
+            }
+        },
+
+        handleVisitSelection(visitId) {
+            const visit = this.visits.find(v => v.visit_id === visitId);
+            if (!visit) return;
+
+            const selectedIndex = this.visits.findIndex(v => v.visit_id === visitId);
+
+            // Update selected visit - this will trigger reactive updates via :key bindings
+            this.selectedVisit = visit;
+
+            // Update chart highlighting - stored globally to avoid Alpine reactivity issues
+            if (timelineChart) {
+                const dataset = timelineChart.data.datasets[0];
+                const pointRadii = [];
+                const pointBorderWidths = [];
+
+                for (let i = 0; i < this.visits.length; i++) {
+                    pointRadii[i] = (i === selectedIndex ? 8 : 4);
+                    pointBorderWidths[i] = (i === selectedIndex ? 3 : 0);
+                }
+
+                dataset.pointRadius = pointRadii;
+                dataset.pointBorderWidth = pointBorderWidths;
+                dataset.pointBorderColor = '#3b82f6';
+
+                // Update chart display without full redraw for efficiency
+                timelineChart.update('none');
             }
 
             // Update map highlighting
-            if (this.map && this.mapMarkers) {
-                this.mapMarkers.forEach((marker, index) => {
-                    const isSelected = this.visits[index].visit_id === visitId;
+            if (timelineMap && timelineMapMarkers.length > 0) {
+                timelineMapMarkers.forEach((marker, index) => {
+                    const isSelected = (this.visits[index].visit_id === visitId);
                     marker.setStyle({
                         radius: isSelected ? 10 : 6,
                         fillColor: isSelected ? '#3b82f6' : '#10b981',
@@ -263,20 +293,6 @@ function caseTimeline() {
                     });
                 });
             }
-
-            // Force re-render of detail panel
-            this.$nextTick(() => {
-                const detailPanelContainer = document.querySelector('.col-span-4');
-                if (detailPanelContainer) {
-                    const detailPanelId = this.layout.right?.find(id => this.widgetConfigs[id]?.widget_type === 'detail_panel');
-                    if (detailPanelId) {
-                        const widgetContainer = detailPanelContainer.querySelector('[x-html]');
-                        if (widgetContainer) {
-                            widgetContainer.innerHTML = this.renderDetailPanel(detailPanelId);
-                        }
-                    }
-                }
-            });
         },
 
         initializeWidgets() {
@@ -298,7 +314,7 @@ function caseTimeline() {
             const config = this.widgetConfigs[widgetId];
             const ctx = canvas.getContext('2d');
 
-            if (this.chart) this.chart.destroy();
+            if (timelineChart) timelineChart.destroy();
 
             // Extract data from visits with actual dates for time scale
             const dataPoints = this.visits
@@ -314,7 +330,7 @@ function caseTimeline() {
             const pointRadii = this.visits.map((_, i) => i === selectedIndex ? 8 : 4);
             const pointBorderWidths = this.visits.map((_, i) => i === selectedIndex ? 3 : 0);
 
-            this.chart = new Chart(ctx, {
+            timelineChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     datasets: [{
@@ -334,11 +350,9 @@ function caseTimeline() {
                     responsive: true,
                     maintainAspectRatio: false,
                     onClick: (event, elements) => {
-                        if (elements.length > 0) {
+                        if (elements && elements.length > 0) {
                             const index = elements[0].index;
-                            if (this.visits[index]) {
-                                this.selectVisit(this.visits[index].visit_id);
-                            }
+                            window.dispatchEvent(new CustomEvent('visit-selected-by-index', { detail: index }));
                         }
                     },
                     plugins: {
@@ -400,7 +414,7 @@ function caseTimeline() {
 
         initMap(widgetId) {
             const container = document.getElementById(`${widgetId}_container`);
-            if (!container || this.map) return;
+            if (!container || timelineMap) return;
 
             try {
                 // Find first valid GPS coordinates
@@ -417,13 +431,13 @@ function caseTimeline() {
                     }
                 }
 
-                this.map = L.map(`${widgetId}_container`).setView([centerLat, centerLng], 15);
+                timelineMap = L.map(`${widgetId}_container`).setView([centerLat, centerLng], 15);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: 'Â© OpenStreetMap contributors'
-                }).addTo(this.map);
+                }).addTo(timelineMap);
 
                 // Add circle markers for each visit
-                this.mapMarkers = [];
+                timelineMapMarkers = [];
                 this.visits.forEach((visit, index) => {
                     const data = visit.widgets[widgetId];
                     if (data.gps) {
@@ -441,14 +455,15 @@ function caseTimeline() {
                                 weight: isSelected ? 3 : 2,
                                 opacity: 1,
                                 fillOpacity: 0.8
-                            }).addTo(this.map).bindPopup(visitLabel);
+                            }).addTo(timelineMap).bindPopup(visitLabel);
 
                             // Make marker clickable to select visit
+                            const visitIndex = index;
                             marker.on('click', () => {
-                                Alpine.store('timeline').selectVisit(visit.visit_id);
+                                window.dispatchEvent(new CustomEvent('visit-selected-by-index', { detail: visitIndex }));
                             });
 
-                            this.mapMarkers.push(marker);
+                            timelineMapMarkers.push(marker);
                         }
                     }
                 });

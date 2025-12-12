@@ -132,11 +132,18 @@
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="child.last_visit_date ? child.last_visit_date.split('T')[0] : '-'"></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            <a :href="`/custom_analysis/kmc/children/${child.child_id}/`"
-                               class="inline-flex items-center px-3 py-1 border border-blue-300 rounded-md text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition-colors">
-                                <i class="fa-solid fa-timeline mr-1"></i>
-                                View Timeline
-                            </a>
+                            <div class="flex gap-2">
+                                <a :href="`/custom_analysis/kmc/children/${child.child_id}/`"
+                                   class="inline-flex items-center px-3 py-1 border border-blue-300 rounded-md text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition-colors">
+                                    <i class="fa-solid fa-timeline mr-1"></i>
+                                    View Timeline
+                                </a>
+                                <a :href="'/labs/explorer/visit-inspector/?query=' + encodeURIComponent(`entity_id = '${child.child_id}'`)"
+                                   class="inline-flex items-center px-3 py-1 border border-purple-300 rounded-md text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 hover:border-purple-400 transition-colors">
+                                    <i class="fa-solid fa-search mr-1"></i>
+                                    View in Inspector
+                                </a>
+                            </div>
                         </td>
                     </tr>
                 </template>

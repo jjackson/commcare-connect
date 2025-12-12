@@ -8,7 +8,7 @@ from collections.abc import Generator
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import connection
+from django.db import connection, transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -400,11 +400,18 @@ class VisitInspectorQueryView(LoginRequiredMixin, View):
             # Build safe query
             query, params = build_safe_query(opportunity_id, where_clause, limit=1000)
 
-            # Execute query in read-only mode
-            with connection.cursor() as cursor:
-                cursor.execute(query, params)
-                columns = [col[0] for col in cursor.description]
-                rows = cursor.fetchall()
+            # Execute query in read-only transaction
+            # This provides an additional safety layer - even if validation is bypassed,
+            # PostgreSQL will reject any write operations (INSERT, UPDATE, DELETE, etc.)
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    # Set transaction to read-only mode
+                    cursor.execute("SET TRANSACTION READ ONLY")
+
+                    # Execute the user's query
+                    cursor.execute(query, params)
+                    columns = [col[0] for col in cursor.description]
+                    rows = cursor.fetchall()
 
             # Convert to list of dicts
             results = []
@@ -461,9 +468,11 @@ class VisitViewView(LoginRequiredMixin, TemplateView):
                 LIMIT 1
             """
 
-            with connection.cursor() as cursor:
-                cursor.execute(query, [opportunity_id, visit_id])
-                row = cursor.fetchone()
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute("SET TRANSACTION READ ONLY")
+                    cursor.execute(query, [opportunity_id, visit_id])
+                    row = cursor.fetchone()
 
             if not row:
                 messages.error(self.request, f"Visit {visit_id} not found")
@@ -519,9 +528,11 @@ class DownloadVisitView(LoginRequiredMixin, View):
                 LIMIT 1
             """
 
-            with connection.cursor() as cursor:
-                cursor.execute(query, [opportunity_id, visit_id])
-                row = cursor.fetchone()
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute("SET TRANSACTION READ ONLY")
+                    cursor.execute(query, [opportunity_id, visit_id])
+                    row = cursor.fetchone()
 
             if not row:
                 messages.error(request, f"Visit {visit_id} not found")
