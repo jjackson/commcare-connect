@@ -10,69 +10,6 @@ from django.http import JsonResponse
 from django.views import View
 from django.views.generic import TemplateView
 
-from commcare_connect.labs.configurable_ui.linking import ChildLinkingService
-from commcare_connect.labs.configurable_ui.widgets import BaseWidget
-from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
-
-
-class GenericTimelineListView(LoginRequiredMixin, TemplateView):
-    """Generic list view for children - works with any timeline config."""
-
-    template_name = "labs/configurable_ui/child_list.html"
-    config_module = None  # Override in subclass
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        # Get opportunity from labs context
-        labs_context = getattr(self.request, "labs_context", {})
-        opportunity_id = labs_context.get("opportunity_id")
-
-        if not opportunity_id:
-            context["error"] = "No opportunity selected"
-            return context
-
-        # Import configuration
-        linking_config = self.config_module.KMC_LINKING_CONFIG
-        widgets_config = self.config_module.KMC_WIDGETS
-        header_fields = self.config_module.KMC_HEADER_FIELDS
-
-        # Get all visits
-        visits = UserVisit.objects.filter(
-            opportunity_id=opportunity_id, status=VisitValidationStatus.approved
-        ).select_related("user")
-
-        # Link visits into children
-        linking_service = ChildLinkingService(linking_config)
-        children = linking_service.link_visits(list(visits))
-
-        # Build child list with summary data
-        child_list = []
-        visit_history_widget = BaseWidget(widgets_config["visit_history"])
-        header_config = type("HeaderConfig", (), {"field_extractors": header_fields})()
-        header_widget = BaseWidget(header_config)
-
-        for child_id, child_visits in children.items():
-            if not child_visits:
-                continue
-
-            first_visit = child_visits[0]
-            last_visit = child_visits[-1]
-
-            child_data = {
-                "child_id": child_id,
-                "name": header_widget.extract_field(first_visit.form_json, "child_name"),
-                "visit_count": len(child_visits),
-                "last_visit_date": visit_history_widget.extract_field(last_visit.form_json, "visit_date"),
-                "current_weight": visit_history_widget.extract_field(last_visit.form_json, "weight"),
-            }
-            child_list.append(child_data)
-
-        context["children"] = child_list
-        context["opportunity_id"] = opportunity_id
-        context["program_name"] = getattr(self.config_module, "PROGRAM_NAME", "Timeline")
-        return context
-
 
 class GenericTimelineDetailView(LoginRequiredMixin, TemplateView):
     """Generic detail view for a single child's timeline."""
@@ -89,6 +26,11 @@ class GenericTimelineDetailView(LoginRequiredMixin, TemplateView):
         from django.urls import reverse
 
         context["api_url"] = reverse(self.api_url_name, kwargs={"child_id": child_id})
+
+        # Add opportunity_id for image URLs
+        labs_context = getattr(self.request, "labs_context", {})
+        context["opportunity_id"] = labs_context.get("opportunity_id") or self.request.GET.get("opportunity_id")
+
         return context
 
 
@@ -96,76 +38,94 @@ class GenericTimelineDataView(LoginRequiredMixin, View):
     """Generic API endpoint for child timeline data - works with any config."""
 
     config_module = None  # Override in subclass
+    pipeline_config = None  # Override in subclass - the AnalysisPipelineConfig
 
     def get(self, request, child_id):
-        # Get opportunity from labs context
+        import logging
+        from copy import deepcopy
+
+        from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
+
+        logger = logging.getLogger(__name__)
+
+        # Get opportunity from labs context or query params
         labs_context = getattr(request, "labs_context", {})
-        opportunity_id = labs_context.get("opportunity_id")
+        opportunity_id = labs_context.get("opportunity_id") or request.GET.get("opportunity_id")
+
+        logger.info(f"[Timeline API] child_id={child_id}, opportunity_id={opportunity_id}")
 
         if not opportunity_id:
             return JsonResponse({"error": "No opportunity selected"}, status=400)
 
         # Import configuration
-        linking_config = self.config_module.KMC_LINKING_CONFIG
         widgets_config = self.config_module.KMC_WIDGETS
         layout_config = self.config_module.KMC_LAYOUT
         header_fields = self.config_module.KMC_HEADER_FIELDS
 
-        # Get all visits for this opportunity
-        visits = UserVisit.objects.filter(
-            opportunity_id=opportunity_id, status=VisitValidationStatus.approved
-        ).select_related("user")
+        # Use pipeline with entity_id filter - this is SQL-optimized now
+        pipeline = AnalysisPipeline(request)
 
-        # Link and filter to this child
-        linking_service = ChildLinkingService(linking_config)
-        children = linking_service.link_visits(list(visits))
+        # Create filtered config for this specific child
+        filtered_config = deepcopy(self.pipeline_config)
+        filtered_config.filters = {"entity_id": child_id}
 
-        child_visits = children.get(child_id, [])
-        if not child_visits:
-            return JsonResponse({"error": "Child not found"}, status=404)
+        logger.info(f"[Timeline API] Running pipeline with entity_id filter: {child_id}")
+        result = pipeline.run_analysis(filtered_config, opportunity_id=opportunity_id)
 
-        # Extract data using widgets
-        timeline_data = self._build_timeline_data(child_id, child_visits, widgets_config, layout_config, header_fields)
+        if not result or not result.rows:
+            logger.warning(f"[Timeline API] No visits found for entity_id={child_id}")
+            return JsonResponse({"error": f"No visits found for child {child_id}"}, status=404)
+
+        logger.info(f"[Timeline API] Pipeline returned {len(result.rows)} visits for child {child_id}")
+
+        # Sort by visit date
+        child_rows = sorted(result.rows, key=lambda r: r.visit_date or "")
+
+        # Build timeline data from computed fields ONLY
+        timeline_data = self._build_timeline_data(child_id, child_rows, widgets_config, layout_config, header_fields)
 
         return JsonResponse(timeline_data)
 
-    def _build_timeline_data(self, child_id, visits, widgets_config, layout_config, header_fields):
-        """Build complete timeline data using composable widgets."""
-        # Header data from first visit
-        header_config = type("HeaderConfig", (), {"field_extractors": header_fields})()
-        header_widget = BaseWidget(header_config)
-        first_visit = visits[0]
+    def _build_timeline_data(self, child_id, visit_rows, widgets_config, layout_config, header_fields):
+        """Build complete timeline data using ONLY pipeline computed fields."""
+        import logging
 
+        logger = logging.getLogger(__name__)
+
+        # Extract first visit for header
+        first_row = visit_rows[0]
+
+        # Header data from computed fields
         header = {}
         for field_name in header_fields.keys():
-            header[field_name] = header_widget.extract_field(first_visit.form_json, field_name)
+            # All header fields should be in computed
+            header[field_name] = first_row.computed.get(field_name)
 
-        # Create widget instances
-        widgets = {widget_id: BaseWidget(config) for widget_id, config in widgets_config.items()}
+        logger.info(f"[Timeline API] Header data: {header}")
 
-        # Extract data for each visit using all widgets
+        # Extract data for each visit from computed fields (including images)
         visit_data = []
-        for visit in visits:
+        for row in visit_rows:
             visit_info = {
-                "visit_id": visit.id,
+                "visit_id": row.id,
                 "widgets": {},  # Data organized by widget_id
+                "images": row.computed.get("images_with_questions", []),  # Pre-computed by pipeline
             }
 
-            # Extract data for each widget
-            for widget_id, widget in widgets.items():
-                widget_data = widget.extract_all_fields(visit.form_json)
+            # Extract data for each widget from computed fields
+            for widget_id, widget_config in widgets_config.items():
+                widget_data = {}
 
-                # Special handling for photo URLs
-                if widget_id == "visit_history" and "photo_url" in widget_data:
-                    photo_filename = widget_data["photo_url"]
-                    if photo_filename and visit.form_json.get("attachments"):
-                        attachments = visit.form_json["attachments"]
-                        if photo_filename in attachments:
-                            widget_data["photo_url"] = attachments[photo_filename].get("url")
+                # Extract each field for this widget from computed fields
+                # Pipeline field names should match widget field names
+                for field_name in widget_config.field_extractors.keys():
+                    widget_data[field_name] = row.computed.get(field_name)
 
                 visit_info["widgets"][widget_id] = widget_data
 
             visit_data.append(visit_info)
+
+        logger.info(f"[Timeline API] Built {len(visit_data)} visit data objects")
 
         # Serialize widget configs for frontend
         widget_configs_serialized = {}

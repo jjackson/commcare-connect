@@ -5,15 +5,19 @@ KMC-specific views using pipeline and SSE streaming.
 import logging
 from collections.abc import Generator
 
+import httpx
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import HttpResponse, JsonResponse
 from django.urls import reverse
-from django.views.generic import TemplateView
+from django.views.generic import TemplateView, View
 
 from commcare_connect.custom_analysis.kmc import timeline_config
 from commcare_connect.custom_analysis.kmc.pipeline_config import KMC_PIPELINE_CONFIG
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, BaseSSEStreamView, send_sse_event
 from commcare_connect.labs.configurable_ui.views import GenericTimelineDataView, GenericTimelineDetailView
+from commcare_connect.opportunity.models import BlobMeta
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +57,7 @@ class KMCTimelineDataView(GenericTimelineDataView):
     """API endpoint for KMC child timeline data."""
 
     config_module = timeline_config
+    pipeline_config = KMC_PIPELINE_CONFIG
 
 
 class KMCChildListStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
@@ -122,10 +127,10 @@ class KMCChildListStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     logger.warning(f"Failed to fetch FLW names: {e}")
                     flw_names = {}
 
-                # Group by child_case_id
+                # Group by child_entity_id (Connect's linking field)
                 children_dict = {}
                 for row in result.rows:
-                    child_id = row.computed.get("child_case_id")
+                    child_id = row.entity_id or row.computed.get("child_entity_id")
                     if not child_id:
                         continue
 
@@ -139,10 +144,11 @@ class KMCChildListStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                             "visits": [],
                         }
 
+                    # Append visit for this child (outside the if block!)
                     children_dict[child_id]["visits"].append(
                         {
-                            "weight_grams": row.computed.get("weight_grams"),
-                            "visit_date": row.computed.get("visit_date")
+                            "weight": row.computed.get("weight"),  # Updated field name
+                            "visit_date": row.computed.get("date")  # Updated field name
                             or (row.visit_date.isoformat() if row.visit_date else None),
                             "visit_number": row.computed.get("visit_number"),
                         }
@@ -159,23 +165,23 @@ class KMCChildListStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     visits.sort(key=lambda v: v.get("visit_date") or "")
 
                     # Get first and last weights
-                    weights = [v.get("weight_grams") for v in visits if v.get("weight_grams")]
+                    weights = [v.get("weight") for v in visits if v.get("weight")]  # Updated field name
                     starting_weight = weights[0] if weights else None
                     current_weight = weights[-1] if weights else None
 
-                    children_list.append(
-                        {
-                            "child_id": child_id,
-                            "child_name": child_data["child_name"],
-                            "entity_name": child_data["entity_name"],
-                            "flw_username": child_data["flw_username"],
-                            "flw_display_name": child_data["flw_display_name"],
-                            "visit_count": len(visits),
-                            "starting_weight": starting_weight,
-                            "current_weight": current_weight,
-                            "last_visit_date": visits[-1].get("visit_date") if visits else None,
-                        }
-                    )
+                    child_entry = {
+                        "child_id": child_id,
+                        "child_name": child_data["child_name"],
+                        "entity_name": child_data["entity_name"],
+                        "flw_username": child_data["flw_username"],
+                        "flw_display_name": child_data["flw_display_name"],
+                        "visit_count": len(visits),
+                        "starting_weight": starting_weight,
+                        "current_weight": current_weight,
+                        "last_visit_date": visits[-1].get("visit_date") if visits else None,
+                    }
+                    logger.info(f"[KMC Stream] Adding child: {child_id[:20]}... with {len(visits)} visits")
+                    children_list.append(child_entry)
 
                 logger.info(f"[KMC] Processed {len(children_list)} children from {len(result.rows)} visits")
 
@@ -194,3 +200,46 @@ class KMCChildListStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
         except Exception as e:
             logger.error(f"[KMC] Stream failed: {e}", exc_info=True)
             yield send_sse_event("Error", error=f"Failed to load child data: {str(e)}")
+
+
+class KMCImageProxyView(LoginRequiredMixin, View):
+    """Proxy view to fetch images from Connect API with authentication."""
+
+    def get(self, request, blob_id):
+        """Download and return image from Connect."""
+        opportunity_id = request.GET.get("opportunity_id")
+        if not opportunity_id:
+            return JsonResponse({"error": "opportunity_id required"}, status=400)
+
+        # Get OAuth token from session
+        labs_oauth = request.session.get("labs_oauth", {})
+        access_token = labs_oauth.get("access_token")
+        if not access_token:
+            return JsonResponse({"error": "Not authenticated"}, status=401)
+
+        # Fetch image from Connect
+        production_url = settings.CONNECT_PRODUCTION_URL.rstrip("/")
+        url = f"{production_url}/export/opportunity/{opportunity_id}/image/"
+
+        try:
+            with httpx.Client() as client:
+                response = client.get(
+                    url,
+                    params={"blob_id": blob_id},
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+
+                # Get content type from BlobMeta if available
+                try:
+                    blob_meta = BlobMeta.objects.get(blob_id=blob_id)
+                    content_type = blob_meta.content_type or "image/jpeg"
+                except BlobMeta.DoesNotExist:
+                    content_type = "image/jpeg"
+
+                return HttpResponse(response.content, content_type=content_type)
+
+        except httpx.HTTPError as e:
+            logging.error(f"[KMC] Failed to fetch image {blob_id}: {e}")
+            return JsonResponse({"error": "Failed to fetch image"}, status=502)

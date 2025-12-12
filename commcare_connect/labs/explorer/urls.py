@@ -9,11 +9,14 @@ from . import views
 app_name = "explorer"
 
 urlpatterns = [
-    path("", views.RecordListView.as_view(), name="list"),
-    path("record/<int:pk>/edit/", views.RecordEditView.as_view(), name="edit"),
-    path("download/", views.DownloadRecordsView.as_view(), name="download"),
-    path("upload/", views.UploadRecordsView.as_view(), name="upload"),
-    path("delete/", views.DeleteRecordsView.as_view(), name="delete"),
+    # Explorer Landing Page
+    path("", views.ExplorerIndexView.as_view(), name="index"),
+    # Labs Record
+    path("records/", views.RecordListView.as_view(), name="list"),
+    path("records/<int:pk>/edit/", views.RecordEditView.as_view(), name="edit"),
+    path("records/download/", views.DownloadRecordsView.as_view(), name="download"),
+    path("records/upload/", views.UploadRecordsView.as_view(), name="upload"),
+    path("records/delete/", views.DeleteRecordsView.as_view(), name="delete"),
     # Visit Inspector
     path("visit-inspector/", views.VisitInspectorView.as_view(), name="visit_inspector"),
     path("visit-inspector/stream/", views.VisitInspectorStreamView.as_view(), name="visit_inspector_stream"),

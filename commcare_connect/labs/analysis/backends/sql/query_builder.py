@@ -326,11 +326,40 @@ def build_visit_extraction_query(
         "entity_name",
     ]
 
+    # Check if any field needs full visit context (form_json, images)
+    needs_full_context = False
+    for field in config.fields:
+        if field.transform and callable(field.transform):
+            import inspect
+
+            sig = inspect.signature(field.transform)
+            params = list(sig.parameters.keys())
+            if "visit_data" in params or len(params) == 0:
+                needs_full_context = True
+                break
+
+    # Include form_json and images if needed
+    if needs_full_context:
+        select_parts.extend(["form_json", "images"])
+
     # Track computed field names for JSON building
     computed_field_names = []
 
     # Add computed fields from config (no aggregation, just extraction + transform)
     for field in config.fields:
+        # Skip fields that will be computed from full visit context (special markers like __images__)
+        if field.transform and callable(field.transform):
+            import inspect
+
+            sig = inspect.signature(field.transform)
+            params = list(sig.parameters.keys())
+            if "visit_data" in params or len(params) == 0:
+                # This field will be computed in post-processing with full visit context
+                # Don't try to extract from form_json, just add a NULL placeholder
+                select_parts.append(f"NULL as {field.name}")
+                computed_field_names.append(field.name)
+                continue
+
         paths = field.paths if field.paths else [field.path]
         value_expr = _paths_to_coalesce_sql(paths)
         transformed_expr = _transform_to_sql(field, value_expr)
@@ -339,11 +368,43 @@ def build_visit_extraction_query(
 
     select_clause = ",\n    ".join(select_parts)
 
+    # Build WHERE clause with filters
+    where_clauses = [f"opportunity_id = {opportunity_id}"]
+
+    # Add entity_id filter if present
+    if "entity_id" in config.filters:
+        entity_id = config.filters["entity_id"]
+        where_clauses.append(f"entity_id = '{entity_id}'")
+
+    # Add status filter if present
+    if "status" in config.filters:
+        statuses = config.filters["status"]
+        if not isinstance(statuses, list):
+            statuses = [statuses]
+        status_list = ", ".join([f"'{s}'" for s in statuses])
+        where_clauses.append(f"status IN ({status_list})")
+
+    # Add flagged filter if present
+    if "flagged" in config.filters:
+        flagged = config.filters["flagged"]
+        where_clauses.append(f"flagged = {flagged}")
+
+    # Add date range filters if present
+    if "date_from" in config.filters:
+        date_from = config.filters["date_from"]
+        where_clauses.append(f"visit_date >= '{date_from}'")
+
+    if "date_to" in config.filters:
+        date_to = config.filters["date_to"]
+        where_clauses.append(f"visit_date <= '{date_to}'")
+
+    where_clause = " AND ".join(where_clauses)
+
     query = f"""
         SELECT
             {select_clause}
         FROM labs_raw_visit_cache
-        WHERE opportunity_id = {opportunity_id}
+        WHERE {where_clause}
         ORDER BY visit_id
     """
 

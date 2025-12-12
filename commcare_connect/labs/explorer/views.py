@@ -40,6 +40,16 @@ from commcare_connect.labs.explorer.utils import (
 logger = logging.getLogger(__name__)
 
 
+class ExplorerIndexView(LoginRequiredMixin, TemplateView):
+    """
+    Landing page for Labs Explorer.
+
+    Shows cards for Labs Record and Visit Inspector.
+    """
+
+    template_name = "labs/explorer/index.html"
+
+
 class RecordListView(LoginRequiredMixin, SingleTableView):
     """Main list view for browsing LabsRecord data."""
 
