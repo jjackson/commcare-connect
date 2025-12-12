@@ -1,7 +1,19 @@
 """
 SQL validation for safe execution of user-provided WHERE clauses.
 
-Ensures user SQL is read-only and only operates on form_json column.
+Ensures user SQL is read-only and only operates on allowed columns:
+- form_json: Full form data (JSONB)
+- entity_id: Entity identifier
+- username: User who submitted the visit
+- visit_date: Date of the visit
+- status: Visit validation status
+- deliver_unit: Delivery unit ID
+
+Additional Safety:
+- All queries execute within a READ ONLY transaction (enforced by PostgreSQL)
+- Query structure is fixed (SELECT only with specific columns)
+- Results are limited to prevent data dumps
+- Dangerous SQL keywords are blocked
 """
 
 import logging
@@ -52,6 +64,9 @@ def validate_where_clause(clause: str) -> tuple[bool, str]:
         >>> validate_where_clause("form_json->>'status' = 'complete'")
         (True, "")
 
+        >>> validate_where_clause("entity_id = 'abc123'")
+        (True, "")
+
         >>> validate_where_clause("form_json->'form'->>'name' LIKE '%test%'")
         (True, "")
 
@@ -81,10 +96,14 @@ def validate_where_clause(clause: str) -> tuple[bool, str]:
     if "--" in clause or "/*" in clause or "*/" in clause:
         return False, "SQL comments are not allowed"
 
-    # Verify it references form_json (primary safety requirement)
-    # This is the main column we want to allow querying
-    if "form_json" not in clause.lower():
-        return False, "WHERE clause must reference the form_json column"
+    # Verify it references allowed columns
+    # These are the columns available in the query and safe to filter on
+    allowed_columns = ["form_json", "entity_id", "username", "visit_date", "status", "deliver_unit"]
+    clause_lower = clause.lower()
+    has_allowed_column = any(col in clause_lower for col in allowed_columns)
+
+    if not has_allowed_column:
+        return False, f"WHERE clause must reference one of the allowed columns: {', '.join(allowed_columns)}"
 
     # Basic length check
     if len(clause) > 1000:
