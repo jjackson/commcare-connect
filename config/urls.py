@@ -40,6 +40,10 @@ urlpatterns = [
         "custom_analysis/chc_nutrition/",
         include("commcare_connect.custom_analysis.chc_nutrition.urls", namespace="chc_nutrition"),
     ),
+    path(
+        "custom_analysis/kmc/",
+        include("commcare_connect.custom_analysis.kmc.urls", namespace="kmc"),
+    ),
     path("ai/", include("commcare_connect.ai.urls", namespace="ai")),
     path("hq/", include("commcare_connect.commcarehq.urls", namespace="commcarehq")),
     path("export/", include("commcare_connect.data_export.urls", namespace="data_export")),

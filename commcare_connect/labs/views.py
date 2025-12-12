@@ -172,6 +172,13 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
                 "description": "Nutrition and health metrics analysis for the Child Health Campaign",
                 "color": "rose",
             },
+            {
+                "name": "KMC Timeline",
+                "url": "/custom_analysis/kmc/children/",
+                "icon": "fa-baby",
+                "description": "Individual child timelines for Kangaroo Mother Care programs",
+                "color": "blue",
+            },
         ]
 
         return context
