@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Child Timeline{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    [x-cloak] { display: none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-6" x-data="caseTimeline()" x-cloak>
+    <!-- Loading State -->
+    <div x-show="loading" class="flex items-center justify-center py-12">
+        <div class="text-center">
+            <i class="fa-solid fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
+            <p class="text-gray-600">Loading timeline...</p>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <div x-show="!loading" class="bg-white border rounded-lg p-6 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h1 class="text-2xl font-bold text-gray-900" x-text="header.child_name || 'Child Timeline'"></h1>
+            <a href="javascript:history.back()" class="text-sm text-gray-600 hover:text-gray-900">
+                <i class="fa-solid fa-arrow-left mr-1"></i>Back to List
+            </a>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div x-show="header.child_dob"><span class="text-gray-600">DOB:</span> <span class="font-medium" x-text="header.child_dob"></span></div>
+            <div x-show="header.child_gender"><span class="text-gray-600">Gender:</span> <span class="font-medium" x-text="header.child_gender"></span></div>
+            <div x-show="header.mother_name"><span class="text-gray-600">Mother:</span> <span class="font-medium" x-text="header.mother_name"></span></div>
+            <div x-show="header.mother_phone"><span class="text-gray-600">Phone:</span> <span class="font-medium" x-text="header.mother_phone"></span></div>
+        </div>
+    </div>
+
+    <!-- Dynamic Three Column Layout -->
+    <div x-show="!loading" class="grid grid-cols-12 gap-6">
+        <!-- Left Column -->
+        <template x-if="layout.left && layout.left.length > 0">
+            <div class="col-span-3 space-y-6">
+                <template x-for="widgetId in layout.left" :key="widgetId">
+                    <div x-html="renderWidget(widgetId)"></div>
+                </template>
+            </div>
+        </template>
+
+        <!-- Center Column -->
+        <template x-if="layout.center && layout.center.length > 0">
+            <div class="col-span-5 space-y-6">
+                <template x-for="widgetId in layout.center" :key="widgetId">
+                    <div x-html="renderWidget(widgetId)"></div>
+                </template>
+            </div>
+        </template>
+
+        <!-- Right Column -->
+        <template x-if="layout.right && layout.right.length > 0">
+            <div class="col-span-4 space-y-6">
+                <template x-for="widgetId in layout.right" :key="widgetId">
+                    <div x-html="renderWidget(widgetId)"></div>
+                </template>
+            </div>
+        </template>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+function caseTimeline() {
+    return {
+        loading: true,
+        header: {},
+        visits: [],
+        selectedVisit: null,
+        layout: {},
+        widgetConfigs: {},
+        chart: null,
+        map: null,
+
+        async init() {
+            await this.loadData();
+            if (this.visits.length > 0) {
+                this.selectVisit(this.visits[this.visits.length - 1].visit_id);
+            }
+            await this.$nextTick();
+            this.initializeWidgets();
+        },
+
+        async loadData() {
+            try {
+                const response = await fetch('{{ api_url }}');
+                if (!response.ok) {
+                    throw new Error('Failed to load timeline data');
+                }
+                const data = await response.json();
+                this.header = data.header || {};
+                this.visits = data.visits || [];
+                this.layout = data.layout || {};
+                this.widgetConfigs = data.widget_configs || {};
+                this.loading = false;
+            } catch (error) {
+                console.error('Error loading timeline:', error);
+                alert('Error loading timeline data');
+            }
+        },
+
+        renderWidget(widgetId) {
+            const config = this.widgetConfigs[widgetId];
+            if (!config) return '';
+
+            const type = config.widget_type;
+
+            if (type === 'visit_history') {
+                return this.renderVisitHistory(widgetId);
+            } else if (type === 'line_chart') {
+                return this.renderChartPlaceholder(widgetId);
+            } else if (type === 'map') {
+                return this.renderMapPlaceholder(widgetId);
+            } else if (type === 'detail_panel') {
+                return this.renderDetailPanel(widgetId);
+            }
+            return '';
+        },
+
+        renderVisitHistory(widgetId) {
+            const config = this.widgetConfigs[widgetId];
+            let html = '<div class="space-y-3">';
+            html += `<h2 class="font-semibold text-lg">${config.title}</h2>`;
+
+            this.visits.forEach((visit, index) => {
+                const data = visit.widgets[widgetId];
+                const isSelected = this.selectedVisit?.visit_id === visit.visit_id;
+                const visitLabel = data.visit_number || (index === 0 ? 'Registration' : `Visit ${index}`);
+
+                html += `
+                    <div onclick="Alpine.store('timeline').selectVisit(${visit.visit_id})"
+                         class="bg-white border rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow ${isSelected ? 'ring-2 ring-blue-500' : ''}">
+                        <div class="flex items-center gap-3">
+                            ${data.photo_url ? `<img src="${data.photo_url}" class="w-16 h-16 rounded object-cover" />` : '<div class="w-16 h-16 bg-gray-200 rounded"></div>'}
+                            <div class="flex-1">
+                                <div class="font-medium">${visitLabel}</div>
+                                <div class="text-sm text-gray-600">${data.visit_date || '-'}</div>
+                                ${data.weight ? `<div class="text-sm font-semibold">${data.weight}g</div>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            return html;
+        },
+
+        renderChartPlaceholder(widgetId) {
+            const config = this.widgetConfigs[widgetId];
+            return `
+                <div class="bg-white border rounded-lg p-6">
+                    <h2 class="font-semibold text-lg mb-4">${config.title}</h2>
+                    <canvas id="${widgetId}_canvas" style="height: 300px;"></canvas>
+                </div>
+            `;
+        },
+
+        renderMapPlaceholder(widgetId) {
+            const config = this.widgetConfigs[widgetId];
+            return `
+                <div class="bg-white border rounded-lg p-6">
+                    <h2 class="font-semibold text-lg mb-4">${config.title}</h2>
+                    <div id="${widgetId}_container" style="height: 300px; background: #f3f4f6;"></div>
+                </div>
+            `;
+        },
+
+        renderDetailPanel(widgetId) {
+            if (!this.selectedVisit) {
+                return '<div class="bg-white border rounded-lg p-6"><p class="text-gray-500 text-center">Select a visit to view details</p></div>';
+            }
+
+            const data = this.selectedVisit.widgets[widgetId];
+            const config = this.widgetConfigs[widgetId];
+
+            let html = `<div class="bg-white border rounded-lg p-6"><h2 class="font-semibold text-lg mb-4">${config.title}</h2>`;
+
+            if (config.options && config.options.sections) {
+                config.options.sections.forEach(section => {
+                    html += `<div class="mb-6"><h3 class="text-sm font-semibold text-gray-700 mb-2">${section.title}</h3><dl class="space-y-2">`;
+
+                    section.fields.forEach(field => {
+                        const value = data[field];
+                        if (value !== null && value !== undefined && value !== '') {
+                            const label = config.field_labels[field] || field;
+                            html += `
+                                <div class="flex justify-between text-sm">
+                                    <dt class="text-gray-600">${label}:</dt>
+                                    <dd class="font-medium text-right">${value}</dd>
+                                </div>
+                            `;
+                        }
+                    });
+
+                    html += '</dl></div>';
+                });
+            }
+
+            html += '</div>';
+            return html;
+        },
+
+        selectVisit(visitId) {
+            this.selectedVisit = this.visits.find(v => v.visit_id === visitId);
+            // Re-render widgets that depend on selection
+            this.$nextTick(() => {
+                const detailPanelId = this.layout.right?.find(id => this.widgetConfigs[id]?.widget_type === 'detail_panel');
+                if (detailPanelId) {
+                    // Force re-render by updating the whole layout
+                    this.layout = {...this.layout};
+                }
+            });
+        },
+
+        initializeWidgets() {
+            // Initialize charts
+            this.layout.center?.forEach(widgetId => {
+                const config = this.widgetConfigs[widgetId];
+                if (config?.widget_type === 'line_chart') {
+                    this.renderChart(widgetId);
+                } else if (config?.widget_type === 'map') {
+                    this.initMap(widgetId);
+                }
+            });
+        },
+
+        renderChart(widgetId) {
+            const canvas = document.getElementById(`${widgetId}_canvas`);
+            if (!canvas) return;
+
+            const config = this.widgetConfigs[widgetId];
+            const ctx = canvas.getContext('2d');
+
+            if (this.chart) this.chart.destroy();
+
+            // Extract data from visits
+            const labels = this.visits.map(v => v.widgets[widgetId].date || '');
+            const dataPoints = this.visits.map(v => v.widgets[widgetId].weight);
+
+            this.chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: config.options.y_axis_label || 'Value',
+                        data: dataPoints,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.3,
+                        fill: true,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: config.options.y_axis_label || 'Value'
+                            }
+                        }
+                    }
+                }
+            });
+        },
+
+        initMap(widgetId) {
+            const container = document.getElementById(`${widgetId}_container`);
+            if (!container || this.map) return;
+
+            try {
+                // Find first valid GPS coordinates
+                let centerLat = 0, centerLng = 0;
+                for (const visit of this.visits) {
+                    const gps = visit.widgets[widgetId]?.gps;
+                    if (gps) {
+                        const parts = gps.split(' ');
+                        if (parts.length >= 2) {
+                            centerLat = parseFloat(parts[0]);
+                            centerLng = parseFloat(parts[1]);
+                            break;
+                        }
+                    }
+                }
+
+                this.map = L.map(`${widgetId}_container`).setView([centerLat, centerLng], 15);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(this.map);
+
+                // Add markers for each visit
+                this.visits.forEach((visit, index) => {
+                    const data = visit.widgets[widgetId];
+                    if (data.gps) {
+                        const parts = data.gps.split(' ');
+                        if (parts.length >= 2) {
+                            const lat = parseFloat(parts[0]);
+                            const lng = parseFloat(parts[1]);
+                            const visitLabel = data.visit_number || (index === 0 ? 'Registration' : `Visit ${index}`);
+                            L.marker([lat, lng]).addTo(this.map)
+                                .bindPopup(visitLabel);
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error initializing map:', error);
+            }
+        }
+    };
+}
+
+// Setup Alpine store for widget interactions
+document.addEventListener('alpine:init', () => {
+    Alpine.store('timeline', {
+        selectVisit(visitId) {
+            const component = Alpine.$data(document.querySelector('[x-data]'));
+            if (component) {
+                component.selectVisit(visitId);
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
