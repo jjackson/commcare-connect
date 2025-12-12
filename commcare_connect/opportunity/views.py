@@ -1536,12 +1536,17 @@ def submit_invoice(request, org_slug, opp_id):
         )
 
     invoice_id = request.POST.get("invoice_id")
+    notes = request.POST.get("notes")
     invoice = get_object_or_404(PaymentInvoice, opportunity=request.opportunity, pk=invoice_id)
     if invoice.status != InvoiceStatus.PENDING:
         return HttpResponseBadRequest("Only invoices with status 'Pending' can be submitted for approval.")
 
     invoice.status = InvoiceStatus.SUBMITTED
-    invoice.save(update_fields=["status"])
+    if invoice.service_delivery:
+        invoice.notes = notes
+        invoice.save(update_fields=["status", "notes"])
+    else:
+        invoice.save(update_fields=["status"])
     messages.success(
         request, _("Invoice %(invoice_number)s submitted for approval.") % {"invoice_number": invoice.invoice_number}
     )

@@ -1474,7 +1474,11 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
             "start_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "end_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "notes": forms.Textarea(
-                attrs={"rows": 3, "placeholder": _("Describe service delivery details, references, or notes...")}
+                attrs={
+                    "rows": 3,
+                    "x-ref": "notes",
+                    "placeholder": _("Describe service delivery details, references, or notes..."),
+                }
             ),
             "title": forms.TextInput(attrs={"placeholder": _("e.g. October Services")}),
         }
@@ -1514,6 +1518,9 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
                 start_date = get_start_date_for_invoice(self.opportunity)
                 self.fields["start_date"].initial = str(start_date)
                 self.fields["end_date"].initial = str(get_end_date_for_invoice(start_date))
+
+            if self.read_only and self.status == InvoiceStatus.PENDING:
+                self.fields["notes"].widget.attrs.pop("readonly", None)
         else:
             self.fields["usd_currency"].widget.attrs.update(
                 {

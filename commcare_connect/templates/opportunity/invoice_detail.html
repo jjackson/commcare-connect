@@ -14,24 +14,20 @@
   </div>
   <div x-data="invoiceFormHandler()">
     {% crispy form %}
-  </div>
-
-
-  <div class="mt-6 flex justify-start gap-4">
-    <a href="{% url 'opportunity:invoice_list' org_slug=request.org.slug opp_id=opportunity.id %}"
-       class="button button-md outline-style">
-      {% translate "Back to Invoices" %}
-    </a>
-    {% if invoice_status == 'pending' and not request.is_opportunity_pm %}
-      <a
-        hx-post="{% url 'opportunity:submit_invoice' org_slug=request.org.slug opp_id=opportunity.id %}"
-        hx-vals='{"invoice_id": "{{ form.instance.id }}"}'
-        hx-swap="innerHTML"
-        class="button button-md primary-dark"
-      >
-        {% translate "Submit for Approval" %}
+    <div class="mt-6 flex justify-start gap-4">
+      <a href="{% url 'opportunity:invoice_list' org_slug=request.org.slug opp_id=opportunity.id %}"
+         class="button button-md outline-style">
+        {% translate "Back to Invoices" %}
       </a>
-    {% endif %}
+      {% if invoice_status == 'pending' and not request.is_opportunity_pm %}
+        <a
+          @click="submitForApproval()"
+          class="button button-md primary-dark"
+        >
+          {% translate "Submit for Approval" %}
+        </a>
+      {% endif %}
+    </div>
   </div>
 </div>
 
