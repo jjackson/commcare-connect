@@ -17,6 +17,7 @@ from commcare_connect.opportunity.models import (
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
+    InvoiceStatus,
     LearnModule,
     OpportunityAccess,
     PaymentInvoice,
@@ -433,7 +434,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
                 f'{_("Review")}</a>'
             )
         pay_button = ""
-        if self.is_pm:
+        if self.is_pm and record.status == InvoiceStatus.SUBMITTED:
             invoice_approve_url = reverse("opportunity:invoice_approve", args=[self.org_slug, self.opportunity.id])
             disabled = "disabled" if getattr(record, "payment", None) else ""
             pay_button = f"""
