@@ -571,6 +571,7 @@ def generate_automated_service_delivery_invoice():
             status=InvoiceStatus.PENDING,
             invoice_number=invoice_number,
             service_delivery=True,
+            exchange_rate=line_items[-1].exchange_rate,
         )
         invoices_chunk.append(payment_invoice)
 
