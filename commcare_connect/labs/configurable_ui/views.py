@@ -108,6 +108,7 @@ class GenericTimelineDataView(LoginRequiredMixin, View):
         for row in visit_rows:
             visit_info = {
                 "visit_id": row.id,
+                "visit_date": row.visit_date.isoformat() if row.visit_date else None,  # Raw datetime for formatting
                 "widgets": {},  # Data organized by widget_id
                 "images": row.computed.get("images_with_questions", []),  # Pre-computed by pipeline
             }

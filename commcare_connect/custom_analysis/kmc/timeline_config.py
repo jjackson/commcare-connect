@@ -29,7 +29,7 @@ KMC_WIDGETS = {
                 "Visit",
                 ["form.grp_kmc_visit.visit_number", "form.case.update.kmc_status"],  # Fallback for registration
             ),
-            "visit_date": FieldExtractor("Date", ["form.grp_kmc_visit.visit_date", "form.reg_date"], transform="date"),
+            "date": FieldExtractor("Date", ["form.grp_kmc_visit.visit_date", "form.reg_date"], transform="date"),
             "weight": FieldExtractor(
                 "Weight",
                 ["form.anthropometric.child_weight_visit", "form.child_details.birth_weight_reg.child_weight_reg"],
