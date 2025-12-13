@@ -263,7 +263,7 @@ class SQLBackend:
     def get_cached_visit_result(
         self, opportunity_id: int, config: AnalysisPipelineConfig, visit_count: int
     ) -> VisitAnalysisResult | None:
-        """Get cached visit result if valid."""
+        """Get cached visit result if valid, applying filters at query time."""
         cache_manager = SQLCacheManager(opportunity_id, config)
 
         if not cache_manager.has_valid_computed_visit_cache(visit_count):
@@ -273,6 +273,17 @@ class SQLBackend:
 
         # Load computed visits (no join needed - all fields are in ComputedVisitCache now)
         computed_qs = cache_manager.get_computed_visits_queryset()
+
+        # Apply filters at query time (OPTIMIZATION: filters not in cache hash)
+        if config.filters:
+            for key, value in config.filters.items():
+                # entity_id is a column, filter directly
+                if key == "entity_id":
+                    computed_qs = computed_qs.filter(entity_id=value)
+                    logger.info(f"[SQL] Applying entity_id filter: {value}")
+                # Other filters could be added here as needed
+                else:
+                    logger.warning(f"[SQL] Unknown filter key '{key}' - skipping")
 
         # Build VisitRow objects directly from ComputedVisitCache
         visit_rows = []

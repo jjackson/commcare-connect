@@ -76,6 +76,20 @@ def _get_transform_pattern(field: FieldComputation | HistogramComputation) -> st
         else:
             return "is_valid_muac_to_1"
 
+    # Numeric conversions with validation
+    if "_is_valid_weight" in source or ("isdigit()" in source and "replace" in source):
+        if "int(x)" in source:
+            return "validated_int"
+        elif "float(x)" in source:
+            return "validated_float"
+
+    # Simple numeric conversions
+    if "float(x)" in source and "if x else None" in source:
+        return "simple_float"
+
+    if "int(x)" in source and "if x else None" in source:
+        return "simple_int"
+
     if "male" in source.lower():
         if "female" in name or "'female'" in source.lower():
             return "gender_female"
@@ -115,6 +129,22 @@ def _transform_to_sql(field: FieldComputation | HistogramComputation, value_expr
             f"""CASE WHEN {value_expr} ~ '^-?[0-9]*\\.?[0-9]+$' """
             f"""AND ({value_expr})::FLOAT >= 11.5 AND ({value_expr})::FLOAT < 12.5 THEN 1 ELSE NULL END"""
         )
+
+    elif transform_src == "validated_int":
+        # int(x) with validation (checks isdigit/numeric)
+        return f"""CASE WHEN {value_expr} ~ '^-?[0-9]+$' THEN ({value_expr})::INTEGER ELSE NULL END"""
+
+    elif transform_src == "validated_float":
+        # float(x) with validation (checks isdigit/numeric)
+        return f"""CASE WHEN {value_expr} ~ '^-?[0-9]*\\.?[0-9]+$' THEN ({value_expr})::FLOAT ELSE NULL END"""
+
+    elif transform_src == "simple_float":
+        # Simple float(x) if x else None - tries conversion, NULL on error
+        return f"""CASE WHEN {value_expr} ~ '^-?[0-9]*\\.?[0-9]+$' THEN ({value_expr})::FLOAT ELSE NULL END"""
+
+    elif transform_src == "simple_int":
+        # Simple int(x) if x else None - tries conversion, NULL on error
+        return f"""CASE WHEN {value_expr} ~ '^-?[0-9]+$' THEN ({value_expr})::INTEGER ELSE NULL END"""
 
     elif transform_src == "gender_male":
         return f"""CASE WHEN LOWER({value_expr}) IN ('male', 'm', 'boy', 'male_child') THEN 1 ELSE NULL END"""

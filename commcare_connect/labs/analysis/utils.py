@@ -23,8 +23,9 @@ def get_config_hash(config) -> str:
     """
     Generate a hash of the analysis config to detect changes.
 
-    Includes field paths, aggregations, histograms, and filters.
-    Changes to any of these will produce a different hash.
+    Includes field paths, aggregations, histograms, and grouping.
+    EXCLUDES filters - filters are applied at query time, not cache time.
+    This allows a single cache to serve all filtered queries efficiently.
 
     Args:
         config: AnalysisPipelineConfig instance
@@ -54,9 +55,8 @@ def get_config_hash(config) -> str:
             except AttributeError:
                 parts.append(f"hist_transform:{str(hist.transform)}")
 
-    # Add filters
-    for key, value in sorted(config.filters.items()):
-        parts.append(f"filter:{key}:{value}")
+    # OPTIMIZATION: Filters are NOT included in hash - they're applied at query time
+    # This allows timeline views to share the same cache and just filter by entity_id
 
     # Add grouping key
     parts.append(f"grouping:{config.grouping_key}")

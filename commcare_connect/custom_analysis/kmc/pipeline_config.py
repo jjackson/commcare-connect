@@ -167,6 +167,17 @@ KMC_PIPELINE_CONFIG = AnalysisPipelineConfig(
             aggregation="first",
             description="Visit date",
         ),
+        # Time end (for timeline time display)
+        FieldComputation(
+            name="time_end",
+            path="form.meta.timeEnd",
+            paths=[
+                "form.meta.timeEnd",
+                "timeEnd",  # Fallback to root level
+            ],
+            aggregation="first",
+            description="Form submission end time",
+        ),
         # Visit number (for widgets)
         FieldComputation(
             name="visit_number",
