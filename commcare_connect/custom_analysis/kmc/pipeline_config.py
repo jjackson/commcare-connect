@@ -5,6 +5,8 @@ Uses the labs analysis pipeline to extract weight, photos, and other metrics
 from KMC visits at the visit level (not child level - aggregation happens in views).
 """
 
+# Import timeline config to reuse field definitions (DRY principle)
+from commcare_connect.custom_analysis.kmc.timeline_config import KMC_HEADER_FIELDS, KMC_WIDGETS
 from commcare_connect.labs.analysis import AnalysisPipelineConfig, CacheStage, FieldComputation
 
 # Keys to skip when traversing form_json (metadata, not question data)
@@ -17,6 +19,41 @@ def _is_valid_weight(x) -> bool:
         return False
     s = str(x).strip()
     return s.replace(".", "").replace("-", "").isdigit()
+
+
+def _get_transform_function(transform_name: str):
+    """
+    Convert timeline config transform name to pipeline transform function.
+
+    Args:
+        transform_name: String like "kg_to_g", "float", "date"
+
+    Returns:
+        Transform function for FieldComputation
+    """
+    if transform_name == "kg_to_g":
+        return lambda x: int(x) if _is_valid_weight(x) else None
+    elif transform_name == "float":
+        return lambda x: float(x) if x else None
+    elif transform_name == "date":
+        return None  # No transform needed, keep as string
+    return None
+
+
+def _create_field_computation_from_extractor(field_name: str, extractor, description: str = None):
+    """
+    Create a FieldComputation from a timeline FieldExtractor.
+
+    This eliminates duplication between timeline_config and pipeline_config.
+    """
+    return FieldComputation(
+        name=field_name,
+        path=extractor.form_paths[0] if extractor.form_paths else None,
+        paths=extractor.form_paths if len(extractor.form_paths) > 1 else None,
+        aggregation="first",
+        transform=_get_transform_function(extractor.transform) if extractor.transform else None,
+        description=description or f"{extractor.display_name} from timeline config",
+    )
 
 
 def _build_filename_map(data: dict, path: str = "") -> dict[str, str]:
@@ -93,6 +130,35 @@ def extract_images_with_question_ids(visit_data: dict) -> list[dict]:
     return result
 
 
+# Build field computations from timeline widget configs (DRY - single source of truth)
+def _build_widget_fields():
+    """Generate FieldComputation objects from timeline widget field extractors."""
+    field_computations = []
+    seen_fields = set()
+
+    # Extract fields from all widgets
+    for widget_id, widget_config in KMC_WIDGETS.items():
+        for field_name, extractor in widget_config.field_extractors.items():
+            if field_name not in seen_fields:
+                field_computations.append(
+                    _create_field_computation_from_extractor(
+                        field_name, extractor, f"{extractor.display_name} for {widget_id}"
+                    )
+                )
+                seen_fields.add(field_name)
+
+    return field_computations
+
+
+# Build header fields from timeline header config
+def _build_header_fields():
+    """Generate FieldComputation objects from timeline header fields."""
+    return [
+        _create_field_computation_from_extractor(field_name, extractor, extractor.display_name)
+        for field_name, extractor in KMC_HEADER_FIELDS.items()
+    ]
+
+
 KMC_PIPELINE_CONFIG = AnalysisPipelineConfig(
     grouping_key="username",
     experiment="kmc_timeline",
@@ -111,28 +177,12 @@ KMC_PIPELINE_CONFIG = AnalysisPipelineConfig(
             aggregation="first",
             description="Child entity ID (Connect linking field)",
         ),
-        # Child info
-        FieldComputation(
-            name="child_name",
-            path="form.child_details.child_name",
-            paths=[
-                "form.child_details.child_name",
-                "form.svn_name",
-            ],
-            aggregation="first",
-            description="Child name",
-        ),
-        FieldComputation(
-            name="child_dob",
-            path="form.child_DOB",
-            paths=[
-                "form.child_DOB",
-                "form.child_details.child_DOB",
-            ],
-            aggregation="first",
-            description="Child date of birth",
-        ),
-        # Entity info (for display)
+        # ===== Fields generated from timeline config (DRY) =====
+        # Widget fields (weight, date, time_end, visit_number, etc.)
+        *_build_widget_fields(),
+        # Header fields (child_name, child_dob, child_gender, mother_name, etc.)
+        *_build_header_fields(),
+        # ===== Additional entity/linking fields not in timeline config =====
         FieldComputation(
             name="entity_name",
             path="form.new_registration_du.deliver.entity_name",
@@ -143,184 +193,6 @@ KMC_PIPELINE_CONFIG = AnalysisPipelineConfig(
             ],
             aggregation="first",
             description="Entity name from deliver unit",
-        ),
-        # Weight measurements (for widgets)
-        FieldComputation(
-            name="weight",  # Match widget field name
-            path="form.anthropometric.child_weight_visit",
-            paths=[
-                "form.anthropometric.child_weight_visit",
-                "form.child_details.birth_weight_reg.child_weight_reg",
-            ],
-            aggregation="first",
-            transform=lambda x: int(x) if _is_valid_weight(x) else None,
-            description="Weight in grams",
-        ),
-        # Visit date (for widgets)
-        FieldComputation(
-            name="date",  # Match widget field name for charts
-            path="form.grp_kmc_visit.visit_date",
-            paths=[
-                "form.grp_kmc_visit.visit_date",
-                "form.reg_date",
-            ],
-            aggregation="first",
-            description="Visit date",
-        ),
-        # Time end (for timeline time display)
-        FieldComputation(
-            name="time_end",
-            path="form.meta.timeEnd",
-            paths=[
-                "form.meta.timeEnd",
-                "timeEnd",  # Fallback to root level
-            ],
-            aggregation="first",
-            description="Form submission end time",
-        ),
-        # Visit number (for widgets)
-        FieldComputation(
-            name="visit_number",
-            path="form.grp_kmc_visit.visit_number",
-            aggregation="first",
-            description="Visit number",
-        ),
-        # Photo (for widgets)
-        FieldComputation(
-            name="photo_url",  # Match widget field name
-            path="form.anthropometric.upload_weight_image",
-            paths=[
-                "form.anthropometric.upload_weight_image",
-                "form.child_details.upload_weight_image",
-            ],
-            aggregation="first",
-            description="Photo filename",
-        ),
-        # Additional fields for timeline details
-        FieldComputation(
-            name="child_gender",
-            path="form.child_details.child_gender",
-            aggregation="first",
-            description="Child's gender",
-        ),
-        FieldComputation(
-            name="mother_name",
-            path="form.mothers_details.mother_name",
-            paths=[
-                "form.mothers_details.mother_name",
-                "form.kmc_beneficiary_name",
-            ],
-            aggregation="first",
-            description="Mother's name",
-        ),
-        FieldComputation(
-            name="mother_phone",
-            path="form.mothers_details.mothers_phone_number",
-            paths=[
-                "form.mothers_details.mothers_phone_number",
-                "form.deduplication_block.mothers_phone_number",
-            ],
-            aggregation="first",
-            description="Mother's phone number",
-        ),
-        FieldComputation(
-            name="village",
-            path="form.mothers_details.village",
-            aggregation="first",
-            description="Village name",
-        ),
-        # GPS coordinates (for map widget)
-        FieldComputation(
-            name="gps",  # Match widget field name
-            paths=["form.visit_gps_manual", "form.reg_gps", "form.meta.location.#text"],
-            aggregation="first",
-            description="GPS coordinates of the visit",
-        ),
-        # KMC Practice (for detail panel)
-        FieldComputation(
-            name="kmc_hours",
-            paths=["form.KMC_24-Hour_Recall.kmc_hours"],
-            aggregation="first",
-            description="KMC hours in last 24 hours",
-        ),
-        FieldComputation(
-            name="kmc_providers",
-            paths=["form.KMC_24-Hour_Recall.kmc_providers"],
-            aggregation="first",
-            description="KMC providers",
-        ),
-        FieldComputation(
-            name="baby_position",
-            paths=["form.kmc_positioning_checklist.baby_position"],
-            aggregation="first",
-            description="Baby position during KMC",
-        ),
-        # Feeding (for detail panel)
-        FieldComputation(
-            name="feeding_provided",
-            paths=["form.KMC_24-Hour_Recall.feeding_provided"],
-            aggregation="first",
-            description="Feeding provided",
-        ),
-        FieldComputation(
-            name="successful_feeds",
-            paths=["form.danger_signs_checklist.successful_feeds_in_last_24_hours"],
-            aggregation="first",
-            description="Successful feeds in last 24 hours",
-        ),
-        # Danger Signs (for detail panel)
-        FieldComputation(
-            name="temperature",
-            paths=["form.danger_signs_checklist.svn_temperature"],
-            aggregation="first",
-            transform=lambda x: float(x) if x else None,
-            description="Child's temperature",
-        ),
-        FieldComputation(
-            name="breath_count",
-            paths=["form.danger_signs_checklist.child_breath_count"],
-            aggregation="first",
-            description="Child's breath count",
-        ),
-        FieldComputation(
-            name="danger_signs",
-            paths=["form.danger_signs_checklist.danger_sign_list"],
-            aggregation="first",
-            description="Danger signs observed",
-        ),
-        # Visit Info (for detail panel)
-        FieldComputation(
-            name="visit_location",
-            paths=["form.visit_location", "form.reg_location"],
-            aggregation="first",
-            description="Visit location description",
-        ),
-        FieldComputation(
-            name="visit_timeliness",
-            paths=["form.grp_kmc_visit.visit_timeliness"],
-            aggregation="first",
-            description="Visit timeliness",
-        ),
-        FieldComputation(
-            name="kmc_status",
-            paths=["form.grp_kmc_beneficiary.kmc_status", "form.kmc_status"],
-            aggregation="first",
-            description="KMC status of the child",
-        ),
-        # Additional anthropometric
-        FieldComputation(
-            name="height",
-            paths=["form.anthropometric.child_height"],
-            aggregation="first",
-            transform=lambda x: float(x) if x else None,
-            description="Child's height in cm",
-        ),
-        FieldComputation(
-            name="birth_weight",
-            paths=["form.child_weight_birth"],
-            aggregation="first",
-            transform=lambda x: int(x) if _is_valid_weight(x) else None,
-            description="Birth weight in grams",
         ),
         # Images with question IDs (special transform that receives full visit_data)
         FieldComputation(

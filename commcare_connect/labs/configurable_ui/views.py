@@ -78,8 +78,15 @@ class GenericTimelineDataView(LoginRequiredMixin, View):
 
         logger.info(f"[Timeline API] Pipeline returned {len(result.rows)} visits for child {child_id}")
 
-        # Sort by visit date
-        child_rows = sorted(result.rows, key=lambda r: r.visit_date or "")
+        # Sort by time_end (form submission end time) for consistent chronological order
+        # Fall back to visit_date if time_end is not available
+        def get_sort_key(row):
+            time_end = row.computed.get("time_end")
+            if time_end:
+                return time_end
+            return row.visit_date.isoformat() if row.visit_date else ""
+
+        child_rows = sorted(result.rows, key=get_sort_key)
 
         # Build timeline data from computed fields ONLY
         timeline_data = self._build_timeline_data(child_id, child_rows, widgets_config, layout_config, header_fields)
