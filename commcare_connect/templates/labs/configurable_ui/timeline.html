@@ -37,12 +37,37 @@
 
     <!-- Dynamic Three Column Layout -->
     <div x-show="!loading" class="grid gap-4" style="grid-template-columns: repeat(12, minmax(0, 1fr))"
-         @visit-selected.window="handleVisitSelection($event.detail)"
-         @visit-selected-by-index.window="selectVisitByIndex($event.detail)">
-        <!-- Left Column - Timeline -->
+         @visit-selected.window="handleVisitSelection($event.detail)">
+        <!-- Left Column - Visit History -->
         <div class="col-span-2 space-y-4">
             <template x-for="widgetId in layout.left" :key="widgetId">
-                <div :key="`${widgetId}-${selectedVisit?.visit_id || 'none'}`" x-html="renderWidget(widgetId)"></div>
+                <div>
+                    <!-- Visit History Widget -->
+                    <template x-if="widgetConfigs[widgetId]?.widget_type === 'visit_history'">
+                        <div class="space-y-2">
+                            <h2 class="font-semibold text-sm mb-2" x-text="widgetConfigs[widgetId].title"></h2>
+                            <template x-for="(visit, index) in visits" :key="visit.visit_id">
+                                <div @click="selectVisit(visit.visit_id)"
+                                     :class="{'ring-2 ring-blue-500 border-blue-500': selectedVisit?.visit_id === visit.visit_id}"
+                                     class="bg-white border rounded p-2 cursor-pointer hover:border-blue-400 transition-all">
+                                    <div class="flex gap-2">
+                                        <template x-if="getVisitPhoto(visit)">
+                                            <img :src="getVisitPhoto(visit)" class="w-12 h-12 rounded object-cover flex-shrink-0" />
+                                        </template>
+                                        <template x-if="!getVisitPhoto(visit)">
+                                            <div class="w-12 h-12 bg-gray-200 rounded flex-shrink-0"></div>
+                                        </template>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="text-xs font-semibold text-gray-900" x-text="getVisitType(visit, index)"></div>
+                                            <div class="text-xs text-gray-600" x-text="formatDateUTC(visit.widgets[widgetId]?.date)"></div>
+                                            <div class="text-xs text-gray-500" x-text="formatTimeUTC(visit.widgets[widgetId]?.time_end || visit.visit_date)"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
             </template>
         </div>
 
@@ -56,7 +81,38 @@
         <!-- Right Column - Details -->
         <div class="col-span-4 space-y-4">
             <template x-for="widgetId in layout.right" :key="widgetId">
-                <div :key="`${widgetId}-${selectedVisit?.visit_id || 'none'}`" x-html="renderWidget(widgetId)"></div>
+                <div>
+                    <!-- Detail Panel Widget -->
+                    <template x-if="widgetConfigs[widgetId]?.widget_type === 'detail_panel'">
+                        <div class="bg-white border rounded-lg p-4 sticky top-4">
+                            <template x-if="!selectedVisit">
+                                <p class="text-gray-500 text-center text-sm">Select a visit to view details</p>
+                            </template>
+                            <template x-if="selectedVisit">
+                                <div>
+                                    <h2 class="font-semibold text-sm mb-3" x-text="widgetConfigs[widgetId].title"></h2>
+                                    <template x-for="section in widgetConfigs[widgetId].options?.sections" :key="section.title">
+                                        <div class="mb-4">
+                                            <h3 class="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide" x-text="section.title"></h3>
+                                            <dl class="space-y-1">
+                                                <template x-for="field in section.fields" :key="field">
+                                                    <template x-if="selectedVisit.widgets[widgetId][field] !== null &&
+                                                                    selectedVisit.widgets[widgetId][field] !== undefined &&
+                                                                    selectedVisit.widgets[widgetId][field] !== ''">
+                                                        <div class="flex justify-between text-xs py-1">
+                                                            <dt class="text-gray-600" x-text="widgetConfigs[widgetId].field_labels[field] + ':'"></dt>
+                                                            <dd class="font-medium text-right ml-2" x-text="selectedVisit.widgets[widgetId][field]"></dd>
+                                                        </div>
+                                                    </template>
+                                                </template>
+                                            </dl>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
             </template>
         </div>
     </div>
@@ -67,10 +123,39 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-// Store chart and map outside Alpine reactivity to avoid infinite loops
-let timelineChart = null;
-let timelineMap = null;
-let timelineMapMarkers = [];
+// Store chart and map instances outside Alpine reactivity
+// These need to be global to avoid Alpine proxy issues causing infinite recursion
+const widgetInstances = {
+    chart: null,
+    map: null,
+    mapMarkers: [],
+    mapMarkerVisitIds: [],
+    chartDataPointMapping: []
+};
+
+// Utility functions for date/time formatting (centralized)
+function formatDateUTC(dateString) {
+    if (!dateString) return '';
+    const dt = new Date(dateString);
+    const month = dt.toLocaleString('default', { month: 'short', timeZone: 'UTC' });
+    const day = dt.getUTCDate();
+    return `${month} ${day}`;
+}
+
+function formatTimeUTC(dateString) {
+    if (!dateString) return '';
+    const dt = new Date(dateString);
+    const hours = String(dt.getUTCHours()).padStart(2, '0');
+    const minutes = String(dt.getUTCMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+}
+
+function formatDateTimeUTC(dateString) {
+    if (!dateString) return '';
+    const date = formatDateUTC(dateString);
+    const time = formatTimeUTC(dateString);
+    return `${date}, ${time}`;
+}
 
 function caseTimeline() {
     return {
@@ -82,13 +167,35 @@ function caseTimeline() {
         widgetConfigs: {},
         opportunityId: '{{ opportunity_id }}',
 
+        // Computed properties
+        get selectedVisitIndex() {
+            if (!this.selectedVisit) return -1;
+            return this.visits.findIndex(v => v.visit_id === this.selectedVisit.visit_id);
+        },
+
+        get firstWeight() {
+            if (this.visits.length === 0) return null;
+            return this.visits[0].widgets['weight_chart']?.weight;
+        },
+
+        get lastWeight() {
+            if (this.visits.length === 0) return null;
+            return this.visits[this.visits.length - 1].widgets['weight_chart']?.weight;
+        },
+
         async init() {
             await this.loadData();
-            if (this.visits.length > 0) {
-                this.selectVisit(this.visits[this.visits.length - 1].visit_id);
-            }
-            await this.$nextTick();
-            this.initializeWidgets();
+
+            // Wait for DOM to render before initializing widgets
+            // Use setTimeout to ensure x-html has fully rendered
+            setTimeout(() => {
+                this.initializeWidgets();
+
+                // Select last visit after widgets are ready
+                if (this.visits.length > 0) {
+                    this.selectVisit(this.visits[this.visits.length - 1].visit_id);
+                }
+            }, 100);
         },
 
         async loadData() {
@@ -115,83 +222,39 @@ function caseTimeline() {
 
             const type = config.widget_type;
 
-            if (type === 'visit_history') {
-                return this.renderVisitHistory(widgetId);
-            } else if (type === 'line_chart') {
+            // Only chart and map widgets use HTML rendering now
+            // visit_history and detail_panel use Alpine templates
+            if (type === 'line_chart') {
                 return this.renderChartPlaceholder(widgetId);
             } else if (type === 'map') {
                 return this.renderMapPlaceholder(widgetId);
-            } else if (type === 'detail_panel') {
-                return this.renderDetailPanel(widgetId);
             }
             return '';
         },
 
-        renderVisitHistory(widgetId) {
-            const config = this.widgetConfigs[widgetId];
-            let html = '<div class="space-y-2">';
-            html += `<h2 class="font-semibold text-sm mb-2">${config.title}</h2>`;
+        // Helper methods for Alpine templates
+        getVisitType(visit, index) {
+            const data = visit.widgets['visit_history'];
+            if (!data) return 'Visit';
 
-            this.visits.forEach((visit, index) => {
-                const data = visit.widgets[widgetId];
-                const isSelected = this.selectedVisit?.visit_id === visit.visit_id;
+            if (index === 0 || data.visit_number === 'Registration' || data.visit_number === 'enrollment') {
+                return 'Reg';
+            } else if (data.visit_number) {
+                return `V${data.visit_number}`;
+            }
+            return `V${index}`;
+        },
 
-                // Determine visit type
-                let visitType = 'Visit';
-                if (index === 0 || data.visit_number === 'Registration' || data.visit_number === 'enrollment') {
-                    visitType = 'Reg';
-                } else if (data.visit_number) {
-                    visitType = `V${data.visit_number}`;
-                } else {
-                    visitType = `V${index}`;
-                }
-
-                // Find weight photo from visit images
-                const weightPhoto = visit.images?.find(img =>
-                    img.question_id && (
-                        img.question_id.includes('upload_weight_image') ||
-                        img.question_id.includes('anthropometric')
-                    )
-                );
-                const photoUrl = weightPhoto ?
-                    `/custom_analysis/kmc/image/${weightPhoto.blob_id}/?opportunity_id=${this.opportunityId}` :
-                    null;
-
-                // Format date and time (keep as UTC, no timezone conversion)
-                let dateStr = '';
-                if (data.date) {
-                    const dt = new Date(data.date);
-                    const month = dt.toLocaleString('default', { month: 'short', timeZone: 'UTC' });
-                    const day = dt.getUTCDate();
-                    dateStr = `${month} ${day}`;
-                }
-                let timeStr = '';
-                // Use time_end from computed field if available, otherwise fall back to visit_date
-                const timeSource = data.time_end || visit.visit_date;
-                if (timeSource) {
-                    const dt = new Date(timeSource);
-                    const hours = String(dt.getUTCHours()).padStart(2, '0');
-                    const minutes = String(dt.getUTCMinutes()).padStart(2, '0');
-                    timeStr = `${hours}:${minutes}`;
-                }
-
-                html += `
-                    <div onclick="window.dispatchEvent(new CustomEvent('visit-selected-by-index', { detail: ${index} }))"
-                         class="bg-white border rounded p-2 cursor-pointer hover:border-blue-400 transition-all ${isSelected ? 'ring-2 ring-blue-500 border-blue-500' : ''}">
-                        <div class="flex gap-2">
-                            ${photoUrl ? `<img src="${photoUrl}" class="w-12 h-12 rounded object-cover flex-shrink-0" />` : '<div class="w-12 h-12 bg-gray-200 rounded flex-shrink-0"></div>'}
-                            <div class="flex-1 min-w-0">
-                                <div class="text-xs font-semibold text-gray-900">${visitType}</div>
-                                <div class="text-xs text-gray-600">${dateStr}</div>
-                                <div class="text-xs text-gray-500">${timeStr}</div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-
-            html += '</div>';
-            return html;
+        getVisitPhoto(visit) {
+            const weightPhoto = visit.images?.find(img =>
+                img.question_id && (
+                    img.question_id.includes('upload_weight_image') ||
+                    img.question_id.includes('anthropometric')
+                )
+            );
+            return weightPhoto ?
+                `/custom_analysis/kmc/image/${weightPhoto.blob_id}/?opportunity_id=${this.opportunityId}` :
+                null;
         },
 
         renderChartPlaceholder(widgetId) {
@@ -216,70 +279,50 @@ function caseTimeline() {
             `;
         },
 
-        renderDetailPanel(widgetId) {
-            if (!this.selectedVisit) {
-                return '<div class="bg-white border rounded-lg p-4 sticky top-4"><p class="text-gray-500 text-center text-sm">Select a visit to view details</p></div>';
-            }
-
-            const data = this.selectedVisit.widgets[widgetId];
-            const config = this.widgetConfigs[widgetId];
-
-            let html = `<div class="bg-white border rounded-lg p-4 sticky top-4"><h2 class="font-semibold text-sm mb-3">${config.title}</h2>`;
-
-            if (config.options && config.options.sections) {
-                config.options.sections.forEach(section => {
-                    html += `<div class="mb-4"><h3 class="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">${section.title}</h3><dl class="space-y-1">`;
-
-                    section.fields.forEach(field => {
-                        const value = data[field];
-                        if (value !== null && value !== undefined && value !== '') {
-                            const label = config.field_labels[field] || field;
-                            html += `
-                                <div class="flex justify-between text-xs py-1">
-                                    <dt class="text-gray-600">${label}:</dt>
-                                    <dd class="font-medium text-right ml-2">${value}</dd>
-                                </div>
-                            `;
-                        }
-                    });
-
-                    html += '</dl></div>';
-                });
-            }
-
-            html += '</div>';
-            return html;
-        },
-
         selectVisit(visitId) {
-            window.dispatchEvent(new CustomEvent('visit-selected', { detail: visitId }));
+            console.log('[selectVisit] Called with visitId:', visitId);
+            console.log('[selectVisit] Chart exists?', !!widgetInstances.chart);
+            console.log('[selectVisit] Map exists?', !!widgetInstances.map);
+            // Simplified - directly call handler instead of dispatching event
+            this.handleVisitSelection(visitId);
         },
 
-        selectVisitByIndex(index) {
-            if (this.visits[index]) {
-                this.handleVisitSelection(this.visits[index].visit_id);
-            }
+        // Date/time formatting methods (for use in Alpine templates)
+        formatDateUTC(dateString) {
+            return formatDateUTC(dateString);
+        },
+
+        formatTimeUTC(dateString) {
+            return formatTimeUTC(dateString);
+        },
+
+        formatDateTimeUTC(dateString) {
+            return formatDateTimeUTC(dateString);
         },
 
         handleVisitSelection(visitId) {
+            console.log('[handleVisitSelection] Called with visitId:', visitId);
             const visit = this.visits.find(v => v.visit_id === visitId);
-            if (!visit) return;
-
-            const selectedIndex = this.visits.findIndex(v => v.visit_id === visitId);
+            if (!visit) {
+                console.warn('[handleVisitSelection] Visit not found for id:', visitId);
+                return;
+            }
 
             // Update selected visit - this will trigger reactive updates via :key bindings
             this.selectedVisit = visit;
+            console.log('[handleVisitSelection] Updated selectedVisit');
 
-            // Update chart highlighting - stored globally to avoid Alpine reactivity issues
-            if (timelineChart) {
-                const dataset = timelineChart.data.datasets[0];
+            // Update chart highlighting using stored mapping
+            if (widgetInstances.chart && widgetInstances.chartDataPointMapping.length > 0) {
+                console.log('[handleVisitSelection] Updating chart...');
+                const dataset = widgetInstances.chart.data.datasets[0];
                 const pointRadii = [];
                 const pointBorderWidths = [];
 
-                // Map through the chart's data points (which may be in different order due to sorting)
-                for (let i = 0; i < dataset.data.length; i++) {
-                    const dataPoint = dataset.data[i];
-                    const isSelected = dataPoint.visitIndex === selectedIndex;
+                // Use the stored mapping to find which chart point corresponds to selected visit
+                for (let i = 0; i < widgetInstances.chartDataPointMapping.length; i++) {
+                    const mappedVisitId = widgetInstances.chartDataPointMapping[i];
+                    const isSelected = mappedVisitId === visitId;
                     pointRadii[i] = (isSelected ? 8 : 4);
                     pointBorderWidths[i] = (isSelected ? 3 : 0);
                 }
@@ -288,14 +331,16 @@ function caseTimeline() {
                 dataset.pointBorderWidth = pointBorderWidths;
                 dataset.pointBorderColor = '#3b82f6';
 
-                // Update chart display without full redraw for efficiency
-                timelineChart.update('none');
+                // Use render() instead of update() to avoid Chart.js state issues
+                widgetInstances.chart.render();
+                console.log('[handleVisitSelection] Chart rendered');
             }
 
-            // Update map highlighting
-            if (timelineMap && timelineMapMarkers.length > 0) {
-                timelineMapMarkers.forEach((marker, index) => {
-                    const isSelected = (this.visits[index].visit_id === visitId);
+            // Update map highlighting using stored visit_id mapping
+            if (widgetInstances.map && widgetInstances.mapMarkers.length > 0 && widgetInstances.mapMarkerVisitIds) {
+                widgetInstances.mapMarkers.forEach((marker, index) => {
+                    const markerVisitId = widgetInstances.mapMarkerVisitIds[index];
+                    const isSelected = (markerVisitId === visitId);
                     marker.setStyle({
                         radius: isSelected ? 10 : 6,
                         fillColor: isSelected ? '#3b82f6' : '#10b981',
@@ -303,19 +348,25 @@ function caseTimeline() {
                         color: isSelected ? '#1e40af' : '#059669',
                     });
                 });
+                console.log('[handleVisitSelection] Map updated');
+            } else {
+                console.warn('[handleVisitSelection] Map not updated - map exists?', !!widgetInstances.map, 'markers:', widgetInstances.mapMarkers?.length);
             }
         },
 
         initializeWidgets() {
-            // Initialize charts
+            console.log('[initializeWidgets] Starting widget initialization');
+            // Initialize charts and maps
             this.layout.center?.forEach(widgetId => {
                 const config = this.widgetConfigs[widgetId];
+                console.log(`[initializeWidgets] Processing widget: ${widgetId}, type: ${config?.widget_type}`);
                 if (config?.widget_type === 'line_chart') {
                     this.renderChart(widgetId);
                 } else if (config?.widget_type === 'map') {
                     this.initMap(widgetId);
                 }
             });
+            console.log('[initializeWidgets] Widget initialization complete. Chart:', !!widgetInstances.chart, 'Map:', !!widgetInstances.map);
         },
 
         renderChart(widgetId) {
@@ -325,25 +376,38 @@ function caseTimeline() {
             const config = this.widgetConfigs[widgetId];
             const ctx = canvas.getContext('2d');
 
-            if (timelineChart) timelineChart.destroy();
+            if (widgetInstances.chart) widgetInstances.chart.destroy();
 
             // Extract data from visits with actual dates for time scale
             // Use time_end for precise datetime positioning, fall back to visit_date or date
-            const dataPoints = this.visits
-                .map((v, index) => {
+            const dataPointsWithVisitId = this.visits
+                .map((v) => {
                     const datetime = v.widgets.visit_history?.time_end || v.visit_date || v.widgets[widgetId].date;
                     const weight = v.widgets[widgetId].weight;
-                    return datetime && weight ? { x: new Date(datetime), y: weight, visitIndex: index } : null;
+                    return datetime && weight ? {
+                        x: new Date(datetime),
+                        y: weight,
+                        visitId: v.visit_id  // Store visit_id instead of index
+                    } : null;
                 })
                 .filter(d => d !== null)
                 .sort((a, b) => a.x - b.x);  // Sort by datetime to ensure correct order
 
-            // Set initial point highlighting based on selected visit (using sorted data point order)
-            const selectedIndex = this.selectedVisit ? this.visits.findIndex(v => v.visit_id === this.selectedVisit.visit_id) : -1;
-            const pointRadii = dataPoints.map(dp => dp.visitIndex === selectedIndex ? 8 : 4);
-            const pointBorderWidths = dataPoints.map(dp => dp.visitIndex === selectedIndex ? 3 : 0);
+            // Store the mapping of chart index -> visit_id for highlighting
+            widgetInstances.chartDataPointMapping = dataPointsWithVisitId.map(dp => dp.visitId);
 
-            timelineChart = new Chart(ctx, {
+            // Extract just the x/y for Chart.js (it doesn't need visitId in data)
+            const dataPoints = dataPointsWithVisitId.map(dp => ({ x: dp.x, y: dp.y }));
+
+            // Set initial point highlighting based on selected visit
+            const selectedVisitId = this.selectedVisit?.visit_id;
+            const pointRadii = widgetInstances.chartDataPointMapping.map(visitId => visitId === selectedVisitId ? 8 : 4);
+            const pointBorderWidths = widgetInstances.chartDataPointMapping.map(visitId => visitId === selectedVisitId ? 3 : 0);
+
+            // Store reference to component for use in Chart.js callbacks
+            const component = this;
+
+            widgetInstances.chart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     datasets: [{
@@ -365,8 +429,10 @@ function caseTimeline() {
                     onClick: (event, elements) => {
                         if (elements && elements.length > 0) {
                             const dataPointIndex = elements[0].index;
-                            const originalVisitIndex = dataPoints[dataPointIndex].visitIndex;
-                            window.dispatchEvent(new CustomEvent('visit-selected-by-index', { detail: originalVisitIndex }));
+                            const visitId = widgetInstances.chartDataPointMapping[dataPointIndex];
+                            if (visitId) {
+                                component.selectVisit(visitId);
+                            }
                         }
                     },
                     plugins: {
@@ -377,12 +443,7 @@ function caseTimeline() {
                             callbacks: {
                                 title: (items) => {
                                     const date = items[0].raw.x;
-                                    // Format in UTC timezone - 3-letter month, day, and time
-                                    const month = date.toLocaleString('default', { month: 'short', timeZone: 'UTC' });
-                                    const day = date.getUTCDate();
-                                    const hours = String(date.getUTCHours()).padStart(2, '0');
-                                    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-                                    return `${month} ${day}, ${hours}:${minutes}`;
+                                    return formatDateTimeUTC(date.toISOString());
                                 }
                             }
                         }
@@ -405,9 +466,7 @@ function caseTimeline() {
                                 callback: function(value, index, ticks) {
                                     // Display ticks in UTC - no time, just date
                                     const date = new Date(value);
-                                    const month = date.toLocaleString('default', { month: 'short', timeZone: 'UTC' });
-                                    const day = date.getUTCDate();
-                                    return `${month} ${day}`;
+                                    return formatDateUTC(date.toISOString());
                                 }
                             },
                             title: {
@@ -434,10 +493,8 @@ function caseTimeline() {
 
         getWeightGain() {
             if (this.visits.length < 2) return null;
-            const firstWeight = this.visits[0].widgets['weight_chart']?.weight;
-            const lastWeight = this.visits[this.visits.length - 1].widgets['weight_chart']?.weight;
-            if (firstWeight && lastWeight) {
-                const gain = lastWeight - firstWeight;
+            if (this.firstWeight && this.lastWeight) {
+                const gain = this.lastWeight - this.firstWeight;
                 return `${gain > 0 ? '+' : ''}${gain}g`;
             }
             return null;
@@ -445,7 +502,15 @@ function caseTimeline() {
 
         initMap(widgetId) {
             const container = document.getElementById(`${widgetId}_container`);
-            if (!container || timelineMap) return;
+            console.log(`[initMap] Container found for ${widgetId}:`, !!container, 'Map already exists:', !!widgetInstances.map);
+            if (!container) {
+                console.warn(`[initMap] No container found for ${widgetId}`);
+                return;
+            }
+            if (widgetInstances.map) {
+                console.log('[initMap] Map already initialized, skipping');
+                return;
+            }
 
             try {
                 // Find first valid GPS coordinates
@@ -462,13 +527,16 @@ function caseTimeline() {
                     }
                 }
 
-                timelineMap = L.map(`${widgetId}_container`).setView([centerLat, centerLng], 15);
+                widgetInstances.map = L.map(`${widgetId}_container`).setView([centerLat, centerLng], 15);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: 'Â© OpenStreetMap contributors'
-                }).addTo(timelineMap);
+                }).addTo(widgetInstances.map);
 
                 // Add circle markers for each visit
-                timelineMapMarkers = [];
+                // Store mapping of marker index -> visit_id (not all visits have GPS)
+                widgetInstances.mapMarkers = [];
+                widgetInstances.mapMarkerVisitIds = [];  // Track which visit each marker corresponds to
+
                 this.visits.forEach((visit, index) => {
                     const data = visit.widgets[widgetId];
                     if (data.gps) {
@@ -486,15 +554,16 @@ function caseTimeline() {
                                 weight: isSelected ? 3 : 2,
                                 opacity: 1,
                                 fillOpacity: 0.8
-                            }).addTo(timelineMap).bindPopup(visitLabel);
+                            }).addTo(widgetInstances.map).bindPopup(visitLabel);
 
                             // Make marker clickable to select visit
-                            const visitIndex = index;
+                            const currentVisitId = visit.visit_id;
                             marker.on('click', () => {
-                                window.dispatchEvent(new CustomEvent('visit-selected-by-index', { detail: visitIndex }));
+                                this.selectVisit(currentVisitId);
                             });
 
-                            timelineMapMarkers.push(marker);
+                            widgetInstances.mapMarkers.push(marker);
+                            widgetInstances.mapMarkerVisitIds.push(visit.visit_id);  // Store mapping
                         }
                     }
                 });
@@ -504,21 +573,6 @@ function caseTimeline() {
         }
     };
 }
-
-// Setup Alpine store for widget interactions
-document.addEventListener('alpine:init', () => {
-    Alpine.store('timeline', {
-        selectVisit(visitId) {
-            const timelineEl = document.querySelector('[x-data*="caseTimeline"]');
-            if (timelineEl && timelineEl.__x) {
-                const component = timelineEl.__x.$data;
-                if (component && typeof component.selectVisit === 'function') {
-                    component.selectVisit(visitId);
-                }
-            }
-        }
-    });
-});
 </script>
 
 {% endblock content %}
