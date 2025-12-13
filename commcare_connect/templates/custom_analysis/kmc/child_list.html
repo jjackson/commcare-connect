@@ -1,13 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
+{% load render_table from django_tables2 %}
 
 {% block title %}KMC - Children{% endblock %}
 
 {% block content %}
-<style>
-    [x-cloak] { display: none !important; }
-</style>
-<div class="container mx-auto p-6" x-data="kmcChildList()" x-cloak>
+<div class="container mx-auto p-6">
     <!-- Header -->
     <div class="flex justify-between items-center mb-6">
         <div>
@@ -16,260 +14,18 @@
         </div>
     </div>
 
-    {% if not has_context %}
-        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
-            <p class="text-sm text-yellow-700">Please select an opportunity from the labs context to view children.</p>
-        </div>
-    {% elif not has_connect_token %}
-        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
-            <p class="text-sm text-yellow-700">Please log in to CommCare Connect to load data.</p>
-            <a href="{% url 'labs:commcare_initiate' %}?next={{ request.get_full_path|urlencode }}"
-               class="inline-block mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-                <i class="fa-solid fa-lock mr-1"></i>
-                Authorize Connect Access
-            </a>
-        </div>
-    {% else %}
-
-    <!-- Loading State -->
-    <div x-show="loading" class="mb-6 p-6 bg-blue-50 border border-blue-200 rounded-lg">
-        <div class="flex items-start gap-4">
-            <i class="fa-solid fa-spinner fa-spin text-blue-600 text-2xl mt-1"></i>
-            <div class="flex-1">
-                <h3 class="text-lg font-semibold text-blue-900 mb-2">Loading KMC Children</h3>
-                <p class="text-sm text-blue-800" x-text="statusMessage"></p>
+    <!-- Children Table -->
+    <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        {% if table.data %}
+            <div class="overflow-x-auto">
+                {% render_table table %}
             </div>
-        </div>
-    </div>
-
-    <!-- Error Display -->
-    <div x-show="error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center">
-                <i class="fa-solid fa-circle-exclamation text-red-600 mr-3"></i>
-                <div>
-                    <strong class="text-red-800">Error:</strong>
-                    <span class="ml-2 text-red-700" x-text="error"></span>
-                </div>
+        {% else %}
+            <div class="px-6 py-8 text-center text-sm text-gray-500">
+                No children found for this opportunity
             </div>
-            <button @click="loadData()"
-                    class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium">
-                <i class="fa-solid fa-rotate mr-1"></i>Retry
-            </button>
-        </div>
+        {% endif %}
     </div>
-
-    <!-- Children List -->
-    <div x-show="!loading && !error" class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <div class="flex justify-between items-center">
-                <h2 class="text-xl font-semibold text-gray-900">
-                    Children
-                    <span class="text-sm text-gray-600 font-normal">(<span x-text="children.length"></span> children)</span>
-                </h2>
-                <div x-show="fromCache" class="px-3 py-1 bg-green-100 text-green-800 rounded-md text-sm font-medium">
-                    <i class="fa-solid fa-clock mr-1"></i>Cached
-                </div>
-            </div>
-        </div>
-
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th @click="sortBy('child_name')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                        <div class="flex items-center gap-2">
-                            <span>Child Name</span>
-                            <i class="fa-solid" :class="getSortIcon('child_name')"></i>
-                        </div>
-                    </th>
-                    <th @click="sortBy('flw_display_name')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                        <div class="flex items-center gap-2">
-                            <span>FLW Name</span>
-                            <i class="fa-solid" :class="getSortIcon('flw_display_name')"></i>
-                        </div>
-                    </th>
-                    <th @click="sortBy('visit_count')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                        <div class="flex items-center gap-2">
-                            <span>Visits</span>
-                            <i class="fa-solid" :class="getSortIcon('visit_count')"></i>
-                        </div>
-                    </th>
-                    <th @click="sortBy('starting_weight')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                        <div class="flex items-center gap-2">
-                            <span>Starting Weight</span>
-                            <i class="fa-solid" :class="getSortIcon('starting_weight')"></i>
-                        </div>
-                    </th>
-                    <th @click="sortBy('current_weight')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                        <div class="flex items-center gap-2">
-                            <span>Current Weight</span>
-                            <i class="fa-solid" :class="getSortIcon('current_weight')"></i>
-                        </div>
-                    </th>
-                    <th @click="sortBy('last_visit_date')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                        <div class="flex items-center gap-2">
-                            <span>Last Visit</span>
-                            <i class="fa-solid" :class="getSortIcon('last_visit_date')"></i>
-                        </div>
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                <template x-for="child in children" :key="child.child_id">
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="child.child_name || 'Unknown'"></td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="child.flw_display_name || child.flw_username || '-'"></td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="child.visit_count"></td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <span x-show="child.starting_weight" x-text="child.starting_weight + 'g'"></span>
-                            <span x-show="!child.starting_weight" class="text-gray-400">-</span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <span x-show="child.current_weight" x-text="child.current_weight + 'g'"></span>
-                            <span x-show="!child.current_weight" class="text-gray-400">-</span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="child.last_visit_date ? child.last_visit_date.split('T')[0] : '-'"></td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            <div class="flex gap-2">
-                                <a :href="`/custom_analysis/kmc/children/${child.child_id}/`"
-                                   class="inline-flex items-center px-3 py-1 border border-blue-300 rounded-md text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition-colors">
-                                    <i class="fa-solid fa-timeline mr-1"></i>
-                                    View Timeline
-                                </a>
-                                <a :href="'/labs/explorer/visit-inspector/?query=' + encodeURIComponent(`entity_id = '${child.child_id}'`)"
-                                   class="inline-flex items-center px-3 py-1 border border-purple-300 rounded-md text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 hover:border-purple-400 transition-colors">
-                                    <i class="fa-solid fa-search mr-1"></i>
-                                    View in Inspector
-                                </a>
-                            </div>
-                        </td>
-                    </tr>
-                </template>
-                <template x-if="children.length === 0 && !loading">
-                    <tr>
-                        <td colspan="7" class="px-6 py-8 text-center text-sm text-gray-500">
-                            No children found for this opportunity
-                        </td>
-                    </tr>
-                </template>
-            </tbody>
-        </table>
-        </div>
-    </div>
-
-    {% endif %}
 </div>
-
-<script>
-function kmcChildList() {
-    return {
-        loading: true,
-        error: null,
-        statusMessage: 'Initializing...',
-        children: [],
-        fromCache: false,
-        sortColumn: 'visit_count',
-        sortDirection: 'desc',
-
-        async init() {
-            console.log('[KMC] Initializing child list...');
-            await this.loadData();
-        },
-
-        sortBy(column) {
-            if (this.sortColumn === column) {
-                this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
-            } else {
-                this.sortColumn = column;
-                this.sortDirection = 'asc';
-            }
-            this.sortChildren();
-        },
-
-        sortChildren() {
-            this.children.sort((a, b) => {
-                let aVal = a[this.sortColumn];
-                let bVal = b[this.sortColumn];
-
-                // Handle null/undefined values
-                if (aVal == null) aVal = '';
-                if (bVal == null) bVal = '';
-
-                // Convert to lowercase for string comparison
-                if (typeof aVal === 'string') aVal = aVal.toLowerCase();
-                if (typeof bVal === 'string') bVal = bVal.toLowerCase();
-
-                let comparison = 0;
-                if (aVal < bVal) comparison = -1;
-                if (aVal > bVal) comparison = 1;
-
-                return this.sortDirection === 'asc' ? comparison : -comparison;
-            });
-        },
-
-        getSortIcon(column) {
-            if (this.sortColumn !== column) return 'fa-sort text-gray-300';
-            return this.sortDirection === 'asc' ? 'fa-sort-up text-blue-600' : 'fa-sort-down text-blue-600';
-        },
-
-        async loadData() {
-            this.loading = true;
-            this.error = null;
-            this.statusMessage = 'Connecting to server...';
-
-            const streamUrl = '{{ stream_api_url }}' + window.location.search;
-            console.log('[KMC] Connecting to SSE stream:', streamUrl);
-
-            try {
-                const eventSource = new EventSource(streamUrl);
-
-                eventSource.onmessage = (event) => {
-                    console.log('[KMC] Raw SSE message:', event.data);
-                    try {
-                        const data = JSON.parse(event.data);
-                        console.log('[KMC] SSE event:', data);
-
-                        if (data.error) {
-                            this.error = data.error;
-                            this.loading = false;
-                            eventSource.close();
-                            return;
-                        }
-
-                        if (data.complete && data.data) {
-                            this.children = data.data.children || [];
-                            this.fromCache = data.data.from_cache || false;
-                            this.sortChildren();
-                            this.loading = false;
-                            eventSource.close();
-                            console.log(`[KMC] Loaded ${this.children.length} children`);
-                        } else {
-                            this.statusMessage = data.message || 'Processing...';
-                        }
-                    } catch (e) {
-                        console.error('[KMC] Error parsing SSE event:', e);
-                    }
-                };
-
-                eventSource.onerror = (error) => {
-                    console.error('[KMC] SSE error:', error);
-                    eventSource.close();
-                    if (this.loading) {
-                        this.error = 'Connection lost. Please try again.';
-                        this.loading = false;
-                    }
-                };
-
-            } catch (error) {
-                console.error('[KMC] Failed to load data:', error);
-                this.error = error.message || 'Failed to load data';
-                this.loading = false;
-            }
-        }
-    };
-}
-</script>
 
 {% endblock content %}

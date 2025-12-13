@@ -158,10 +158,18 @@ function caseTimeline() {
                     null;
 
                 // Format date and time (keep as UTC, no timezone conversion)
-                const dateStr = data.date ? data.date.split('T')[0] : '';
+                let dateStr = '';
+                if (data.date) {
+                    const dt = new Date(data.date);
+                    const month = dt.toLocaleString('default', { month: 'short', timeZone: 'UTC' });
+                    const day = dt.getUTCDate();
+                    dateStr = `${month} ${day}`;
+                }
                 let timeStr = '';
-                if (visit.visit_date) {
-                    const dt = new Date(visit.visit_date);
+                // Use time_end from computed field if available, otherwise fall back to visit_date
+                const timeSource = data.time_end || visit.visit_date;
+                if (timeSource) {
+                    const dt = new Date(timeSource);
                     const hours = String(dt.getUTCHours()).padStart(2, '0');
                     const minutes = String(dt.getUTCMinutes()).padStart(2, '0');
                     timeStr = `${hours}:${minutes}`;
@@ -268,9 +276,12 @@ function caseTimeline() {
                 const pointRadii = [];
                 const pointBorderWidths = [];
 
-                for (let i = 0; i < this.visits.length; i++) {
-                    pointRadii[i] = (i === selectedIndex ? 8 : 4);
-                    pointBorderWidths[i] = (i === selectedIndex ? 3 : 0);
+                // Map through the chart's data points (which may be in different order due to sorting)
+                for (let i = 0; i < dataset.data.length; i++) {
+                    const dataPoint = dataset.data[i];
+                    const isSelected = dataPoint.visitIndex === selectedIndex;
+                    pointRadii[i] = (isSelected ? 8 : 4);
+                    pointBorderWidths[i] = (isSelected ? 3 : 0);
                 }
 
                 dataset.pointRadius = pointRadii;
@@ -317,18 +328,20 @@ function caseTimeline() {
             if (timelineChart) timelineChart.destroy();
 
             // Extract data from visits with actual dates for time scale
+            // Use time_end for precise datetime positioning, fall back to visit_date or date
             const dataPoints = this.visits
-                .map(v => {
-                    const date = v.widgets[widgetId].date || v.visit_date;
+                .map((v, index) => {
+                    const datetime = v.widgets.visit_history?.time_end || v.visit_date || v.widgets[widgetId].date;
                     const weight = v.widgets[widgetId].weight;
-                    return date && weight ? { x: new Date(date), y: weight } : null;
+                    return datetime && weight ? { x: new Date(datetime), y: weight, visitIndex: index } : null;
                 })
-                .filter(d => d !== null);
+                .filter(d => d !== null)
+                .sort((a, b) => a.x - b.x);  // Sort by datetime to ensure correct order
 
-            // Set initial point highlighting based on selected visit
+            // Set initial point highlighting based on selected visit (using sorted data point order)
             const selectedIndex = this.selectedVisit ? this.visits.findIndex(v => v.visit_id === this.selectedVisit.visit_id) : -1;
-            const pointRadii = this.visits.map((_, i) => i === selectedIndex ? 8 : 4);
-            const pointBorderWidths = this.visits.map((_, i) => i === selectedIndex ? 3 : 0);
+            const pointRadii = dataPoints.map(dp => dp.visitIndex === selectedIndex ? 8 : 4);
+            const pointBorderWidths = dataPoints.map(dp => dp.visitIndex === selectedIndex ? 3 : 0);
 
             timelineChart = new Chart(ctx, {
                 type: 'line',
@@ -351,8 +364,9 @@ function caseTimeline() {
                     maintainAspectRatio: false,
                     onClick: (event, elements) => {
                         if (elements && elements.length > 0) {
-                            const index = elements[0].index;
-                            window.dispatchEvent(new CustomEvent('visit-selected-by-index', { detail: index }));
+                            const dataPointIndex = elements[0].index;
+                            const originalVisitIndex = dataPoints[dataPointIndex].visitIndex;
+                            window.dispatchEvent(new CustomEvent('visit-selected-by-index', { detail: originalVisitIndex }));
                         }
                     },
                     plugins: {
@@ -362,7 +376,13 @@ function caseTimeline() {
                         tooltip: {
                             callbacks: {
                                 title: (items) => {
-                                    return items[0].raw.x.toLocaleDateString();
+                                    const date = items[0].raw.x;
+                                    // Format in UTC timezone - 3-letter month, day, and time
+                                    const month = date.toLocaleString('default', { month: 'short', timeZone: 'UTC' });
+                                    const day = date.getUTCDate();
+                                    const hours = String(date.getUTCHours()).padStart(2, '0');
+                                    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+                                    return `${month} ${day}, ${hours}:${minutes}`;
                                 }
                             }
                         }
@@ -371,18 +391,29 @@ function caseTimeline() {
                         x: {
                             type: 'time',
                             time: {
-                                unit: 'day',
+                                // Auto-select appropriate unit based on data range
                                 displayFormats: {
-                                    day: 'MMM d'
+                                    hour: 'MMM d, HH:mm',
+                                    day: 'MMM d',
+                                    week: 'MMM d',
+                                    month: 'MMM yyyy'
+                                },
+                                tooltipFormat: 'yyyy-MM-dd HH:mm'
+                            },
+                            ticks: {
+                                font: { size: 10 },
+                                callback: function(value, index, ticks) {
+                                    // Display ticks in UTC - no time, just date
+                                    const date = new Date(value);
+                                    const month = date.toLocaleString('default', { month: 'short', timeZone: 'UTC' });
+                                    const day = date.getUTCDate();
+                                    return `${month} ${day}`;
                                 }
                             },
                             title: {
                                 display: true,
                                 text: 'Date',
                                 font: { size: 11 }
-                            },
-                            ticks: {
-                                font: { size: 10 }
                             }
                         },
                         y: {

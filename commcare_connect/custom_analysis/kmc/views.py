@@ -7,13 +7,16 @@ from collections.abc import Generator
 
 import httpx
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
-from django.urls import reverse
-from django.views.generic import TemplateView, View
+from django.views.generic import View
+from django_tables2 import SingleTableView
 
 from commcare_connect.custom_analysis.kmc import timeline_config
 from commcare_connect.custom_analysis.kmc.pipeline_config import KMC_PIPELINE_CONFIG
+from commcare_connect.custom_analysis.kmc.tables import KMCChildTable
+from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, BaseSSEStreamView, send_sse_event
 from commcare_connect.labs.configurable_ui.views import GenericTimelineDataView, GenericTimelineDetailView
@@ -22,27 +25,116 @@ from commcare_connect.opportunity.models import BlobMeta
 logger = logging.getLogger(__name__)
 
 
-class KMCTimelineListView(LoginRequiredMixin, TemplateView):
-    """List all KMC children using pipeline data."""
+class KMCTimelineListView(LoginRequiredMixin, SingleTableView):
+    """List all KMC children using pipeline data with django-tables2."""
 
     template_name = "custom_analysis/kmc/child_list.html"
+    table_class = KMCChildTable
+    context_table_name = "table"
+    paginate_by = 50
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
+    def get_queryset(self):
+        """Load children from pipeline analysis."""
         # Check for context
         labs_context = getattr(self.request, "labs_context", {})
         opportunity_id = labs_context.get("opportunity_id")
 
-        context["has_context"] = bool(opportunity_id)
-        context["opportunity_id"] = opportunity_id
+        if not opportunity_id:
+            messages.warning(self.request, "Please select an opportunity from the labs context.")
+            return []
 
         # Check for OAuth token
         labs_oauth = self.request.session.get("labs_oauth", {})
-        context["has_connect_token"] = bool(labs_oauth.get("access_token"))
+        if not labs_oauth.get("access_token"):
+            messages.warning(self.request, "Please log in to CommCare Connect to load data.")
+            return []
 
-        # Provide the SSE stream API URL
-        context["stream_api_url"] = reverse("kmc:child_list_stream")
+        try:
+            # Run pipeline to get visit data
+            pipeline = AnalysisPipeline(self.request)
+            result = pipeline.run_analysis(KMC_PIPELINE_CONFIG, opportunity_id=opportunity_id)
+
+            logger.info(f"[KMC] Got result with {len(result.rows) if hasattr(result, 'rows') else 0} rows")
+
+            # Get FLW display names
+            try:
+                flw_names = get_flw_names_for_opportunity(self.request)
+            except Exception as e:
+                logger.warning(f"Failed to fetch FLW names: {e}")
+                flw_names = {}
+
+            # Group by child_entity_id
+            children_dict = {}
+            for row in result.rows:
+                child_id = row.entity_id or row.computed.get("child_entity_id")
+                if not child_id:
+                    continue
+
+                if child_id not in children_dict:
+                    children_dict[child_id] = {
+                        "child_id": child_id,
+                        "entity_id": child_id,  # For table rendering
+                        "child_name": row.computed.get("child_name"),
+                        "entity_name": row.entity_name or row.computed.get("entity_name"),
+                        "flw_username": row.username,
+                        "flw_display_name": flw_names.get(row.username, row.username),
+                        "visits": [],
+                    }
+
+                # Append visit
+                children_dict[child_id]["visits"].append(
+                    {
+                        "weight": row.computed.get("weight"),
+                        "visit_date": row.computed.get("date")
+                        or (row.visit_date.isoformat() if row.visit_date else None),
+                        "visit_number": row.computed.get("visit_number"),
+                    }
+                )
+
+            # Calculate aggregates
+            children_list = []
+            for child_id, child_data in children_dict.items():
+                visits = child_data["visits"]
+                if not visits:
+                    continue
+
+                # Sort by visit date
+                visits.sort(key=lambda v: v.get("visit_date") or "")
+
+                # Get first and last weights
+                weights = [v.get("weight") for v in visits if v.get("weight")]
+                starting_weight = weights[0] if weights else None
+                current_weight = weights[-1] if weights else None
+
+                children_list.append(
+                    {
+                        "child_id": child_id,
+                        "entity_id": child_id,
+                        "child_name": child_data["child_name"],
+                        "entity_name": child_data["entity_name"],
+                        "flw_username": child_data["flw_username"],
+                        "flw_display_name": child_data["flw_display_name"],
+                        "visit_count": len(visits),
+                        "starting_weight": starting_weight,
+                        "current_weight": current_weight,
+                        "last_visit_date": visits[-1].get("visit_date") if visits else None,
+                    }
+                )
+
+            logger.info(f"[KMC] Processed {len(children_list)} children")
+            return children_list
+
+        except Exception as e:
+            logger.error(f"[KMC] Failed to load children: {e}", exc_info=True)
+            messages.error(self.request, f"Failed to load children: {str(e)}")
+            return []
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Add opportunity context
+        labs_context = getattr(self.request, "labs_context", {})
+        context["opportunity_id"] = labs_context.get("opportunity_id")
 
         return context
 
@@ -122,7 +214,7 @@ class KMCChildListStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
 
                 try:
-                    flw_names = get_flw_names_for_opportunity(request, opportunity_id=opportunity_id)
+                    flw_names = get_flw_names_for_opportunity(request)
                 except Exception as e:
                     logger.warning(f"Failed to fetch FLW names: {e}")
                     flw_names = {}
