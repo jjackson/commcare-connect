@@ -19,14 +19,18 @@ from commcare_connect.custom_analysis.kmc.tables import KMCChildTable
 from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, BaseSSEStreamView, send_sse_event
-from commcare_connect.labs.configurable_ui.views import GenericTimelineDataView, GenericTimelineDetailView
+from commcare_connect.labs.configurable_ui.views import (
+    GenericTimelineDataStreamView,
+    GenericTimelineDataView,
+    GenericTimelineDetailView,
+)
 from commcare_connect.opportunity.models import BlobMeta
 
 logger = logging.getLogger(__name__)
 
 
 class KMCTimelineListView(LoginRequiredMixin, SingleTableView):
-    """List all KMC children using pipeline data with django-tables2."""
+    """List all KMC children - uses SSE for initial load, then django-tables2 for rendering."""
 
     template_name = "custom_analysis/kmc/child_list.html"
     table_class = KMCChildTable
@@ -34,8 +38,7 @@ class KMCTimelineListView(LoginRequiredMixin, SingleTableView):
     paginate_by = 50
 
     def get_queryset(self):
-        """Load children from pipeline analysis."""
-        # Check for context
+        """Load children from cache (fast) or return empty to trigger SSE load."""
         labs_context = getattr(self.request, "labs_context", {})
         opportunity_id = labs_context.get("opportunity_id")
 
@@ -49,92 +52,102 @@ class KMCTimelineListView(LoginRequiredMixin, SingleTableView):
             messages.warning(self.request, "Please log in to CommCare Connect to load data.")
             return []
 
+        # Check if refresh is requested - force SSE reload
+        if self.request.GET.get("refresh"):
+            logger.info(f"[KMC List] Refresh requested, forcing SSE load for opp {opportunity_id}")
+            return []
+
+        # Check if data is already cached
+        from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
+
+        pipeline = AnalysisPipeline(self.request)
+
+        # Quick cache check - if cached, load it
         try:
-            # Run pipeline to get visit data
-            pipeline = AnalysisPipeline(self.request)
             result = pipeline.run_analysis(KMC_PIPELINE_CONFIG, opportunity_id=opportunity_id)
 
-            logger.info(f"[KMC] Got result with {len(result.rows) if hasattr(result, 'rows') else 0} rows")
+            # If we got here quickly (from cache), process and return
+            if result and result.rows:
+                logger.info(f"[KMC List] Loading {len(result.rows)} visits from cache")
 
-            # Get FLW display names
-            try:
-                flw_names = get_flw_names_for_opportunity(self.request)
-            except Exception as e:
-                logger.warning(f"Failed to fetch FLW names: {e}")
-                flw_names = {}
+                # Get FLW display names
+                try:
+                    flw_names = get_flw_names_for_opportunity(self.request)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch FLW names: {e}")
+                    flw_names = {}
 
-            # Group by child_entity_id
-            children_dict = {}
-            for row in result.rows:
-                child_id = row.entity_id or row.computed.get("child_entity_id")
-                if not child_id:
-                    continue
+                # Group by child_entity_id
+                children_dict = {}
+                for row in result.rows:
+                    child_id = row.entity_id or row.computed.get("child_entity_id")
+                    if not child_id:
+                        continue
 
-                if child_id not in children_dict:
-                    children_dict[child_id] = {
-                        "child_id": child_id,
-                        "entity_id": child_id,  # For table rendering
-                        "child_name": row.computed.get("child_name"),
-                        "entity_name": row.entity_name or row.computed.get("entity_name"),
-                        "flw_username": row.username,
-                        "flw_display_name": flw_names.get(row.username, row.username),
-                        "visits": [],
-                    }
+                    if child_id not in children_dict:
+                        children_dict[child_id] = {
+                            "child_id": child_id,
+                            "entity_id": child_id,
+                            "child_name": row.computed.get("child_name"),
+                            "entity_name": row.entity_name or row.computed.get("entity_name"),
+                            "flw_username": row.username,
+                            "flw_display_name": flw_names.get(row.username, row.username),
+                            "visits": [],
+                        }
 
-                # Append visit
-                children_dict[child_id]["visits"].append(
-                    {
-                        "weight": row.computed.get("weight"),
-                        "visit_date": row.computed.get("date")
-                        or (row.visit_date.isoformat() if row.visit_date else None),
-                        "visit_number": row.computed.get("visit_number"),
-                    }
-                )
+                    children_dict[child_id]["visits"].append(
+                        {
+                            "weight": row.computed.get("weight"),
+                            "visit_date": row.computed.get("date")
+                            or (row.visit_date.isoformat() if row.visit_date else None),
+                            "visit_number": row.computed.get("visit_number"),
+                        }
+                    )
 
-            # Calculate aggregates
-            children_list = []
-            for child_id, child_data in children_dict.items():
-                visits = child_data["visits"]
-                if not visits:
-                    continue
+                # Calculate aggregates
+                children_list = []
+                for child_id, child_data in children_dict.items():
+                    visits = child_data["visits"]
+                    if not visits:
+                        continue
 
-                # Sort by visit date
-                visits.sort(key=lambda v: v.get("visit_date") or "")
+                    visits.sort(key=lambda v: v.get("visit_date") or "")
+                    weights = [v.get("weight") for v in visits if v.get("weight")]
+                    starting_weight = weights[0] if weights else None
+                    current_weight = weights[-1] if weights else None
 
-                # Get first and last weights
-                weights = [v.get("weight") for v in visits if v.get("weight")]
-                starting_weight = weights[0] if weights else None
-                current_weight = weights[-1] if weights else None
+                    children_list.append(
+                        {
+                            "child_id": child_id,
+                            "entity_id": child_id,
+                            "child_name": child_data["child_name"],
+                            "entity_name": child_data["entity_name"],
+                            "flw_username": child_data["flw_username"],
+                            "flw_display_name": child_data["flw_display_name"],
+                            "visit_count": len(visits),
+                            "starting_weight": starting_weight,
+                            "current_weight": current_weight,
+                            "last_visit_date": visits[-1].get("visit_date") if visits else None,
+                        }
+                    )
 
-                children_list.append(
-                    {
-                        "child_id": child_id,
-                        "entity_id": child_id,
-                        "child_name": child_data["child_name"],
-                        "entity_name": child_data["entity_name"],
-                        "flw_username": child_data["flw_username"],
-                        "flw_display_name": child_data["flw_display_name"],
-                        "visit_count": len(visits),
-                        "starting_weight": starting_weight,
-                        "current_weight": current_weight,
-                        "last_visit_date": visits[-1].get("visit_date") if visits else None,
-                    }
-                )
-
-            logger.info(f"[KMC] Processed {len(children_list)} children")
-            return children_list
+                logger.info(f"[KMC List] Returning {len(children_list)} children")
+                return children_list
 
         except Exception as e:
-            logger.error(f"[KMC] Failed to load children: {e}", exc_info=True)
-            messages.error(self.request, f"Failed to load children: {str(e)}")
-            return []
+            logger.info(f"[KMC List] Cache miss or error, will trigger SSE load: {e}")
+
+        # Return empty - template will trigger SSE load
+        return []
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # Add opportunity context
         labs_context = getattr(self.request, "labs_context", {})
         context["opportunity_id"] = labs_context.get("opportunity_id")
+
+        # Signal to template whether to trigger SSE load
+        context["needs_sse_load"] = len(context["table"].data) == 0
 
         return context
 
@@ -142,11 +155,18 @@ class KMCTimelineListView(LoginRequiredMixin, SingleTableView):
 class KMCTimelineDetailView(GenericTimelineDetailView):
     """Display timeline for a single KMC child."""
 
-    api_url_name = "kmc:api_child_data"
+    api_url_name = "kmc:api_child_data_stream"
 
 
 class KMCTimelineDataView(GenericTimelineDataView):
-    """API endpoint for KMC child timeline data."""
+    """API endpoint for KMC child timeline data (legacy non-streaming)."""
+
+    config_module = timeline_config
+    pipeline_config = KMC_PIPELINE_CONFIG
+
+
+class KMCTimelineDataStreamView(GenericTimelineDataStreamView):
+    """SSE streaming endpoint for KMC child timeline data."""
 
     config_module = timeline_config
     pipeline_config = KMC_PIPELINE_CONFIG
@@ -158,9 +178,9 @@ class KMCChildListStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
     def stream_data(self, request) -> Generator[str, None, None]:
         """Stream child list data loading progress via SSE."""
         try:
-            # Check for context
+            # Check for context (from labs context or query params)
             labs_context = getattr(request, "labs_context", {})
-            opportunity_id = labs_context.get("opportunity_id")
+            opportunity_id = labs_context.get("opportunity_id") or request.GET.get("opportunity_id")
 
             if not opportunity_id:
                 yield send_sse_event("Error", error="No opportunity selected")
@@ -172,38 +192,18 @@ class KMCChildListStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 yield send_sse_event("Error", error="No OAuth token found. Please log in to Connect.")
                 return
 
-            # Run analysis pipeline with streaming - manually process like explorer does
+            # Run analysis pipeline with streaming using mixin
             pipeline = AnalysisPipeline(request)
             pipeline_stream = pipeline.stream_analysis(KMC_PIPELINE_CONFIG, opportunity_id=opportunity_id)
 
             logger.info(f"[KMC] Starting stream for opportunity {opportunity_id}")
 
-            result = None
-            from_cache = False
+            # Stream all pipeline events as SSE (using mixin)
+            yield from self.stream_pipeline_events(pipeline_stream)
 
-            # Process pipeline events
-            from commcare_connect.labs.analysis.pipeline import EVENT_DOWNLOAD, EVENT_RESULT, EVENT_STATUS
-
-            for event_type, event_data in pipeline_stream:
-                if event_type == EVENT_STATUS:
-                    message = event_data.get("message", "Processing...")
-                    from_cache = from_cache or "cache" in message.lower()
-                    yield send_sse_event(message)
-
-                elif event_type == EVENT_DOWNLOAD:
-                    bytes_dl = event_data.get("bytes", 0)
-                    total_bytes = event_data.get("total", 0)
-                    if total_bytes > 0:
-                        mb_dl = bytes_dl / (1024 * 1024)
-                        mb_total = total_bytes / (1024 * 1024)
-                        pct = int(bytes_dl / total_bytes * 100)
-                        yield send_sse_event(f"Downloading: {mb_dl:.1f} / {mb_total:.1f} MB ({pct}%)")
-                    else:
-                        yield send_sse_event("Downloading visit data...")
-
-                elif event_type == EVENT_RESULT:
-                    result = event_data
-                    break
+            # Result is now available in self._pipeline_result
+            result = self._pipeline_result
+            from_cache = self._pipeline_from_cache
 
             # Process result into child list
             if result:
@@ -272,7 +272,6 @@ class KMCChildListStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                         "current_weight": current_weight,
                         "last_visit_date": visits[-1].get("visit_date") if visits else None,
                     }
-                    logger.info(f"[KMC Stream] Adding child: {child_id[:20]}... with {len(visits)} visits")
                     children_list.append(child_entry)
 
                 logger.info(f"[KMC] Processed {len(children_list)} children from {len(result.rows)} visits")

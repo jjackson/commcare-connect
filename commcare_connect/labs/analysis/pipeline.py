@@ -276,6 +276,12 @@ class AnalysisPipeline:
                 f"[Pipeline/{self.backend_name}] Checking {stage_name}-level cache for opp {opp_id} "
                 f"(expected visits: {self.visit_count})"
             )
+
+            # CRITICAL FIX: Detect if we have filters - we'll need to handle specially
+            has_filters = bool(config.filters)
+            if has_filters:
+                logger.info(f"[Pipeline/{self.backend_name}] Config has filters: {list(config.filters.keys())}")
+
             yield (EVENT_STATUS, {"message": f"Checking {stage_name}-level cache..."})
 
             if not force_refresh:
@@ -295,10 +301,168 @@ class AnalysisPipeline:
                     return
                 else:
                     logger.info(f"[Pipeline/{self.backend_name}] CACHE MISS ({stage_name}-level) for opp {opp_id}")
+
+                    # CRITICAL FIX: If config has filters on cache miss, we must cache UNFILTERED data first
+                    # Filters should only be applied when reading from cache, never when writing to cache
+                    # This ensures the cache contains the full dataset and can serve all filtered queries
+                    if config.filters:
+                        from copy import deepcopy
+
+                        logger.info(
+                            f"[Pipeline/{self.backend_name}] Filtered config detected on cache miss - "
+                            f"will cache full unfiltered dataset first"
+                        )
+                        yield (EVENT_STATUS, {"message": "Building cache with full dataset..."})
+
+                        # Create unfiltered version for caching
+                        unfiltered_config = deepcopy(config)
+                        unfiltered_config.filters = {}
+
+                        # Download, process, and cache with unfiltered config
+                        yield (EVENT_STATUS, {"message": "Connecting to Connect API..."})
+                        logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
+
+                        visit_dicts = None
+                        for event in self.backend.stream_raw_visits(
+                            opportunity_id=opp_id,
+                            access_token=self.access_token,
+                            expected_visit_count=self.visit_count,
+                            force_refresh=force_refresh,
+                        ):
+                            event_type = event[0]
+                            if event_type == "cached":
+                                visit_dicts = event[1]
+                                logger.info(
+                                    f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
+                                )
+                                yield (
+                                    EVENT_STATUS,
+                                    {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."},
+                                )
+                            elif event_type == "progress":
+                                _, bytes_downloaded, total_bytes = event
+                                yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
+                            elif event_type == "parsing":
+                                csv_size = event[1]
+                                size_mb = csv_size / (1024 * 1024)
+                                yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data..."})
+                            elif event_type == "complete":
+                                visit_dicts = event[1]
+                                logger.info(
+                                    f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
+                                )
+                                yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
+
+                        if visit_dicts is None:
+                            raise RuntimeError("No data received from API")
+
+                        # Process and cache with UNFILTERED config (critical!)
+                        yield (EVENT_STATUS, {"message": f"Processing {len(visit_dicts)} visits..."})
+                        logger.info(
+                            f"[Pipeline/{self.backend_name}] Processing {len(visit_dicts)} visits "
+                            "with unfiltered config"
+                        )
+
+                        self.backend.process_and_cache(self.request, unfiltered_config, opp_id, visit_dicts)
+
+                        # Now read from cache with ORIGINAL FILTERED config
+                        logger.info(f"[Pipeline/{self.backend_name}] Reading cached data with filters applied")
+                        yield (EVENT_STATUS, {"message": "Applying filters..."})
+
+                        if terminal_stage == CacheStage.AGGREGATED:
+                            filtered_result = self.backend.get_cached_flw_result(opp_id, config, self.visit_count)
+                        else:
+                            filtered_result = self.backend.get_cached_visit_result(opp_id, config, self.visit_count)
+
+                        if filtered_result:
+                            yield (EVENT_STATUS, {"message": "Complete!"})
+                            logger.info(
+                                f"[Pipeline/{self.backend_name}] Complete: {len(filtered_result.rows)} rows (filtered)"
+                            )
+                            yield (EVENT_RESULT, filtered_result)
+                            return
+                        else:
+                            raise RuntimeError("Failed to read filtered data from cache after caching full dataset")
             else:
                 logger.info(f"[Pipeline/{self.backend_name}] Force refresh requested, skipping cache")
 
-            # Stream raw data fetch with progress
+                # CRITICAL FIX: If force refresh with filters, must cache unfiltered first
+                if config.filters:
+                    from copy import deepcopy
+
+                    logger.info(
+                        f"[Pipeline/{self.backend_name}] Force refresh with filters - "
+                        f"will cache full unfiltered dataset first"
+                    )
+                    yield (EVENT_STATUS, {"message": "Force refresh: caching full dataset..."})
+
+                    # Create unfiltered version
+                    unfiltered_config = deepcopy(config)
+                    unfiltered_config.filters = {}
+
+                    # Download and process with unfiltered config
+                    yield (EVENT_STATUS, {"message": "Connecting to Connect API..."})
+                    logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
+
+                    visit_dicts = None
+                    for event in self.backend.stream_raw_visits(
+                        opportunity_id=opp_id,
+                        access_token=self.access_token,
+                        expected_visit_count=self.visit_count,
+                        force_refresh=True,  # Force refresh from API
+                    ):
+                        event_type = event[0]
+                        if event_type == "cached":
+                            visit_dicts = event[1]
+                            logger.info(
+                                f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
+                            )
+                            yield (EVENT_STATUS, {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."})
+                        elif event_type == "progress":
+                            _, bytes_downloaded, total_bytes = event
+                            yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
+                        elif event_type == "parsing":
+                            csv_size = event[1]
+                            size_mb = csv_size / (1024 * 1024)
+                            yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data..."})
+                        elif event_type == "complete":
+                            visit_dicts = event[1]
+                            logger.info(
+                                f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
+                            )
+                            yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
+
+                    if visit_dicts is None:
+                        raise RuntimeError("No data received from API")
+
+                    # Process and cache with UNFILTERED config
+                    yield (EVENT_STATUS, {"message": f"Processing {len(visit_dicts)} visits..."})
+                    logger.info(
+                        f"[Pipeline/{self.backend_name}] Processing {len(visit_dicts)} visits with unfiltered config"
+                    )
+
+                    self.backend.process_and_cache(self.request, unfiltered_config, opp_id, visit_dicts)
+
+                    # Read back with filters
+                    logger.info(f"[Pipeline/{self.backend_name}] Reading cached data with filters applied")
+                    yield (EVENT_STATUS, {"message": "Applying filters..."})
+
+                    if terminal_stage == CacheStage.AGGREGATED:
+                        filtered_result = self.backend.get_cached_flw_result(opp_id, config, self.visit_count)
+                    else:
+                        filtered_result = self.backend.get_cached_visit_result(opp_id, config, self.visit_count)
+
+                    if filtered_result:
+                        yield (EVENT_STATUS, {"message": "Complete!"})
+                        logger.info(
+                            f"[Pipeline/{self.backend_name}] Complete: {len(filtered_result.rows)} rows (filtered)"
+                        )
+                        yield (EVENT_RESULT, filtered_result)
+                        return
+                    else:
+                        raise RuntimeError("Failed to read filtered data from cache after force refresh")
+
+            # Stream raw data fetch with progress (unfiltered path)
             yield (EVENT_STATUS, {"message": "Connecting to Connect API..."})
             logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
 

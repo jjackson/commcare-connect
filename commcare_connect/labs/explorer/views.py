@@ -586,51 +586,16 @@ class VisitInspectorStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 yield send_sse_event("Error", error="No OAuth token found. Please log in to Connect.")
                 return
 
-            # Initial status
-            yield send_sse_event("Checking cache...")
-
-            # Run analysis pipeline with streaming
+            # Run analysis pipeline with streaming using mixin
             pipeline = AnalysisPipeline(request)
             pipeline_stream = pipeline.stream_analysis(VISIT_INSPECTOR_CONFIG)
 
-            # Use mixin to convert pipeline events to SSE
-            result = None
-            from_cache = False
+            # Stream all pipeline events as SSE (using improved mixin)
+            yield from self.stream_pipeline_events(pipeline_stream)
 
-            for sse_event, cache_flag in self.stream_pipeline_events(pipeline_stream):
-                from_cache = cache_flag
-                yield sse_event
-
-                # Check if we got a result (mixin returns it)
-                if cache_flag is not False:  # This means we've processed all events
-                    result = sse_event  # Actually need to get result differently
-                    break
-
-            # Alternative: manually process to get result
-            result = None
-            from_cache = False
-            pipeline_stream = pipeline.stream_analysis(VISIT_INSPECTOR_CONFIG)
-
-            for event_type, event_data in pipeline_stream:
-                if event_type == "status":
-                    message = event_data.get("message", "Processing...")
-                    from_cache = from_cache or "cache" in message.lower()
-                    yield send_sse_event(message)
-
-                elif event_type == "download":
-                    bytes_dl = event_data.get("bytes", 0)
-                    total_bytes = event_data.get("total", 0)
-                    if total_bytes > 0:
-                        mb_dl = bytes_dl / (1024 * 1024)
-                        mb_total = total_bytes / (1024 * 1024)
-                        pct = int(bytes_dl / total_bytes * 100)
-                        yield send_sse_event(f"Downloading: {mb_dl:.1f} / {mb_total:.1f} MB ({pct}%)")
-                    else:
-                        yield send_sse_event("Downloading visit data...")
-
-                elif event_type == "result":
-                    result = event_data
-                    break
+            # Result is now available in self._pipeline_result
+            result = self._pipeline_result
+            from_cache = self._pipeline_from_cache
 
             # Build completion response
             if result:
