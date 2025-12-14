@@ -212,6 +212,7 @@ document.addEventListener('alpine:init', () => {
         const selectedVisitId = parent.selectedVisit?.visit_id;
         const pointRadii = widgetInstances.chartDataPointMapping.map(visitId => visitId === selectedVisitId ? 8 : 4);
         const pointBorderWidths = widgetInstances.chartDataPointMapping.map(visitId => visitId === selectedVisitId ? 3 : 0);
+        const pointBorderColors = widgetInstances.chartDataPointMapping.map(visitId => visitId === selectedVisitId ? '#3b82f6' : 'transparent');
 
         widgetInstances.chart = new Chart(ctx, {
             type: 'line',
@@ -226,7 +227,7 @@ document.addEventListener('alpine:init', () => {
                     pointRadius: pointRadii,
                     pointHoverRadius: 6,
                     pointBorderWidth: pointBorderWidths,
-                    pointBorderColor: '#3b82f6',
+                    pointBorderColor: pointBorderColors,
                 }]
             },
             options: {
@@ -553,6 +554,7 @@ function caseTimeline() {
                 const dataset = widgetInstances.chart.data.datasets[0];
                 const pointRadii = [];
                 const pointBorderWidths = [];
+                const pointBorderColors = [];
 
                 // Use the stored mapping to find which chart point corresponds to selected visit
                 for (let i = 0; i < widgetInstances.chartDataPointMapping.length; i++) {
@@ -560,15 +562,16 @@ function caseTimeline() {
                     const isSelected = mappedVisitId === visitId;
                     pointRadii[i] = (isSelected ? 8 : 4);
                     pointBorderWidths[i] = (isSelected ? 3 : 0);
+                    pointBorderColors[i] = (isSelected ? '#3b82f6' : 'transparent');
                 }
 
                 dataset.pointRadius = pointRadii;
                 dataset.pointBorderWidth = pointBorderWidths;
-                dataset.pointBorderColor = '#3b82f6';
+                dataset.pointBorderColor = pointBorderColors;
 
-                // Use render() instead of update() to avoid Chart.js state issues
-                widgetInstances.chart.render();
-                console.log('[handleVisitSelection] Chart rendered');
+                // Use update() to refresh the chart with new point styling
+                widgetInstances.chart.update('active'); // 'active' mode for minimal animation
+                console.log('[handleVisitSelection] Chart updated - pointRadii:', pointRadii);
             }
 
             // Update map highlighting using stored visit_id mapping
