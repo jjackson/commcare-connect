@@ -74,7 +74,27 @@
         <!-- Center Column - Charts/Map -->
         <div class="col-span-6 space-y-4">
             <template x-for="widgetId in layout.center" :key="widgetId">
-                <div x-html="renderWidget(widgetId)"></div>
+                <div>
+                    <!-- Chart Widget -->
+                    <template x-if="widgetConfigs[widgetId]?.widget_type === 'line_chart'">
+                        <div class="bg-white border rounded-lg p-4"
+                             x-data="timelineChartWidget(widgetId)">
+                            <h2 class="font-semibold text-sm mb-3" x-text="widgetConfigs[widgetId].title"></h2>
+                            <div style="height: 250px; max-height: 250px; position: relative;">
+                                <canvas :id="`${widgetId}_canvas`"></canvas>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Map Widget -->
+                    <template x-if="widgetConfigs[widgetId]?.widget_type === 'map'">
+                        <div class="bg-white border rounded-lg p-4"
+                             x-data="timelineMapWidget(widgetId)">
+                            <h2 class="font-semibold text-sm mb-3" x-text="widgetConfigs[widgetId].title"></h2>
+                            <div :id="`${widgetId}_container`" style="height: 250px; background: #f3f4f6;"></div>
+                        </div>
+                    </template>
+                </div>
             </template>
         </div>
 
@@ -130,8 +150,245 @@ const widgetInstances = {
     map: null,
     mapMarkers: [],
     mapMarkerVisitIds: [],
-    chartDataPointMapping: []
+    chartDataPointMapping: [],
+    parentComponent: null  // Will be set by the parent component
 };
+
+// ===== Reusable Alpine Widget Components =====
+
+// Wait for Alpine to be loaded before registering components
+document.addEventListener('alpine:init', () => {
+    // Chart Widget Component
+    Alpine.data('timelineChartWidget', (widgetId) => ({
+        widgetId,
+
+    init() {
+        console.log(`[timelineChartWidget] Initializing widget: ${this.widgetId}`);
+        // Use $nextTick to ensure DOM elements are rendered
+        this.$nextTick(() => {
+            this.renderChart();
+        });
+    },
+
+    renderChart() {
+        const canvas = document.getElementById(`${this.widgetId}_canvas`);
+        if (!canvas) {
+            console.warn(`[timelineChartWidget] Canvas not found for ${this.widgetId}`);
+            return;
+        }
+
+        const parent = widgetInstances.parentComponent;
+
+        // Wait for parent data to load
+        if (!parent || parent.loading || !parent.visits || parent.visits.length === 0) {
+            console.log(`[timelineChartWidget] Parent data not ready yet, waiting...`);
+            setTimeout(() => this.renderChart(), 100);
+            return;
+        }
+
+        const config = parent.widgetConfigs[this.widgetId];
+        const ctx = canvas.getContext('2d');
+
+        if (widgetInstances.chart) widgetInstances.chart.destroy();
+
+        // Extract data from visits with actual dates for time scale
+        const dataPointsWithVisitId = parent.visits
+            .map((v) => {
+                const datetime = v.widgets.visit_history?.time_end || v.visit_date || v.widgets[this.widgetId].date;
+                const weight = v.widgets[this.widgetId].weight;
+                return datetime && weight ? {
+                    x: new Date(datetime),
+                    y: weight,
+                    visitId: v.visit_id
+                } : null;
+            })
+            .filter(d => d !== null)
+            .sort((a, b) => a.x - b.x);
+
+        widgetInstances.chartDataPointMapping = dataPointsWithVisitId.map(dp => dp.visitId);
+        const dataPoints = dataPointsWithVisitId.map(dp => ({ x: dp.x, y: dp.y }));
+
+        // Set initial point highlighting
+        const selectedVisitId = parent.selectedVisit?.visit_id;
+        const pointRadii = widgetInstances.chartDataPointMapping.map(visitId => visitId === selectedVisitId ? 8 : 4);
+        const pointBorderWidths = widgetInstances.chartDataPointMapping.map(visitId => visitId === selectedVisitId ? 3 : 0);
+
+        widgetInstances.chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: config.options.y_axis_label || 'Value',
+                    data: dataPoints,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: pointRadii,
+                    pointHoverRadius: 6,
+                    pointBorderWidth: pointBorderWidths,
+                    pointBorderColor: '#3b82f6',
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                onClick: (event, elements) => {
+                    if (elements && elements.length > 0) {
+                        const dataPointIndex = elements[0].index;
+                        const visitId = widgetInstances.chartDataPointMapping[dataPointIndex];
+                        if (visitId) {
+                            parent.selectVisit(visitId);
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: (items) => {
+                                const date = items[0].raw.x;
+                                return formatDateTimeUTC(date.toISOString());
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            displayFormats: {
+                                hour: 'MMM d, HH:mm',
+                                day: 'MMM d',
+                                week: 'MMM d',
+                                month: 'MMM yyyy'
+                            },
+                            tooltipFormat: 'yyyy-MM-dd HH:mm'
+                        },
+                        ticks: {
+                            font: { size: 10 },
+                            callback: function(value, index, ticks) {
+                                const date = new Date(value);
+                                return formatDateUTC(date.toISOString());
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Date',
+                            font: { size: 11 }
+                        }
+                    },
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: config.options.y_axis_label || 'Value',
+                            font: { size: 11 }
+                        },
+                        ticks: {
+                            font: { size: 10 }
+                        }
+                    }
+                }
+            }
+        });
+
+        console.log(`[timelineChartWidget] Chart initialized for ${this.widgetId}`);
+    }
+}));
+
+// Map Widget Component
+Alpine.data('timelineMapWidget', (widgetId) => ({
+    widgetId,
+
+    init() {
+        console.log(`[timelineMapWidget] Initializing widget: ${this.widgetId}`);
+        // Use $nextTick to ensure DOM elements are rendered
+        this.$nextTick(() => {
+            this.initMap();
+        });
+    },
+
+    initMap() {
+        const container = document.getElementById(`${this.widgetId}_container`);
+        if (!container) {
+            console.warn(`[timelineMapWidget] Container not found for ${this.widgetId}`);
+            return;
+        }
+        if (widgetInstances.map) {
+            console.log('[timelineMapWidget] Map already initialized, skipping');
+            return;
+        }
+
+        const parent = widgetInstances.parentComponent;
+
+        // Wait for parent data to load
+        if (!parent || parent.loading || !parent.visits || parent.visits.length === 0) {
+            console.log(`[timelineMapWidget] Parent data not ready yet, waiting...`);
+            setTimeout(() => this.initMap(), 100);
+            return;
+        }
+
+        try {
+            // Find first valid GPS coordinates
+            let centerLat = 0, centerLng = 0;
+            for (const visit of parent.visits) {
+                const gps = visit.widgets[this.widgetId]?.gps;
+                if (gps) {
+                    const parts = gps.split(' ');
+                    if (parts.length >= 2) {
+                        centerLat = parseFloat(parts[0]);
+                        centerLng = parseFloat(parts[1]);
+                        break;
+                    }
+                }
+            }
+
+            widgetInstances.map = L.map(`${this.widgetId}_container`).setView([centerLat, centerLng], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: 'Â© OpenStreetMap contributors'
+            }).addTo(widgetInstances.map);
+
+            widgetInstances.mapMarkers = [];
+            widgetInstances.mapMarkerVisitIds = [];
+
+            parent.visits.forEach((visit, index) => {
+                const data = visit.widgets[this.widgetId];
+                if (data.gps) {
+                    const parts = data.gps.split(' ');
+                    if (parts.length >= 2) {
+                        const lat = parseFloat(parts[0]);
+                        const lng = parseFloat(parts[1]);
+                        const visitLabel = data.visit_number || (index === 0 ? 'Registration' : `Visit ${index}`);
+
+                        const isSelected = parent.selectedVisit?.visit_id === visit.visit_id;
+                        const marker = L.circleMarker([lat, lng], {
+                            radius: 7,
+                            fillColor: isSelected ? '#3b82f6' : '#10b981',
+                            color: isSelected ? '#1e40af' : '#059669',
+                            weight: 2,
+                            opacity: isSelected ? 1 : 0.6,
+                            fillOpacity: isSelected ? 1 : 0.4,
+                            zIndexOffset: isSelected ? 1000 : 0
+                        }).addTo(widgetInstances.map).bindPopup(visitLabel);
+
+                        const currentVisitId = visit.visit_id;
+                        marker.on('click', () => {
+                            parent.selectVisit(currentVisitId);
+                        });
+
+                        widgetInstances.mapMarkers.push(marker);
+                        widgetInstances.mapMarkerVisitIds.push(visit.visit_id);
+                    }
+                }
+            });
+
+            console.log(`[timelineMapWidget] Map initialized for ${this.widgetId}`);
+        } catch (error) {
+            console.error('[timelineMapWidget] Error initializing map:', error);
+        }
+    }
+}));
+});
 
 // Utility functions for date/time formatting (centralized)
 function formatDateUTC(dateString) {
@@ -184,14 +441,14 @@ function caseTimeline() {
         },
 
         async init() {
+            // Store reference to this component globally so widgets can access it
+            widgetInstances.parentComponent = this;
+
             await this.loadData();
 
-            // Wait for DOM to render before initializing widgets
-            // Use setTimeout to ensure x-html has fully rendered
+            // Wait for Alpine to render the templates, then select the last visit
+            // Widgets will auto-initialize via their x-data directives
             setTimeout(() => {
-                this.initializeWidgets();
-
-                // Select last visit after widgets are ready
                 if (this.visits.length > 0) {
                     this.selectVisit(this.visits[this.visits.length - 1].visit_id);
                 }
@@ -257,28 +514,6 @@ function caseTimeline() {
                 null;
         },
 
-        renderChartPlaceholder(widgetId) {
-            const config = this.widgetConfigs[widgetId];
-            return `
-                <div class="bg-white border rounded-lg p-4">
-                    <h2 class="font-semibold text-sm mb-3">${config.title}</h2>
-                    <div style="height: 250px; max-height: 250px; position: relative;">
-                        <canvas id="${widgetId}_canvas"></canvas>
-                    </div>
-                </div>
-            `;
-        },
-
-        renderMapPlaceholder(widgetId) {
-            const config = this.widgetConfigs[widgetId];
-            return `
-                <div class="bg-white border rounded-lg p-4">
-                    <h2 class="font-semibold text-sm mb-3">${config.title}</h2>
-                    <div id="${widgetId}_container" style="height: 250px; background: #f3f4f6;"></div>
-                </div>
-            `;
-        },
-
         selectVisit(visitId) {
             console.log('[selectVisit] Called with visitId:', visitId);
             console.log('[selectVisit] Chart exists?', !!widgetInstances.chart);
@@ -342,153 +577,23 @@ function caseTimeline() {
                     const markerVisitId = widgetInstances.mapMarkerVisitIds[index];
                     const isSelected = (markerVisitId === visitId);
                     marker.setStyle({
-                        radius: isSelected ? 10 : 6,
+                        radius: 7,
                         fillColor: isSelected ? '#3b82f6' : '#10b981',
-                        weight: isSelected ? 3 : 2,
+                        weight: 2,
                         color: isSelected ? '#1e40af' : '#059669',
+                        opacity: isSelected ? 1 : 0.6,
+                        fillOpacity: isSelected ? 1 : 0.4,
+                        zIndexOffset: isSelected ? 1000 : 0
                     });
+                    // Bring selected marker to front
+                    if (isSelected) {
+                        marker.bringToFront();
+                    }
                 });
                 console.log('[handleVisitSelection] Map updated');
             } else {
                 console.warn('[handleVisitSelection] Map not updated - map exists?', !!widgetInstances.map, 'markers:', widgetInstances.mapMarkers?.length);
             }
-        },
-
-        initializeWidgets() {
-            console.log('[initializeWidgets] Starting widget initialization');
-            // Initialize charts and maps
-            this.layout.center?.forEach(widgetId => {
-                const config = this.widgetConfigs[widgetId];
-                console.log(`[initializeWidgets] Processing widget: ${widgetId}, type: ${config?.widget_type}`);
-                if (config?.widget_type === 'line_chart') {
-                    this.renderChart(widgetId);
-                } else if (config?.widget_type === 'map') {
-                    this.initMap(widgetId);
-                }
-            });
-            console.log('[initializeWidgets] Widget initialization complete. Chart:', !!widgetInstances.chart, 'Map:', !!widgetInstances.map);
-        },
-
-        renderChart(widgetId) {
-            const canvas = document.getElementById(`${widgetId}_canvas`);
-            if (!canvas) return;
-
-            const config = this.widgetConfigs[widgetId];
-            const ctx = canvas.getContext('2d');
-
-            if (widgetInstances.chart) widgetInstances.chart.destroy();
-
-            // Extract data from visits with actual dates for time scale
-            // Use time_end for precise datetime positioning, fall back to visit_date or date
-            const dataPointsWithVisitId = this.visits
-                .map((v) => {
-                    const datetime = v.widgets.visit_history?.time_end || v.visit_date || v.widgets[widgetId].date;
-                    const weight = v.widgets[widgetId].weight;
-                    return datetime && weight ? {
-                        x: new Date(datetime),
-                        y: weight,
-                        visitId: v.visit_id  // Store visit_id instead of index
-                    } : null;
-                })
-                .filter(d => d !== null)
-                .sort((a, b) => a.x - b.x);  // Sort by datetime to ensure correct order
-
-            // Store the mapping of chart index -> visit_id for highlighting
-            widgetInstances.chartDataPointMapping = dataPointsWithVisitId.map(dp => dp.visitId);
-
-            // Extract just the x/y for Chart.js (it doesn't need visitId in data)
-            const dataPoints = dataPointsWithVisitId.map(dp => ({ x: dp.x, y: dp.y }));
-
-            // Set initial point highlighting based on selected visit
-            const selectedVisitId = this.selectedVisit?.visit_id;
-            const pointRadii = widgetInstances.chartDataPointMapping.map(visitId => visitId === selectedVisitId ? 8 : 4);
-            const pointBorderWidths = widgetInstances.chartDataPointMapping.map(visitId => visitId === selectedVisitId ? 3 : 0);
-
-            // Store reference to component for use in Chart.js callbacks
-            const component = this;
-
-            widgetInstances.chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    datasets: [{
-                        label: config.options.y_axis_label || 'Value',
-                        data: dataPoints,
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        tension: 0.3,
-                        fill: true,
-                        pointRadius: pointRadii,
-                        pointHoverRadius: 6,
-                        pointBorderWidth: pointBorderWidths,
-                        pointBorderColor: '#3b82f6',
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    onClick: (event, elements) => {
-                        if (elements && elements.length > 0) {
-                            const dataPointIndex = elements[0].index;
-                            const visitId = widgetInstances.chartDataPointMapping[dataPointIndex];
-                            if (visitId) {
-                                component.selectVisit(visitId);
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            callbacks: {
-                                title: (items) => {
-                                    const date = items[0].raw.x;
-                                    return formatDateTimeUTC(date.toISOString());
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: {
-                                // Auto-select appropriate unit based on data range
-                                displayFormats: {
-                                    hour: 'MMM d, HH:mm',
-                                    day: 'MMM d',
-                                    week: 'MMM d',
-                                    month: 'MMM yyyy'
-                                },
-                                tooltipFormat: 'yyyy-MM-dd HH:mm'
-                            },
-                            ticks: {
-                                font: { size: 10 },
-                                callback: function(value, index, ticks) {
-                                    // Display ticks in UTC - no time, just date
-                                    const date = new Date(value);
-                                    return formatDateUTC(date.toISOString());
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Date',
-                                font: { size: 11 }
-                            }
-                        },
-                        y: {
-                            beginAtZero: false,
-                            title: {
-                                display: true,
-                                text: config.options.y_axis_label || 'Value',
-                                font: { size: 11 }
-                            },
-                            ticks: {
-                                font: { size: 10 }
-                            }
-                        }
-                    }
-                }
-            });
         },
 
         getWeightGain() {
@@ -498,78 +603,6 @@ function caseTimeline() {
                 return `${gain > 0 ? '+' : ''}${gain}g`;
             }
             return null;
-        },
-
-        initMap(widgetId) {
-            const container = document.getElementById(`${widgetId}_container`);
-            console.log(`[initMap] Container found for ${widgetId}:`, !!container, 'Map already exists:', !!widgetInstances.map);
-            if (!container) {
-                console.warn(`[initMap] No container found for ${widgetId}`);
-                return;
-            }
-            if (widgetInstances.map) {
-                console.log('[initMap] Map already initialized, skipping');
-                return;
-            }
-
-            try {
-                // Find first valid GPS coordinates
-                let centerLat = 0, centerLng = 0;
-                for (const visit of this.visits) {
-                    const gps = visit.widgets[widgetId]?.gps;
-                    if (gps) {
-                        const parts = gps.split(' ');
-                        if (parts.length >= 2) {
-                            centerLat = parseFloat(parts[0]);
-                            centerLng = parseFloat(parts[1]);
-                            break;
-                        }
-                    }
-                }
-
-                widgetInstances.map = L.map(`${widgetId}_container`).setView([centerLat, centerLng], 15);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: 'Â© OpenStreetMap contributors'
-                }).addTo(widgetInstances.map);
-
-                // Add circle markers for each visit
-                // Store mapping of marker index -> visit_id (not all visits have GPS)
-                widgetInstances.mapMarkers = [];
-                widgetInstances.mapMarkerVisitIds = [];  // Track which visit each marker corresponds to
-
-                this.visits.forEach((visit, index) => {
-                    const data = visit.widgets[widgetId];
-                    if (data.gps) {
-                        const parts = data.gps.split(' ');
-                        if (parts.length >= 2) {
-                            const lat = parseFloat(parts[0]);
-                            const lng = parseFloat(parts[1]);
-                            const visitLabel = data.visit_number || (index === 0 ? 'Registration' : `Visit ${index}`);
-
-                            const isSelected = this.selectedVisit?.visit_id === visit.visit_id;
-                            const marker = L.circleMarker([lat, lng], {
-                                radius: isSelected ? 10 : 6,
-                                fillColor: isSelected ? '#3b82f6' : '#10b981',
-                                color: isSelected ? '#1e40af' : '#059669',
-                                weight: isSelected ? 3 : 2,
-                                opacity: 1,
-                                fillOpacity: 0.8
-                            }).addTo(widgetInstances.map).bindPopup(visitLabel);
-
-                            // Make marker clickable to select visit
-                            const currentVisitId = visit.visit_id;
-                            marker.on('click', () => {
-                                this.selectVisit(currentVisitId);
-                            });
-
-                            widgetInstances.mapMarkers.push(marker);
-                            widgetInstances.mapMarkerVisitIds.push(visit.visit_id);  // Store mapping
-                        }
-                    }
-                });
-            } catch (error) {
-                console.error('Error initializing map:', error);
-            }
         }
     };
 }
