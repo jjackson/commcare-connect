@@ -106,43 +106,64 @@ class AnalysisPipelineSSEMixin:
 
     Provides common pipeline streaming logic and event conversion.
     Converts AnalysisPipeline events to SSE format.
+
+    Stores result and cache status as instance variables for easy access:
+    - self._pipeline_result: The analysis result object
+    - self._pipeline_from_cache: Whether the result came from cache
+
+    Example:
+        class MyStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
+            def stream_data(self, request):
+                pipeline = AnalysisPipeline(request)
+                stream = pipeline.stream_analysis(config)
+
+                # Stream all progress events as SSE
+                yield from self.stream_pipeline_events(stream)
+
+                # Result is now available in self._pipeline_result
+                result = self._pipeline_result
+                if result:
+                    yield send_sse_event("Complete", data={"count": len(result.rows)})
     """
 
-    @staticmethod
+    def __init__(self, *args, **kwargs):
+        """Initialize mixin state."""
+        super().__init__(*args, **kwargs)
+        self._pipeline_result = None
+        self._pipeline_from_cache = False
+
     def stream_pipeline_events(
+        self,
         pipeline_stream: Generator,
         send_sse_func: Callable[[str, dict | None, str | None], str] = send_sse_event,
-    ) -> Generator[tuple[str, bool], None, None]:
+    ) -> Generator[str, None, None]:
         """
         Convert AnalysisPipeline stream events to SSE events.
+
+        Processes all pipeline events (STATUS, DOWNLOAD, RESULT) and yields
+        formatted SSE events. Stores the final result in self._pipeline_result
+        and cache status in self._pipeline_from_cache.
 
         Args:
             pipeline_stream: Generator from pipeline.stream_analysis()
             send_sse_func: SSE formatting function (defaults to send_sse_event)
 
         Yields:
-            Tuple of (sse_event_string, from_cache_flag)
+            Formatted SSE event strings
 
-        Returns:
-            Tuple of (result, from_cache)
-
-        Example:
-            pipeline = AnalysisPipeline(request)
-            stream = pipeline.stream_analysis(config)
-
-            for sse_event in self.stream_pipeline_events(stream):
-                yield sse_event
+        Side Effects:
+            Sets self._pipeline_result and self._pipeline_from_cache
         """
         from commcare_connect.labs.analysis.pipeline import EVENT_DOWNLOAD, EVENT_RESULT, EVENT_STATUS
 
-        result = None
-        from_cache = False
+        self._pipeline_result = None
+        self._pipeline_from_cache = False
 
         for event_type, event_data in pipeline_stream:
             if event_type == EVENT_STATUS:
                 message = event_data.get("message", "Processing...")
-                from_cache = from_cache or "cache" in message.lower()
-                yield send_sse_func(message), from_cache
+                self._pipeline_from_cache = self._pipeline_from_cache or "cache" in message.lower()
+                yield send_sse_func(message)
 
             elif event_type == EVENT_DOWNLOAD:
                 bytes_dl = event_data.get("bytes", 0)
@@ -151,12 +172,10 @@ class AnalysisPipelineSSEMixin:
                     mb_dl = bytes_dl / (1024 * 1024)
                     mb_total = total_bytes / (1024 * 1024)
                     pct = int(bytes_dl / total_bytes * 100)
-                    yield send_sse_func(f"Downloading: {mb_dl:.1f} / {mb_total:.1f} MB ({pct}%)"), from_cache
+                    yield send_sse_func(f"Downloading: {mb_dl:.1f} / {mb_total:.1f} MB ({pct}%)")
                 else:
-                    yield send_sse_func("Downloading data..."), from_cache
+                    yield send_sse_func("Downloading data...")
 
             elif event_type == EVENT_RESULT:
-                result = event_data
+                self._pipeline_result = event_data
                 break
-
-        return result, from_cache

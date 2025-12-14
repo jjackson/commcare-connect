@@ -141,6 +141,13 @@ KMC_HEADER_FIELDS = {
     "child_name": FieldExtractor("Child Name", ["form.child_details.child_name", "form.svn_name"]),
     "child_dob": FieldExtractor("DOB", ["form.child_DOB", "form.child_details.child_DOB"], transform="date"),
     "child_gender": FieldExtractor("Gender", ["form.child_details.child_gender"]),
+    "birth_weight": FieldExtractor(
+        "Birth Weight",
+        ["form.child_details.birth_weight_group.child_weight_birth", "form.child_weight_birth"],
+        transform="kg_to_g",
+    ),
+    "reg_date": FieldExtractor("Registration Date", ["form.reg_date"], transform="date"),
+    "kmc_status": FieldExtractor("KMC Status", ["form.kmc_status", "form.case.update.kmc_status"]),
     "mother_name": FieldExtractor(
         "Mother",
         ["form.mothers_details.mother_name", "form.kmc_beneficiary_name"],
@@ -149,5 +156,7 @@ KMC_HEADER_FIELDS = {
         "Phone",
         ["form.mothers_details.mothers_phone_number", "form.deduplication_block.mothers_phone_number"],
     ),
+    "mother_age": FieldExtractor("Mother Age", ["form.mothers_details.mother_age", "form.mother_age"]),
     "village": FieldExtractor("Village", ["form.mothers_details.village"]),
+    "subcounty": FieldExtractor("Subcounty", ["form.mothers_details.subcounty", "form.subcounty"]),
 }

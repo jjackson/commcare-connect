@@ -32,7 +32,7 @@ def _get_transform_function(transform_name: str):
         Transform function for FieldComputation
     """
     if transform_name == "kg_to_g":
-        return lambda x: int(x) if _is_valid_weight(x) else None
+        return lambda x: int(float(x)) if _is_valid_weight(x) else None
     elif transform_name == "float":
         return lambda x: float(x) if x else None
     elif transform_name == "date":

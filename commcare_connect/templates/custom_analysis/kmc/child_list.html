@@ -14,7 +14,65 @@
         </div>
     </div>
 
-    <!-- Children Table -->
+    {% if needs_sse_load %}
+    <!-- Loading State - SSE will load data then refresh -->
+    <div id="loading-container" class="bg-white border border-gray-200 rounded-lg shadow-sm p-12">
+        <div class="text-center">
+            <i class="fa-solid fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
+            <p class="text-gray-600 text-lg mb-2">Loading children...</p>
+            <p class="text-gray-500 text-sm" id="loading-message">Initializing...</p>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const streamUrl = '{% url "kmc:child_list_stream" %}?opportunity_id={{ opportunity_id }}';
+        const loadingMessage = document.getElementById('loading-message');
+
+        console.log('[KMC Child List] Starting SSE load:', streamUrl);
+
+        const eventSource = new EventSource(streamUrl);
+        let dataReceived = false;
+
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+
+                if (data.error) {
+                    console.error('[KMC Child List] Error:', data.error);
+                    loadingMessage.textContent = 'Error: ' + data.error;
+                    loadingMessage.style.color = 'red';
+                    eventSource.close();
+                } else if (data.complete && data.data) {
+                    console.log('[KMC Child List] Data loaded, refreshing page...');
+                    dataReceived = true;
+                    eventSource.close();
+                    // Refresh the page to render with django-tables2 (remove refresh param to avoid loop)
+                    const url = new URL(window.location);
+                    url.searchParams.delete('refresh');
+                    window.location.href = url.toString();
+                } else {
+                    // Update progress message
+                    loadingMessage.textContent = data.message || 'Loading...';
+                }
+            } catch (e) {
+                console.error('[KMC Child List] Error parsing SSE:', e);
+                eventSource.close();
+            }
+        };
+
+        eventSource.onerror = (error) => {
+            if (!dataReceived) {
+                console.error('[KMC Child List] SSE error:', error);
+                loadingMessage.textContent = 'Connection error. Please refresh the page.';
+                loadingMessage.style.color = 'red';
+            }
+            eventSource.close();
+        };
+    })();
+    </script>
+    {% else %}
+    <!-- Table loaded from cache - render with django-tables2 -->
     <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
         {% if table.data %}
             <div class="overflow-x-auto">
@@ -26,6 +84,7 @@
             </div>
         {% endif %}
     </div>
+    {% endif %}
 </div>
 
 {% endblock content %}

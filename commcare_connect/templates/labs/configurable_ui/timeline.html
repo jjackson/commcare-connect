@@ -13,25 +13,124 @@
     <div x-show="loading" class="flex items-center justify-center py-12">
         <div class="text-center">
             <i class="fa-solid fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
-            <p class="text-gray-600">Loading timeline...</p>
+            <p class="text-gray-600" x-text="loadingMessage">Loading timeline...</p>
         </div>
     </div>
 
-    <!-- Header -->
-    <div x-show="!loading" class="bg-white border rounded-lg p-4 mb-4">
-        <div class="flex items-center justify-between mb-3">
-            <h1 class="text-2xl font-bold text-gray-900" x-text="header.child_name || 'Child Timeline'"></h1>
-            <a href="javascript:history.back()" class="text-sm text-gray-600 hover:text-gray-900">
-                <i class="fa-solid fa-arrow-left mr-1"></i>Back to List
-            </a>
+    <!-- Header - Compact 3-Column Layout -->
+    <div x-show="!loading" class="bg-white border rounded-lg p-3 mb-4">
+        <!-- Primary Row - Compact -->
+        <div class="flex items-center justify-between mb-2 pb-2 border-b">
+            <div class="flex-1 flex items-center gap-3">
+                <h1 class="text-xl font-bold text-gray-900" x-text="header.child_name || 'Child Timeline'"></h1>
+                <span x-show="header.kmc_status" class="badge badge-sm primary-light" x-text="header.kmc_status"></span>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-right" x-show="header.current_weight">
+                    <div class="text-xl font-bold text-gray-900" x-text="formatNumber(header.current_weight) + 'g'"></div>
+                    <div class="text-xs text-gray-500">current</div>
+                </div>
+                <a href="javascript:history.back()" class="text-sm text-gray-600 hover:text-gray-900">
+                    <i class="fa-solid fa-arrow-left mr-1"></i>Back to List
+                </a>
+            </div>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
-            <div x-show="header.child_dob"><span class="text-gray-600">DOB:</span> <span class="font-medium" x-text="header.child_dob"></span></div>
-            <div x-show="header.child_gender"><span class="text-gray-600">Gender:</span> <span class="font-medium" x-text="header.child_gender"></span></div>
-            <div x-show="header.mother_name"><span class="text-gray-600">Mother:</span> <span class="font-medium" x-text="header.mother_name"></span></div>
-            <div x-show="header.mother_phone"><span class="text-gray-600">Phone:</span> <span class="font-medium" x-text="header.mother_phone"></span></div>
-            <div><span class="text-gray-600">Visits:</span> <span class="font-medium" x-text="visits.length"></span></div>
-            <div x-show="getWeightGain() !== null"><span class="text-gray-600">Weight Gain:</span> <span class="font-medium" x-text="getWeightGain()"></span></div>
+
+        <!-- Secondary Info - Single Line -->
+        <div class="flex items-center gap-3 text-xs text-gray-500 mb-3">
+            <span x-show="header.child_gender">
+                <i class="fa-solid fa-child"></i>
+                <span x-text="header.child_gender"></span>
+            </span>
+            <span x-show="header.child_dob" class="text-gray-300">|</span>
+            <span x-show="header.child_dob">
+                <i class="fa-solid fa-calendar"></i>
+                Born <span x-text="header.child_dob"></span>
+                <span x-show="childAgeWeeks !== null" class="text-gray-400">
+                    (<span x-text="childAgeWeeks"></span> <span x-text="childAgeWeeks === 1 ? 'week' : 'weeks'"></span> old)
+                </span>
+            </span>
+        </div>
+
+        <!-- Three-Column Grid - Compact -->
+        <div class="grid grid-cols-3 gap-3 text-xs">
+            <!-- Column 1: PROGRAM -->
+            <div class="space-y-1 border-r border-gray-200 pr-3">
+                <div class="font-semibold text-gray-700 uppercase tracking-wide mb-2">Program</div>
+                <div x-show="firstVisitDate">
+                    <span class="text-gray-600">First Visit:</span>
+                    <span class="font-medium ml-1" x-text="formatDateUTC(firstVisitDate)"></span>
+                </div>
+                <div x-show="lastVisitDate">
+                    <span class="text-gray-600">Last Visit:</span>
+                    <span class="font-medium ml-1" x-text="formatDateUTC(lastVisitDate)"></span>
+                </div>
+                <div>
+                    <span class="text-gray-600">Total Visits:</span>
+                    <span class="font-medium ml-1">
+                        <span x-text="visits.length"></span>
+                        <span x-show="daysInProgram !== null" class="text-gray-400">
+                            (<span x-text="daysInProgram"></span>d)
+                        </span>
+                    </span>
+                </div>
+                <div x-show="daysInProgram !== null">
+                    <span class="text-gray-600">Time in Program:</span>
+                    <span class="font-medium ml-1">
+                        <span x-text="daysInProgram"></span> days
+                    </span>
+                </div>
+            </div>
+
+            <!-- Column 2: WEIGHT -->
+            <div class="space-y-1 border-r border-gray-200 pr-3">
+                <div class="font-semibold text-gray-700 uppercase tracking-wide mb-2">Weight</div>
+                <div x-show="header.starting_weight">
+                    <span class="text-gray-600">Starting:</span>
+                    <span class="font-medium ml-1" x-text="formatNumber(header.starting_weight) + 'g'"></span>
+                </div>
+                <div x-show="header.current_weight">
+                    <span class="text-gray-600">Current:</span>
+                    <span class="font-medium ml-1" x-text="formatNumber(header.current_weight) + 'g'"></span>
+                </div>
+                <div x-show="header.weight_gain !== null && header.weight_gain !== undefined">
+                    <span class="text-gray-600">Gain:</span>
+                    <span
+                        class="font-medium ml-1"
+                        :class="{
+                            'text-green-600': header.weight_gain > 0,
+                            'text-red-600': header.weight_gain < 0,
+                            'text-gray-900': header.weight_gain === 0
+                        }"
+                    >
+                        <span x-text="(header.weight_gain > 0 ? '+' : '') + formatNumber(header.weight_gain) + 'g'"></span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Column 3: CONTACT INFO -->
+            <div class="space-y-1">
+                <div class="font-semibold text-gray-700 uppercase tracking-wide mb-2">Contact Info</div>
+                <div x-show="header.mother_name">
+                    <span class="text-gray-600">Mother:</span>
+                    <span class="font-medium ml-1" x-text="header.mother_name"></span>
+                    <span x-show="header.mother_age" class="text-gray-400">
+                        (Age <span x-text="header.mother_age"></span>)
+                    </span>
+                </div>
+                <div x-show="header.mother_phone">
+                    <span class="text-gray-600">Phone:</span>
+                    <span class="font-medium ml-1" x-text="header.mother_phone"></span>
+                </div>
+                <div x-show="header.village">
+                    <span class="text-gray-600">Village:</span>
+                    <span class="font-medium ml-1 uppercase" x-text="header.village"></span>
+                </div>
+                <div x-show="header.subcounty">
+                    <span class="text-gray-600">Subcounty:</span>
+                    <span class="font-medium ml-1 uppercase" x-text="header.subcounty"></span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -418,12 +517,14 @@ function formatDateTimeUTC(dateString) {
 function caseTimeline() {
     return {
         loading: true,
+        loadingMessage: 'Loading timeline...',
         header: {},
         visits: [],
         selectedVisit: null,
         layout: {},
         widgetConfigs: {},
         opportunityId: '{{ opportunity_id }}',
+        eventSource: null,
 
         // Computed properties
         get selectedVisitIndex() {
@@ -441,6 +542,43 @@ function caseTimeline() {
             return this.visits[this.visits.length - 1].widgets['weight_chart']?.weight;
         },
 
+        get firstVisitDate() {
+            if (this.visits.length === 0) return null;
+            return this.visits[0].widgets['visit_history']?.date || this.visits[0].visit_date;
+        },
+
+        get lastVisitDate() {
+            if (this.visits.length === 0) return null;
+            const last = this.visits[this.visits.length - 1];
+            return last.widgets['visit_history']?.date || last.visit_date;
+        },
+
+        get daysInProgram() {
+            if (!this.firstVisitDate || !this.lastVisitDate) return null;
+            const diff = new Date(this.lastVisitDate) - new Date(this.firstVisitDate);
+            return Math.floor(diff / (1000 * 60 * 60 * 24));
+        },
+
+        get childAgeWeeks() {
+            if (!this.header.child_dob) return null;
+            const diff = Date.now() - new Date(this.header.child_dob);
+            return Math.floor(diff / (1000 * 60 * 60 * 24 * 7));
+        },
+
+        get weightDisplay() {
+            const current = this.lastWeight;
+            const birth = this.header.birth_weight;
+            if (!current) return null;
+            const gain = birth ? current - birth : this.firstWeight ? current - this.firstWeight : null;
+            return {
+                current,
+                gain,
+                hasBirthWeight: !!birth,
+                gainPositive: gain > 0,
+                gainNegative: gain < 0
+            };
+        },
+
         async init() {
             // Store reference to this component globally so widgets can access it
             widgetInstances.parentComponent = this;
@@ -456,22 +594,53 @@ function caseTimeline() {
             }, 100);
         },
 
-        async loadData() {
-            try {
-                const response = await fetch('{{ api_url }}');
-                if (!response.ok) {
-                    throw new Error('Failed to load timeline data');
-                }
-                const data = await response.json();
-                this.header = data.header || {};
-                this.visits = data.visits || [];
-                this.layout = data.layout || {};
-                this.widgetConfigs = data.widget_configs || {};
-                this.loading = false;
-            } catch (error) {
-                console.error('Error loading timeline:', error);
-                alert('Error loading timeline data');
+        destroy() {
+            // Clean up event source on component destroy
+            if (this.eventSource) {
+                this.eventSource.close();
             }
+        },
+
+        async loadData() {
+            const streamUrl = '{{ api_url }}';
+            console.log('[Timeline] Connecting to SSE:', streamUrl);
+
+            this.eventSource = new EventSource(streamUrl);
+
+            this.eventSource.onmessage = (event) => {
+                try {
+                    console.log('[Timeline] SSE event:', event.data);
+                    const data = JSON.parse(event.data);
+
+                    if (data.error) {
+                        console.error('[Timeline] Error:', data.error);
+                        this.loadingMessage = 'Error: ' + data.error;
+                        this.eventSource.close();
+                        this.loading = false;
+                        alert('Error loading timeline: ' + data.error);
+                    } else if (data.complete && data.data) {
+                        console.log('[Timeline] Data loaded successfully');
+                        this.header = data.data.header || {};
+                        this.visits = data.data.visits || [];
+                        this.layout = data.data.layout || {};
+                        this.widgetConfigs = data.data.widget_configs || {};
+                        this.loading = false;
+                        this.eventSource.close();
+                        console.log(`[Timeline] Loaded ${this.visits.length} visits`);
+                    } else {
+                        this.loadingMessage = data.message || 'Loading...';
+                    }
+                } catch (e) {
+                    console.error('[Timeline] Error parsing SSE event:', e);
+                }
+            };
+
+            this.eventSource.onerror = (error) => {
+                console.error('[Timeline] SSE error:', error);
+                this.eventSource.close();
+                this.loading = false;
+                alert('Connection error while loading timeline data');
+            };
         },
 
         renderWidget(widgetId) {
@@ -600,12 +769,14 @@ function caseTimeline() {
         },
 
         getWeightGain() {
-            if (this.visits.length < 2) return null;
-            if (this.firstWeight && this.lastWeight) {
-                const gain = this.lastWeight - this.firstWeight;
-                return `${gain > 0 ? '+' : ''}${gain}g`;
-            }
-            return null;
+            const display = this.weightDisplay;
+            if (!display || display.gain === null) return null;
+            return `${display.gain > 0 ? '+' : ''}${display.gain}g`;
+        },
+
+        formatNumber(num) {
+            if (!num) return '';
+            return num.toLocaleString();
         }
     };
 }
