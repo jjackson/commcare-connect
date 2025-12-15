@@ -217,6 +217,21 @@ class SolicitationForm(forms.Form):
     Program context is now provided via labs_context instead of a form field.
     """
 
+    # Delivery type field - choices populated dynamically in __init__
+    delivery_type = forms.ChoiceField(
+        required=True,
+        label="Program Type",
+        help_text="Select the type of program this solicitation is for",
+        widget=forms.Select(
+            attrs={
+                "class": (
+                    "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none "
+                    "focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo"
+                )
+            }
+        ),
+    )
+
     # Define all fields
     title = forms.CharField(
         max_length=255,
@@ -326,8 +341,21 @@ class SolicitationForm(forms.Form):
         ),
     )
 
-    def __init__(self, user=None, *args, **kwargs):
+    def __init__(self, user=None, data_access=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Populate delivery type choices from API
+        delivery_type_choices = [("", "-- Select Program Type --")]
+        if data_access:
+            try:
+                delivery_types = data_access.get_delivery_types(active_only=True)
+                for dt in delivery_types:
+                    delivery_type_choices.append((dt.slug, dt.name))
+            except Exception:
+                # If API fails, show empty choices
+                pass
+
+        self.fields["delivery_type"].choices = delivery_type_choices
 
         # Setup crispy forms
         self.helper = FormHelper(self)
@@ -348,9 +376,10 @@ class SolicitationForm(forms.Form):
                 Div(
                     # Title (full width)
                     Field("title", wrapper_class="mb-6"),
-                    # Row 2: Type, Status, and Visibility
+                    # Row 2: Type, Status, Delivery Type, and Visibility
                     Div(
                         Column(Field("solicitation_type"), css_class="flex-1"),
+                        Column(Field("delivery_type"), css_class="flex-1"),
                         Column(Field("status"), css_class="flex-1"),
                         Column(Field("is_publicly_listed"), css_class="flex-1"),
                         css_class="flex flex-col md:flex-row gap-6 mb-6",

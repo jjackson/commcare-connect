@@ -126,6 +126,7 @@ class LocalLabsRecord:
         self.organization_id: str | None = api_data.get("organization_id")
         self.program_id: int | None = api_data.get("program_id")
         self.labs_record_id: int | None = api_data.get("labs_record_id")  # Parent reference
+        self.public: bool = api_data.get("public", False)  # Public records can be queried without scope
 
     @property
     def pk(self) -> int:
@@ -158,6 +159,7 @@ class LocalLabsRecord:
             "labs_record_id": self.labs_record_id,
             "opportunity_id": self.opportunity_id,
             "organization_id": self.organization_id,
+            "public": self.public,
         }
 
     def save(self, *args: Any, **kwargs: Any) -> None:

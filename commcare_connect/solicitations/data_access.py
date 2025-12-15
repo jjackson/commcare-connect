@@ -11,7 +11,12 @@ This is a pure API client with no local database storage.
 from django.http import HttpRequest
 
 from commcare_connect.labs.integrations.connect.api_client import LabsRecordAPIClient
-from commcare_connect.solicitations.models import ResponseRecord, ReviewRecord, SolicitationRecord
+from commcare_connect.solicitations.models import (
+    DeliveryTypeDescriptionRecord,
+    ResponseRecord,
+    ReviewRecord,
+    SolicitationRecord,
+)
 
 
 class SolicitationDataAccess:
@@ -68,6 +73,116 @@ class SolicitationDataAccess:
             organization_id=self.organization_id,
             program_id=self.program_id,
         )
+
+    # =========================================================================
+    # Delivery Type Methods
+    # =========================================================================
+
+    def get_delivery_types(self, active_only: bool = True) -> list[DeliveryTypeDescriptionRecord]:
+        """
+        Get all delivery types (public records, no scope required).
+
+        Args:
+            active_only: If True, only return active delivery types
+
+        Returns:
+            List of DeliveryTypeDescriptionRecord instances sorted by name
+        """
+        records = self.labs_api.get_records(
+            experiment="solicitations",
+            type="DeliveryTypeDescriptionRecord",
+            public=True,
+            model_class=DeliveryTypeDescriptionRecord,
+        )
+
+        # Filter to active only if requested
+        if active_only:
+            records = [r for r in records if r.is_active]
+
+        # Sort by name alphabetically
+        records.sort(key=lambda r: r.name.lower())
+
+        return records
+
+    def get_delivery_type_by_slug(self, slug: str) -> DeliveryTypeDescriptionRecord | None:
+        """
+        Get a specific delivery type by slug.
+
+        Args:
+            slug: URL-safe slug identifier
+
+        Returns:
+            DeliveryTypeDescriptionRecord instance or None
+        """
+        records = self.labs_api.get_records(
+            experiment="solicitations",
+            type="DeliveryTypeDescriptionRecord",
+            public=True,
+            model_class=DeliveryTypeDescriptionRecord,
+            slug=slug,
+        )
+        return records[0] if records else None
+
+    # =========================================================================
+    # Public Solicitation Methods
+    # =========================================================================
+
+    def get_public_solicitations(
+        self,
+        status: str | None = "active",
+        delivery_type_slug: str | None = None,
+    ) -> list[SolicitationRecord]:
+        """
+        Get publicly listed solicitations (no scope required).
+
+        Args:
+            status: Filter by status (default: 'active')
+            delivery_type_slug: Filter by delivery type slug
+
+        Returns:
+            List of SolicitationRecord instances
+        """
+        kwargs = {}
+        if status:
+            kwargs["status"] = status
+        # Note: We don't filter by is_publicly_listed here because:
+        # 1. public=True on the API call already ensures we get publicly queryable records
+        # 2. The production API has a bug where boolean query params become strings
+        #    (e.g., data__is_publicly_listed=true becomes string "true", not boolean true)
+        if delivery_type_slug:
+            kwargs["delivery_type_slug"] = delivery_type_slug
+
+        return self.labs_api.get_records(
+            experiment="solicitations",
+            type="Solicitation",
+            public=True,
+            model_class=SolicitationRecord,
+            **kwargs,
+        )
+
+    def get_solicitations_by_delivery_type(
+        self,
+        delivery_type_slug: str,
+        status: str | None = "active",
+    ) -> list[SolicitationRecord]:
+        """
+        Get solicitations filtered by delivery type.
+
+        Args:
+            delivery_type_slug: Delivery type slug to filter by
+            status: Filter by status (default: 'active')
+
+        Returns:
+            List of SolicitationRecord instances
+        """
+        return self.get_public_solicitations(
+            status=status,
+            delivery_type_slug=delivery_type_slug,
+        )
+
+    # =========================================================================
+    # Solicitation CRUD Methods
+    # =========================================================================
 
     def get_solicitations(
         self,
@@ -140,12 +255,16 @@ class SolicitationDataAccess:
         Returns:
             SolicitationRecord instance
         """
+        # Set public=True if solicitation is publicly listed
+        is_public = data_dict.get("is_publicly_listed", False)
+
         return self.labs_api.create_record(
             experiment="solicitations",
             type="Solicitation",
             data=data_dict,
             program_id=program_id,
             username=username,
+            public=is_public,
         )
 
     def get_responses_for_solicitation(

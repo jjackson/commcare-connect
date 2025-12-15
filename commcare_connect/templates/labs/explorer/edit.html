@@ -101,6 +101,12 @@
         <span class="record-meta-label">Organization ID:</span>
         <span>{{ record.organization_id|default:"—" }}</span>
       </div>
+      <div class="record-meta-item">
+        <span class="record-meta-label">Public:</span>
+        <span class="{% if record.public %}text-green-600 font-semibold{% else %}text-red-600 font-semibold{% endif %}">
+          {{ record.public|yesno:"True,False,—" }}
+        </span>
+      </div>
     </div>
 
     <!-- Edit Form -->

@@ -63,21 +63,21 @@ class RecordListView(LoginRequiredMixin, SingleTableView):
         if self._all_records_cache is not None:
             return self._all_records_cache
 
-        # Check for context - API requires at least one of org/program/opp
+        # Check for context - if no context, fetch public records instead
         labs_context = getattr(self.request, "labs_context", {})
-        if (
-            not labs_context.get("opportunity_id")
-            and not labs_context.get("program_id")
-            and not labs_context.get("organization_id")
-        ):
-            logger.warning("No labs context selected")
-            return []
+        has_context = (
+            labs_context.get("opportunity_id") or labs_context.get("program_id") or labs_context.get("organization_id")
+        )
 
         # Fetch all records once (no filters - we'll filter in Python)
         try:
             data_access = RecordExplorerDataAccess(request=self.request)
             try:
-                self._all_records_cache = data_access.get_all_records()
+                if has_context:
+                    self._all_records_cache = data_access.get_all_records()
+                else:
+                    # No context selected - fetch public records
+                    self._all_records_cache = data_access.get_public_records()
             finally:
                 data_access.close()
         except Exception as e:

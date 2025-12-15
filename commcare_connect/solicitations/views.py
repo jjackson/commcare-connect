@@ -13,7 +13,7 @@ from django_tables2 import SingleTableView
 
 from .data_access import SolicitationDataAccess
 from .forms import SolicitationForm, SolicitationResponseForm, SolicitationReviewForm
-from .models import ResponseRecord, ReviewRecord, SolicitationRecord
+from .models import DeliveryTypeDescriptionRecord, ResponseRecord, ReviewRecord, SolicitationRecord
 
 # =============================================================================
 # Permission Mixins (following established patterns)
@@ -246,13 +246,10 @@ class SolicitationResponsesListView(SingleTableView):
         return context
 
 
-class SolicitationListView(ListView):
+class SolicitationListView(LoginRequiredMixin, ListView):
     """
     Public list view of all publicly listed solicitations using LocalLabsRecords.
-
-    Note: Public listings are not yet supported by the production API.
-    This view shows a "coming soon" message until the API supports
-    querying publicly listed records without a scope filter.
+    Any authenticated user can view public solicitations.
     """
 
     model = SolicitationRecord
@@ -261,16 +258,43 @@ class SolicitationListView(ListView):
     paginate_by = 12
 
     def get_queryset(self):
-        # Public listings not yet supported - API requires org/program/opp scope
-        return []
+        try:
+            data_access = SolicitationDataAccess(request=self.request)
+            solicitation_type = self.kwargs.get("type")
+            delivery_type_slug = self.request.GET.get("delivery_type")
+
+            # Get public solicitations
+            solicitations = data_access.get_public_solicitations(
+                status="active",
+                delivery_type_slug=delivery_type_slug,
+            )
+
+            # Filter by solicitation type if specified
+            if solicitation_type and solicitation_type != "all":
+                solicitations = [s for s in solicitations if s.solicitation_type == solicitation_type]
+
+            return solicitations
+        except Exception:
+            # If API fails, return empty list
+            return []
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["current_type"] = self.kwargs.get("type", "all")
-        context["coming_soon"] = True
-        context["total_active"] = 0
-        context["eoi_count"] = 0
-        context["rfp_count"] = 0
+        context["coming_soon"] = False
+        context["delivery_type_filter"] = self.request.GET.get("delivery_type", "")
+
+        # Count totals
+        solicitations = context.get("solicitations", [])
+        if isinstance(solicitations, list):
+            context["total_active"] = len(solicitations)
+            context["eoi_count"] = len([s for s in solicitations if s.solicitation_type == "eoi"])
+            context["rfp_count"] = len([s for s in solicitations if s.solicitation_type == "rfp"])
+        else:
+            context["total_active"] = 0
+            context["eoi_count"] = 0
+            context["rfp_count"] = 0
+
         return context
 
 
@@ -662,10 +686,16 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
         # Pass user for form setup (even though program field is removed)
         kwargs["user"] = self.request.user
 
+        # Pass data_access for dynamic delivery type choices
+        kwargs["data_access"] = SolicitationDataAccess(request=self.request)
+
         # For labs: populate form with JSON data for editing
         if self.object:
             # Populate form with JSON data for editing
             initial_data = self.object.data.copy()
+            # Map delivery_type_slug to delivery_type field
+            if "delivery_type_slug" in initial_data:
+                initial_data["delivery_type"] = initial_data["delivery_type_slug"]
             kwargs["initial"] = initial_data
 
         return kwargs
@@ -752,6 +782,7 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
             "solicitation_type": form.cleaned_data.get("solicitation_type", "eoi"),
             "status": form.cleaned_data.get("status", "draft"),
             "is_publicly_listed": form.cleaned_data.get("is_publicly_listed", True),
+            "delivery_type_slug": form.cleaned_data.get("delivery_type", ""),
             "application_deadline": str(form.cleaned_data.get("application_deadline", "")),
             "expected_start_date": str(form.cleaned_data.get("expected_start_date", ""))
             if form.cleaned_data.get("expected_start_date")
@@ -788,3 +819,91 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
     def get_success_url(self):
         # Redirect to manage list after creating/editing solicitation
         return reverse("solicitations:manage_list")
+
+
+# =============================================================================
+# Delivery Type Views (Public)
+# =============================================================================
+
+
+class DeliveryTypesListView(LoginRequiredMixin, ListView):
+    """
+    Public list view of all delivery types with solicitation counts.
+    Any authenticated user can view delivery types.
+    """
+
+    model = DeliveryTypeDescriptionRecord
+    template_name = "solicitations/delivery_types_list.html"
+    context_object_name = "delivery_types"
+
+    def get_queryset(self):
+        try:
+            data_access = SolicitationDataAccess(request=self.request)
+            return data_access.get_delivery_types(active_only=True)
+        except Exception:
+            return []
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Get solicitation counts per delivery type
+        try:
+            data_access = SolicitationDataAccess(request=self.request)
+            all_solicitations = data_access.get_public_solicitations(status="active")
+
+            # Count solicitations by delivery type
+            counts = {}
+            for sol in all_solicitations:
+                slug = sol.delivery_type_slug
+                if slug:
+                    counts[slug] = counts.get(slug, 0) + 1
+
+            # Add count to each delivery type for template access
+            delivery_types = context.get("delivery_types", [])
+            for dt in delivery_types:
+                dt.solicitation_count = counts.get(dt.slug, 0)
+
+            context["total_solicitations"] = len(all_solicitations)
+        except Exception:
+            context["total_solicitations"] = 0
+
+        return context
+
+
+class DeliveryTypeDetailView(LoginRequiredMixin, DetailView):
+    """
+    Public detail view of a delivery type with its solicitations.
+    Any authenticated user can view delivery type details.
+    """
+
+    model = DeliveryTypeDescriptionRecord
+    template_name = "solicitations/delivery_type_detail.html"
+    context_object_name = "delivery_type"
+
+    def get_object(self, queryset=None):
+        slug = self.kwargs.get("slug")
+        try:
+            data_access = SolicitationDataAccess(request=self.request)
+            delivery_type = data_access.get_delivery_type_by_slug(slug)
+            if not delivery_type:
+                raise Http404("Delivery type not found")
+            return delivery_type
+        except Http404:
+            raise
+        except Exception:
+            raise Http404("Delivery type not found")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Get solicitations for this delivery type
+        try:
+            data_access = SolicitationDataAccess(request=self.request)
+            context["solicitations"] = data_access.get_solicitations_by_delivery_type(
+                delivery_type_slug=self.object.slug,
+                status="active",
+            )
+        except Exception:
+            context["solicitations"] = []
+
+        return context
