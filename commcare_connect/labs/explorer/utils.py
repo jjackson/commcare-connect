@@ -188,3 +188,97 @@ def truncate_json_preview(data: dict, max_length: int = 100) -> str:
     if len(json_str) <= max_length:
         return json_str
     return json_str[:max_length] + "..."
+
+
+# =============================================================================
+# Cache Management Utilities
+# =============================================================================
+
+
+def format_cache_size(size_bytes: int) -> str:
+    """
+    Format byte size as human-readable string.
+
+    Args:
+        size_bytes: Size in bytes
+
+    Returns:
+        Formatted string (e.g., "1.5 MB", "512 KB", "2.3 GB")
+    """
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+
+
+def get_cache_type_display(cache_type: str) -> str:
+    """
+    Get human-readable display name for cache type.
+
+    Args:
+        cache_type: Cache type identifier ("raw", "computed_visit", "computed_flw")
+
+    Returns:
+        Human-readable name
+    """
+    display_names = {
+        "raw": "Raw Visits",
+        "computed_visit": "Computed Visits",
+        "computed_flw": "Computed FLWs",
+    }
+    return display_names.get(cache_type, cache_type)
+
+
+def truncate_config_hash(config_hash: str | None, length: int = 8) -> str:
+    """
+    Truncate config hash for display.
+
+    Args:
+        config_hash: Full config hash or None
+        length: Number of characters to show
+
+    Returns:
+        Truncated hash or "N/A" if None
+    """
+    if not config_hash:
+        return "N/A"
+    return config_hash[:length]
+
+
+def is_cache_expired(expires_at: datetime) -> bool:
+    """
+    Check if cache entry is expired.
+
+    Args:
+        expires_at: Expiration datetime
+
+    Returns:
+        True if expired, False otherwise
+    """
+    from django.utils import timezone
+
+    return expires_at < timezone.now()
+
+
+def is_cache_expiring_soon(expires_at: datetime, threshold_minutes: int = 10) -> bool:
+    """
+    Check if cache entry is expiring soon.
+
+    Args:
+        expires_at: Expiration datetime
+        threshold_minutes: Minutes before expiration to consider "expiring soon"
+
+    Returns:
+        True if expiring soon, False otherwise
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    now = timezone.now()
+    threshold = now + timedelta(minutes=threshold_minutes)
+    return now < expires_at <= threshold

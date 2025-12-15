@@ -7,147 +7,63 @@ from collections.abc import Generator
 
 import httpx
 from django.conf import settings
-from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
-from django.views.generic import View
-from django_tables2 import SingleTableView
+from django.urls import reverse
+from django.views.generic import TemplateView, View
 
 from commcare_connect.custom_analysis.kmc import timeline_config
 from commcare_connect.custom_analysis.kmc.pipeline_config import KMC_PIPELINE_CONFIG
-from commcare_connect.custom_analysis.kmc.tables import KMCChildTable
-from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, BaseSSEStreamView, send_sse_event
-from commcare_connect.labs.configurable_ui.views import (
-    GenericTimelineDataStreamView,
-    GenericTimelineDataView,
-    GenericTimelineDetailView,
-)
+from commcare_connect.labs.configurable_ui.views import GenericTimelineDataStreamView, GenericTimelineDetailView
 from commcare_connect.opportunity.models import BlobMeta
 
 logger = logging.getLogger(__name__)
 
 
-class KMCTimelineListView(LoginRequiredMixin, SingleTableView):
-    """List all KMC children - uses SSE for initial load, then django-tables2 for rendering."""
+class KMCTimelineListView(LoginRequiredMixin, TemplateView):
+    """
+    List all KMC children - uses client-side rendering with Alpine.js.
+
+    Pattern: Page loads instantly, SSE streams data, Alpine.js renders table.
+    This avoids the complexity of django-tables2 needing data synchronously.
+    """
 
     template_name = "custom_analysis/kmc/child_list.html"
-    table_class = KMCChildTable
-    context_table_name = "table"
-    paginate_by = 50
-
-    def get_queryset(self):
-        """Load children from cache (fast) or return empty to trigger SSE load."""
-        labs_context = getattr(self.request, "labs_context", {})
-        opportunity_id = labs_context.get("opportunity_id")
-
-        if not opportunity_id:
-            messages.warning(self.request, "Please select an opportunity from the labs context.")
-            return []
-
-        # Check for OAuth token
-        labs_oauth = self.request.session.get("labs_oauth", {})
-        if not labs_oauth.get("access_token"):
-            messages.warning(self.request, "Please log in to CommCare Connect to load data.")
-            return []
-
-        # Check if refresh is requested - force SSE reload
-        if self.request.GET.get("refresh"):
-            logger.info(f"[KMC List] Refresh requested, forcing SSE load for opp {opportunity_id}")
-            return []
-
-        # Check if data is already cached
-        from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
-
-        pipeline = AnalysisPipeline(self.request)
-
-        # Quick cache check - if cached, load it
-        try:
-            result = pipeline.run_analysis(KMC_PIPELINE_CONFIG, opportunity_id=opportunity_id)
-
-            # If we got here quickly (from cache), process and return
-            if result and result.rows:
-                logger.info(f"[KMC List] Loading {len(result.rows)} visits from cache")
-
-                # Get FLW display names
-                try:
-                    flw_names = get_flw_names_for_opportunity(self.request)
-                except Exception as e:
-                    logger.warning(f"Failed to fetch FLW names: {e}")
-                    flw_names = {}
-
-                # Group by child_entity_id
-                children_dict = {}
-                for row in result.rows:
-                    child_id = row.entity_id or row.computed.get("child_entity_id")
-                    if not child_id:
-                        continue
-
-                    if child_id not in children_dict:
-                        children_dict[child_id] = {
-                            "child_id": child_id,
-                            "entity_id": child_id,
-                            "child_name": row.computed.get("child_name"),
-                            "entity_name": row.entity_name or row.computed.get("entity_name"),
-                            "flw_username": row.username,
-                            "flw_display_name": flw_names.get(row.username, row.username),
-                            "visits": [],
-                        }
-
-                    children_dict[child_id]["visits"].append(
-                        {
-                            "weight": row.computed.get("weight"),
-                            "visit_date": row.computed.get("date")
-                            or (row.visit_date.isoformat() if row.visit_date else None),
-                            "visit_number": row.computed.get("visit_number"),
-                        }
-                    )
-
-                # Calculate aggregates
-                children_list = []
-                for child_id, child_data in children_dict.items():
-                    visits = child_data["visits"]
-                    if not visits:
-                        continue
-
-                    visits.sort(key=lambda v: v.get("visit_date") or "")
-                    weights = [v.get("weight") for v in visits if v.get("weight")]
-                    starting_weight = weights[0] if weights else None
-                    current_weight = weights[-1] if weights else None
-
-                    children_list.append(
-                        {
-                            "child_id": child_id,
-                            "entity_id": child_id,
-                            "child_name": child_data["child_name"],
-                            "entity_name": child_data["entity_name"],
-                            "flw_username": child_data["flw_username"],
-                            "flw_display_name": child_data["flw_display_name"],
-                            "visit_count": len(visits),
-                            "starting_weight": starting_weight,
-                            "current_weight": current_weight,
-                            "last_visit_date": visits[-1].get("visit_date") if visits else None,
-                        }
-                    )
-
-                logger.info(f"[KMC List] Returning {len(children_list)} children")
-                return children_list
-
-        except Exception as e:
-            logger.info(f"[KMC List] Cache miss or error, will trigger SSE load: {e}")
-
-        # Return empty - template will trigger SSE load
-        return []
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
         labs_context = getattr(self.request, "labs_context", {})
-        context["opportunity_id"] = labs_context.get("opportunity_id")
+        opportunity_id = labs_context.get("opportunity_id")
 
-        # Signal to template whether to trigger SSE load
-        context["needs_sse_load"] = len(context["table"].data) == 0
+        context["opportunity_id"] = opportunity_id
+        context["opportunity_name"] = labs_context.get("opportunity_name")
+        context["has_context"] = bool(opportunity_id)
+
+        # Check for OAuth token
+        labs_oauth = self.request.session.get("labs_oauth", {})
+        context["has_oauth"] = bool(labs_oauth.get("access_token"))
+
+        # Provide SSE stream URL for async data loading
+        if opportunity_id:
+            context["stream_url"] = reverse("kmc:child_list_stream")
+
+        # Provide timeline URL base for building child-specific URLs
+        # Use a placeholder that JavaScript will replace with the actual child_id
+        context["timeline_url_base"] = reverse("kmc:child_timeline", kwargs={"child_id": "__CHILD_ID__"})
+
+        # Provide linking field name for inspector queries
+        # For beneficiary_case_id, we need to query form_json path since it's not a base column
+        linking_field = KMC_PIPELINE_CONFIG.linking_field
+        context["linking_field"] = linking_field
+        if linking_field == "beneficiary_case_id":
+            # Query form_json for case_id (registration visits store it in form.case.@case_id)
+            context["inspector_query_template"] = "form_json->'form'->'case'->>'@case_id' = '{}'"
+        else:
+            # Default to entity_id which is a base column
+            context["inspector_query_template"] = "entity_id = '{}'"
 
         return context
 
@@ -156,13 +72,6 @@ class KMCTimelineDetailView(GenericTimelineDetailView):
     """Display timeline for a single KMC child."""
 
     api_url_name = "kmc:api_child_data_stream"
-
-
-class KMCTimelineDataView(GenericTimelineDataView):
-    """API endpoint for KMC child timeline data (legacy non-streaming)."""
-
-    config_module = timeline_config
-    pipeline_config = KMC_PIPELINE_CONFIG
 
 
 class KMCTimelineDataStreamView(GenericTimelineDataStreamView):
@@ -219,10 +128,16 @@ class KMCChildListStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     logger.warning(f"Failed to fetch FLW names: {e}")
                     flw_names = {}
 
-                # Group by child_entity_id (Connect's linking field)
+                # Group by linking_field from config (allows switching between entity_id and case_id)
+                # Default is entity_id, but can be set to beneficiary_case_id for twins
+                linking_field = KMC_PIPELINE_CONFIG.linking_field
                 children_dict = {}
                 for row in result.rows:
-                    child_id = row.entity_id or row.computed.get("child_entity_id")
+                    # Get child_id from linking_field (either base field or computed field)
+                    if linking_field == "entity_id":
+                        child_id = row.entity_id
+                    else:
+                        child_id = row.computed.get(linking_field)
                     if not child_id:
                         continue
 

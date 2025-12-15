@@ -281,6 +281,12 @@ class SQLBackend:
                 if key == "entity_id":
                     computed_qs = computed_qs.filter(entity_id=value)
                     logger.info(f"[SQL] Applying entity_id filter: {value}")
+                # Support filtering on computed fields stored in computed_fields JSON
+                # This enables linking by fields like beneficiary_case_id for twins
+                elif key in ["beneficiary_case_id", "child_entity_id"]:
+                    # Use Django's JSONB contains lookup for exact match
+                    computed_qs = computed_qs.filter(computed_fields__contains={key: value})
+                    logger.info(f"[SQL] Applying computed field filter: {key}={value}")
                 # Other filters could be added here as needed
                 else:
                     logger.warning(f"[SQL] Unknown filter key '{key}' - skipping")

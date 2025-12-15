@@ -25,9 +25,17 @@ KMC_WIDGETS = {
         widget_type="visit_history",
         title="Visit History",
         field_extractors={
+            "form_name": FieldExtractor(
+                "Form Name",
+                ["form.@name"],  # "Register KMC Beneficiary" or "Record Visit Details"
+            ),
+            "visit_type": FieldExtractor(
+                "Visit Type",
+                ["form.grp_kmc_visit.visit_type"],  # "KMC Visit" or "Additional Visit"
+            ),
             "visit_number": FieldExtractor(
-                "Visit",
-                ["form.grp_kmc_visit.visit_number", "form.case.update.kmc_status"],  # Fallback for registration
+                "Visit Number",
+                ["form.grp_kmc_visit.visit_number"],  # "1", "2", "Additional", etc.
             ),
             "date": FieldExtractor("Date", ["form.grp_kmc_visit.visit_date", "form.reg_date"], transform="date"),
             "time_end": FieldExtractor("Time End", ["form.meta.timeEnd", "timeEnd"]),

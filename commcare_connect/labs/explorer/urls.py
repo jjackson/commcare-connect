@@ -23,4 +23,8 @@ urlpatterns = [
     path("visit-inspector/query/", views.VisitInspectorQueryView.as_view(), name="visit_inspector_query"),
     path("visit-inspector/view/<int:visit_id>/", views.VisitViewView.as_view(), name="view_visit"),
     path("visit-inspector/download/<int:visit_id>/", views.DownloadVisitView.as_view(), name="download_visit"),
+    # Cache Manager
+    path("cache/", views.CacheManagerView.as_view(), name="cache_manager"),
+    path("cache/delete/", views.CacheDeleteView.as_view(), name="cache_delete"),
+    path("cache/stats/", views.CacheStatsAPIView.as_view(), name="cache_stats"),
 ]

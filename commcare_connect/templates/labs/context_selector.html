@@ -392,7 +392,16 @@ function labsContextSelector() {
           url.searchParams.set('opportunity_id', this.selectedOpp.id);
         }
 
-        window.location.href = url.toString();
+        const newUrl = url.toString();
+        const currentUrl = window.location.href;
+
+        // Force a full page reload with the new URL
+        // If URL is the same, force reload; otherwise navigate to new URL
+        if (newUrl === currentUrl) {
+          window.location.reload();
+        } else {
+          window.location.href = newUrl;
+        }
       }
     },
 

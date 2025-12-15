@@ -1,0 +1,512 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-7xl">
+  <!-- Header -->
+  <div class="mb-8">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">
+          <i class="fa-solid fa-database text-green-600 mr-3"></i>
+          Cache Manager
+        </h1>
+        <p class="text-gray-600">
+          Inspect and manage analysis cache entries
+        </p>
+      </div>
+      <a href="{% url 'explorer:index' %}" class="inline-flex items-center text-gray-600 hover:text-gray-900">
+        <i class="fa-solid fa-arrow-left mr-2"></i>
+        Back to Explorer
+      </a>
+    </div>
+  </div>
+
+  <!-- Summary Statistics -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+      <div class="text-sm text-gray-600 mb-1">Total Entries</div>
+      <div class="text-2xl font-bold text-gray-900">{{ total_entries }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+      <div class="text-sm text-gray-600 mb-1">Total Rows Cached</div>
+      <div class="text-2xl font-bold text-gray-900">{{ total_rows|default:"0" }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+      <div class="text-sm text-gray-600 mb-1">Expired Entries</div>
+      <div class="text-2xl font-bold text-red-600">{{ expired_count }}</div>
+    </div>
+  </div>
+
+  <!-- Filters and Actions -->
+  <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <form method="get" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <!-- Opportunity Filter -->
+        <div>
+          <label for="opportunity_id" class="block text-sm font-medium text-gray-700 mb-1">
+            Opportunity ID
+          </label>
+          <select name="opportunity_id" id="opportunity_id"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+            <option value="">All Opportunities</option>
+            {% for opp_id in all_opportunities %}
+              <option value="{{ opp_id }}" {% if opportunity_filter == opp_id|stringformat:"s" %}selected{% endif %}>
+                {{ opp_id }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Cache Type Filter -->
+        <div>
+          <label for="cache_type" class="block text-sm font-medium text-gray-700 mb-1">
+            Cache Type
+          </label>
+          <select name="cache_type" id="cache_type"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+            <option value="">All Types</option>
+            {% for cache_type in cache_types %}
+              <option value="{{ cache_type }}" {% if cache_type_filter == cache_type %}selected{% endif %}>
+                {% if cache_type == "raw" %}Raw Visits
+                {% elif cache_type == "computed_visit" %}Computed Visits
+                {% elif cache_type == "computed_flw" %}Computed FLWs
+                {% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Show Expired Filter -->
+        <div class="flex items-end">
+          <label class="flex items-center cursor-pointer">
+            <input type="checkbox" name="show_expired" class="mr-2 rounded"
+                   {% if show_expired_only %}checked{% endif %}>
+            <span class="text-sm font-medium text-gray-700">Show Expired Only</span>
+          </label>
+        </div>
+
+        <!-- Filter Button -->
+        <div class="flex items-end">
+          <button type="submit"
+                  class="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+            <i class="fa-solid fa-filter mr-2"></i>
+            Apply Filters
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Action Buttons -->
+    <div class="mt-4 pt-4 border-t border-gray-200">
+      <div class="flex flex-wrap gap-2">
+        <button onclick="deleteSelected()"
+                class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors">
+          <i class="fa-solid fa-trash mr-2"></i>
+          Delete Selected
+        </button>
+        <button onclick="showDeleteByOpportunityModal()"
+                class="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors">
+          <i class="fa-solid fa-building mr-2"></i>
+          Delete by Opportunity
+        </button>
+        <button onclick="showDeleteByConfigModal()"
+                class="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors">
+          <i class="fa-solid fa-cog mr-2"></i>
+          Delete by Config
+        </button>
+        <button onclick="deleteExpired()"
+                class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors">
+          <i class="fa-solid fa-clock mr-2"></i>
+          Clear Expired
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cache Entries Table -->
+  <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left">
+              <input type="checkbox" id="select-all" onchange="toggleSelectAll(this)"
+                     class="rounded">
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Opportunity
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Cache Type
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Config Hash
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Row Count
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Expires At
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Created At
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Visit Count
+            </th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {% for entry in cache_entries %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3">
+              <input type="checkbox" class="cache-entry-checkbox rounded"
+                     data-opportunity-id="{{ entry.opportunity_id }}"
+                     data-cache-type="{{ entry.cache_type }}"
+                     data-config-hash="{{ entry.config_hash|default:'' }}">
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-900">
+              {{ entry.opportunity_id }}
+            </td>
+            <td class="px-4 py-3 text-sm">
+              <span class="px-2 py-1 rounded-full text-xs font-medium
+                {% if entry.cache_type == 'raw' %}bg-blue-100 text-blue-800
+                {% elif entry.cache_type == 'computed_visit' %}bg-green-100 text-green-800
+                {% else %}bg-purple-100 text-purple-800{% endif %}">
+                {{ entry.cache_type_display }}
+              </span>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-600 font-mono">
+              {% if entry.config_hash %}
+                <span title="{{ entry.config_hash }}" class="cursor-help">
+                  {{ entry.config_hash_short }}
+                </span>
+              {% else %}
+                <span class="text-gray-400">N/A</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-900">
+              {{ entry.row_count|default:"0" }}
+            </td>
+            <td class="px-4 py-3 text-sm">
+              {% if entry.is_expired %}
+                <span class="text-red-600 font-medium">
+                  {{ entry.expires_at|date:"Y-m-d H:i" }} (expired)
+                </span>
+              {% elif entry.is_expiring_soon %}
+                <span class="text-yellow-600 font-medium">
+                  {{ entry.expires_at|date:"Y-m-d H:i" }} (soon)
+                </span>
+              {% else %}
+                <span class="text-gray-900">
+                  {{ entry.expires_at|date:"Y-m-d H:i" }}
+                </span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-600">
+              {{ entry.created_at|date:"Y-m-d H:i" }}
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-900">
+              {{ entry.visit_count|default:"0" }}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+              No cache entries found
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Delete by Opportunity Modal -->
+<div id="deleteOpportunityModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+  <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+    <h3 class="text-lg font-bold text-gray-900 mb-4">Delete Cache by Opportunity</h3>
+    <p class="text-sm text-gray-600 mb-4">
+      This will delete ALL cache (raw, computed visits, and FLW) for the selected opportunity.
+    </p>
+    <div class="mb-4">
+      <label for="deleteOppId" class="block text-sm font-medium text-gray-700 mb-2">
+        Select Opportunity
+      </label>
+      <select id="deleteOppId" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+        <option value="">-- Select --</option>
+        {% for opp_id in all_opportunities %}
+          <option value="{{ opp_id }}">Opportunity {{ opp_id }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="confirmDeleteByOpportunity()"
+              class="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+        Delete
+      </button>
+      <button onclick="hideDeleteByOpportunityModal()"
+              class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete by Config Modal -->
+<div id="deleteConfigModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+  <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+    <h3 class="text-lg font-bold text-gray-900 mb-4">Delete Cache by Config</h3>
+    <p class="text-sm text-gray-600 mb-4">
+      This will delete computed cache (visits and FLW) for a specific opportunity and config combination.
+    </p>
+    <div class="mb-4">
+      <label for="deleteConfigOppId" class="block text-sm font-medium text-gray-700 mb-2">
+        Opportunity ID
+      </label>
+      <select id="deleteConfigOppId" class="w-full px-3 py-2 border border-gray-300 rounded-md" onchange="loadConfigsForOpportunity()">
+        <option value="">-- Select --</option>
+        {% for opp_id in all_opportunities %}
+          <option value="{{ opp_id }}">{{ opp_id }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-4">
+      <label for="deleteConfigHash" class="block text-sm font-medium text-gray-700 mb-2">
+        Config Hash
+      </label>
+      <select id="deleteConfigHash" class="w-full px-3 py-2 border border-gray-300 rounded-md" disabled>
+        <option value="">-- Select opportunity first --</option>
+      </select>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="confirmDeleteByConfig()"
+              class="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+        Delete
+      </button>
+      <button onclick="hideDeleteByConfigModal()"
+              class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// CSRF token for Django
+const csrftoken = '{{ csrf_token }}';
+
+// Toggle select all checkboxes
+function toggleSelectAll(checkbox) {
+  const checkboxes = document.querySelectorAll('.cache-entry-checkbox');
+  checkboxes.forEach(cb => cb.checked = checkbox.checked);
+}
+
+// Delete selected entries
+function deleteSelected() {
+  const checkboxes = document.querySelectorAll('.cache-entry-checkbox:checked');
+  if (checkboxes.length === 0) {
+    alert('Please select at least one cache entry to delete');
+    return;
+  }
+
+  if (!confirm(`Are you sure you want to delete ${checkboxes.length} cache entries?`)) {
+    return;
+  }
+
+  const entries = [];
+  checkboxes.forEach(cb => {
+    entries.push({
+      opportunity_id: parseInt(cb.dataset.opportunityId),
+      cache_type: cb.dataset.cacheType,
+      config_hash: cb.dataset.configHash || null
+    });
+  });
+
+  fetch("{% url 'explorer:cache_delete' %}", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-CSRFToken': csrftoken
+    },
+    body: new URLSearchParams({
+      mode: 'selective',
+      selected_entries: JSON.stringify(entries)
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      alert(data.message);
+      location.reload();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(error => {
+    alert('Error: ' + error);
+  });
+}
+
+// Delete expired entries
+function deleteExpired() {
+  if (!confirm('Are you sure you want to delete all expired cache entries?')) {
+    return;
+  }
+
+  fetch("{% url 'explorer:cache_delete' %}", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-CSRFToken': csrftoken
+    },
+    body: new URLSearchParams({
+      mode: 'expired'
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      alert(data.message);
+      location.reload();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(error => {
+    alert('Error: ' + error);
+  });
+}
+
+// Modal functions for delete by opportunity
+function showDeleteByOpportunityModal() {
+  document.getElementById('deleteOpportunityModal').classList.remove('hidden');
+}
+
+function hideDeleteByOpportunityModal() {
+  document.getElementById('deleteOpportunityModal').classList.add('hidden');
+}
+
+function confirmDeleteByOpportunity() {
+  const oppId = document.getElementById('deleteOppId').value;
+  if (!oppId) {
+    alert('Please select an opportunity');
+    return;
+  }
+
+  if (!confirm(`Are you sure you want to delete ALL cache for opportunity ${oppId}?`)) {
+    return;
+  }
+
+  fetch("{% url 'explorer:cache_delete' %}", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-CSRFToken': csrftoken
+    },
+    body: new URLSearchParams({
+      mode: 'opportunity',
+      opportunity_id: oppId
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      alert(data.message);
+      hideDeleteByOpportunityModal();
+      location.reload();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(error => {
+    alert('Error: ' + error);
+  });
+}
+
+// Modal functions for delete by config
+function showDeleteByConfigModal() {
+  document.getElementById('deleteConfigModal').classList.remove('hidden');
+}
+
+function hideDeleteByConfigModal() {
+  document.getElementById('deleteConfigModal').classList.add('hidden');
+}
+
+function loadConfigsForOpportunity() {
+  const oppId = document.getElementById('deleteConfigOppId').value;
+  const configSelect = document.getElementById('deleteConfigHash');
+
+  if (!oppId) {
+    configSelect.disabled = true;
+    configSelect.innerHTML = '<option value="">-- Select opportunity first --</option>';
+    return;
+  }
+
+  // Get configs from current cache entries
+  const configs = new Set();
+  {% for entry in cache_entries %}
+    if ({{ entry.opportunity_id }} == parseInt(oppId) && '{{ entry.config_hash|default:"" }}') {
+      configs.add('{{ entry.config_hash }}');
+    }
+  {% endfor %}
+
+  if (configs.size === 0) {
+    configSelect.innerHTML = '<option value="">-- No configs found --</option>';
+    configSelect.disabled = true;
+  } else {
+    configSelect.innerHTML = '<option value="">-- Select --</option>';
+    configs.forEach(hash => {
+      const option = document.createElement('option');
+      option.value = hash;
+      option.textContent = hash.substring(0, 8) + '... (' + hash + ')';
+      configSelect.appendChild(option);
+    });
+    configSelect.disabled = false;
+  }
+}
+
+function confirmDeleteByConfig() {
+  const oppId = document.getElementById('deleteConfigOppId').value;
+  const configHash = document.getElementById('deleteConfigHash').value;
+
+  if (!oppId || !configHash) {
+    alert('Please select both opportunity and config');
+    return;
+  }
+
+  if (!confirm(`Are you sure you want to delete cache for opportunity ${oppId} and config ${configHash.substring(0, 8)}?`)) {
+    return;
+  }
+
+  fetch("{% url 'explorer:cache_delete' %}", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-CSRFToken': csrftoken
+    },
+    body: new URLSearchParams({
+      mode: 'config',
+      opportunity_id: oppId,
+      config_hash: configHash
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      alert(data.message);
+      hideDeleteByConfigModal();
+      location.reload();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(error => {
+    alert('Error: ' + error);
+  });
+}
+</script>
+
+{% endblock %}

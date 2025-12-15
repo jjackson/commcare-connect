@@ -1,23 +1,30 @@
 """
 Analysis pipeline - the single entry point for all analysis data access.
 
-Usage:
-    from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
+Usage Patterns:
+--------------
 
-    # Raw data access (replaces api_cache.py)
+Raw data access (replaces api_cache.py):
     pipeline = AnalysisPipeline(request)
     visits = pipeline.fetch_raw_visits(opportunity_id=814)
     visits_slim = pipeline.fetch_raw_visits(opportunity_id=814, skip_form_json=True)
 
-    # Analysis with streaming progress
-    for event_type, event_data in pipeline.stream_analysis(config):
-        if event_type == "status":
-            yield format_sse(event_data["message"])
-        elif event_type == "result":
-            return event_data
+Web Views (SSE Streaming):
+    # Use stream_analysis() - it's fast when cached, shows progress when not
+    pipeline = AnalysisPipeline(request)
+    for event_type, data in pipeline.stream_analysis(config):
+        if event_type == EVENT_STATUS:
+            yield sse_event(data["message"])
+        elif event_type == EVENT_RESULT:
+            return data
 
-    # Synchronous analysis
-    result = pipeline.run_analysis(config)
+Non-Web Contexts (Synchronous):
+    # Use stream_analysis_ignore_events() for tests, scripts, enrichment
+    pipeline = AnalysisPipeline(request)
+    result = pipeline.stream_analysis_ignore_events(config)
+
+Note: stream_analysis() is ALWAYS fast when data is cached (typically <1s),
+      so web views don't need to check cache existence beforehand.
 
 Backend selection is based on settings.LABS_ANALYSIS_BACKEND:
 - "python_redis" (default): Redis/file caching with pandas computation
@@ -167,6 +174,31 @@ class AnalysisPipeline:
             return False
         return self.backend.has_valid_raw_cache(opp_id, self.visit_count)
 
+    def has_valid_processed_cache(self, config: AnalysisPipelineConfig, opportunity_id: int | None = None) -> bool:
+        """
+        Check if valid processed/computed cache exists for the config.
+
+        This is the correct check for views that want to decide whether to
+        trigger SSE loading vs render from cache. Unlike has_valid_raw_cache(),
+        this checks the appropriate processed cache level based on config.terminal_stage.
+
+        Args:
+            config: Analysis configuration (determines which cache level to check)
+            opportunity_id: Opportunity ID (defaults to labs_context)
+
+        Returns:
+            True if processed cache exists and is valid, False otherwise
+        """
+        opp_id = opportunity_id or self.opportunity_id
+        if not opp_id:
+            return False
+
+        terminal_stage = config.terminal_stage
+        if terminal_stage == CacheStage.AGGREGATED:
+            return self.backend.get_cached_flw_result(opp_id, config, self.visit_count) is not None
+        else:
+            return self.backend.get_cached_visit_result(opp_id, config, self.visit_count) is not None
+
     def filter_visits_for_audit(
         self,
         opportunity_id: int | None = None,
@@ -219,13 +251,19 @@ class AnalysisPipeline:
     # Analysis
     # -------------------------------------------------------------------------
 
-    def run_analysis(
+    def stream_analysis_ignore_events(
         self,
         config: AnalysisPipelineConfig,
         opportunity_id: int | None = None,
     ) -> FLWAnalysisResult | VisitAnalysisResult:
         """
-        Run analysis synchronously.
+        Run analysis synchronously, ignoring progress events.
+
+        Convenience wrapper around stream_analysis() for non-web contexts
+        (tests, scripts, enrichment) that don't need progress updates.
+
+        For web views, use stream_analysis() directly to provide real-time
+        progress feedback via SSE.
 
         Args:
             config: Analysis configuration
@@ -536,7 +574,7 @@ def run_analysis_pipeline(
     """
     Synchronous wrapper around stream_analysis_pipeline.
 
-    DEPRECATED: Use AnalysisPipeline(request).run_analysis(config) instead.
+    DEPRECATED: Use AnalysisPipeline(request).stream_analysis_ignore_events(config) instead.
     """
     pipeline = AnalysisPipeline(request)
-    return pipeline.run_analysis(config, opportunity_id)
+    return pipeline.stream_analysis_ignore_events(config, opportunity_id)
