@@ -10,7 +10,7 @@ def backfill_invoice_status(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("opportunity", "0088_paymentinvoice_status"),
+        ("opportunity", "0089_paymentinvoice_status"),
     ]
 
     operations = [
