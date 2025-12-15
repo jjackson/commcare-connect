@@ -6,6 +6,7 @@ from uuid import uuid4
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Count, F, Q, Sum
+from django.db.models.expressions import RawSQL
 from django.utils.dateparse import parse_datetime
 from django.utils.functional import cached_property
 from django.utils.timezone import now
@@ -465,6 +466,10 @@ class ExchangeRate(models.Model):
 
 
 class PaymentInvoice(models.Model):
+    class InvoiceType(models.TextChoices):
+        service_delivery = "service_delivery", gettext("Service Delivery")
+        custom = "custom", gettext("Custom")
+
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     amount_usd = models.DecimalField(max_digits=10, decimal_places=2, null=True)
@@ -472,6 +477,10 @@ class PaymentInvoice(models.Model):
     invoice_number = models.CharField(max_length=50)
     service_delivery = models.BooleanField(default=True)
     exchange_rate = models.ForeignKey(ExchangeRate, on_delete=models.DO_NOTHING, null=True)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    title = models.CharField(max_length=255, null=True, blank=True)
+    notes = models.TextField(null=True, blank=True)
 
     class Meta:
         unique_together = ("opportunity", "invoice_number")
@@ -536,6 +545,7 @@ class CompletedWork(models.Model):
     saved_org_payment_accrued_usd = models.DecimalField(
         max_digits=10, decimal_places=2, default=0, help_text="Payment accrued for the organization in USD."
     )
+    invoice = models.ForeignKey(PaymentInvoice, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         unique_together = ("opportunity_access", "entity_id", "payment_unit")
@@ -633,7 +643,37 @@ class VisitReviewStatus(models.TextChoices):
     disagree = "disagree", gettext("Disagree")
 
 
+class UserVisitQuerySet(models.QuerySet):
+    def with_any_flags(self, flags):
+        from commcare_connect.utils.flags import Flags
+
+        # flags should be a subset of Flags
+        allowed_flags = {flag.value for flag in Flags}
+        flags = list(set(flags) & allowed_flags)
+
+        if not flags:
+            return self
+
+        conditions = " || ".join([f"@[0] == $f{i}" for i in range(len(flags))])
+
+        params = []
+        for i, f in enumerate(flags):
+            params.extend([f"f{i}", f])
+
+        sql = f"""
+            jsonb_path_exists(
+                flag_reason,
+                '$.flags[*] ? ({conditions})',
+                jsonb_build_object({', '.join(['%s'] * len(params))})
+            )
+        """
+
+        return self.annotate(has_flag=RawSQL(sql, params)).filter(has_flag=True)
+
+
 class UserVisit(XFormBaseModel):
+    objects = UserVisitQuerySet.as_manager()
+
     opportunity = models.ForeignKey(
         Opportunity,
         on_delete=models.CASCADE,
@@ -867,6 +907,7 @@ class LabsRecord(models.Model):
     labs_record = models.ForeignKey("LabsRecord", on_delete=models.CASCADE, null=True)
     type = models.CharField(max_length=255)
     data = models.JSONField()
+    public = models.BooleanField(default=False)
 
     def __str__(self):
         return f"ExperimentRecord({self.user}, {self.organization}, {self.opportunity}, {self.experiment})"
