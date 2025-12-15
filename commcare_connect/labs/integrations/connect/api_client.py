@@ -77,6 +77,7 @@ class LabsRecordAPIClient:
         program_id: int | None = None,
         labs_record_id: int | None = None,
         model_class: type[LocalLabsRecord] | None = None,
+        public: bool | None = None,
         **data_filters,
     ) -> list[LocalLabsRecord]:
         """Fetch records from production API.
@@ -89,6 +90,7 @@ class LabsRecordAPIClient:
             program_id: Filter by program ID
             labs_record_id: Filter by parent record ID
             model_class: Optional proxy model class to instantiate (e.g., AuditSessionRecord)
+            public: Filter by public flag (True = public records queryable without scope)
             **data_filters: Additional filters for JSON data fields
 
         Returns:
@@ -111,19 +113,27 @@ class LabsRecordAPIClient:
             if username:
                 params["username"] = username
 
+            # Handle public filter:
+            # When public=True, we DON'T add scope params and DON'T send public param
+            # The server automatically filters for public records when no scope is provided
+            # When public=False or None, we use scope params as normal
+            skip_scope = public is True
+
             # Add scope filters from client initialization or method parameters
             # NOTE: organization_id must be an integer ID, not a slug
             # labs_context now provides integer IDs extracted from OAuth data
-            if organization_id and isinstance(organization_id, int):
-                params["organization_id"] = organization_id
-            elif self.organization_id and isinstance(self.organization_id, int):
-                params["organization_id"] = self.organization_id
-            if program_id:
-                params["program_id"] = program_id
-            elif self.program_id:
-                params["program_id"] = self.program_id
-            if self.opportunity_id:
-                params["opportunity_id"] = self.opportunity_id
+            # Skip scope params when requesting public records
+            if not skip_scope:
+                if organization_id and isinstance(organization_id, int):
+                    params["organization_id"] = organization_id
+                elif self.organization_id and isinstance(self.organization_id, int):
+                    params["organization_id"] = self.organization_id
+                if program_id:
+                    params["program_id"] = program_id
+                elif self.program_id:
+                    params["program_id"] = self.program_id
+                if self.opportunity_id:
+                    params["opportunity_id"] = self.opportunity_id
             if labs_record_id:
                 params["labs_record_id"] = labs_record_id
 
@@ -180,6 +190,7 @@ class LabsRecordAPIClient:
         username: str | None = None,
         program_id: int | None = None,
         labs_record_id: int | None = None,
+        public: bool = False,
     ) -> LocalLabsRecord:
         """Create a new record in production.
 
@@ -190,6 +201,7 @@ class LabsRecordAPIClient:
             username: Username to associate record with
             program_id: Program ID
             labs_record_id: Parent record ID
+            public: Whether record is publicly queryable without scope
 
         Returns:
             Created LocalLabsRecord instance
@@ -201,6 +213,7 @@ class LabsRecordAPIClient:
             "experiment": experiment,
             "type": type,
             "data": data,
+            "public": public,
         }
 
         if username:

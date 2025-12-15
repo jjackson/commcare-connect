@@ -11,6 +11,45 @@ from datetime import datetime
 from commcare_connect.labs.models import LocalLabsRecord
 
 
+class DeliveryTypeDescriptionRecord(LocalLabsRecord):
+    """Proxy model for DeliveryTypeDescription-type LocalLabsRecords.
+
+    Stores delivery type metadata for categorizing solicitations.
+    These records are always public so all authenticated users can view them.
+    Matches production DeliveryType slugs but stores additional description data.
+    """
+
+    @property
+    def name(self):
+        """Display name for the delivery type."""
+        return self.data.get("name", "")
+
+    @property
+    def slug(self):
+        """URL-safe slug identifier (matches production DeliveryType slugs)."""
+        return self.data.get("slug", "")
+
+    @property
+    def description(self):
+        """Brief description for card display."""
+        return self.data.get("description", "")
+
+    @property
+    def long_description(self):
+        """Detailed description for detail page (supports markdown)."""
+        return self.data.get("long_description", "")
+
+    @property
+    def icon(self):
+        """FontAwesome icon class (e.g., 'fa-solid fa-baby')."""
+        return self.data.get("icon", "fa-solid fa-folder")
+
+    @property
+    def is_active(self):
+        """Whether this delivery type is active and should be shown."""
+        return self.data.get("is_active", True)
+
+
 class SolicitationRecord(LocalLabsRecord):
     """Proxy model for Solicitation-type LocalLabsRecords."""
 
@@ -89,6 +128,11 @@ class SolicitationRecord(LocalLabsRecord):
     def contact_email(self):
         """Return contact email."""
         return self.data.get("contact_email", "")
+
+    @property
+    def delivery_type_slug(self):
+        """Return delivery type slug for categorization."""
+        return self.data.get("delivery_type_slug", "")
 
     # Helper methods
     def can_accept_responses(self):

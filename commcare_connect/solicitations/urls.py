@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    DeliveryTypeDetailView,
+    DeliveryTypesListView,
     LabsHomeView,
     ManageSolicitationsListView,
     MyResponsesListView,
@@ -18,6 +20,9 @@ app_name = "solicitations"
 urlpatterns = [
     # Labs Home
     path("", LabsHomeView.as_view(), name="home"),
+    # Delivery Types (Public - any authenticated user)
+    path("delivery-types/", DeliveryTypesListView.as_view(), name="delivery_types"),
+    path("delivery-types/<slug:slug>/", DeliveryTypeDetailView.as_view(), name="delivery_type_detail"),
     # Program Manager URLs
     path("manage/", ManageSolicitationsListView.as_view(), name="manage_list"),
     path("create/", SolicitationCreateOrUpdate.as_view(), name="create"),

@@ -95,6 +95,32 @@ class RecordExplorerDataAccess:
             logger.error(f"Failed to get records: {e}")
             return []
 
+    def get_public_records(
+        self,
+        experiment: str | None = None,
+        type: str | None = None,
+    ) -> list[LocalLabsRecord]:
+        """Get all public records (records not scoped to any opp/org/program).
+
+        Args:
+            experiment: Filter by experiment name
+            type: Filter by record type
+
+        Returns:
+            List of LocalLabsRecord instances
+        """
+        try:
+            # Fetch public records by passing public=True
+            # This skips scope params and returns only public records
+            return self.client.get_records(
+                experiment=experiment,
+                type=type,
+                public=True,
+            )
+        except LabsAPIError as e:
+            logger.error(f"Failed to get public records: {e}")
+            return []
+
     def get_record_by_id(self, record_id: int) -> LocalLabsRecord | None:
         """Get a single record by ID.
 

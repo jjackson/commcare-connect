@@ -11,6 +11,18 @@
     {% endif %}
 {% endblock %}
 
+{% block hero_label %}
+<span class="text-sm font-medium text-brand-cornflower-blue">
+    {% if current_type == 'eoi' %}
+        <i class="fa-solid fa-hand mr-1"></i> Expressions of Interest
+    {% elif current_type == 'rfp' %}
+        <i class="fa-solid fa-file-contract mr-1"></i> Requests for Proposals
+    {% else %}
+        <i class="fa-solid fa-bullhorn mr-1"></i> Partnership Opportunities
+    {% endif %}
+</span>
+{% endblock %}
+
 {% block hero_title %}
     {% if current_type == 'eoi' %}
         Expressions of Interest
@@ -19,6 +31,40 @@
     {% else %}
         Current Opportunities
     {% endif %}
+{% endblock %}
+
+{% block hero_actions %}
+<a href="{% url 'solicitations:delivery_types' %}" class="button button-md outline-style whitespace-nowrap">
+    <i class="fa-solid fa-layer-group mr-2"></i>Browse by Program Type
+</a>
+{% endblock %}
+
+{% block hero_info_row %}
+<div class="flex items-center gap-6 pt-4 border-t border-gray-100 mt-2">
+    <div class="flex items-center gap-2">
+        <i class="fa-solid fa-file-alt text-brand-cornflower-blue"></i>
+        <div>
+            <span class="text-xs text-gray-500 block">Total Active</span>
+            <span class="font-semibold text-brand-deep-purple">{{ total_active }}</span>
+        </div>
+    </div>
+    <div class="w-px h-8 bg-gray-200"></div>
+    <div class="flex items-center gap-2">
+        <i class="fa-solid fa-hand text-brand-cornflower-blue"></i>
+        <div>
+            <span class="text-xs text-gray-500 block">EOIs</span>
+            <span class="font-semibold text-brand-deep-purple">{{ eoi_count }}</span>
+        </div>
+    </div>
+    <div class="w-px h-8 bg-gray-200"></div>
+    <div class="flex items-center gap-2">
+        <i class="fa-solid fa-file-contract text-brand-cornflower-blue"></i>
+        <div>
+            <span class="text-xs text-gray-500 block">RFPs</span>
+            <span class="font-semibold text-brand-deep-purple">{{ rfp_count }}</span>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block hero_description %}

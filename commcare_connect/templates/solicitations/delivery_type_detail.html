@@ -1,0 +1,114 @@
+{% extends "solicitations/public_base.html" %}
+{% load static %}
+
+{% block page_title %}{{ delivery_type.name }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="mb-4">
+    <ol class="flex items-center gap-2 text-sm text-gray-600">
+        <li>
+            <a href="{% url 'solicitations:delivery_types' %}" class="hover:text-brand-cornflower-blue">
+                Program Types
+            </a>
+        </li>
+        <li><i class="fa-solid fa-chevron-right text-xs"></i></li>
+        <li class="text-brand-deep-purple font-medium">{{ delivery_type.name }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block hero_label %}
+<span class="text-sm font-medium text-brand-cornflower-blue">
+    <i class="{{ delivery_type.icon|default:'fa-solid fa-folder' }} mr-1"></i> Program Type
+</span>
+{% endblock %}
+
+{% block hero_title %}{{ delivery_type.name }}{% endblock %}
+
+{% block hero_description %}
+{{ delivery_type.description|default:"Explore solicitations for this program type." }}
+{% endblock %}
+
+{% block hero_actions %}
+<a href="{% url 'solicitations:list' %}" class="button button-md outline-style whitespace-nowrap">
+    <i class="fa-solid fa-list mr-2"></i>All Solicitations
+</a>
+{% endblock %}
+
+{% block hero_info_row %}
+<div class="flex items-center gap-6 pt-4 border-t border-gray-100 mt-2">
+    <div class="flex items-center gap-2">
+        <i class="fa-solid fa-file-alt text-brand-cornflower-blue"></i>
+        <div>
+            <span class="text-xs text-gray-500 block">Active Solicitations</span>
+            <span class="font-semibold text-brand-deep-purple">{{ solicitations|length }}</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block main_content %}
+    <!-- Long Description -->
+    {% if delivery_type.long_description %}
+        <div class="card_bg mb-6">
+            <h2 class="text-lg font-semibold text-brand-deep-purple mb-3">
+                About This Program Type
+            </h2>
+            <div class="prose max-w-none text-gray-700 text-sm">
+                {{ delivery_type.long_description|linebreaks }}
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Solicitations List -->
+    {% if solicitations %}
+        <div class="space-y-4">
+            {% for sol in solicitations %}
+                <div class="card_bg hover:shadow-md transition-shadow">
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="badge badge-sm {% if sol.solicitation_type == 'eoi' %}primary-light{% else %}warning-light{% endif %}">
+                                    {{ sol.get_solicitation_type_display }}
+                                </span>
+                                <span class="text-sm text-green-600 flex items-center gap-1">
+                                    <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                                    Active
+                                </span>
+                            </div>
+                            <h3 class="font-semibold text-brand-deep-purple mb-2">
+                                <a href="{% url 'solicitations:detail' pk=sol.pk %}"
+                                   class="hover:text-brand-cornflower-blue transition-colors">
+                                    {{ sol.title }}
+                                </a>
+                            </h3>
+                            <p class="text-sm text-gray-600 mb-3">
+                                {{ sol.description|truncatewords:30 }}
+                            </p>
+                            <div class="flex items-center gap-4 text-sm text-gray-500">
+                                {% if sol.program_name %}
+                                    <span><i class="fa-solid fa-building mr-1"></i>{{ sol.program_name }}</span>
+                                {% endif %}
+                                {% if sol.application_deadline %}
+                                    <span><i class="fa-solid fa-calendar mr-1"></i>Deadline: {{ sol.application_deadline|date:"M d, Y" }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <a href="{% url 'solicitations:detail' pk=sol.pk %}"
+                           class="button button-sm primary-dark whitespace-nowrap">
+                            View Details
+                        </a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="card_bg text-center py-8">
+            <i class="fa-solid fa-inbox text-4xl text-gray-400 mb-4"></i>
+            <p class="text-gray-600 mb-4">No active solicitations for this program type.</p>
+            <a href="{% url 'solicitations:list' %}" class="button button-sm outline-style">
+                Browse All Solicitations
+            </a>
+        </div>
+    {% endif %}
+{% endblock %}
