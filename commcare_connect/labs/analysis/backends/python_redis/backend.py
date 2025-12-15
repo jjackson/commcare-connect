@@ -107,9 +107,12 @@ class PythonRedisBackend:
         url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_visits/"
         headers = {"Authorization": f"Bearer {access_token}"}
 
+        # Use shared progress interval from SSE streaming module
+        from commcare_connect.labs.analysis.sse_streaming import DOWNLOAD_PROGRESS_INTERVAL_BYTES
+
         chunks = []
         bytes_downloaded = 0
-        chunk_size = 5 * 1024 * 1024  # 5MB progress intervals
+        progress_interval = DOWNLOAD_PROGRESS_INTERVAL_BYTES  # 5MB progress intervals
 
         try:
             with httpx.stream("GET", url, headers=headers, timeout=580.0) as response:
@@ -121,10 +124,12 @@ class PythonRedisBackend:
                     chunks.append(chunk)
                     bytes_downloaded += len(chunk)
 
-                    if bytes_downloaded - last_progress_at >= chunk_size:
+                    # Yield progress every 5MB for real-time UI updates
+                    if bytes_downloaded - last_progress_at >= progress_interval:
                         yield ("progress", bytes_downloaded, total_bytes)
                         last_progress_at = bytes_downloaded
 
+                # Always yield final progress to ensure UI shows 100%
                 if bytes_downloaded > last_progress_at:
                     yield ("progress", bytes_downloaded, total_bytes)
 

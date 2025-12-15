@@ -14,6 +14,10 @@ from django.views import View
 
 logger = logging.getLogger(__name__)
 
+# Download progress interval - yield progress updates every 5MB
+# This is used by backends to throttle download progress events
+DOWNLOAD_PROGRESS_INTERVAL_BYTES = 5 * 1024 * 1024  # 5MB
+
 
 def send_sse_event(message: str, data: dict | None = None, error: str | None = None) -> str:
     """
@@ -144,6 +148,10 @@ class AnalysisPipelineSSEMixin:
         formatted SSE events. Stores the final result in self._pipeline_result
         and cache status in self._pipeline_from_cache.
 
+        Download progress events are yielded every ~5MB (configured by backends
+        using DOWNLOAD_PROGRESS_INTERVAL_BYTES). Each download event is immediately
+        converted to an SSE event for real-time UI updates.
+
         Args:
             pipeline_stream: Generator from pipeline.stream_analysis()
             send_sse_func: SSE formatting function (defaults to send_sse_event)
@@ -163,19 +171,26 @@ class AnalysisPipelineSSEMixin:
             if event_type == EVENT_STATUS:
                 message = event_data.get("message", "Processing...")
                 self._pipeline_from_cache = self._pipeline_from_cache or "cache" in message.lower()
+                logger.debug(f"[SSE Mixin] Status event: {message}")
                 yield send_sse_func(message)
 
             elif event_type == EVENT_DOWNLOAD:
+                # Download progress event - yield immediately for real-time UI updates
+                # These events are generated every 5MB by the backend (see DOWNLOAD_PROGRESS_INTERVAL_BYTES)
                 bytes_dl = event_data.get("bytes", 0)
                 total_bytes = event_data.get("total", 0)
                 if total_bytes > 0:
                     mb_dl = bytes_dl / (1024 * 1024)
                     mb_total = total_bytes / (1024 * 1024)
                     pct = int(bytes_dl / total_bytes * 100)
-                    yield send_sse_func(f"Downloading: {mb_dl:.1f} / {mb_total:.1f} MB ({pct}%)")
+                    message = f"Downloading: {mb_dl:.1f} / {mb_total:.1f} MB ({pct}%)"
                 else:
-                    yield send_sse_func("Downloading data...")
+                    mb_dl = bytes_dl / (1024 * 1024)
+                    message = f"Downloading: {mb_dl:.1f} MB..."
+                logger.debug(f"[SSE Mixin] Download progress: {message}")
+                yield send_sse_func(message)
 
             elif event_type == EVENT_RESULT:
+                logger.debug("[SSE Mixin] Received result event")
                 self._pipeline_result = event_data
                 break
