@@ -664,12 +664,24 @@ function caseTimeline() {
             const data = visit.widgets['visit_history'];
             if (!data) return 'Visit';
 
-            if (index === 0 || data.visit_number === 'Registration' || data.visit_number === 'enrollment') {
-                return 'Reg';
-            } else if (data.visit_number) {
-                return `V${data.visit_number}`;
+            // Use form_name to identify registration vs visit forms
+            const formName = data.form_name || '';
+            if (formName.toLowerCase().includes('register')) {
+                return 'Registration';
             }
-            return `V${index}`;
+
+            // For visit forms, use visit_type and visit_number
+            const visitType = data.visit_type || '';
+            const visitNumber = data.visit_number || '';
+
+            if (visitType === 'Additional Visit' || visitNumber === 'Additional') {
+                return 'Discharge';
+            } else if (visitNumber && !isNaN(visitNumber)) {
+                return `Visit ${visitNumber}`;
+            }
+
+            // Fallback to index-based
+            return index === 0 ? 'Registration' : `Visit ${index}`;
         },
 
         getVisitPhoto(visit) {

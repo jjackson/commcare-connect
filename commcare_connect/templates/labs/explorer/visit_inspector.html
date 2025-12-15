@@ -264,7 +264,16 @@
           Query Results: <span x-text="paginatedResults.length"></span> of <span x-text="results.length"></span> visits
           <span class="text-sm text-gray-500" x-show="results.length >= 1000">(limited to 1000)</span>
         </h3>
-        <div class="flex items-center gap-4" x-show="totalPages > 1">
+        <div class="flex items-center gap-4">
+          <button
+            @click="downloadAll"
+            class="button button-sm outline-style"
+            :disabled="downloadingAll"
+          >
+            <i class="fa-solid" :class="downloadingAll ? 'fa-spinner fa-spin' : 'fa-download'"></i>
+            <span x-text="downloadingAll ? `Downloading ${downloadAllProgress}...` : 'Download All'"></span>
+          </button>
+          <div class="flex items-center gap-4" x-show="totalPages > 1">
           <span class="text-sm text-gray-600">
             Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span>
           </span>
@@ -283,6 +292,7 @@
             >
               <i class="fa-solid fa-chevron-right"></i>
             </button>
+          </div>
           </div>
         </div>
       </div>
@@ -378,6 +388,10 @@
 
       // UI state
       showInstructions: false,
+
+      // Download all state
+      downloadingAll: false,
+      downloadAllProgress: '',
 
       // SSE
       eventSource: null,
@@ -588,6 +602,39 @@
           this.queryError = 'Network error: ' + err.message;
         } finally {
           this.queryLoading = false;
+        }
+      },
+
+      async downloadAll() {
+        if (this.results.length === 0) return;
+
+        this.downloadingAll = true;
+        const total = this.results.length;
+
+        try {
+          for (let i = 0; i < this.results.length; i++) {
+            const visit = this.results[i];
+            this.downloadAllProgress = `${i + 1}/${total}`;
+
+            // Create a temporary link and click it to trigger download
+            const link = document.createElement('a');
+            link.href = `/labs/explorer/visit-inspector/download/${visit.visit_id}/`;
+            link.download = '';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Small delay between downloads to avoid overwhelming the browser
+            if (i < this.results.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 200));
+            }
+          }
+          console.log(`[VisitInspector] Downloaded ${total} visits`);
+        } catch (err) {
+          console.error('[VisitInspector] Download all failed:', err);
+        } finally {
+          this.downloadingAll = false;
+          this.downloadAllProgress = '';
         }
       }
     };

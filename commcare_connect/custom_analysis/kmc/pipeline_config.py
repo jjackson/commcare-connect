@@ -163,9 +163,26 @@ KMC_PIPELINE_CONFIG = AnalysisPipelineConfig(
     grouping_key="username",
     experiment="kmc_timeline",
     terminal_stage=CacheStage.VISIT_LEVEL,  # Visit-level, not aggregated
+    # Use beneficiary_case_id for linking instead of entity_id
+    # entity_id is mother_name+phone which incorrectly combines twins' visits
+    # beneficiary_case_id is unique per child
+    # TODO: Revert to "entity_id" once the upstream bug is fixed
+    linking_field="beneficiary_case_id",
     fields=[
+        # Beneficiary case ID - unique per child, used for linking visits
+        # This correctly separates twins/multiples under the same mother
+        FieldComputation(
+            name="beneficiary_case_id",
+            paths=[
+                "form.case.@case_id",  # Registration visit - main case ID
+                "form.kmc_beneficiary_case_id",  # Follow-up visits store it explicitly
+            ],
+            aggregation="first",
+            description="Beneficiary case ID (unique per child, used for linking)",
+        ),
         # Child identifier for linking - using entity_id (Connect's linking field)
         # Note: entity_id from deliver unit is what links visits in Connect
+        # This is kept for backwards compatibility but not used for linking when twins exist
         FieldComputation(
             name="child_entity_id",
             path="form.new_registration_du.deliver.entity_id",
@@ -175,7 +192,7 @@ KMC_PIPELINE_CONFIG = AnalysisPipelineConfig(
                 "form.kmc_pay_visit_du.deliver.entity_id",  # Follow-up visits (pay)
             ],
             aggregation="first",
-            description="Child entity ID (Connect linking field)",
+            description="Child entity ID (Connect linking field - mother_name+phone)",
         ),
         # ===== Fields generated from timeline config (DRY) =====
         # Widget fields (weight, date, time_end, visit_number, etc.)

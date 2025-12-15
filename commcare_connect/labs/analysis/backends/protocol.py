@@ -146,3 +146,88 @@ class AnalysisBackend(Protocol):
             List of visit IDs, or (visit_ids, visit_dicts) if return_visit_data=True
         """
         ...
+
+    # -------------------------------------------------------------------------
+    # Cache Management
+    # -------------------------------------------------------------------------
+
+    def delete_all_cache(self, opportunity_id: int) -> dict[str, int]:
+        """
+        Delete all cache for an opportunity (all cache types, all configs).
+
+        Args:
+            opportunity_id: Opportunity to delete cache for
+
+        Returns:
+            Dict with deletion counts: {"raw": count, "computed_visit": count, "computed_flw": count}
+        """
+        ...
+
+    def delete_config_cache(self, opportunity_id: int, config_hash: str) -> dict[str, int]:
+        """
+        Delete cache for a specific opportunity and config combination.
+
+        Args:
+            opportunity_id: Opportunity to delete cache for
+            config_hash: Config hash to delete cache for
+
+        Returns:
+            Dict with deletion counts: {"computed_visit": count, "computed_flw": count}
+        """
+        ...
+
+    def get_cache_stats(self, opportunity_id: int) -> dict[str, dict]:
+        """
+        Get comprehensive cache statistics for an opportunity.
+
+        Args:
+            opportunity_id: Opportunity to get stats for
+
+        Returns:
+            Dict with stats for each cache type:
+            {
+                "raw": {"count": int, "total_size": int, "configs": []},
+                "computed_visit": {"count": int, "total_size": int, "configs": [config_hash, ...]},
+                "computed_flw": {"count": int, "total_size": int, "configs": [config_hash, ...]}
+            }
+        """
+        ...
+
+    def get_all_opportunities_with_cache(self) -> list[int]:
+        """
+        Get list of all opportunity IDs that have any cache.
+
+        Returns:
+            List of opportunity IDs
+        """
+        ...
+
+    def get_configs_for_opportunity(self, opportunity_id: int) -> list[str]:
+        """
+        Get list of config hashes for a specific opportunity.
+
+        Args:
+            opportunity_id: Opportunity to get configs for
+
+        Returns:
+            List of unique config hashes
+        """
+        ...
+
+    def get_cache_details(self) -> list[dict]:
+        """
+        Get comprehensive details about all cache entries.
+
+        Returns:
+            List of dicts, each containing:
+            {
+                "opportunity_id": int,
+                "cache_type": str,  # "raw", "computed_visit", or "computed_flw"
+                "config_hash": str | None,  # None for raw cache
+                "row_count": int,
+                "expires_at": datetime,
+                "created_at": datetime,
+                "visit_count": int
+            }
+        """
+        ...

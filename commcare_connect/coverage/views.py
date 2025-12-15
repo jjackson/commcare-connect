@@ -47,61 +47,6 @@ class BaseCoverageView(LoginRequiredMixin, TemplateView):
         return True
 
 
-class CoverageIndexView(BaseCoverageView):
-    """Landing page with opportunity selector and summary"""
-
-    template_name = "coverage/index.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        # Check if context is selected
-        labs_context = getattr(self.request, "labs_context", {})
-        context["has_context"] = bool(labs_context.get("opportunity_id"))
-        context["has_commcare_oauth"] = self.check_commcare_oauth()
-
-        if context["has_context"]:
-            if not context["has_commcare_oauth"]:
-                context["error"] = "CommCare OAuth not configured. Please authorize CommCare access."
-                context["needs_oauth"] = True
-            else:
-                try:
-                    # Use data loader helper for consistency
-                    from commcare_connect.coverage.data_loader import CoverageMapDataLoader
-
-                    loader = CoverageMapDataLoader(self.request)
-                    data_access = CoverageDataAccess(self.request)
-
-                    # Get DU data
-                    coverage = data_access.build_coverage_dus_only()
-
-                    # Get visits via analysis framework (base config, no computed fields)
-                    from commcare_connect.coverage.analysis import COVERAGE_BASE_CONFIG
-
-                    visit_rows, _ = loader.get_enriched_visits(COVERAGE_BASE_CONFIG, coverage)
-
-                    # Populate coverage with visits using helper
-                    loader.populate_coverage_visits(coverage, visit_rows)
-
-                    context["coverage"] = coverage
-                    context["summary_stats"] = {
-                        "total_dus": len(coverage.delivery_units),
-                        "total_sas": len(coverage.service_areas),
-                        "total_flws": len(coverage.flws),
-                        "total_visits": len(coverage.service_points),
-                        "completion": round(coverage.completion_percentage, 1),
-                    }
-                    context["service_points_count"] = len(visit_rows)
-                except Exception as e:
-                    logger.error(f"Failed to load coverage data: {e}", exc_info=True)
-                    context["error"] = str(e)
-                    # Check if error is about missing OAuth
-                    if "CommCare OAuth" in str(e):
-                        context["needs_oauth"] = True
-
-        return context
-
-
 class CoverageMapView(BaseCoverageView):
     """
     Interactive coverage map with FLW color-coding and real-time progress.

@@ -296,6 +296,275 @@ class SQLCacheManager:
         ComputedFLWCache.objects.filter(opportunity_id=self.opportunity_id).delete()
         logger.info(f"[SQLCache] Invalidated all cache for opp {self.opportunity_id}")
 
+    def delete_config(self):
+        """
+        Delete all cache for this opportunity and config.
+
+        Deletes computed visit and FLW cache for current config_hash.
+        Does not delete raw cache as it's shared across configs.
+        """
+        if not self.config_hash:
+            logger.warning("[SQLCache] Cannot delete config cache without config_hash")
+            return {"computed_visit": 0, "computed_flw": 0}
+
+        visit_deleted, _ = ComputedVisitCache.objects.filter(
+            opportunity_id=self.opportunity_id,
+            config_hash=self.config_hash,
+        ).delete()
+
+        flw_deleted, _ = ComputedFLWCache.objects.filter(
+            opportunity_id=self.opportunity_id,
+            config_hash=self.config_hash,
+        ).delete()
+
+        logger.info(
+            f"[SQLCache] Deleted config cache for opp {self.opportunity_id}, "
+            f"config {self.config_hash}: {visit_deleted} visits, {flw_deleted} FLWs"
+        )
+
+        return {"computed_visit": visit_deleted, "computed_flw": flw_deleted}
+
+    # -------------------------------------------------------------------------
+    # Cache Management (Class Methods)
+    # -------------------------------------------------------------------------
+
+    @classmethod
+    def delete_all_cache(cls, opportunity_id: int) -> dict[str, int]:
+        """
+        Delete all cache for an opportunity (all cache types, all configs).
+
+        Args:
+            opportunity_id: Opportunity to delete cache for
+
+        Returns:
+            Dict with deletion counts for each cache type
+        """
+        raw_deleted = RawVisitCache.invalidate_opportunity(opportunity_id)
+
+        visit_deleted, _ = ComputedVisitCache.objects.filter(opportunity_id=opportunity_id).delete()
+
+        flw_deleted, _ = ComputedFLWCache.objects.filter(opportunity_id=opportunity_id).delete()
+
+        logger.info(
+            f"[SQLCache] Deleted all cache for opp {opportunity_id}: "
+            f"{raw_deleted} raw, {visit_deleted} computed visits, {flw_deleted} FLWs"
+        )
+
+        return {
+            "raw": raw_deleted,
+            "computed_visit": visit_deleted,
+            "computed_flw": flw_deleted,
+        }
+
+    @classmethod
+    def delete_config_cache(cls, opportunity_id: int, config_hash: str) -> dict[str, int]:
+        """
+        Delete cache for a specific opportunity and config combination.
+
+        Args:
+            opportunity_id: Opportunity to delete cache for
+            config_hash: Config hash to delete cache for
+
+        Returns:
+            Dict with deletion counts
+        """
+        visit_deleted = ComputedVisitCache.invalidate_opportunity_config(opportunity_id, config_hash)
+
+        flw_deleted = ComputedFLWCache.invalidate_opportunity_config(opportunity_id, config_hash)
+
+        logger.info(
+            f"[SQLCache] Deleted config cache for opp {opportunity_id}, "
+            f"config {config_hash}: {visit_deleted} visits, {flw_deleted} FLWs"
+        )
+
+        return {
+            "computed_visit": visit_deleted,
+            "computed_flw": flw_deleted,
+        }
+
+    @classmethod
+    def get_cache_stats(cls, opportunity_id: int) -> dict[str, dict]:
+        """
+        Get comprehensive cache statistics for an opportunity.
+
+        Args:
+            opportunity_id: Opportunity to get stats for
+
+        Returns:
+            Dict with stats for each cache type
+        """
+        from django.db.models import Count
+
+        # Raw cache stats
+        raw_stats = RawVisitCache.objects.filter(opportunity_id=opportunity_id).aggregate(
+            count=Count("id"),
+            total_rows=Count("visit_id"),
+        )
+
+        # Computed visit cache stats
+        computed_visit_stats = ComputedVisitCache.objects.filter(opportunity_id=opportunity_id).aggregate(
+            count=Count("id"),
+            total_rows=Count("visit_id"),
+        )
+
+        computed_visit_configs = list(
+            ComputedVisitCache.objects.filter(opportunity_id=opportunity_id)
+            .values_list("config_hash", flat=True)
+            .distinct()
+        )
+
+        # Computed FLW cache stats
+        computed_flw_stats = ComputedFLWCache.objects.filter(opportunity_id=opportunity_id).aggregate(
+            count=Count("id"),
+            total_rows=Count("username"),
+        )
+
+        computed_flw_configs = list(
+            ComputedFLWCache.objects.filter(opportunity_id=opportunity_id)
+            .values_list("config_hash", flat=True)
+            .distinct()
+        )
+
+        return {
+            "raw": {
+                "count": raw_stats["count"] or 0,
+                "total_rows": raw_stats["total_rows"] or 0,
+                "configs": [],
+            },
+            "computed_visit": {
+                "count": computed_visit_stats["count"] or 0,
+                "total_rows": computed_visit_stats["total_rows"] or 0,
+                "configs": computed_visit_configs,
+            },
+            "computed_flw": {
+                "count": computed_flw_stats["count"] or 0,
+                "total_rows": computed_flw_stats["total_rows"] or 0,
+                "configs": computed_flw_configs,
+            },
+        }
+
+    @classmethod
+    def get_all_opportunities_with_cache(cls) -> list[int]:
+        """
+        Get list of all opportunity IDs that have any cache.
+
+        Returns:
+            List of unique opportunity IDs
+        """
+        # Get opportunity IDs from all three cache tables
+        raw_opps = set(RawVisitCache.objects.values_list("opportunity_id", flat=True).distinct())
+        visit_opps = set(ComputedVisitCache.objects.values_list("opportunity_id", flat=True).distinct())
+        flw_opps = set(ComputedFLWCache.objects.values_list("opportunity_id", flat=True).distinct())
+
+        # Combine and return sorted list
+        all_opps = sorted(raw_opps | visit_opps | flw_opps)
+        return all_opps
+
+    @classmethod
+    def get_configs_for_opportunity(cls, opportunity_id: int) -> list[str]:
+        """
+        Get list of config hashes for a specific opportunity.
+
+        Args:
+            opportunity_id: Opportunity to get configs for
+
+        Returns:
+            List of unique config hashes
+        """
+        # Get config hashes from computed caches
+        visit_configs = set(
+            ComputedVisitCache.objects.filter(opportunity_id=opportunity_id)
+            .values_list("config_hash", flat=True)
+            .distinct()
+        )
+
+        flw_configs = set(
+            ComputedFLWCache.objects.filter(opportunity_id=opportunity_id)
+            .values_list("config_hash", flat=True)
+            .distinct()
+        )
+
+        # Combine and return sorted list
+        all_configs = sorted(visit_configs | flw_configs)
+        return all_configs
+
+    @classmethod
+    def get_cache_details(cls) -> list[dict]:
+        """
+        Get comprehensive details about all cache entries.
+
+        Returns:
+            List of dicts with cache entry details (without size - size calculation removed to avoid confusion)
+        """
+        from django.db.models import Count, Min
+
+        details = []
+
+        # Raw cache entries (group by opportunity)
+        # Note: Use Min() for created_at since it's an aggregate function.
+        # Coalesce is NOT an aggregate - it would add created_at to GROUP BY,
+        # splitting rows by their individual timestamps.
+        raw_entries = (
+            RawVisitCache.objects.values("opportunity_id", "visit_count", "expires_at")
+            .annotate(row_count=Count("id"), created_at_min=Min("created_at"))
+            .order_by("opportunity_id")
+        )
+
+        for entry in raw_entries:
+            details.append(
+                {
+                    "opportunity_id": entry["opportunity_id"],
+                    "cache_type": "raw",
+                    "config_hash": None,
+                    "row_count": entry["row_count"],
+                    "expires_at": entry["expires_at"],
+                    "created_at": entry["created_at_min"],
+                    "visit_count": entry["visit_count"],
+                }
+            )
+
+        # Computed visit cache entries (group by opportunity + config)
+        visit_entries = (
+            ComputedVisitCache.objects.values("opportunity_id", "config_hash", "visit_count", "expires_at")
+            .annotate(row_count=Count("id"), created_at_min=Min("created_at"))
+            .order_by("opportunity_id", "config_hash")
+        )
+
+        for entry in visit_entries:
+            details.append(
+                {
+                    "opportunity_id": entry["opportunity_id"],
+                    "cache_type": "computed_visit",
+                    "config_hash": entry["config_hash"],
+                    "row_count": entry["row_count"],
+                    "expires_at": entry["expires_at"],
+                    "created_at": entry["created_at_min"],
+                    "visit_count": entry["visit_count"],
+                }
+            )
+
+        # Computed FLW cache entries (group by opportunity + config)
+        flw_entries = (
+            ComputedFLWCache.objects.values("opportunity_id", "config_hash", "visit_count", "expires_at")
+            .annotate(row_count=Count("id"), created_at_min=Min("created_at"))
+            .order_by("opportunity_id", "config_hash")
+        )
+
+        for entry in flw_entries:
+            details.append(
+                {
+                    "opportunity_id": entry["opportunity_id"],
+                    "cache_type": "computed_flw",
+                    "config_hash": entry["config_hash"],
+                    "row_count": entry["row_count"],
+                    "expires_at": entry["expires_at"],
+                    "created_at": entry["created_at_min"],
+                    "visit_count": entry["visit_count"],
+                }
+            )
+
+        return details
+
     # -------------------------------------------------------------------------
     # Visit Filtering (for Audit)
     # -------------------------------------------------------------------------

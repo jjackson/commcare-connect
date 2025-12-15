@@ -238,6 +238,10 @@ class AnalysisPipelineConfig:
         date_field: Field name for date filtering (default: "visit_date")
         experiment: Name of the experiment/project (e.g., "chc_nutrition", "coverage")
         terminal_stage: Which stage is the final output for LabsRecord caching
+        linking_field: Field to use for linking visits to entities (children, beneficiaries).
+                      Default "entity_id" uses the base field from Connect.
+                      Can be set to a computed field name (e.g., "beneficiary_case_id")
+                      for cases where entity_id doesn't correctly identify unique entities.
 
     Example:
         config = AnalysisPipelineConfig(
@@ -274,6 +278,9 @@ class AnalysisPipelineConfig:
     # Pipeline metadata (optional, backwards compatible with defaults)
     experiment: str = ""
     terminal_stage: CacheStage = CacheStage.AGGREGATED
+
+    # Entity linking configuration
+    linking_field: str = "entity_id"
 
     def __post_init__(self):
         """Validate configuration."""

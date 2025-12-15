@@ -150,7 +150,7 @@ def get_coverage_visit_analysis(
 
     # Use the AnalysisPipeline (backend-agnostic)
     pipeline = AnalysisPipeline(request)
-    visit_result = pipeline.run_analysis(config)
+    visit_result = pipeline.stream_analysis_ignore_events(config)
 
     # Enrich with coverage context
     return enrich_with_coverage_context(visit_result, du_lookup)

@@ -447,3 +447,46 @@ class RawAPICacheManager:
         except Exception as e:
             logger.warning(f"Cache delete failed for {key}: {e}")
             return False
+
+
+# =============================================================================
+# Cache Management Methods (TODO: Implement for Protocol Compliance)
+# =============================================================================
+
+# TODO: Implement the following class methods to match the AnalysisBackend protocol:
+#
+# @classmethod
+# def delete_all_cache(cls, opportunity_id: int) -> dict[str, int]:
+#     """Delete all cache for an opportunity (all cache types, all configs)."""
+#     # Implementation needed: Clear all Redis cache keys for this opportunity
+#     pass
+#
+# @classmethod
+# def delete_config_cache(cls, opportunity_id: int, config_hash: str) -> dict[str, int]:
+#     """Delete cache for a specific opportunity and config combination."""
+#     # Implementation needed: Clear Redis cache keys for this opp + config
+#     pass
+#
+# @classmethod
+# def get_cache_stats(cls, opportunity_id: int) -> dict[str, dict]:
+#     """Get comprehensive cache statistics for an opportunity."""
+#     # Implementation needed: Query Redis for cache stats
+#     pass
+#
+# @classmethod
+# def get_all_opportunities_with_cache(cls) -> list[int]:
+#     """Get list of all opportunity IDs that have any cache."""
+#     # Implementation needed: Scan Redis keys to find all opportunity IDs
+#     pass
+#
+# @classmethod
+# def get_configs_for_opportunity(cls, opportunity_id: int) -> list[str]:
+#     """Get list of config hashes for a specific opportunity."""
+#     # Implementation needed: Scan Redis keys for this opportunity
+#     pass
+#
+# @classmethod
+# def get_cache_details(cls) -> list[dict]:
+#     """Get comprehensive details about all cache entries."""
+#     # Implementation needed: Scan all Redis cache keys and return details
+#     pass

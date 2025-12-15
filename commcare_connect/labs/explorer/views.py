@@ -614,3 +614,258 @@ class VisitInspectorStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
         except Exception as e:
             logger.error(f"[VisitInspector] Stream failed: {e}")
             yield send_sse_event("Error", error=f"Failed to load visit data: {str(e)}")
+
+
+# =============================================================================
+# Cache Manager Views
+# =============================================================================
+
+
+class CacheManagerView(LoginRequiredMixin, TemplateView):
+    """
+    Cache Manager page for inspecting and managing analysis cache.
+
+    Shows all cache entries with details and provides filtering and deletion options.
+    """
+
+    template_name = "labs/explorer/cache_manager.html"
+
+    def get_context_data(self, **kwargs):
+        """Provide initial page context."""
+        context = super().get_context_data(**kwargs)
+
+        # Get filter parameters
+        opportunity_filter = self.request.GET.get("opportunity_id", "")
+        cache_type_filter = self.request.GET.get("cache_type", "")
+        show_expired_only = self.request.GET.get("show_expired", "") == "on"
+
+        context["opportunity_filter"] = opportunity_filter
+        context["cache_type_filter"] = cache_type_filter
+        context["show_expired_only"] = show_expired_only
+
+        # Get cache details from SQL backend
+        from commcare_connect.labs.analysis.backends.sql.cache import SQLCacheManager
+        from commcare_connect.labs.explorer.utils import (
+            get_cache_type_display,
+            is_cache_expired,
+            is_cache_expiring_soon,
+            truncate_config_hash,
+        )
+
+        try:
+            all_entries = SQLCacheManager.get_cache_details()
+
+            # Apply filters
+            filtered_entries = all_entries
+
+            if opportunity_filter:
+                try:
+                    opp_id = int(opportunity_filter)
+                    filtered_entries = [e for e in filtered_entries if e["opportunity_id"] == opp_id]
+                except ValueError:
+                    pass
+
+            if cache_type_filter:
+                filtered_entries = [e for e in filtered_entries if e["cache_type"] == cache_type_filter]
+
+            if show_expired_only:
+                filtered_entries = [e for e in filtered_entries if is_cache_expired(e["expires_at"])]
+
+            # Add display fields
+            for entry in filtered_entries:
+                entry["cache_type_display"] = get_cache_type_display(entry["cache_type"])
+                entry["config_hash_short"] = truncate_config_hash(entry["config_hash"])
+                entry["is_expired"] = is_cache_expired(entry["expires_at"])
+                entry["is_expiring_soon"] = is_cache_expiring_soon(entry["expires_at"])
+
+            # Calculate summary stats
+            total_entries = len(filtered_entries)
+            total_rows = sum(e["row_count"] for e in filtered_entries)
+            expired_count = sum(1 for e in filtered_entries if e["is_expired"])
+
+            context["cache_entries"] = filtered_entries
+            context["total_entries"] = total_entries
+            context["total_rows"] = total_rows
+            context["expired_count"] = expired_count
+
+            # Get distinct opportunities and cache types for filters
+            all_opportunities = SQLCacheManager.get_all_opportunities_with_cache()
+            cache_types = ["raw", "computed_visit", "computed_flw"]
+
+            context["all_opportunities"] = all_opportunities
+            context["cache_types"] = cache_types
+
+        except Exception as e:
+            logger.error(f"[CacheManager] Failed to load cache details: {e}")
+            messages.error(self.request, f"Failed to load cache details: {e}")
+            context["cache_entries"] = []
+            context["total_entries"] = 0
+            context["total_rows"] = 0
+            context["expired_count"] = 0
+            context["all_opportunities"] = []
+            context["cache_types"] = []
+
+        return context
+
+
+class CacheDeleteView(LoginRequiredMixin, View):
+    """Handle cache deletion requests."""
+
+    def post(self, request):
+        """Execute cache deletion based on mode."""
+        from commcare_connect.labs.analysis.backends.sql.cache import SQLCacheManager
+        from commcare_connect.labs.analysis.backends.sql.models import (
+            ComputedFLWCache,
+            ComputedVisitCache,
+            RawVisitCache,
+        )
+
+        mode = request.POST.get("mode")
+
+        try:
+            if mode == "opportunity":
+                # Delete all cache for an opportunity
+                opportunity_id = int(request.POST.get("opportunity_id"))
+                result = SQLCacheManager.delete_all_cache(opportunity_id)
+
+                return JsonResponse(
+                    {
+                        "success": True,
+                        "message": f"Deleted all cache for opportunity {opportunity_id}",
+                        "deleted": result,
+                    }
+                )
+
+            elif mode == "config":
+                # Delete cache for specific opportunity + config
+                opportunity_id = int(request.POST.get("opportunity_id"))
+                config_hash = request.POST.get("config_hash")
+
+                result = SQLCacheManager.delete_config_cache(opportunity_id, config_hash)
+
+                return JsonResponse(
+                    {
+                        "success": True,
+                        "message": f"Deleted config cache for opportunity {opportunity_id}, config {config_hash[:8]}",
+                        "deleted": result,
+                    }
+                )
+
+            elif mode == "expired":
+                # Delete all expired entries
+                raw_deleted = RawVisitCache.cleanup_expired()
+                visit_deleted = ComputedVisitCache.cleanup_expired()
+                flw_deleted = ComputedFLWCache.cleanup_expired()
+
+                return JsonResponse(
+                    {
+                        "success": True,
+                        "message": "Deleted all expired cache entries",
+                        "deleted": {
+                            "raw": raw_deleted,
+                            "computed_visit": visit_deleted,
+                            "computed_flw": flw_deleted,
+                        },
+                    }
+                )
+
+            elif mode == "selective":
+                # Delete selected entries
+                selected_entries = json.loads(request.POST.get("selected_entries", "[]"))
+
+                deleted_counts = {"raw": 0, "computed_visit": 0, "computed_flw": 0}
+
+                for entry in selected_entries:
+                    cache_type = entry["cache_type"]
+                    opportunity_id = entry["opportunity_id"]
+                    config_hash = entry.get("config_hash")
+
+                    if cache_type == "raw":
+                        count = RawVisitCache.objects.filter(opportunity_id=opportunity_id).delete()[0]
+                        deleted_counts["raw"] += count
+                    elif cache_type == "computed_visit":
+                        if config_hash:
+                            count = ComputedVisitCache.objects.filter(
+                                opportunity_id=opportunity_id, config_hash=config_hash
+                            ).delete()[0]
+                            deleted_counts["computed_visit"] += count
+                    elif cache_type == "computed_flw":
+                        if config_hash:
+                            count = ComputedFLWCache.objects.filter(
+                                opportunity_id=opportunity_id, config_hash=config_hash
+                            ).delete()[0]
+                            deleted_counts["computed_flw"] += count
+
+                return JsonResponse(
+                    {
+                        "success": True,
+                        "message": f"Deleted {len(selected_entries)} cache entries",
+                        "deleted": deleted_counts,
+                    }
+                )
+
+            else:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": f"Invalid deletion mode: {mode}",
+                    },
+                    status=400,
+                )
+
+        except Exception as e:
+            logger.error(f"[CacheManager] Delete failed: {e}")
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": f"Deletion failed: {str(e)}",
+                },
+                status=500,
+            )
+
+
+class CacheStatsAPIView(LoginRequiredMixin, View):
+    """AJAX endpoint for cache statistics."""
+
+    def get(self, request):
+        """Return cache statistics as JSON."""
+        from commcare_connect.labs.analysis.backends.sql.cache import SQLCacheManager
+
+        try:
+            opportunity_id = request.GET.get("opportunity_id")
+
+            if opportunity_id:
+                # Get stats for specific opportunity
+                stats = SQLCacheManager.get_cache_stats(int(opportunity_id))
+
+                return JsonResponse(
+                    {
+                        "success": True,
+                        "opportunity_id": int(opportunity_id),
+                        "stats": stats,
+                    }
+                )
+            else:
+                # Get global stats
+                all_entries = SQLCacheManager.get_cache_details()
+
+                total_entries = len(all_entries)
+                total_rows = sum(e["row_count"] for e in all_entries)
+
+                return JsonResponse(
+                    {
+                        "success": True,
+                        "total_entries": total_entries,
+                        "total_rows": total_rows,
+                    }
+                )
+
+        except Exception as e:
+            logger.error(f"[CacheManager] Stats API failed: {e}")
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": f"Failed to get cache stats: {str(e)}",
+                },
+                status=500,
+            )

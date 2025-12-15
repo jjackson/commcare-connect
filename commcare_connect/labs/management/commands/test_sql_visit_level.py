@@ -116,7 +116,7 @@ class Command(BaseCommand):
         start = time.time()
 
         pipeline = AnalysisPipeline(request)
-        result = pipeline.run_analysis(CHC_NUTRITION_CONFIG)
+        result = pipeline.stream_analysis_ignore_events(CHC_NUTRITION_CONFIG)
 
         duration = time.time() - start
 
