@@ -1462,6 +1462,7 @@ class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateVie
         kwargs["opportunity"] = self.get_opportunity()
         kwargs["invoice_type"] = self.request.GET.get("invoice_type", PaymentInvoice.InvoiceType.service_delivery)
         kwargs["status"] = InvoiceStatus.SUBMITTED
+        kwargs["is_opportunity_pm"] = self.request.is_opportunity_pm
         return kwargs
 
     def get_success_url(self):
@@ -1533,6 +1534,7 @@ class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailVie
             invoice_type=invoice_type,
             line_items_table=line_items_table,
             read_only=True,
+            is_opportunity_pm=self.request.is_opportunity_pm,
         )
 
     @property
