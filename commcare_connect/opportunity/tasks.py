@@ -560,6 +560,7 @@ def generate_automated_service_delivery_invoice():
 
         total_local_amount = sum(item["total_amount_local"] for item in line_items)
         total_usd_amount = sum(item["total_amount_usd"] for item in line_items)
+        exchange_rate = ExchangeRate.latest_exchange_rate(line_items[-1]["currency"], line_items[-1]["month"])
 
         payment_invoice = PaymentInvoice(
             opportunity=opportunity,
@@ -571,7 +572,7 @@ def generate_automated_service_delivery_invoice():
             status=InvoiceStatus.PENDING,
             invoice_number=invoice_number,
             service_delivery=True,
-            exchange_rate=line_items[-1].exchange_rate,
+            exchange_rate=exchange_rate,
         )
         invoices_chunk.append(payment_invoice)
 
