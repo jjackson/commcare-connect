@@ -11,6 +11,7 @@ from commcare_connect.flags.switch_names import AUTOMATED_INVOICES_MONTHLY
 from commcare_connect.opportunity.models import (
     BlobMeta,
     CompletedWorkStatus,
+    ExchangeRate,
     InvoiceStatus,
     Opportunity,
     OpportunityAccess,
@@ -184,10 +185,19 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
             mock.patch("commcare_connect.opportunity.tasks.get_start_date_for_invoice") as mock_start_date,
             mock.patch("commcare_connect.opportunity.tasks.get_end_date_previous_month") as mock_end_date,
             mock.patch("commcare_connect.opportunity.tasks.generate_invoice_number") as mock_invoice_number,
+            mock.patch(
+                "commcare_connect.opportunity.models.ExchangeRate.latest_exchange_rate",
+                create=True,
+            ) as mock_latest_exchange_rate,
         ):
             mock_start_date.return_value = datetime.date(2024, 1, 1)
             mock_end_date.return_value = datetime.date(2024, 1, 31)
             mock_invoice_number.side_effect = ["INV001", "INV002", "INV003", "INV004", "INV005"]
+
+            rate = ExchangeRate.objects.create(
+                currency_code="USD", rate=Decimal("1.00"), rate_date=datetime.date(2024, 1, 31)
+            )
+            mock_latest_exchange_rate.return_value = rate
 
             self.mock_start_date = mock_start_date
             self.mock_end_date = mock_end_date
