@@ -101,7 +101,7 @@ def send_monthly_delivery_reminder_email():
         opportunity__opportunityaccess__completedwork__status=CompletedWorkStatus.pending
     ).distinct()
 
-    for organization in organizations_with_pending_deliveries:
+    for organization in organizations_with_pending_deliveries.iterator(chunk_size=50):
         recipient_emails = _get_membership_users_emails(organization)
         if not recipient_emails:
             continue
