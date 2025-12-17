@@ -1491,7 +1491,9 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
             self.fields["date"].initial = str(datetime.date.today())
 
         if self.is_service_delivery:
-            self.fields["amount"].label = _("Amount (Local Currency)")
+            self.fields["amount"].label = _("Amount ({currency_code})").format(
+                currency_code=self.opportunity.currency or "Local Currency"
+            )
             self.fields["amount"].help_text = _("Local currency is determined by the opportunity.")
             if self.instance.pk:
                 self.fields["start_date"].initial = str(self.instance.start_date)
