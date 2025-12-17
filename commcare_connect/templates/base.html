@@ -40,7 +40,7 @@
                 <i class="fa-regular fa-circle-check"></i>
               {% elif message.tags == 'warning' %}
                 <i class="fa-solid fa-triangle-exclamation"></i>
-              {% elif message.tags == 'error' %}
+              {% elif message.tags == 'error' or message.tags == 'danger' %}
                 <i class="fa-solid fa-circle-exclamation"></i>
               {% elif message.tags == 'info' %}
                 <i class="fa-solid fa-circle-info"></i>
