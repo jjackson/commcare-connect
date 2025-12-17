@@ -29,6 +29,8 @@
   --color-message-success-text: #218079;
   --color-message-warning-text: #bc950f;
   --color-message-warning: #fff4cd;
+  --color-success-border: #7abfb4;
+  --color-warning-border: #dbb646;
   --width-screen-sm: var(--breakpoint-sm);
 }
 

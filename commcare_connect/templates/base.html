@@ -29,10 +29,10 @@
       <main id="content" class="md:max-w-screen-2xl mx-auto">
         {% if messages %}
           {% for message in messages %}
-          <div class="flex items-center justify-between p-4 mb-4 rounded-lg
-                    {% if message.tags == 'success' %}bg-message-success text-message-success-text
+          <div class="flex items-center justify-between p-4 mb-4 rounded-lg border-[0.5px]
+                    {% if message.tags == 'success' %}bg-message-success text-message-success-text border-message-success-border
                     {% elif message.tags == 'error' or message.tags == 'danger' %}bg-red-500 text-white
-                    {% elif message.tags == 'warning' %}bg-message-warning text-message-warning-text
+                    {% elif message.tags == 'warning' %}bg-message-warning text-message-warning-text border-message-warning-border
                     {% elif message.tags == 'info' %}bg-blue-500 text-white
                     {% else %}bg-gray-500 text-white{% endif %}">
             <div class="flex items-center gap-2">
