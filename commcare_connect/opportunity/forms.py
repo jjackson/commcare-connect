@@ -1457,10 +1457,12 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
     date_of_expense_incurred = forms.DateField(
         label=_("Date of expense incurred"),
         widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+        required=False,
     )
     justification = forms.CharField(
         label=_("Justification"),
         widget=forms.Textarea(attrs={"rows": 3, "placeholder": _("Provide justification for the invoice amount...")}),
+        required=False,
     )
 
     class Meta:
@@ -1488,6 +1490,14 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         self.line_items_table = kwargs.pop("line_items_table", None)
 
         super().__init__(*args, **kwargs)
+
+        self.prepare_fields()
+
+        self.helper = FormHelper(self)
+        self.helper.layout = self.get_form_layout()
+        self.helper.form_tag = False
+
+    def prepare_fields(self):
         if self.read_only:
             for field in self.fields.values():
                 field.widget.attrs["readonly"] = "readonly"
@@ -1517,31 +1527,8 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
                     "x-on:change": "currency = $event.target.checked; convert(true)",
                 }
             )
-
-        self.helper = FormHelper(self)
-
-        invoice_form_fields = self.invoice_form_fields()
-        if self.is_service_delivery:
-            invoice_form_fields.extend(
-                [
-                    self.line_items,
-                    Fieldset(
-                        "Service Delivery Notes",
-                        Field("notes"),
-                    ),
-                ]
-            )
-
-        if not self.read_only:
-            invoice_form_fields.append(
-                Div(
-                    Submit("submit", "Submit", css_class="button button-md primary-dark"),
-                    css_class="flex justify-end mt-4",
-                )
-            )
-
-        self.helper.layout = Layout(*invoice_form_fields)
-        self.helper.form_tag = False
+            self.fields["justification"].required = True
+            self.fields["date_of_expense_incurred"].required = True
 
     def get_start_date_for_invoice(self):
         date = (
@@ -1569,10 +1556,20 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
             return datetime.date.today() - datetime.timedelta(days=1)
         return last_day_previous_month
 
-    def invoice_form_fields(self):
+    def get_form_layout(self):
         if self.is_service_delivery:
-            return self.service_delivery_invoice_fields
-        return self.custom_invoice_fields
+            invoice_form_fields = self.service_delivery_invoice_fields
+        else:
+            invoice_form_fields = self.custom_invoice_fields
+
+        if not self.read_only:
+            invoice_form_fields.append(
+                Div(
+                    Submit("submit", _("Submit"), css_class="button button-md primary-dark"),
+                    css_class="flex justify-end mt-4",
+                )
+            )
+        return Layout(*invoice_form_fields)
 
     @property
     def service_delivery_invoice_fields(self):
@@ -1607,6 +1604,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
                 },
             ),
         ]
+
         return [
             Div(
                 Div(*first_row, css_class="grid grid-cols-3 gap-6"),
@@ -1617,6 +1615,11 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
                     css_class="grid grid-cols-3 gap-6",
                 ),
                 css_class="flex flex-col gap-4",
+            ),
+            self.line_items,
+            Fieldset(
+                _("Service Delivery Notes"),
+                Field("notes"),
             ),
         ]
 
