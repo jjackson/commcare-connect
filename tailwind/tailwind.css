@@ -33,8 +33,10 @@
   --color-message-error-text: #900000;
   --color-message-info: #eef0ff;
   --color-message-info-text: #3a42c7;
-  --color-success-border: #7abfb4;
-  --color-warning-border: #dbb646;
+  --color-message-success-border: #7abfb4;
+  --color-message-warning-border: #dbb646;
+  --color-message-info-border: #3a42c7;
+  --color-message-error-border: #900000;
   --width-screen-sm: var(--breakpoint-sm);
 }
 
