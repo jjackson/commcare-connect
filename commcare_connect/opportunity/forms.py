@@ -1454,6 +1454,14 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         label=_("Specify in USD"),
         widget=forms.CheckboxInput(),
     )
+    date_of_expense_incurred = forms.DateField(
+        label=_("Date of expense incurred"),
+        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+    )
+    justification = forms.CharField(
+        label=_("Justification"),
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": _("Provide justification for the invoice amount...")}),
+    )
 
     class Meta:
         model = PaymentInvoice
@@ -1562,57 +1570,43 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         return last_day_previous_month
 
     def invoice_form_fields(self):
-        invoice_number_attrs = {}
-        invoice_number_attrs["readonly"] = "readonly"
-        first_row = [Field("invoice_number", **invoice_number_attrs)]
-
         if self.is_service_delivery:
-            first_row.append(Field("title"))
+            return self.service_delivery_invoice_fields
+        return self.custom_invoice_fields
 
-        second_row = [Field("date", **{"x-ref": "date", "x-on:change": "convert()"})]
-        if self.is_service_delivery:
-            start_date_attrs = (
-                {} if self.read_only else {"x-model": "startDate", "x-on:change": "fetchInvoiceLineItems()"}
-            )
-            end_date_attrs = {} if self.read_only else {"x-model": "endDate", "x-on:change": "fetchInvoiceLineItems()"}
-            second_row.append(Field("start_date", **start_date_attrs))
-            second_row.append(Field("end_date", **end_date_attrs))
+    @property
+    def service_delivery_invoice_fields(self):
+        first_row = [
+            Field("invoice_number", **{"readonly": "readonly"}),
+            Field("title"),
+        ]
 
-        amount_field_attrs = {
-            "x-ref": "amount",
-            "x-model": "amount",
-            "x-on:input.debounce.300ms": "convert()",
-        }
-        amount_usd_field_attrs = {
-            "x-model": "usdAmount",
-        }
-        if self.is_service_delivery:
-            amount_field_attrs["readonly"] = "readonly"
-            amount_usd_field_attrs["readonly"] = "readonly"
+        start_date_attrs = {} if self.read_only else {"x-model": "startDate", "x-on:change": "fetchInvoiceLineItems()"}
+        end_date_attrs = {} if self.read_only else {"x-model": "endDate", "x-on:change": "fetchInvoiceLineItems()"}
+        second_row = [
+            Field("date", **{"x-ref": "date", "x-on:change": "convert()"}),
+            Field("start_date", **start_date_attrs),
+            Field("end_date", **end_date_attrs),
+        ]
 
         third_row = [
             Field(
                 "amount",
-                label=f"Amount ({self.opportunity.currency})",
-                **amount_field_attrs,
+                **{
+                    "x-ref": "amount",
+                    "x-model": "amount",
+                    "x-on:input.debounce.300ms": "convert()",
+                    "readonly": "readonly",
+                },
+            ),
+            Field(
+                "amount_usd",
+                **{
+                    "x-model": "usdAmount",
+                    "readonly": "readonly",
+                },
             ),
         ]
-        if self.is_service_delivery:
-            third_row.append(
-                Field(
-                    "amount_usd",
-                    **amount_usd_field_attrs,
-                ),
-            )
-        else:
-            third_row.append(
-                Field(
-                    "usd_currency",
-                    css_class=CHECKBOX_CLASS,
-                    wrapper_class="flex p-4 justify-between rounded-lg bg-gray-100",
-                ),
-            )
-
         return [
             Div(
                 Div(*first_row, css_class="grid grid-cols-3 gap-6"),
@@ -1622,6 +1616,44 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
                     Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
                     css_class="grid grid-cols-3 gap-6",
                 ),
+                css_class="flex flex-col gap-4",
+            ),
+        ]
+
+    @property
+    def custom_invoice_fields(self):
+        first_row = [
+            Field("invoice_number", **{"readonly": "readonly"}),
+            Field("date", **{"x-ref": "date", "x-on:change": "convert()"}),
+            Field("date_of_expense_incurred"),
+        ]
+
+        second_row = [
+            Field(
+                "amount",
+                label=_("Amount"),
+                **{
+                    "x-ref": "amount",
+                    "x-model": "amount",
+                    "x-on:input.debounce.300ms": "convert()",
+                },
+            ),
+            Field(
+                "usd_currency",
+                css_class=CHECKBOX_CLASS,
+                wrapper_class="flex p-4 justify-between rounded-lg bg-gray-100",
+            ),
+        ]
+
+        third_row = [
+            Field("justification"),
+        ]
+
+        return [
+            Div(
+                Div(*first_row, css_class="grid grid-cols-3 gap-6"),
+                Div(*second_row, css_class="grid grid-cols-3 gap-6"),
+                Div(*third_row, css_class="w-full"),
                 css_class="flex flex-col gap-4",
             ),
         ]
