@@ -31,15 +31,19 @@
           {% for message in messages %}
           <div class="flex items-center justify-between p-4 mb-4 rounded-lg border-[0.5px]
                     {% if message.tags == 'success' %}bg-message-success text-message-success-text border-message-success-border
-                    {% elif message.tags == 'error' or message.tags == 'danger' %}bg-red-500 text-white
+                    {% elif message.tags == 'error' or message.tags == 'danger' %}bg-message-error text-message-error-text border-message-error-text
                     {% elif message.tags == 'warning' %}bg-message-warning text-message-warning-text border-message-warning-border
-                    {% elif message.tags == 'info' %}bg-blue-500 text-white
+                    {% elif message.tags == 'info' %}bg-message-info text-message-info-text border-message-info-text
                     {% else %}bg-gray-500 text-white{% endif %}">
             <div class="flex items-center gap-2">
               {% if message.tags == 'success' %}
-              <i class="fa-regular fa-circle-check"></i>
+                <i class="fa-regular fa-circle-check"></i>
               {% elif message.tags == 'warning' %}
-              <i class="fa-solid fa-triangle-exclamation"></i>
+                <i class="fa-solid fa-triangle-exclamation"></i>
+              {% elif message.tags == 'error' %}
+                <i class="fa-solid fa-circle-exclamation"></i>
+              {% elif message.tags == 'info' %}
+                <i class="fa-solid fa-circle-info"></i>
               {% endif %}
               <span>{{ message }}</span>
             </div>
