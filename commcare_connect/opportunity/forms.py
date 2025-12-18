@@ -1581,7 +1581,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         start_date_attrs = {} if self.read_only else {"x-model": "startDate", "x-on:change": "fetchInvoiceLineItems()"}
         end_date_attrs = {} if self.read_only else {"x-model": "endDate", "x-on:change": "fetchInvoiceLineItems()"}
         second_row = [
-            Field("date", **{"x-ref": "date", "x-on:change": "convert()"}),
+            Field("date", **{"x-ref": "date"}),
             Field("start_date", **start_date_attrs),
             Field("end_date", **end_date_attrs),
         ]
@@ -1592,7 +1592,6 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
                 **{
                     "x-ref": "amount",
                     "x-model": "amount",
-                    "x-on:input.debounce.300ms": "convert()",
                     "readonly": "readonly",
                 },
             ),
@@ -1609,11 +1608,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
             Div(
                 Div(*first_row, css_class="grid grid-cols-3 gap-6"),
                 Div(*second_row, css_class="grid grid-cols-3 gap-6"),
-                Div(
-                    *third_row,
-                    Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
-                    css_class="grid grid-cols-3 gap-6",
-                ),
+                Div(*third_row, css_class="grid grid-cols-3 gap-6"),
                 css_class="flex flex-col gap-4",
             ),
             self.line_items,
@@ -1627,7 +1622,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
     def custom_invoice_fields(self):
         first_row = [
             Field("invoice_number", **{"readonly": "readonly"}),
-            Field("date", **{"x-ref": "date", "x-on:change": "convert()"}),
+            Field("date", **{"x-ref": "date"}),
             Field("date_of_expense_incurred"),
         ]
 
@@ -1646,6 +1641,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
                 css_class=CHECKBOX_CLASS,
                 wrapper_class="flex p-4 justify-between rounded-lg bg-gray-100",
             ),
+            Div(css_id="converted-amount-wrapper", css_class="space-y-1 text-sm text-gray-500 mb-4"),
         ]
 
         third_row = [
@@ -1656,7 +1652,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
             Div(
                 Div(*first_row, css_class="grid grid-cols-3 gap-6"),
                 Div(*second_row, css_class="grid grid-cols-3 gap-6"),
-                Div(*third_row, css_class="w-full"),
+                Div(*third_row),
                 css_class="flex flex-col gap-4",
             ),
         ]
