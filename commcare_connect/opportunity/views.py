@@ -1580,7 +1580,10 @@ def submit_invoice(request, org_slug, opp_id):
 @require_POST
 def invoice_approve(request, org_slug, opp_id):
     if not request.opportunity.managed or not (request.org_membership and request.org_membership.is_program_manager):
-        return redirect("opportunity:detail", org_slug, opp_id)
+        return HttpResponse(
+            status=302,
+            headers={"HX-Redirect": reverse("opportunity:detail", args=[org_slug, opp_id])},
+        )
     invoice_ids = request.POST.getlist("pk")
     invoices = PaymentInvoice.objects.filter(opportunity=request.opportunity, pk__in=invoice_ids, payment__isnull=True)
 
