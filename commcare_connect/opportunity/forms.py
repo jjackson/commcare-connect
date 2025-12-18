@@ -1454,33 +1454,39 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         label=_("Specify in USD"),
         widget=forms.CheckboxInput(),
     )
-    date_of_expense_incurred = forms.DateField(
+    date_of_expense = forms.DateField(
         label=_("Date of expense incurred"),
         widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         required=False,
     )
-    justification = forms.CharField(
-        label=_("Justification"),
-        widget=forms.Textarea(attrs={"rows": 3, "placeholder": _("Provide justification for the invoice amount...")}),
+    description = forms.CharField(
+        label="",
+        widget=forms.Textarea(attrs={"rows": 3}),
         required=False,
     )
 
     class Meta:
         model = PaymentInvoice
-        fields = ("title", "date", "invoice_number", "start_date", "end_date", "notes", "amount", "amount_usd")
+        fields = (
+            "title",
+            "date",
+            "invoice_number",
+            "start_date",
+            "end_date",
+            "description",
+            "amount",
+            "amount_usd",
+            "date_of_expense",
+        )
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "start_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "end_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
-            "notes": forms.Textarea(
-                attrs={"rows": 3, "placeholder": _("Describe service delivery details, references, or notes...")}
-            ),
             "title": forms.TextInput(attrs={"placeholder": _("e.g. October Services")}),
         }
         labels = {
             "title": _("Invoice title"),
             "date": _("Generation date"),
-            "notes": "",
         }
 
     def __init__(self, *args, **kwargs):
@@ -1513,6 +1519,13 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
                 currency_code=self.opportunity.currency or "Local Currency"
             )
             self.fields["amount"].help_text = _("Local currency is determined by the opportunity.")
+
+            self.fields["description"].widget.attrs.update(
+                {
+                    "placeholder": _("Describe service delivery details, references, or notes..."),
+                }
+            )
+
             if self.instance.pk:
                 self.fields["start_date"].initial = str(self.instance.start_date)
                 self.fields["end_date"].initial = str(self.instance.end_date)
@@ -1527,8 +1540,14 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
                     "x-on:change": "currency = $event.target.checked; convert(true)",
                 }
             )
-            self.fields["justification"].required = True
-            self.fields["date_of_expense_incurred"].required = True
+            self.fields["description"].required = True
+            self.fields["description"].label = _("Justification")
+            self.fields["description"].widget.attrs.update(
+                {
+                    "placeholder": _("Provide a justification for this expense..."),
+                }
+            )
+            self.fields["date_of_expense"].required = True
 
     def get_start_date_for_invoice(self):
         date = (
@@ -1614,7 +1633,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
             self.line_items,
             Fieldset(
                 _("Service Delivery Notes"),
-                Field("notes"),
+                Field("description"),
             ),
         ]
 
@@ -1623,7 +1642,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         first_row = [
             Field("invoice_number", **{"readonly": "readonly"}),
             Field("date", **{"x-ref": "date"}),
-            Field("date_of_expense_incurred"),
+            Field("date_of_expense"),
         ]
 
         second_row = [
@@ -1645,7 +1664,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         ]
 
         third_row = [
-            Field("justification"),
+            Field("description"),
         ]
 
         return [
@@ -1692,7 +1711,6 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
             cleaned_data["title"] = None
             cleaned_data["start_date"] = None
             cleaned_data["end_date"] = None
-            cleaned_data["notes"] = None
 
             exchange_rate = ExchangeRate.latest_exchange_rate(self.opportunity.currency, date)
             if not exchange_rate:
@@ -1725,6 +1743,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         instance.amount = self.cleaned_data["amount"]
         instance.exchange_rate = self.cleaned_data.get("exchange_rate")
         instance.service_delivery = self.invoice_type == PaymentInvoice.InvoiceType.service_delivery
+        instance.date_of_expense = self.cleaned_data.get("date_of_expense")
 
         if commit:
             instance.save()
