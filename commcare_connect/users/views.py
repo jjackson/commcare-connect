@@ -21,6 +21,7 @@ from rest_framework.decorators import api_view, authentication_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from waffle.models import Switch
 
 from commcare_connect.connect_id_client.main import fetch_demo_user_tokens, get_user_otp
 from commcare_connect.connect_id_client.models import ConnectIdUser
@@ -224,6 +225,13 @@ class CheckInvitedUserView(ClientProtectedResourceMixin, View):
         if phone_number:
             invited = UserInvite.objects.filter(phone_number=phone_number).exists()
         return JsonResponse({"invited": invited})
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class UserToggleView(ClientProtectedResourceMixin, View):
+    def get(self, request, *args, **kwargs):
+        toggles = list(Switch.objects.all().values("name", "active"))
+        return JsonResponse({"toggles": toggles})
 
 
 @method_decorator(csrf_exempt, name="dispatch")
