@@ -236,7 +236,7 @@ class TestUserToggleView:
         assert data["toggles"] == []
 
     def test_toggles(self, mobile_user: User, rf: RequestFactory):
-        SwitchFactory(name="TEST_SWITCH")
+        switch = SwitchFactory(name="TEST_SWITCH")
         user_toggle_view = UserToggleView.as_view()
         request = rf.get("/fake-url/", data={"username": "abc"})
         request.user = mobile_user
@@ -249,4 +249,6 @@ class TestUserToggleView:
 
         assert response.status_code == 200
         assert "toggles" in data
-        assert data["toggles"] == [{"name": "TEST_SWITCH", "active": True}]
+        assert data["toggles"] == [
+            {"name": "TEST_SWITCH", "active": True, "created": switch.created, "modified": switch.modified}
+        ]
