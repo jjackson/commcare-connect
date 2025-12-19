@@ -229,8 +229,10 @@ class CheckInvitedUserView(ClientProtectedResourceMixin, View):
 
 @method_decorator(csrf_exempt, name="dispatch")
 class UserToggleView(ClientProtectedResourceMixin, View):
+    # This takes a username or phone_number query parameter
+    # but ignoring for now since all toggles are global switches
     def get(self, request, *args, **kwargs):
-        toggles = list(Switch.objects.all().values("name", "active"))
+        toggles = list(Switch.objects.all().values("name", "active", "created", "modified"))
         return JsonResponse({"toggles": toggles})
 
 
