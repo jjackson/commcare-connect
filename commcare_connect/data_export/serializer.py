@@ -233,6 +233,7 @@ class LabsRecordDataSerializer(serializers.ModelSerializer):
             "labs_record_id",
             "type",
             "data",
+            "public",
         ]
 
     def get_username(self, obj) -> str:
