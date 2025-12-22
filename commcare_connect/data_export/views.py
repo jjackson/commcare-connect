@@ -6,7 +6,7 @@ from django.http import FileResponse, JsonResponse, StreamingHttpResponse
 from drf_spectacular.utils import extend_schema, inline_serializer
 from oauth2_provider.contrib.rest_framework.permissions import TokenHasScope
 from rest_framework import status
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.exceptions import NotFound
 from rest_framework.generics import ListCreateAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -238,9 +238,14 @@ class CompletedModuleDataView(OpportunityScopedDataView):
     serializer_class = CompletedModuleDataSerializer
 
     def get_queryset(self, request, opp_id):
-        return CompletedModule.objects.filter(opportunity=self.opportunity).annotate(
+        queryset = CompletedModule.objects.filter(opportunity=self.opportunity)
+        username = request.query_params.get("username")
+        if username:
+            queryset = queryset.filter(opportunity_access__user__username=username)
+        queryset = queryset.annotate(
             username=F("opportunity_access__user__username"),
         )
+        return queryset
 
 
 class AssessmentDataView(OpportunityScopedDataView):
@@ -267,7 +272,7 @@ class LabsRecordDataView(BaseDataExportView, ListCreateAPIView):
             org_id = params.get("organization_id")
             self.organization = _get_org_or_404(request.user, org_id)
         else:
-            raise PermissionDenied("Specifying an org, opp, or program is required")
+            self.public = True
 
     def _check_edit_permissions(self, request):
         data = request.data
@@ -305,6 +310,8 @@ class LabsRecordDataView(BaseDataExportView, ListCreateAPIView):
         for key, value in query_params.items():
             filters[key] = value
         queryset = LabsRecord.objects.filter(**filters)
+        if hasattr(self, "public"):
+            queryset = queryset.filter(public=self.public)
         if hasattr(self, "opportunity"):
             queryset = queryset.filter(opportunity=self.opportunity)
         if hasattr(self, "program"):

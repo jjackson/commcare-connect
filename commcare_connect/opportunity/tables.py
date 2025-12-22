@@ -17,6 +17,7 @@ from commcare_connect.opportunity.models import (
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
+    InvoiceStatus,
     LearnModule,
     OpportunityAccess,
     PaymentInvoice,
@@ -378,20 +379,23 @@ class PaymentInvoiceTable(OpportunityContextTable):
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="Actions")
     exchange_rate = tables.Column(orderable=False, empty_values=(None,), accessor="exchange_rate__rate")
     amount_usd = tables.Column(verbose_name="Amount (USD)")
+    status = tables.Column(verbose_name="Invoice Status")
+    invoice_type = tables.Column(verbose_name="Invoice Type", accessor="service_delivery", empty_values=())
 
     class Meta:
         model = PaymentInvoice
         orderable = False
-        fields = ("amount", "date", "invoice_number", "service_delivery")
+        fields = ("amount", "date", "invoice_number")
         sequence = (
             "amount",
             "amount_usd",
             "exchange_rate",
             "date",
             "invoice_number",
+            "status",
             "payment_status",
             "payment_date",
-            "service_delivery",
+            "invoice_type",
             "actions",
         )
         empty_text = "No Payment Invoices"
@@ -419,6 +423,11 @@ class PaymentInvoiceTable(OpportunityContextTable):
             return value.date_paid
         return
 
+    def render_invoice_type(self, record):
+        if record.service_delivery:
+            return _("Service Delivery")
+        return _("Other")
+
     def render_actions(self, record):
         review_button = ""
         if waffle.switch_is_active(INVOICE_REVIEW):
@@ -431,7 +440,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
                 f'{_("Review")}</a>'
             )
         pay_button = ""
-        if self.is_pm:
+        if self.is_pm and record.status == InvoiceStatus.SUBMITTED:
             invoice_approve_url = reverse("opportunity:invoice_approve", args=[self.org_slug, self.opportunity.id])
             disabled = "disabled" if getattr(record, "payment", None) else ""
             pay_button = f"""
@@ -439,8 +448,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
                     hx-post="{invoice_approve_url}"
                     hx-vals='{{"pk": "{record.pk}"}}'
                     hx-headers='{{"X-CSRFToken": "{self.csrf_token}"}}'
-                    hx-target="body"
-                    class="button button-md outline-style"
+                    class="button button-md primary-dark"
                     {disabled}>
                     {_("Pay")}
                 </button>
