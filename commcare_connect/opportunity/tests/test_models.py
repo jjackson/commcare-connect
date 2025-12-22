@@ -130,7 +130,7 @@ def test_access_visit_count(opportunity: Opportunity):
 @pytest.mark.django_db
 def test_populate_currency_and_country_fk():
     migration_module = importlib.import_module(
-        "commcare_connect.opportunity.migrations.0088_currency_country_opportunity_currency_fk"
+        "commcare_connect.opportunity.migrations.0092_currency_country_opportunity_currency_fk"
     )
     populate_currency_and_country_fk = migration_module.populate_currency_and_country_fk
 
@@ -185,6 +185,7 @@ def test_populate_currency_and_country_fk():
     assert CurrencyModel.objects.count() == initial_currency_count + 1
 
 
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     "query_flags, expected_keys",
     [
