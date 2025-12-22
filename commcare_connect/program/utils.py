@@ -53,10 +53,8 @@ def populate_currency_and_country_fk_for_model(apps, model_name, app_label, tota
                 continue
 
             if raw_code not in code_to_currency:
-                currency_obj, _ = Currency.objects.get_or_create(
-                    code=raw_code,
-                    defaults={"name": "Unknown Name", "is_valid": False},
-                )
+                # Set to USD when code is incorrect
+                currency_obj = code_to_currency["USD"]
                 code_to_currency[currency_obj.code] = currency_obj
             else:
                 currency_obj = code_to_currency[raw_code]
