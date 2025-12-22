@@ -167,14 +167,14 @@ def test_populate_currency_and_country_fk():
         opp.refresh_from_db()
 
     # valid currency should map to fk
-    assert opp_valid.currency_fk_id == valid_currency_only
+    assert opp_valid.currency_fk.code == valid_currency_only
 
     # single-country currency auto-sets the country fk
-    assert opp_single.currency_fk_id == single_country_currency
+    assert opp_single.currency_fk.code == single_country_currency
     assert opp_single.country_id == CountryModel.objects.get(code="KEN").pk
 
     # multi-country currencies should stay NULL for country
-    assert opp_multi.currency_fk_id == multi_country_currency
+    assert opp_multi.currency_fk.code == multi_country_currency
     assert opp_multi.country_id is None
 
     # invalid currencies fall back to USD without creating new currency rows
