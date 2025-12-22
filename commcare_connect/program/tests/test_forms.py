@@ -38,6 +38,7 @@ class TestProgramForm:
             "delivery_type": delivery_type.id,
             "budget": 10000,
             "currency_fk": "USD",
+            "country": "USA",
             "start_date": timezone.now().date(),
             "end_date": timezone.now().date() + timezone.timedelta(days=30),
         }
