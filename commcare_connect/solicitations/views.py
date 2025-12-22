@@ -828,8 +828,11 @@ class SolicitationCreateOrUpdate(SolicitationManagerMixin, UpdateView):
 
 class DeliveryTypesListView(LoginRequiredMixin, ListView):
     """
-    Public list view of all delivery types with solicitation counts.
+    Public list view of all delivery types with solicitation and program counts.
     Any authenticated user can view delivery types.
+
+    URL Parameters:
+        min_visits: Minimum visit threshold for counting programs (default: 0)
     """
 
     model = DeliveryTypeDescriptionRecord
@@ -846,34 +849,61 @@ class DeliveryTypesListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # Get solicitation counts per delivery type
+        # Get min_visits from URL params
+        min_visits = int(self.request.GET.get("min_visits", 0))
+        context["min_visits"] = min_visits
+
         try:
             data_access = SolicitationDataAccess(request=self.request)
-            all_solicitations = data_access.get_public_solicitations(status="active")
 
-            # Count solicitations by delivery type
-            counts = {}
+            # Get solicitation counts per delivery type
+            all_solicitations = data_access.get_public_solicitations(status="active")
+            solicitation_counts = {}
             for sol in all_solicitations:
                 slug = sol.delivery_type_slug
                 if slug:
-                    counts[slug] = counts.get(slug, 0) + 1
+                    solicitation_counts[slug] = solicitation_counts.get(slug, 0) + 1
 
-            # Add count to each delivery type for template access
+            # Get opportunity counts per delivery type
+            opp_counts = data_access.get_opportunity_counts_by_delivery_type(min_visits=min_visits)
+
+            # Add counts to each delivery type for template access
             delivery_types = context.get("delivery_types", [])
+            total_active_opps = 0
+            total_completed_opps = 0
+
             for dt in delivery_types:
-                dt.solicitation_count = counts.get(dt.slug, 0)
+                dt.solicitation_count = solicitation_counts.get(dt.slug, 0)
+
+                # Add opportunity counts
+                opp_data = opp_counts.get(dt.slug, {"active": 0, "completed": 0, "total": 0})
+                dt.active_opportunities = opp_data["active"]
+                dt.completed_opportunities = opp_data["completed"]
+                dt.total_opportunities = opp_data["total"]
+
+                total_active_opps += opp_data["active"]
+                total_completed_opps += opp_data["completed"]
 
             context["total_solicitations"] = len(all_solicitations)
+            context["total_active_opportunities"] = total_active_opps
+            context["total_completed_opportunities"] = total_completed_opps
+
         except Exception:
             context["total_solicitations"] = 0
+            context["total_active_opportunities"] = 0
+            context["total_completed_opportunities"] = 0
 
         return context
 
 
 class DeliveryTypeDetailView(LoginRequiredMixin, DetailView):
     """
-    Public detail view of a delivery type with its solicitations.
+    Public detail view of a delivery type with its solicitations and programs.
     Any authenticated user can view delivery type details.
+
+    URL Parameters:
+        min_visits: Minimum visit threshold for showing programs (default: 0)
+        include_inactive: Include inactive/ended programs (default: false)
     """
 
     model = DeliveryTypeDescriptionRecord
@@ -896,14 +926,93 @@ class DeliveryTypeDetailView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # Get solicitations for this delivery type
+        # Get URL params
+        min_visits = int(self.request.GET.get("min_visits", 0))
+        include_inactive = self.request.GET.get("include_inactive", "").lower() == "true"
+        context["min_visits"] = min_visits
+        context["include_inactive"] = include_inactive
+
         try:
             data_access = SolicitationDataAccess(request=self.request)
+
+            # Get solicitations for this delivery type
             context["solicitations"] = data_access.get_solicitations_by_delivery_type(
                 delivery_type_slug=self.object.slug,
                 status="active",
             )
+
+            # Get opportunities/programs for this delivery type
+            opportunities = data_access.get_opportunities_by_delivery_type(
+                delivery_type_slug=self.object.slug,
+                min_visits=min_visits,
+                include_inactive=include_inactive,
+            )
+
+            # Group opportunities by organization for summary
+            org_summaries = {}
+            for opp in opportunities:
+                org_slug = opp.get("organization", "unknown")
+                if org_slug not in org_summaries:
+                    org_summaries[org_slug] = {
+                        "organization": org_slug,
+                        "opportunities": [],
+                        "total_visits": 0,
+                        "active_count": 0,
+                        "completed_count": 0,
+                    }
+
+                org_summaries[org_slug]["opportunities"].append(opp)
+                org_summaries[org_slug]["total_visits"] += opp.get("visit_count", 0)
+                if opp.get("is_active", False):
+                    org_summaries[org_slug]["active_count"] += 1
+                else:
+                    org_summaries[org_slug]["completed_count"] += 1
+
+            context["opportunities"] = opportunities
+            context["org_summaries"] = list(org_summaries.values())
+            context["total_opportunities"] = len(opportunities)
+            context["total_visits"] = sum(opp.get("visit_count", 0) for opp in opportunities)
+
         except Exception:
             context["solicitations"] = []
+            context["opportunities"] = []
+            context["org_summaries"] = []
+            context["total_opportunities"] = 0
+            context["total_visits"] = 0
+
+        return context
+
+
+class OpportunityDetailView(LoginRequiredMixin, TemplateView):
+    """
+    Detail view for a single opportunity.
+    Shows all available information about the opportunity in a nice layout.
+    """
+
+    template_name = "solicitations/opportunity_detail.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        opp_id = self.kwargs.get("opp_id")
+
+        try:
+            data_access = SolicitationDataAccess(request=self.request)
+            opportunity = data_access.get_opportunity_by_id(opp_id)
+
+            if not opportunity:
+                raise Http404("Opportunity not found")
+
+            context["opportunity"] = opportunity
+
+            # Get delivery type info for breadcrumb
+            delivery_type_slug = opportunity.get("delivery_type_slug")
+            if delivery_type_slug:
+                delivery_type = data_access.get_delivery_type_by_slug(delivery_type_slug)
+                context["delivery_type"] = delivery_type
+
+        except Http404:
+            raise
+        except Exception:
+            raise Http404("Opportunity not found")
 
         return context

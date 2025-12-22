@@ -334,6 +334,9 @@ commcare_connect/coverage/examples/
 # Labs explorer downloaded visits (temporary inspection files)
 commcare_connect/labs/explorer/downloaded_visits/
 
+# Admin boundaries example files (GeoPoDe exports, etc.)
+commcare_connect/labs/admin_boundaries/examples/
+
 # Elastic Beanstalk Files
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml

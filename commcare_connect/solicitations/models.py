@@ -231,3 +231,47 @@ class ReviewRecord(LocalLabsRecord):
             "neutral": "Neutral",
         }
         return rec_map.get(self.recommendation, self.recommendation)
+
+
+class OppOrgEnrichmentRecord(LocalLabsRecord):
+    """Proxy model for storing enrichment data for opportunities.
+
+    This record stores additional metadata about opportunities that is not
+    available in Connect Prod, such as country information. This allows us
+    to enrich the data displayed on delivery type pages.
+
+    The data field contains an array of opportunity enrichment objects.
+    """
+
+    @property
+    def enrichments(self):
+        """Return the array of enrichment objects."""
+        return self.data.get("enrichments", [])
+
+    def get_enrichment_for_opp(self, opportunity_id: int) -> dict | None:
+        """Get enrichment data for a specific opportunity.
+
+        Args:
+            opportunity_id: The opportunity ID to look up
+
+        Returns:
+            Dict with enrichment data or None if not found
+        """
+        for enrichment in self.enrichments:
+            if enrichment.get("opportunity_id") == opportunity_id:
+                return enrichment
+        return None
+
+    def get_country_for_opp(self, opportunity_id: int) -> str:
+        """Get country for a specific opportunity.
+
+        Args:
+            opportunity_id: The opportunity ID to look up
+
+        Returns:
+            Country string or empty string if not found
+        """
+        enrichment = self.get_enrichment_for_opp(opportunity_id)
+        if enrichment:
+            return enrichment.get("opp_country", "")
+        return ""

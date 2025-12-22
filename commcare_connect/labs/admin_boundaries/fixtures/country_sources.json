@@ -1,0 +1,293 @@
+[
+  {
+    "iso_code": "NGA",
+    "name": "Nigeria",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      },
+      "grid3": {
+        "type": "url",
+        "max_level": 3,
+        "levels": {
+          "1": {
+            "url": "https://data.grid3.org/datasets/GRID3::nigeria-state-boundaries/explore",
+            "name_field": "statename",
+            "id_field": "statecode",
+            "note": "PLACEHOLDER - need actual GeoJSON download URL"
+          },
+          "2": {
+            "url": "https://data.grid3.org/datasets/GRID3::nigeria-local-government-area-boundaries/explore",
+            "name_field": "lganame",
+            "id_field": "lgacode",
+            "note": "PLACEHOLDER - need actual GeoJSON download URL"
+          },
+          "3": {
+            "url": "https://data.grid3.org/datasets/GRID3::nigeria-ward-boundaries/explore",
+            "name_field": "wardname",
+            "id_field": "wardcode",
+            "note": "PLACEHOLDER - need actual GeoJSON download URL"
+          }
+        }
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries",
+      "3": "grid3"
+    }
+  },
+  {
+    "iso_code": "KEN",
+    "name": "Kenya",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  },
+  {
+    "iso_code": "ETH",
+    "name": "Ethiopia",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  },
+  {
+    "iso_code": "ZAF",
+    "name": "South Africa",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  },
+  {
+    "iso_code": "ZMB",
+    "name": "Zambia",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  },
+  {
+    "iso_code": "RWA",
+    "name": "Rwanda",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  },
+  {
+    "iso_code": "UGA",
+    "name": "Uganda",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  },
+  {
+    "iso_code": "MWI",
+    "name": "Malawi",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  },
+  {
+    "iso_code": "TZA",
+    "name": "Tanzania",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  },
+  {
+    "iso_code": "MOZ",
+    "name": "Mozambique",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  },
+  {
+    "iso_code": "IND",
+    "name": "India",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  },
+  {
+    "iso_code": "BGD",
+    "name": "Bangladesh",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  },
+  {
+    "iso_code": "PAK",
+    "name": "Pakistan",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  },
+  {
+    "iso_code": "PHL",
+    "name": "Philippines",
+    "sources": {
+      "geoboundaries": {
+        "type": "api",
+        "max_level": 2
+      },
+      "osm": {
+        "type": "api",
+        "max_level": 4
+      }
+    },
+    "recommended": {
+      "0": "geoboundaries",
+      "1": "geoboundaries",
+      "2": "geoboundaries"
+    }
+  }
+]

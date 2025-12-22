@@ -38,6 +38,22 @@ Explore our program types and find solicitations that match your organization's 
             <span class="font-semibold text-brand-deep-purple">{{ total_solicitations }}</span>
         </div>
     </div>
+    <div class="w-px h-8 bg-gray-200"></div>
+    <div class="flex items-center gap-2">
+        <i class="fa-solid fa-rocket text-green-600"></i>
+        <div>
+            <span class="text-xs text-gray-500 block">Active Opportunities</span>
+            <span class="font-semibold text-brand-deep-purple">{{ total_active_opportunities }}</span>
+        </div>
+    </div>
+    <div class="w-px h-8 bg-gray-200"></div>
+    <div class="flex items-center gap-2">
+        <i class="fa-solid fa-check-circle text-gray-500"></i>
+        <div>
+            <span class="text-xs text-gray-500 block">Completed</span>
+            <span class="font-semibold text-brand-deep-purple">{{ total_completed_opportunities }}</span>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -58,13 +74,23 @@ Explore our program types and find solicitations that match your organization's 
                             <h3 class="card_title group-hover:text-brand-cornflower-blue transition-colors">
                                 {{ dt.name }}
                             </h3>
-                            {% if dt.solicitation_count %}
-                                <span class="badge badge-sm primary-light">
-                                    {{ dt.solicitation_count }} active solicitation{{ dt.solicitation_count|pluralize }}
-                                </span>
-                            {% else %}
-                                <span class="badge badge-sm neutral">No active solicitations</span>
-                            {% endif %}
+                            <div class="flex flex-wrap gap-1 mt-1">
+                                {% if dt.active_opportunities %}
+                                    <span class="badge badge-sm positive-light">
+                                        {{ dt.active_opportunities }} active opportunit{{ dt.active_opportunities|pluralize:"y,ies" }}
+                                    </span>
+                                {% endif %}
+                                {% if dt.completed_opportunities %}
+                                    <span class="badge badge-sm neutral">
+                                        {{ dt.completed_opportunities }} completed
+                                    </span>
+                                {% endif %}
+                                {% if dt.solicitation_count %}
+                                    <span class="badge badge-sm primary-light">
+                                        {{ dt.solicitation_count }} solicitation{{ dt.solicitation_count|pluralize }}
+                                    </span>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
 
