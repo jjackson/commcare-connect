@@ -1,0 +1,812 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-7xl">
+  <!-- Header -->
+  <div class="mb-8">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">
+          <i class="fa-solid fa-map-location-dot text-green-600 mr-3"></i>
+          Admin Boundaries
+        </h1>
+        <p class="text-gray-600">
+          Manage administrative boundary data from multiple sources
+        </p>
+      </div>
+      <a href="{% url 'explorer:index' %}" class="inline-flex items-center text-gray-600 hover:text-gray-900">
+        <i class="fa-solid fa-arrow-left mr-2"></i>
+        Back to Explorer
+      </a>
+    </div>
+  </div>
+
+  <!-- Summary Statistics -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+      <div class="text-sm text-gray-600 mb-1">Countries Loaded</div>
+      <div class="text-2xl font-bold text-gray-900">{{ total_countries }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+      <div class="text-sm text-gray-600 mb-1">Total Boundaries</div>
+      <div class="text-2xl font-bold text-gray-900">{{ total_boundaries }}</div>
+    </div>
+  </div>
+
+  <!-- Load Data Section - Single Country Workflow -->
+  <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <h2 class="text-lg font-bold text-gray-900 mb-4">
+      <i class="fa-solid fa-download mr-2 text-green-600"></i>
+      Load Boundary Data
+    </h2>
+
+    <form id="loadForm" class="space-y-4">
+      <!-- Step 1: Country Selection -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label for="countrySelect" class="block text-sm font-medium text-gray-700 mb-1">
+            1. Select Country
+          </label>
+          <select id="countrySelect" name="iso_code"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+            <option value="">-- Select a country --</option>
+            {% for country in configured_countries %}
+              <option value="{{ country.iso_code }}">{{ country.iso_code }} - {{ country.name }}</option>
+            {% endfor %}
+          </select>
+          <p class="mt-1 text-xs text-gray-500">
+            {{ configured_countries|length }} countries configured
+          </p>
+        </div>
+
+        <!-- Step 2: Data Source Selection -->
+        <div>
+          <label for="dataSource" class="block text-sm font-medium text-gray-700 mb-1">
+            2. Select Data Source
+          </label>
+          <select id="dataSource" name="source" disabled
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed">
+            <option value="">-- Select country first --</option>
+          </select>
+          <p id="sourceInfo" class="mt-1 text-xs text-gray-500">
+            Available sources depend on country selection
+          </p>
+        </div>
+
+        <!-- Step 3: Admin Levels -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            3. Select Admin Levels
+          </label>
+          <div id="levelsContainer" class="flex flex-wrap gap-2 mt-1">
+            <span class="text-sm text-gray-500">Select source first</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Options and Submit -->
+      <div class="flex items-center justify-between flex-wrap gap-4">
+        <label class="inline-flex items-center">
+          <input type="checkbox" id="clearExisting" name="clear"
+                 class="rounded border-gray-300 text-green-600 focus:ring-green-500">
+          <span class="ml-2 text-sm text-gray-700">Clear existing data for this country/source</span>
+        </label>
+
+        <div class="flex items-center gap-4">
+          <button type="submit" id="loadButton" disabled
+                  class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors inline-flex items-center disabled:bg-gray-400 disabled:cursor-not-allowed">
+            <i class="fa-solid fa-cloud-arrow-down mr-2"></i>
+            Load Boundaries
+          </button>
+          <span id="loadStatus" class="text-sm text-gray-600 hidden">
+            <i class="fa-solid fa-spinner fa-spin mr-2"></i>
+            Loading boundaries...
+          </span>
+        </div>
+      </div>
+    </form>
+
+    <!-- Progress/Results Area -->
+    <div id="loadResults" class="mt-4 hidden">
+      <div class="border border-gray-200 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 px-4 py-2 border-b border-gray-200">
+          <h3 class="font-medium text-gray-900">Loading Progress</h3>
+        </div>
+        <div id="loadResultsContent" class="p-4 max-h-64 overflow-y-auto font-mono text-sm">
+          <!-- Results will be populated here -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Source Legend -->
+    <div class="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+      <p class="text-sm text-gray-700 mb-2"><strong>Data Sources:</strong></p>
+      <ul class="text-xs text-gray-600 space-y-1">
+        <li><span class="font-medium text-green-700">geoBoundaries</span> - Global coverage, ADM0-2, fast API (CC BY 4.0)</li>
+        <li><span class="font-medium text-blue-700">OpenStreetMap</span> - Global coverage, variable detail, slower but more granular (ODbL)</li>
+        <li><span class="font-medium text-purple-700">GRID3</span> - Select African countries, ADM3+ (wards), high quality</li>
+        <li><span class="font-medium text-orange-700">HDX</span> - Humanitarian datasets, varies by country (OCHA COD)</li>
+        <li><span class="font-medium text-pink-700">GeoPoDe</span> - High-quality WHO boundaries, upload ZIP files from geopode.world</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- GeoPoDe File Upload Section -->
+  <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <h2 class="text-lg font-bold text-gray-900 mb-4">
+      <i class="fa-solid fa-upload mr-2 text-pink-600"></i>
+      Upload GeoPoDe Data
+    </h2>
+    <p class="text-sm text-gray-600 mb-4">
+      Upload ZIP files exported from <a href="https://geopode.world/" target="_blank" class="text-pink-600 hover:underline">GeoPoDe</a>.
+      The ZIP should contain GeoJSON files for each admin level.
+    </p>
+
+    <form id="geopodeUploadForm" enctype="multipart/form-data" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label for="geopodeFile" class="block text-sm font-medium text-gray-700 mb-1">
+            Select ZIP File
+          </label>
+          <input type="file" id="geopodeFile" name="file" accept=".zip"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100">
+          <p class="mt-1 text-xs text-gray-500">
+            e.g., GeoPoDe_NGA_Geometry_20251218.zip
+          </p>
+        </div>
+        <div class="flex items-end">
+          <div class="w-full">
+            <label class="inline-flex items-center mb-2">
+              <input type="checkbox" id="geopodeClear" name="clear"
+                     class="rounded border-gray-300 text-pink-600 focus:ring-pink-500">
+              <span class="ml-2 text-sm text-gray-700">Clear existing GeoPoDe data for this country</span>
+            </label>
+            <button type="submit" id="geopodeUploadButton"
+                    class="w-full px-6 py-2 bg-pink-600 text-white rounded-md hover:bg-pink-700 transition-colors inline-flex items-center justify-center">
+              <i class="fa-solid fa-upload mr-2"></i>
+              Upload and Load
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <!-- Upload Progress/Results Area -->
+    <div id="geopodeResults" class="mt-4 hidden">
+      <div class="border border-gray-200 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 px-4 py-2 border-b border-gray-200">
+          <h3 class="font-medium text-gray-900">Upload Results</h3>
+        </div>
+        <div id="geopodeResultsContent" class="p-4 max-h-64 overflow-y-auto font-mono text-sm">
+          <!-- Results will be populated here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Countries Summary Table -->
+  <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-gray-900">
+        <i class="fa-solid fa-globe mr-2 text-green-600"></i>
+        Loaded Countries
+      </h2>
+    </div>
+
+    {% if countries_summary %}
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Country</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ADM0</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ADM1</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ADM2</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ADM3+</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {% for country in countries_summary %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm font-medium text-gray-900">
+              {{ country.iso_code }}
+            </td>
+            <td class="px-4 py-3 text-sm">
+              <span class="px-2 py-1 rounded-full text-xs font-medium
+                {% if country.source == 'geoboundaries' %}bg-green-100 text-green-800
+                {% elif country.source == 'osm' %}bg-blue-100 text-blue-800
+                {% elif country.source == 'grid3' %}bg-purple-100 text-purple-800
+                {% elif country.source == 'hdx' %}bg-orange-100 text-orange-800
+                {% elif country.source == 'geopode' %}bg-pink-100 text-pink-800
+                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                {% if country.source == 'geoboundaries' %}geoBoundaries
+                {% elif country.source == 'osm' %}OSM
+                {% elif country.source == 'grid3' %}GRID3
+                {% elif country.source == 'hdx' %}HDX
+                {% elif country.source == 'geopode' %}GeoPoDe
+                {% else %}{{ country.source }}{% endif %}
+              </span>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-600">{{ country.adm0 }}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">{{ country.adm1 }}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">{{ country.adm2 }}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">{{ country.adm3|add:country.adm4 }}</td>
+            <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ country.total }}</td>
+            <td class="px-4 py-3 text-sm">
+              <button onclick="deleteCountry('{{ country.iso_code }}', '{{ country.source }}')"
+                      class="text-red-600 hover:text-red-800 font-medium">
+                <i class="fa-solid fa-trash mr-1"></i> Delete
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-8 text-gray-500">
+      <i class="fa-solid fa-map text-4xl mb-4 text-gray-300"></i>
+      <p>No boundary data loaded yet.</p>
+      <p class="text-sm mt-2">Use the form above to load boundaries.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Boundary Browser Section -->
+  {% if boundaries_count > 0 %}
+  <div class="bg-white rounded-lg shadow-sm p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-gray-900">
+        <i class="fa-solid fa-list mr-2 text-green-600"></i>
+        Browse Boundaries
+      </h2>
+      <span class="text-sm text-gray-500">
+        Showing {{ boundaries|length }} of {{ boundaries_count }}
+        {% if showing_limited %}(limited to 100){% endif %}
+      </span>
+    </div>
+
+    <!-- Filters -->
+    <form method="get" class="mb-4">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label for="country" class="block text-sm font-medium text-gray-700 mb-1">Country</label>
+          <select name="country" id="country"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+            <option value="">All Countries</option>
+            {% for iso in all_countries %}
+              <option value="{{ iso }}" {% if country_filter == iso %}selected{% endif %}>{{ iso }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="level" class="block text-sm font-medium text-gray-700 mb-1">Admin Level</label>
+          <select name="level" id="level"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+            <option value="">All Levels</option>
+            <option value="0" {% if level_filter == "0" %}selected{% endif %}>ADM0 (Country)</option>
+            <option value="1" {% if level_filter == "1" %}selected{% endif %}>ADM1 (State/Province)</option>
+            <option value="2" {% if level_filter == "2" %}selected{% endif %}>ADM2 (District)</option>
+            <option value="3" {% if level_filter == "3" %}selected{% endif %}>ADM3</option>
+            <option value="4" {% if level_filter == "4" %}selected{% endif %}>ADM4</option>
+          </select>
+        </div>
+        <div>
+          <label for="source" class="block text-sm font-medium text-gray-700 mb-1">Source</label>
+          <select name="source" id="source"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+            <option value="">All Sources</option>
+            {% for source_value, source_label in source_choices %}
+              <option value="{{ source_value }}" {% if source_filter == source_value %}selected{% endif %}>{{ source_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button type="submit"
+                  class="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+            <i class="fa-solid fa-filter mr-2"></i>
+            Apply Filters
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Boundaries Table -->
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Country</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Level</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boundary ID</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {% for boundary in boundaries %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ boundary.iso_code }}</td>
+            <td class="px-4 py-3 text-sm">
+              <span class="px-2 py-1 rounded-full text-xs font-medium
+                {% if boundary.admin_level == 0 %}bg-blue-100 text-blue-800
+                {% elif boundary.admin_level == 1 %}bg-green-100 text-green-800
+                {% elif boundary.admin_level == 2 %}bg-yellow-100 text-yellow-800
+                {% else %}bg-purple-100 text-purple-800{% endif %}">
+                ADM{{ boundary.admin_level }}
+              </span>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-900">{{ boundary.name }}</td>
+            <td class="px-4 py-3 text-sm">
+              <span class="px-2 py-1 rounded-full text-xs font-medium
+                {% if boundary.source == 'geoboundaries' %}bg-green-100 text-green-800
+                {% elif boundary.source == 'osm' %}bg-blue-100 text-blue-800
+                {% elif boundary.source == 'grid3' %}bg-purple-100 text-purple-800
+                {% elif boundary.source == 'hdx' %}bg-orange-100 text-orange-800
+                {% elif boundary.source == 'geopode' %}bg-pink-100 text-pink-800
+                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                {% if boundary.source == 'geoboundaries' %}GB
+                {% elif boundary.source == 'osm' %}OSM
+                {% elif boundary.source == 'grid3' %}GRID3
+                {% elif boundary.source == 'hdx' %}HDX
+                {% elif boundary.source == 'geopode' %}GeoPoDe
+                {% else %}{{ boundary.source }}{% endif %}
+              </span>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-500 font-mono text-xs">{{ boundary.boundary_id|truncatechars:20 }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5" class="px-4 py-8 text-center text-gray-500">
+              No boundaries match the current filters
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+  <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+    <h3 class="text-lg font-bold text-gray-900 mb-4">Delete Country Boundaries</h3>
+    <p class="text-sm text-gray-600 mb-4">
+      Are you sure you want to delete all boundaries for <strong id="deleteCountryCode"></strong>
+      from <strong id="deleteSource"></strong>?
+      This action cannot be undone.
+    </p>
+    <div class="flex gap-2">
+      <button onclick="confirmDelete()"
+              class="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+        Delete
+      </button>
+      <button onclick="hideDeleteModal()"
+              class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const csrftoken = '{{ csrf_token }}';
+let pendingDeleteCountry = null;
+let pendingDeleteSource = null;
+let currentEventSource = null;
+
+// Country configurations from backend
+const countryConfigs = {{ country_configs_json|safe }};
+
+// Source display names
+const sourceNames = {
+  'geoboundaries': 'geoBoundaries',
+  'osm': 'OpenStreetMap',
+  'grid3': 'GRID3',
+  'hdx': 'HDX (OCHA COD)',
+  'geopode': 'GeoPoDe'
+};
+
+// Update source dropdown when country changes
+document.getElementById('countrySelect').addEventListener('change', function() {
+  const isoCode = this.value;
+  const sourceSelect = document.getElementById('dataSource');
+  const sourceInfo = document.getElementById('sourceInfo');
+  const levelsContainer = document.getElementById('levelsContainer');
+  const loadButton = document.getElementById('loadButton');
+
+  // Reset
+  sourceSelect.innerHTML = '';
+  levelsContainer.innerHTML = '<span class="text-sm text-gray-500">Select source first</span>';
+  loadButton.disabled = true;
+
+  if (!isoCode || !countryConfigs[isoCode]) {
+    sourceSelect.innerHTML = '<option value="">-- Select country first --</option>';
+    sourceSelect.disabled = true;
+    sourceInfo.textContent = 'Available sources depend on country selection';
+    return;
+  }
+
+  const config = countryConfigs[isoCode];
+  const sources = config.sources;
+  const recommended = config.recommended;
+
+  // Populate source options
+  sourceSelect.innerHTML = '<option value="">-- Select a source --</option>';
+
+  for (const [sourceId, sourceConfig] of Object.entries(sources)) {
+    const option = document.createElement('option');
+    option.value = sourceId;
+
+    // Check if this source is recommended for any level
+    const isRecommended = Object.values(recommended).includes(sourceId);
+    const maxLevel = sourceConfig.max_level;
+
+    option.textContent = `${sourceNames[sourceId] || sourceId} (ADM0-${maxLevel})`;
+    if (isRecommended) {
+      option.textContent += ' - Recommended';
+    }
+
+    sourceSelect.appendChild(option);
+  }
+
+  sourceSelect.disabled = false;
+  sourceInfo.textContent = `${Object.keys(sources).length} source(s) available for ${config.name}`;
+});
+
+// Update levels when source changes
+document.getElementById('dataSource').addEventListener('change', function() {
+  const isoCode = document.getElementById('countrySelect').value;
+  const source = this.value;
+  const levelsContainer = document.getElementById('levelsContainer');
+  const loadButton = document.getElementById('loadButton');
+
+  if (!isoCode || !source || !countryConfigs[isoCode]) {
+    levelsContainer.innerHTML = '<span class="text-sm text-gray-500">Select source first</span>';
+    loadButton.disabled = true;
+    return;
+  }
+
+  const config = countryConfigs[isoCode];
+  const sourceConfig = config.sources[source];
+  const recommended = config.recommended;
+
+  if (!sourceConfig) {
+    levelsContainer.innerHTML = '<span class="text-sm text-gray-500">Source not configured</span>';
+    loadButton.disabled = true;
+    return;
+  }
+
+  // Build level checkboxes
+  const levels = sourceConfig.levels || [];
+  let html = '';
+
+  levels.forEach(level => {
+    const isRecommended = recommended[level.toString()] === source;
+    const checked = level <= 2 ? 'checked' : '';  // Default check ADM0-2
+
+    html += `
+      <label class="inline-flex items-center">
+        <input type="checkbox" name="levels" value="${level}" ${checked}
+               class="rounded border-gray-300 text-green-600 focus:ring-green-500">
+        <span class="ml-1 text-sm text-gray-700">
+          ADM${level}
+          ${isRecommended ? '<span class="text-green-600 text-xs">(rec)</span>' : ''}
+        </span>
+      </label>
+    `;
+  });
+
+  if (levels.length === 0) {
+    html = '<span class="text-sm text-gray-500">No levels configured for this source</span>';
+    loadButton.disabled = true;
+  } else {
+    loadButton.disabled = false;
+  }
+
+  levelsContainer.innerHTML = html;
+});
+
+// Load Form Handler - Using Server-Sent Events for real-time progress
+document.getElementById('loadForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+
+  const loadButton = document.getElementById('loadButton');
+  const loadStatus = document.getElementById('loadStatus');
+  const loadResults = document.getElementById('loadResults');
+  const loadResultsContent = document.getElementById('loadResultsContent');
+
+  // Get form values
+  const isoCode = document.getElementById('countrySelect').value;
+  const source = document.getElementById('dataSource').value;
+  const levelCheckboxes = document.querySelectorAll('input[name="levels"]:checked');
+  const levels = Array.from(levelCheckboxes).map(cb => cb.value).join(',');
+  const clear = document.getElementById('clearExisting').checked;
+
+  if (!isoCode) {
+    alert('Please select a country');
+    return;
+  }
+
+  if (!source) {
+    alert('Please select a data source');
+    return;
+  }
+
+  if (!levels) {
+    alert('Please select at least one admin level');
+    return;
+  }
+
+  const sourceName = sourceNames[source] || source;
+
+  // Close any existing connection
+  if (currentEventSource) {
+    currentEventSource.close();
+    currentEventSource = null;
+  }
+
+  // Show loading state
+  loadButton.disabled = true;
+  loadStatus.classList.remove('hidden');
+  loadResults.classList.remove('hidden');
+  loadResultsContent.innerHTML = `<div class="text-gray-600"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Connecting to ${sourceName}...</div>`;
+
+  // Build SSE URL with query parameters (single country)
+  const params = new URLSearchParams({
+    iso_code: isoCode,
+    levels: levels,
+    source: source,
+    clear: clear ? 'true' : 'false'
+  });
+
+  const streamUrl = "{% url 'explorer:admin_boundaries:load_stream' %}?" + params.toString();
+
+  // Create EventSource for SSE
+  currentEventSource = new EventSource(streamUrl);
+
+  // Track progress messages
+  let progressLog = [];
+
+  currentEventSource.onmessage = function(event) {
+    try {
+      const data = JSON.parse(event.data);
+
+      // Add message to log
+      if (data.message) {
+        progressLog.push(data.message);
+
+        // Build progress HTML - show last 15 messages
+        const recentMessages = progressLog.slice(-15);
+        let html = recentMessages.map(msg => {
+          if (msg.includes('Error:')) {
+            return `<div class="text-red-600"><i class="fa-solid fa-times-circle mr-2"></i>${msg}</div>`;
+          } else if (msg.includes('Complete') || msg.includes('Loaded')) {
+            return `<div class="text-green-700"><i class="fa-solid fa-check mr-2"></i>${msg}</div>`;
+          } else if (msg.includes('Cleared')) {
+            return `<div class="text-yellow-600"><i class="fa-solid fa-trash mr-2"></i>${msg}</div>`;
+          } else if (msg.includes('not configured')) {
+            return `<div class="text-orange-600"><i class="fa-solid fa-exclamation-triangle mr-2"></i>${msg}</div>`;
+          } else {
+            return `<div class="text-gray-600"><i class="fa-solid fa-spinner fa-spin mr-2"></i>${msg}</div>`;
+          }
+        }).join('');
+
+        loadResultsContent.innerHTML = html;
+
+        // Auto-scroll to bottom
+        loadResultsContent.scrollTop = loadResultsContent.scrollHeight;
+      }
+
+      // Check if complete
+      if (data.complete) {
+        currentEventSource.close();
+        currentEventSource = null;
+
+        // Re-enable button
+        loadButton.disabled = false;
+        loadStatus.classList.add('hidden');
+
+        if (data.error) {
+          // Error completion
+          loadResultsContent.innerHTML += `<div class="mt-4 pt-4 border-t border-gray-200 font-bold text-red-600">
+            <i class="fa-solid fa-times-circle mr-2"></i>
+            Error: ${data.error}
+          </div>`;
+        } else if (data.data) {
+          // Success completion
+          const result = data.data;
+          loadResultsContent.innerHTML += `<div class="mt-4 pt-4 border-t border-gray-200 font-bold text-green-700">
+            <i class="fa-solid fa-check-circle mr-2"></i>
+            Complete - loaded ${result.total_loaded} boundaries from ${sourceName}
+          </div>`;
+
+          // Reload page after short delay
+          setTimeout(() => {
+            location.reload();
+          }, 2000);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse SSE event:', e);
+    }
+  };
+
+  currentEventSource.onerror = function(event) {
+    console.error('SSE error:', event);
+    currentEventSource.close();
+    currentEventSource = null;
+
+    loadButton.disabled = false;
+    loadStatus.classList.add('hidden');
+
+    loadResultsContent.innerHTML += `<div class="mt-4 pt-4 border-t border-gray-200 text-red-600">
+      <i class="fa-solid fa-times-circle mr-2"></i>
+      Connection error - please try again
+    </div>`;
+  };
+});
+
+// Delete Functions
+function deleteCountry(isoCode, source) {
+  pendingDeleteCountry = isoCode;
+  pendingDeleteSource = source;
+  document.getElementById('deleteCountryCode').textContent = isoCode;
+  document.getElementById('deleteSource').textContent = sourceNames[source] || source;
+  document.getElementById('deleteModal').classList.remove('hidden');
+}
+
+function hideDeleteModal() {
+  document.getElementById('deleteModal').classList.add('hidden');
+  pendingDeleteCountry = null;
+  pendingDeleteSource = null;
+}
+
+function confirmDelete() {
+  if (!pendingDeleteCountry) return;
+
+  const params = new URLSearchParams({
+    iso_code: pendingDeleteCountry
+  });
+  if (pendingDeleteSource) {
+    params.append('source', pendingDeleteSource);
+  }
+
+  fetch("{% url 'explorer:admin_boundaries:delete' %}", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-CSRFToken': csrftoken
+    },
+    body: params
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      alert(data.message);
+      hideDeleteModal();
+      location.reload();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(error => {
+    alert('Error: ' + error);
+  });
+}
+
+// GeoPoDe Upload Handler
+document.getElementById('geopodeUploadForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+
+  const fileInput = document.getElementById('geopodeFile');
+  const uploadButton = document.getElementById('geopodeUploadButton');
+  const resultsDiv = document.getElementById('geopodeResults');
+  const resultsContent = document.getElementById('geopodeResultsContent');
+  const clearCheckbox = document.getElementById('geopodeClear');
+
+  const file = fileInput.files[0];
+
+  if (!file) {
+    alert('Please select a ZIP file to upload');
+    return;
+  }
+
+  if (!file.name.endsWith('.zip')) {
+    alert('Please select a ZIP file');
+    return;
+  }
+
+  // Show loading state
+  uploadButton.disabled = true;
+  uploadButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Uploading...';
+  resultsDiv.classList.remove('hidden');
+  resultsContent.innerHTML = '<div class="text-gray-600"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Uploading and processing ZIP file...</div>';
+
+  // Create form data
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('clear', clearCheckbox.checked ? 'true' : 'false');
+
+  // Upload the file
+  fetch("{% url 'explorer:admin_boundaries:upload_geopode' %}", {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': csrftoken
+    },
+    body: formData
+  })
+  .then(response => response.json())
+  .then(data => {
+    // Re-enable button
+    uploadButton.disabled = false;
+    uploadButton.innerHTML = '<i class="fa-solid fa-upload mr-2"></i>Upload and Load';
+
+    if (data.success) {
+      // Build results HTML
+      let html = '';
+
+      if (data.levels) {
+        for (const level of data.levels) {
+          if (level.success) {
+            html += `<div class="text-green-700"><i class="fa-solid fa-check mr-2"></i>${level.message}</div>`;
+          } else if (level.error) {
+            html += `<div class="text-red-600"><i class="fa-solid fa-times-circle mr-2"></i>ADM${level.level}: ${level.error}</div>`;
+          } else if (level.message) {
+            html += `<div class="text-gray-600">${level.message}</div>`;
+          }
+        }
+      }
+
+      html += `<div class="mt-4 pt-4 border-t border-gray-200 font-bold text-green-700">
+        <i class="fa-solid fa-check-circle mr-2"></i>
+        ${data.message}
+      </div>`;
+
+      resultsContent.innerHTML = html;
+
+      // Reload page after short delay
+      setTimeout(() => {
+        location.reload();
+      }, 2000);
+    } else {
+      // Error
+      let html = '';
+
+      if (data.levels) {
+        for (const level of data.levels) {
+          if (level.error) {
+            html += `<div class="text-red-600"><i class="fa-solid fa-times-circle mr-2"></i>${level.error}</div>`;
+          } else if (level.message) {
+            html += `<div class="text-gray-600">${level.message}</div>`;
+          }
+        }
+      }
+
+      html += `<div class="mt-4 pt-4 border-t border-gray-200 font-bold text-red-600">
+        <i class="fa-solid fa-times-circle mr-2"></i>
+        Error: ${data.error}
+      </div>`;
+
+      resultsContent.innerHTML = html;
+    }
+  })
+  .catch(error => {
+    uploadButton.disabled = false;
+    uploadButton.innerHTML = '<i class="fa-solid fa-upload mr-2"></i>Upload and Load';
+
+    resultsContent.innerHTML = `<div class="text-red-600">
+      <i class="fa-solid fa-times-circle mr-2"></i>
+      Upload failed: ${error}
+    </div>`;
+  });
+});
+</script>
+
+{% endblock %}

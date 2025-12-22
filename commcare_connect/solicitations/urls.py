@@ -6,6 +6,7 @@ from .views import (
     LabsHomeView,
     ManageSolicitationsListView,
     MyResponsesListView,
+    OpportunityDetailView,
     SolicitationCreateOrUpdate,
     SolicitationDetailView,
     SolicitationListView,
@@ -23,6 +24,8 @@ urlpatterns = [
     # Delivery Types (Public - any authenticated user)
     path("delivery-types/", DeliveryTypesListView.as_view(), name="delivery_types"),
     path("delivery-types/<slug:slug>/", DeliveryTypeDetailView.as_view(), name="delivery_type_detail"),
+    # Opportunity Detail
+    path("opportunity/<int:opp_id>/", OpportunityDetailView.as_view(), name="opportunity_detail"),
     # Program Manager URLs
     path("manage/", ManageSolicitationsListView.as_view(), name="manage_list"),
     path("create/", SolicitationCreateOrUpdate.as_view(), name="create"),

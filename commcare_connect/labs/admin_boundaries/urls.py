@@ -1,0 +1,22 @@
+"""
+URL routing for Admin Boundaries
+"""
+
+from django.urls import path
+
+from . import views
+
+app_name = "admin_boundaries"
+
+urlpatterns = [
+    # Admin Boundaries Manager
+    path("", views.AdminBoundariesView.as_view(), name="index"),
+    path("load/", views.LoadBoundariesView.as_view(), name="load"),
+    path("load/stream/", views.LoadBoundariesStreamView.as_view(), name="load_stream"),
+    path("delete/", views.DeleteBoundariesView.as_view(), name="delete"),
+    path("stats/", views.BoundaryStatsAPIView.as_view(), name="stats"),
+    # GeoPoDe file upload
+    path("upload/geopode/", views.UploadGeoPoDEView.as_view(), name="upload_geopode"),
+    # GeoJSON API
+    path("geojson/<str:iso_code>/ADM<int:admin_level>/", views.BoundaryGeoJSONView.as_view(), name="geojson"),
+]

@@ -1,0 +1,14 @@
+{
+  "enrichments": [
+    {
+      "opportunity_id": 0,
+      "delivery_type_slug": "",
+      "opp_country": "",
+      "amount_raised": 0,
+      "budget_goal": 0,
+      "visits_target": 0,
+      "org_photo_url": "",
+      "opp_description": ""
+    }
+  ]
+}

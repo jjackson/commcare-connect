@@ -2,7 +2,7 @@
 URL routing for Labs Explorer
 """
 
-from django.urls import path
+from django.urls import include, path
 
 from . import views
 
@@ -27,4 +27,6 @@ urlpatterns = [
     path("cache/", views.CacheManagerView.as_view(), name="cache_manager"),
     path("cache/delete/", views.CacheDeleteView.as_view(), name="cache_delete"),
     path("cache/stats/", views.CacheStatsAPIView.as_view(), name="cache_stats"),
+    # Admin Boundaries
+    path("boundaries/", include("commcare_connect.labs.admin_boundaries.urls")),
 ]

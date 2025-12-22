@@ -8,11 +8,14 @@ It handles casting API responses to typed proxy models
 This is a pure API client with no local database storage.
 """
 
+import httpx
+from django.conf import settings
 from django.http import HttpRequest
 
 from commcare_connect.labs.integrations.connect.api_client import LabsRecordAPIClient
 from commcare_connect.solicitations.models import (
     DeliveryTypeDescriptionRecord,
+    OppOrgEnrichmentRecord,
     ResponseRecord,
     ReviewRecord,
     SolicitationRecord,
@@ -68,6 +71,7 @@ class SolicitationDataAccess:
         if not access_token:
             raise ValueError("OAuth access token required for solicitation data access")
 
+        self.access_token = access_token
         self.labs_api = LabsRecordAPIClient(
             access_token,
             organization_id=self.organization_id,
@@ -122,6 +126,333 @@ class SolicitationDataAccess:
             slug=slug,
         )
         return records[0] if records else None
+
+    # =========================================================================
+    # Opportunity Enrichment Methods
+    # =========================================================================
+
+    def get_enrichment_record(self) -> OppOrgEnrichmentRecord | None:
+        """
+        Get the OppOrgEnrichmentRecord containing enrichment data for opportunities.
+
+        Returns:
+            OppOrgEnrichmentRecord instance or None if not found
+        """
+        records = self.labs_api.get_records(
+            experiment="solicitations",
+            type="OppOrgEnrichmentRecord",
+            public=True,
+            model_class=OppOrgEnrichmentRecord,
+        )
+        return records[0] if records else None
+
+    def get_opp_org_program_data(self) -> tuple[list[dict], list[dict], dict[int, str]]:
+        """
+        Fetch opportunities, programs from Connect Prod API and build program->delivery_type lookup.
+
+        Returns:
+            Tuple of (opportunities, programs, program_delivery_type_map)
+            - opportunities: List of opportunity dicts
+            - programs: List of program dicts
+            - program_delivery_type_map: Dict mapping program_id to delivery_type_slug
+        """
+        url = f"{settings.CONNECT_PRODUCTION_URL}/export/opp_org_program_list/"
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+
+        try:
+            response = httpx.get(url, headers=headers, timeout=30.0)
+            response.raise_for_status()
+            data = response.json()
+
+            opportunities = data.get("opportunities", [])
+            programs = data.get("programs", [])
+
+            # Build program_id -> delivery_type_slug lookup
+            program_delivery_type_map = {}
+            for prog in programs:
+                prog_id = prog.get("id")
+                delivery_type = prog.get("delivery_type")
+                if prog_id and delivery_type:
+                    program_delivery_type_map[prog_id] = delivery_type
+
+            return opportunities, programs, program_delivery_type_map
+        except httpx.HTTPError:
+            return [], [], {}
+
+    def get_opportunities_from_prod(self) -> list[dict]:
+        """
+        Fetch all opportunities from Connect Prod API.
+
+        Returns:
+            List of opportunity dictionaries from prod
+        """
+        opportunities, _, _ = self.get_opp_org_program_data()
+        return opportunities
+
+    def get_opportunity_by_id(self, opp_id: int) -> dict | None:
+        """
+        Get a single opportunity by ID with enrichment data.
+
+        Args:
+            opp_id: The opportunity ID
+
+        Returns:
+            Enriched opportunity dict or None if not found
+        """
+        # Fetch all data from prod
+        opportunities, programs, program_delivery_type_map = self.get_opp_org_program_data()
+
+        # Build program lookup for additional info
+        program_map = {p["id"]: p for p in programs}
+
+        # Find the opportunity
+        opp = None
+        for o in opportunities:
+            if o.get("id") == opp_id:
+                opp = o
+                break
+
+        if not opp:
+            return None
+
+        # Fetch enrichment data
+        enrichment_record = self.get_enrichment_record()
+
+        # Get delivery type
+        opp_delivery_type = self._get_opp_delivery_type(opp, program_delivery_type_map, enrichment_record)
+
+        # Get enrichment data
+        enrichment = None
+        if enrichment_record:
+            enrichment = enrichment_record.get_enrichment_for_opp(opp_id)
+
+        # Build enriched opportunity
+        enriched_opp = opp.copy()
+        enriched_opp["delivery_type_slug"] = opp_delivery_type
+
+        # Add program info
+        program_id = opp.get("program")
+        if program_id and program_id in program_map:
+            program = program_map[program_id]
+            enriched_opp["program_name"] = program.get("name", "")
+            enriched_opp["program_currency"] = program.get("currency", "")
+        else:
+            enriched_opp["program_name"] = ""
+            enriched_opp["program_currency"] = ""
+
+        # Add enrichment fields
+        if enrichment:
+            enriched_opp["opp_country"] = enrichment.get("opp_country", "")
+            enriched_opp["amount_raised"] = enrichment.get("amount_raised", 0)
+            enriched_opp["budget_goal"] = enrichment.get("budget_goal", 0)
+            enriched_opp["visits_target"] = enrichment.get("visits_target", 0)
+            enriched_opp["org_photo_url"] = enrichment.get("org_photo_url", "")
+            enriched_opp["opp_description"] = enrichment.get("opp_description", "")
+        else:
+            enriched_opp["opp_country"] = ""
+            enriched_opp["amount_raised"] = 0
+            enriched_opp["budget_goal"] = 0
+            enriched_opp["visits_target"] = 0
+            enriched_opp["org_photo_url"] = ""
+            enriched_opp["opp_description"] = ""
+
+        # Calculate progress percentages
+        visit_count = enriched_opp.get("visit_count", 0)
+        visits_target = enriched_opp.get("visits_target", 0)
+        amount_raised = enriched_opp.get("amount_raised", 0)
+        budget_goal = enriched_opp.get("budget_goal", 0)
+
+        enriched_opp["visits_progress_pct"] = (
+            min(100, int((visit_count / visits_target) * 100)) if visits_target > 0 else 0
+        )
+        enriched_opp["funding_progress_pct"] = (
+            min(100, int((amount_raised / budget_goal) * 100)) if budget_goal > 0 else 0
+        )
+
+        return enriched_opp
+
+    def _get_opp_delivery_type(
+        self,
+        opp: dict,
+        program_delivery_type_map: dict[int, str],
+        enrichment_record,
+    ) -> str | None:
+        """
+        Determine delivery type for an opportunity.
+
+        Priority:
+        1. If opp has a program, use program's delivery_type
+        2. Otherwise, fall back to enrichment record (for legacy opps without program)
+
+        Args:
+            opp: Opportunity dict from prod API
+            program_delivery_type_map: Dict mapping program_id to delivery_type_slug
+            enrichment_record: OppOrgEnrichmentRecord or None
+
+        Returns:
+            delivery_type_slug or None if not determinable
+        """
+        opp_id = opp.get("id")
+        program_id = opp.get("program")
+
+        # Primary: Get from program's delivery_type
+        if program_id and program_id in program_delivery_type_map:
+            return program_delivery_type_map[program_id]
+
+        # Fallback: Get from enrichment record (for legacy opps without program)
+        if enrichment_record:
+            enrichment = enrichment_record.get_enrichment_for_opp(opp_id)
+            if enrichment:
+                return enrichment.get("delivery_type_slug")
+
+        return None
+
+    def get_opportunities_by_delivery_type(
+        self,
+        delivery_type_slug: str,
+        min_visits: int = 0,
+        include_inactive: bool = False,
+    ) -> list[dict]:
+        """
+        Get opportunities filtered by delivery type slug and minimum visits.
+
+        Delivery type is determined by:
+        1. Program's delivery_type (primary - for opps with a program)
+        2. Enrichment record (fallback - for legacy opps without program)
+
+        Additional enrichment data (country, etc.) comes from OppOrgEnrichmentRecord.
+
+        Args:
+            delivery_type_slug: The delivery type slug to filter by
+            min_visits: Minimum visit threshold (default: 0)
+            include_inactive: Include inactive/ended opportunities (default: False)
+
+        Returns:
+            List of opportunity dicts with enrichment data merged in
+        """
+        # Fetch opportunities and program data from prod
+        opportunities, _, program_delivery_type_map = self.get_opp_org_program_data()
+
+        # Fetch enrichment data for additional fields and legacy fallback
+        enrichment_record = self.get_enrichment_record()
+
+        # Filter and enrich opportunities
+        results = []
+        for opp in opportunities:
+            opp_id = opp.get("id")
+            visit_count = opp.get("visit_count", 0)
+
+            # Apply min_visits filter
+            if visit_count < min_visits:
+                continue
+
+            # Apply active filter
+            if not include_inactive and not opp.get("is_active", False):
+                continue
+
+            # Get delivery type (from program or enrichment fallback)
+            opp_delivery_type = self._get_opp_delivery_type(opp, program_delivery_type_map, enrichment_record)
+
+            # Only include if delivery type matches
+            if opp_delivery_type != delivery_type_slug:
+                continue
+
+            # Get enrichment data for this opportunity
+            enrichment = None
+            if enrichment_record:
+                enrichment = enrichment_record.get_enrichment_for_opp(opp_id)
+
+            # Merge enrichment data into opportunity
+            enriched_opp = opp.copy()
+            enriched_opp["delivery_type_slug"] = opp_delivery_type
+
+            # Add enrichment fields (with defaults)
+            if enrichment:
+                enriched_opp["opp_country"] = enrichment.get("opp_country", "")
+                enriched_opp["amount_raised"] = enrichment.get("amount_raised", 0)
+                enriched_opp["budget_goal"] = enrichment.get("budget_goal", 0)
+                enriched_opp["visits_target"] = enrichment.get("visits_target", 0)
+                enriched_opp["org_photo_url"] = enrichment.get("org_photo_url", "")
+                enriched_opp["opp_description"] = enrichment.get("opp_description", "")
+            else:
+                enriched_opp["opp_country"] = ""
+                enriched_opp["amount_raised"] = 0
+                enriched_opp["budget_goal"] = 0
+                enriched_opp["visits_target"] = 0
+                enriched_opp["org_photo_url"] = ""
+                enriched_opp["opp_description"] = ""
+
+            # Calculate progress percentages
+            visit_count = enriched_opp.get("visit_count", 0)
+            visits_target = enriched_opp.get("visits_target", 0)
+            amount_raised = enriched_opp.get("amount_raised", 0)
+            budget_goal = enriched_opp.get("budget_goal", 0)
+
+            enriched_opp["visits_progress_pct"] = (
+                min(100, int((visit_count / visits_target) * 100)) if visits_target > 0 else 0
+            )
+            enriched_opp["funding_progress_pct"] = (
+                min(100, int((amount_raised / budget_goal) * 100)) if budget_goal > 0 else 0
+            )
+
+            results.append(enriched_opp)
+
+        return results
+
+    def get_opportunity_counts_by_delivery_type(
+        self,
+        min_visits: int = 0,
+    ) -> dict[str, dict]:
+        """
+        Get counts of opportunities grouped by delivery type.
+
+        Delivery type is determined by:
+        1. Program's delivery_type (primary - for opps with a program)
+        2. Enrichment record (fallback - for legacy opps without program)
+
+        Args:
+            min_visits: Minimum visit threshold (default: 0)
+
+        Returns:
+            Dict mapping delivery_type_slug to counts:
+            {
+                "chc": {"active": 5, "completed": 3, "total": 8},
+                "kmc": {"active": 2, "completed": 1, "total": 3},
+            }
+        """
+        # Fetch opportunities and program data from prod
+        opportunities, _, program_delivery_type_map = self.get_opp_org_program_data()
+
+        # Fetch enrichment data for legacy fallback
+        enrichment_record = self.get_enrichment_record()
+
+        # Count by delivery type
+        counts: dict[str, dict] = {}
+
+        for opp in opportunities:
+            visit_count = opp.get("visit_count", 0)
+
+            # Apply min_visits filter
+            if visit_count < min_visits:
+                continue
+
+            # Get delivery type (from program or enrichment fallback)
+            delivery_type_slug = self._get_opp_delivery_type(opp, program_delivery_type_map, enrichment_record)
+            if not delivery_type_slug:
+                continue
+
+            # Initialize counts for this delivery type
+            if delivery_type_slug not in counts:
+                counts[delivery_type_slug] = {"active": 0, "completed": 0, "total": 0}
+
+            # Increment counts
+            counts[delivery_type_slug]["total"] += 1
+            if opp.get("is_active", False):
+                counts[delivery_type_slug]["active"] += 1
+            else:
+                counts[delivery_type_slug]["completed"] += 1
+
+        return counts
 
     # =========================================================================
     # Public Solicitation Methods

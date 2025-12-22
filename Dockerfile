@@ -1,7 +1,8 @@
 FROM python:3.11-slim-bookworm as build-python
 RUN apt-get update \
   # dependencies for building Python packages
-  && apt-get install -y build-essential libpq-dev
+  # libgdal-dev needed for GeoDjango/GDAL bindings
+  && apt-get install -y build-essential libpq-dev libgdal-dev
 COPY ./requirements /requirements
 # Build wheels for each requirement file separately to avoid conflicts
 RUN pip wheel --no-cache-dir --wheel-dir /wheels -r /requirements/base.txt
@@ -24,7 +25,8 @@ ENV DEBUG 0
 
 RUN apt-get update \
   # psycopg2, gettext etc dependencies
-  && apt-get install -y libpq-dev gettext curl \
+  # gdal-bin provides GDAL runtime libraries for GeoDjango spatial features
+  && apt-get install -y libpq-dev gettext curl gdal-bin \
   # cleaning up unused files
   && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
   && rm -rf /var/lib/apt/lists/*

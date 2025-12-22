@@ -121,9 +121,9 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
         # Build Coverage button URL using current labs context opportunity
         opportunity_id = labs_context.get("opportunity_id")
         if opportunity_id:
-            coverage_url = f"/coverage/map/?opportunity_id={opportunity_id}&config=chc_nutrition"
+            coverage_url = f"/coverage/?opportunity_id={opportunity_id}&config=chc_nutrition"
         else:
-            coverage_url = "/coverage/map/?config=chc_nutrition"
+            coverage_url = "/coverage/?config=chc_nutrition"
 
         # Define labs projects with descriptions
         context["labs_projects"] = [
@@ -150,7 +150,7 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
             },
             {
                 "name": "Coverage",
-                "url": "/coverage/map/",
+                "url": "/coverage/",
                 "icon": "fa-map-marked-alt",
                 "description": "Geographic coverage analysis and mapping for Service Areas and Delivery Units",
                 "color": "green",
@@ -158,6 +158,10 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
                     {
                         "label": "CHC Nutrition View",
                         "url": coverage_url,
+                    },
+                    {
+                        "label": "Generic View",
+                        "url": "/coverage/",
                     },
                 ],
             },

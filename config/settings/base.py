@@ -1,11 +1,48 @@
 """
 Base settings to build other settings files upon.
 """
+import os
+import sys
 from pathlib import Path
 
 import environ
 
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
+
+# GDAL Configuration for GeoDjango
+# ------------------------------------------------------------------------------
+# On Windows, GDAL must be installed separately (e.g., via OSGeo4W)
+# Set GDAL_LIBRARY_PATH to point to the GDAL DLL
+# This must be set BEFORE Django tries to import GDAL
+GDAL_LIBRARY_PATH = None
+GEOS_LIBRARY_PATH = None
+
+if sys.platform == "win32":
+    # Common OSGeo4W installation paths
+    osgeo4w_paths = [
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\OSGeo4W\bin"),
+        r"C:\OSGeo4W\bin",
+        r"C:\OSGeo4W64\bin",
+        r"C:\Program Files\GDAL\bin",
+    ]
+    for osgeo_path in osgeo4w_paths:
+        if Path(osgeo_path).exists():
+            # Add to PATH so dependent DLLs can be found
+            os.environ["PATH"] = osgeo_path + os.pathsep + os.environ.get("PATH", "")
+
+            # Find GDAL DLL
+            gdal_dlls = list(Path(osgeo_path).glob("gdal*.dll"))
+            main_gdal = next((d for d in gdal_dlls if d.stem.replace("gdal", "").isdigit()), None)
+            if main_gdal:
+                GDAL_LIBRARY_PATH = str(main_gdal)
+
+            # Find GEOS DLL
+            geos_dlls = list(Path(osgeo_path).glob("geos_c.dll"))
+            if geos_dlls:
+                GEOS_LIBRARY_PATH = str(geos_dlls[0])
+
+            if GDAL_LIBRARY_PATH:
+                break
 # commcare_connect/
 APPS_DIR = BASE_DIR / "commcare_connect"
 
@@ -31,13 +68,15 @@ DATABASES = {
         default="postgres:///commcare_connect",
     ),
 }
+# Use PostGIS backend for GeoDjango spatial features
+DATABASES["default"]["ENGINE"] = "django.contrib.gis.db.backends.postgis"
 
 # DATABASES staging/production
 # ------------------------------------------------------------------------------
 if env("RDS_HOSTNAME", default=None):
     DATABASES = {
         "default": {
-            "ENGINE": "django.db.backends.postgresql",
+            "ENGINE": "django.contrib.gis.db.backends.postgis",
             "NAME": env("RDS_DB_NAME"),
             "USER": env("RDS_USERNAME"),
             "PASSWORD": env("RDS_PASSWORD"),
@@ -73,6 +112,7 @@ DJANGO_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.humanize",  # Handy template tags
     "django.contrib.admin",
+    "django.contrib.gis",  # GeoDjango for spatial/GIS features
     "django.forms",
 ]
 THIRD_PARTY_APPS = [
@@ -101,6 +141,7 @@ LOCAL_APPS = [
     "commcare_connect.data_export",
     "commcare_connect.flags",
     "commcare_connect.form_receiver",
+    "commcare_connect.labs.admin_boundaries",
     "commcare_connect.multidb",
     "commcare_connect.opportunity",
     "commcare_connect.organization",
@@ -275,6 +316,12 @@ LOGGING = {
         "commcare_connect.ai": {
             "handlers": ["console"],
             "level": "INFO",
+            "propagate": False,
+        },
+        # Suppress GEOS geometry warnings (self-intersection notices from admin boundary data)
+        "django.contrib.gis": {
+            "handlers": ["console"],
+            "level": "ERROR",
             "propagate": False,
         },
     },
