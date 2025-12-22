@@ -12,7 +12,7 @@ def populate_program_currency_and_country_fk(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0088_currency_country_opportunity_currency_fk"),
+        ("opportunity", "0092_currency_country_opportunity_currency_fk"),
         ("program", "0003_alter_program_budget"),
     ]
 
