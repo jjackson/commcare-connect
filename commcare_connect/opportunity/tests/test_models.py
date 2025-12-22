@@ -177,12 +177,12 @@ def test_populate_currency_and_country_fk():
     assert opp_multi.currency_fk_id == multi_country_currency
     assert opp_multi.country_id is None
 
-    # invalid currencies create placeholder currencies is_valid=False
-    assert CurrencyModel.objects.filter(code=invalid_currency_code, is_valid=False).exists()
-    assert opp_invalid.currency_fk_id == invalid_currency_code
+    # invalid currencies fall back to USD without creating new currency rows
+    assert not CurrencyModel.objects.filter(code=invalid_currency_code).exists()
+    assert opp_invalid.currency_fk_id == multi_country_currency
     assert opp_invalid.country_id is None
     assert CountryModel.objects.count() == initial_country_count
-    assert CurrencyModel.objects.count() == initial_currency_count + 1
+    assert CurrencyModel.objects.count() == initial_currency_count
 
 
 @pytest.mark.django_db

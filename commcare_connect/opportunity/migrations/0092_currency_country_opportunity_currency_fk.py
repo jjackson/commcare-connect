@@ -439,7 +439,6 @@ def load_currency_and_country_data(apps, schema_editor):
             Currency(
                 code=code,
                 name=name,
-                is_valid=True,
             )
         )
 
@@ -479,7 +478,6 @@ class Migration(migrations.Migration):
             fields=[
                 ("code", models.CharField(max_length=3, primary_key=True, serialize=False)),
                 ("name", models.CharField(max_length=64)),
-                ("is_valid", models.BooleanField(default=True)),
             ],
         ),
         migrations.CreateModel(

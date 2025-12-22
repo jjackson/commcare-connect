@@ -62,7 +62,6 @@ class DeliveryType(models.Model):
 class Currency(models.Model):
     code = models.CharField(max_length=3, primary_key=True)  # ISO 4217
     name = models.CharField(max_length=64)
-    is_valid = models.BooleanField(default=True)
 
 
 class Country(models.Model):
