@@ -59,6 +59,7 @@ class TestOpportunityChangeForm:
             "short_description": "Updated Short Description",
             "active": True,
             "currency_fk": "EUR",
+            "country": valid_opportunity.country,
             "is_test": False,
             "delivery_type": valid_opportunity.delivery_type.id,
             "end_date": (datetime.date.today() + datetime.timedelta(days=60)).isoformat(),
@@ -75,6 +76,7 @@ class TestOpportunityChangeForm:
             "short_description",
             "active",
             "currency_fk",
+            "country",
             "is_test",
             "delivery_type",
             "end_date",
@@ -88,6 +90,7 @@ class TestOpportunityChangeForm:
             "short_description": valid_opportunity.short_description,
             "active": valid_opportunity.active,
             "currency_fk": valid_opportunity.currency_fk.code,
+            "country": valid_opportunity.country.code,
             "is_test": valid_opportunity.is_test,
             "delivery_type": valid_opportunity.delivery_type.id,
             "end_date": valid_opportunity.end_date.isoformat(),
@@ -101,6 +104,7 @@ class TestOpportunityChangeForm:
             "description",
             "short_description",
             "currency_fk",
+            "country",
         ],
     )
     def test_required_fields(self, valid_opportunity, field, base_form_data):
@@ -308,6 +312,7 @@ class TestOpportunityInitUpdateForm:
             "description": "updated opportunity description",
             "short_description": "updated short description",
             "currency_fk": currency_code,
+            "country": opportunity.country,
             "learn_app_description": learn_description,
             "learn_app_passing_score": learn_score,
         }
