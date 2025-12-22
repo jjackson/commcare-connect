@@ -80,7 +80,7 @@ class TestUninvoicedVisitItems:
         }[date.month]
 
         opp_access = OpportunityAccessFactory()
-        opp_access.opportunity.currency = "EUR"
+        opp_access.opportunity.currency_fk = "EUR"
         opp_access.opportunity.save()
 
         payment_unit = PaymentUnitFactory()
@@ -140,7 +140,7 @@ class TestUninvoicedVisitItems:
         }[date.month]
 
         opp_access = OpportunityAccessFactory()
-        opp_access.opportunity.currency = "EUR"
+        opp_access.opportunity.currency_fk = "EUR"
         opp_access.opportunity.save()
 
         payment_unit1 = PaymentUnitFactory()

@@ -1016,10 +1016,8 @@ class AddBudgetNewUsersForm(forms.Form):
         )
 
         self.fields["total_budget"].initial = self.opportunity.total_budget
-        currency = getattr(self.opportunity, "currency_fk", None)
-        currency_code = currency.code if currency else ""
-        if currency_code:
-            self.fields["total_budget"].label += f" ({currency_code})"
+        if self.opportunity.currency_code:
+            self.fields["total_budget"].label += f" ({self.opportunity.currency_code})"
 
         self.fields["add_users"].widget.attrs.update(
             {
@@ -1387,8 +1385,7 @@ class PaymentInvoiceForm(forms.ModelForm):
             }
         )
 
-        currency = getattr(self.opportunity, "currency_fk", None)
-        currency_code = currency.code if currency else ""
+        currency_code = self.opportunity.currency_code
 
         self.helper = FormHelper(self)
         layout_fields = [
@@ -1626,7 +1623,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
         third_row = [
             Field(
                 "amount",
-                label=f"Amount ({self.opportunity.currency})",
+                label=f"Amount ({self.opportunity.currency_code})",
                 **amount_field_attrs,
             ),
         ]

@@ -4,7 +4,7 @@ from factory import DictFactory, Faker, LazyAttribute, LazyFunction, SelfAttribu
 from factory.django import DjangoModelFactory
 
 from commcare_connect.commcarehq.tests.factories import HQServerFactory
-from commcare_connect.opportunity.models import Currency, VisitValidationStatus
+from commcare_connect.opportunity.models import Country, Currency, VisitValidationStatus
 from commcare_connect.users.tests.factories import OrganizationFactory
 
 
@@ -58,6 +58,7 @@ class OpportunityFactory(DjangoModelFactory):
     api_key = SubFactory(HQApiKeyFactory)
     delivery_type = SubFactory(DeliveryTypeFactory)
     currency_fk = LazyFunction(lambda: Currency.objects.get(code="USD"))
+    country = LazyFunction(lambda: Country.objects.get(code="USA"))
     hq_server = SubFactory(HQServerFactory)
 
     class Meta:

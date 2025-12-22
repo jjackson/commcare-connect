@@ -27,6 +27,13 @@ class Program(BaseModel):
     def __str__(self):
         return self.slug
 
+    @property
+    def currency_code(self):
+        if self.currency_fk:
+            return self.currency_fk.code
+        else:
+            return None
+
 
 class ManagedOpportunity(Opportunity):
     program = models.ForeignKey(Program, on_delete=models.DO_NOTHING)
