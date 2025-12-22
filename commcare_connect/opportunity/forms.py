@@ -111,7 +111,7 @@ class OpportunityUserInviteForm(forms.Form):
 class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
     currency_fk = forms.ModelChoiceField(
         label=_("Currency"),
-        queryset=Currency.objects.filter(is_valid=True).order_by("code"),
+        queryset=Currency.objects.order_by("code"),
         widget=forms.Select(attrs={"data-tomselect": "1"}),
         empty_label=_("Select a currency"),
     )
@@ -315,7 +315,7 @@ class OpportunityInitForm(forms.ModelForm):
     app_hint_text = "Add required apps to the opportunity. All fields are mandatory."
     currency_fk = forms.ModelChoiceField(
         label=_("Currency"),
-        queryset=Currency.objects.filter(is_valid=True).order_by("code"),
+        queryset=Currency.objects.order_by("code"),
         widget=forms.Select(attrs={"data-tomselect": "1"}),
         empty_label=_("Select a currency"),
     )

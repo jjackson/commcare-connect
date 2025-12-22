@@ -13,7 +13,7 @@ DATE_INPUT = forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"})
 class ProgramForm(forms.ModelForm):
     currency_fk = forms.ModelChoiceField(
         label="Currency",
-        queryset=Currency.objects.filter(is_valid=True).order_by("code"),
+        queryset=Currency.objects.order_by("code"),
         widget=forms.Select(attrs={"data-tomselect": "1"}),
         empty_label="Select a currency",
     )
