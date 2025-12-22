@@ -116,6 +116,13 @@ class Opportunity(BaseModel):
         return self.name
 
     @property
+    def currency_code(self):
+        if self.currency_fk:
+            return self.currency_fk.code
+        else:
+            return None
+
+    @property
     def org_pay_per_visit(self):
         return self.managedopportunity.org_pay_per_visit if self.managed else 0
 
