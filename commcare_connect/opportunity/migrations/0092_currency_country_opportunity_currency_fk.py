@@ -423,7 +423,6 @@ CURRENCIES = [
     ("Vatu", "VUV"),
     ("Bolívar Soberano", "VES"),
     ("Dong", "VND"),
-    ("Moroccan Dirham", "MAD"),
     ("Yemeni Rial", "YER"),
     ("Zambian Kwacha", "ZMW"),
     ("Zimbabwe Gold", "ZWG"),
