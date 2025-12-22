@@ -1,6 +1,5 @@
 import datetime
 import json
-import sys
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
@@ -103,6 +102,7 @@ from commcare_connect.opportunity.models import (
     DeliverUnitFlagRules,
     ExchangeRate,
     FormJsonValidationRules,
+    InvoiceStatus,
     LearnModule,
     Opportunity,
     OpportunityAccess,
@@ -572,7 +572,10 @@ def review_visit_import(request, org_slug=None, opp_id=None):
             messages.warning(request, mark_safe(status.get_missing_message()))
         if status.locked_visits:
             messages.warning(request, mark_safe(status.get_locked_message()))
-        messages.success(request, mark_safe(f"Visit review updated successfully for {len(status)} visits."))
+        if status.seen_visits:
+            messages.success(
+                request, mark_safe(f"Visit review updated successfully for {len(status.seen_visits)} visits.")
+            )
     return redirect(redirect_url)
 
 
@@ -1460,6 +1463,8 @@ class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateVie
         kwargs = super().get_form_kwargs()
         kwargs["opportunity"] = self.get_opportunity()
         kwargs["invoice_type"] = self.request.GET.get("invoice_type", PaymentInvoice.InvoiceType.service_delivery)
+        kwargs["status"] = InvoiceStatus.SUBMITTED
+        kwargs["is_opportunity_pm"] = self.request.is_opportunity_pm
         return kwargs
 
     def get_success_url(self):
@@ -1490,6 +1495,7 @@ class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailVie
                 "opportunity": opportunity,
                 "form": self.get_form(),
                 "is_service_delivery": invoice.service_delivery,
+                "invoice_status": invoice.status,
                 "path": [
                     {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
                     {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
@@ -1530,6 +1536,7 @@ class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailVie
             invoice_type=invoice_type,
             line_items_table=line_items_table,
             read_only=True,
+            is_opportunity_pm=self.request.is_opportunity_pm,
         )
 
     @property
@@ -1542,15 +1549,52 @@ class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailVie
 @org_member_required
 @opportunity_required
 @require_POST
+def submit_invoice(request, org_slug, opp_id):
+    if not (request.opportunity.managed and request.org_membership):
+        return HttpResponse(
+            status=302,
+            headers={"HX-Redirect": reverse("opportunity:detail", args=[org_slug, opp_id])},
+        )
+
+    invoice_id = request.POST.get("invoice_id")
+    notes = request.POST.get("notes")
+    invoice = get_object_or_404(PaymentInvoice, opportunity=request.opportunity, pk=invoice_id)
+    if invoice.status != InvoiceStatus.PENDING:
+        return HttpResponseBadRequest("Only invoices with status 'Pending' can be submitted for approval.")
+
+    invoice.status = InvoiceStatus.SUBMITTED
+    if invoice.service_delivery:
+        invoice.notes = notes
+        invoice.save(update_fields=["status", "notes"])
+    else:
+        invoice.save(update_fields=["status"])
+    messages.success(
+        request, _("Invoice %(invoice_number)s submitted for approval.") % {"invoice_number": invoice.invoice_number}
+    )
+
+    return HttpResponse(
+        status=204,
+        headers={"HX-Redirect": reverse("opportunity:invoice_list", args=[org_slug, opp_id])},
+    )
+
+
+@org_member_required
+@opportunity_required
+@require_POST
 def invoice_approve(request, org_slug, opp_id):
     if not request.opportunity.managed or not (request.org_membership and request.org_membership.is_program_manager):
-        return redirect("opportunity:detail", org_slug, opp_id)
+        return HttpResponse(
+            status=302,
+            headers={"HX-Redirect": reverse("opportunity:detail", args=[org_slug, opp_id])},
+        )
     invoice_ids = request.POST.getlist("pk")
     invoices = PaymentInvoice.objects.filter(opportunity=request.opportunity, pk__in=invoice_ids, payment__isnull=True)
 
     paid_invoice_ids = []
     payments = []
     for inv in invoices:
+        if inv.status != InvoiceStatus.SUBMITTED:
+            return HttpResponseBadRequest(_("Only submitted invoice can be approved."))
         paid_invoice_ids.append(inv.id)
         payments.append(
             Payment(
@@ -1560,10 +1604,16 @@ def invoice_approve(request, org_slug, opp_id):
                 invoice=inv,
             )
         )
+        inv.status = InvoiceStatus.APPROVED
+        inv.save(update_fields=["status"])
+
     Payment.objects.bulk_create(payments)
 
     transaction.on_commit(partial(send_invoice_paid_mail.delay, request.opportunity.id, paid_invoice_ids))
-    return redirect("opportunity:invoice_list", org_slug, opp_id)
+    if paid_invoice_ids:
+        messages.success(request, _("Invoice(s) successfully marked as paid."))
+    redirect_url = reverse("opportunity:invoice_list", args=(org_slug, opp_id))
+    return HttpResponse(headers={"HX-Redirect": redirect_url})
 
 
 @org_member_required
@@ -2064,7 +2114,6 @@ def user_visit_details(request, org_slug, opp_id, pk):
 
     user_forms = []
     other_forms = []
-    closest_distance = sys.maxsize
 
     if user_visit.location:
         lat, lon, _, precision = user_visit.location.split(" ")
@@ -2100,7 +2149,6 @@ def user_visit_details(request, org_slug, opp_id, pk):
             try:
                 other_lat, other_lon, *_ = loc.location.split()
                 dist = distance.distance((lat, lon), (float(other_lat), float(other_lon))).m
-                closest_distance = int(min(closest_distance, dist))
                 if dist <= 250:
                     visit_info = {
                         "entity_name": loc.entity_name,
@@ -2143,7 +2191,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
             user_forms=user_forms[:5],
             other_forms=other_forms[:5],
             visit_data=visit_data,
-            closest_distance=closest_distance,
+            min_allowed_distance=verification_flags_config.location,
             verification_flags_config=verification_flags_config,
             flags=flags,
             flag_count=flag_count,
