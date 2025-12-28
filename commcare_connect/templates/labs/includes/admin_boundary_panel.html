@@ -1,0 +1,373 @@
+{% comment %}
+Admin Boundary Coverage Panel - Reusable Component
+
+Displays which admin boundaries contain visits for an opportunity.
+Self-contained HTML + CSS + JS - no external dependencies needed.
+
+Usage:
+    {% include "labs/includes/admin_boundary_panel.html" with opportunity_id=opp.id %}
+
+    Optional params:
+    - opportunity_id: (required) The opportunity ID to analyze
+    - default_iso_code: (optional) Pre-select a country ISO code
+
+Requirements:
+    - API endpoint accessible at /labs/explorer/boundaries/api/coverage/
+    - API endpoint accessible at /labs/explorer/boundaries/api/countries/
+    - Visit data must be cached (pipeline must have run for this opportunity)
+{% endcomment %}
+
+<div id="admin-boundary-panel" class="bg-white rounded-lg shadow p-4 mb-4">
+    <h3 class="text-lg font-semibold text-gray-900 mb-4">Admin Boundary Coverage</h3>
+
+    <!-- Controls -->
+    <div class="flex flex-wrap gap-4 mb-4">
+        <!-- Country Selector -->
+        <div class="flex-1 min-w-[200px]">
+            <label for="boundary-country-select" class="block text-sm font-medium text-gray-700 mb-1">
+                Country
+            </label>
+            <select id="boundary-country-select"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                <option value="">Loading countries...</option>
+            </select>
+        </div>
+
+        <!-- Admin Levels -->
+        <div class="flex-1 min-w-[200px]">
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+                Admin Levels
+            </label>
+            <div class="flex gap-4">
+                <label class="inline-flex items-center">
+                    <input type="checkbox" id="boundary-level-1" value="1" checked
+                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                    <span class="ml-2 text-sm text-gray-700">ADM1</span>
+                </label>
+                <label class="inline-flex items-center">
+                    <input type="checkbox" id="boundary-level-2" value="2" checked
+                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                    <span class="ml-2 text-sm text-gray-700">ADM2</span>
+                </label>
+                <label class="inline-flex items-center">
+                    <input type="checkbox" id="boundary-level-3" value="3"
+                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                    <span class="ml-2 text-sm text-gray-700">ADM3</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Analyze Button -->
+        <div class="flex items-end">
+            <button id="boundary-analyze-btn"
+                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                Analyze Coverage
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="boundary-loading" class="hidden py-8 text-center">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div>
+        <p class="mt-2 text-gray-600">Analyzing boundary coverage...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="boundary-error" class="hidden bg-red-50 border border-red-200 rounded-md p-4">
+        <p class="text-red-700" id="boundary-error-message"></p>
+    </div>
+
+    <!-- Results -->
+    <div id="boundary-results" class="hidden">
+        <!-- Summary Stats -->
+        <div id="boundary-summary" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div class="bg-gray-50 rounded-lg p-3">
+                <div class="text-sm text-gray-500">Total Visits</div>
+                <div class="text-xl font-semibold" id="stat-total-visits">-</div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-3">
+                <div class="text-sm text-gray-500">With GPS</div>
+                <div class="text-xl font-semibold" id="stat-with-gps">-</div>
+            </div>
+            <div class="bg-green-50 rounded-lg p-3">
+                <div class="text-sm text-gray-500">Matched</div>
+                <div class="text-xl font-semibold text-green-700" id="stat-matched">-</div>
+            </div>
+            <div class="bg-yellow-50 rounded-lg p-3">
+                <div class="text-sm text-gray-500">Unmatched</div>
+                <div class="text-xl font-semibold text-yellow-700" id="stat-unmatched">-</div>
+            </div>
+        </div>
+
+        <!-- Boundaries by Level -->
+        <div id="boundary-levels" class="space-y-4">
+            <!-- Populated by JavaScript -->
+        </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="boundary-empty" class="py-8 text-center text-gray-500">
+        <p>Select a country and click "Analyze Coverage" to see which admin boundaries contain visits.</p>
+    </div>
+</div>
+
+<script>
+(function() {
+    // Configuration
+    const opportunityId = {{ opportunity_id|default:"null" }};
+    const defaultIsoCode = "{{ default_iso_code|default:'' }}";
+    const countriesApiUrl = "{% url 'explorer:admin_boundaries:countries_api' %}";
+    const coverageApiUrl = "{% url 'explorer:admin_boundaries:coverage_api' %}";
+
+    // DOM elements
+    const countrySelect = document.getElementById('boundary-country-select');
+    const analyzeBtn = document.getElementById('boundary-analyze-btn');
+    const loadingDiv = document.getElementById('boundary-loading');
+    const errorDiv = document.getElementById('boundary-error');
+    const errorMessage = document.getElementById('boundary-error-message');
+    const resultsDiv = document.getElementById('boundary-results');
+    const emptyDiv = document.getElementById('boundary-empty');
+    const levelsContainer = document.getElementById('boundary-levels');
+
+    // Stats elements
+    const statTotalVisits = document.getElementById('stat-total-visits');
+    const statWithGps = document.getElementById('stat-with-gps');
+    const statMatched = document.getElementById('stat-matched');
+    const statUnmatched = document.getElementById('stat-unmatched');
+
+    // Initialize
+    async function init() {
+        if (!opportunityId) {
+            showError('No opportunity ID provided. This panel requires an opportunity context.');
+            analyzeBtn.disabled = true;
+            return;
+        }
+
+        // Load available countries
+        await loadCountries();
+
+        // Set default if provided
+        if (defaultIsoCode && countrySelect.querySelector(`option[value="${defaultIsoCode}"]`)) {
+            countrySelect.value = defaultIsoCode;
+        }
+
+        // Bind events
+        analyzeBtn.addEventListener('click', analyzeCoverage);
+    }
+
+    async function loadCountries() {
+        try {
+            const response = await fetch(countriesApiUrl);
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to load countries');
+            }
+
+            countrySelect.innerHTML = '<option value="">Select a country...</option>';
+
+            if (data.countries.length === 0) {
+                countrySelect.innerHTML = '<option value="">No boundaries loaded</option>';
+                analyzeBtn.disabled = true;
+                return;
+            }
+
+            data.countries.forEach(country => {
+                const option = document.createElement('option');
+                option.value = country.iso_code;
+                option.textContent = `${country.iso_code} (${country.total_boundaries} boundaries, max ADM${country.max_level})`;
+                countrySelect.appendChild(option);
+            });
+
+        } catch (error) {
+            console.error('Failed to load countries:', error);
+            countrySelect.innerHTML = '<option value="">Error loading countries</option>';
+        }
+    }
+
+    function getSelectedLevels() {
+        const levels = [];
+        if (document.getElementById('boundary-level-1').checked) levels.push(1);
+        if (document.getElementById('boundary-level-2').checked) levels.push(2);
+        if (document.getElementById('boundary-level-3').checked) levels.push(3);
+        return levels;
+    }
+
+    async function analyzeCoverage() {
+        const isoCode = countrySelect.value;
+        const levels = getSelectedLevels();
+
+        if (!isoCode) {
+            showError('Please select a country');
+            return;
+        }
+
+        if (levels.length === 0) {
+            showError('Please select at least one admin level');
+            return;
+        }
+
+        // Show loading
+        showLoading(true);
+        hideError();
+        hideResults();
+
+        try {
+            const params = new URLSearchParams({
+                opportunity_id: opportunityId,
+                iso_code: isoCode,
+                levels: levels.join(',')
+            });
+
+            const response = await fetch(`${coverageApiUrl}?${params}`);
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.error || 'Analysis failed');
+            }
+
+            renderResults(data);
+
+        } catch (error) {
+            console.error('Coverage analysis failed:', error);
+            showError(error.message || 'Failed to analyze boundary coverage');
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    function renderResults(data) {
+        // Update stats
+        statTotalVisits.textContent = data.total_visits.toLocaleString();
+
+        const gpsPct = data.total_visits > 0
+            ? ((data.visits_with_gps / data.total_visits) * 100).toFixed(1)
+            : 0;
+        statWithGps.textContent = `${data.visits_with_gps.toLocaleString()} (${gpsPct}%)`;
+
+        const matchPct = data.visits_with_gps > 0
+            ? ((data.visits_matched / data.visits_with_gps) * 100).toFixed(1)
+            : 0;
+        statMatched.textContent = `${data.visits_matched.toLocaleString()} (${matchPct}%)`;
+
+        statUnmatched.textContent = data.visits_unmatched.toLocaleString();
+
+        // Render boundaries by level
+        levelsContainer.innerHTML = '';
+
+        const levelNames = {
+            '1': 'State/Province',
+            '2': 'District/County',
+            '3': 'Sub-district/Ward'
+        };
+
+        const levels = Object.keys(data.boundaries_by_level).sort();
+
+        if (levels.length === 0) {
+            levelsContainer.innerHTML = `
+                <div class="text-center py-4 text-gray-500">
+                    No visits matched any boundaries at the selected levels.
+                </div>
+            `;
+        } else {
+            levels.forEach(level => {
+                const boundaries = data.boundaries_by_level[level];
+                const levelName = levelNames[level] || `Level ${level}`;
+
+                const levelDiv = document.createElement('div');
+                levelDiv.className = 'border rounded-lg overflow-hidden';
+
+                // Header (collapsible)
+                const header = document.createElement('button');
+                header.className = 'w-full px-4 py-3 bg-gray-100 text-left font-medium flex justify-between items-center hover:bg-gray-200 transition-colors';
+                header.innerHTML = `
+                    <span>ADM${level} - ${levelName} (${boundaries.length} boundaries)</span>
+                    <svg class="w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                `;
+
+                // Content
+                const content = document.createElement('div');
+                content.className = 'hidden';
+
+                const table = document.createElement('table');
+                table.className = 'w-full text-sm';
+                table.innerHTML = `
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left font-medium text-gray-700">Boundary Name</th>
+                            <th class="px-4 py-2 text-right font-medium text-gray-700">Visit Count</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        ${boundaries.map(b => `
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-2">${escapeHtml(b.name)}</td>
+                                <td class="px-4 py-2 text-right font-mono">${b.visit_count.toLocaleString()}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                `;
+                content.appendChild(table);
+
+                // Toggle functionality
+                header.addEventListener('click', () => {
+                    content.classList.toggle('hidden');
+                    const arrow = header.querySelector('svg');
+                    arrow.classList.toggle('rotate-180');
+                });
+
+                levelDiv.appendChild(header);
+                levelDiv.appendChild(content);
+                levelsContainer.appendChild(levelDiv);
+
+                // Auto-expand first level
+                if (level === levels[0]) {
+                    content.classList.remove('hidden');
+                    header.querySelector('svg').classList.add('rotate-180');
+                }
+            });
+        }
+
+        showResults();
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function showLoading(show) {
+        loadingDiv.classList.toggle('hidden', !show);
+        analyzeBtn.disabled = show;
+    }
+
+    function showError(message) {
+        errorMessage.textContent = message;
+        errorDiv.classList.remove('hidden');
+        emptyDiv.classList.add('hidden');
+    }
+
+    function hideError() {
+        errorDiv.classList.add('hidden');
+    }
+
+    function showResults() {
+        resultsDiv.classList.remove('hidden');
+        emptyDiv.classList.add('hidden');
+    }
+
+    function hideResults() {
+        resultsDiv.classList.add('hidden');
+    }
+
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+</script>

@@ -82,6 +82,11 @@ class CoverageMapView(BaseCoverageView):
 
         context["stream_api_url"] = reverse("coverage:map_stream")
 
+        # Get opportunity_id from labs_context or query params for admin boundary panel
+        labs_context = getattr(self.request, "labs_context", {}) or {}
+        opportunity_id = labs_context.get("opportunity_id") or self.request.GET.get("opportunity_id")
+        context["opportunity_id"] = int(opportunity_id) if opportunity_id else None
+
         return context
 
 

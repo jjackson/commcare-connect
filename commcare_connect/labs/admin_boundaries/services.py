@@ -927,6 +927,11 @@ class GeoPoDELoader:
         if not features:
             return LoadResult(iso_code="", level=0, success=False, message=f"No features in {filename}")
 
+        # Check for CRS in the GeoJSON
+        source_srid = self._detect_crs(geojson_data)
+        if source_srid and source_srid != 4326:
+            progress(f"Detected CRS: EPSG:{source_srid} - will transform to WGS84")
+
         # Extract level from filename: boundary_{level}_{source}.json
         level_name = self._extract_level_from_filename(filename)
 
@@ -962,7 +967,9 @@ class GeoPoDELoader:
 
         for feature in features:
             try:
-                boundary = self._feature_to_boundary(feature, iso_code, admin_level, level_name, filename)
+                boundary = self._feature_to_boundary(
+                    feature, iso_code, admin_level, level_name, filename, source_srid=source_srid
+                )
                 if boundary:
                     boundaries_to_create.append(boundary)
             except Exception as e:
@@ -1050,6 +1057,52 @@ class GeoPoDELoader:
 
         return 1  # Default to ADM1
 
+    def _detect_crs(self, geojson_data: dict) -> int | None:
+        """Detect the CRS/SRID from GeoJSON data.
+
+        GeoJSON files may include CRS in various formats:
+        - crs.properties.name: "urn:ogc:def:crs:EPSG::32632" or "EPSG:32632"
+        - crs.properties.code: 32632
+
+        Returns:
+            EPSG SRID code if found, None otherwise
+        """
+        crs = geojson_data.get("crs")
+        if not crs:
+            return None
+
+        props = crs.get("properties", {})
+
+        # Try to get from 'code' property
+        code = props.get("code")
+        if code:
+            try:
+                return int(code)
+            except (ValueError, TypeError):
+                pass
+
+        # Try to extract from 'name' property
+        name = props.get("name", "")
+        if name:
+            # Handle various formats:
+            # "urn:ogc:def:crs:EPSG::32632"
+            # "EPSG:32632"
+            # "urn:ogc:def:crs:OGC:1.3:CRS84" (WGS84)
+            if "CRS84" in name or "CRS:84" in name:
+                return 4326
+
+            # Extract EPSG code
+            match = re.search(r"EPSG[:\s]*:*(\d+)", name, re.IGNORECASE)
+            if match:
+                return int(match.group(1))
+
+            # Try urn:ogc format
+            match = re.search(r"EPSG::(\d+)", name)
+            if match:
+                return int(match.group(1))
+
+        return None
+
     def _feature_to_boundary(
         self,
         feature: dict,
@@ -1057,6 +1110,7 @@ class GeoPoDELoader:
         level: int,
         level_name: str,
         source_filename: str,
+        source_srid: int | None = None,
     ) -> AdminBoundary | None:
         """Convert a GeoPoDe GeoJSON feature to an AdminBoundary."""
         properties = feature.get("properties", {})
@@ -1066,6 +1120,81 @@ class GeoPoDELoader:
             return None
 
         geom = GEOSGeometry(json.dumps(geometry_data))
+
+        # If source SRID is specified and not WGS84, transform to WGS84
+        if source_srid and source_srid != 4326:
+            geom.srid = source_srid
+            geom.transform(4326)
+        elif source_srid is None:
+            # Auto-detect if coordinates are in projected CRS (not WGS84)
+            # WGS84 lat/long: lat -90 to 90, lon -180 to 180
+            # Projected CRS: coordinates typically in thousands or millions
+            extent = geom.extent  # (xmin, ymin, xmax, ymax)
+            if abs(extent[0]) > 180 or abs(extent[2]) > 180 or abs(extent[1]) > 90 or abs(extent[3]) > 90:
+                logger.warning(
+                    f"[GeoPoDe] Coordinates appear to be in projected CRS "
+                    f"(extent: {extent[0]:.0f}, {extent[1]:.0f}). "
+                    f"Attempting auto-transform from common African projections..."
+                )
+                # Try common projected CRS for African countries
+                # UTM zones for Africa (both N and S hemispheres)
+                # Africa spans roughly UTM zones 28-38
+                common_african_srids = [
+                    # UTM South (common for sub-Saharan Africa)
+                    32732,
+                    32733,
+                    32734,
+                    32735,
+                    32736,
+                    32737,
+                    32738,
+                    # UTM North (common for North/Central Africa)
+                    32632,
+                    32633,
+                    32634,
+                    32635,
+                    32636,
+                    32637,
+                    32638,
+                    # Africa-specific projections
+                    4210,  # Arc 1960 (East Africa)
+                    4269,  # NAD83
+                    102022,  # Africa Albers Equal Area
+                    102024,  # Africa Lambert Conformal Conic
+                ]
+                transformed = False
+                for try_srid in common_african_srids:
+                    try:
+                        test_geom = GEOSGeometry(json.dumps(geometry_data))
+                        test_geom.srid = try_srid
+                        test_geom.transform(4326)
+                        test_extent = test_geom.extent
+                        # Check if transformed coords are valid WGS84 and make geographic sense
+                        # Africa roughly spans: lon -20 to 55, lat -35 to 40
+                        if (
+                            -180 <= test_extent[0] <= 180
+                            and -180 <= test_extent[2] <= 180
+                            and -90 <= test_extent[1] <= 90
+                            and -90 <= test_extent[3] <= 90
+                            # Additional check: result should be roughly in Africa
+                            and -30 <= test_extent[0] <= 60
+                            and -40 <= test_extent[1] <= 45
+                        ):
+                            geom = test_geom
+                            transformed = True
+                            logger.info(f"[GeoPoDe] Successfully transformed from SRID {try_srid}")
+                            break
+                    except Exception:
+                        continue
+
+                if not transformed:
+                    logger.error(
+                        f"[GeoPoDe] Could not auto-transform coordinates. "
+                        f"Data may not display correctly. Extent: {extent}"
+                    )
+
+        # Ensure SRID is set to WGS84
+        geom.srid = 4326
 
         # Ensure it's a MultiPolygon
         if isinstance(geom, Polygon):
@@ -1574,3 +1703,266 @@ def stream_load_geopode(
 
 # Backwards compatibility alias
 BoundaryLoader = GeoBoundariesLoader
+
+
+# =============================================================================
+# Opportunity Boundary Coverage - Spatial Query Service
+# =============================================================================
+
+
+@dataclass
+class BoundaryMatch:
+    """Single admin boundary with visit count."""
+
+    boundary_id: str
+    name: str
+    admin_level: int
+    visit_count: int
+
+
+@dataclass
+class BoundaryMatchResult:
+    """Result of matching opportunity visits to admin boundaries."""
+
+    opportunity_id: int
+    iso_code: str
+    total_visits: int
+    visits_with_gps: int
+    visits_matched: int
+    visits_unmatched: int  # Has GPS but outside all known boundaries
+    boundaries_by_level: dict[int, list[BoundaryMatch]] = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "opportunity_id": self.opportunity_id,
+            "iso_code": self.iso_code,
+            "total_visits": self.total_visits,
+            "visits_with_gps": self.visits_with_gps,
+            "visits_matched": self.visits_matched,
+            "visits_unmatched": self.visits_unmatched,
+            "boundaries_by_level": {
+                str(level): [
+                    {
+                        "boundary_id": b.boundary_id,
+                        "name": b.name,
+                        "admin_level": b.admin_level,
+                        "visit_count": b.visit_count,
+                    }
+                    for b in boundaries
+                ]
+                for level, boundaries in self.boundaries_by_level.items()
+            },
+        }
+
+
+def get_opp_boundary_coverage(
+    opportunity_id: int,
+    iso_code: str,
+    admin_levels: list[int] | None = None,
+) -> BoundaryMatchResult:
+    """
+    Get admin boundary coverage for an opportunity using efficient SQL join.
+
+    Performs a spatial join between cached visit GPS coordinates and admin
+    boundaries using PostGIS ST_Contains. Returns summary of which boundaries
+    contain visits and how many.
+
+    Cache Handling:
+        - Queries ComputedVisitCache which may have multiple entries per visit
+          (from different pipeline configs)
+        - Uses DISTINCT ON to deduplicate - each visit counted once
+        - The `location` field is a base field, identical across all configs
+        - Raises ValueError if no cached data exists for the opportunity
+
+    Args:
+        opportunity_id: Opportunity to analyze
+        iso_code: Country ISO code to filter boundaries (e.g., "KEN", "NGA")
+        admin_levels: Which admin levels to match (default [1, 2] for ADM1/ADM2)
+
+    Returns:
+        BoundaryMatchResult with counts per boundary and unmatched visit count
+
+    Raises:
+        ValueError: If no cached visit data exists for the opportunity.
+                   Caller must ensure pipeline has been run first.
+
+    Example:
+        # In a view where pipeline has already run:
+        result = get_opp_boundary_coverage(
+            opportunity_id=814,
+            iso_code="KEN",
+            admin_levels=[1, 2, 3]
+        )
+        print(f"Matched {result.visits_matched} visits to boundaries")
+    """
+    from django.db import connection
+
+    from commcare_connect.labs.analysis.backends.sql.models import ComputedVisitCache
+
+    if admin_levels is None:
+        admin_levels = [1, 2]
+
+    # Check if cache exists for this opportunity
+    cache_exists = ComputedVisitCache.objects.filter(opportunity_id=opportunity_id).exists()
+
+    if not cache_exists:
+        raise ValueError(
+            f"No cached visit data exists for opportunity {opportunity_id}. "
+            "Run the analysis pipeline first to populate the cache."
+        )
+
+    # Get total visit count and visits with GPS (deduplicated)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                COUNT(DISTINCT visit_id) as total_visits,
+                COUNT(DISTINCT CASE WHEN location IS NOT NULL AND location != '' THEN visit_id END) as visits_with_gps
+            FROM labs_computed_visit_cache
+            WHERE opportunity_id = %s
+            """,
+            [opportunity_id],
+        )
+        row = cursor.fetchone()
+        total_visits = row[0] or 0
+        visits_with_gps = row[1] or 0
+
+    if visits_with_gps == 0:
+        return BoundaryMatchResult(
+            opportunity_id=opportunity_id,
+            iso_code=iso_code,
+            total_visits=total_visits,
+            visits_with_gps=0,
+            visits_matched=0,
+            visits_unmatched=0,
+            boundaries_by_level={},
+        )
+
+    # Check if admin boundaries exist for this country
+    boundaries_exist = AdminBoundary.objects.filter(iso_code=iso_code, admin_level__in=admin_levels).exists()
+
+    if not boundaries_exist:
+        return BoundaryMatchResult(
+            opportunity_id=opportunity_id,
+            iso_code=iso_code,
+            total_visits=total_visits,
+            visits_with_gps=visits_with_gps,
+            visits_matched=0,
+            visits_unmatched=visits_with_gps,
+            boundaries_by_level={},
+        )
+
+    # Run the spatial join query
+    # This query:
+    # 1. Deduplicates visits (DISTINCT ON visit_id) to handle multiple cache entries
+    # 2. Parses location string "lat lon alt acc" into PostGIS point
+    # 3. Joins with admin boundaries using ST_Contains
+    # 4. Groups by boundary to get visit counts
+    with connection.cursor() as cursor:
+        cursor.execute(
+            r"""
+            WITH unique_visits AS (
+                -- Deduplicate visits (may have multiple cache entries from different configs)
+                SELECT DISTINCT ON (visit_id)
+                    visit_id,
+                    location
+                FROM labs_computed_visit_cache
+                WHERE opportunity_id = %s
+                  AND location IS NOT NULL
+                  AND location != ''
+            ),
+            visit_points AS (
+                -- Parse location string "lat lon alt acc" into PostGIS point
+                SELECT
+                    visit_id,
+                    ST_SetSRID(ST_MakePoint(
+                        CAST(split_part(location, ' ', 2) AS float),  -- lon (2nd part)
+                        CAST(split_part(location, ' ', 1) AS float)   -- lat (1st part)
+                    ), 4326) AS geom
+                FROM unique_visits
+                WHERE split_part(location, ' ', 1) ~ '^-?[0-9]+\.?[0-9]*$'
+                  AND split_part(location, ' ', 2) ~ '^-?[0-9]+\.?[0-9]*$'
+            )
+            SELECT
+                ab.boundary_id,
+                ab.name,
+                ab.admin_level,
+                COUNT(vp.visit_id) AS visit_count
+            FROM visit_points vp
+            JOIN labs_admin_boundary ab
+                ON ST_Contains(ab.geometry, vp.geom)
+            WHERE ab.iso_code = %s
+              AND ab.admin_level = ANY(%s)
+            GROUP BY ab.boundary_id, ab.name, ab.admin_level
+            ORDER BY ab.admin_level, visit_count DESC;
+            """,
+            [opportunity_id, iso_code, admin_levels],
+        )
+        boundary_rows = cursor.fetchall()
+
+    # Build result
+    boundaries_by_level: dict[int, list[BoundaryMatch]] = {}
+
+    for boundary_id, name, admin_level, visit_count in boundary_rows:
+        if admin_level not in boundaries_by_level:
+            boundaries_by_level[admin_level] = []
+
+        boundaries_by_level[admin_level].append(
+            BoundaryMatch(
+                boundary_id=boundary_id,
+                name=name,
+                admin_level=admin_level,
+                visit_count=visit_count,
+            )
+        )
+
+    # Calculate total matched visits (need a separate query to get unique visit count)
+    # because a visit can be in multiple boundaries at different levels
+    with connection.cursor() as cursor:
+        cursor.execute(
+            r"""
+            WITH unique_visits AS (
+                SELECT DISTINCT ON (visit_id)
+                    visit_id,
+                    location
+                FROM labs_computed_visit_cache
+                WHERE opportunity_id = %s
+                  AND location IS NOT NULL
+                  AND location != ''
+            ),
+            visit_points AS (
+                SELECT
+                    visit_id,
+                    ST_SetSRID(ST_MakePoint(
+                        CAST(split_part(location, ' ', 2) AS float),
+                        CAST(split_part(location, ' ', 1) AS float)
+                    ), 4326) AS geom
+                FROM unique_visits
+                WHERE split_part(location, ' ', 1) ~ '^-?[0-9]+\.?[0-9]*$'
+                  AND split_part(location, ' ', 2) ~ '^-?[0-9]+\.?[0-9]*$'
+            )
+            SELECT COUNT(DISTINCT vp.visit_id)
+            FROM visit_points vp
+            WHERE EXISTS (
+                SELECT 1 FROM labs_admin_boundary ab
+                WHERE ST_Contains(ab.geometry, vp.geom)
+                  AND ab.iso_code = %s
+                  AND ab.admin_level = ANY(%s)
+            );
+            """,
+            [opportunity_id, iso_code, admin_levels],
+        )
+        visits_matched = cursor.fetchone()[0] or 0
+
+    visits_unmatched = visits_with_gps - visits_matched
+
+    return BoundaryMatchResult(
+        opportunity_id=opportunity_id,
+        iso_code=iso_code,
+        total_visits=total_visits,
+        visits_with_gps=visits_with_gps,
+        visits_matched=visits_matched,
+        visits_unmatched=visits_unmatched,
+        boundaries_by_level=boundaries_by_level,
+    )
