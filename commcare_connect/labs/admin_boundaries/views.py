@@ -10,6 +10,7 @@ from collections.abc import Generator
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.serializers import serialize
+from django.db import models
 from django.http import JsonResponse
 from django.views import View
 from django.views.generic import TemplateView
@@ -518,3 +519,150 @@ class UploadGeoPoDEStreamView(BaseSSEStreamView):
             "GeoPoDe uploads are processed synchronously. Use the upload form.",
             error="Use POST to /upload/ instead",
         )
+
+
+class BoundaryCoverageAPIView(LoginRequiredMixin, View):
+    """
+    API endpoint to get admin boundary coverage for an opportunity.
+
+    Returns which admin boundaries contain visits for the specified opportunity,
+    using efficient PostGIS spatial queries on cached visit data.
+
+    Requires that the analysis pipeline has been run for the opportunity
+    (visits must be cached in ComputedVisitCache).
+    """
+
+    def get(self, request):
+        """
+        Get boundary coverage for an opportunity.
+
+        Query params:
+            opportunity_id (required): Opportunity ID to analyze
+            iso_code (required): Country ISO code (e.g., KEN, NGA)
+            levels (optional): Comma-separated admin levels (default: 1,2)
+
+        Returns:
+            JSON with boundary coverage summary
+        """
+        from commcare_connect.labs.admin_boundaries.services import get_opp_boundary_coverage
+
+        # Parse required params
+        opportunity_id = request.GET.get("opportunity_id")
+        iso_code = request.GET.get("iso_code", "").upper()
+
+        if not opportunity_id:
+            return JsonResponse(
+                {"success": False, "error": "opportunity_id is required"},
+                status=400,
+            )
+
+        if not iso_code:
+            return JsonResponse(
+                {"success": False, "error": "iso_code is required"},
+                status=400,
+            )
+
+        try:
+            opportunity_id = int(opportunity_id)
+        except ValueError:
+            return JsonResponse(
+                {"success": False, "error": "opportunity_id must be an integer"},
+                status=400,
+            )
+
+        # Parse optional levels
+        levels_raw = request.GET.get("levels", "1,2")
+        try:
+            admin_levels = [int(level.strip()) for level in levels_raw.split(",") if level.strip()]
+        except ValueError:
+            return JsonResponse(
+                {"success": False, "error": "levels must be comma-separated integers"},
+                status=400,
+            )
+
+        # Check if boundaries exist for this country
+        boundaries_exist = AdminBoundary.objects.filter(iso_code=iso_code, admin_level__in=admin_levels).exists()
+
+        if not boundaries_exist:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": f"No admin boundaries found for {iso_code} at levels {admin_levels}. "
+                    f"Load boundaries first.",
+                },
+                status=404,
+            )
+
+        try:
+            result = get_opp_boundary_coverage(
+                opportunity_id=opportunity_id,
+                iso_code=iso_code,
+                admin_levels=admin_levels,
+            )
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    **result.to_dict(),
+                }
+            )
+
+        except ValueError as e:
+            # No cached data for opportunity
+            return JsonResponse(
+                {"success": False, "error": str(e)},
+                status=404,
+            )
+        except Exception as e:
+            logger.error(f"[BoundaryCoverage] Error: {e}", exc_info=True)
+            return JsonResponse(
+                {"success": False, "error": f"Failed to get boundary coverage: {str(e)}"},
+                status=500,
+            )
+
+
+class AvailableCountriesAPIView(LoginRequiredMixin, View):
+    """
+    API endpoint to get list of countries with loaded admin boundaries.
+
+    Used by UI components to populate country selector dropdowns.
+    """
+
+    def get(self, request):
+        """
+        Get list of countries with loaded boundaries.
+
+        Returns:
+            JSON with list of ISO codes and boundary counts
+        """
+        try:
+            # Get unique countries with their boundary counts
+            countries = (
+                AdminBoundary.objects.values("iso_code")
+                .annotate(
+                    total=models.Count("id"),
+                    max_level=models.Max("admin_level"),
+                )
+                .order_by("iso_code")
+            )
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "countries": [
+                        {
+                            "iso_code": c["iso_code"],
+                            "total_boundaries": c["total"],
+                            "max_level": c["max_level"],
+                        }
+                        for c in countries
+                    ],
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"[AvailableCountries] Error: {e}", exc_info=True)
+            return JsonResponse(
+                {"success": False, "error": f"Failed to get countries: {str(e)}"},
+                status=500,
+            )

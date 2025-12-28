@@ -242,6 +242,13 @@
        x-show="!loading && !loadError"
        x-cloak></div>
 
+  <!-- Admin Boundary Coverage Panel -->
+  {% if opportunity_id %}
+  <div class="mt-6" x-show="!loading && !loadError" x-cloak>
+    {% include "labs/includes/admin_boundary_panel.html" with opportunity_id=opportunity_id %}
+  </div>
+  {% endif %}
+
   {% endif %}
 </div>
 {% endblock %}
@@ -416,7 +423,7 @@ function coverageMap() {
           setTimeout(() => {
             if (this.map) {
               this.map.invalidateSize();
-              this.fitMapToDUs();
+              this.fitMapToData();
             }
           }, 100);
         });
@@ -466,17 +473,33 @@ function coverageMap() {
       this.loadPointsData();
     },
 
-    // Fit map to show all delivery units
-    fitMapToDUs() {
-      if (!this.duData || this.duData.features.length === 0) return;
+    // Fit map to show all data (DUs or service points)
+    fitMapToData() {
+      let bounds = null;
 
-      try {
-        const bounds = L.geoJSON(this.duData).getBounds();
-        if (bounds.isValid()) {
-          this.map.fitBounds(bounds, {padding: [20, 20]});
+      // Try DU bounds first
+      if (this.duData && this.duData.features.length > 0) {
+        try {
+          bounds = L.geoJSON(this.duData).getBounds();
+          if (!bounds.isValid()) bounds = null;
+        } catch (e) {
+          console.warn('Could not get DU bounds:', e);
         }
-      } catch (e) {
-        console.warn('Could not fit bounds:', e);
+      }
+
+      // Fall back to service points if no valid DU bounds
+      if (!bounds && this.pointsData && this.pointsData.features.length > 0) {
+        try {
+          bounds = L.geoJSON(this.pointsData).getBounds();
+          if (!bounds.isValid()) bounds = null;
+        } catch (e) {
+          console.warn('Could not get service points bounds:', e);
+        }
+      }
+
+      // Apply bounds if valid
+      if (bounds) {
+        this.map.fitBounds(bounds, {padding: [20, 20]});
       }
     },
 
