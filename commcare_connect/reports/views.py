@@ -1,20 +1,31 @@
+import calendar
 from datetime import date, timedelta
 
 import django_filters
 import django_tables2 as tables
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Column, Layout, Row
-from django.urls import reverse
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
+from django.db.models import F, OuterRef, Subquery
 from django.utils.functional import cached_property
 from django_filters.views import FilterView
+from django_tables2.views import SingleTableMixin
 
-from commcare_connect.opportunity.models import CompletedWork, DeliveryType, Opportunity
+from commcare_connect.opportunity.models import (
+    CompletedWork,
+    DeliveryType,
+    InvoiceStatus,
+    Opportunity,
+    Payment,
+    PaymentInvoice,
+)
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import Program
 from commcare_connect.reports.decorators import KPIReportMixin
 from commcare_connect.reports.helpers import get_table_data_for_year_month
+from commcare_connect.utils.permission_const import INVOICE_REPORT_ACCESS
 
-from .tables import AdminReportTable
+from .tables import AdminReportTable, InvoiceReportTable
 
 COUNTRY_CURRENCY_CHOICES = [
     ("ETB", "Ethiopia"),
@@ -122,7 +133,7 @@ class DeliveryStatsReportView(tables.SingleTableMixin, KPIReportMixin, NonModelF
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["report_url"] = reverse("reports:delivery_stats_report")
+        context["title"] = "Delivery Stats Report"
         return context
 
     @cached_property
@@ -135,3 +146,92 @@ class DeliveryStatsReportView(tables.SingleTableMixin, KPIReportMixin, NonModelF
     @property
     def object_list(self):
         return get_table_data_for_year_month(**self.filter_values)
+
+
+class InvoiceReportFilter(django_filters.FilterSet):
+    opportunity_id = django_filters.NumberFilter(
+        field_name="opportunity__id",
+        label="Opportunity ID",
+    )
+
+    status = django_filters.ChoiceFilter(
+        choices=InvoiceStatus.choices,
+        label="Status",
+    )
+
+    from_date = django_filters.DateFilter(
+        field_name="date_paid",
+        lookup_expr="gte",
+        label="From Payment Date",
+        input_formats=["%Y-%m"],
+        required=False,
+    )
+
+    to_date = django_filters.DateFilter(
+        field_name="date_paid",
+        method="filter_to_date",
+        label="To Payment Date",
+        input_formats=["%Y-%m"],
+        required=False,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.form.helper = FormHelper()
+        self.form.helper.layout = Layout(
+            Row(
+                Column("opportunity_id"),
+                Column("status"),
+                Column("from_date"),
+                Column("to_date"),
+                css_class="grid grid-cols-4 gap-4",
+            ),
+        )
+
+    def filter_to_date(self, queryset, name, value):
+        # move to last day of the selected month
+        last_day = calendar.monthrange(value.year, value.month)[1]
+        end_of_month = date(value.year, value.month, last_day)
+        return queryset.filter(date_paid__lte=end_of_month)
+
+    class Meta:
+        model = PaymentInvoice
+        fields = ["opportunity_id", "status", "from_date", "to_date"]
+
+
+class InvoiceReportView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    SingleTableMixin,
+    FilterView,
+):
+    model = PaymentInvoice
+    table_class = InvoiceReportTable
+    filterset_class = InvoiceReportFilter
+    permission_required = INVOICE_REPORT_ACCESS
+
+    def get_template_names(self):
+        if self.request.htmx:
+            return ["base_table.html"]
+        return ["reports/report_table.html"]
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["title"] = "Invoice Report"
+        return context
+
+    def get_queryset(self):
+        payment_date_subquery = Payment.objects.filter(invoice=OuterRef("pk")).values("date_paid")[:1]
+        return (
+            PaymentInvoice.objects.select_related(
+                "opportunity",
+                "opportunity__managedopportunity",
+                "opportunity__managedopportunity__program",
+                "opportunity__managedopportunity__program__organization",
+            )
+            .annotate(
+                date_paid=Subquery(payment_date_subquery),
+                org_slug=F("opportunity__managedopportunity__program__organization__slug"),
+            )
+            .order_by("-date_paid", "-date")
+        )
