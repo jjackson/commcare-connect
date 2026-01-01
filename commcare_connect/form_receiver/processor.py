@@ -1,6 +1,7 @@
 import datetime
 from functools import partial
 
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Min, Q
 from django.utils.timezone import now
@@ -267,21 +268,23 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             f"{deliver_unit.name} in opportunity: {opportunity.name}"
         )
 
-    counts = (
-        UserVisit.objects.filter(opportunity_access=access, deliver_unit=deliver_unit)
-        .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
-        .aggregate(
-            daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)),
-            total=Count("*"),
-            entity=Count("pk", filter=Q(entity_id=deliver_unit_block.get("entity_id"), deliver_unit=deliver_unit)),
-        )
-    )
     claim = OpportunityClaim.objects.get(opportunity_access=access)
     claim_limit = OpportunityClaimLimit.objects.get(opportunity_claim=claim, payment_unit=payment_unit)
     entity_id = deliver_unit_block.get("entity_id")
     entity_name = deliver_unit_block.get("entity_name")
 
-    with transaction.atomic():
+    # handle concurrent form submissions for same entity id
+    lock_key = f"visit_processor:{access.id}:{deliver_unit.id}:{entity_id}"
+    with cache.lock(lock_key, timeout=10, sleep=0.1), transaction.atomic():
+        counts = (
+            UserVisit.objects.filter(opportunity_access=access, deliver_unit=deliver_unit)
+            .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
+            .aggregate(
+                daily=Count("pk", filter=Q(visit_date__date=xform.metadata.timeStart)),
+                total=Count("*"),
+                entity=Count("pk", filter=Q(entity_id=deliver_unit_block.get("entity_id"), deliver_unit=deliver_unit)),
+            )
+        )
         user_visit = UserVisit(
             opportunity=opportunity,
             user=user,
