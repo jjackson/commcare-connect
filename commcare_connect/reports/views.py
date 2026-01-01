@@ -4,7 +4,8 @@ from datetime import date, timedelta
 import django_filters
 import django_tables2 as tables
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Column, Layout, Row
+from crispy_forms.layout import Column, Field, Layout, Row
+from django import forms
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.db.models import F, OuterRef, Subquery
 from django.utils.functional import cached_property
@@ -149,42 +150,58 @@ class DeliveryStatsReportView(tables.SingleTableMixin, KPIReportMixin, NonModelF
 
 
 class InvoiceReportFilter(django_filters.FilterSet):
-    opportunity_id = django_filters.NumberFilter(
-        field_name="opportunity__id",
-        label="Opportunity ID",
+    opportunity_id = django_filters.ModelChoiceFilter(
+        field_name="opportunity",
+        queryset=Opportunity.objects.only("id"),
+        label="Opportunity",
+        widget=forms.Select(
+            attrs={
+                "data-tomselect": "1",
+                "placeholder": "Select Opportunity",
+            }
+        ),
     )
 
-    status = django_filters.ChoiceFilter(
+    status = django_filters.MultipleChoiceFilter(
         choices=InvoiceStatus.choices,
         label="Status",
+        widget=forms.SelectMultiple(
+            attrs={
+                "data-tomselect": "1",
+                "placeholder": "Select status",
+            }
+        ),
     )
 
     from_date = django_filters.DateFilter(
-        field_name="date_paid",
+        field_name="date_paid__date",
         lookup_expr="gte",
         label="From Payment Date",
-        input_formats=["%Y-%m"],
+        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         required=False,
+        input_formats=["%Y-%m-%d"],
     )
 
     to_date = django_filters.DateFilter(
-        field_name="date_paid",
-        method="filter_to_date",
+        field_name="date_paid__date",
+        lookup_expr="lte",
         label="To Payment Date",
-        input_formats=["%Y-%m"],
+        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         required=False,
+        input_formats=["%Y-%m-%d"],
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.form.helper = FormHelper()
+        self.form.helper.form_tag = False
         self.form.helper.layout = Layout(
+            Field("opportunity_id"),
+            Field("status"),
             Row(
-                Column("opportunity_id"),
-                Column("status"),
-                Column("from_date"),
-                Column("to_date"),
-                css_class="grid grid-cols-4 gap-4",
+                Field("from_date"),
+                Field("to_date"),
+                css_class="grid grid-cols-2 gap-4",
             ),
         )
 
@@ -213,11 +230,20 @@ class InvoiceReportView(
     def get_template_names(self):
         if self.request.htmx:
             return ["base_table.html"]
-        return ["reports/report_table.html"]
+        return ["reports/invoice_report.html"]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["title"] = "Invoice Report"
+
+        if self.filterset:
+            filter_fields = self.filterset.form.fields.keys()
+            context["filters_applied_count"] = sum(
+                1 for key in filter_fields if self.filterset.data.get(key) not in ("", None)
+            )
+        else:
+            context["filters_applied_count"] = 0
+
         return context
 
     def get_queryset(self):
