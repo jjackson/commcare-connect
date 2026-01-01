@@ -1,4 +1,3 @@
-import calendar
 from datetime import date, timedelta
 
 import django_filters
@@ -204,12 +203,6 @@ class InvoiceReportFilter(django_filters.FilterSet):
                 css_class="grid grid-cols-2 gap-4",
             ),
         )
-
-    def filter_to_date(self, queryset, name, value):
-        # move to last day of the selected month
-        last_day = calendar.monthrange(value.year, value.month)[1]
-        end_of_month = date(value.year, value.month, last_day)
-        return queryset.filter(date_paid__lte=end_of_month)
 
     class Meta:
         model = PaymentInvoice
