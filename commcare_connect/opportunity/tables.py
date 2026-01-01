@@ -1220,6 +1220,7 @@ class WorkerLearnTable(OrgContextTable):
         )
 
         order_by = ("-last_active",)
+        row_attrs = {"class": "group"}
 
     def render_user(self, value, record):
         if not record.accepted:
@@ -1355,6 +1356,7 @@ class WorkerDeliveryTable(OrgContextTable):
             "action",
         )
         order_by = ("user.name", "-last_active")
+        row_attrs = {"class": "group"}
 
     def __init__(self, *args, **kwargs):
         self.opp_id = kwargs.pop("opp_id")
