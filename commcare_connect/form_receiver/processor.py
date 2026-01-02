@@ -1,7 +1,6 @@
 import datetime
 from functools import partial
 
-from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Min, Q
 from django.utils.timezone import now
@@ -35,6 +34,7 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.tasks import download_user_visit_attachments
 from commcare_connect.opportunity.visit_import import update_payment_accrued_for_user
 from commcare_connect.users.models import User
+from commcare_connect.utils.lock import try_redis_lock
 
 LEARN_MODULE_JSONPATH = parse("$..module")
 ASSESSMENT_JSONPATH = parse("$..assessment")
@@ -275,7 +275,9 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
 
     # handle concurrent form submissions for same entity id
     lock_key = f"visit_processor:{access.id}:{deliver_unit.id}:{entity_id}"
-    with cache.lock(lock_key, timeout=10, sleep=0.1), transaction.atomic():
+    with try_redis_lock(lock_key, timeout=10, blocking_timeout=2) as acquired, transaction.atomic():
+        if not acquired:
+            raise ProcessingError("Error processing form, please retry again.")
         counts = (
             UserVisit.objects.filter(opportunity_access=access, deliver_unit=deliver_unit)
             .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
