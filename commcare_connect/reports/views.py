@@ -251,7 +251,7 @@ class InvoiceReportView(
         return context
 
     @classmethod
-    def get_invoice_queryset(self):
+    def get_invoice_queryset():
         payment_date_subquery = Payment.objects.filter(invoice=OuterRef("pk")).values("date_paid")[:1]
         return (
             PaymentInvoice.objects.select_related(
