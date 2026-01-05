@@ -194,6 +194,7 @@ class InvoiceReportFilter(django_filters.FilterSet):
         super().__init__(*args, **kwargs)
         self.form.helper = FormHelper()
         self.form.helper.form_tag = False
+        self.form.helper.disable_csrf = True
         self.form.helper.layout = Layout(
             Field("opportunity_id"),
             Field("status"),
