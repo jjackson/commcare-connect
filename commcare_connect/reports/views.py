@@ -157,7 +157,7 @@ class DeliveryStatsReportView(tables.SingleTableMixin, KPIReportMixin, NonModelF
 class InvoiceReportFilter(django_filters.FilterSet):
     opportunity_id = django_filters.ModelChoiceFilter(
         field_name="opportunity",
-        queryset=Opportunity.objects.only("id"),
+        queryset=Opportunity.objects.all(),
         label="Opportunity",
         widget=forms.Select(
             attrs={
@@ -200,6 +200,7 @@ class InvoiceReportFilter(django_filters.FilterSet):
         super().__init__(*args, **kwargs)
         self.form.helper = FormHelper()
         self.form.helper.form_tag = False
+        self.form.helper.disable_csrf = True
         self.form.helper.layout = Layout(
             Field("opportunity_id"),
             Field("status"),

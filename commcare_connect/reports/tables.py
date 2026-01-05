@@ -60,10 +60,13 @@ class InvoiceReportTable(tables.Table):
         model = PaymentInvoice
         fields = (
             "opportunity_id",
+            "opportunity_name",
             "invoice_number",
             "amount",
             "amount_usd",
+            "invoice_type",
             "status",
+            "date",
         )
         sequence = (
             "opportunity_id",
@@ -91,7 +94,7 @@ class InvoiceReportTable(tables.Table):
         return value
 
     def render_amount(self, record):
-        return f"{record.opportunity.currency} {record.amount}"
+        return f"{record.opportunity.currency_code} {record.amount}"
 
     def render_invoice_type(self, record):
         return (
