@@ -258,5 +258,5 @@ class InvoiceReportView(
                 date_paid=Subquery(payment_date_subquery),
                 org_slug=F("opportunity__managedopportunity__program__organization__slug"),
             )
-            .order_by("-date_paid", "-date")
+            .order_by("-date")
         )
