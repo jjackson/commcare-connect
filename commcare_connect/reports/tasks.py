@@ -1,5 +1,5 @@
 import logging
-import time
+import uuid
 from collections import defaultdict
 from itertools import chain
 
@@ -145,7 +145,7 @@ def export_invoice_report_task(filters_data):
     table = InvoiceReportTable(filterset.qs)
 
     exporter = TableExport("csv", table)
-    filename = f"invoice-report-{round(time.time() * 1000)}.csv"
+    filename = f"invoice-report-{uuid.uuid4()}.csv"
     content = exporter.export()
     default_storage.save(filename, ContentFile(content))
     return filename
