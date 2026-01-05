@@ -32,6 +32,7 @@ from commcare_connect.reports.tables import AdminReportTable, InvoiceReportTable
 from commcare_connect.reports.tasks import export_invoice_report_task
 from commcare_connect.utils.celery import download_export_file, render_export_status
 from commcare_connect.utils.permission_const import INVOICE_REPORT_ACCESS
+from commcare_connect.utils.tables import DEFAULT_PAGE_SIZE, get_validated_page_size
 
 COUNTRY_CURRENCY_CHOICES = [
     ("ETB", "Ethiopia"),
@@ -226,6 +227,10 @@ class InvoiceReportView(
     table_class = InvoiceReportTable
     filterset_class = InvoiceReportFilter
     permission_required = INVOICE_REPORT_ACCESS
+    paginate_by = DEFAULT_PAGE_SIZE
+
+    def get_paginate_by(self, table):
+        return get_validated_page_size(self.request)
 
     def get_template_names(self):
         return ["reports/invoice_report.html"]
@@ -259,7 +264,7 @@ class InvoiceReportView(
                 date_paid=Subquery(payment_date_subquery),
                 org_slug=F("opportunity__managedopportunity__program__organization__slug"),
             )
-            .order_by("-date_paid", "-date")
+            .order_by("-date")
         )
 
     def get_queryset(self):
