@@ -87,6 +87,9 @@ class InvoiceReportTable(tables.Table):
             value,
         )
 
+    def value_invoice_number(self, value, record):
+        return value
+
     def render_amount(self, record):
         return f"{record.opportunity.currency} {record.amount}"
 
