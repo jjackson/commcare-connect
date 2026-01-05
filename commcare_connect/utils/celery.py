@@ -2,7 +2,6 @@ from celery.result import AsyncResult
 from django.core.files.storage import storages
 from django.http import FileResponse, Http404
 from django.shortcuts import render
-from django.utils.timezone import now
 from django_tables2.export import TableExport
 
 CELERY_TASK_SUCCESS = "SUCCESS"
@@ -50,7 +49,6 @@ def render_export_status(
         "components/upload_progress_bar.html",
         {
             "task_id": task_id,
-            "current_time": now().microsecond,
             "progress": progress,
             "download_url": download_url,
         },
