@@ -1,13 +1,18 @@
 from datetime import date, timedelta
+from urllib.parse import urlencode
 
 import django_filters
 import django_tables2 as tables
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Column, Field, Layout, Row
 from django import forms
+from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.db.models import F, OuterRef, Subquery
+from django.http import HttpResponse
+from django.urls import reverse
 from django.utils.functional import cached_property
+from django.views.decorators.http import require_GET, require_POST
 from django_filters.views import FilterView
 from django_tables2.views import SingleTableMixin
 
@@ -23,9 +28,10 @@ from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import Program
 from commcare_connect.reports.decorators import KPIReportMixin
 from commcare_connect.reports.helpers import get_table_data_for_year_month
+from commcare_connect.reports.tables import AdminReportTable, InvoiceReportTable
+from commcare_connect.reports.tasks import export_invoice_report_task
+from commcare_connect.utils.celery import download_export_file, render_export_status
 from commcare_connect.utils.permission_const import INVOICE_REPORT_ACCESS
-
-from .tables import AdminReportTable, InvoiceReportTable
 
 COUNTRY_CURRENCY_CHOICES = [
     ("ETB", "Ethiopia"),
@@ -221,13 +227,12 @@ class InvoiceReportView(
     permission_required = INVOICE_REPORT_ACCESS
 
     def get_template_names(self):
-        if self.request.htmx:
-            return ["base_table.html"]
         return ["reports/invoice_report.html"]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["title"] = "Invoice Report"
+        context["task_id"] = self.request.GET.get("task_id")
 
         if self.filterset:
             filter_fields = self.filterset.form.fields.keys()
@@ -239,7 +244,8 @@ class InvoiceReportView(
 
         return context
 
-    def get_queryset(self):
+    @classmethod
+    def get_invoice_queryset(self):
         payment_date_subquery = Payment.objects.filter(invoice=OuterRef("pk")).values("date_paid")[:1]
         return (
             PaymentInvoice.objects.select_related(
@@ -254,3 +260,45 @@ class InvoiceReportView(
             )
             .order_by("-date_paid", "-date")
         )
+
+    def get_queryset(self):
+        return self.get_invoice_queryset()
+
+
+@require_POST
+@login_required
+@permission_required(INVOICE_REPORT_ACCESS, raise_exception=True)
+def export_invoice_report(request):
+    filterset = InvoiceReportFilter(request.POST, queryset=PaymentInvoice.objects.none())
+    if not filterset.is_valid():
+        return HttpResponse("Invalid filters", status=400)
+
+    filters_data = filterset.form.cleaned_data
+    task = export_invoice_report_task.delay(filters_data)
+
+    #  Build redirect URL preserving applied filters
+    query_params = {k: v for k, v in filters_data.items() if v not in [None, "", []]}
+    query_params["task_id"] = task.id
+    redirect_url = f"{reverse('reports:invoice_report')}?{urlencode(query_params, doseq=True)}"
+    response = HttpResponse(status=204)
+    response["HX-Redirect"] = redirect_url
+    return response
+
+
+@require_GET
+@login_required
+@permission_required(INVOICE_REPORT_ACCESS, raise_exception=True)
+def export_status(request, task_id):
+    return render_export_status(
+        request,
+        task_id=task_id,
+        download_url=reverse("reports:download_export", args=(task_id,)),
+        ownership_check=None,
+    )
+
+
+@require_GET
+@login_required
+@permission_required(INVOICE_REPORT_ACCESS, raise_exception=True)
+def download_export(request, task_id):
+    return download_export_file(task_id=task_id, filename_without_ext=f"invoice_export_{request.user.name}")
