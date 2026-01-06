@@ -428,6 +428,16 @@ class PaymentInvoiceTable(OpportunityContextTable):
             return _("Service Delivery")
         return _("Other")
 
+    def render_status(self, record):
+        tooltips = {
+            "Pending": _("Under review by Program Manager."),
+            "Approved": _("Invoice Approved and Paid"),
+            "Submitted": _("Submitted to Program Manager for approval"),
+            "Archived": _("Invoice Archived. No User Actions Allowed."),
+        }
+        status = record.get_status_display()
+        return format_html('<span x-data x-tooltip.raw="{}">{}</span>', tooltips.get(status, ""), status)
+
     def render_actions(self, record):
         review_button = ""
         if waffle.switch_is_active(INVOICE_REVIEW):
