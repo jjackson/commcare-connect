@@ -140,7 +140,7 @@ class DeliveryStatsReportView(tables.SingleTableMixin, KPIReportMixin, NonModelF
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["title"] = "Delivery Stats Report"
+        context["report_url"] = reverse("reports:delivery_stats_report")
         return context
 
     @cached_property
