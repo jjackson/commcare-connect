@@ -413,7 +413,9 @@ class PaymentInvoiceTable(OpportunityContextTable):
         super().__init__(*args, **kwargs)
         self.base_columns["amount"].verbose_name = f"Amount ({self.opportunity.currency_code})"
 
-    def render_payment_status(self, value):
+    def render_payment_status(self, record, value):
+        if record.status == InvoiceStatus.ARCHIVED:
+            return "Archived"
         if value is not None:
             return "Paid"
         return "Pending"
