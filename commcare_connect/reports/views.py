@@ -156,14 +156,14 @@ class DeliveryStatsReportView(tables.SingleTableMixin, KPIReportMixin, NonModelF
 
 
 class InvoiceReportFilter(django_filters.FilterSet):
-    opportunity_id = django_filters.ModelChoiceFilter(
-        field_name="opportunity",
-        queryset=Opportunity.objects.all(),
+    opportunity_name = django_filters.ModelChoiceFilter(
+        field_name="opportunity__name",
+        queryset=Opportunity.objects.only("id", "name"),
         label="Opportunity",
         widget=forms.Select(
             attrs={
                 "data-tomselect": "1",
-                "placeholder": "Select Opportunity",
+                "placeholder": "Select Opportunity(s)",
             }
         ),
     )
@@ -203,7 +203,7 @@ class InvoiceReportFilter(django_filters.FilterSet):
         self.form.helper.form_tag = False
         self.form.helper.disable_csrf = True
         self.form.helper.layout = Layout(
-            Field("opportunity_id"),
+            Field("opportunity_name"),
             Field("status"),
             Row(
                 Field("from_date"),
@@ -214,7 +214,7 @@ class InvoiceReportFilter(django_filters.FilterSet):
 
     class Meta:
         model = PaymentInvoice
-        fields = ["opportunity_id", "status", "from_date", "to_date"]
+        fields = ["opportunity_name", "status", "from_date", "to_date"]
 
 
 class InvoiceReportView(
@@ -251,7 +251,7 @@ class InvoiceReportView(
         return context
 
     @classmethod
-    def get_invoice_queryset():
+    def get_invoice_queryset(cls):
         payment_date_subquery = Payment.objects.filter(invoice=OuterRef("pk")).values("date_paid")[:1]
         return (
             PaymentInvoice.objects.select_related(
@@ -280,6 +280,8 @@ def export_invoice_report(request):
         return HttpResponse("Invalid filters", status=400)
 
     filters_data = filterset.form.cleaned_data
+    if filters_data.get("opportunity_name"):
+        filters_data["opportunity_name"] = filters_data["opportunity_name"].id
     task = export_invoice_report_task.delay(filters_data)
 
     #  Build redirect URL preserving applied filters
