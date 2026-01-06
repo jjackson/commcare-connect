@@ -7,6 +7,7 @@ from crispy_forms.layout import Column, Field, Layout, Row
 from django import forms
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.db.models import F, OuterRef, Subquery
+from django.urls import reverse
 from django.utils.functional import cached_property
 from django_filters.views import FilterView
 from django_tables2.views import SingleTableMixin
@@ -134,7 +135,7 @@ class DeliveryStatsReportView(tables.SingleTableMixin, KPIReportMixin, NonModelF
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["title"] = "Delivery Stats Report"
+        context["report_url"] = reverse("reports:delivery_stats_report")
         return context
 
     @cached_property
