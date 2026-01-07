@@ -163,7 +163,7 @@ class InvoiceReportFilter(django_filters.FilterSet):
         widget=forms.Select(
             attrs={
                 "data-tomselect": "1",
-                "placeholder": "Select Opportunity(s)",
+                "placeholder": "Select Opportunity",
             }
         ),
     )
