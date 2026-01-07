@@ -1,0 +1,480 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Boundary Map{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-6" x-data="boundaryMap()">
+  <!-- Header -->
+  <div class="flex justify-between items-center mb-6">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900">Admin Boundary Map</h1>
+      <p class="text-gray-600 mt-1">Visualize admin boundaries across opportunities</p>
+    </div>
+    <a href="{% url 'explorer:admin_boundaries:index' %}" class="inline-flex items-center text-gray-600 hover:text-gray-900">
+      <i class="fa-solid fa-arrow-left mr-2"></i>
+      Back to Boundaries
+    </a>
+  </div>
+
+  <!-- Loading Indicator -->
+  <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg" x-show="loading" x-cloak>
+    <div class="flex items-center">
+      <i class="fa-solid fa-spinner fa-spin text-blue-600 text-xl mr-3"></i>
+      <span class="text-blue-800">Loading boundary data...</span>
+    </div>
+  </div>
+
+  <!-- Error Display -->
+  <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg" x-show="loadError" x-cloak>
+    <div class="flex items-center justify-between">
+      <div class="flex items-center">
+        <i class="fa-solid fa-circle-exclamation text-red-600 mr-3"></i>
+        <div>
+          <strong class="text-red-800">Error:</strong>
+          <span class="ml-2 text-red-700" x-text="loadError"></span>
+        </div>
+      </div>
+      <button @click="loadData()"
+              class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm font-medium">
+        <i class="fa-solid fa-rotate mr-1"></i>Retry
+      </button>
+    </div>
+  </div>
+
+  <!-- Control Panel -->
+  <div class="bg-white shadow-sm rounded-lg p-4 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+
+      <!-- Country Filter (Toggles) -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Countries</label>
+        <div class="flex flex-wrap gap-2">
+          {% for iso in available_countries %}
+          <label class="inline-flex items-center px-2 py-1 bg-gray-100 rounded cursor-pointer hover:bg-gray-200 transition-colors"
+                 :class="{ 'bg-green-100 ring-1 ring-green-500': selectedCountries.includes('{{ iso }}') }">
+            <input type="checkbox" value="{{ iso }}"
+                   x-model="selectedCountries"
+                   @change="applyClientFilters()"
+                   class="sr-only">
+            <span class="text-sm" :class="selectedCountries.includes('{{ iso }}') ? 'text-green-800 font-medium' : 'text-gray-700'">{{ iso }}</span>
+          </label>
+          {% empty %}
+          <span class="text-sm text-gray-500">No countries available</span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Funder Filter (Toggles) -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Funders</label>
+        <div class="flex flex-wrap gap-2">
+          {% for funder in available_funders %}
+          <label class="inline-flex items-center px-2 py-1 bg-gray-100 rounded cursor-pointer hover:bg-gray-200 transition-colors"
+                 :class="{ 'bg-green-100 ring-1 ring-green-500': selectedFunders.includes('{{ funder }}') }">
+            <input type="checkbox" value="{{ funder }}"
+                   x-model="selectedFunders"
+                   @change="applyClientFilters()"
+                   class="sr-only">
+            <span class="text-sm" :class="selectedFunders.includes('{{ funder }}') ? 'text-green-800 font-medium' : 'text-gray-700'">{{ funder }}</span>
+          </label>
+          {% empty %}
+          <span class="text-sm text-gray-500">No funders available</span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Admin Level Selector (Toggles) -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Admin Levels</label>
+        <div class="flex flex-wrap gap-2">
+          {% for level in available_levels %}
+          <label class="inline-flex items-center px-2 py-1 bg-gray-100 rounded cursor-pointer hover:bg-gray-200 transition-colors"
+                 :class="{ 'bg-green-100 ring-1 ring-green-500': selectedLevels.includes('{{ level }}') }">
+            <input type="checkbox" value="{{ level }}"
+                   x-model="selectedLevels"
+                   @change="applyClientFilters()"
+                   class="sr-only">
+            <span class="text-sm" :class="selectedLevels.includes('{{ level }}') ? 'text-green-800 font-medium' : 'text-gray-700'">ADM{{ level }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Opportunity IDs -->
+      <div>
+        <label for="oppIds" class="block text-sm font-medium text-gray-700 mb-2">Opportunity IDs</label>
+        <input type="text" id="oppIds" x-model="oppIdsInput"
+               placeholder="e.g. 814,822,830"
+               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent">
+        <button @click="loadData()" class="mt-2 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700">
+          Apply
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="mt-4 pt-4 border-t border-gray-200 flex items-center gap-6 text-sm text-gray-600" x-show="!loading && !loadError">
+      <span><strong x-text="totalBoundaries"></strong> boundaries</span>
+      <span><strong x-text="totalOpps"></strong> opportunities</span>
+      <span>Max visits: <strong x-text="maxVisits.toLocaleString()"></strong></span>
+    </div>
+  </div>
+
+  <!-- Map Container -->
+  <div class="relative">
+    <div x-ref="mapContainer"
+         class="w-full rounded-lg shadow-lg bg-gray-100"
+         style="height: 600px; min-height: 400px;">
+    </div>
+
+    <!-- Legend -->
+    <div class="absolute bottom-4 right-4 bg-white px-4 py-3 rounded-lg shadow-lg z-[1000]">
+      <h4 class="font-semibold text-gray-800 text-sm mb-2">Visit Density</h4>
+      <div class="space-y-1 text-xs">
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 rounded" style="background: #08519c"></div>
+          <span>High</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 rounded" style="background: #3182bd"></div>
+          <span>Medium-High</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 rounded" style="background: #6baed6"></div>
+          <span>Medium</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 rounded" style="background: #bdd7e7"></div>
+          <span>Low</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 rounded" style="background: #eff3ff"></div>
+          <span>Very Low</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div class="absolute inset-0 flex items-center justify-center bg-gray-50 rounded-lg"
+         x-show="!loading && !loadError && totalBoundaries === 0" x-cloak>
+      <div class="text-center text-gray-500">
+        <i class="fa-solid fa-map text-4xl mb-2"></i>
+        <p><strong>No boundaries found</strong></p>
+        <p class="text-sm">
+          Try adjusting your filters or run the enrichment command to populate boundary data.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block inline_javascript %}
+{{ block.super }}
+<!-- Leaflet CSS and JS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+<script>
+function boundaryMap() {
+  return {
+    // Loading state
+    loading: true,
+    loadError: null,
+
+    // Filters (arrays for multi-select toggles)
+    selectedCountries: [],
+    selectedFunders: [],
+    selectedLevels: [],
+    oppIdsInput: '{{ opp_ids_param }}',
+
+    // Stats (for filtered view)
+    totalBoundaries: 0,
+    totalOpps: 0,
+    maxVisits: 0,
+
+    // Leaflet objects
+    map: null,
+    boundaryLayer: null,
+
+    // Full dataset (loaded once)
+    fullGeojsonData: null,
+    fullMetadata: null,
+
+    // Filtered dataset (for current view)
+    filteredGeojsonData: null,
+
+    // API URL
+    apiUrl: '{% url "explorer:admin_boundaries:map_api" %}',
+
+    // Color scale (blues)
+    getColor(intensity) {
+      if (intensity > 0.8) return '#08519c';
+      if (intensity > 0.6) return '#3182bd';
+      if (intensity > 0.4) return '#6baed6';
+      if (intensity > 0.2) return '#bdd7e7';
+      return '#eff3ff';
+    },
+
+    // Initialize
+    init() {
+      // Parse initial values from URL params
+      const urlParams = new URLSearchParams(window.location.search);
+
+      // Parse countries (comma-separated)
+      const countries = urlParams.get('countries');
+      if (countries) {
+        this.selectedCountries = countries.split(',').filter(c => c);
+      }
+
+      // Parse funders (comma-separated)
+      const funders = urlParams.get('funders');
+      if (funders) {
+        this.selectedFunders = funders.split(',').filter(f => f);
+      }
+
+      // Parse levels (comma-separated)
+      const levels = urlParams.get('levels');
+      if (levels) {
+        this.selectedLevels = levels.split(',').filter(l => l);
+      } else {
+        // Default: select all levels
+        this.selectedLevels = [{% for level in available_levels %}'{{ level }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
+      }
+
+      // Parse opp IDs
+      const opps = urlParams.get('opps');
+      if (opps) {
+        this.oppIdsInput = opps;
+      }
+
+      this.loadData();
+    },
+
+    // Build API URL - always fetch ALL data (no country/funder/level filters)
+    buildApiUrl() {
+      const params = new URLSearchParams();
+      // Always fetch all levels
+      params.set('levels', 'all');
+      // Only filter by opp IDs on server side (if specified)
+      if (this.oppIdsInput) params.set('opps', this.oppIdsInput);
+      return `${this.apiUrl}?${params.toString()}`;
+    },
+
+    // Load ALL data from API (only called once, or when opp IDs change)
+    async loadData() {
+      this.loading = true;
+      this.loadError = null;
+
+      try {
+        const response = await fetch(this.buildApiUrl());
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        console.log('[BoundaryMap] Loaded full dataset:', data.features?.length, 'features');
+
+        // Store full dataset
+        this.fullGeojsonData = data;
+        this.fullMetadata = data.metadata || {};
+
+        this.loading = false;
+
+        // Apply client-side filters and render
+        this.applyClientFilters();
+
+        this.$nextTick(() => {
+          // Force Leaflet to recalculate container size after render
+          setTimeout(() => {
+            if (this.map) {
+              this.map.invalidateSize();
+              this.fitMapToData();
+            }
+          }, 100);
+        });
+
+      } catch (error) {
+        console.error('[BoundaryMap] Error:', error);
+        this.loadError = error.message;
+        this.loading = false;
+      }
+    },
+
+    // Apply filters CLIENT-SIDE (instant, no API call)
+    applyClientFilters() {
+      if (!this.fullGeojsonData) return;
+
+      // Update URL with current filters
+      const params = new URLSearchParams();
+      if (this.selectedCountries.length > 0) params.set('countries', this.selectedCountries.join(','));
+      if (this.selectedFunders.length > 0) params.set('funders', this.selectedFunders.join(','));
+      if (this.selectedLevels.length > 0) params.set('levels', this.selectedLevels.join(','));
+      if (this.oppIdsInput) params.set('opps', this.oppIdsInput);
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState({}, '', newUrl);
+
+      // Filter features client-side
+      const filteredFeatures = this.fullGeojsonData.features.filter(feature => {
+        const props = feature.properties || {};
+
+        // Filter by admin level
+        if (this.selectedLevels.length > 0) {
+          const level = String(props.admin_level);
+          if (!this.selectedLevels.includes(level)) return false;
+        }
+
+        // Filter by country (if any selected)
+        if (this.selectedCountries.length > 0) {
+          const iso = (props.iso_code || '').toUpperCase();
+          if (!this.selectedCountries.includes(iso)) return false;
+        }
+
+        // Note: Funder filtering would require funder info in feature properties
+        // Currently not included in GeoJSON - would need API change to support
+
+        return true;
+      });
+
+      // Recalculate max visits for color scaling
+      const maxVisits = filteredFeatures.length > 0
+        ? Math.max(...filteredFeatures.map(f => f.properties?.visit_count || 0))
+        : 1;
+
+      // Recalculate intensity based on filtered max
+      const featuresWithIntensity = filteredFeatures.map(f => ({
+        ...f,
+        properties: {
+          ...f.properties,
+          intensity: maxVisits > 0 ? (f.properties?.visit_count || 0) / maxVisits : 0
+        }
+      }));
+
+      // Build filtered GeoJSON
+      this.filteredGeojsonData = {
+        type: 'FeatureCollection',
+        features: featuresWithIntensity
+      };
+
+      // Update stats
+      this.totalBoundaries = filteredFeatures.length;
+      this.totalOpps = this.fullMetadata.total_opps || 0;
+      this.maxVisits = maxVisits;
+
+      console.log('[BoundaryMap] Filtered to', filteredFeatures.length, 'features');
+
+      // Re-render map with filtered data
+      if (this.map) {
+        this.renderBoundaries();
+      } else {
+        this.initMap();
+      }
+    },
+
+    // Initialize map (only once)
+    initMap() {
+      if (!this.filteredGeojsonData) {
+        console.error('Cannot initialize map: no data');
+        return;
+      }
+
+      // Clean up existing map
+      if (this.map) {
+        this.map.remove();
+        this.map = null;
+        this.boundaryLayer = null;
+      }
+
+      // Initialize Leaflet map
+      this.map = L.map(this.$refs.mapContainer).setView([5, 20], 4);
+
+      // Add tile layer
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 18
+      }).addTo(this.map);
+
+      // Add boundary layer
+      this.renderBoundaries();
+    },
+
+    // Fit map to data bounds
+    fitMapToData() {
+      if (this.boundaryLayer && this.filteredGeojsonData?.features?.length > 0) {
+        const bounds = this.boundaryLayer.getBounds();
+        if (bounds.isValid()) {
+          this.map.fitBounds(bounds, { padding: [20, 20] });
+        }
+      }
+    },
+
+    // Render boundary polygons
+    renderBoundaries() {
+      if (!this.map || !this.filteredGeojsonData) return;
+
+      // Remove existing layer
+      if (this.boundaryLayer) {
+        this.map.removeLayer(this.boundaryLayer);
+      }
+
+      const self = this;
+
+      this.boundaryLayer = L.geoJSON(this.filteredGeojsonData, {
+        style: function(feature) {
+          const intensity = feature.properties?.intensity || 0;
+          return {
+            fillColor: self.getColor(intensity),
+            weight: 1,
+            opacity: 1,
+            color: '#666',
+            fillOpacity: 0.7
+          };
+        },
+        onEachFeature: function(feature, layer) {
+          const props = feature.properties || {};
+          const visitCount = props.visit_count || 0;
+          const oppCount = props.opp_count || 0;
+
+          // Popup content
+          const popup = `
+            <div class="text-sm">
+              <strong class="text-gray-900">${props.name || 'Unknown'}</strong>
+              <div class="text-gray-600 mt-1">
+                <div>ISO: ${props.iso_code || 'N/A'}</div>
+                <div>ADM Level: ${props.admin_level || 'N/A'}</div>
+                <div class="mt-2 font-medium text-green-700">
+                  ${visitCount.toLocaleString()} visits
+                </div>
+                <div class="text-gray-500">
+                  from ${oppCount} opportunity${oppCount !== 1 ? 's' : ''}
+                </div>
+              </div>
+            </div>
+          `;
+          layer.bindPopup(popup);
+
+          // Hover effects
+          layer.on({
+            mouseover: function(e) {
+              const layer = e.target;
+              layer.setStyle({
+                weight: 3,
+                color: '#333',
+                fillOpacity: 0.9
+              });
+              layer.bringToFront();
+            },
+            mouseout: function(e) {
+              self.boundaryLayer.resetStyle(e.target);
+            }
+          });
+        }
+      }).addTo(this.map);
+
+      // Fit to bounds
+      this.fitMapToData();
+    }
+  };
+}
+</script>
+{% endblock %}

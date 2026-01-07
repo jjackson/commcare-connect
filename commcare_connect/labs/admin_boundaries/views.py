@@ -23,6 +23,7 @@ from commcare_connect.labs.admin_boundaries.services import (
     stream_load_country,
 )
 from commcare_connect.labs.analysis.sse_streaming import BaseSSEStreamView, send_sse_event
+from commcare_connect.solicitations.data_access import SolicitationDataAccess
 
 logger = logging.getLogger(__name__)
 
@@ -666,3 +667,253 @@ class AvailableCountriesAPIView(LoginRequiredMixin, View):
                 {"success": False, "error": f"Failed to get countries: {str(e)}"},
                 status=500,
             )
+
+
+class BoundaryMapView(LoginRequiredMixin, TemplateView):
+    """
+    Map visualization for admin boundaries across multiple opportunities.
+
+    Displays a Leaflet choropleth map showing boundaries colored by visit count.
+    Supports filtering by opportunity IDs, country, or funder.
+    """
+
+    template_name = "labs/explorer/boundary_map.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Get filter parameters
+        opp_ids_param = self.request.GET.get("opps", "")
+        country_filter = self.request.GET.get("country", "")
+        funder_filter = self.request.GET.get("funder", "")
+        admin_level = self.request.GET.get("level", "1")
+
+        context["opp_ids_param"] = opp_ids_param
+        context["country_filter"] = country_filter
+        context["funder_filter"] = funder_filter
+        context["admin_level"] = admin_level
+
+        # Load enrichment data to get available filters
+        enrichment_data = self._load_enrichment_data()
+
+        # Get unique countries and funders for filter dropdowns
+        countries = sorted({e.get("iso_code", "") for e in enrichment_data if e.get("iso_code")})
+        funders = sorted({e.get("funder", "") for e in enrichment_data if e.get("funder")})
+
+        context["available_countries"] = countries
+        context["available_funders"] = funders
+        context["enrichment_count"] = len(enrichment_data)
+
+        # Get available admin levels from loaded boundaries
+        available_levels = (
+            AdminBoundary.objects.values_list("admin_level", flat=True).distinct().order_by("admin_level")
+        )
+        context["available_levels"] = list(available_levels)
+
+        return context
+
+    def _load_enrichment_data(self) -> list:
+        """Load enrichment data from production LabsRecord."""
+        data_access = SolicitationDataAccess(request=self.request)
+        enrichment_record = data_access.get_enrichment_record()
+        if enrichment_record:
+            return enrichment_record.enrichments
+        return []
+
+
+class BoundaryMapAPIView(LoginRequiredMixin, View):
+    """
+    API endpoint to get aggregated boundary GeoJSON for multiple opportunities.
+
+    Aggregates visit counts across selected opportunities and returns GeoJSON
+    suitable for choropleth visualization.
+    """
+
+    def get(self, request):
+        """
+        Get aggregated boundary GeoJSON.
+
+        Query params:
+            opps (optional): Comma-separated opportunity IDs
+            countries (optional): Comma-separated ISO codes to include
+            funders (optional): Comma-separated funder names to include
+            levels (optional): Comma-separated admin levels or 'all'
+
+        Returns:
+            GeoJSON FeatureCollection with visit_count properties
+        """
+        # Parse parameters
+        opp_ids_param = request.GET.get("opps", "")
+        countries_param = request.GET.get("countries", "")
+        funders_param = request.GET.get("funders", "")
+        levels_param = request.GET.get("levels", "all")
+
+        # Parse multi-value filters
+        country_filters = [c.strip().upper() for c in countries_param.split(",") if c.strip()]
+        funder_filters = [f.strip() for f in funders_param.split(",") if f.strip()]
+
+        # Parse admin levels
+        show_all_levels = levels_param.lower() == "all"
+        selected_levels = []
+        if not show_all_levels:
+            try:
+                selected_levels = [int(x.strip()) for x in levels_param.split(",") if x.strip()]
+            except ValueError:
+                return JsonResponse(
+                    {"success": False, "error": "levels must be comma-separated integers or 'all'"},
+                    status=400,
+                )
+
+        # Load enrichment data
+        enrichment_data = self._load_enrichment_data()
+
+        # Filter enrichments based on parameters
+        filtered_enrichments = enrichment_data
+
+        if opp_ids_param:
+            try:
+                opp_ids = [int(x.strip()) for x in opp_ids_param.split(",") if x.strip()]
+                filtered_enrichments = [e for e in filtered_enrichments if e.get("opportunity_id") in opp_ids]
+            except ValueError:
+                return JsonResponse(
+                    {"success": False, "error": "Invalid opportunity IDs"},
+                    status=400,
+                )
+
+        # Filter by countries (if any selected)
+        if country_filters:
+            filtered_enrichments = [
+                e for e in filtered_enrichments if e.get("iso_code", "").upper() in country_filters
+            ]
+
+        # Filter by funders (if any selected)
+        if funder_filters:
+            filtered_enrichments = [e for e in filtered_enrichments if e.get("funder", "") in funder_filters]
+
+        # Only include enrichments that have admin_boundaries data
+        filtered_enrichments = [e for e in filtered_enrichments if e.get("admin_boundaries")]
+
+        if not filtered_enrichments:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "type": "FeatureCollection",
+                    "features": [],
+                    "metadata": {
+                        "total_opps": 0,
+                        "admin_levels": levels_param,
+                        "message": "No enriched opportunities match the filters",
+                    },
+                }
+            )
+
+        # Aggregate boundary visit counts across opportunities
+        # boundary_id -> {"name": str, "visit_count": int, "opp_count": int, "admin_level": int}
+        boundary_visits = {}
+
+        for enrichment in filtered_enrichments:
+            admin_boundaries = enrichment.get("admin_boundaries", {})
+
+            # Determine which levels to process
+            if show_all_levels:
+                levels_to_process = admin_boundaries.keys()
+            else:
+                levels_to_process = [str(lvl) for lvl in selected_levels]
+
+            for level_str in levels_to_process:
+                boundaries_at_level = admin_boundaries.get(level_str, [])
+                for boundary in boundaries_at_level:
+                    bid = boundary.get("boundary_id", "")
+                    if not bid:
+                        continue
+
+                    if bid not in boundary_visits:
+                        boundary_visits[bid] = {
+                            "name": boundary.get("name", ""),
+                            "visit_count": 0,
+                            "opp_count": 0,
+                            "iso_code": enrichment.get("iso_code", ""),
+                            "admin_level": int(level_str),
+                        }
+
+                    boundary_visits[bid]["visit_count"] += boundary.get("visit_count", 0)
+                    boundary_visits[bid]["opp_count"] += 1
+
+        if not boundary_visits:
+            level_desc = "any level" if show_all_levels else f"ADM {levels_param}"
+            return JsonResponse(
+                {
+                    "success": True,
+                    "type": "FeatureCollection",
+                    "features": [],
+                    "metadata": {
+                        "total_opps": len(filtered_enrichments),
+                        "admin_levels": levels_param,
+                        "message": f"No {level_desc} boundaries found in enrichment data",
+                    },
+                }
+            )
+
+        # Fetch actual geometries from database
+        boundary_ids = list(boundary_visits.keys())
+        if show_all_levels:
+            boundaries = AdminBoundary.objects.filter(boundary_id__in=boundary_ids)
+        else:
+            boundaries = AdminBoundary.objects.filter(
+                boundary_id__in=boundary_ids,
+                admin_level__in=selected_levels,
+            )
+
+        # Build GeoJSON features
+        features = []
+        max_visits = max(b["visit_count"] for b in boundary_visits.values()) if boundary_visits else 1
+
+        for boundary in boundaries:
+            bid = boundary.boundary_id
+            stats = boundary_visits.get(bid, {})
+
+            # Calculate color intensity based on visit count
+            visit_count = stats.get("visit_count", 0)
+            intensity = visit_count / max_visits if max_visits > 0 else 0
+
+            feature = {
+                "type": "Feature",
+                "properties": {
+                    "boundary_id": bid,
+                    "name": boundary.name,
+                    "admin_level": stats.get("admin_level", boundary.admin_level),
+                    "iso_code": boundary.iso_code,
+                    "visit_count": visit_count,
+                    "opp_count": stats.get("opp_count", 0),
+                    "intensity": intensity,
+                },
+                "geometry": json.loads(boundary.geometry.geojson),
+            }
+            features.append(feature)
+
+        return JsonResponse(
+            {
+                "success": True,
+                "type": "FeatureCollection",
+                "features": features,
+                "metadata": {
+                    "total_opps": len(filtered_enrichments),
+                    "total_boundaries": len(features),
+                    "admin_levels": levels_param,
+                    "max_visits": max_visits,
+                    "filters": {
+                        "opps": opp_ids_param,
+                        "countries": countries_param,
+                        "funders": funders_param,
+                    },
+                },
+            }
+        )
+
+    def _load_enrichment_data(self) -> list:
+        """Load enrichment data from production LabsRecord."""
+        data_access = SolicitationDataAccess(request=self.request)
+        enrichment_record = data_access.get_enrichment_record()
+        if enrichment_record:
+            return enrichment_record.enrichments
+        return []

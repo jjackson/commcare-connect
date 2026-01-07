@@ -22,4 +22,7 @@ urlpatterns = [
     # Opportunity boundary coverage API
     path("api/coverage/", views.BoundaryCoverageAPIView.as_view(), name="coverage_api"),
     path("api/countries/", views.AvailableCountriesAPIView.as_view(), name="countries_api"),
+    # Boundary map visualization
+    path("map/", views.BoundaryMapView.as_view(), name="map"),
+    path("api/map/", views.BoundaryMapAPIView.as_view(), name="map_api"),
 ]
