@@ -81,8 +81,8 @@ class InvoiceReportTable(tables.Table):
 
     def render_invoice_number(self, value, record):
         url = reverse(
-            "opportunity:invoice_list",
-            args=[record.org_slug, record.opportunity_id],
+            "opportunity:invoice_review",
+            args=[record.org_slug, record.opportunity_id, record.id],
         )
         return format_html(
             '<a href="{}" class="underline text-brand-deep-purple">{}</a>',
