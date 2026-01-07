@@ -11,14 +11,16 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--dry-run", type=bool, required=False, help="Dry Run. Returns the Number of invoice that will be updated."
+            "--dry-run", action="store_true", help="Dry Run. Returns the Number of invoice that will be updated."
         )
 
-    def handle(self, *args, dry_run=False, **options):
+    def handle(self, *args, **options):
+        dry_run = options.get("dry_run")
         cutoff_date = datetime(2025, 11, 1)
         invoices = PaymentInvoice.objects.filter(opportunity__end_date__lte=cutoff_date, status=InvoiceStatus.PENDING)
 
-        print(f"Marking {len(invoices)} invoices as Archived.")
-
-        if not dry_run:
+        if dry_run:
+            print(f"Found {len(invoices)} Pending invoices.")
+        else:
+            print(f"Marking {len(invoices)} Pending invoices as Archived.")
             invoices.update(status=InvoiceStatus.ARCHIVED, archived_date=now())
