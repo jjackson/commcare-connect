@@ -21,6 +21,7 @@ def render_export_status(
     request,
     task_id,
     download_url,
+    export_status_url,
     ownership_check=None,
 ):
     """
@@ -51,6 +52,7 @@ def render_export_status(
             "task_id": task_id,
             "progress": progress,
             "download_url": download_url,
+            "export_status_url": export_status_url,
         },
     )
 

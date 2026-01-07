@@ -147,5 +147,5 @@ def export_invoice_report_task(filters_data):
     exporter = TableExport("csv", table)
     filename = f"invoice-report-{uuid.uuid4()}.csv"
     content = exporter.export()
-    default_storage.save(filename, ContentFile(content))
+    default_storage.save(filename, ContentFile(content.encode("utf-8")))
     return filename

@@ -301,6 +301,7 @@ def export_status(request, task_id):
         request,
         task_id=task_id,
         download_url=reverse("reports:download_export", args=(task_id,)),
+        export_status_url=reverse("reports:export_status", args=(task_id,)),
         ownership_check=None,
     )
 
