@@ -1,12 +1,12 @@
 """
-Management command to populate OppOrgEnrichmentRecord from JSON fixture.
+Management command to populate OppOrgEnrichmentRecord to production LabsRecord.
 
 Usage:
-    # Populate via API (uses CONNECT_PRODUCTION_URL from settings)
-    python manage.py populate_opp_enrichment --target=api
+    # Push enrichment data to production
+    python manage.py populate_opp_enrichment
 
     # Dry run - show what would be created
-    python manage.py populate_opp_enrichment --target=api --dry-run
+    python manage.py populate_opp_enrichment --dry-run
 """
 
 import json
@@ -16,11 +16,10 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from commcare_connect.labs.integrations.connect.cli.token_manager import TokenManager
-from commcare_connect.opportunity.models import LabsRecord
 
 
 class Command(BaseCommand):
-    help = "Populate OppOrgEnrichmentRecord from JSON fixture"
+    help = "Push OppOrgEnrichmentRecord from JSON fixture to production LabsRecord"
 
     FIXTURE_PATH = Path(__file__).parent.parent.parent / "fixtures" / "opp_org_enrichment.json"
     EXPERIMENT = "solicitations"
@@ -28,26 +27,20 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--target",
-            type=str,
-            choices=["local", "api"],
-            default="api",
-            help="Target environment: 'local' for direct DB, 'api' for API calls (default: api)",
-        )
-        parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Show what would be created without actually creating records",
         )
 
     def handle(self, *args, **options):
-        target = options["target"]
+        import httpx
+
         dry_run = options["dry_run"]
 
         self.stdout.write("=" * 70)
-        self.stdout.write("POPULATE OPP ORG ENRICHMENT RECORD")
+        self.stdout.write("PUSH OPP ORG ENRICHMENT TO PRODUCTION")
         self.stdout.write("=" * 70)
-        self.stdout.write(f"Target: {target}")
+        self.stdout.write(f"Target: {settings.CONNECT_PRODUCTION_URL}")
         self.stdout.write(f"Dry run: {dry_run}")
         self.stdout.write("")
 
@@ -60,54 +53,10 @@ class Command(BaseCommand):
 
         enrichments = enrichment_data.get("enrichments", [])
         self.stdout.write(f"Loaded {len(enrichments)} enrichment entries from fixture")
-        self.stdout.write("")
 
-        if target == "local":
-            self._populate_local(enrichment_data, dry_run)
-        else:
-            self._populate_api(enrichment_data, dry_run)
-
-        self.stdout.write("")
-        self.stdout.write("=" * 70)
-        if dry_run:
-            self.stdout.write(self.style.WARNING("DRY RUN COMPLETE - no changes made"))
-        else:
-            self.stdout.write(self.style.SUCCESS("POPULATION COMPLETE"))
-        self.stdout.write("=" * 70)
-
-    def _populate_local(self, enrichment_data: dict, dry_run: bool):
-        """Populate directly to local database."""
-        self.stdout.write("[LOCAL] Populating local database...")
-        self.stdout.write("")
-
-        if dry_run:
-            self.stdout.write("  Would create/update OppOrgEnrichmentRecord")
-        else:
-            # Find or create the single enrichment record
-            existing = LabsRecord.objects.filter(
-                experiment=self.EXPERIMENT,
-                type=self.TYPE,
-            ).first()
-
-            if existing:
-                existing.data = enrichment_data
-                existing.public = True
-                existing.save()
-                self.stdout.write("  Updated existing OppOrgEnrichmentRecord")
-            else:
-                LabsRecord.objects.create(
-                    experiment=self.EXPERIMENT,
-                    type=self.TYPE,
-                    data=enrichment_data,
-                    public=True,
-                )
-                self.stdout.write("  Created new OppOrgEnrichmentRecord")
-
-    def _populate_api(self, enrichment_data: dict, dry_run: bool):
-        """Populate via API calls to production/labs."""
-        import httpx
-
-        self.stdout.write(f"[API] Populating via API: {settings.CONNECT_PRODUCTION_URL}")
+        # Count entries with boundary data
+        with_boundaries = sum(1 for e in enrichments if e.get("admin_boundaries"))
+        self.stdout.write(f"  - {with_boundaries} entries have admin boundary data")
         self.stdout.write("")
 
         # Get OAuth token
@@ -122,7 +71,7 @@ class Command(BaseCommand):
         headers = {"Authorization": f"Bearer {access_token}"}
 
         # Check if record already exists
-        self.stdout.write("  Checking for existing record...")
+        self.stdout.write("Checking for existing record...")
         try:
             response = httpx.get(
                 api_url,
@@ -161,12 +110,12 @@ class Command(BaseCommand):
                         api_url,
                         json=payload,
                         headers=headers,
-                        timeout=30.0,
+                        timeout=60.0,
                     )
                     response.raise_for_status()
-                    self.stdout.write(f"  Updated existing record (ID: {record_id})")
+                    self.stdout.write(self.style.SUCCESS(f"  Updated existing record (ID: {record_id})"))
                 except httpx.HTTPError as e:
-                    self.stdout.write(self.style.ERROR(f"  Failed to update record: {e}"))
+                    raise CommandError(f"Failed to update record: {e}")
             else:
                 # Create new record
                 payload = [
@@ -182,9 +131,17 @@ class Command(BaseCommand):
                         api_url,
                         json=payload,
                         headers=headers,
-                        timeout=30.0,
+                        timeout=60.0,
                     )
                     response.raise_for_status()
-                    self.stdout.write("  Created new OppOrgEnrichmentRecord")
+                    self.stdout.write(self.style.SUCCESS("  Created new OppOrgEnrichmentRecord"))
                 except httpx.HTTPError as e:
-                    self.stdout.write(self.style.ERROR(f"  Failed to create record: {e}"))
+                    raise CommandError(f"Failed to create record: {e}")
+
+        self.stdout.write("")
+        self.stdout.write("=" * 70)
+        if dry_run:
+            self.stdout.write(self.style.WARNING("DRY RUN COMPLETE - no changes made"))
+        else:
+            self.stdout.write(self.style.SUCCESS("PUSH COMPLETE"))
+        self.stdout.write("=" * 70)
