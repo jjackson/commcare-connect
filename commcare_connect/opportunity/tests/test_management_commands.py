@@ -1,13 +1,12 @@
 import datetime
 
 from django.core.management import call_command
-from django.test import TestCase
 
 from commcare_connect.opportunity.models import InvoiceStatus
 from commcare_connect.opportunity.tests.factories import OpportunityFactory, PaymentInvoiceFactory
 
 
-class ArchivePendingInvoicesTest(TestCase):
+class ArchivePendingInvoicesTest:
     def test_archive_pending_invoices(self):
         fixed_cutoff_date = datetime.date(2025, 11, 1)
 
@@ -29,17 +28,17 @@ class ArchivePendingInvoicesTest(TestCase):
         invoice4.refresh_from_db()
         invoice5.refresh_from_db()
 
-        self.assertEqual(invoice1.status, InvoiceStatus.ARCHIVED)
-        self.assertIsNotNone(invoice1.archived_date)
+        assert invoice1.status == InvoiceStatus.ARCHIVED
+        assert invoice1.archived_date is not None
 
-        self.assertEqual(invoice2.status, InvoiceStatus.ARCHIVED)
-        self.assertIsNotNone(invoice2.archived_date)
+        assert invoice2.status == InvoiceStatus.ARCHIVED
+        assert invoice2.archived_date is not None
 
-        self.assertEqual(invoice3.status, InvoiceStatus.PENDING)
-        self.assertIsNone(invoice3.archived_date)
+        assert invoice3.status == InvoiceStatus.PENDING
+        assert invoice3.archived_date is None
 
-        self.assertEqual(invoice4.status, InvoiceStatus.APPROVED)
-        self.assertIsNone(invoice4.archived_date)
+        assert invoice4.status == InvoiceStatus.APPROVED
+        assert invoice4.archived_date is None
 
-        self.assertEqual(invoice5.status, InvoiceStatus.ARCHIVED)
-        self.assertIsNotNone(invoice5.archived_date)
+        assert invoice5.status == InvoiceStatus.ARCHIVED
+        assert invoice5.archived_date is not None
