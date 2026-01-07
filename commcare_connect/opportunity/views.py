@@ -511,6 +511,7 @@ def export_status(request, org_slug, task_id):
         request,
         task_id=task_id,
         download_url=reverse("opportunity:download_export", args=(org_slug, task_id)),
+        export_status_url=reverse("opportunity:export_status", args=(org_slug, task_id)),
         ownership_check=ownership_check,
     )
 
