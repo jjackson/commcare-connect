@@ -337,6 +337,9 @@ commcare_connect/labs/explorer/downloaded_visits/
 # Admin boundaries example files (GeoPoDe exports, etc.)
 commcare_connect/labs/admin_boundaries/examples/
 
+# MBW custom analysis example files (visit JSON samples)
+commcare_connect/custom_analysis/mbw/examples/
+
 # Elastic Beanstalk Files
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml

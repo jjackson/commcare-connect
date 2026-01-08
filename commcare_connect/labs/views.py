@@ -183,6 +183,13 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
                 "description": "Individual child timelines for Kangaroo Mother Care programs",
                 "color": "blue",
             },
+            {
+                "name": "MBW GPS Analysis",
+                "url": "/custom_analysis/mbw/gps/",
+                "icon": "fa-location-dot",
+                "description": "GPS distance metrics and travel analysis for Mother Baby Wellness",
+                "color": "emerald",
+            },
         ]
 
         return context
