@@ -9,6 +9,7 @@ import logging
 from collections.abc import Generator
 from datetime import date, timedelta
 
+import sentry_sdk
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.urls import reverse
@@ -284,9 +285,11 @@ class MBWGPSStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
 
         except ValueError as e:
             logger.error(f"[MBW GPS] ValueError: {e}")
+            sentry_sdk.capture_exception(e)
             yield send_sse_event("Error", error=str(e))
         except Exception as e:
             logger.error(f"[MBW GPS] Stream failed: {e}", exc_info=True)
+            sentry_sdk.capture_exception(e)
             yield send_sse_event("Error", error=f"Failed to analyze GPS data: {str(e)}")
 
 
@@ -357,9 +360,11 @@ class MBWGPSDataView(LoginRequiredMixin, View):
             return JsonResponse(response_data)
 
         except ValueError as e:
+            sentry_sdk.capture_exception(e)
             return JsonResponse({"error": str(e)}, status=400)
         except Exception as e:
             logger.error(f"[MBW GPS] API failed: {e}", exc_info=True)
+            sentry_sdk.capture_exception(e)
             return JsonResponse({"error": str(e)}, status=500)
 
 
@@ -423,4 +428,5 @@ class MBWGPSVisitDetailView(LoginRequiredMixin, View):
 
         except Exception as e:
             logger.error(f"[MBW GPS] Visit detail failed: {e}", exc_info=True)
+            sentry_sdk.capture_exception(e)
             return JsonResponse({"error": str(e)}, status=500)

@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 import pandas as pd
+import sentry_sdk
 from django.conf import settings
 from django.http import HttpRequest
 
@@ -135,6 +136,7 @@ class PythonRedisBackend:
 
         except httpx.TimeoutException as e:
             logger.error(f"[PythonRedis] Timeout downloading for opp {opportunity_id}: {e}")
+            sentry_sdk.capture_exception(e)
             raise RuntimeError("Connect API timeout") from e
 
         csv_bytes = b"".join(chunks)
@@ -168,6 +170,7 @@ class PythonRedisBackend:
             return response.content
         except httpx.TimeoutException as e:
             logger.error(f"[PythonRedis] Timeout fetching visits for opp {opportunity_id}: {e}")
+            sentry_sdk.capture_exception(e)
             raise RuntimeError("Connect API timeout") from e
 
     # -------------------------------------------------------------------------

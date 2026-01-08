@@ -12,6 +12,7 @@ from decimal import Decimal
 from typing import Any
 
 import httpx
+import sentry_sdk
 from django.conf import settings
 from django.http import HttpRequest
 from django.utils.dateparse import parse_date
@@ -169,6 +170,7 @@ class SQLBackend:
 
         except httpx.TimeoutException as e:
             logger.error(f"[SQL] Timeout downloading for opp {opportunity_id}: {e}")
+            sentry_sdk.capture_exception(e)
             raise RuntimeError("Connect API timeout") from e
 
         csv_bytes = b"".join(chunks)
@@ -225,6 +227,7 @@ class SQLBackend:
             return response.content
         except httpx.TimeoutException as e:
             logger.error(f"[SQL] Timeout fetching visits for opp {opportunity_id}: {e}")
+            sentry_sdk.capture_exception(e)
             raise RuntimeError("Connect API timeout") from e
 
     # -------------------------------------------------------------------------
