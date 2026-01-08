@@ -1,5 +1,6 @@
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils.translation import gettext as _
 from django_tables2 import columns, tables
 
 from commcare_connect.opportunity.models import PaymentInvoice
@@ -44,31 +45,22 @@ class AdminReportTable(tables.Table):
 class InvoiceReportTable(tables.Table):
     opportunity_id = columns.Column(
         accessor="opportunity__id",
+        verbose_name=_("Opportunity ID"),
     )
     opportunity_name = columns.Column(
         accessor="opportunity__name",
-        verbose_name="Opportunity Name",
+        verbose_name=_("Opportunity Name"),
     )
-    invoice_number = columns.Column(orderable=False)
-    amount = columns.Column(verbose_name="Amount")
-    amount_usd = columns.Column(verbose_name="Amount (USD)")
-    invoice_type = columns.Column(verbose_name="Type", accessor="service_delivery")
-    status = columns.Column()
-    date = DMYTColumn(verbose_name="Date of Payment", accessor="date_paid")
+    invoice_number = columns.Column(orderable=False, verbose_name=_("Invoice Number"))
+    amount = columns.Column(verbose_name=_("Amount"))
+    amount_usd = columns.Column(verbose_name=_("Amount (USD)"))
+    invoice_type = columns.Column(verbose_name=_("Type"), accessor="service_delivery")
+    status = columns.Column(verbose_name=_("Status"))
+    date = DMYTColumn(verbose_name=_("Date of Payment"), accessor="date_paid")
 
     class Meta:
         model = PaymentInvoice
         fields = (
-            "opportunity_id",
-            "opportunity_name",
-            "invoice_number",
-            "amount",
-            "amount_usd",
-            "invoice_type",
-            "status",
-            "date",
-        )
-        sequence = (
             "opportunity_id",
             "opportunity_name",
             "invoice_number",
