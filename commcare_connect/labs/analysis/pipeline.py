@@ -35,6 +35,7 @@ import logging
 from collections.abc import Generator
 from typing import Any
 
+import sentry_sdk
 from django.conf import settings
 from django.http import HttpRequest
 
@@ -544,6 +545,7 @@ class AnalysisPipeline:
 
         except Exception as e:
             logger.error(f"[Pipeline/{self.backend_name}] Error: {e}", exc_info=True)
+            sentry_sdk.capture_exception(e)
             yield (EVENT_ERROR, {"message": str(e)})
 
 
