@@ -42,10 +42,11 @@ class TestGetObjectByUuidOrInt:
         fetched = get_object_by_uuid_or_int(Example.objects.all(), example_id, uuid_field="example_id")
         assert fetched.pk == obj.pk
 
-    def test_invalid_value_raises_404(self):
+    @pytest.mark.parametrize("value", ["not-a-uuid-or-int", " 123", "0123", "123abc"])
+    def test_invalid_value_raises_404(self, value):
         Example.objects.create()
         with pytest.raises(Http404):
-            get_object_by_uuid_or_int(Example.objects.all(), "not-a-uuid-or-int", uuid_field="example_id")
+            get_object_by_uuid_or_int(Example.objects.all(), value, uuid_field="example_id")
 
     def test_filtered_queryset(self):
         Example.objects.create()
