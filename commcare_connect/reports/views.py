@@ -12,6 +12,7 @@ from django.db.models import F, OuterRef, Subquery
 from django.http import HttpResponse
 from django.urls import reverse
 from django.utils.functional import cached_property
+from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET, require_POST
 from django_filters.views import FilterView
 from django_tables2.views import SingleTableMixin
@@ -25,7 +26,7 @@ from commcare_connect.opportunity.models import (
     PaymentInvoice,
 )
 from commcare_connect.organization.models import Organization
-from commcare_connect.program.models import Program
+from commcare_connect.program.models import ManagedOpportunity, Program
 from commcare_connect.reports.decorators import KPIReportMixin
 from commcare_connect.reports.helpers import get_table_data_for_year_month
 from commcare_connect.reports.tables import AdminReportTable, InvoiceReportTable
@@ -158,19 +159,19 @@ class DeliveryStatsReportView(tables.SingleTableMixin, KPIReportMixin, NonModelF
 class InvoiceReportFilter(django_filters.FilterSet):
     opportunity_name = django_filters.ModelChoiceFilter(
         field_name="opportunity__name",
-        queryset=Opportunity.objects.only("id", "name"),
-        label="Opportunity",
+        queryset=ManagedOpportunity.objects.only("id", "name"),
+        label=_("Opportunity"),
         widget=forms.Select(
             attrs={
                 "data-tomselect": "1",
-                "placeholder": "Select Opportunity",
+                "placeholder": "Select Opportunity (Name - ID)",
             }
         ),
     )
 
     status = django_filters.MultipleChoiceFilter(
         choices=InvoiceStatus.choices,
-        label="Status",
+        label=_("Status"),
         widget=forms.SelectMultiple(
             attrs={
                 "data-tomselect": "1",
@@ -182,7 +183,7 @@ class InvoiceReportFilter(django_filters.FilterSet):
     from_date = django_filters.DateFilter(
         field_name="date_paid__date",
         lookup_expr="gte",
-        label="From Payment Date",
+        label=_("From Payment Date"),
         widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         required=False,
         input_formats=["%Y-%m-%d"],
@@ -191,7 +192,7 @@ class InvoiceReportFilter(django_filters.FilterSet):
     to_date = django_filters.DateFilter(
         field_name="date_paid__date",
         lookup_expr="lte",
-        label="To Payment Date",
+        label=_("To Payment Date"),
         widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         required=False,
         input_formats=["%Y-%m-%d"],
@@ -199,6 +200,8 @@ class InvoiceReportFilter(django_filters.FilterSet):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.filters["opportunity_name"].field.label_from_instance = lambda obj: f"{obj.name} - {obj.id}"
         self.form.helper = FormHelper()
         self.form.helper.form_tag = False
         self.form.helper.disable_csrf = True
