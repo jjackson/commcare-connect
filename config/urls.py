@@ -44,6 +44,10 @@ urlpatterns = [
         "custom_analysis/kmc/",
         include("commcare_connect.custom_analysis.kmc.urls", namespace="kmc"),
     ),
+    path(
+        "custom_analysis/mbw/",
+        include("commcare_connect.custom_analysis.mbw.urls", namespace="mbw"),
+    ),
     path("ai/", include("commcare_connect.ai.urls", namespace="ai")),
     path("hq/", include("commcare_connect.commcarehq.urls", namespace="commcarehq")),
     path("export/", include("commcare_connect.data_export.urls", namespace="data_export")),

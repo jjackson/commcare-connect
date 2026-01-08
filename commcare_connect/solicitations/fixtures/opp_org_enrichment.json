@@ -4585,6 +4585,2070 @@
       "iso_code": "NGA",
       "funder": "GiveWell",
       "enrichment_skipped_reason": "too_large"
+    },
+    {
+      "opportunity_id": 517,
+      "opp_country": "Nigeria",
+      "iso_code": "NGA",
+      "funder": "GiveWell",
+      "admin_boundaries": {
+        "0": [
+          {
+            "name": "Nigeria",
+            "boundary_id": "geopode-1b8fe6fb-00ff-4186-9837-78c7b3f9f332",
+            "visit_count": 5755
+          }
+        ],
+        "1": [
+          {
+            "name": "Borno",
+            "boundary_id": "geopode-41198194-502f-4fa1-82d2-a1a80e78c6f3",
+            "visit_count": 5755
+          }
+        ],
+        "2": [
+          {
+            "name": "Damboa",
+            "boundary_id": "geopode-93707cfc-1aae-4436-af5d-19fc9070b0c5",
+            "visit_count": 2711
+          },
+          {
+            "name": "Bama",
+            "boundary_id": "geopode-a12789a7-66dc-4ec2-a5cd-ba35a14acac7",
+            "visit_count": 1727
+          },
+          {
+            "name": "Konduga",
+            "boundary_id": "geopode-4c9e45f8-ef04-4ee6-aac9-eaf93530640b",
+            "visit_count": 1055
+          },
+          {
+            "name": "Mafa",
+            "boundary_id": "geopode-600c8fab-c980-4152-b060-a097bbddfa99",
+            "visit_count": 261
+          },
+          {
+            "name": "Konduga",
+            "boundary_id": "osm-3721183",
+            "visit_count": 163
+          },
+          {
+            "name": "Magumeri",
+            "boundary_id": "osm-3721187",
+            "visit_count": 163
+          },
+          {
+            "name": "Jere",
+            "boundary_id": "geopode-f0c3e645-2e25-4574-b89c-1955e2db246e",
+            "visit_count": 1
+          }
+        ],
+        "3": [
+          {
+            "name": "Damboa",
+            "boundary_id": "geopode-e60d60cc-dceb-4ea0-b312-c9bc8771a8ef",
+            "visit_count": 2690
+          },
+          {
+            "name": "Kasugula",
+            "boundary_id": "geopode-f891cae0-28dd-4b35-8621-722ef447fa4a",
+            "visit_count": 1675
+          },
+          {
+            "name": "Auno",
+            "boundary_id": "geopode-44791f68-a900-42f5-bd60-29c580172cbb",
+            "visit_count": 1049
+          },
+          {
+            "name": "Mafa",
+            "boundary_id": "geopode-551fea6d-39c4-4346-8128-fb7034915d6c",
+            "visit_count": 261
+          },
+          {
+            "name": "Ngubala Bamma",
+            "boundary_id": "osm-3721432",
+            "visit_count": 166
+          },
+          {
+            "name": "Yajiwa",
+            "boundary_id": "osm-3721486",
+            "visit_count": 163
+          },
+          {
+            "name": "Shehuri",
+            "boundary_id": "geopode-6b8cc3bd-d561-454e-a2fd-27104c11fd54",
+            "visit_count": 52
+          },
+          {
+            "name": "Nzuba Wayaram",
+            "boundary_id": "geopode-3991cb42-4316-45bd-a5a4-cb2910193fcd",
+            "visit_count": 21
+          },
+          {
+            "name": "Yajiwa",
+            "boundary_id": "geopode-b23640a5-f70c-425b-95ce-e40e508ff427",
+            "visit_count": 6
+          },
+          {
+            "name": "Hoyo Chingowa",
+            "boundary_id": "osm-3721330",
+            "visit_count": 3
+          },
+          {
+            "name": "Gomari",
+            "boundary_id": "geopode-b40c8412-8564-477d-be89-432d42c848fa",
+            "visit_count": 1
+          }
+        ]
+      },
+      "enrichment_skipped_reason": null,
+      "boundary_coverage": {
+        "total_visits": 5755,
+        "visits_with_gps": 5755,
+        "visits_matched": 5755,
+        "visits_unmatched": 0
+      }
+    },
+    {
+      "opportunity_id": 522,
+      "opp_country": "Nigeria",
+      "iso_code": "NGA",
+      "funder": "Founders Pledge",
+      "admin_boundaries": {
+        "0": [
+          {
+            "name": "Nigeria",
+            "boundary_id": "geopode-1b8fe6fb-00ff-4186-9837-78c7b3f9f332",
+            "visit_count": 2575
+          }
+        ],
+        "1": [
+          {
+            "name": "Kano",
+            "boundary_id": "geopode-df136b4a-6955-4df2-b07c-083afd197c88",
+            "visit_count": 2575
+          }
+        ],
+        "2": [
+          {
+            "name": "Wudil",
+            "boundary_id": "geopode-f68a5edc-417d-4eac-aefe-3976a050c2af",
+            "visit_count": 2575
+          }
+        ],
+        "3": [
+          {
+            "name": "Indabo",
+            "boundary_id": "geopode-ac6b2cba-5da2-44ac-af82-6a2191c08226",
+            "visit_count": 2575
+          }
+        ]
+      },
+      "enrichment_skipped_reason": null,
+      "boundary_coverage": {
+        "total_visits": 2575,
+        "visits_with_gps": 2575,
+        "visits_matched": 2575,
+        "visits_unmatched": 0
+      }
+    },
+    {
+      "opportunity_id": 523,
+      "opp_country": "Uganda",
+      "iso_code": "UGA",
+      "funder": "ECF",
+      "admin_boundaries": {
+        "0": [
+          {
+            "name": "Uganda",
+            "boundary_id": "62106908B38903582654399",
+            "visit_count": 941
+          }
+        ],
+        "1": [
+          {
+            "name": "Central Region",
+            "boundary_id": "17295835B48340970483027",
+            "visit_count": 941
+          }
+        ],
+        "2": [
+          {
+            "name": "Mukono",
+            "boundary_id": "47994165B89759933687529",
+            "visit_count": 703
+          },
+          {
+            "name": "Nakifuma",
+            "boundary_id": "47994165B45375916338342",
+            "visit_count": 190
+          },
+          {
+            "name": "Kyadondo",
+            "boundary_id": "47994165B50134135343616",
+            "visit_count": 33
+          },
+          {
+            "name": "Kampala",
+            "boundary_id": "47994165B16286500452212",
+            "visit_count": 10
+          },
+          {
+            "name": "Ntenjeru",
+            "boundary_id": "47994165B60619713855646",
+            "visit_count": 3
+          },
+          {
+            "name": "Buikwe",
+            "boundary_id": "47994165B96029758291375",
+            "visit_count": 2
+          }
+        ]
+      },
+      "enrichment_skipped_reason": null,
+      "boundary_coverage": {
+        "total_visits": 962,
+        "visits_with_gps": 941,
+        "visits_matched": 941,
+        "visits_unmatched": 0
+      }
+    },
+    {
+      "opportunity_id": 524,
+      "opp_country": "Uganda",
+      "iso_code": "UGA",
+      "funder": "ECF",
+      "admin_boundaries": {
+        "0": [
+          {
+            "name": "Uganda",
+            "boundary_id": "62106908B38903582654399",
+            "visit_count": 6715
+          }
+        ],
+        "1": [
+          {
+            "name": "Central Region",
+            "boundary_id": "17295835B48340970483027",
+            "visit_count": 6706
+          },
+          {
+            "name": "Eastern Region",
+            "boundary_id": "17295835B57878138064711",
+            "visit_count": 6
+          },
+          {
+            "name": "Western Region",
+            "boundary_id": "17295835B91329899113986",
+            "visit_count": 3
+          }
+        ],
+        "2": [
+          {
+            "name": "Kyadondo",
+            "boundary_id": "47994165B50134135343616",
+            "visit_count": 3279
+          },
+          {
+            "name": "Kampala",
+            "boundary_id": "47994165B16286500452212",
+            "visit_count": 2010
+          },
+          {
+            "name": "Busiro",
+            "boundary_id": "47994165B22960344442703",
+            "visit_count": 1058
+          },
+          {
+            "name": "Mukono",
+            "boundary_id": "47994165B89759933687529",
+            "visit_count": 169
+          },
+          {
+            "name": "Mawokota",
+            "boundary_id": "47994165B21649077875075",
+            "visit_count": 130
+          },
+          {
+            "name": "Bamunanika",
+            "boundary_id": "47994165B21872772059494",
+            "visit_count": 27
+          },
+          {
+            "name": "Katikamu",
+            "boundary_id": "47994165B81778624417030",
+            "visit_count": 12
+          },
+          {
+            "name": "Butambala",
+            "boundary_id": "47994165B24232061225094",
+            "visit_count": 9
+          },
+          {
+            "name": "Kagoma",
+            "boundary_id": "47994165B29030563175808",
+            "visit_count": 6
+          },
+          {
+            "name": "Kajara",
+            "boundary_id": "47994165B5370592709245",
+            "visit_count": 3
+          },
+          {
+            "name": "Nakifuma",
+            "boundary_id": "47994165B45375916338342",
+            "visit_count": 2
+          },
+          {
+            "name": "Bukuto",
+            "boundary_id": "47994165B51876264217150",
+            "visit_count": 1
+          }
+        ]
+      },
+      "enrichment_skipped_reason": null,
+      "boundary_coverage": {
+        "total_visits": 6764,
+        "visits_with_gps": 6717,
+        "visits_matched": 6715,
+        "visits_unmatched": 2
+      }
+    },
+    {
+      "opportunity_id": 531,
+      "opp_country": "Nigeria",
+      "iso_code": "NGA",
+      "funder": "GiveWell",
+      "admin_boundaries": {
+        "0": [
+          {
+            "name": "Nigeria",
+            "boundary_id": "geopode-1b8fe6fb-00ff-4186-9837-78c7b3f9f332",
+            "visit_count": 25145
+          }
+        ],
+        "1": [
+          {
+            "name": "Kano",
+            "boundary_id": "geopode-df136b4a-6955-4df2-b07c-083afd197c88",
+            "visit_count": 25145
+          }
+        ],
+        "2": [
+          {
+            "name": "Tarauni",
+            "boundary_id": "geopode-9ea1d820-9ef2-4df7-849b-87668b8ef408",
+            "visit_count": 25120
+          },
+          {
+            "name": "Kumbotso",
+            "boundary_id": "osm-3710327",
+            "visit_count": 807
+          },
+          {
+            "name": "Tarauni",
+            "boundary_id": "osm-3710341",
+            "visit_count": 807
+          },
+          {
+            "name": "Kumbotso",
+            "boundary_id": "geopode-b60991f7-154d-4227-b60f-85ae34272d5a",
+            "visit_count": 25
+          }
+        ],
+        "3": [
+          {
+            "name": "Unguwa Uku Kauyen Alu",
+            "boundary_id": "geopode-8a262b42-0d00-471d-ba94-b34a32f4d148",
+            "visit_count": 11271
+          },
+          {
+            "name": "Darmanawa",
+            "boundary_id": "geopode-021bb2aa-33a2-4046-a325-c50eb4145f2b",
+            "visit_count": 9428
+          },
+          {
+            "name": "Unguwa Uku Kauyen Alu",
+            "boundary_id": "osm-3710768",
+            "visit_count": 9313
+          },
+          {
+            "name": "Hotoro",
+            "boundary_id": "osm-3710547",
+            "visit_count": 6009
+          },
+          {
+            "name": "Unguwa Uku Cikin Gari",
+            "boundary_id": "geopode-48335e85-3406-4d92-be14-b447d54ebdba",
+            "visit_count": 4363
+          },
+          {
+            "name": "Unguwa Uku Cikin Gari",
+            "boundary_id": "osm-3710767",
+            "visit_count": 3310
+          },
+          {
+            "name": "Darmanawa",
+            "boundary_id": "osm-3710420",
+            "visit_count": 822
+          },
+          {
+            "name": "Dan Maliki",
+            "boundary_id": "osm-3710408",
+            "visit_count": 419
+          },
+          {
+            "name": "Naibawa",
+            "boundary_id": "osm-3710674",
+            "visit_count": 388
+          },
+          {
+            "name": "Hotoro",
+            "boundary_id": "geopode-9143c303-424f-4238-95cf-b941aafb73d0",
+            "visit_count": 26
+          },
+          {
+            "name": "Babban Giji",
+            "boundary_id": "geopode-f4bef14d-27ee-44e9-978c-6d89dc30cdd3",
+            "visit_count": 16
+          },
+          {
+            "name": "Unguwar Gano",
+            "boundary_id": "osm-3710772",
+            "visit_count": 15
+          },
+          {
+            "name": "Dan Maliki",
+            "boundary_id": "geopode-7c0e275c-1e69-4b04-a140-bd282d17b2fb",
+            "visit_count": 15
+          },
+          {
+            "name": "Unguwar Gano",
+            "boundary_id": "geopode-de91c883-7b65-45d7-8272-ac22592df291",
+            "visit_count": 15
+          },
+          {
+            "name": "Naibawa",
+            "boundary_id": "geopode-152702d1-8049-4ff3-932b-6f2b28871dda",
+            "visit_count": 7
+          },
+          {
+            "name": "Kureken Sani",
+            "boundary_id": "geopode-69a003a4-27ff-41e6-9e84-3d5ee7da9d39",
+            "visit_count": 3
+          },
+          {
+            "name": "Daurawa",
+            "boundary_id": "geopode-a98dedb9-2ea4-467c-9c30-3850e3a2607b",
+            "visit_count": 1
+          }
+        ]
+      },
+      "enrichment_skipped_reason": null,
+      "boundary_coverage": {
+        "total_visits": 25146,
+        "visits_with_gps": 25145,
+        "visits_matched": 25145,
+        "visits_unmatched": 0
+      }
+    },
+    {
+      "opportunity_id": 532,
+      "opp_country": "Kenya",
+      "iso_code": "KEN",
+      "funder": "Other Funder",
+      "admin_boundaries": {
+        "0": [
+          {
+            "name": "Republic of Kenya",
+            "boundary_id": "21065076B29129174773383",
+            "visit_count": 2012
+          },
+          {
+            "name": "Kenya",
+            "boundary_id": "geopode-5bf91169-8c52-4c1e-9ecb-c43d3e44b272",
+            "visit_count": 2012
+          }
+        ],
+        "1": [
+          {
+            "name": "Siaya",
+            "boundary_id": "geopode-6ca157e7-f5c6-4e39-920c-bd9b8eed1104",
+            "visit_count": 1995
+          },
+          {
+            "name": "Siaya",
+            "boundary_id": "32016919B12007380424127",
+            "visit_count": 1995
+          },
+          {
+            "name": "Busia",
+            "boundary_id": "geopode-ac3119bc-151e-48ac-b255-facc0673d121",
+            "visit_count": 14
+          },
+          {
+            "name": "Busia",
+            "boundary_id": "32016919B17784979587790",
+            "visit_count": 14
+          },
+          {
+            "name": "Kisumu",
+            "boundary_id": "geopode-7e9e73ec-a921-482f-8a76-e2852936a54f",
+            "visit_count": 2
+          },
+          {
+            "name": "Kisumu",
+            "boundary_id": "32016919B35081513576883",
+            "visit_count": 2
+          },
+          {
+            "name": "Kakamega",
+            "boundary_id": "geopode-3b285ac3-7694-4fd2-8bfb-13b1dd78e361",
+            "visit_count": 1
+          },
+          {
+            "name": "Kakamega",
+            "boundary_id": "32016919B72187572718143",
+            "visit_count": 1
+          }
+        ],
+        "2": [
+          {
+            "name": "Alego Usonga",
+            "boundary_id": "3690345B57306569752992",
+            "visit_count": 1896
+          },
+          {
+            "name": "Alego Usonga",
+            "boundary_id": "geopode-c78702a3-14b8-44a3-a07b-5690b8f53c4a",
+            "visit_count": 1896
+          },
+          {
+            "name": "Ugenya",
+            "boundary_id": "geopode-da3c32ca-2a7a-4fac-a044-6542e6719e95",
+            "visit_count": 31
+          },
+          {
+            "name": "Ugenya",
+            "boundary_id": "3690345B43634586140198",
+            "visit_count": 31
+          },
+          {
+            "name": "Ugunja",
+            "boundary_id": "3690345B50219798141587",
+            "visit_count": 24
+          },
+          {
+            "name": "Ugunja",
+            "boundary_id": "geopode-4c2ad21d-31dc-421f-aedc-bf3258f27f59",
+            "visit_count": 24
+          },
+          {
+            "name": "Gem",
+            "boundary_id": "3690345B53081703212176",
+            "visit_count": 23
+          },
+          {
+            "name": "Gem",
+            "boundary_id": "geopode-95a989f3-4158-4fe2-a42a-5b1344804e42",
+            "visit_count": 23
+          },
+          {
+            "name": "Budalangi",
+            "boundary_id": "3690345B63864240127702",
+            "visit_count": 14
+          },
+          {
+            "name": "Bunyala",
+            "boundary_id": "geopode-1fa73193-bfa3-46d8-b054-215a923af74d",
+            "visit_count": 14
+          },
+          {
+            "name": "Bondo",
+            "boundary_id": "3690345B84738590288078",
+            "visit_count": 12
+          },
+          {
+            "name": "Bondo",
+            "boundary_id": "geopode-02d40a93-9a50-4e68-a5ca-f35ffbaeb463",
+            "visit_count": 12
+          },
+          {
+            "name": "Rarieda",
+            "boundary_id": "3690345B79902810586974",
+            "visit_count": 9
+          },
+          {
+            "name": "Rarieda",
+            "boundary_id": "geopode-ebb59493-5de8-48ac-93b8-e748030a0514",
+            "visit_count": 9
+          },
+          {
+            "name": "Kisumu East",
+            "boundary_id": "geopode-d6c41619-3090-4a0d-9c6b-c8589d24ef11",
+            "visit_count": 2
+          },
+          {
+            "name": "Kisumu East",
+            "boundary_id": "3690345B94932158837865",
+            "visit_count": 2
+          },
+          {
+            "name": "Khwisero",
+            "boundary_id": "geopode-ccb1aa01-8b18-44ad-bb10-e136ce09324b",
+            "visit_count": 1
+          },
+          {
+            "name": "Khwisero",
+            "boundary_id": "3690345B3814928417926",
+            "visit_count": 1
+          }
+        ]
+      },
+      "enrichment_skipped_reason": null,
+      "boundary_coverage": {
+        "total_visits": 2035,
+        "visits_with_gps": 2013,
+        "visits_matched": 2012,
+        "visits_unmatched": 1
+      }
+    },
+    {
+      "opportunity_id": 539,
+      "opp_country": "Nigeria",
+      "iso_code": "NGA",
+      "funder": "GiveWell",
+      "admin_boundaries": {
+        "0": [
+          {
+            "name": "Nigeria",
+            "boundary_id": "geopode-1b8fe6fb-00ff-4186-9837-78c7b3f9f332",
+            "visit_count": 41273
+          }
+        ],
+        "1": [
+          {
+            "name": "Sokoto",
+            "boundary_id": "geopode-5b168286-e59d-45dd-be73-b86c5c671d69",
+            "visit_count": 41273
+          }
+        ],
+        "2": [
+          {
+            "name": "Kware",
+            "boundary_id": "geopode-c5d3f415-c759-407d-8d82-8c96e2d2ddae",
+            "visit_count": 41240
+          },
+          {
+            "name": "Sokoto South",
+            "boundary_id": "osm-3707385",
+            "visit_count": 657
+          },
+          {
+            "name": "Kware",
+            "boundary_id": "osm-3707379",
+            "visit_count": 657
+          },
+          {
+            "name": "Dange Shuni",
+            "boundary_id": "geopode-a23fc4b5-563c-4130-9d32-e427d2f2f0e7",
+            "visit_count": 21
+          },
+          {
+            "name": "Sokoto South",
+            "boundary_id": "geopode-864508b1-8413-4a22-bad8-5e6378362d32",
+            "visit_count": 9
+          },
+          {
+            "name": "Wurno",
+            "boundary_id": "geopode-3ecf57c9-338f-474b-833f-1b257dbde8c6",
+            "visit_count": 3
+          }
+        ],
+        "3": [
+          {
+            "name": "Durbawa",
+            "boundary_id": "geopode-f01b6e71-254e-41ff-bc9d-ad71c580fc42",
+            "visit_count": 17870
+          },
+          {
+            "name": "Tsaki Walakae",
+            "boundary_id": "geopode-8be3a684-5cd2-4735-8cb3-4efadcb632d8",
+            "visit_count": 10911
+          },
+          {
+            "name": "Kware",
+            "boundary_id": "geopode-d9f678a4-c7b7-4cc2-a660-f5c0dcdc63a8",
+            "visit_count": 7101
+          },
+          {
+            "name": "Kware",
+            "boundary_id": "osm-3707529",
+            "visit_count": 7101
+          },
+          {
+            "name": "Bankanu",
+            "boundary_id": "osm-3707406",
+            "visit_count": 7101
+          },
+          {
+            "name": "Hamma Ali Marabawa",
+            "boundary_id": "geopode-37c4494f-1fb3-4a5c-b102-0396ed591957",
+            "visit_count": 4782
+          },
+          {
+            "name": "Durbawa",
+            "boundary_id": "osm-3707439",
+            "visit_count": 779
+          },
+          {
+            "name": "Gagi A",
+            "boundary_id": "osm-3707446",
+            "visit_count": 657
+          },
+          {
+            "name": "Gidan Rugga More",
+            "boundary_id": "geopode-1bf5b968-58a0-4a58-98ba-a94395d58f31",
+            "visit_count": 258
+          },
+          {
+            "name": "Gandu",
+            "boundary_id": "geopode-bacafd60-4666-447f-9d24-ae15d1dee3ff",
+            "visit_count": 235
+          },
+          {
+            "name": "Tunga Mallamawa",
+            "boundary_id": "osm-3707623",
+            "visit_count": 207
+          },
+          {
+            "name": "Tsaki Walakae",
+            "boundary_id": "osm-3707613",
+            "visit_count": 85
+          },
+          {
+            "name": "Bankanu",
+            "boundary_id": "geopode-cc386e5e-5533-48aa-80be-dc5baae08438",
+            "visit_count": 55
+          },
+          {
+            "name": "Rugar Gidado",
+            "boundary_id": "geopode-fce07937-e0be-43f2-812b-94e704a070f1",
+            "visit_count": 21
+          },
+          {
+            "name": "Tunga Mallamawa",
+            "boundary_id": "geopode-07a30a12-2d25-4a1a-b203-313b8c5dcaf4",
+            "visit_count": 12
+          },
+          {
+            "name": "Gagi A",
+            "boundary_id": "geopode-ab3f0168-125f-43c7-a5a1-4781e3b33d03",
+            "visit_count": 9
+          },
+          {
+            "name": "Kabanga",
+            "boundary_id": "geopode-c0f4f565-6c7d-465d-8e66-39adaebb1c0a",
+            "visit_count": 9
+          },
+          {
+            "name": "Sabon Birni",
+            "boundary_id": "geopode-7c993862-b6ce-4e72-82cf-fd9f3fcf28bd",
+            "visit_count": 7
+          },
+          {
+            "name": "Kwasare",
+            "boundary_id": "geopode-eaac62fb-7ff9-4bd2-b85b-6459f083e4af",
+            "visit_count": 3
+          }
+        ]
+      },
+      "enrichment_skipped_reason": null,
+      "boundary_coverage": {
+        "total_visits": 41273,
+        "visits_with_gps": 41273,
+        "visits_matched": 41273,
+        "visits_unmatched": 0
+      }
+    },
+    {
+      "opportunity_id": 548,
+      "opp_country": "Nigeria",
+      "iso_code": "NGA",
+      "funder": "Founders Pledge",
+      "admin_boundaries": {
+        "0": [
+          {
+            "name": "Nigeria",
+            "boundary_id": "geopode-1b8fe6fb-00ff-4186-9837-78c7b3f9f332",
+            "visit_count": 8815
+          }
+        ],
+        "1": [
+          {
+            "name": "Kaduna",
+            "boundary_id": "geopode-2e0daae3-b364-4cd6-b560-e2f424d0ae5b",
+            "visit_count": 8778
+          },
+          {
+            "name": "Kano",
+            "boundary_id": "geopode-df136b4a-6955-4df2-b07c-083afd197c88",
+            "visit_count": 30
+          },
+          {
+            "name": "Fct",
+            "boundary_id": "geopode-79d2a532-4e66-4311-8b84-4a9944e3139f",
+            "visit_count": 7
+          }
+        ],
+        "2": [
+          {
+            "name": "Chikun",
+            "boundary_id": "geopode-6054de3d-8a62-47af-96f4-9a3294943caa",
+            "visit_count": 3675
+          },
+          {
+            "name": "Igabi",
+            "boundary_id": "geopode-6015a4b6-9e88-49e9-97c8-6595a9c60ec7",
+            "visit_count": 3405
+          },
+          {
+            "name": "Kaduna North",
+            "boundary_id": "geopode-50ca3096-896f-4c76-bc61-72eb154baafd",
+            "visit_count": 1112
+          },
+          {
+            "name": "Kaduna South",
+            "boundary_id": "geopode-519239d7-740d-4fd8-a993-cc188fac45cf",
+            "visit_count": 504
+          },
+          {
+            "name": "Zaria",
+            "boundary_id": "geopode-b30b9f9c-6ff8-4c89-924d-2bc60fe30a4f",
+            "visit_count": 71
+          },
+          {
+            "name": "Nassarawa",
+            "boundary_id": "geopode-161d0116-4d4d-411f-b722-b282445517ec",
+            "visit_count": 12
+          },
+          {
+            "name": "Kano Municipal",
+            "boundary_id": "geopode-a4373fe3-c2a9-4341-89af-cad9e0063b9a",
+            "visit_count": 12
+          },
+          {
+            "name": "Kachia",
+            "boundary_id": "geopode-0992ba6c-df17-424e-9504-3583cbff5845",
+            "visit_count": 7
+          },
+          {
+            "name": "Tarauni",
+            "boundary_id": "geopode-9ea1d820-9ef2-4df7-849b-87668b8ef408",
+            "visit_count": 6
+          },
+          {
+            "name": "Municipal Area Council",
+            "boundary_id": "geopode-bb97ee47-0a4a-4ff2-b8fc-58c16372815c",
+            "visit_count": 5
+          },
+          {
+            "name": "Kajuru",
+            "boundary_id": "geopode-0743e216-9eb4-46d4-bf23-0271ba91e0af",
+            "visit_count": 3
+          },
+          {
+            "name": "Bwari",
+            "boundary_id": "geopode-dd1c4045-e0d8-43ae-bb6c-fff69915cf11",
+            "visit_count": 2
+          },
+          {
+            "name": "Kaduna South",
+            "boundary_id": "osm-3709363",
+            "visit_count": 2
+          },
+          {
+            "name": "Zangon Kataf",
+            "boundary_id": "geopode-28e0ab7f-a9f5-4d9b-8f93-60bb7da6c9a3",
+            "visit_count": 1
+          },
+          {
+            "name": "Chikun",
+            "boundary_id": "osm-3709355",
+            "visit_count": 1
+          },
+          {
+            "name": "Kaduna North",
+            "boundary_id": "osm-3709362",
+            "visit_count": 1
+          }
+        ],
+        "3": [
+          {
+            "name": "Rigachikun",
+            "boundary_id": "geopode-c2dadc42-ff21-4d91-ac88-039dc7e0aabb",
+            "visit_count": 1497
+          },
+          {
+            "name": "Rido",
+            "boundary_id": "geopode-d87d8150-55a9-4b46-a5d3-11a0d8f707cb",
+            "visit_count": 1386
+          },
+          {
+            "name": "Sabon Tasha",
+            "boundary_id": "geopode-bc2c1939-c054-4e03-953f-bb8f5ea17aab",
+            "visit_count": 890
+          },
+          {
+            "name": "Rigasa",
+            "boundary_id": "geopode-ea18a7f7-cbc9-4aaa-9a26-99e9ed489312",
+            "visit_count": 682
+          },
+          {
+            "name": "Rido",
+            "boundary_id": "osm-3709568",
+            "visit_count": 663
+          },
+          {
+            "name": "Yelwa",
+            "boundary_id": "geopode-32613ce5-ed85-4813-a601-31ab873b5b25",
+            "visit_count": 494
+          },
+          {
+            "name": "Afaka",
+            "boundary_id": "geopode-5a44a06c-8213-4a57-969a-892009c8a205",
+            "visit_count": 486
+          },
+          {
+            "name": "Narayi",
+            "boundary_id": "geopode-fd8fcee7-06ae-4117-b33b-d7a8ccb3e2f2",
+            "visit_count": 455
+          },
+          {
+            "name": "Kujama",
+            "boundary_id": "osm-3709514",
+            "visit_count": 445
+          },
+          {
+            "name": "Kawo",
+            "boundary_id": "geopode-0754fe88-c1e9-4733-adda-16d4092e943f",
+            "visit_count": 429
+          },
+          {
+            "name": "Kakau",
+            "boundary_id": "geopode-bcd40823-91e8-46fb-92b3-b85dc4a1b951",
+            "visit_count": 383
+          },
+          {
+            "name": "Badarawa",
+            "boundary_id": "geopode-de464006-afed-4a57-bc42-07811257a15f",
+            "visit_count": 381
+          },
+          {
+            "name": "Kwarau",
+            "boundary_id": "geopode-1bb5e954-a0d1-45fd-b016-b3d334bd5837",
+            "visit_count": 351
+          },
+          {
+            "name": "Birnin Yero",
+            "boundary_id": "geopode-5b81a20c-72fb-490c-ac14-ec6cb5afda25",
+            "visit_count": 308
+          },
+          {
+            "name": "Sabon Tasha",
+            "boundary_id": "osm-3709582",
+            "visit_count": 291
+          },
+          {
+            "name": "Television",
+            "boundary_id": "geopode-7a3fafda-e61a-47b9-a589-4218fe5c44b6",
+            "visit_count": 234
+          },
+          {
+            "name": "Kakuri Hausa",
+            "boundary_id": "geopode-739c5512-b91a-41de-8cf2-42e823edb78e",
+            "visit_count": 157
+          },
+          {
+            "name": "Unguwan Dosa",
+            "boundary_id": "geopode-c86634b3-8dc1-426e-9d62-4cd6beb2903f",
+            "visit_count": 114
+          },
+          {
+            "name": "Narayi",
+            "boundary_id": "osm-3709551",
+            "visit_count": 77
+          },
+          {
+            "name": "Hayin Banki",
+            "boundary_id": "geopode-31e7c67d-9940-4687-b79e-8c8d6085c014",
+            "visit_count": 71
+          },
+          {
+            "name": "Sabon Gari Nassarawa",
+            "boundary_id": "geopode-8daf8595-d43c-4e0a-a2a1-df4b3d54ac22",
+            "visit_count": 55
+          },
+          {
+            "name": "Turunku",
+            "boundary_id": "geopode-3be1b76d-2149-40ee-bbc7-ef3448d0bc30",
+            "visit_count": 53
+          },
+          {
+            "name": "Kabala",
+            "boundary_id": "geopode-e28cac87-0855-49b5-b627-4907c908c16d",
+            "visit_count": 43
+          },
+          {
+            "name": "Sabon Gari North",
+            "boundary_id": "geopode-16cd296f-086f-4483-b98e-f645aa68772c",
+            "visit_count": 38
+          },
+          {
+            "name": "Kufena",
+            "boundary_id": "geopode-dd39e603-09e0-400c-a001-c4da54b9a44e",
+            "visit_count": 36
+          },
+          {
+            "name": "Barnawa",
+            "boundary_id": "geopode-052daa24-ddc6-44c9-8f49-44c343567b45",
+            "visit_count": 31
+          },
+          {
+            "name": "Kakuri Gwari",
+            "boundary_id": "geopode-8db547d7-88cf-4813-8f16-125161775542",
+            "visit_count": 24
+          },
+          {
+            "name": "Unguwar Rimi",
+            "boundary_id": "geopode-cbd97d73-2168-425a-a5bd-cfe3754cc22e",
+            "visit_count": 20
+          },
+          {
+            "name": "Sabon Birnin",
+            "boundary_id": "geopode-df3b5920-58eb-4223-a813-84896b69ec9b",
+            "visit_count": 17
+          },
+          {
+            "name": "Sabon Gari South",
+            "boundary_id": "osm-3709579",
+            "visit_count": 13
+          },
+          {
+            "name": "Shaba",
+            "boundary_id": "geopode-0e28fd05-1bdd-4abb-a171-02da9fa3aa9c",
+            "visit_count": 13
+          },
+          {
+            "name": "Giginyu",
+            "boundary_id": "geopode-49f82cde-97e0-4498-a1bb-f7c4b094892f",
+            "visit_count": 12
+          },
+          {
+            "name": "Sharada",
+            "boundary_id": "geopode-4f7d1ecd-18f3-4ad1-9532-e951df8677a1",
+            "visit_count": 12
+          },
+          {
+            "name": "Sabon Gari North",
+            "boundary_id": "osm-3709577",
+            "visit_count": 12
+          },
+          {
+            "name": "Gyellesu",
+            "boundary_id": "geopode-23d6a92b-77a3-4bca-87b9-f382cf608544",
+            "visit_count": 11
+          },
+          {
+            "name": "Kwarbai A",
+            "boundary_id": "geopode-bec1743d-7a4b-42f2-9cdc-c7e927b1d4db",
+            "visit_count": 11
+          },
+          {
+            "name": "Sardauna",
+            "boundary_id": "geopode-dc8b10f4-145a-4512-a419-b4fb4edb64e5",
+            "visit_count": 10
+          },
+          {
+            "name": "Sabon Gari Nassarawa",
+            "boundary_id": "osm-3709576",
+            "visit_count": 9
+          },
+          {
+            "name": "Unguwar Shanu",
+            "boundary_id": "geopode-cf962048-cb07-4d84-a0bc-294baba0ef91",
+            "visit_count": 9
+          },
+          {
+            "name": "Yelwa",
+            "boundary_id": "osm-3709620",
+            "visit_count": 8
+          },
+          {
+            "name": "Maiburiji",
+            "boundary_id": "geopode-990522cc-0194-42b5-bfbe-27046b14b7f0",
+            "visit_count": 8
+          },
+          {
+            "name": "Dadi Riba",
+            "boundary_id": "geopode-4e46325f-f595-40c1-816d-7273c6bf9048",
+            "visit_count": 7
+          },
+          {
+            "name": "Kwarbai A",
+            "boundary_id": "osm-3709525",
+            "visit_count": 7
+          },
+          {
+            "name": "Gumel",
+            "boundary_id": "geopode-5975f4de-5226-4922-aec4-9ab0e81da1aa",
+            "visit_count": 7
+          },
+          {
+            "name": "Kujama",
+            "boundary_id": "geopode-8a7e5a14-9edb-4495-b0c2-8afd29819e2d",
+            "visit_count": 7
+          },
+          {
+            "name": "Unguwar Sarki",
+            "boundary_id": "geopode-4af8b164-09d9-4bb0-9985-a291243c42d3",
+            "visit_count": 7
+          },
+          {
+            "name": "Darmanawa",
+            "boundary_id": "geopode-021bb2aa-33a2-4046-a325-c50eb4145f2b",
+            "visit_count": 6
+          },
+          {
+            "name": "Kakau",
+            "boundary_id": "osm-3709483",
+            "visit_count": 6
+          },
+          {
+            "name": "Zangon Aya",
+            "boundary_id": "geopode-ab01662d-387f-4e86-afd6-16a8854d7e02",
+            "visit_count": 6
+          },
+          {
+            "name": "Nassarawa",
+            "boundary_id": "geopode-d09d0c26-ed04-4f21-a9ce-b28e289497e5",
+            "visit_count": 5
+          },
+          {
+            "name": "Tudun Wada South",
+            "boundary_id": "geopode-c469d1ed-378e-4a1d-a74a-cb40bea869be",
+            "visit_count": 5
+          },
+          {
+            "name": "Fanshanu",
+            "boundary_id": "geopode-c8c2032a-13df-4ed7-b7b5-478cc4a4bdc3",
+            "visit_count": 5
+          },
+          {
+            "name": "Makera",
+            "boundary_id": "geopode-34de65ed-8ad5-4a66-a133-b36bcdc9ead6",
+            "visit_count": 5
+          },
+          {
+            "name": "Kabala",
+            "boundary_id": "osm-3709472",
+            "visit_count": 4
+          },
+          {
+            "name": "Unguwar Fatika",
+            "boundary_id": "geopode-09ba5369-417e-44a6-9969-a77dcac7bac5",
+            "visit_count": 4
+          },
+          {
+            "name": "Dutsen Abba",
+            "boundary_id": "geopode-e5f54122-ccf5-4481-aa14-e68f9e7395b2",
+            "visit_count": 4
+          },
+          {
+            "name": "Garki 1",
+            "boundary_id": "geopode-af85ffec-3966-43ec-93a7-707271054964",
+            "visit_count": 4
+          },
+          {
+            "name": "Badiko",
+            "boundary_id": "geopode-f04338b2-66d0-43ae-974f-9687f4baeb31",
+            "visit_count": 4
+          },
+          {
+            "name": "Gyellesu",
+            "boundary_id": "osm-3709455",
+            "visit_count": 4
+          },
+          {
+            "name": "Kwarbai B",
+            "boundary_id": "osm-3709526",
+            "visit_count": 4
+          },
+          {
+            "name": "Nassarawa",
+            "boundary_id": "osm-3709553",
+            "visit_count": 4
+          },
+          {
+            "name": "Unguwar Rimi",
+            "boundary_id": "osm-3709613",
+            "visit_count": 4
+          },
+          {
+            "name": "Sabon Gari South",
+            "boundary_id": "geopode-b3b13d3f-4950-41a7-a082-b2fae40fcb34",
+            "visit_count": 3
+          },
+          {
+            "name": "Kasuwan Magani",
+            "boundary_id": "geopode-db4f0494-958b-406d-acfe-8601719e1052",
+            "visit_count": 3
+          },
+          {
+            "name": "Kawo",
+            "boundary_id": "osm-3709503",
+            "visit_count": 2
+          },
+          {
+            "name": "Dambo",
+            "boundary_id": "geopode-2486b5ec-e12d-417c-ae90-7ea618980373",
+            "visit_count": 2
+          },
+          {
+            "name": "Sardauna",
+            "boundary_id": "osm-3709587",
+            "visit_count": 2
+          },
+          {
+            "name": "Sabon Gari West",
+            "boundary_id": "geopode-6025e784-f816-445d-abb6-753634f985b1",
+            "visit_count": 2
+          },
+          {
+            "name": "Hayin Banki",
+            "boundary_id": "osm-3709458",
+            "visit_count": 2
+          },
+          {
+            "name": "Tukur Tukur",
+            "boundary_id": "geopode-801e7f1c-0004-40ec-b629-904c5bf15d76",
+            "visit_count": 1
+          },
+          {
+            "name": "Tudun Nupawa",
+            "boundary_id": "geopode-87d533bf-f9cc-4e69-b794-1784cc58ee13",
+            "visit_count": 1
+          },
+          {
+            "name": "Ikulu",
+            "boundary_id": "geopode-c243b780-115f-42e1-9c9d-ad570248936d",
+            "visit_count": 1
+          },
+          {
+            "name": "Dutse",
+            "boundary_id": "geopode-3c44b67a-adcd-4ae5-a201-6d1b7767ceaa",
+            "visit_count": 1
+          },
+          {
+            "name": "Limancin Kona",
+            "boundary_id": "geopode-5dcb2804-cb2e-47f4-90a9-ce9d494999a1",
+            "visit_count": 1
+          },
+          {
+            "name": "Tundun Wada South",
+            "boundary_id": "osm-3709602",
+            "visit_count": 1
+          },
+          {
+            "name": "Tundun Wada West",
+            "boundary_id": "osm-3709603",
+            "visit_count": 1
+          },
+          {
+            "name": "Unguwan Sanusi",
+            "boundary_id": "osm-3709608",
+            "visit_count": 1
+          },
+          {
+            "name": "Badiko",
+            "boundary_id": "osm-3709393",
+            "visit_count": 1
+          },
+          {
+            "name": "Barnawa",
+            "boundary_id": "osm-3709396",
+            "visit_count": 1
+          },
+          {
+            "name": "Unguwar Fatika",
+            "boundary_id": "osm-3709609",
+            "visit_count": 1
+          },
+          {
+            "name": "Dadi Riba",
+            "boundary_id": "osm-3709411",
+            "visit_count": 1
+          },
+          {
+            "name": "Kaura",
+            "boundary_id": "geopode-0612b0ef-4bbf-40e1-ae20-f1612e764697",
+            "visit_count": 1
+          },
+          {
+            "name": "Kakuri Gwari",
+            "boundary_id": "osm-3709484",
+            "visit_count": 1
+          },
+          {
+            "name": "Kuduru",
+            "boundary_id": "geopode-204c15f3-d78b-4397-ba63-d6d5c803a118",
+            "visit_count": 1
+          },
+          {
+            "name": "City Center 1",
+            "boundary_id": "geopode-4f0bc71e-4c8a-49a5-8702-d6902f7d2800",
+            "visit_count": 1
+          },
+          {
+            "name": "Maiburiji",
+            "boundary_id": "osm-3709539",
+            "visit_count": 1
+          },
+          {
+            "name": "Unguwar Shanu",
+            "boundary_id": "osm-3709615",
+            "visit_count": 1
+          }
+        ]
+      },
+      "enrichment_skipped_reason": null,
+      "boundary_coverage": {
+        "total_visits": 10020,
+        "visits_with_gps": 8815,
+        "visits_matched": 8815,
+        "visits_unmatched": 0
+      }
+    },
+    {
+      "opportunity_id": 549,
+      "opp_country": "Nigeria",
+      "iso_code": "NGA",
+      "funder": "Founders Pledge",
+      "admin_boundaries": {
+        "0": [
+          {
+            "name": "Nigeria",
+            "boundary_id": "geopode-1b8fe6fb-00ff-4186-9837-78c7b3f9f332",
+            "visit_count": 9198
+          }
+        ],
+        "1": [
+          {
+            "name": "Kaduna",
+            "boundary_id": "geopode-2e0daae3-b364-4cd6-b560-e2f424d0ae5b",
+            "visit_count": 8812
+          },
+          {
+            "name": "Niger",
+            "boundary_id": "geopode-553ddbf5-7c8b-4a28-a3fa-72241e1da3c5",
+            "visit_count": 327
+          },
+          {
+            "name": "Katsina",
+            "boundary_id": "geopode-1900278b-bab8-43a4-b84e-81e75d08390e",
+            "visit_count": 56
+          },
+          {
+            "name": "Bauchi",
+            "boundary_id": "geopode-3aab602d-db6b-4789-8d7b-8a44feea1983",
+            "visit_count": 2
+          },
+          {
+            "name": "Fct",
+            "boundary_id": "geopode-79d2a532-4e66-4311-8b84-4a9944e3139f",
+            "visit_count": 1
+          }
+        ],
+        "2": [
+          {
+            "name": "Chikun",
+            "boundary_id": "geopode-6054de3d-8a62-47af-96f4-9a3294943caa",
+            "visit_count": 4127
+          },
+          {
+            "name": "Igabi",
+            "boundary_id": "geopode-6015a4b6-9e88-49e9-97c8-6595a9c60ec7",
+            "visit_count": 3343
+          },
+          {
+            "name": "Kaduna North",
+            "boundary_id": "geopode-50ca3096-896f-4c76-bc61-72eb154baafd",
+            "visit_count": 564
+          },
+          {
+            "name": "Kaduna South",
+            "boundary_id": "geopode-519239d7-740d-4fd8-a993-cc188fac45cf",
+            "visit_count": 561
+          },
+          {
+            "name": "Munya",
+            "boundary_id": "geopode-e95d1c31-95f2-481c-aa03-e545f107f2c7",
+            "visit_count": 325
+          },
+          {
+            "name": "Zaria",
+            "boundary_id": "geopode-b30b9f9c-6ff8-4c89-924d-2bc60fe30a4f",
+            "visit_count": 202
+          },
+          {
+            "name": "Chikun",
+            "boundary_id": "osm-3709355",
+            "visit_count": 70
+          },
+          {
+            "name": "Dutsin Ma",
+            "boundary_id": "geopode-82084cdb-d681-479b-a3f7-f3589d7c48a6",
+            "visit_count": 56
+          },
+          {
+            "name": "Birnin Gwari",
+            "boundary_id": "osm-3709354",
+            "visit_count": 41
+          },
+          {
+            "name": "Kaduna South",
+            "boundary_id": "osm-3709363",
+            "visit_count": 29
+          },
+          {
+            "name": "Jaba",
+            "boundary_id": "geopode-cb08adc7-262f-4684-bb4e-c0c5b85c628f",
+            "visit_count": 11
+          },
+          {
+            "name": "Shiroro",
+            "boundary_id": "osm-3718406",
+            "visit_count": 2
+          },
+          {
+            "name": "Toro",
+            "boundary_id": "geopode-0bd5eb93-90fc-4d52-a384-ee393afee6d2",
+            "visit_count": 2
+          },
+          {
+            "name": "Lere",
+            "boundary_id": "geopode-7a24a166-2bd2-41cd-b700-39afaae364c0",
+            "visit_count": 2
+          },
+          {
+            "name": "Chanchaga",
+            "boundary_id": "geopode-c547547c-bc82-425f-a48b-fc075ed3434f",
+            "visit_count": 2
+          },
+          {
+            "name": "Bosso",
+            "boundary_id": "osm-3718389",
+            "visit_count": 2
+          },
+          {
+            "name": "Chanchaga",
+            "boundary_id": "osm-3718390",
+            "visit_count": 2
+          },
+          {
+            "name": "Soba",
+            "boundary_id": "geopode-1106cca4-97fb-4f54-945f-694380c8a681",
+            "visit_count": 1
+          },
+          {
+            "name": "Municipal Area Council",
+            "boundary_id": "geopode-bb97ee47-0a4a-4ff2-b8fc-58c16372815c",
+            "visit_count": 1
+          },
+          {
+            "name": "Kubau",
+            "boundary_id": "geopode-42de93a5-bac5-4bdd-99d0-95e20ccacdad",
+            "visit_count": 1
+          }
+        ],
+        "3": [
+          {
+            "name": "Rigachikun",
+            "boundary_id": "geopode-c2dadc42-ff21-4d91-ac88-039dc7e0aabb",
+            "visit_count": 1500
+          },
+          {
+            "name": "Kunai",
+            "boundary_id": "geopode-147e09b5-f580-4440-8a73-bb7b552e364f",
+            "visit_count": 869
+          },
+          {
+            "name": "Sabon Tasha",
+            "boundary_id": "geopode-bc2c1939-c054-4e03-953f-bb8f5ea17aab",
+            "visit_count": 778
+          },
+          {
+            "name": "Kwarau",
+            "boundary_id": "geopode-1bb5e954-a0d1-45fd-b016-b3d334bd5837",
+            "visit_count": 708
+          },
+          {
+            "name": "Yelwa",
+            "boundary_id": "geopode-32613ce5-ed85-4813-a601-31ab873b5b25",
+            "visit_count": 657
+          },
+          {
+            "name": "Narayi",
+            "boundary_id": "geopode-fd8fcee7-06ae-4117-b33b-d7a8ccb3e2f2",
+            "visit_count": 633
+          },
+          {
+            "name": "Rigasa",
+            "boundary_id": "geopode-ea18a7f7-cbc9-4aaa-9a26-99e9ed489312",
+            "visit_count": 574
+          },
+          {
+            "name": "Kakau",
+            "boundary_id": "geopode-bcd40823-91e8-46fb-92b3-b85dc4a1b951",
+            "visit_count": 408
+          },
+          {
+            "name": "Rido",
+            "boundary_id": "osm-3709568",
+            "visit_count": 397
+          },
+          {
+            "name": "Rido",
+            "boundary_id": "geopode-d87d8150-55a9-4b46-a5d3-11a0d8f707cb",
+            "visit_count": 397
+          },
+          {
+            "name": "Kawo",
+            "boundary_id": "geopode-0754fe88-c1e9-4733-adda-16d4092e943f",
+            "visit_count": 392
+          },
+          {
+            "name": "Kujama",
+            "boundary_id": "osm-3709514",
+            "visit_count": 318
+          },
+          {
+            "name": "Turunku",
+            "boundary_id": "geopode-3be1b76d-2149-40ee-bbc7-ef3448d0bc30",
+            "visit_count": 292
+          },
+          {
+            "name": "Sabon Gari Nassarawa",
+            "boundary_id": "geopode-8daf8595-d43c-4e0a-a2a1-df4b3d54ac22",
+            "visit_count": 275
+          },
+          {
+            "name": "Dangunu",
+            "boundary_id": "geopode-819e74c5-7e28-472d-bb54-bf7230047173",
+            "visit_count": 270
+          },
+          {
+            "name": "Sabon Gari West",
+            "boundary_id": "geopode-6025e784-f816-445d-abb6-753634f985b1",
+            "visit_count": 190
+          },
+          {
+            "name": "Birnin Yero",
+            "boundary_id": "geopode-5b81a20c-72fb-490c-ac14-ec6cb5afda25",
+            "visit_count": 177
+          },
+          {
+            "name": "Sabon Gari North",
+            "boundary_id": "geopode-16cd296f-086f-4483-b98e-f645aa68772c",
+            "visit_count": 173
+          },
+          {
+            "name": "Unguwar Fatika",
+            "boundary_id": "geopode-09ba5369-417e-44a6-9969-a77dcac7bac5",
+            "visit_count": 152
+          },
+          {
+            "name": "Sabon Tasha",
+            "boundary_id": "osm-3709582",
+            "visit_count": 93
+          },
+          {
+            "name": "Nassarawa",
+            "boundary_id": "geopode-d09d0c26-ed04-4f21-a9ce-b28e289497e5",
+            "visit_count": 67
+          },
+          {
+            "name": "Nassarawa",
+            "boundary_id": "osm-3709553",
+            "visit_count": 57
+          },
+          {
+            "name": "Sarki Power",
+            "boundary_id": "geopode-1989ed48-11d6-492d-aff8-7257c83db6b5",
+            "visit_count": 55
+          },
+          {
+            "name": "Sabon Gari Nassarawa",
+            "boundary_id": "osm-3709576",
+            "visit_count": 50
+          },
+          {
+            "name": "Unguwan Sanusi",
+            "boundary_id": "geopode-6783e57a-dac9-4ecf-8330-ff681304efa9",
+            "visit_count": 43
+          },
+          {
+            "name": "Kuriga",
+            "boundary_id": "geopode-e1a01430-b798-4e25-a622-b1c27f6b8bc2",
+            "visit_count": 41
+          },
+          {
+            "name": "Kuriga",
+            "boundary_id": "osm-3709518",
+            "visit_count": 41
+          },
+          {
+            "name": "Gayam",
+            "boundary_id": "osm-3709437",
+            "visit_count": 41
+          },
+          {
+            "name": "Dabawa",
+            "boundary_id": "geopode-dd8c2a4c-b3a2-4df4-ae9a-c6f16413dd07",
+            "visit_count": 39
+          },
+          {
+            "name": "Sabon Gari North",
+            "boundary_id": "osm-3709577",
+            "visit_count": 36
+          },
+          {
+            "name": "Badiko",
+            "boundary_id": "geopode-f04338b2-66d0-43ae-974f-9687f4baeb31",
+            "visit_count": 34
+          },
+          {
+            "name": "Unguwar Rimi",
+            "boundary_id": "geopode-cbd97d73-2168-425a-a5bd-cfe3754cc22e",
+            "visit_count": 34
+          },
+          {
+            "name": "Unguwan Dosa",
+            "boundary_id": "geopode-c86634b3-8dc1-426e-9d62-4cd6beb2903f",
+            "visit_count": 33
+          },
+          {
+            "name": "Sabon Birnin",
+            "boundary_id": "geopode-df3b5920-58eb-4223-a813-84896b69ec9b",
+            "visit_count": 30
+          },
+          {
+            "name": "Kerawa",
+            "boundary_id": "geopode-3c442337-4039-4b70-87e2-3d808a27a1ef",
+            "visit_count": 29
+          },
+          {
+            "name": "Unguwar Shanu",
+            "boundary_id": "geopode-cf962048-cb07-4d84-a0bc-294baba0ef91",
+            "visit_count": 26
+          },
+          {
+            "name": "Barnawa",
+            "boundary_id": "geopode-052daa24-ddc6-44c9-8f49-44c343567b45",
+            "visit_count": 25
+          },
+          {
+            "name": "Hayin Banki",
+            "boundary_id": "geopode-31e7c67d-9940-4687-b79e-8c8d6085c014",
+            "visit_count": 25
+          },
+          {
+            "name": "Unguwan Sanusi",
+            "boundary_id": "osm-3709608",
+            "visit_count": 21
+          },
+          {
+            "name": "Kufena",
+            "boundary_id": "geopode-dd39e603-09e0-400c-a001-c4da54b9a44e",
+            "visit_count": 20
+          },
+          {
+            "name": "Kakuri Gwari",
+            "boundary_id": "geopode-8db547d7-88cf-4813-8f16-125161775542",
+            "visit_count": 20
+          },
+          {
+            "name": "Television",
+            "boundary_id": "geopode-7a3fafda-e61a-47b9-a589-4218fe5c44b6",
+            "visit_count": 19
+          },
+          {
+            "name": "Tudun Wada South",
+            "boundary_id": "geopode-c469d1ed-378e-4a1d-a74a-cb40bea869be",
+            "visit_count": 19
+          },
+          {
+            "name": "Sabon Birnin",
+            "boundary_id": "osm-3709575",
+            "visit_count": 18
+          },
+          {
+            "name": "Birnin Yero",
+            "boundary_id": "osm-3709399",
+            "visit_count": 18
+          },
+          {
+            "name": "Dutsin Ma B",
+            "boundary_id": "geopode-acb556e9-bbd3-49d9-b3c6-68634eea70f9",
+            "visit_count": 17
+          },
+          {
+            "name": "Sabon Gari South",
+            "boundary_id": "geopode-b3b13d3f-4950-41a7-a082-b2fae40fcb34",
+            "visit_count": 17
+          },
+          {
+            "name": "Sabon Gari South",
+            "boundary_id": "osm-3709579",
+            "visit_count": 17
+          },
+          {
+            "name": "Narayi",
+            "boundary_id": "osm-3709551",
+            "visit_count": 14
+          },
+          {
+            "name": "Afaka",
+            "boundary_id": "geopode-5a44a06c-8213-4a57-969a-892009c8a205",
+            "visit_count": 14
+          },
+          {
+            "name": "Badarawa",
+            "boundary_id": "geopode-de464006-afed-4a57-bc42-07811257a15f",
+            "visit_count": 12
+          },
+          {
+            "name": "Unguwar Juma",
+            "boundary_id": "geopode-bd7debca-6a68-43b0-87f3-12a2c7d7d160",
+            "visit_count": 12
+          },
+          {
+            "name": "Hayin Banki",
+            "boundary_id": "osm-3709458",
+            "visit_count": 11
+          },
+          {
+            "name": "Daddu",
+            "boundary_id": "geopode-122eceae-df61-4a64-9a37-5cc8d2fc1fd3",
+            "visit_count": 11
+          },
+          {
+            "name": "Kawo",
+            "boundary_id": "osm-3709503",
+            "visit_count": 11
+          },
+          {
+            "name": "Unguwar Sarki",
+            "boundary_id": "geopode-4af8b164-09d9-4bb0-9985-a291243c42d3",
+            "visit_count": 10
+          },
+          {
+            "name": "Kakuri Gwari",
+            "boundary_id": "osm-3709484",
+            "visit_count": 10
+          },
+          {
+            "name": "Limancin Kona",
+            "boundary_id": "geopode-5dcb2804-cb2e-47f4-90a9-ce9d494999a1",
+            "visit_count": 9
+          },
+          {
+            "name": "Kabala",
+            "boundary_id": "geopode-e28cac87-0855-49b5-b627-4907c908c16d",
+            "visit_count": 9
+          },
+          {
+            "name": "Zangon Aya",
+            "boundary_id": "geopode-ab01662d-387f-4e86-afd6-16a8854d7e02",
+            "visit_count": 9
+          },
+          {
+            "name": "Maiburiji",
+            "boundary_id": "geopode-990522cc-0194-42b5-bfbe-27046b14b7f0",
+            "visit_count": 8
+          },
+          {
+            "name": "Shaba",
+            "boundary_id": "geopode-0e28fd05-1bdd-4abb-a171-02da9fa3aa9c",
+            "visit_count": 8
+          },
+          {
+            "name": "Tudun Wada North",
+            "boundary_id": "geopode-38824607-16e3-4742-9411-e40ad22e298c",
+            "visit_count": 8
+          },
+          {
+            "name": "Fanshanu",
+            "boundary_id": "geopode-c8c2032a-13df-4ed7-b7b5-478cc4a4bdc3",
+            "visit_count": 7
+          },
+          {
+            "name": "Dadi Riba",
+            "boundary_id": "geopode-4e46325f-f595-40c1-816d-7273c6bf9048",
+            "visit_count": 7
+          },
+          {
+            "name": "Makera",
+            "boundary_id": "geopode-34de65ed-8ad5-4a66-a133-b36bcdc9ead6",
+            "visit_count": 6
+          },
+          {
+            "name": "Tundun Wada West",
+            "boundary_id": "osm-3709603",
+            "visit_count": 5
+          },
+          {
+            "name": "Dutsen Abba",
+            "boundary_id": "geopode-e5f54122-ccf5-4481-aa14-e68f9e7395b2",
+            "visit_count": 5
+          },
+          {
+            "name": "Kakuri Hausa",
+            "boundary_id": "geopode-739c5512-b91a-41de-8cf2-42e823edb78e",
+            "visit_count": 4
+          },
+          {
+            "name": "Tudun Nupawa",
+            "boundary_id": "osm-3709597",
+            "visit_count": 4
+          },
+          {
+            "name": "Gyellesu",
+            "boundary_id": "geopode-23d6a92b-77a3-4bca-87b9-f382cf608544",
+            "visit_count": 4
+          },
+          {
+            "name": "Igabi",
+            "boundary_id": "geopode-e004f37d-6a5a-4cf8-b55c-47966945f24d",
+            "visit_count": 3
+          },
+          {
+            "name": "Unguwar Sarki",
+            "boundary_id": "osm-3709614",
+            "visit_count": 3
+          },
+          {
+            "name": "Tudun Nupawa",
+            "boundary_id": "geopode-87d533bf-f9cc-4e69-b794-1784cc58ee13",
+            "visit_count": 3
+          },
+          {
+            "name": "Tundun Wada South",
+            "boundary_id": "osm-3709602",
+            "visit_count": 3
+          },
+          {
+            "name": "Kudaru",
+            "boundary_id": "geopode-42f4dbb3-31da-4362-bd72-af23103ba75f",
+            "visit_count": 2
+          },
+          {
+            "name": "Television",
+            "boundary_id": "osm-3709596",
+            "visit_count": 2
+          },
+          {
+            "name": "Gwagwada",
+            "boundary_id": "geopode-760c8ff6-dc58-45c9-928e-bdca66140feb",
+            "visit_count": 2
+          },
+          {
+            "name": "Rahama",
+            "boundary_id": "geopode-7e31b372-921c-4807-8ca1-0e06bb89afb7",
+            "visit_count": 2
+          },
+          {
+            "name": "Yelwa",
+            "boundary_id": "osm-3709620",
+            "visit_count": 1
+          },
+          {
+            "name": "Kakau",
+            "boundary_id": "osm-3709483",
+            "visit_count": 1
+          },
+          {
+            "name": "Garki 1",
+            "boundary_id": "geopode-af85ffec-3966-43ec-93a7-707271054964",
+            "visit_count": 1
+          },
+          {
+            "name": "Maiburiji",
+            "boundary_id": "osm-3709539",
+            "visit_count": 1
+          },
+          {
+            "name": "Barnawa",
+            "boundary_id": "osm-3709396",
+            "visit_count": 1
+          },
+          {
+            "name": "Pambegua",
+            "boundary_id": "geopode-e013f0ff-4979-48cd-9c82-bfabfb534c12",
+            "visit_count": 1
+          },
+          {
+            "name": "Makera",
+            "boundary_id": "geopode-f004ff4b-7fcb-4d84-9e92-f87b05dbc384",
+            "visit_count": 1
+          },
+          {
+            "name": "Limawa B",
+            "boundary_id": "geopode-36edd3e1-67bc-4c45-8dc3-5e6147a0f9f2",
+            "visit_count": 1
+          },
+          {
+            "name": "Gamagira",
+            "boundary_id": "geopode-104c3aa3-84cf-4b76-a98b-9ab4fbbd8306",
+            "visit_count": 1
+          }
+        ]
+      },
+      "enrichment_skipped_reason": null,
+      "boundary_coverage": {
+        "total_visits": 10442,
+        "visits_with_gps": 9198,
+        "visits_matched": 9198,
+        "visits_unmatched": 0
+      }
+    },
+    {
+      "opportunity_id": 566,
+      "opp_country": "Nigeria",
+      "iso_code": "NGA",
+      "funder": "GiveWell",
+      "admin_boundaries": {
+        "0": [
+          {
+            "name": "Nigeria",
+            "boundary_id": "geopode-1b8fe6fb-00ff-4186-9837-78c7b3f9f332",
+            "visit_count": 26771
+          }
+        ],
+        "1": [
+          {
+            "name": "Adamawa",
+            "boundary_id": "geopode-7ea543b2-a1e2-4e05-a6d8-2482603e1207",
+            "visit_count": 26771
+          },
+          {
+            "name": "Adamawa",
+            "boundary_id": "osm-3720358",
+            "visit_count": 461
+          },
+          {
+            "name": "Borno",
+            "boundary_id": "osm-3721167",
+            "visit_count": 461
+          }
+        ],
+        "2": [
+          {
+            "name": "Michika",
+            "boundary_id": "geopode-e771487b-ed9f-4e3a-adff-5fb0bd1159aa",
+            "visit_count": 15487
+          },
+          {
+            "name": "Madagali",
+            "boundary_id": "geopode-e0cbc68c-5b98-44fb-bbaf-e688b568f646",
+            "visit_count": 11284
+          },
+          {
+            "name": "Madagali",
+            "boundary_id": "osm-3720368",
+            "visit_count": 620
+          },
+          {
+            "name": "Askira-Uba",
+            "boundary_id": "osm-3721169",
+            "visit_count": 461
+          },
+          {
+            "name": "Michika",
+            "boundary_id": "osm-3720371",
+            "visit_count": 159
+          }
+        ],
+        "3": [
+          {
+            "name": "Michika 2",
+            "boundary_id": "geopode-fc1dfff1-c594-47ef-bf98-8b852a6cb588",
+            "visit_count": 8040
+          },
+          {
+            "name": "Kirchinga",
+            "boundary_id": "geopode-0b1a4269-1c83-420a-be66-e0d48b3099a9",
+            "visit_count": 6645
+          },
+          {
+            "name": "Michika 1",
+            "boundary_id": "geopode-6494978d-3f07-4142-9a5a-8acc2215655c",
+            "visit_count": 4645
+          },
+          {
+            "name": "Futuless",
+            "boundary_id": "geopode-78c4299a-0a61-4ef6-8317-07f0704b2c0a",
+            "visit_count": 2762
+          },
+          {
+            "name": "Pallam",
+            "boundary_id": "geopode-c2abee5c-c4e1-4cb3-86e9-0b047e57583f",
+            "visit_count": 2328
+          },
+          {
+            "name": "Sukur",
+            "boundary_id": "geopode-a03d7d2d-2f93-41a2-aef5-2d257a577196",
+            "visit_count": 2302
+          },
+          {
+            "name": "Ngurthlavu Kopa",
+            "boundary_id": "osm-3721436",
+            "visit_count": 461
+          },
+          {
+            "name": "Ninkisi/Wuro Ngiki",
+            "boundary_id": "geopode-04947275-802b-4089-bb47-3c6cbd81054b",
+            "visit_count": 20
+          },
+          {
+            "name": "Moda/Dlaka",
+            "boundary_id": "geopode-6588f2e8-eeff-446e-ad93-9ed1d288b919",
+            "visit_count": 9
+          },
+          {
+            "name": "Duhu",
+            "boundary_id": "geopode-0675f98a-0882-4096-8b77-533e5f7f3a5e",
+            "visit_count": 9
+          },
+          {
+            "name": "Sina Kamale",
+            "boundary_id": "geopode-f9595612-9917-4ffe-9600-de9c3b012749",
+            "visit_count": 8
+          },
+          {
+            "name": "Wambilimi/Tili",
+            "boundary_id": "geopode-25270a6c-5544-4b96-b570-109d4c512e7c",
+            "visit_count": 3
+          }
+        ]
+      },
+      "enrichment_skipped_reason": null,
+      "boundary_coverage": {
+        "total_visits": 26772,
+        "visits_with_gps": 26771,
+        "visits_matched": 26771,
+        "visits_unmatched": 0
+      }
     }
   ]
 }
