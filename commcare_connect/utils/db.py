@@ -33,9 +33,9 @@ def slugify_uniquely(value, model, slugfield="slug"):
         suffix += 1
 
 
-def get_object_by_uuid_or_int(queryset: QuerySet, lookup_value: str, uuid_field: str):
+def get_object_by_uuid_or_int(queryset: QuerySet, lookup_value: str, uuid_field: str, int_field: str = "pk"):
     if lookup_value.isdigit():
-        return get_object_or_404(queryset, pk=int(lookup_value))
+        return get_object_or_404(queryset, **{int_field: int(lookup_value)})
 
     try:
         uuid_val = uuid.UUID(lookup_value)
