@@ -10,7 +10,9 @@ from uuid import uuid4
 import pytest
 from django.utils.timezone import now
 from rest_framework.test import APIClient
+from waffle.testutils import override_switch
 
+from commcare_connect.flags.switch_names import CONCURRENT_SUBMISSIONS_LOCK
 from commcare_connect.form_receiver.processor import update_completed_learn_date
 from commcare_connect.form_receiver.tests.test_receiver_endpoint import add_credentials
 from commcare_connect.form_receiver.tests.xforms import (
@@ -322,6 +324,7 @@ def test_receiver_duplicate(user_with_connectid_link: User, api_client: APIClien
 
 
 @pytest.mark.django_db(transaction=True)
+@override_switch(CONCURRENT_SUBMISSIONS_LOCK, active=True)
 def test_receiver_duplicate_concurrent_submissions(user_with_connectid_link: User, opportunity: Opportunity):
     oauth_application = opportunity.hq_server.oauth_application
     user = user_with_connectid_link
