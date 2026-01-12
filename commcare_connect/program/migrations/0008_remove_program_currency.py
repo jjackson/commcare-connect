@@ -5,12 +5,12 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0092_currency_country_opportunity_currency_fk"),
+        ("program", "0007_set_uuid_unique"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name="opportunity",
+            model_name="program",
             name="currency",
         ),
     ]
