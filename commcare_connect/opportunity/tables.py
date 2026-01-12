@@ -434,7 +434,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
         tooltips = {
             "Pending": _("Under review by Program Manager."),
             "Approved": _("Invoice Approved and Paid."),
-            "Submitted": _("Submitted to Program Manager for approval."),
+            "Submitted": _("Submitted to Program Manager for Approval."),
             "Archived": _("Invoice Archived. No User Actions Allowed."),
         }
         status = record.get_status_display()
