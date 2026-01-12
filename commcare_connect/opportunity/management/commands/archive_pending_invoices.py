@@ -20,7 +20,7 @@ class Command(BaseCommand):
         invoices = PaymentInvoice.objects.filter(opportunity__end_date__lte=cutoff_date, status=InvoiceStatus.PENDING)
 
         if dry_run:
-            print(f"Found {len(invoices)} Pending invoices.")
+            print(f"Found {invoices.count()} Pending invoices.")
         else:
-            print(f"Marking {len(invoices)} Pending invoices as Archived.")
+            print(f"Marking {invoices.count()} Pending invoices as Archived.")
             invoices.update(status=InvoiceStatus.ARCHIVED, archived_date=now())
