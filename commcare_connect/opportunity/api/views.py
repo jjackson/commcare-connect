@@ -9,7 +9,6 @@ from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from utils.db import get_object_for_api_version
 
 from commcare_connect.opportunity.api.serializers import (
     CompletedWorkSerializer,
@@ -26,6 +25,7 @@ from commcare_connect.opportunity.models import (
     Payment,
 )
 from commcare_connect.users.helpers import create_hq_user_and_link
+from commcare_connect.utils.db import get_object_for_api_version
 from commcare_connect.utils.error_codes import ErrorCodes
 
 logger = logging.getLogger(__name__)
