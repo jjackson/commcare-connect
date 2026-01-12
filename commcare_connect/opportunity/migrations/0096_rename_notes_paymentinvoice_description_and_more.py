@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0088_labsrecord_public"),
+        ("opportunity", "0095_set_uuid_unique"),
     ]
 
     operations = [
