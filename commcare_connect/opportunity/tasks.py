@@ -547,7 +547,10 @@ def generate_automated_service_delivery_invoice():
     invoices_chunk = []
     end_date_prev_month = get_end_date_previous_month()
 
-    for opportunity in Opportunity.objects.filter(active=True, managed=True).iterator(chunk_size=CHUNK_SIZE):
+    opp_start_date = datetime.date(2026, 1, 1)
+    for opportunity in Opportunity.objects.filter(active=True, managed=True, start_date__gte=opp_start_date).iterator(
+        chunk_size=CHUNK_SIZE
+    ):
         start_date = get_start_date_for_invoice(opportunity)
         # Below indicates there are no uninvoiced completed works to invoice in previous month or earlier
         if start_date > end_date_prev_month:

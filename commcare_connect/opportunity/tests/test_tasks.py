@@ -207,8 +207,8 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
 
     @override_switch(AUTOMATED_INVOICES_MONTHLY, active=True)
     def test_generate_invoice_for_two_active_managed_opportunities(self):
-        opportunity1 = OpportunityFactory(active=True, managed=True)
-        opportunity2 = OpportunityFactory(active=True, managed=True)
+        opportunity1 = OpportunityFactory(active=True, managed=True, start_date=datetime.date(2026, 1, 1))
+        opportunity2 = OpportunityFactory(active=True, managed=True, start_date=datetime.date(2026, 12, 1))
 
         payment_unit1 = PaymentUnitFactory(opportunity=opportunity1, amount=Decimal("100.00"))
         payment_unit2 = PaymentUnitFactory(opportunity=opportunity2, amount=Decimal("50.00"))
@@ -259,7 +259,7 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
 
     @override_switch(AUTOMATED_INVOICES_MONTHLY, active=True)
     def test_no_invoice_for_inactive_opportunities(self):
-        inactive_opportunity = OpportunityFactory(active=False, managed=True)
+        inactive_opportunity = OpportunityFactory(active=False, managed=True, start_date=datetime.date(2026, 1, 1))
         payment_unit = PaymentUnitFactory(opportunity=inactive_opportunity)
         access = OpportunityAccessFactory(opportunity=inactive_opportunity)
         completed_work = CompletedWorkFactory(
@@ -280,7 +280,7 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
 
     @override_switch(AUTOMATED_INVOICES_MONTHLY, active=True)
     def test_no_invoice_for_active_unmanaged_opportunity(self):
-        unmanaged_opportunity = OpportunityFactory(active=True, managed=False)
+        unmanaged_opportunity = OpportunityFactory(active=True, managed=False, start_date=datetime.date(2026, 1, 1))
         payment_unit = PaymentUnitFactory(opportunity=unmanaged_opportunity, amount=Decimal("100.00"))
         access = OpportunityAccessFactory(opportunity=unmanaged_opportunity)
         completed_work = CompletedWorkFactory(
@@ -299,7 +299,7 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
 
     @override_switch(AUTOMATED_INVOICES_MONTHLY, active=False)
     def test_no_invoice_when_switch_inactive(self):
-        opportunity = OpportunityFactory(active=True, managed=True)
+        opportunity = OpportunityFactory(active=True, managed=True, start_date=datetime.date(2026, 1, 1))
         payment_unit = PaymentUnitFactory(opportunity=opportunity, amount=Decimal("100.00"))
         access = OpportunityAccessFactory(opportunity=opportunity)
         completed_work = CompletedWorkFactory(
@@ -318,7 +318,7 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
 
     @override_switch(AUTOMATED_INVOICES_MONTHLY, active=True)
     def test_no_invoice_with_no_approved_work(self):
-        opportunity = OpportunityFactory(active=True, managed=True)
+        opportunity = OpportunityFactory(active=True, managed=True, start_date=datetime.date(2026, 1, 1))
 
         generate_automated_service_delivery_invoice()
 
