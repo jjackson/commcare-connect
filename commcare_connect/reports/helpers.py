@@ -95,10 +95,9 @@ def get_table_data_for_year_month(
             "users": 0,
             "services": 0,
             "flw_amount_earned": 0,
-            "nm_amount_earned": 0,
+            "intervention_funding_deployed": 0,
             "avg_time_to_payment": 0,
             "max_time_to_payment": 0,
-            "intervention_funding_deployed": 0,
             "organization_funding_deployed": 0,
             "flw_amount_paid": 0,
             "avg_top_earned_flws": 0,
@@ -147,9 +146,6 @@ def get_table_data_for_year_month(
             services=models.Sum("saved_approved_count", default=0),
             flw_amount_earned=models.Sum("saved_payment_accrued_usd", default=0),
             intervention_funding_deployed=models.Sum(
-                "saved_org_payment_accrued_usd", default=0, filter=models.Q(invoice__service_delivery=True)
-            ),
-            nm_amount_earned=models.Sum(
                 models.F("saved_org_payment_accrued_usd") + models.F("saved_payment_accrued_usd"), default=0
             ),
         )
