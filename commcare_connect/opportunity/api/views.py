@@ -5,10 +5,11 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils.timezone import now
 from rest_framework import viewsets
-from rest_framework.generics import RetrieveAPIView, get_object_or_404
+from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from utils.db import get_object_for_api_version
 
 from commcare_connect.opportunity.api.serializers import (
     CompletedWorkSerializer,
@@ -43,8 +44,12 @@ class UserLearnProgressView(RetrieveAPIView):
     serializer_class = UserLearnProgressSerializer
 
     def get_object(self):
-        opportunity_access = get_object_or_404(
-            OpportunityAccess, user=self.request.user, opportunity=self.kwargs.get("pk")
+        opportunity_access = get_object_for_api_version(
+            request=self.request,
+            queryset=OpportunityAccess.objects.filter(user=self.request.user),
+            pk=self.kwargs.get("pk"),
+            uuid_field="opportunity__opportunity_id",
+            int_field="opportunity",
         )
         return dict(
             completed_modules=opportunity_access.unique_completed_modules,
@@ -68,14 +73,26 @@ class DeliveryProgressView(RetrieveAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
-        return OpportunityAccess.objects.get(user=self.request.user, opportunity=self.kwargs.get("pk"))
+        return get_object_for_api_version(
+            request=self.request,
+            queryset=OpportunityAccess.objects.filter(user=self.request.user),
+            pk=self.kwargs.get("pk"),
+            uuid_field="opportunity__opportunity_id",
+            int_field="opportunity",
+        )
 
 
 class ClaimOpportunityView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, *args, **kwargs):
-        opportunity_access = get_object_or_404(OpportunityAccess, user=self.request.user, opportunity=kwargs.get("pk"))
+        opportunity_access = get_object_for_api_version(
+            request=self.request,
+            queryset=OpportunityAccess.objects.filter(user=self.request.user),
+            pk=kwargs.get("pk"),
+            uuid_field="opportunity__opportunity_id",
+            int_field="opportunity",
+        )
         opportunity = opportunity_access.opportunity
 
         if OpportunityClaim.objects.filter(opportunity_access=opportunity_access).exists():
@@ -109,12 +126,15 @@ class ConfirmPaymentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, *args, **kwargs):
-        payment_query = Payment.objects.filter(
+        payment = get_object_for_api_version(
+            request=self.request,
+            queryset=Payment.objects.filter(
+                Q(organization__memberships__user=self.request.user) | Q(opportunity_access__user=self.request.user),
+            ),
             pk=kwargs.get("pk"),
-        ).filter(
-            Q(organization__memberships__user=self.request.user) | Q(opportunity_access__user=self.request.user),
+            uuid_field="payment_id",
+            int_field="pk",
         )
-        payment = get_object_or_404(payment_query)
 
         confirmed_value = self.request.data["confirmed"]
         if confirmed_value == "false":
