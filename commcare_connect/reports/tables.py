@@ -16,7 +16,6 @@ class AdminReportTable(tables.Table):
     max_time_to_payment = columns.Column(verbose_name="Max Time to Payment")
     flw_amount_earned = SumColumn(verbose_name="FLW Amount Earned")
     flw_amount_paid = SumColumn(verbose_name="FLW Amount Paid")
-    nm_amount_earned = SumColumn(verbose_name="NM Amount Earned")
     intervention_funding_deployed = SumColumn(verbose_name="Intervention Funding Deployed")
     organization_funding_deployed = SumColumn(verbose_name="Organization Funding Deployed")
     services = SumColumn(verbose_name="Verified Services")

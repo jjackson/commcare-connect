@@ -119,8 +119,7 @@ def test_get_table_data_for_year_month(from_date, to_date, httpx_mock):
         assert 0 <= row["max_time_to_payment"] <= 90
         assert row["flw_amount_earned"] == 4500
         assert row["flw_amount_paid"] == 2250
-        assert row["nm_amount_earned"] == 5500
-        assert row["intervention_funding_deployed"] == 1000
+        assert row["intervention_funding_deployed"] == 5500
         assert row["organization_funding_deployed"] == 1000
         assert row["avg_top_earned_flws"] == 900
 
@@ -242,8 +241,7 @@ def test_get_table_data_for_year_month_by_delivery_type(delivery_type, httpx_moc
         assert row["max_time_to_payment"] == 40
         assert row["flw_amount_earned"] == 1000
         assert row["flw_amount_paid"] == 500
-        assert row["nm_amount_earned"] == 1500
-        assert row["intervention_funding_deployed"] == 500
+        assert row["intervention_funding_deployed"] == 1500
         assert row["avg_top_earned_flws"] == 400
         assert row["activated_connect_users"] == 5
 
@@ -309,8 +307,7 @@ def test_get_table_data_for_year_month_by_country_currency(opp_currency, filter_
             assert 0 <= row["max_time_to_payment"] <= 90
             assert row["flw_amount_earned"] == 4500
             assert row["flw_amount_paid"] == 2250
-            assert row["nm_amount_earned"] == 5500
-            assert row["intervention_funding_deployed"] == 1000
+            assert row["intervention_funding_deployed"] == 5500
             assert row["organization_funding_deployed"] == 1000
             assert row["avg_top_earned_flws"] == 900
 
