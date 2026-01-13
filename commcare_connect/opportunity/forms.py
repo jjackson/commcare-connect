@@ -916,7 +916,9 @@ class OpportunityAccessCreationForm(forms.ModelForm):
 
 class AddBudgetExistingUsersForm(forms.Form):
     additional_visits = forms.IntegerField(
-        widget=forms.NumberInput(attrs={"x-model": "additionalVisits"}), required=False
+        widget=forms.NumberInput(attrs={"x-model": "additionalVisits", "min": 1}),
+        required=False,
+        min_value=1,
     )
     end_date = forms.DateField(
         widget=forms.DateInput(
