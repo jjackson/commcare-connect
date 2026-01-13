@@ -1746,6 +1746,19 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
             )
         return invoice_number
 
+    def clean_date_of_expense(self):
+        date_of_expense = self.cleaned_data.get("date_of_expense")
+        if self.is_service_delivery:
+            return date_of_expense
+
+        if not date_of_expense:
+            raise ValidationError("Date of expense is required for custom invoices.")
+
+        if date_of_expense > datetime.date.today():
+            raise ValidationError("Date of expense cannot be in the future.")
+
+        return date_of_expense
+
     def clean(self):
         cleaned_data = super().clean()
         amount = cleaned_data.get("amount")
