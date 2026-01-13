@@ -498,6 +498,7 @@ class InvoiceStatus(models.TextChoices):
     PENDING = "pending", gettext("Pending")
     SUBMITTED = "submitted", gettext("Submitted")
     APPROVED = "approved", gettext("Approved")
+    ARCHIVED = "archived", gettext("Archived")
 
 
 class PaymentInvoice(models.Model):
@@ -518,6 +519,7 @@ class PaymentInvoice(models.Model):
     description = models.TextField(null=True, blank=True)
     date_of_expense = models.DateField(null=True, blank=True)
     status = models.CharField(choices=InvoiceStatus.choices, default=InvoiceStatus.PENDING, max_length=50)
+    archived_date = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         unique_together = ("opportunity", "invoice_number")
