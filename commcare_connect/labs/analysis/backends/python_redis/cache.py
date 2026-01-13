@@ -109,6 +109,42 @@ def get_cache_tolerance_from_request(request: HttpRequest) -> int | None:
     return None
 
 
+def get_cache_tolerance_pct_from_request(request: HttpRequest) -> float | None:
+    """
+    Extract cache_tolerance_pct from URL parameters.
+
+    Looks for ?cache_tolerance_pct=N where N is a percentage (0-100).
+    For example, cache_tolerance_pct=98 means accept cache if it has at least 98% of expected visits.
+
+    Args:
+        request: HttpRequest with GET parameters
+
+    Returns:
+        Tolerance percentage (0-100) or None if not specified
+
+    Example:
+        # In view:
+        tolerance_pct = get_cache_tolerance_pct_from_request(request)
+        result = compute_visit_analysis(request, config, cache_tolerance_pct=tolerance_pct)
+
+        # URL usage: ?cache_tolerance_pct=98
+        # If expected visits = 1000 and cache has 980, cache is valid (980/1000 = 98%)
+    """
+    try:
+        tolerance_str = request.GET.get("cache_tolerance_pct")
+        if tolerance_str:
+            tolerance = float(tolerance_str)
+            if tolerance < 0 or tolerance > 100:
+                logger.warning(f"Invalid cache_tolerance_pct={tolerance}, must be 0-100")
+                return None
+            logger.info(f"Using cache tolerance: {tolerance}% from URL parameter")
+            return tolerance
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Failed to parse cache_tolerance_pct parameter: {e}")
+
+    return None
+
+
 # =============================================================================
 # Cache Managers
 # =============================================================================
@@ -261,17 +297,20 @@ class AnalysisCacheManager:
         logger.info(f"Cleared cache for opp={self.opportunity_id}, hash={self.config_hash}")
 
     def validate_cache(
-        self, current_visit_count: int, cached_data: dict, tolerance_minutes: int | None = None
+        self,
+        current_visit_count: int,
+        cached_data: dict,
+        tolerance_minutes: int | None = None,
+        tolerance_pct: float | None = None,
     ) -> bool:
         """
-        Validate cached data with optional time-based tolerance.
+        Validate cached data with optional time-based or percentage-based tolerance.
 
         Validation rules:
         1. If cached_count >= current_visit_count -> VALID (cache has at least as much data)
-        2. If tolerance_minutes is None -> check must pass rule 1
-        3. If tolerance_minutes is set:
-           - If cache age < tolerance_minutes -> VALID (accept stale data)
-           - Otherwise -> INVALID
+        2. If tolerance_pct is set and (cached_count / current_visit_count * 100) >= tolerance_pct -> VALID
+        3. If tolerance_minutes is set and cache age < tolerance_minutes -> VALID (accept stale data)
+        4. Otherwise -> INVALID
 
         Note: We use >= instead of == because sometimes the API returns more visits
         than what's reported in the opportunity metadata (opp_org_opp endpoint).
@@ -280,6 +319,8 @@ class AnalysisCacheManager:
             current_visit_count: Expected visit count from labs_context
             cached_data: Cached data dict with 'visit_count' and 'cached_at'
             tolerance_minutes: Max age (in minutes) to accept mismatched counts
+            tolerance_pct: Min percentage (0-100) of expected visits to accept cache
+                           e.g., 98 means accept if cache has >= 98% of expected visits
 
         Returns:
             True if cache is valid, False if stale
@@ -294,7 +335,22 @@ class AnalysisCacheManager:
             logger.debug(f"Cache valid: cached={cached_count} >= expected={current_visit_count}")
             return True
 
-        # Cache has fewer visits than expected - check tolerance
+        # Cache has fewer visits than expected - check percentage tolerance first
+        if tolerance_pct is not None and current_visit_count > 0:
+            actual_pct = (cached_count / current_visit_count) * 100
+            if actual_pct >= tolerance_pct:
+                logger.info(
+                    f"Cache ACCEPTED with percentage tolerance: "
+                    f"cached={cached_count}, expected={current_visit_count}, "
+                    f"actual={actual_pct:.1f}%, tolerance={tolerance_pct}%"
+                )
+                return True
+            else:
+                logger.debug(
+                    f"Cache percentage check failed: " f"actual={actual_pct:.1f}% < tolerance={tolerance_pct}%"
+                )
+
+        # Check time-based tolerance
         if tolerance_minutes is None:
             logger.info(f"Cache invalid: cached={cached_count} < expected={current_visit_count}, no tolerance")
             return False
@@ -312,7 +368,7 @@ class AnalysisCacheManager:
 
             if age_minutes <= tolerance_minutes:
                 logger.info(
-                    f"Cache ACCEPTED with tolerance: "
+                    f"Cache ACCEPTED with time tolerance: "
                     f"cached={cached_count}, expected={current_visit_count}, "
                     f"age={age_minutes:.1f}min, tolerance={tolerance_minutes}min"
                 )

@@ -106,7 +106,10 @@ class PythonRedisBackend:
         logger.info(f"[PythonRedis] Raw cache MISS for opp {opportunity_id}, streaming from API")
 
         url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_visits/"
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept-Encoding": "gzip, deflate",
+        }
 
         # Use shared progress interval from SSE streaming module
         from commcare_connect.labs.analysis.sse_streaming import DOWNLOAD_PROGRESS_INTERVAL_BYTES
@@ -123,7 +126,8 @@ class PythonRedisBackend:
 
                 for chunk in response.iter_bytes(chunk_size=65536):
                     chunks.append(chunk)
-                    bytes_downloaded += len(chunk)
+                    # Use num_bytes_downloaded to track actual network traffic (compressed bytes)
+                    bytes_downloaded = response.num_bytes_downloaded
 
                     # Yield progress every 5MB for real-time UI updates
                     if bytes_downloaded - last_progress_at >= progress_interval:
@@ -162,7 +166,10 @@ class PythonRedisBackend:
     def _fetch_from_api(self, opportunity_id: int, access_token: str) -> bytes:
         """Fetch raw CSV bytes from Connect API."""
         url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_visits/"
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept-Encoding": "gzip, deflate",
+        }
 
         try:
             response = httpx.get(url, headers=headers, timeout=580.0)

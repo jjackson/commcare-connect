@@ -450,6 +450,7 @@ def compute_flw_analysis(
     config: AnalysisPipelineConfig,
     use_cache: bool = True,
     cache_tolerance_minutes: int | None = None,
+    cache_tolerance_pct: float | None = None,
 ) -> FLWAnalysisResult:
     """
     Compute FLW analysis using the pipeline pattern.
@@ -474,6 +475,7 @@ def compute_flw_analysis(
         config: AnalysisPipelineConfig defining computations
         use_cache: Whether to use file/Redis cache (default: True)
         cache_tolerance_minutes: Accept cache if age < N minutes (even if counts mismatch)
+        cache_tolerance_pct: Accept cache if it has >= N% of expected visits (e.g., 98 for 98%)
 
     Returns:
         FLWAnalysisResult
@@ -481,6 +483,7 @@ def compute_flw_analysis(
     from commcare_connect.labs.analysis.backends.python_redis.cache import (
         AnalysisCacheManager,
         get_cache_tolerance_from_request,
+        get_cache_tolerance_pct_from_request,
         sync_labs_context_visit_count,
     )
     from commcare_connect.labs.analysis.backends.python_redis.visit_analyzer import compute_visit_analysis
@@ -494,6 +497,8 @@ def compute_flw_analysis(
     # Extract tolerance from request if not explicitly provided
     if cache_tolerance_minutes is None:
         cache_tolerance_minutes = get_cache_tolerance_from_request(request)
+    if cache_tolerance_pct is None:
+        cache_tolerance_pct = get_cache_tolerance_pct_from_request(request)
 
     # Check FLW cache first (fastest path)
     if use_cache and not force_refresh:
@@ -502,7 +507,9 @@ def compute_flw_analysis(
             current_visit_count = pipeline.visit_count
 
             cached_flw = cache_manager.get_results_cache()
-            if cached_flw and cache_manager.validate_cache(current_visit_count, cached_flw, cache_tolerance_minutes):
+            if cached_flw and cache_manager.validate_cache(
+                current_visit_count, cached_flw, cache_tolerance_minutes, cache_tolerance_pct
+            ):
                 logger.info(f"Using cached FLW results for opp {opportunity_id}")
                 return cached_flw["result"]
         except Exception as e:
@@ -512,7 +519,11 @@ def compute_flw_analysis(
     # This is the foundation of the pipeline
     logger.info(f"Getting visit analysis for FLW aggregation (opp {opportunity_id})")
     visit_result = compute_visit_analysis(
-        request, config, use_cache=use_cache, cache_tolerance_minutes=cache_tolerance_minutes
+        request,
+        config,
+        use_cache=use_cache,
+        cache_tolerance_minutes=cache_tolerance_minutes,
+        cache_tolerance_pct=cache_tolerance_pct,
     )
 
     # Aggregate to FLW level

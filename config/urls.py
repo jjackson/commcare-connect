@@ -48,6 +48,10 @@ urlpatterns = [
         "custom_analysis/mbw/",
         include("commcare_connect.custom_analysis.mbw.urls", namespace="mbw"),
     ),
+    path(
+        "custom_analysis/rutf/",
+        include("commcare_connect.custom_analysis.rutf.urls", namespace="rutf"),
+    ),
     path("ai/", include("commcare_connect.ai.urls", namespace="ai")),
     path("hq/", include("commcare_connect.commcarehq.urls", namespace="commcarehq")),
     path("export/", include("commcare_connect.data_export.urls", namespace="data_export")),

@@ -415,8 +415,16 @@ function mbwGPSAnalysis() {
                            '&include_visits=1';
                 const response = await fetch(url);
 
+                if (response.status === 401) {
+                    // Session expired - prompt user to refresh
+                    alert('Your session has expired. Please refresh the page to re-authenticate.');
+                    this.expandedFlw = null;
+                    return;
+                }
+
                 if (!response.ok) {
-                    throw new Error('Failed to load visit details');
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Failed to load visit details');
                 }
 
                 const data = await response.json();
