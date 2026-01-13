@@ -190,6 +190,13 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
                 "description": "GPS distance metrics and travel analysis for Mother Baby Wellness",
                 "color": "emerald",
             },
+            {
+                "name": "RUTF Timeline",
+                "url": "/custom_analysis/rutf/children/",
+                "icon": "fa-weight-scale",
+                "description": "SAM follow-up tracking with MUAC measurements for malnutrition programs",
+                "color": "orange",
+            },
         ]
 
         return context

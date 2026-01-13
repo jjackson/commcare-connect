@@ -58,8 +58,12 @@ def get_flw_names_for_opportunity(request: HttpRequest) -> dict[str, str]:
     url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_data/"
     logger.info(f"Fetching FLW names from {url}")
 
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept-Encoding": "gzip, deflate",
+    }
     try:
-        response = httpx.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=30.0)
+        response = httpx.get(url, headers=headers, timeout=30.0)
         response.raise_for_status()
     except httpx.TimeoutException as e:
         logger.error(f"Timeout fetching FLW names for opportunity {opportunity_id}: {e}")

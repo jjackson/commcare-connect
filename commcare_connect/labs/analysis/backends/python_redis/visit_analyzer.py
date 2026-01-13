@@ -217,6 +217,7 @@ def compute_visit_analysis(
     config: AnalysisPipelineConfig,
     use_cache: bool = True,
     cache_tolerance_minutes: int | None = None,
+    cache_tolerance_pct: float | None = None,
 ) -> VisitAnalysisResult:
     """
     Compute visit-level analysis with caching.
@@ -235,6 +236,7 @@ def compute_visit_analysis(
         config: AnalysisPipelineConfig defining field computations
         use_cache: Whether to use caching (default: True)
         cache_tolerance_minutes: Accept cache if age < N minutes (even if counts mismatch)
+        cache_tolerance_pct: Accept cache if it has >= N% of expected visits (e.g., 98 for 98%)
 
     Returns:
         VisitAnalysisResult with one VisitRow per visit
@@ -242,6 +244,7 @@ def compute_visit_analysis(
     from commcare_connect.labs.analysis.backends.python_redis.cache import (
         AnalysisCacheManager,
         get_cache_tolerance_from_request,
+        get_cache_tolerance_pct_from_request,
         sync_labs_context_visit_count,
     )
 
@@ -272,6 +275,8 @@ def compute_visit_analysis(
     # Extract tolerance from request if not explicitly provided
     if cache_tolerance_minutes is None:
         cache_tolerance_minutes = get_cache_tolerance_from_request(request)
+    if cache_tolerance_pct is None:
+        cache_tolerance_pct = get_cache_tolerance_pct_from_request(request)
 
     # Get current visit count for validation
     try:
@@ -286,7 +291,9 @@ def compute_visit_analysis(
 
     # Try cache
     cached = cache_manager.get_visit_results_cache()
-    if cached and cache_manager.validate_cache(current_visit_count, cached, cache_tolerance_minutes):
+    if cached and cache_manager.validate_cache(
+        current_visit_count, cached, cache_tolerance_minutes, cache_tolerance_pct
+    ):
         logger.info(f"[Analysis] CACHE HIT - using cached visit results (opp {opportunity_id})")
         return cached["result"]
 

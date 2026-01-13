@@ -140,7 +140,10 @@ class SQLBackend:
         logger.info(f"[SQL] Raw cache MISS for opp {opportunity_id}, streaming from API")
 
         url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_visits/"
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept-Encoding": "gzip, deflate",
+        }
 
         # Use shared progress interval from SSE streaming module
         from commcare_connect.labs.analysis.sse_streaming import DOWNLOAD_PROGRESS_INTERVAL_BYTES
@@ -157,7 +160,8 @@ class SQLBackend:
 
                 for chunk in response.iter_bytes(chunk_size=65536):
                     chunks.append(chunk)
-                    bytes_downloaded += len(chunk)
+                    # Use num_bytes_downloaded to track actual network traffic (compressed bytes)
+                    bytes_downloaded = response.num_bytes_downloaded
 
                     # Yield progress every 5MB for real-time UI updates
                     if bytes_downloaded - last_progress_at >= progress_interval:
@@ -219,7 +223,10 @@ class SQLBackend:
     def _fetch_from_api(self, opportunity_id: int, access_token: str) -> bytes:
         """Fetch raw CSV bytes from Connect API."""
         url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_visits/"
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept-Encoding": "gzip, deflate",
+        }
 
         try:
             response = httpx.get(url, headers=headers, timeout=580.0)
@@ -289,15 +296,12 @@ class SQLBackend:
                 if key == "entity_id":
                     computed_qs = computed_qs.filter(entity_id=value)
                     logger.info(f"[SQL] Applying entity_id filter: {value}")
-                # Support filtering on computed fields stored in computed_fields JSON
-                # This enables linking by fields like beneficiary_case_id for twins
-                elif key in ["beneficiary_case_id", "child_entity_id"]:
+                # All other filters are treated as computed field filters
+                # This enables linking by fields like beneficiary_case_id, rutf_case_id, etc.
+                else:
                     # Use Django's JSONB contains lookup for exact match
                     computed_qs = computed_qs.filter(computed_fields__contains={key: value})
                     logger.info(f"[SQL] Applying computed field filter: {key}={value}")
-                # Other filters could be added here as needed
-                else:
-                    logger.warning(f"[SQL] Unknown filter key '{key}' - skipping")
 
         # Build VisitRow objects directly from ComputedVisitCache
         visit_rows = []

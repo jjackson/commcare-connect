@@ -176,9 +176,9 @@
           <span x-show="hasSelection">
             Selected:
             <span x-show="selectedOrg" class="font-medium text-blue-600" x-text="selectedOrg ? selectedOrg.name : ''"></span>
-            <span x-show="selectedOrg && (selectedProgram || selectedOpp)"> → </span>
+            <span x-show="selectedOrg && (selectedProgram || selectedOpp)"> -> </span>
             <span x-show="selectedProgram" class="font-medium text-green-600" x-text="selectedProgram ? selectedProgram.name : ''"></span>
-            <span x-show="selectedProgram && selectedOpp"> → </span>
+            <span x-show="selectedProgram && selectedOpp"> -> </span>
             <span x-show="selectedOpp" class="font-medium text-purple-600" x-text="selectedOpp ? selectedOpp.name : ''"></span>
           </span>
           <span x-show="!hasSelection" class="text-gray-400 italic">
@@ -186,6 +186,22 @@
           </span>
         </div>
         <div class="flex items-center space-x-3">
+          {# Cache tolerance input - for testing/development #}
+          <div class="flex items-center space-x-2 border-r border-gray-300 pr-3 mr-1">
+            <label for="cache-tolerance" class="text-xs text-gray-500 whitespace-nowrap" title="Accept cache if it has >= this % of expected visits. Useful for testing when visit counts are slightly stale.">
+              Cache tolerance:
+            </label>
+            <input type="number"
+                   id="cache-tolerance"
+                   x-model="cacheTolerance"
+                   min="0"
+                   max="100"
+                   step="1"
+                   placeholder="e.g. 98"
+                   class="w-16 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                   title="Enter percentage (0-100). Leave empty for exact match only.">
+            <span class="text-xs text-gray-400">%</span>
+          </div>
           <button type="button"
                   @click="clearSelection()"
                   x-show="hasSelection"
@@ -217,6 +233,7 @@ function labsContextSelector() {
     selectedOrg: null,
     selectedProgram: null,
     selectedOpp: null,
+    cacheTolerance: '',
     orgData: [],
     programData: [],
     oppData: [],
@@ -244,6 +261,7 @@ function labsContextSelector() {
       const orgId = urlParams.get('organization_id');
       const programId = urlParams.get('program_id');
       const oppId = urlParams.get('opportunity_id');
+      const cacheTolPct = urlParams.get('cache_tolerance_pct');
 
       if (orgId) {
         const org = this.orgData.find(o => o.slug === orgId);
@@ -264,6 +282,11 @@ function labsContextSelector() {
         if (opp) {
           this.selectedOpp = {id: opp.id, name: opp.name};
         }
+      }
+
+      // Initialize cache tolerance from URL
+      if (cacheTolPct) {
+        this.cacheTolerance = cacheTolPct;
       }
     },
 
@@ -381,6 +404,7 @@ function labsContextSelector() {
         url.searchParams.delete('organization_id');
         url.searchParams.delete('program_id');
         url.searchParams.delete('opportunity_id');
+        url.searchParams.delete('cache_tolerance_pct');
 
         if (this.selectedOrg && this.showOrgs) {
           url.searchParams.set('organization_id', this.selectedOrg.slug);
@@ -390,6 +414,14 @@ function labsContextSelector() {
         }
         if (this.selectedOpp && this.showOpps) {
           url.searchParams.set('opportunity_id', this.selectedOpp.id);
+        }
+
+        // Add cache tolerance if specified (valid range 0-100)
+        if (this.cacheTolerance !== '' && this.cacheTolerance !== null) {
+          const tolerance = parseFloat(this.cacheTolerance);
+          if (!isNaN(tolerance) && tolerance >= 0 && tolerance <= 100) {
+            url.searchParams.set('cache_tolerance_pct', tolerance);
+          }
         }
 
         const newUrl = url.toString();

@@ -6,6 +6,7 @@ Uses the standard pipeline approach with AnalysisPipelineSSEMixin.
 """
 
 import logging
+import time
 from collections.abc import Generator
 from datetime import date, timedelta
 
@@ -302,6 +303,11 @@ class MBWGPSDataView(LoginRequiredMixin, View):
 
     def get(self, request):
         """Return GPS analysis data for a specific FLW."""
+        # Check OAuth token for API requests
+        labs_oauth = request.session.get("labs_oauth", {})
+        if not labs_oauth.get("access_token"):
+            return JsonResponse({"error": "Session expired. Please refresh the page to re-authenticate."}, status=401)
+
         labs_context = getattr(request, "labs_context", {})
         opportunity_id = labs_context.get("opportunity_id")
 
@@ -315,10 +321,14 @@ class MBWGPSDataView(LoginRequiredMixin, View):
         include_visits = request.GET.get("include_visits") == "1"
         username_filter = request.GET.get("username")
 
+        logger.info(f"[MBW GPS API] Request: username={username_filter}, include_visits={include_visits}")
+
         try:
             # Use pipeline to get cached data
+            t0 = time.time()
             pipeline = AnalysisPipeline(request)
             result = pipeline.stream_analysis_ignore_events(MBW_GPS_PIPELINE_CONFIG, opportunity_id)
+            logger.info(f"[MBW GPS API] Pipeline fetch took {time.time() - t0:.2f}s, got {len(result.rows)} rows")
 
             # Convert to visit dicts
             visits_for_analysis = []
@@ -327,6 +337,11 @@ class MBWGPSDataView(LoginRequiredMixin, View):
                 if username_filter and row.username != username_filter:
                     continue
 
+                # Build GPS location string from VisitRow's lat/lon (consistent with stream view)
+                gps_location = None
+                if row.latitude is not None and row.longitude is not None:
+                    gps_location = f"{row.latitude} {row.longitude}"
+
                 visits_for_analysis.append(
                     {
                         "id": row.id,
@@ -334,29 +349,38 @@ class MBWGPSDataView(LoginRequiredMixin, View):
                         "visit_date": row.visit_date.isoformat() if row.visit_date else None,
                         "entity_name": row.entity_name,
                         "computed": row.computed,
-                        "metadata": {"location": row.computed.get("gps_location")},
+                        "metadata": {"location": gps_location},
                     }
                 )
 
+            logger.info(f"[MBW GPS API] Built {len(visits_for_analysis)} visits for analysis")
+
             # Get FLW names
+            t1 = time.time()
             try:
                 flw_names = get_flw_names_for_opportunity(request)
             except Exception:
                 flw_names = {}
+            logger.info(f"[MBW GPS API] FLW names took {time.time() - t1:.2f}s")
 
             # Run GPS analysis on all visits (to calculate case distances using full history)
+            t2 = time.time()
             gps_result = analyze_gps_metrics(visits_for_analysis, flw_names)
+            logger.info(f"[MBW GPS API] GPS analysis took {time.time() - t2:.2f}s")
 
             # Filter by date - keep pre-calculated case distances
             filtered_visits = filter_visits_by_date(gps_result.visits, start_date, end_date)
 
             # Build summaries from filtered visits
+            t3 = time.time()
             gps_result = build_result_from_analyzed_visits(filtered_visits, flw_names)
+            logger.info(f"[MBW GPS API] Build result took {time.time() - t3:.2f}s")
 
             response_data = serialize_result(gps_result, include_visits=include_visits)
             response_data["success"] = True
             response_data["opportunity_id"] = opportunity_id
 
+            logger.info(f"[MBW GPS API] Total request time: {time.time() - t0:.2f}s")
             return JsonResponse(response_data)
 
         except ValueError as e:
@@ -377,6 +401,11 @@ class MBWGPSVisitDetailView(LoginRequiredMixin, View):
 
     def get(self, request, username: str):
         """Return visits for a specific FLW."""
+        # Check OAuth token for API requests
+        labs_oauth = request.session.get("labs_oauth", {})
+        if not labs_oauth.get("access_token"):
+            return JsonResponse({"error": "Session expired. Please refresh the page to re-authenticate."}, status=401)
+
         labs_context = getattr(request, "labs_context", {})
         opportunity_id = labs_context.get("opportunity_id")
 
@@ -399,6 +428,11 @@ class MBWGPSVisitDetailView(LoginRequiredMixin, View):
                 if row.username != username:
                     continue
 
+                # Build GPS location string from VisitRow's lat/lon (consistent with stream view)
+                gps_location = None
+                if row.latitude is not None and row.longitude is not None:
+                    gps_location = f"{row.latitude} {row.longitude}"
+
                 visits_for_analysis.append(
                     {
                         "id": row.id,
@@ -406,7 +440,7 @@ class MBWGPSVisitDetailView(LoginRequiredMixin, View):
                         "visit_date": row.visit_date.isoformat() if row.visit_date else None,
                         "entity_name": row.entity_name,
                         "computed": row.computed,
-                        "metadata": {"location": row.computed.get("gps_location")},
+                        "metadata": {"location": gps_location},
                     }
                 )
 

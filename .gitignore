@@ -340,6 +340,9 @@ commcare_connect/labs/admin_boundaries/examples/
 # MBW custom analysis example files (visit JSON samples)
 commcare_connect/custom_analysis/mbw/examples/
 
+# RUTF custom analysis example files (visit JSON samples)
+commcare_connect/custom_analysis/rutf/examples/
+
 # Elastic Beanstalk Files
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
