@@ -43,6 +43,7 @@ class TestGetObjectForApiVersion:
             ("2.0", lambda obj: str(obj.example_id)),
             ("1.0", lambda obj: str(obj.example_id)),
             ("1.0", lambda obj: str(obj.pk)),
+            ("27.0", lambda obj: str(obj.example_id)),
         ],
     )
     def test_get_object_for_api_version(self, api_version, lookup_value):

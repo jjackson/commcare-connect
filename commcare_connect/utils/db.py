@@ -41,18 +41,18 @@ def get_object_for_api_version(request, queryset, pk, int_field, uuid_field):
     V2 uses the UUID model field exclusively, while V1 supports both int IDs and UUIDs.
     Fetch object from queryset using appropriate field based on request API version.
     """
-    if request.version == "2.0":
-        try:
-            return get_object_or_404(queryset, **{uuid_field: pk})
-        except ValidationError:
-            raise Http404("Invalid UUID format.")
-    else:
+    if request.version == "1.0":
         return get_object_by_uuid_or_int(
             queryset,
             lookup_value=pk,
             int_field=int_field,
             uuid_field=uuid_field,
         )
+    else:
+        try:
+            return get_object_or_404(queryset, **{uuid_field: pk})
+        except ValidationError:
+            raise Http404("Invalid UUID format.")
 
 
 def get_object_by_uuid_or_int(queryset: QuerySet, lookup_value: str, uuid_field: str, int_field: str = "pk"):
