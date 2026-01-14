@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0096_paymentinvoice_archived_date_and_more"),
+        ("opportunity", "0095_paymentinvoice_archived_date_and_more"),
     ]
 
     operations = [
