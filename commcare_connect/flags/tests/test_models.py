@@ -1,9 +1,11 @@
 import pytest
 from django.core.cache import cache
 
+from commcare_connect.flags.models import Flag
 from commcare_connect.flags.tests.factories import FlagFactory
 from commcare_connect.opportunity.tests.factories import OpportunityFactory
 from commcare_connect.program.tests.factories import ProgramFactory
+from commcare_connect.users.tests.factories import UserFactory
 
 
 @pytest.fixture
@@ -39,3 +41,24 @@ class TestFlagModel:
     def test_invalid_object(self, flag):
         invalid_obj = {"name": "test"}
         assert flag.is_active_for(invalid_obj) is False
+
+    def test_active_flags_for_user(self):
+        user = UserFactory()
+        user_flag = FlagFactory()
+        FlagFactory()
+
+        user_flag.users.add(user)
+        active_flags = Flag.active_flags_for_user(user)
+        assert active_flags.count() == 1
+        assert active_flags[0] == user_flag
+
+    def test_active_flags_for_user_role_flags(self):
+        user = UserFactory(is_staff=True)
+        staff_flag = FlagFactory(staff=True)
+        everyone_flag = FlagFactory(everyone=True)
+        FlagFactory(superusers=True)
+        FlagFactory()
+
+        active_flags = Flag.active_flags_for_user(user, include_role_flags=True)
+        assert active_flags.count() == 2
+        assert set(active_flags) == {staff_flag, everyone_flag}

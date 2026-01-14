@@ -40,6 +40,19 @@ class Flag(AbstractUserFlag):
 
         return flush_keys
 
+    @classmethod
+    def active_flags_for_user(cls, user, include_role_flags=False):
+        if not include_role_flags:
+            return cls.objects.filter(users__in=[user])
+
+        conditions = models.Q(users__in=[user]) | models.Q(everyone=True)
+        if user.is_staff:
+            conditions |= models.Q(staff=True)
+        if user.is_superuser:
+            conditions |= models.Q(superusers=True)
+
+        return cls.objects.filter(conditions)
+
     def is_active_for(self, obj: Organization | Opportunity | Program):
         if isinstance(obj, Organization):
             organization_ids = self._get_ids_for_relation("organizations")
