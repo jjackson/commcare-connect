@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("program", "0007_set_uuid_unique"),
+        ("program", "0006_backfill_uuid_fields"),
     ]
 
     operations = [
