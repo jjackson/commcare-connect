@@ -49,7 +49,7 @@ class UserLearnProgressView(RetrieveAPIView):
             queryset=OpportunityAccess.objects.filter(user=self.request.user),
             pk=self.kwargs.get("pk"),
             uuid_field="opportunity__opportunity_id",
-            int_field="opportunity",
+            int_field="opportunity_id",
         )
         return dict(
             completed_modules=opportunity_access.unique_completed_modules,
@@ -78,7 +78,7 @@ class DeliveryProgressView(RetrieveAPIView):
             queryset=OpportunityAccess.objects.filter(user=self.request.user),
             pk=self.kwargs.get("pk"),
             uuid_field="opportunity__opportunity_id",
-            int_field="opportunity",
+            int_field="opportunity_id",
         )
 
 
@@ -91,7 +91,7 @@ class ClaimOpportunityView(APIView):
             queryset=OpportunityAccess.objects.filter(user=self.request.user),
             pk=kwargs.get("pk"),
             uuid_field="opportunity__opportunity_id",
-            int_field="opportunity",
+            int_field="opportunity_id",
         )
         opportunity = opportunity_access.opportunity
 
