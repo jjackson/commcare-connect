@@ -319,7 +319,7 @@ def test_opportunity_delivery_stats(opportunity):
         review_created_on=now(),
     )
 
-    # case nm rapproved first but rejected later so review_created_on will not be false in this case.
+    # case nm rapproved first but rejected later so review_created_on will not be null in this case.
     cw = CompletedWorkFactory(opportunity_access=oa2, status_modified_date=now(), status=CompletedWorkStatus.pending)
     UserVisitFactory.create(
         opportunity=opportunity,
