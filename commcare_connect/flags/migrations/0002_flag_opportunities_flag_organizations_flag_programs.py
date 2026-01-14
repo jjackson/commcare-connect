@@ -5,9 +5,9 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0096_paymentinvoice_archived_date_and_more"),
+        ("opportunity", "0095_paymentinvoice_archived_date_and_more"),
         ("organization", "0007_remove_userorganizationmembership_accepted"),
-        ("program", "0007_set_uuid_unique"),
+        ("program", "0006_backfill_uuid_fields"),
         ("flags", "0001_initial"),
     ]
 
