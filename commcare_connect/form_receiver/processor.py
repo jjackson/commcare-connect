@@ -262,7 +262,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     try:
         access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
     except OpportunityAccess.DoesNotExist:
-        raise ProcessingError(f"User {user.username} does not have access to opportunity {opportunity.name}")
+        raise ProcessingError(f"User does not have access to opportunity {opportunity.name}")
     payment_unit = deliver_unit.payment_unit
     if not payment_unit:
         raise ProcessingError(
