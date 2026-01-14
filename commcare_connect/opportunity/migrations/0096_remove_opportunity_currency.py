@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0095_set_uuid_unique"),
+        ("opportunity", "0095_paymentinvoice_archived_date_and_more"),
     ]
 
     operations = [
