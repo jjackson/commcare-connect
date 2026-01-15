@@ -604,4 +604,55 @@ def _bulk_create_and_link_invoices(invoices_chunk):
 
 
 def _send_auto_invoice_created_notification(invoice_ids):
-    pass
+    invoices = PaymentInvoice.objects.filter(id__in=invoice_ids).select_related("opportunity__organization")
+    org_invoices_map = {}
+    for invoice in invoices:
+        org = invoice.opportunity.organization
+        if org.id not in org_invoices_map:
+            org_invoices_map[org.id] = {"organization": org, "invoices": []}
+
+        org_invoices_map[org.id]["invoices"].append(
+            {
+                "opportunity": invoice.opportunity,
+                "invoice": invoice,
+                "invoice_url": build_absolute_uri(
+                    None,
+                    reverse(
+                        "opportunity:invoice_review",
+                        kwargs={
+                            "org_slug": org.slug,
+                            "opp_id": invoice.opportunity.id,
+                            "pk": invoice.pk,
+                        },
+                    ),
+                ),
+            }
+        )
+
+    for org_item in org_invoices_map.values():
+        organization = org_item["organization"]
+        recipient_emails = organization.get_member_emails()
+        if not recipient_emails:
+            continue
+
+        subject = f"[{organization.name}] Automated Service Delivery Invoices Created"
+        context = {
+            "organization": organization,
+            "invoices_items": org_item["invoices"],
+        }
+
+        text_body = render_to_string(
+            "opportunity/email/automated_invoice_created.txt",
+            context,
+        )
+        html_body = render_to_string(
+            "opportunity/email/automated_invoice_created.html",
+            context,
+        )
+        send_mail(
+            subject=subject,
+            message=text_body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=recipient_emails,
+            html_message=html_body,
+        )
