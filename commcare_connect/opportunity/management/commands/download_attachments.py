@@ -108,52 +108,41 @@ class Command(BaseCommand):
     def _download_missing_visits(self, visit_ids: list[int], chunk_size: int, max_retries: int, delay: float):
         total = len(visit_ids)
         failures = []
-        select_related_fields = [
-            "opportunity__api_key__user",
-            "opportunity__api_key__hq_server",
-            "opportunity__deliver_app",
-        ]
         processed = 0
 
         for start in range(0, total, chunk_size):
             batch_ids = visit_ids[start : start + chunk_size]  # noqa: E203
-            visits = (
-                UserVisit.objects.filter(id__in=batch_ids)
-                .select_related(*select_related_fields)
-                .order_by("id")
-                .iterator(chunk_size=chunk_size)
-            )
-            for visit in visits:
+            for visit_id in batch_ids:
                 processed += 1
-                error = self._download_visit_with_retries(visit, processed, total, max_retries, delay)
+                error = self._download_visit_with_retries(visit_id, processed, total, max_retries, delay)
                 if error:
-                    failures.append((visit.id, error))
+                    failures.append((visit_id, error))
 
         if failures:
             self.stderr.write(self.style.ERROR(f"{len(failures)} visits failed. Review and rerun as needed."))
         else:
             self.stdout.write(self.style.SUCCESS("All missing attachments downloaded successfully."))
 
-    def _download_visit_with_retries(self, visit: UserVisit, index: int, total: int, max_retries: int, delay: float):
+    def _download_visit_with_retries(self, visit_id: int, index: int, total: int, max_retries: int, delay: float):
         for attempt in range(1, max_retries + 1):
             try:
-                download_user_visit_attachments(visit.id)
+                download_user_visit_attachments(visit_id)
             except Exception as exc:  # noqa: BLE001
                 if attempt >= max_retries:
                     self.stderr.write(
                         self.style.ERROR(
-                            f"[{index}/{total}] Failed to download attachments for visit {visit.id}: {exc}"
+                            f"[{index}/{total}] Failed to download attachments for visit {visit_id}: {exc}"
                         )
                     )
                     time.sleep(delay)
                     return str(exc)
                 self.stderr.write(
-                    f"[{index}/{total}] Error downloading visit {visit.id} "
+                    f"[{index}/{total}] Error downloading visit {visit_id} "
                     f"(attempt {attempt}/{max_retries}). Retrying..."
                 )
                 time.sleep(delay)
             else:
-                self.stdout.write(f"[{index}/{total}] Downloaded attachments for visit {visit.id}.")
+                self.stdout.write(f"[{index}/{total}] Downloaded attachments for visit {visit_id}.")
                 time.sleep(delay)
                 return None
 
