@@ -548,6 +548,8 @@ def generate_automated_service_delivery_invoice():
     end_date_prev_month = get_end_date_previous_month()
 
     opp_start_date = datetime.date(2026, 1, 1)
+    created_invoices_ids = []
+
     for opportunity in Opportunity.objects.filter(active=True, managed=True, start_date__gte=opp_start_date).iterator(
         chunk_size=CHUNK_SIZE
     ):
@@ -580,15 +582,26 @@ def generate_automated_service_delivery_invoice():
         invoices_chunk.append(payment_invoice)
 
         if len(invoices_chunk) == CHUNK_SIZE:
-            _bulk_create_and_link_invoices(invoices_chunk)
+            created_ids = _bulk_create_and_link_invoices(invoices_chunk)
+            created_invoices_ids.extend(created_ids)
             invoices_chunk = []
 
     if invoices_chunk:
-        _bulk_create_and_link_invoices(invoices_chunk)
+        created_ids = _bulk_create_and_link_invoices(invoices_chunk)
+        created_invoices_ids.extend(created_ids)
+
+    _send_auto_invoice_created_notification(created_invoices_ids)
 
 
 def _bulk_create_and_link_invoices(invoices_chunk):
+    invoice_ids = []
     with transaction.atomic():
-        PaymentInvoice.objects.bulk_create(invoices_chunk)
-        for invoice in invoices_chunk:
+        invoice_objs = PaymentInvoice.objects.bulk_create(invoices_chunk)
+        for invoice in invoice_objs:
             link_invoice_to_completed_works(invoice, start_date=invoice.start_date, end_date=invoice.end_date)
+            invoice_ids.append(invoice.id)
+    return invoice_ids
+
+
+def _send_auto_invoice_created_notification(invoice_ids):
+    pass
