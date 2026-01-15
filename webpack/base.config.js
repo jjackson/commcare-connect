@@ -26,6 +26,10 @@ module.exports = {
       __dirname,
       '../commcare_connect/static/js/code-editor.tsx',
     ),
+    'workflow-runner': path.resolve(
+      __dirname,
+      '../commcare_connect/static/js/workflow-runner.tsx',
+    ),
   },
   output: {
     path: path.resolve(__dirname, '../commcare_connect/static/bundles/'),

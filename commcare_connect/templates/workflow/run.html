@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% load static i18n %}
+
+{% block title %}{{ definition.name|default:"Workflow" }}{% endblock %}
+
+{% block javascript %}
+{{ block.super }}
+{% if has_context and render_code and not error %}
+<script src="{% static 'bundles/js/workflow-runner-bundle.js' %}" defer></script>
+{% endif %}
+{% endblock javascript %}
+
+{% block content %}
+<div class="max-w-full mx-auto px-4 py-6">
+    <!-- Breadcrumb -->
+    <nav class="mb-4">
+        <ol class="flex items-center space-x-2 text-sm text-gray-500">
+            <li><a href="{% url 'labs:workflow:list' %}" class="hover:text-gray-700">Workflows</a></li>
+            <li><i class="fa-solid fa-chevron-right text-xs"></i></li>
+            <li class="text-gray-900">{{ definition.name|default:"Run" }}</li>
+        </ol>
+    </nav>
+
+    {% if not has_context %}
+    <!-- No Context Warning -->
+    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-exclamation-triangle text-yellow-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-yellow-700">
+                    Please select an opportunity from the labs context to run this workflow.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% elif error %}
+    <!-- Error Display -->
+    <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-circle-exclamation text-red-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-red-700">{{ error }}</p>
+            </div>
+        </div>
+    </div>
+    {% elif not render_code %}
+    <!-- No Render Code Warning -->
+    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-code text-yellow-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-yellow-700">
+                    No render code found for this workflow. The workflow definition exists but needs a React component to render it.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Workflow data passed via script tag for safe JSON handling -->
+    {{ workflow_data|json_script:"workflow-data" }}
+
+    <!-- Workflow UI Container -->
+    <div id="workflow-root" data-csrf-token="{{ csrf_token }}">
+        <!-- React component will mount here -->
+        <div class="flex items-center justify-center py-12">
+            <div class="text-center">
+                <i class="fa-solid fa-spinner fa-spin text-3xl text-blue-600 mb-4"></i>
+                <p class="text-gray-600">Loading workflow...</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock content %}
