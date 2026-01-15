@@ -7,6 +7,7 @@ from commcare_connect.opportunity.models import CompletedWorkStatus
 from commcare_connect.organization.models import Organization, UserOrganizationMembership
 from commcare_connect.program.models import ManagedOpportunity, ProgramApplication
 from commcare_connect.utils.tasks import send_mail_async
+from config import celery_app
 
 
 def send_program_invite_applied_email(application_id):
@@ -96,6 +97,7 @@ def _get_program_home_url(org_slug):
     return build_absolute_uri(None, reverse("program:home", kwargs={"org_slug": org_slug}))
 
 
+@celery_app.task()
 def send_monthly_delivery_reminder_email():
     organizations_with_pending_deliveries = Organization.objects.filter(
         opportunity__opportunityaccess__completedwork__status=CompletedWorkStatus.pending
