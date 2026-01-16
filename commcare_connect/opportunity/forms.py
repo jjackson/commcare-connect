@@ -915,6 +915,10 @@ class OpportunityAccessCreationForm(forms.ModelForm):
 
 
 class AddBudgetExistingUsersForm(forms.Form):
+    class AdjustmentType(TextChoices):
+        INCREASE = "increase_visits", _("Increase Visits")
+        DECREASE = "decrease_visits", _("Decrease Visits")
+
     additional_visits = forms.IntegerField(
         widget=forms.NumberInput(attrs={"x-model": "additionalVisits", "min": 1}),
         required=False,
@@ -931,6 +935,12 @@ class AddBudgetExistingUsersForm(forms.Form):
         ),
         label="Extended Opportunity End date",
         required=False,
+    )
+    adjustment_type = forms.ChoiceField(
+        choices=AdjustmentType.choices,
+        widget=forms.RadioSelect(),
+        required=False,
+        label="",
     )
 
     def __init__(self, *args, **kwargs):
