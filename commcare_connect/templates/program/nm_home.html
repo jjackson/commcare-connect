@@ -67,12 +67,12 @@
         </div>
 
         {% if program.status == 'invited' %}
-          <button {% if request.org_membership.is_viewer %}
-                  disabled
-                  {% else %}
+          <button {% if request.org_membership.is_admin %}
                   hx-post="{% url "program:apply_or_decline_application" request.org.slug program.id program.application_id "apply" %}"
                   hx-swap="outerHTML"
                   hx-target="body"
+                  {% else %}
+                  disabled
                   {% endif %}
                 class="button button-sm primary-dark">
             Apply
