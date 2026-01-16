@@ -156,6 +156,13 @@
                       {{ radio }}
                     {% endfor %}
                   </div>
+                  {% if form.adjustment_type.errors %}
+                    <div class="text-sm text-red-600 mt-1">
+                      {% for error in form.adjustment_type.errors %}
+                        {{ error }}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
                 </div>
                 <div class="flex-1">{{ form.end_date|as_crispy_field }}</div>
               </div>
