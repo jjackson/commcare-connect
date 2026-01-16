@@ -3,7 +3,7 @@ Data Access Layer for Workflows.
 
 This layer uses LabsRecordAPIClient to interact with production LabsRecord API.
 It handles:
-1. Managing workflow definitions, render code, and instances via production API
+1. Managing workflow definitions, render code, and runs via production API
 2. Fetching worker data dynamically from Connect OAuth APIs
 
 This is a pure API client with no local database storage.
@@ -61,8 +61,8 @@ class WorkflowRenderCodeRecord(LocalLabsRecord):
         return self.data.get("version", 1)
 
 
-class WorkflowInstanceRecord(LocalLabsRecord):
-    """Proxy model for workflow instance LabsRecords."""
+class WorkflowRunRecord(LocalLabsRecord):
+    """Proxy model for workflow run LabsRecords."""
 
     @property
     def definition_id(self):
@@ -83,6 +83,26 @@ class WorkflowInstanceRecord(LocalLabsRecord):
     @property
     def state(self):
         return self.data.get("state", {})
+
+
+class WorkflowChatHistoryRecord(LocalLabsRecord):
+    """Proxy model for workflow chat history LabsRecords."""
+
+    @property
+    def definition_id(self):
+        return self.data.get("definition_id")
+
+    @property
+    def messages(self):
+        return self.data.get("messages", [])
+
+    @property
+    def created_at(self):
+        return self.data.get("created_at")
+
+    @property
+    def updated_at(self):
+        return self.data.get("updated_at")
 
 
 class WorkflowDataAccess:
@@ -249,7 +269,12 @@ class WorkflowDataAccess:
         Returns:
             Updated WorkflowDefinitionRecord or None
         """
-        result = self.labs_api.update_record(definition_id, data)
+        result = self.labs_api.update_record(
+            record_id=definition_id,
+            experiment=self.EXPERIMENT,
+            type="workflow_definition",
+            data=data,
+        )
         if result:
             return WorkflowDefinitionRecord(
                 {
@@ -312,7 +337,12 @@ class WorkflowDataAccess:
 
         if existing:
             # Update existing
-            result = self.labs_api.update_record(existing.id, data)
+            result = self.labs_api.update_record(
+                record_id=existing.id,
+                experiment=self.EXPERIMENT,
+                type="workflow_render_code",
+                data=data,
+            )
         else:
             # Create new
             result = self.labs_api.create_record(
@@ -332,23 +362,23 @@ class WorkflowDataAccess:
         )
 
     # -------------------------------------------------------------------------
-    # Workflow Instance Methods
+    # Workflow Run Methods
     # -------------------------------------------------------------------------
 
-    def list_instances(self, definition_id: int | None = None) -> list[WorkflowInstanceRecord]:
+    def list_runs(self, definition_id: int | None = None) -> list[WorkflowRunRecord]:
         """
-        List workflow instances.
+        List workflow runs.
 
         Args:
             definition_id: Optional filter by definition ID
 
         Returns:
-            List of WorkflowInstanceRecord instances
+            List of WorkflowRunRecord instances
         """
         records = self.labs_api.get_records(
             experiment=self.EXPERIMENT,
-            type="workflow_instance",
-            model_class=WorkflowInstanceRecord,
+            type="workflow_run",
+            model_class=WorkflowRunRecord,
         )
 
         if definition_id:
@@ -356,49 +386,46 @@ class WorkflowDataAccess:
 
         return records
 
-    def get_instance(self, instance_id: int) -> WorkflowInstanceRecord | None:
+    def get_run(self, run_id: int) -> WorkflowRunRecord | None:
         """
-        Get a workflow instance by ID.
+        Get a workflow run by ID.
 
         Args:
-            instance_id: Instance ID
+            run_id: Run ID
 
         Returns:
-            WorkflowInstanceRecord or None if not found
+            WorkflowRunRecord or None if not found
         """
         return self.labs_api.get_record_by_id(
-            record_id=instance_id,
+            record_id=run_id,
             experiment=self.EXPERIMENT,
-            type="workflow_instance",
-            model_class=WorkflowInstanceRecord,
+            type="workflow_run",
+            model_class=WorkflowRunRecord,
         )
 
-    def get_or_create_instance(self, definition_id: int, opportunity_id: int) -> WorkflowInstanceRecord:
+    def get_or_create_run(self, definition_id: int, opportunity_id: int) -> WorkflowRunRecord:
         """
-        Get or create a workflow instance for the current week.
+        Get or create a workflow run for the current week.
 
         Args:
             definition_id: Definition ID
             opportunity_id: Opportunity ID
 
         Returns:
-            WorkflowInstanceRecord (existing or newly created)
+            WorkflowRunRecord (existing or newly created)
         """
         # Calculate current week boundaries
         today = datetime.now().date()
         week_start = today - timedelta(days=today.weekday())  # Monday
         week_end = week_start + timedelta(days=6)  # Sunday
 
-        # Look for existing instance for this week
-        instances = self.list_instances(definition_id)
-        for instance in instances:
-            if (
-                instance.opportunity_id == opportunity_id
-                and instance.data.get("period_start") == week_start.isoformat()
-            ):
-                return instance
+        # Look for existing run for this week
+        runs = self.list_runs(definition_id)
+        for run in runs:
+            if run.opportunity_id == opportunity_id and run.data.get("period_start") == week_start.isoformat():
+                return run
 
-        # Create new instance
+        # Create new run
         data = {
             "definition_id": definition_id,
             "period_start": week_start.isoformat(),
@@ -409,11 +436,11 @@ class WorkflowDataAccess:
 
         record = self.labs_api.create_record(
             experiment=self.EXPERIMENT,
-            type="workflow_instance",
+            type="workflow_run",
             data=data,
         )
 
-        return WorkflowInstanceRecord(
+        return WorkflowRunRecord(
             {
                 "id": record.id,
                 "experiment": record.experiment,
@@ -423,11 +450,11 @@ class WorkflowDataAccess:
             }
         )
 
-    def create_instance(
+    def create_run(
         self, definition_id: int, opportunity_id: int, period_start: str, period_end: str, initial_state: dict = None
-    ) -> WorkflowInstanceRecord:
+    ) -> WorkflowRunRecord:
         """
-        Create a new workflow instance.
+        Create a new workflow run.
 
         Args:
             definition_id: Definition ID
@@ -437,7 +464,7 @@ class WorkflowDataAccess:
             initial_state: Initial state data
 
         Returns:
-            Created WorkflowInstanceRecord
+            Created WorkflowRunRecord
         """
         data = {
             "definition_id": definition_id,
@@ -449,11 +476,11 @@ class WorkflowDataAccess:
 
         record = self.labs_api.create_record(
             experiment=self.EXPERIMENT,
-            type="workflow_instance",
+            type="workflow_run",
             data=data,
         )
 
-        return WorkflowInstanceRecord(
+        return WorkflowRunRecord(
             {
                 "id": record.id,
                 "experiment": record.experiment,
@@ -463,31 +490,36 @@ class WorkflowDataAccess:
             }
         )
 
-    def update_instance_state(self, instance_id: int, new_state: dict) -> WorkflowInstanceRecord | None:
+    def update_run_state(self, run_id: int, new_state: dict) -> WorkflowRunRecord | None:
         """
-        Update workflow instance state.
+        Update workflow run state.
 
         Args:
-            instance_id: Instance ID
+            run_id: Run ID
             new_state: New state data (merged with existing)
 
         Returns:
-            Updated WorkflowInstanceRecord or None
+            Updated WorkflowRunRecord or None
         """
-        instance = self.get_instance(instance_id)
-        if not instance:
+        run = self.get_run(run_id)
+        if not run:
             return None
 
         # Merge state
-        current_state = instance.data.get("state", {})
+        current_state = run.data.get("state", {})
         merged_state = {**current_state, **new_state}
 
         # Update data
-        updated_data = {**instance.data, "state": merged_state}
+        updated_data = {**run.data, "state": merged_state}
 
-        result = self.labs_api.update_record(instance_id, updated_data)
+        result = self.labs_api.update_record(
+            record_id=run_id,
+            experiment=self.EXPERIMENT,
+            type="workflow_run",
+            data=updated_data,
+        )
         if result:
-            return WorkflowInstanceRecord(
+            return WorkflowRunRecord(
                 {
                     "id": result.id,
                     "experiment": result.experiment,
@@ -498,25 +530,30 @@ class WorkflowDataAccess:
             )
         return None
 
-    def complete_instance(self, instance_id: int) -> WorkflowInstanceRecord | None:
+    def complete_run(self, run_id: int) -> WorkflowRunRecord | None:
         """
-        Mark a workflow instance as completed.
+        Mark a workflow run as completed.
 
         Args:
-            instance_id: Instance ID
+            run_id: Run ID
 
         Returns:
-            Updated WorkflowInstanceRecord or None
+            Updated WorkflowRunRecord or None
         """
-        instance = self.get_instance(instance_id)
-        if not instance:
+        run = self.get_run(run_id)
+        if not run:
             return None
 
-        updated_data = {**instance.data, "status": "completed", "completed_at": datetime.now().isoformat()}
+        updated_data = {**run.data, "status": "completed", "completed_at": datetime.now().isoformat()}
 
-        result = self.labs_api.update_record(instance_id, updated_data)
+        result = self.labs_api.update_record(
+            record_id=run_id,
+            experiment=self.EXPERIMENT,
+            type="workflow_run",
+            data=updated_data,
+        )
         if result:
-            return WorkflowInstanceRecord(
+            return WorkflowRunRecord(
                 {
                     "id": result.id,
                     "experiment": result.experiment,
@@ -526,6 +563,143 @@ class WorkflowDataAccess:
                 }
             )
         return None
+
+    # -------------------------------------------------------------------------
+    # Chat History Methods
+    # -------------------------------------------------------------------------
+
+    def get_chat_history(self, definition_id: int) -> WorkflowChatHistoryRecord | None:
+        """
+        Get chat history for a workflow definition.
+
+        Args:
+            definition_id: Definition ID
+
+        Returns:
+            WorkflowChatHistoryRecord or None if not found
+        """
+        records = self.labs_api.get_records(
+            experiment=self.EXPERIMENT,
+            type="workflow_chat_history",
+            model_class=WorkflowChatHistoryRecord,
+        )
+
+        logger.info(
+            f"Looking for chat history for definition {definition_id}, found {len(records)} chat history records"
+        )
+
+        # Find the one matching this definition (compare as int to handle type differences)
+        definition_id_int = int(definition_id)
+        for record in records:
+            record_def_id = record.data.get("definition_id")
+            logger.debug(
+                f"Checking record {record.id}: definition_id={record_def_id} (type={type(record_def_id).__name__})"
+            )
+            if record_def_id is not None and int(record_def_id) == definition_id_int:
+                logger.info(f"Found chat history record {record.id} with {len(record.messages)} messages")
+                return record
+
+        logger.info(f"No chat history found for definition {definition_id}")
+        return None
+
+    def get_chat_messages(self, definition_id: int) -> list[dict]:
+        """
+        Get chat messages for a workflow definition.
+
+        Args:
+            definition_id: Definition ID
+
+        Returns:
+            List of message dicts with 'role' and 'content' keys
+        """
+        record = self.get_chat_history(definition_id)
+        if record:
+            return record.messages
+        return []
+
+    def save_chat_history(self, definition_id: int, messages: list[dict]) -> WorkflowChatHistoryRecord:
+        """
+        Save chat history for a workflow definition.
+
+        Args:
+            definition_id: Definition ID
+            messages: List of message dicts
+
+        Returns:
+            Created or updated WorkflowChatHistoryRecord
+        """
+        now = datetime.now().isoformat()
+        definition_id_int = int(definition_id)  # Ensure it's stored as int
+        existing = self.get_chat_history(definition_id_int)
+
+        data = {
+            "definition_id": definition_id_int,
+            "messages": messages,
+            "updated_at": now,
+        }
+
+        if existing:
+            # Update existing - preserve created_at
+            data["created_at"] = existing.data.get("created_at", now)
+            result = self.labs_api.update_record(
+                record_id=existing.id,
+                experiment=self.EXPERIMENT,
+                type="workflow_chat_history",
+                data=data,
+            )
+        else:
+            # Create new
+            data["created_at"] = now
+            result = self.labs_api.create_record(
+                experiment=self.EXPERIMENT,
+                type="workflow_chat_history",
+                data=data,
+            )
+
+        return WorkflowChatHistoryRecord(
+            {
+                "id": result.id,
+                "experiment": result.experiment,
+                "type": result.type,
+                "data": result.data,
+                "opportunity_id": result.opportunity_id,
+            }
+        )
+
+    def add_chat_message(self, definition_id: int, role: str, content: str) -> bool:
+        """
+        Add a single message to the chat history.
+
+        Args:
+            definition_id: Definition ID
+            role: Message role ('user' or 'assistant')
+            content: Message content
+
+        Returns:
+            True if successful
+        """
+        messages = self.get_chat_messages(definition_id)
+        messages.append({"role": role, "content": content})
+        self.save_chat_history(definition_id, messages)
+        return True
+
+    def clear_chat_history(self, definition_id: int) -> bool:
+        """
+        Clear chat history for a workflow definition.
+
+        Args:
+            definition_id: Definition ID
+
+        Returns:
+            True if cleared, False if not found
+        """
+        existing = self.get_chat_history(definition_id)
+        if existing:
+            # Delete the record by setting messages to empty
+            # (or we could actually delete the record if the API supports it)
+            self.save_chat_history(definition_id, [])
+            return True
+        return False
 
     # -------------------------------------------------------------------------
     # Worker Data Methods

@@ -21,6 +21,23 @@
         </ol>
     </nav>
 
+    {% if is_edit_mode %}
+    <!-- Edit Mode Banner -->
+    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-pen-to-square text-blue-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-blue-700">
+                    <span class="font-medium">Edit Mode:</span>
+                    Worker status changes are temporary. Use the AI chat or code editor to modify the workflow, then click Save.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {% if not has_context %}
     <!-- No Context Warning -->
     <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">

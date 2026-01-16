@@ -2,11 +2,18 @@
 Celery tasks for Pydantic AI demo.
 """
 import asyncio
+import json
 import logging
 
 from django.contrib.auth import get_user_model
 
 from commcare_connect.ai.agents.solicitation_agent import get_solicitation_agent
+from commcare_connect.ai.agents.workflow_agent import (
+    WorkflowEditResponse,
+    build_workflow_prompt,
+    get_workflow_agent,
+    get_workflow_agent_openai,
+)
 
 # Coding agent is optional - only needed for "vibes" agent type
 try:
@@ -166,11 +173,38 @@ def run_agent(
     # program_id is optional for UserDependencies
     deps = UserDependencies(user=request_user, request=mock_request, program_id=program_id)
 
+    # Parse current_code as JSON for workflow agent (it contains workflow definition, render_code, and IDs)
+    current_definition = None
+    current_render_code = None
+    model_provider = None
+    definition_id = None
+    opportunity_id = None
+    if current_code:
+        try:
+            parsed = json.loads(current_code)
+            if isinstance(parsed, dict):
+                current_definition = parsed.get("definition")
+                current_render_code = parsed.get("render_code")
+                model_provider = parsed.get("model_provider", "anthropic")
+                definition_id = parsed.get("definition_id")
+                opportunity_id = parsed.get("opportunity_id")
+        except json.JSONDecodeError:
+            pass
+
     async def run_agent_task():
         # Get the agent instance based on agent parameter
         if agent == "solicitations":
             agent_instance = get_solicitation_agent()
             actual_prompt = prompt
+        elif agent == "workflow":
+            # Use the appropriate model based on user selection
+            if model_provider == "openai":
+                agent_instance = get_workflow_agent_openai()
+            else:
+                agent_instance = get_workflow_agent()
+
+            # Build prompt with current workflow context (definition and render code)
+            actual_prompt = build_workflow_prompt(prompt, current_definition, current_render_code)
         elif agent == "vibes":
             if not HAS_CODING_AGENT:
                 raise ValueError("Coding agent not available - module not installed")
@@ -230,21 +264,89 @@ Please generate React code to fulfill the user's request. The code should be com
                     "code": result.output.code,
                 }
 
+        # Handle structured output for workflow agent
+        if agent == "workflow" and isinstance(result.output, WorkflowEditResponse):
+            # Debug logging to understand what the AI returned
+            logger.warning(
+                f"[AI TASK] WorkflowEditResponse received: "
+                f"message_len={len(result.output.message)}, "
+                f"definition_changed={result.output.definition_changed}, "
+                f"render_code_changed={result.output.render_code_changed}, "
+                f"has_definition={result.output.definition is not None}, "
+                f"has_render_code={result.output.render_code is not None}, "
+                f"render_code_len={len(result.output.render_code) if result.output.render_code else 0}"
+            )
+
+            response_dict = {
+                "message": result.output.message,
+                "definition_changed": result.output.definition_changed,
+                "render_code_changed": result.output.render_code_changed,
+            }
+            if result.output.definition:
+                response_dict["definition"] = result.output.definition
+            if result.output.render_code:
+                response_dict["render_code"] = result.output.render_code
+
+            # Validate: if render_code_changed is True but render_code is missing, fix the flag
+            if result.output.render_code_changed and not result.output.render_code:
+                logger.warning(
+                    "[AI TASK] AI claimed render_code_changed=True but didn't provide render_code. "
+                    "This may be due to output token limits. Setting render_code_changed=False."
+                )
+                response_dict["render_code_changed"] = False
+                response_dict["message"] += (
+                    "\n\n(Note: I tried to update the UI code but the response was too long. "
+                    "Please try a simpler request or update the code manually.)"
+                )
+
+            # Same validation for definition
+            if result.output.definition_changed and not result.output.definition:
+                logger.warning("[AI TASK] AI claimed definition_changed=True but didn't provide definition.")
+                response_dict["definition_changed"] = False
+
+            return response_dict
+
         return result.output
 
     try:
         response = asyncio.run(run_agent_task())
 
-        # Save messages to history if session_id is provided
-        if session_id:
-            # Add user message
+        # Save messages to history
+        if agent == "workflow" and definition_id and access_token:
+            # For workflow agents, save to LabsRecord via WorkflowDataAccess
+            try:
+                from commcare_connect.workflow.data_access import WorkflowDataAccess
+
+                workflow_data_access = WorkflowDataAccess(
+                    access_token=access_token,
+                    program_id=program_id,
+                    opportunity_id=opportunity_id,
+                )
+                # Add user message
+                workflow_data_access.add_chat_message(definition_id, "user", prompt)
+                # Add assistant response
+                if isinstance(response, dict) and "message" in response:
+                    workflow_data_access.add_chat_message(definition_id, "assistant", response["message"])
+                else:
+                    workflow_data_access.add_chat_message(definition_id, "assistant", str(response))
+                workflow_data_access.close()
+                logger.warning(f"[AI TASK] Saved workflow chat to LabsRecord for definition {definition_id}")
+            except Exception as e:
+                logger.error(f"[AI TASK] Failed to save workflow chat to LabsRecord: {e}")
+                # Fall back to session store
+                if session_id:
+                    add_message_to_history(session_id, "user", prompt)
+                    if isinstance(response, dict) and "message" in response:
+                        add_message_to_history(session_id, "assistant", response["message"])
+                    else:
+                        add_message_to_history(session_id, "assistant", str(response))
+        elif session_id:
+            # For other agents, use session store
             add_message_to_history(session_id, "user", prompt)
-            # Add assistant response
-            # For structured output, save the message part
             if isinstance(response, dict) and "message" in response:
                 add_message_to_history(session_id, "assistant", response["message"])
             else:
-                add_message_to_history(session_id, "assistant", response)
+                add_message_to_history(session_id, "assistant", str(response))
             logger.warning(f"[AI TASK] Saved messages to history for session {session_id}")
 
         return response
