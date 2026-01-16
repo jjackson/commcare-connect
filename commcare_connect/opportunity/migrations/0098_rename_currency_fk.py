@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0096_remove_opportunity_currency"),
+        ("opportunity", "0097_remove_opportunity_currency"),
     ]
 
     operations = [
