@@ -25,7 +25,7 @@ from commcare_connect.reports.helpers import get_table_data_for_year_month
 from commcare_connect.reports.tables import AdminReportTable, InvoiceReportTable
 from commcare_connect.reports.tasks import export_invoice_report_task
 from commcare_connect.utils.celery import download_export_file, render_export_status
-from commcare_connect.utils.permission_const import INVOICE_REPORT_ACCESS
+from commcare_connect.utils.permission_const import ALL_ORG_ACCESS
 from commcare_connect.utils.tables import DEFAULT_PAGE_SIZE, get_validated_page_size
 
 COUNTRY_CURRENCY_CHOICES = [
@@ -222,7 +222,7 @@ class InvoiceReportView(
     model = PaymentInvoice
     table_class = InvoiceReportTable
     filterset_class = InvoiceReportFilter
-    permission_required = INVOICE_REPORT_ACCESS
+    permission_required = ALL_ORG_ACCESS
     paginate_by = DEFAULT_PAGE_SIZE
 
     def get_paginate_by(self, table):
@@ -266,7 +266,7 @@ class InvoiceReportView(
 
 @require_POST
 @login_required
-@permission_required(INVOICE_REPORT_ACCESS, raise_exception=True)
+@permission_required(ALL_ORG_ACCESS, raise_exception=True)
 def export_invoice_report(request):
     filterset = InvoiceReportFilter(request.POST, queryset=PaymentInvoice.objects.none())
     if not filterset.is_valid():
@@ -288,7 +288,7 @@ def export_invoice_report(request):
 
 @require_GET
 @login_required
-@permission_required(INVOICE_REPORT_ACCESS, raise_exception=True)
+@permission_required(ALL_ORG_ACCESS, raise_exception=True)
 def export_status(request, task_id):
     return render_export_status(
         request,
@@ -301,6 +301,6 @@ def export_status(request, task_id):
 
 @require_GET
 @login_required
-@permission_required(INVOICE_REPORT_ACCESS, raise_exception=True)
+@permission_required(ALL_ORG_ACCESS, raise_exception=True)
 def download_export(request, task_id):
     return download_export_file(task_id=task_id, filename_without_ext=f"invoice_export_{request.user.name}")
