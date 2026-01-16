@@ -1567,7 +1567,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
 
         if self.is_service_delivery:
             self.fields["amount"].label = _("Amount ({currency_code})").format(
-                currency_code=self.opportunity.currency or "Local Currency"
+                currency_code=self.opportunity.currency_code or "Local Currency"
             )
             self.fields["amount"].help_text = _("Local currency is determined by the opportunity.")
 
