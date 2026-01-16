@@ -26,6 +26,9 @@ export interface WorkflowProps {
   /** Helper functions for generating URLs to other Labs features */
   links: LinkHelpers;
 
+  /** Action handlers for programmatic operations (create tasks, OCS, etc.) */
+  actions: ActionHandlers;
+
   /** Callback to update workflow instance state */
   onUpdateState: (newState: Record<string, unknown>) => Promise<void>;
 }
@@ -287,6 +290,138 @@ export interface UpdateStateResponse {
 export interface GetWorkersResponse {
   workers: WorkerData[];
   error?: string;
+}
+
+// =============================================================================
+// Action Handlers - For programmatic operations
+// =============================================================================
+
+/**
+ * Action handlers available to workflow components.
+ * These allow workflows to create tasks, initiate OCS sessions, etc.
+ */
+export interface ActionHandlers {
+  /**
+   * Create a task for a worker.
+   */
+  createTask(params: CreateTaskParams): Promise<TaskResult>;
+
+  /**
+   * Check if OCS OAuth is configured and valid.
+   */
+  checkOCSStatus(): Promise<OCSStatusResult>;
+
+  /**
+   * List available OCS bots.
+   */
+  listOCSBots(): Promise<OCSBotsResult>;
+
+  /**
+   * Initiate an OCS session on an existing task.
+   */
+  initiateOCSSession(
+    taskId: number,
+    params: OCSSessionParams,
+  ): Promise<OCSInitiateResult>;
+
+  /**
+   * Create a task and optionally initiate an OCS session on it.
+   * This is a convenience method that combines createTask + initiateOCSSession.
+   */
+  createTaskWithOCS(
+    params: CreateTaskWithOCSParams,
+  ): Promise<TaskWithOCSResult>;
+}
+
+/**
+ * Parameters for creating a task.
+ */
+export interface CreateTaskParams {
+  /** FLW username */
+  username: string;
+  /** Task title */
+  title: string;
+  /** Task description */
+  description?: string;
+  /** Priority: low, medium, high */
+  priority?: 'low' | 'medium' | 'high';
+}
+
+/**
+ * Result from creating a task.
+ */
+export interface TaskResult {
+  success: boolean;
+  task_id?: number;
+  error?: string;
+}
+
+/**
+ * Result from checking OCS status.
+ */
+export interface OCSStatusResult {
+  connected: boolean;
+  login_url?: string;
+  error?: string;
+}
+
+/**
+ * Result from listing OCS bots.
+ */
+export interface OCSBotsResult {
+  success: boolean;
+  bots?: OCSBot[];
+  needs_oauth?: boolean;
+  error?: string;
+}
+
+/**
+ * OCS bot information.
+ */
+export interface OCSBot {
+  id: string;
+  name: string;
+  version?: number;
+}
+
+/**
+ * Parameters for initiating an OCS session.
+ */
+export interface OCSSessionParams {
+  /** Participant identifier (usually FLW username) */
+  identifier: string;
+  /** OCS experiment/bot ID */
+  experiment: string;
+  /** Prompt instructions for the bot */
+  prompt_text: string;
+  /** Platform identifier */
+  platform?: string;
+  /** Start a new session even if one exists */
+  start_new_session?: boolean;
+}
+
+/**
+ * Result from initiating an OCS session.
+ */
+export interface OCSInitiateResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+/**
+ * Parameters for creating a task with optional OCS session.
+ */
+export interface CreateTaskWithOCSParams extends CreateTaskParams {
+  /** Optional OCS configuration - if provided, initiates OCS session after task creation */
+  ocs?: Omit<OCSSessionParams, 'identifier'>; // identifier comes from username
+}
+
+/**
+ * Result from creating a task with OCS.
+ */
+export interface TaskWithOCSResult extends TaskResult {
+  ocs?: OCSInitiateResult;
 }
 
 // =============================================================================
