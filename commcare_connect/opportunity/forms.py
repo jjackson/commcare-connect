@@ -957,8 +957,11 @@ class AddBudgetExistingUsersForm(forms.Form):
         additional_visits = cleaned_data.get("additional_visits")
         adjustment_type = cleaned_data.get("adjustment_type")
 
-        if not selected_users and not additional_visits and not cleaned_data.get("end_date"):
-            raise forms.ValidationError("Please select users and specify either additional visits or end date.")
+        if not selected_users:
+            raise forms.ValidationError({"selected_users": gettext("Please select workers to update.")})
+        elif not additional_visits and not cleaned_data.get("end_date"):
+            raise forms.ValidationError(gettext("Please specify either additional visits or end date."))
+
         if additional_visits and not adjustment_type:
             raise forms.ValidationError(
                 {"adjustment_type": gettext("Please select an adjustment type for additional visits.")}
