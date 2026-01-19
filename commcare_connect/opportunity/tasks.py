@@ -628,29 +628,32 @@ def _send_auto_invoice_created_notification(invoice_ids):
         )
 
     for org_item in org_invoices_map.values():
-        organization = org_item["organization"]
-        recipient_emails = organization.get_member_emails()
-        if not recipient_emails:
-            continue
+        try:
+            organization = org_item["organization"]
+            recipient_emails = organization.get_member_emails()
+            if not recipient_emails:
+                continue
 
-        subject = f"[{organization.name}] Automated Service Delivery Invoices Created"
-        context = {
-            "organization": organization,
-            "invoices_items": org_item["invoices"],
-        }
+            subject = f"[{organization.name}] Automated Service Delivery Invoices Created"
+            context = {
+                "organization": organization,
+                "invoices_items": org_item["invoices"],
+            }
 
-        text_body = render_to_string(
-            "opportunity/email/automated_invoice_created.txt",
-            context,
-        )
-        html_body = render_to_string(
-            "opportunity/email/automated_invoice_created.html",
-            context,
-        )
-        send_mail(
-            subject=subject,
-            message=text_body,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=recipient_emails,
-            html_message=html_body,
-        )
+            text_body = render_to_string(
+                "opportunity/email/automated_invoice_created.txt",
+                context,
+            )
+            html_body = render_to_string(
+                "opportunity/email/automated_invoice_created.html",
+                context,
+            )
+            send_mail(
+                subject=subject,
+                message=text_body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=recipient_emails,
+                html_message=html_body,
+            )
+        except Exception as e:
+            logger.error(f"Error sending automated invoice created email for organization {organization.slug}: {e}")
