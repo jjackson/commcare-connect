@@ -926,6 +926,7 @@ class AddBudgetExistingUsersForm(forms.Form):
         widget=forms.NumberInput(attrs={"x-model": "additionalVisits", "min": 1}),
         required=False,
         min_value=1,
+        label=_("Number of Visits"),
     )
     end_date = forms.DateField(
         widget=forms.DateInput(
