@@ -1400,11 +1400,20 @@ def invoice_list(request, org_slug, opp_id):
         {
             "opportunity": request.opportunity,
             "table": table,
-            "new_invoice_url": reverse("opportunity:invoice_create", args=(org_slug, opp_id)),
+            "new_invoice_url": reverse(
+                "opportunity:invoice_create",
+                args=(org_slug, request.opportunity.opportunity_id),
+            ),
             "path": [
                 {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
-                {"title": request.opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opp_id))},
-                {"title": "Invoices", "url": reverse("opportunity:invoice_list", args=(org_slug, opp_id))},
+                {
+                    "title": request.opportunity.name,
+                    "url": reverse("opportunity:detail", args=(org_slug, request.opportunity.opportunity_id)),
+                },
+                {
+                    "title": "Invoices",
+                    "url": reverse("opportunity:invoice_list", args=(org_slug, request.opportunity.opportunity_id)),
+                },
             ],
         },
     )
@@ -1426,11 +1435,17 @@ class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateVie
                 == PaymentInvoice.InvoiceType.service_delivery,
                 "path": [
                     {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
-                    {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
-                    {"title": "Invoices", "url": reverse("opportunity:invoice_list", args=(org_slug, opportunity.id))},
+                    {
+                        "title": opportunity.name,
+                        "url": reverse("opportunity:detail", args=(org_slug, opportunity.opportunity_id)),
+                    },
+                    {
+                        "title": "Invoices",
+                        "url": reverse("opportunity:invoice_list", args=(org_slug, opportunity.opportunity_id)),
+                    },
                     {
                         "title": self.breadcrumb_title,
-                        "url": reverse("opportunity:invoice_create", args=(org_slug, opportunity.id)),
+                        "url": reverse("opportunity:invoice_create", args=(org_slug, opportunity.opportunity_id)),
                     },
                 ],
             }
@@ -1472,7 +1487,7 @@ class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateVie
         return kwargs
 
     def get_success_url(self):
-        return reverse("opportunity:invoice_list", args=(self.request.org.slug, self.get_opportunity().id))
+        return reverse("opportunity:invoice_list", args=(self.request.org.slug, self.get_opportunity().opportunity_id))
 
 
 class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailView):
@@ -1485,7 +1500,7 @@ class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailVie
         opportunity = self.get_opportunity()
         return get_object_or_404(
             PaymentInvoice,
-            id=self.kwargs.get("pk"),
+            payment_invoice_id=self.kwargs.get("pk"),
             opportunity_id=opportunity.id,
         )
 
@@ -1502,11 +1517,20 @@ class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailVie
                 "invoice_status": invoice.status,
                 "path": [
                     {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
-                    {"title": opportunity.name, "url": reverse("opportunity:detail", args=(org_slug, opportunity.id))},
-                    {"title": "Invoices", "url": reverse("opportunity:invoice_list", args=(org_slug, opportunity.id))},
+                    {
+                        "title": opportunity.name,
+                        "url": reverse("opportunity:detail", args=(org_slug, opportunity.opportunity_id)),
+                    },
+                    {
+                        "title": "Invoices",
+                        "url": reverse("opportunity:invoice_list", args=(org_slug, opportunity.opportunity_id)),
+                    },
                     {
                         "title": self.breadcrumb_title,
-                        "url": reverse("opportunity:invoice_review", args=(org_slug, opportunity.id, invoice.pk)),
+                        "url": reverse(
+                            "opportunity:invoice_review",
+                            args=(org_slug, opportunity.opportunity_id, invoice.payment_invoice_id),
+                        ),
                     },
                 ],
             }
@@ -1562,14 +1586,14 @@ def submit_invoice(request, org_slug, opp_id):
 
     invoice_id = request.POST.get("invoice_id")
     notes = request.POST.get("notes")
-    invoice = get_object_or_404(PaymentInvoice, opportunity=request.opportunity, pk=invoice_id)
+    invoice = get_object_or_404(PaymentInvoice, opportunity=request.opportunity, payment_invoice_id=invoice_id)
     if invoice.status != InvoiceStatus.PENDING:
         return HttpResponseBadRequest("Only invoices with status 'Pending' can be submitted for approval.")
 
     invoice.status = InvoiceStatus.SUBMITTED
     if invoice.service_delivery:
-        invoice.notes = notes
-        invoice.save(update_fields=["status", "notes"])
+        invoice.description = notes
+        invoice.save(update_fields=["status", "description"])
     else:
         invoice.save(update_fields=["status"])
     messages.success(
@@ -1592,7 +1616,9 @@ def invoice_approve(request, org_slug, opp_id):
             headers={"HX-Redirect": reverse("opportunity:detail", args=[org_slug, opp_id])},
         )
     invoice_ids = request.POST.getlist("pk")
-    invoices = PaymentInvoice.objects.filter(opportunity=request.opportunity, pk__in=invoice_ids, payment__isnull=True)
+    invoices = PaymentInvoice.objects.filter(
+        opportunity=request.opportunity, payment_invoice_id__in=invoice_ids, payment__isnull=True
+    )
 
     paid_invoice_ids = []
     payments = []
@@ -1613,7 +1639,7 @@ def invoice_approve(request, org_slug, opp_id):
 
     Payment.objects.bulk_create(payments)
 
-    transaction.on_commit(partial(send_invoice_paid_mail.delay, request.opportunity.id, paid_invoice_ids))
+    transaction.on_commit(partial(send_invoice_paid_mail.delay, request.opportunity.pk, paid_invoice_ids))
     if paid_invoice_ids:
         messages.success(request, _("Invoice(s) successfully marked as paid."))
     redirect_url = reverse("opportunity:invoice_list", args=(org_slug, opp_id))
@@ -2922,7 +2948,7 @@ def download_invoice_line_items(request, org_slug, opp_id):
     end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").date()
     if invoice_id:
         deliveries = CompletedWork.objects.filter(
-            invoice_id=invoice_id,
+            invoice__payment_invoice_id=invoice_id,
             opportunity_access__opportunity=request.opportunity,
         )
     else:
