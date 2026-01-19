@@ -604,7 +604,7 @@ def add_budget_existing_users(request, org_slug=None, opp_id=None):
         if additional_visits and selected_users:
             visit_text = f"visits by {additional_visits}"
             user_text = f"{len(selected_users)} worker{'s' if len(selected_users) != 1 else ''}"
-            change_type = "Increased" if adjustment_type == form.AdjustmentType.INCREASE else "Decreased"
+            change_type = "Increased" if adjustment_type == form.AdjustmentType.INCREASE_VISITS else "Decreased"
             message_parts.append(f"{change_type} {visit_text} for {user_text}.")
             if not request.opportunity.managed:
                 message_parts.append(f"Budget {change_type.lower()} by {form.budget_change:.2f}.")
