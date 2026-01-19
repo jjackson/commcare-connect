@@ -472,3 +472,114 @@ def execute_visit_extraction(
 
     logger.info(f"[SQL] Extracted {len(results)} visits with {len(computed_field_names)} computed fields")
     return results, computed_field_names
+
+
+# -----------------------------------------------------------------------------
+# SQL Preview (for debugging/testing)
+# -----------------------------------------------------------------------------
+
+
+def generate_sql_preview(
+    config: AnalysisPipelineConfig,
+    opportunity_id: int,
+) -> dict:
+    """
+    Generate SQL query strings without executing them.
+
+    This is useful for debugging and testing queries in external tools like psql.
+
+    Args:
+        config: Pipeline configuration
+        opportunity_id: Opportunity ID to use in WHERE clause
+
+    Returns:
+        Dictionary containing:
+        - visit_extraction_sql: SQL for extracting visit-level data
+        - flw_aggregation_sql: SQL for aggregating to FLW level (if terminal_stage is AGGREGATED)
+        - field_expressions: Dict mapping field names to their SQL extraction expressions
+        - histogram_expressions: Dict mapping histogram names to their bin SQL expressions
+        - terminal_stage: Which query represents the final output
+    """
+    from commcare_connect.labs.analysis.config import CacheStage
+
+    result = {
+        "terminal_stage": config.terminal_stage.value,
+        "field_expressions": {},
+        "histogram_expressions": {},
+    }
+
+    # Generate field extraction expressions
+    for field in config.fields:
+        paths = field.paths if field.paths else [field.path]
+        value_expr = _paths_to_coalesce_sql(paths)
+        transformed_expr = _transform_to_sql(field, value_expr)
+        result["field_expressions"][field.name] = {
+            "paths": paths,
+            "extraction_sql": value_expr,
+            "transformed_sql": transformed_expr,
+            "aggregation": field.aggregation,
+        }
+
+    # Generate histogram expressions
+    for hist in config.histograms:
+        paths = hist.paths if hist.paths else [hist.path]
+        value_expr = _paths_to_coalesce_sql(paths)
+        transformed_expr = _transform_to_sql(hist, value_expr)
+
+        bin_expressions = {}
+        bin_width = (hist.upper_bound - hist.lower_bound) / hist.num_bins
+
+        for i in range(hist.num_bins):
+            bin_lower = hist.lower_bound + (i * bin_width)
+            bin_upper = bin_lower + bin_width
+            lower_str = str(bin_lower).replace(".", "_")
+            upper_str = str(bin_upper).replace(".", "_")
+            bin_name = f"{hist.bin_name_prefix}_{lower_str}_{upper_str}_visits"
+
+            if i == 0 and hist.include_out_of_range:
+                bin_sql = f"COUNT(*) FILTER (WHERE {transformed_expr} < {bin_upper})"
+            elif i == hist.num_bins - 1 and hist.include_out_of_range:
+                bin_sql = f"COUNT(*) FILTER (WHERE {transformed_expr} >= {bin_lower})"
+            elif i == hist.num_bins - 1:
+                bin_sql = (
+                    f"COUNT(*) FILTER (WHERE {transformed_expr} >= {bin_lower} AND {transformed_expr} <= {bin_upper})"
+                )
+            else:
+                bin_sql = (
+                    f"COUNT(*) FILTER (WHERE {transformed_expr} >= {bin_lower} AND {transformed_expr} < {bin_upper})"
+                )
+
+            bin_expressions[bin_name] = bin_sql
+
+        result["histogram_expressions"][hist.name] = {
+            "paths": paths,
+            "extraction_sql": value_expr,
+            "transformed_sql": transformed_expr,
+            "bins": bin_expressions,
+        }
+
+    # Generate visit extraction query
+    visit_query, computed_fields = build_visit_extraction_query(config, opportunity_id)
+    result["visit_extraction_sql"] = _format_sql(visit_query)
+    result["computed_fields"] = computed_fields
+
+    # Generate FLW aggregation query if applicable
+    if config.terminal_stage == CacheStage.AGGREGATED:
+        flw_query = build_flw_aggregation_query(config, opportunity_id)
+        result["flw_aggregation_sql"] = _format_sql(flw_query)
+    else:
+        result["flw_aggregation_sql"] = None
+
+    return result
+
+
+def _format_sql(sql: str) -> str:
+    """Format SQL for readability."""
+    # Remove excess whitespace but keep structure
+    lines = sql.strip().split("\n")
+    formatted_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped:
+            formatted_lines.append(stripped)
+    return "\n".join(formatted_lines)

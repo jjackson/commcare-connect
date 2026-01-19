@@ -1,0 +1,342 @@
+{% extends 'base.html' %}
+{% load static i18n %}
+
+{% block title %}Custom Pipelines{% endblock %}
+
+{% block content %}
+<style>[x-cloak] { display: none !important; }</style>
+<div class="max-w-6xl mx-auto px-4 py-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Custom Pipelines</h1>
+            <p class="text-gray-600 mt-1">AI-generated data analysis pipelines</p>
+        </div>
+        <div class="flex items-center gap-4" x-data="{ showTemplateModal: false }">
+            {% if has_context %}
+            <div class="text-sm text-gray-500">
+                <span class="font-medium">Opportunity:</span> {{ opportunity_name|default:"Selected" }}
+            </div>
+            <button @click="showTemplateModal = true"
+                    type="button"
+                    class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                <i class="fa-solid fa-plus mr-2"></i>
+                Create Pipeline
+            </button>
+
+            <!-- Template Selector Modal -->
+            <div x-show="showTemplateModal"
+                 x-cloak
+                 class="fixed inset-0 z-50 overflow-y-auto"
+                 @keydown.escape.window="showTemplateModal = false">
+                <!-- Backdrop -->
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+                     @click="showTemplateModal = false"></div>
+
+                <!-- Modal Panel -->
+                <div class="flex min-h-full items-center justify-center p-4">
+                    <div class="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6"
+                         @click.stop>
+                        <div class="absolute top-4 right-4">
+                            <button @click="showTemplateModal = false"
+                                    class="text-gray-400 hover:text-gray-600">
+                                <i class="fa-solid fa-times"></i>
+                            </button>
+                        </div>
+
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">Choose a Template</h3>
+                        <p class="text-sm text-gray-500 mb-6">Select a pipeline template to get started.</p>
+
+                        <div class="space-y-3">
+                            <!-- Visit Data Explorer Template -->
+                            <form method="post" action="{% url 'labs:custom_pipelines:api_create' %}" x-data="{ creating: false, error: '' }"
+                                  @submit.prevent="
+                                      creating = true;
+                                      error = '';
+                                      fetch($el.action, {
+                                          method: 'POST',
+                                          headers: {
+                                              'Content-Type': 'application/json',
+                                              'X-CSRFToken': '{{ csrf_token }}'
+                                          },
+                                          body: JSON.stringify({ template_type: 'visit_list' })
+                                      }).then(r => r.json()).then(data => {
+                                          if (data.id) {
+                                              window.location.href = '/labs/pipelines/' + data.id + '/run/';
+                                          } else {
+                                              error = data.error || 'Failed to create pipeline';
+                                              creating = false;
+                                          }
+                                      }).catch(e => {
+                                          error = 'Network error';
+                                          creating = false;
+                                      })
+                                  ">
+                                <button type="submit"
+                                        :disabled="creating"
+                                        :class="creating ? 'opacity-75 cursor-wait' : ''"
+                                        class="w-full text-left p-4 border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors group">
+                                    <div class="flex items-start gap-4">
+                                        <div class="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                            <i x-show="!creating" class="fa-solid fa-table-list text-blue-600"></i>
+                                            <i x-show="creating" x-cloak class="fa-solid fa-spinner fa-spin text-blue-600"></i>
+                                        </div>
+                                        <div class="flex-1">
+                                            <h4 class="font-medium text-gray-900 group-hover:text-blue-700">Visit Data Explorer</h4>
+                                            <p class="text-sm text-gray-500 mt-1">
+                                                Explore visit-level data with custom field extraction, sorting, and filtering.
+                                            </p>
+                                            <p x-show="error" x-cloak class="text-sm text-red-600 mt-1" x-text="error"></p>
+                                        </div>
+                                        <div class="flex-shrink-0 text-gray-400 group-hover:text-blue-600">
+                                            <i x-show="!creating" class="fa-solid fa-arrow-right"></i>
+                                        </div>
+                                    </div>
+                                </button>
+                            </form>
+
+                            <!-- FLW Performance Summary Template -->
+                            <form method="post" action="{% url 'labs:custom_pipelines:api_create' %}" x-data="{ creating: false, error: '' }"
+                                  @submit.prevent="
+                                      creating = true;
+                                      error = '';
+                                      fetch($el.action, {
+                                          method: 'POST',
+                                          headers: {
+                                              'Content-Type': 'application/json',
+                                              'X-CSRFToken': '{{ csrf_token }}'
+                                          },
+                                          body: JSON.stringify({ template_type: 'flw_summary' })
+                                      }).then(r => r.json()).then(data => {
+                                          if (data.id) {
+                                              window.location.href = '/labs/pipelines/' + data.id + '/run/';
+                                          } else {
+                                              error = data.error || 'Failed to create pipeline';
+                                              creating = false;
+                                          }
+                                      }).catch(e => {
+                                          error = 'Network error';
+                                          creating = false;
+                                      })
+                                  ">
+                                <button type="submit"
+                                        :disabled="creating"
+                                        :class="creating ? 'opacity-75 cursor-wait' : ''"
+                                        class="w-full text-left p-4 border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors group">
+                                    <div class="flex items-start gap-4">
+                                        <div class="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                            <i x-show="!creating" class="fa-solid fa-chart-bar text-green-600"></i>
+                                            <i x-show="creating" x-cloak class="fa-solid fa-spinner fa-spin text-green-600"></i>
+                                        </div>
+                                        <div class="flex-1">
+                                            <h4 class="font-medium text-gray-900 group-hover:text-blue-700">FLW Performance Summary</h4>
+                                            <p class="text-sm text-gray-500 mt-1">
+                                                Aggregated statistics per frontline worker with performance metrics.
+                                            </p>
+                                            <p x-show="error" x-cloak class="text-sm text-red-600 mt-1" x-text="error"></p>
+                                        </div>
+                                        <div class="flex-shrink-0 text-gray-400 group-hover:text-blue-600">
+                                            <i x-show="!creating" class="fa-solid fa-arrow-right"></i>
+                                        </div>
+                                    </div>
+                                </button>
+                            </form>
+
+                            <!-- Weight Tracker Template -->
+                            <form method="post" action="{% url 'labs:custom_pipelines:api_create' %}" x-data="{ creating: false, error: '' }"
+                                  @submit.prevent="
+                                      creating = true;
+                                      error = '';
+                                      fetch($el.action, {
+                                          method: 'POST',
+                                          headers: {
+                                              'Content-Type': 'application/json',
+                                              'X-CSRFToken': '{{ csrf_token }}'
+                                          },
+                                          body: JSON.stringify({ template_type: 'weight_tracker' })
+                                      }).then(r => r.json()).then(data => {
+                                          if (data.id) {
+                                              window.location.href = '/labs/pipelines/' + data.id + '/run/';
+                                          } else {
+                                              error = data.error || 'Failed to create pipeline';
+                                              creating = false;
+                                          }
+                                      }).catch(e => {
+                                          error = 'Network error';
+                                          creating = false;
+                                      })
+                                  ">
+                                <button type="submit"
+                                        :disabled="creating"
+                                        :class="creating ? 'opacity-75 cursor-wait' : ''"
+                                        class="w-full text-left p-4 border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors group">
+                                    <div class="flex items-start gap-4">
+                                        <div class="flex-shrink-0 w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                            <i x-show="!creating" class="fa-solid fa-weight-scale text-purple-600"></i>
+                                            <i x-show="creating" x-cloak class="fa-solid fa-spinner fa-spin text-purple-600"></i>
+                                        </div>
+                                        <div class="flex-1">
+                                            <h4 class="font-medium text-gray-900 group-hover:text-blue-700">Weight Tracker</h4>
+                                            <p class="text-sm text-gray-500 mt-1">
+                                                Track weight measurements across visits with linked child data.
+                                            </p>
+                                            <p x-show="error" x-cloak class="text-sm text-red-600 mt-1" x-text="error"></p>
+                                        </div>
+                                        <div class="flex-shrink-0 text-gray-400 group-hover:text-blue-600">
+                                            <i x-show="!creating" class="fa-solid fa-arrow-right"></i>
+                                        </div>
+                                    </div>
+                                </button>
+                            </form>
+
+                            <!-- Blank Pipeline -->
+                            <form method="post" action="{% url 'labs:custom_pipelines:api_create' %}" x-data="{ creating: false, error: '' }"
+                                  @submit.prevent="
+                                      creating = true;
+                                      error = '';
+                                      fetch($el.action, {
+                                          method: 'POST',
+                                          headers: {
+                                              'Content-Type': 'application/json',
+                                              'X-CSRFToken': '{{ csrf_token }}'
+                                          },
+                                          body: JSON.stringify({ template_type: 'blank' })
+                                      }).then(r => r.json()).then(data => {
+                                          if (data.id) {
+                                              window.location.href = '/labs/pipelines/' + data.id + '/run/';
+                                          } else {
+                                              error = data.error || 'Failed to create pipeline';
+                                              creating = false;
+                                          }
+                                      }).catch(e => {
+                                          error = 'Network error';
+                                          creating = false;
+                                      })
+                                  ">
+                                <button type="submit"
+                                        :disabled="creating"
+                                        :class="creating ? 'opacity-75 cursor-wait' : ''"
+                                        class="w-full text-left p-4 border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors group">
+                                    <div class="flex items-start gap-4">
+                                        <div class="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                                            <i x-show="!creating" class="fa-solid fa-file-circle-plus text-gray-600"></i>
+                                            <i x-show="creating" x-cloak class="fa-solid fa-spinner fa-spin text-gray-600"></i>
+                                        </div>
+                                        <div class="flex-1">
+                                            <h4 class="font-medium text-gray-900 group-hover:text-blue-700">Blank Pipeline</h4>
+                                            <p class="text-sm text-gray-500 mt-1">
+                                                Start from scratch and build your own custom pipeline with AI assistance.
+                                            </p>
+                                            <p x-show="error" x-cloak class="text-sm text-red-600 mt-1" x-text="error"></p>
+                                        </div>
+                                        <div class="flex-shrink-0 text-gray-400 group-hover:text-blue-600">
+                                            <i x-show="!creating" class="fa-solid fa-arrow-right"></i>
+                                        </div>
+                                    </div>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not has_context %}
+    <!-- No Context Warning -->
+    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-exclamation-triangle text-yellow-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-yellow-700">
+                    Please select an opportunity from the Labs context selector to view and create pipelines.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% elif not has_oauth %}
+    <!-- No OAuth Warning -->
+    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-lock text-yellow-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-yellow-700">
+                    Please log in to CommCare Connect to manage pipelines.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% elif load_error %}
+    <!-- Error Message -->
+    <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-circle-exclamation text-red-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-red-700">
+                    {{ load_error }}
+                </p>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Pipelines List -->
+    {% if pipelines %}
+    <div class="space-y-4">
+        {% for pipeline in pipelines %}
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+            <div class="p-5">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <h3 class="text-lg font-semibold text-gray-900">{{ pipeline.name }}</h3>
+                        <p class="text-gray-600 mt-1 text-sm">{{ pipeline.description|default:"No description" }}</p>
+                        <div class="flex items-center gap-4 mt-3 text-xs text-gray-500">
+                            <span>
+                                <i class="fa-solid fa-layer-group mr-1"></i>
+                                {% if pipeline.schema.terminal_stage == "aggregated" %}
+                                Aggregated
+                                {% else %}
+                                Visit Level
+                                {% endif %}
+                            </span>
+                            <span>
+                                <i class="fa-solid fa-list mr-1"></i>
+                                {{ pipeline.schema.fields|length }} fields
+                            </span>
+                            <span>
+                                <i class="fa-solid fa-code-branch mr-1"></i>
+                                v{{ pipeline.version }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 ml-4">
+                        <a href="{% url 'labs:custom_pipelines:run' definition_id=pipeline.id %}"
+                           class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                            <i class="fa-solid fa-play mr-2"></i>
+                            Run
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="text-center py-12 bg-white rounded-lg border border-gray-200">
+        <div class="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+            <i class="fa-solid fa-database text-gray-400 text-2xl"></i>
+        </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">No Pipelines Yet</h3>
+        <p class="text-gray-500 mb-6">Create your first custom pipeline to start analyzing data.</p>
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

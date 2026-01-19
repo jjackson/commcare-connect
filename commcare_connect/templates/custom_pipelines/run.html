@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% load static i18n %}
+
+{% block title %}{{ definition.name|default:"Pipeline" }}{% endblock %}
+
+{% block javascript %}
+{{ block.super }}
+{% if has_context and has_oauth and not error %}
+<script src="{% static 'bundles/js/pipeline-runner-bundle.js' %}" defer></script>
+{% endif %}
+{% endblock javascript %}
+
+{% block content %}
+{% if not has_context %}
+<!-- No Context Warning -->
+<div class="max-w-4xl mx-auto px-4 py-6">
+    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-exclamation-triangle text-yellow-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-yellow-700">
+                    Please select an opportunity from the Labs context selector to run this pipeline.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% elif not has_oauth %}
+<!-- No OAuth Warning -->
+<div class="max-w-4xl mx-auto px-4 py-6">
+    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-lock text-yellow-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-yellow-700">
+                    Please log in to CommCare Connect to run pipelines.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% elif error %}
+<!-- Error Message -->
+<div class="max-w-4xl mx-auto px-4 py-6">
+    <div class="bg-red-50 border-l-4 border-red-400 p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-circle-exclamation text-red-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-red-700">{{ error }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+
+<!-- CSRF Token for API calls -->
+{% csrf_token %}
+
+<!-- Pipeline data for React -->
+{{ pipeline_data|json_script:"pipeline-data" }}
+
+<!-- React mount point -->
+<div id="pipeline-runner-root">
+    <!-- React component will mount here -->
+    <div class="flex items-center justify-center py-12">
+        <div class="text-center">
+            <i class="fa-solid fa-spinner fa-spin text-3xl text-blue-600 mb-4"></i>
+            <p class="text-gray-600">Loading pipeline...</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

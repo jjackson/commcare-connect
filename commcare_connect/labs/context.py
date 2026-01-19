@@ -262,6 +262,7 @@ class LabsContextMiddleware(MiddlewareMixin):
                 "/ai/",
                 "/labs/explorer/",
                 "/labs/workflow/",
+                "/labs/pipelines/",
                 "/coverage/",
                 "/custom_analysis/",
             ]
