@@ -36,6 +36,7 @@
     return {
       modalOpen: false,
       additionalVisits: null,
+      adjustmentType: null,
       budgetPerVisit: budgetPerVisit,
       selected_users: [],
       end_date: '',
@@ -63,6 +64,42 @@
       },
       calculatedBudget() {
         return (this.totalVisits() * budgetPerVisit)
+      },
+      // Validation methods
+      hasAdditionalVisitsOrEndDate() {
+        return Boolean(this.additionalVisits > 0 || this.end_date);
+      },
+      hasValidVisitsAndAdjustment() {
+        if (this.additionalVisits > 0 && !this.adjustmentType) {
+          return false;
+        }
+        if (this.adjustmentType && !(this.additionalVisits > 0)) {
+          return false;
+        }
+        return true;
+      },
+      isFormValid() {
+        return this.selected_users.length > 0 &&
+               this.hasAdditionalVisitsOrEndDate() &&
+               this.hasValidVisitsAndAdjustment();
+      },
+      getValidationErrors() {
+        const errors = [];
+        if (this.selected_users.length === 0) {
+          errors.push('Please select at least one worker');
+        }
+        if (!this.hasAdditionalVisitsOrEndDate()) {
+          errors.push('Please specify either additional visits (>0) or end date');
+        }
+        if (!this.hasValidVisitsAndAdjustment()) {
+          if (this.additionalVisits > 0 && !this.adjustmentType) {
+            errors.push('Please select an adjustment type (Increase or Decrease)');
+          }
+          if (this.adjustmentType && !this.additionalVisits) {
+            errors.push('Please specify the number of additional visits');
+          }
+        }
+        return errors;
       }
     };
 }
@@ -198,19 +235,42 @@
                   </button>
                 </div>
                 <div class="py-4">
-                  You are about to allocate an additional <b x-text="totalVisits()"></b> visits which will result in an
-                  additional budget allocation of
-                  <b x-text="calculatedBudget()"></b> to this Opportunity.
-                  <div x-show="!!end_date" class="mt-2">
-                    You are changing the end date for the selected workers to <b
-                    x-text="new Date(end_date).toLocaleDateString()"></b>.
+                  <!-- Validation Errors -->
+                  <div x-show="!isFormValid()" class="mb-4 p-3 bg-red-50 border border-red-300 rounded-lg">
+                    <div class="flex items-start">
+                      <i class="fa-solid fa-exclamation-circle text-red-600 mt-0.5 mr-2"></i>
+                      <div class="flex-1">
+                        <p class="text-sm font-semibold text-red-800 mb-1">Please fix the following errors:</p>
+                        <ul class="text-sm text-red-700">
+                          <template x-for="error in getValidationErrors()" :key="error">
+                            <li x-text="error"></li>
+                          </template>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Success Messages -->
+                  <div x-show="isFormValid()">
+                    <div x-show="additionalVisits && adjustmentType">
+                      You are about to <span x-text="adjustmentType === 'increase_visits' ? 'increase' : 'decrease'"></span>
+                      by <b x-text="totalVisits()"></b> visit(s) which will result in a
+                      budget <span x-text="adjustmentType === 'increase_visits' ? 'increase' : 'decrease'"></span> of
+                      <b x-text="calculatedBudget()"></b> to this Opportunity.
+                    </div>
+                    <div x-show="!!end_date" class="mt-2">
+                      You are changing the end date for the selected workers to <b
+                      x-text="new Date(end_date).toLocaleDateString()"></b>.
+                    </div>
                   </div>
                 </div>
                 <div class="footer flex justify-end gap-4">
                   <button type="button" @click="closeModal()" type="button" class="button button-md outline-style">
                     Close
                   </button>
-                  <button type="submit" class="button button-md primary-dark">
+                  <button type="submit"
+                          class="button button-md primary-dark"
+                          :disabled="!isFormValid()">
                     Confirm
                   </button>
                 </div>

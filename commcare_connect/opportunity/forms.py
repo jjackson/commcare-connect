@@ -939,7 +939,7 @@ class AddBudgetExistingUsersForm(forms.Form):
     )
     adjustment_type = forms.ChoiceField(
         choices=AdjustmentType.choices,
-        widget=forms.RadioSelect(),
+        widget=forms.RadioSelect(attrs={"x-model": "adjustmentType"}),
         required=False,
         label="",
     )
