@@ -6,6 +6,7 @@ from django_tables2.export import TableExport
 
 CELERY_TASK_SUCCESS = "SUCCESS"
 CELERY_TASK_IN_PROGRESS = "PROGRESS"
+CELERY_TASK_PENDING = "PENDING"
 
 
 def set_task_progress(task, message, is_complete=False):
@@ -34,7 +35,7 @@ def render_export_status(
     task_meta = task._get_task_meta()
     status = task_meta.get("status")
 
-    if ownership_check:
+    if ownership_check and status is not CELERY_TASK_PENDING:
         ownership_check(request, task_meta)
 
     progress = {

@@ -151,7 +151,7 @@ class DeliveryStatsReportView(tables.SingleTableMixin, KPIReportMixin, NonModelF
 
 class InvoiceReportFilter(django_filters.FilterSet):
     opportunity_name = django_filters.ModelChoiceFilter(
-        field_name="opportunity__name",
+        field_name="opportunity",
         queryset=ManagedOpportunity.objects.only("id", "name"),
         label=_("Opportunity"),
         widget=forms.Select(
@@ -275,6 +275,11 @@ def export_invoice_report(request):
     filters_data = filterset.form.cleaned_data
     if filters_data.get("opportunity_name"):
         filters_data["opportunity_name"] = filters_data["opportunity_name"].id
+    if filters_data.get("from_date"):
+        filters_data["from_date"] = filters_data["from_date"].isoformat()
+    if filters_data.get("to_date"):
+        filters_data["to_date"] = filters_data["to_date"].isoformat()
+
     task = export_invoice_report_task.delay(filters_data)
 
     #  Build redirect URL preserving applied filters
