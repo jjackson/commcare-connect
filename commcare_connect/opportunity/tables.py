@@ -1508,7 +1508,6 @@ class WorkerLearnStatusTable(tables.Table):
     module_name = tables.Column(accessor="module__name", orderable=False)
     date = DMYTColumn(verbose_name="Date Completed", accessor="date", orderable=False)
     duration = DurationColumn(accessor="duration", orderable=False)
-    time = tables.Column(accessor="date", verbose_name="Time Completed", orderable=False)
 
     class Meta:
         sequence = ("index", "module_name", "date", "duration")
