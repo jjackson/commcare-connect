@@ -35,7 +35,7 @@ def render_export_status(
     task_meta = task._get_task_meta()
     status = task_meta.get("status")
 
-    if ownership_check and status is not CELERY_TASK_PENDING:
+    if ownership_check and status != CELERY_TASK_PENDING:
         ownership_check(request, task_meta)
 
     progress = {
