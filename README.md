@@ -68,8 +68,6 @@ Some useful command are available via the `tasks.py` file:
 - Copy the Client ID and Client Secret
 - Create a new SocialApp locally at http://localhost:8000/admin/socialaccount/socialapp/
 
-Note: for labs set ups see the [labs README](./commcare_connect/labs/README.md) for how to enable oauth.
-
 **Test the OAuth2 flow**
 
 - Set `COMMCARE_HQ_URL=https://staging.commcarehq.org` in your `.env` file and restart the server.
