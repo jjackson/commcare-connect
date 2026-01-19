@@ -949,9 +949,11 @@ class AddBudgetExistingUsersForm(forms.Form):
 
     def _validate_budget(self, selected_users, additional_visits):
         claims = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
-        org_pay = self.opportunity.managedopportunity.org_pay_per_visit if self.opportunity.managed else 0
 
-        budget_increase = sum((ocl.payment_unit.amount + org_pay) * additional_visits for ocl in claims)
+        budget_increase = 0
+        for claim in claims:
+            org_amount = claim.payment_unit.org_amount if self.opportunity.managed else 0
+            budget_increase += (claim.payment_unit.amount + org_amount) * additional_visits
 
         if self.opportunity.managed:
             # NM cannot increase the opportunity budget they can only
@@ -994,7 +996,7 @@ class AddBudgetNewUsersForm(forms.Form):
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity", None)
         self.program_manager = kwargs.pop("program_manager", False)
-        self.payments_units = list(self.opportunity.paymentunit_set.values("amount", "max_total"))
+        self.payments_units = list(self.opportunity.paymentunit_set.values("amount", "max_total", "org_amount"))
 
         super().__init__(*args, **kwargs)
 
@@ -1014,7 +1016,7 @@ class AddBudgetNewUsersForm(forms.Form):
                 id_total_budget.value =
                 {self.opportunity.total_budget} +
                 {json.dumps(self.payments_units)}.reduce(
-                    (sum, u) => sum + (u.amount + {self.opportunity.org_pay_per_visit})
+                    (sum, u) => sum + (u.amount + u.org_amount)
                     * u.max_total * parseInt(this.value || 0),
                     0
                 );
@@ -1041,11 +1043,9 @@ class AddBudgetNewUsersForm(forms.Form):
         increased_budget = 0
         total_program_budget = 0
         claimed_program_budget = 0
-        org_pay = 0
 
         if self.opportunity.managed:
             manage_opp = self.opportunity.managedopportunity
-            org_pay = manage_opp.org_pay_per_visit
             program = manage_opp.program
             total_program_budget = program.budget
             claimed_program_budget = (
@@ -1057,7 +1057,8 @@ class AddBudgetNewUsersForm(forms.Form):
 
         if add_users:
             for payment_unit in self.payments_units:
-                increased_budget += (payment_unit["amount"] + org_pay) * payment_unit["max_total"] * add_users
+                org_amount = payment_unit["org_amount"] if self.opportunity.managed else 0
+                increased_budget += (payment_unit["amount"] + org_amount) * payment_unit["max_total"] * add_users
 
             # Both fields were manually modified by the user — raising a validation error to prevent conflicts.
             if total_budget and total_budget != self.opportunity.total_budget + increased_budget:
