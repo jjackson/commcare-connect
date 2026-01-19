@@ -42,7 +42,7 @@
         <div class="infocard-dark">
             <i class="fa-solid fa-file-circle-check"></i>
             <div>
-                <h6>Delivery Type</h6>
+                <h6>{% translate "Delivery Type" %}</h6>
                 <p>{{ program.delivery_type.name }}</p>
             </div>
         </div>
@@ -53,14 +53,14 @@
               <div class="infocard-dark">
                   <i class="fa-solid fa-calendar-check"></i>
                   <div>
-                      <h6>Start Date</h6>
+                      <h6>{% translate "Start Date" %}</h6>
                       <p>{{ program.start_date }}</p>
                   </div>
               </div>
               <div class="infocard-dark">
                   <i class="fa-solid fa-arrow-right text-brand-mango"></i>
                   <div>
-                      <h6>End Date</h6>
+                      <h6>{% translate "End Date" %}</h6>
                       <p>{{ program.end_date }}</p>
                   </div>
               </div>
@@ -85,7 +85,7 @@
         {% elif program.status == 'accepted' %}
           {% if program.managed_opportunities_for_org %}
             <button class="button button-sm outline-style w-full" @click="showOpp = !showOpp">
-              <span class="relative z-20" x-text="showOpp ? 'Hide Opportunities' : 'View Opportunities'"></span>
+              <span class="relative z-20" x-text="showOpp ? '{% translate "Hide Opportunities" %}' : '{% translate "View Opportunities" %}'"></span>
               <i class="fa-solid text-xs" :class="showOpp ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
             </button>
           {% endif %}
@@ -129,7 +129,7 @@
                     </div>
                     <a class="button button-md button-outline-rounded" href="{% url "opportunity:detail" request.org.slug opportunity.id %}">
                       <div class="flex items-center justify-between gap-4">
-                        <p class="text-sm">View</p>
+                        <p class="text-sm">{% translate "View" %}</p>
                         <i class="fa-solid fa-arrow-right"></i>
                       </div>
                     </a>
