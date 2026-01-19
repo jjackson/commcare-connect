@@ -99,6 +99,14 @@
           >
             {% csrf_token %}
 
+            {% if form.non_field_errors %}
+              <div class="text-sm text-red-600 mt-1">
+                {% for error in form.non_field_errors %}
+                  {{ error }}
+                {% endfor %}
+              </div>
+            {% endif %}
+
             {% if form.selected_users.errors %}
             <div class="flex rounded-lg border border-red-300 bg-red-50 text-red-800 px-4 py-3 mb-4" role="alert">
               <span class="text-red-800 flex-1">Please select workers to update.</span>
