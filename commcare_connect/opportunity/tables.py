@@ -449,7 +449,8 @@ class PaymentInvoiceTable(OpportunityContextTable):
         review_button = ""
         if waffle.switch_is_active(INVOICE_REVIEW):
             invoice_review_url = reverse(
-                "opportunity:invoice_review", args=[self.org_slug, self.opportunity.id, record.pk]
+                "opportunity:invoice_review",
+                args=[self.org_slug, str(self.opportunity.opportunity_id), str(record.payment_invoice_id)],
             )
             review_button = (
                 f'<a href="{invoice_review_url}" '
@@ -458,12 +459,14 @@ class PaymentInvoiceTable(OpportunityContextTable):
             )
         pay_button = ""
         if self.is_pm and record.status == InvoiceStatus.SUBMITTED:
-            invoice_approve_url = reverse("opportunity:invoice_approve", args=[self.org_slug, self.opportunity.id])
+            invoice_approve_url = reverse(
+                "opportunity:invoice_approve", args=[self.org_slug, self.opportunity.opportunity_id]
+            )
             disabled = "disabled" if getattr(record, "payment", None) else ""
             pay_button = f"""
                 <button
                     hx-post="{invoice_approve_url}"
-                    hx-vals='{{"pk": "{record.pk}"}}'
+                    hx-vals='{{"pk": "{record.payment_invoice_id}"}}'
                     hx-headers='{{"X-CSRFToken": "{self.csrf_token}"}}'
                     class="button button-md primary-dark"
                     {disabled}>
@@ -787,7 +790,7 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
             actions.append(
                 {
                     "title": "View Invoices",
-                    "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.id]),
+                    "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
                 }
             )
 
