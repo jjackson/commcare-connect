@@ -77,7 +77,7 @@ class Country(models.Model):
 
 
 class Opportunity(BaseModel):
-    opportunity_id = models.UUIDField(default=uuid4, unique=True, editable=False)
+    opportunity_id = models.UUIDField(editable=False, null=True)
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
@@ -103,7 +103,6 @@ class Opportunity(BaseModel):
     end_date = models.DateField(null=True)
     total_budget = models.PositiveBigIntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
-    currency = models.CharField(max_length=3, null=True)
     currency_fk = models.ForeignKey(Currency, on_delete=models.PROTECT, null=True)
     country = models.ForeignKey(Country, on_delete=models.PROTECT, null=True)
     auto_approve_visits = models.BooleanField(default=True)
@@ -276,7 +275,7 @@ class XFormBaseModel(models.Model):
 
 
 class OpportunityAccess(models.Model):
-    opportunity_access_id = models.UUIDField(default=uuid4, unique=True, editable=False)
+    opportunity_access_id = models.UUIDField(editable=False, null=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
     date_learn_started = models.DateTimeField(null=True)
@@ -420,7 +419,7 @@ class Assessment(XFormBaseModel):
 
 
 class PaymentUnit(models.Model):
-    payment_unit_id = models.UUIDField(default=uuid4, unique=True, editable=False)
+    payment_unit_id = models.UUIDField(editable=False, null=True)
     opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
     amount = models.PositiveIntegerField()
     name = models.CharField(max_length=255)
@@ -516,7 +515,8 @@ class PaymentInvoice(models.Model):
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     title = models.CharField(max_length=255, null=True, blank=True)
-    notes = models.TextField(null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
+    date_of_expense = models.DateField(null=True, blank=True)
     status = models.CharField(choices=InvoiceStatus.choices, default=InvoiceStatus.PENDING, max_length=50)
     archived_date = models.DateTimeField(null=True, blank=True)
 
@@ -525,7 +525,7 @@ class PaymentInvoice(models.Model):
 
 
 class Payment(models.Model):
-    payment_id = models.UUIDField(default=uuid4, unique=True, editable=False)
+    payment_id = models.UUIDField(editable=False, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     amount_usd = models.DecimalField(max_digits=10, decimal_places=2, null=True)
@@ -713,7 +713,7 @@ class UserVisitQuerySet(models.QuerySet):
 class UserVisit(XFormBaseModel):
     objects = UserVisitQuerySet.as_manager()
 
-    user_visit_id = models.UUIDField(default=uuid4, unique=True, editable=False)
+    user_visit_id = models.UUIDField(editable=False, null=True)
     opportunity = models.ForeignKey(
         Opportunity,
         on_delete=models.CASCADE,
@@ -878,7 +878,7 @@ class UserInvite(models.Model):
 
 
 class FormJsonValidationRules(models.Model):
-    form_json_validation_rules_id = models.UUIDField(default=uuid4, unique=True, editable=False)
+    form_json_validation_rules_id = models.UUIDField(editable=False, null=True)
     slug = models.SlugField()
     name = models.CharField(max_length=25)
     deliver_unit = models.ManyToManyField(DeliverUnit)

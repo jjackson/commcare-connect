@@ -1185,7 +1185,7 @@ class TestInvoiceReviewView:
             form = response.context["form"]
             assert form.read_only is True
             for field_name, field in form.fields.items():
-                if field_name == "notes":
+                if field_name == "description":
                     assert field.widget.attrs.get("readonly") is None, f"Field {field_name} should be editable"
                 else:
                     assert field.widget.attrs.get("readonly") == "readonly", f"Field {field_name} should be readonly"
