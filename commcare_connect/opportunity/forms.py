@@ -917,8 +917,8 @@ class OpportunityAccessCreationForm(forms.ModelForm):
 
 class AddBudgetExistingUsersForm(forms.Form):
     class AdjustmentType(TextChoices):
-        INCREASE = "increase_visits", _("Increase Visits")
-        DECREASE = "decrease_visits", _("Decrease Visits")
+        INCREASE_VISITS = "increase_visits", _("Increase Visits")
+        DECREASE_VISITS = "decrease_visits", _("Decrease Visits")
 
     additional_visits = forms.IntegerField(
         widget=forms.NumberInput(attrs={"x-model": "additionalVisits", "min": 1}),
@@ -970,7 +970,7 @@ class AddBudgetExistingUsersForm(forms.Form):
 
         if additional_visits and selected_users:
             self.budget_change = self._get_budget_change(selected_users, additional_visits)
-            if adjustment_type == self.AdjustmentType.DECREASE:
+            if adjustment_type == self.AdjustmentType.DECREASE_VISITS:
                 self._validate_decrease_additional_visits(selected_users, additional_visits)
             else:
                 self._validate_budget_increase()
@@ -1027,7 +1027,7 @@ class AddBudgetExistingUsersForm(forms.Form):
 
     def _get_budget_change(self, selected_users, additional_visits):
         claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
-        if self.cleaned_data.get("adjustment_type") == self.AdjustmentType.DECREASE:
+        if self.cleaned_data.get("adjustment_type") == self.AdjustmentType.DECREASE_VISITS:
             additional_visits = -additional_visits
         org_pay = self.opportunity.managedopportunity.org_pay_per_visit if self.opportunity.managed else 0
         budget_change = sum((ocl.payment_unit.amount + org_pay) * additional_visits for ocl in claim_limits)
@@ -1053,7 +1053,7 @@ class AddBudgetExistingUsersForm(forms.Form):
 
         if additional_visits:
             claims = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
-            if self.cleaned_data.get("adjustment_type") == self.AdjustmentType.DECREASE:
+            if self.cleaned_data.get("adjustment_type") == self.AdjustmentType.DECREASE_VISITS:
                 claims.update(max_visits=F("max_visits") - additional_visits)
             else:
                 claims.update(max_visits=F("max_visits") + additional_visits)

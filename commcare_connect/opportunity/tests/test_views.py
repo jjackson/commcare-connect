@@ -77,7 +77,7 @@ def test_add_budget_existing_users(
             selected_users=[claim.id],
             additional_visits=5,
             end_date=end_date,
-            adjustment_type=AddBudgetExistingUsersForm.AdjustmentType.INCREASE,
+            adjustment_type=AddBudgetExistingUsersForm.AdjustmentType.INCREASE_VISITS,
         ),
     )
     assert response.status_code == 302
@@ -131,7 +131,7 @@ def test_add_budget_existing_users_for_managed_opportunity(
         data={
             "selected_users": [claim.id],
             "additional_visits": additional_visits,
-            "adjustment_type": AddBudgetExistingUsersForm.AdjustmentType.INCREASE,
+            "adjustment_type": AddBudgetExistingUsersForm.AdjustmentType.INCREASE_VISITS,
         },
     )
     assert response.status_code == HTTPStatus.FOUND
@@ -151,7 +151,7 @@ def test_add_budget_existing_users_for_managed_opportunity(
         data={
             "selected_users": [claim.id],
             "additional_visits": additional_visits,
-            "adjustment_type": AddBudgetExistingUsersForm.AdjustmentType.INCREASE,
+            "adjustment_type": AddBudgetExistingUsersForm.AdjustmentType.INCREASE_VISITS,
         },
     )
     assert response.status_code == HTTPStatus.OK
@@ -184,7 +184,7 @@ def test_decrease_budget_existing_users(
         data=dict(
             selected_users=[claim.id],
             additional_visits=5,
-            adjustment_type=AddBudgetExistingUsersForm.AdjustmentType.DECREASE,
+            adjustment_type=AddBudgetExistingUsersForm.AdjustmentType.DECREASE_VISITS,
             end_date=end_date,
         ),
     )
@@ -240,7 +240,7 @@ def test_decrease_budget_existing_users_for_managed_opportunity(
         data={
             "selected_users": [claim.id],
             "additional_visits": decrease_visits,
-            "adjustment_type": AddBudgetExistingUsersForm.AdjustmentType.DECREASE,
+            "adjustment_type": AddBudgetExistingUsersForm.AdjustmentType.DECREASE_VISITS,
         },
     )
     assert response.status_code == HTTPStatus.FOUND
@@ -290,7 +290,7 @@ def test_decrease_budget_validation_error_completed_visits(
         data=dict(
             selected_users=[claim.id],
             additional_visits=8,
-            adjustment_type=AddBudgetExistingUsersForm.AdjustmentType.DECREASE,
+            adjustment_type=AddBudgetExistingUsersForm.AdjustmentType.DECREASE_VISITS,
         ),
     )
     assert response.status_code == 200
