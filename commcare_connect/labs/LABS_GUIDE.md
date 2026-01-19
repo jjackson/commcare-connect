@@ -4,6 +4,28 @@
 
 Labs is a rapid prototyping environment for CommCare Connect experiments. It uses OAuth authentication (no local database users) and reads/writes data to production via APIs.
 
+## Local Setup
+
+Follow the standard CommCare Connect setup in the main [README.md](../../README.md), then:
+
+1.  **Install labs requirements**:
+
+    $ pip install -r requirements/labs.txt
+
+2.  **Run with local settings** (NOT labs settings):
+
+        $ ./manage.py runserver
+
+    **Important**: Use `config.settings.local` (the default), NOT `config.settings.labs`. This is confusing, but `config.settings.labs` is designed for the AWS deployment at labs.connect.dimagi.com. The `local.py` settings already have `IS_LABS_ENVIRONMENT = True` and all labs middleware configured.
+
+3.  **Get a CLI OAuth token** (for scripts and management commands):
+
+        $ python manage.py get_cli_token
+
+    This opens a browser for OAuth authentication and saves the token to `~/.commcare-connect/token.json`.
+
+4.  **Access Labs features** at `http://localhost:8000/labs/login/`
+
 ## Key Architecture
 
 - **OAuth Authentication**: Session-based, no local user database
@@ -318,6 +340,5 @@ if __name__ == "__main__":
 
 ## Getting Help
 
-- Check `MIGRATION_STATUS.md` for migration notes from old ExperimentRecord pattern
 - See individual app READMEs for app-specific patterns
 - OAuth flow details in `integrations/connect/oauth_views.py` for web authentication
