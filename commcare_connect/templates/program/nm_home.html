@@ -68,7 +68,7 @@
             <button {% if request.org_membership.is_viewer %}
                     disabled
                     {% else %}
-                    hx-post="{% url "program:apply_or_decline_application" request.org.slug program.id program.application_id "apply" %}"
+                    hx-post="{% url "program:apply_or_decline_application" request.org.slug program.program_id program.application_program_application_id "apply" %}"
                     hx-swap="outerHTML"
                     hx-target="body"
                     {% endif %}
@@ -121,7 +121,7 @@
                           </div>
                       </div>
                     </div>
-                    <a class="button button-md button-outline-rounded" href="{% url "opportunity:detail" request.org.slug opportunity.id %}">
+                    <a class="button button-md button-outline-rounded" href="{% url "opportunity:detail" request.org.slug opportunity.opportunity_id %}">
                       <div class="flex items-center justify-between gap-4">
                         <p class="text-sm">View</p>
                         <i class="fa-solid fa-arrow-right"></i>
