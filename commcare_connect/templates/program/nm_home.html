@@ -1,4 +1,5 @@
 {% extends 'program/program_base.html' %}
+{% load i18n %}
 
 {% block inner %}
   <div class="flex flex-col gap-4">
@@ -65,7 +66,7 @@
               </div>
           </div>
         </div>
-
+        <div class="flex flex-row-reverse">
         {% if program.status == 'invited' %}
           <button {% if request.org_membership.is_admin %}
                   hx-post="{% url "program:apply_or_decline_application" request.org.slug program.id program.application_id "apply" %}"
@@ -75,18 +76,21 @@
                   disabled
                   {% endif %}
                 class="button button-sm primary-dark">
-            Apply
+              <i class="fa-solid fa-circle-check text-green-600"></i> {% translate "Apply to Program" %}
           </button>
         {% elif program.status == 'applied' %}
-          <button class="button button-sm neutral" disabled>Apply</button>
+          <button class="button button-sm neutral lg:self-end" disabled>
+              <i class="fa-solid fa-circle-check text-green-600"></i> {% translate "Apply to Program" %}
+          </button>
         {% elif program.status == 'accepted' %}
           {% if program.managed_opportunities_for_org %}
-            <button class="button button-sm outline-style" @click="showOpp = !showOpp">
+            <button class="button button-sm outline-style w-full" @click="showOpp = !showOpp">
               <span class="relative z-20" x-text="showOpp ? 'Hide Opportunities' : 'View Opportunities'"></span>
               <i class="fa-solid text-xs" :class="showOpp ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
             </button>
           {% endif %}
         {% endif %}
+        </div>
 
         {% if program.status == 'accepted' %}
           {% if program.managed_opportunities_for_org %}
