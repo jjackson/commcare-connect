@@ -288,6 +288,7 @@ def get_annotated_opportunity_access_deliver_status(opportunity: Opportunity, fi
 
         queryset = queryset.annotate(
             payment_unit_id=Value(payment_unit.pk),
+            payment_unit_payment_unit_id=Value(payment_unit.payment_unit_id),
             payment_unit=Value(payment_unit.name, output_field=CharField()),
             total_visits=Coalesce(total_visits_sq, Value(None, output_field=IntegerField())),  # Optional
             _last_visit_val=Coalesce(last_visit_sq, Value(None, output_field=DateTimeField())),
