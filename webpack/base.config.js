@@ -30,6 +30,10 @@ module.exports = {
       __dirname,
       '../commcare_connect/static/js/workflow-runner.tsx',
     ),
+    'pipeline-runner': path.resolve(
+      __dirname,
+      '../commcare_connect/static/js/pipeline-runner.tsx',
+    ),
   },
   output: {
     path: path.resolve(__dirname, '../commcare_connect/static/bundles/'),

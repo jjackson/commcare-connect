@@ -7,6 +7,12 @@ import logging
 
 from django.contrib.auth import get_user_model
 
+from commcare_connect.ai.agents.pipeline_agent import (
+    PipelineEditResponse,
+    build_pipeline_prompt,
+    get_pipeline_agent,
+    get_pipeline_agent_openai,
+)
 from commcare_connect.ai.agents.solicitation_agent import get_solicitation_agent
 from commcare_connect.ai.agents.workflow_agent import (
     WorkflowEditResponse,
@@ -205,6 +211,16 @@ def run_agent(
 
             # Build prompt with current workflow context (definition and render code)
             actual_prompt = build_workflow_prompt(prompt, current_definition, current_render_code)
+        elif agent == "pipeline":
+            # Use the appropriate model based on user selection
+            if model_provider == "openai":
+                agent_instance = get_pipeline_agent_openai()
+            else:
+                agent_instance = get_pipeline_agent()
+
+            # Build prompt with current pipeline context (schema and render code)
+            # For pipeline, current_definition contains the schema
+            actual_prompt = build_pipeline_prompt(prompt, current_definition, current_render_code)
         elif agent == "vibes":
             if not HAS_CODING_AGENT:
                 raise ValueError("Coding agent not available - module not installed")
@@ -306,6 +322,47 @@ Please generate React code to fulfill the user's request. The code should be com
 
             return response_dict
 
+        # Handle structured output for pipeline agent
+        if agent == "pipeline" and isinstance(result.output, PipelineEditResponse):
+            logger.warning(
+                f"[AI TASK] PipelineEditResponse received: "
+                f"message_len={len(result.output.message)}, "
+                f"schema_changed={result.output.schema_changed}, "
+                f"render_code_changed={result.output.render_code_changed}, "
+                f"has_schema={result.output.schema is not None}, "
+                f"has_render_code={result.output.render_code is not None}, "
+                f"render_code_len={len(result.output.render_code) if result.output.render_code else 0}"
+            )
+
+            response_dict = {
+                "message": result.output.message,
+                "schema_changed": result.output.schema_changed,
+                "render_code_changed": result.output.render_code_changed,
+            }
+            if result.output.schema:
+                response_dict["schema"] = result.output.schema
+            if result.output.render_code:
+                response_dict["render_code"] = result.output.render_code
+
+            # Validate: if render_code_changed is True but render_code is missing, fix the flag
+            if result.output.render_code_changed and not result.output.render_code:
+                logger.warning(
+                    "[AI TASK] AI claimed render_code_changed=True but didn't provide render_code. "
+                    "Setting render_code_changed=False."
+                )
+                response_dict["render_code_changed"] = False
+                response_dict["message"] += (
+                    "\n\n(Note: I tried to update the UI code but the response was too long. "
+                    "Please try a simpler request or update the code manually.)"
+                )
+
+            # Same validation for schema
+            if result.output.schema_changed and not result.output.schema:
+                logger.warning("[AI TASK] AI claimed schema_changed=True but didn't provide schema.")
+                response_dict["schema_changed"] = False
+
+            return response_dict
+
         return result.output
 
     try:
@@ -333,6 +390,34 @@ Please generate React code to fulfill the user's request. The code should be com
                 logger.warning(f"[AI TASK] Saved workflow chat to LabsRecord for definition {definition_id}")
             except Exception as e:
                 logger.error(f"[AI TASK] Failed to save workflow chat to LabsRecord: {e}")
+                # Fall back to session store
+                if session_id:
+                    add_message_to_history(session_id, "user", prompt)
+                    if isinstance(response, dict) and "message" in response:
+                        add_message_to_history(session_id, "assistant", response["message"])
+                    else:
+                        add_message_to_history(session_id, "assistant", str(response))
+        elif agent == "pipeline" and definition_id and access_token:
+            # For pipeline agents, save to LabsRecord via PipelineDataAccess
+            try:
+                from commcare_connect.labs.custom_pipelines.data_access import PipelineDataAccess
+
+                pipeline_data_access = PipelineDataAccess(
+                    access_token=access_token,
+                    program_id=program_id,
+                    opportunity_id=opportunity_id,
+                )
+                # Add user message
+                pipeline_data_access.add_chat_message(definition_id, "user", prompt)
+                # Add assistant response
+                if isinstance(response, dict) and "message" in response:
+                    pipeline_data_access.add_chat_message(definition_id, "assistant", response["message"])
+                else:
+                    pipeline_data_access.add_chat_message(definition_id, "assistant", str(response))
+                pipeline_data_access.close()
+                logger.warning(f"[AI TASK] Saved pipeline chat to LabsRecord for definition {definition_id}")
+            except Exception as e:
+                logger.error(f"[AI TASK] Failed to save pipeline chat to LabsRecord: {e}")
                 # Fall back to session store
                 if session_id:
                     add_message_to_history(session_id, "user", prompt)

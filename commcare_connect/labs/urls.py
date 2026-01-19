@@ -32,6 +32,8 @@ urlpatterns = [
     path("api/analysis/flw/", analysis_views.FLWAnalysisAPIView.as_view(), name="api_flw_analysis"),
     # Workflow
     path("workflow/", include("commcare_connect.workflow.urls", namespace="workflow")),
+    # Custom Pipelines
+    path("pipelines/", include("commcare_connect.labs.custom_pipelines.urls", namespace="custom_pipelines")),
     # Dashboard Prototypes
     path("", include("commcare_connect.labs.dashboards.urls")),
 ]
