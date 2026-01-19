@@ -582,13 +582,11 @@ def generate_automated_service_delivery_invoice():
         invoices_chunk.append(payment_invoice)
 
         if len(invoices_chunk) == CHUNK_SIZE:
-            created_ids = _bulk_create_and_link_invoices(invoices_chunk)
-            created_invoices_ids.extend(created_ids)
+            created_invoices_ids += _bulk_create_and_link_invoices(invoices_chunk)
             invoices_chunk = []
 
     if invoices_chunk:
-        created_ids = _bulk_create_and_link_invoices(invoices_chunk)
-        created_invoices_ids.extend(created_ids)
+        created_invoices_ids += _bulk_create_and_link_invoices(invoices_chunk)
 
     _send_auto_invoice_created_notification(created_invoices_ids)
 
