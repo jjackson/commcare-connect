@@ -2170,7 +2170,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
                 lat_val__range=(lat - lat_delta, lat + lat_delta),
                 lon_val__range=(lon - lon_delta, lon + lon_delta),
             )
-            .select_related("user")
+            .select_related("user", "opportunity")
         )
 
         for loc in qs:
@@ -2189,7 +2189,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
                             "opportunity:user_visit_details",
                             kwargs={
                                 "org_slug": request.org.slug,
-                                "opp_id": loc.opportunity__opportunity_id,
+                                "opp_id": loc.opportunity.opportunity_id,
                                 "pk": loc.user_visit_id,
                             },
                         ),
