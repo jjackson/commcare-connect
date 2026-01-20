@@ -103,7 +103,6 @@ class Opportunity(BaseModel):
     end_date = models.DateField(null=True)
     total_budget = models.PositiveBigIntegerField(null=True)
     api_key = models.ForeignKey(HQApiKey, on_delete=models.DO_NOTHING, null=True)
-    currency = models.CharField(max_length=3, null=True)
     currency_fk = models.ForeignKey(Currency, on_delete=models.PROTECT, null=True)
     country = models.ForeignKey(Country, on_delete=models.PROTECT, null=True)
     auto_approve_visits = models.BooleanField(default=True)
@@ -516,7 +515,8 @@ class PaymentInvoice(models.Model):
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     title = models.CharField(max_length=255, null=True, blank=True)
-    notes = models.TextField(null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
+    date_of_expense = models.DateField(null=True, blank=True)
     status = models.CharField(choices=InvoiceStatus.choices, default=InvoiceStatus.PENDING, max_length=50)
     archived_date = models.DateTimeField(null=True, blank=True)
 
