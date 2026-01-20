@@ -42,16 +42,21 @@ class Flag(AbstractUserFlag):
 
     @classmethod
     def active_flags_for_user(cls, user, include_role_flags=False):
-        if not include_role_flags:
-            return cls.objects.filter(users__in=[user])
+        filters = (
+            models.Q(users=user)
+            | models.Q(organizations__members=user)
+            | models.Q(opportunities__opportunityaccess__user=user)
+            | models.Q(programs__organization__members=user)
+        )
 
-        conditions = models.Q(users__in=[user]) | models.Q(everyone=True)
-        if user.is_staff:
-            conditions |= models.Q(staff=True)
-        if user.is_superuser:
-            conditions |= models.Q(superusers=True)
+        if include_role_flags:
+            filters |= models.Q(everyone=True)
+            if user.is_staff:
+                filters |= models.Q(staff=True)
+            if user.is_superuser:
+                filters |= models.Q(superusers=True)
 
-        return cls.objects.filter(conditions)
+        return cls.objects.filter(filters).distinct()
 
     def is_active_for(self, obj: Organization | Opportunity | Program):
         if isinstance(obj, Organization):
