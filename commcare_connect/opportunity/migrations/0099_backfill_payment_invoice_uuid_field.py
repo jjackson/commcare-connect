@@ -4,20 +4,6 @@ import uuid
 from django.db import migrations, models
 
 
-
-def gen_uuid(apps, schema_editor):
-    connection = schema_editor.connection
-    table_name = "opportunity_paymentinvoice"
-    field_name = "payment_invoice_id"
-
-    with connection.cursor() as cursor:
-        cursor.execute(f"""
-            UPDATE {table_name}
-            SET {field_name} = gen_random_uuid()
-            WHERE {field_name} IS NULL;
-        """)
-
-
 class Migration(migrations.Migration):
     dependencies = [
         ("opportunity", "0098_paymentinvoice_payment_invoice_id"),
