@@ -2,8 +2,12 @@ from unittest.mock import patch
 
 import pytest
 
-from commcare_connect.opportunity.models import CompletedWorkStatus
-from commcare_connect.opportunity.tests.factories import CompletedWorkFactory, OpportunityAccessFactory
+from commcare_connect.opportunity.models import CompletedWorkStatus, VisitValidationStatus
+from commcare_connect.opportunity.tests.factories import (
+    CompletedWorkFactory,
+    OpportunityAccessFactory,
+    UserVisitFactory,
+)
 from commcare_connect.program.models import ProgramApplicationStatus
 from commcare_connect.program.tasks import (
     send_monthly_delivery_reminder_email,
@@ -80,7 +84,15 @@ class TestMonthlyDeliveryReminderEmail:
         opportunity = ManagedOpportunityFactory(organization=org)
 
         access = OpportunityAccessFactory(opportunity=opportunity)
-        CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
+        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
+
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=access.user,
+            opportunity_access=access,
+            status=VisitValidationStatus.pending,
+            completed_work=completed_work,
+        )
 
         send_monthly_delivery_reminder_email()
 

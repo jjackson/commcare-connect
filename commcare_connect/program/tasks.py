@@ -147,6 +147,7 @@ def send_pm_reminder_for_opportunities(organization):
     opp_ids_pending_pm_review = (
         CompletedWork.objects.filter(
             opportunity_access__opportunity__organization=organization,
+            opportunity_access__opportunity__managed=True,
             uservisit__review_status=VisitReviewStatus.pending,
             uservisit__status=VisitValidationStatus.approved,
         )
@@ -157,7 +158,7 @@ def send_pm_reminder_for_opportunities(organization):
     if not opp_ids_pending_pm_review:
         return
 
-    opportunities = Opportunity.objects.filter(id__in=opp_ids_pending_pm_review, managed=True).annotate(
+    opportunities = Opportunity.objects.filter(id__in=opp_ids_pending_pm_review).annotate(
         program_organization=F("managedopportunity__program__organization")
     )
 
