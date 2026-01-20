@@ -3,7 +3,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
 
+import sentry_sdk
 from django.apps import apps
+from django.db import transaction
 
 from commcare_connect.opportunity.models import Opportunity
 
@@ -56,27 +58,26 @@ OPPORTUNITY_DELETIONS: Sequence[ModelDeletion] = (
 )
 
 
-def delete_opportunity_data(opportunity_or_id):
-    if isinstance(opportunity_or_id, Opportunity):
-        opportunity_id = opportunity_or_id.pk
-    else:
-        opportunity_id = opportunity_or_id
-    total_deleted = 0
-    for deletion in OPPORTUNITY_DELETIONS:
-        deleted = deletion.delete(opportunity_id)
-        total_deleted += deleted
-        logger.info(
-            "Deleted %s rows from %s",
-            deleted,
-            deletion.model._meta.label,
-        )
-    logger.info("Deleted %s total rows tied to Opportunity %s", total_deleted, opportunity_id)
-
-
 def delete_opportunity(opportunity_or_id):
     if isinstance(opportunity_or_id, Opportunity):
         opportunity = opportunity_or_id
     else:
         opportunity = Opportunity.objects.get(pk=opportunity_or_id)
-    delete_opportunity_data(opportunity.pk)
-    opportunity.delete()
+    opportunity_id = opportunity.pk
+    total_deleted = 0
+    try:
+        with transaction.atomic():
+            for deletion in OPPORTUNITY_DELETIONS:
+                deleted = deletion.delete(opportunity_id)
+                total_deleted += deleted
+                logger.info(
+                    "Deleted %s rows from %s",
+                    deleted,
+                    deletion.model._meta.label,
+                )
+            logger.info("Deleted %s total rows tied to Opportunity %s", total_deleted, opportunity_id)
+            opportunity.delete()
+    except Exception:
+        sentry_sdk.capture_exception()
+        logger.exception("Failed to delete Opportunity %s", opportunity_id)
+        raise
