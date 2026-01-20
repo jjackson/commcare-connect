@@ -63,7 +63,16 @@ class TestSendMonthlyDeliveryReminderEmail:
         program = ProgramFactory(organization=org)
         opportunity = ManagedOpportunityFactory(organization=org, program=program)
         access = OpportunityAccessFactory(opportunity=opportunity)
-        CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
+        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
+
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=access.user,
+            opportunity_access=access,
+            status=VisitValidationStatus.approved,
+            review_status=VisitReviewStatus.pending,
+            completed_work=completed_work,
+        )
 
         send_monthly_delivery_reminder_email()
 
