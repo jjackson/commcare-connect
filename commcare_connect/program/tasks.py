@@ -174,6 +174,9 @@ def send_pm_reminder_for_opportunities(organization):
 
 
 def _send_org_email_for_opportunities(organization, opportunities, recipient_emails):
+    if not recipient_emails:
+        return
+
     opportunity_links = []
     for opportunity in opportunities:
         worker_deliver_url = build_absolute_uri(
