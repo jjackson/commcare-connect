@@ -25,7 +25,7 @@
       {% if request.is_opportunity_pm %}
         {% if invoice_status == 'submitted' %}
           <button hx-post="{% url 'opportunity:invoice_approve' org_slug=request.org.slug opp_id=opportunity.opportunity_id %}"
-                  hx-vals='{"pk": {{ form.instance.payment_invoice_id }}}'
+                  hx-vals='{"pk": "{{ form.instance.payment_invoice_id }}"}'
                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                   class="button button-md primary-dark justify-center !inline-flex"
                   {% if form.instance.payment %}disabled{% endif %}>
