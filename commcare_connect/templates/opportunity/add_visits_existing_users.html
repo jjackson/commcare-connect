@@ -95,7 +95,7 @@
           if (this.additionalVisits > 0 && !this.adjustmentType) {
             errors.push('Please select an adjustment type (Increase or Decrease)');
           }
-          if (this.adjustmentType && !this.additionalVisits) {
+          if (this.adjustmentType && !(this.additionalVisits > 0)) {
             errors.push('Please specify the number of additional visits');
           }
         }

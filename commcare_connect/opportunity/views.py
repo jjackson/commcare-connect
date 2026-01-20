@@ -596,7 +596,7 @@ def add_budget_existing_users(request, org_slug=None, opp_id=None):
             change_type = "Increased" if adjustment_type == form.AdjustmentType.INCREASE_VISITS else "Decreased"
             message_parts.append(f"{change_type} {visit_text} for {user_text}.")
             if not request.opportunity.managed:
-                message_parts.append(f"Budget {change_type.lower()} by {form.budget_change:.2f}.")
+                message_parts.append(f"Budget {change_type.lower()} by {abs(form.budget_change):.2f}.")
 
         if end_date:
             message_parts.append(f"Extended opportunity end date to {end_date} for selected workers.")
