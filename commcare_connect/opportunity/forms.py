@@ -1033,8 +1033,9 @@ class AddBudgetExistingUsersForm(forms.Form):
         claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
         if self.cleaned_data.get("adjustment_type") == self.AdjustmentType.DECREASE_VISITS:
             number_of_visits = -number_of_visits
-        org_pay = self.opportunity.managedopportunity.org_pay_per_visit if self.opportunity.managed else 0
-        budget_change = sum((ocl.payment_unit.amount + org_pay) * number_of_visits for ocl in claim_limits)
+        budget_change = sum(
+            (ocl.payment_unit.amount + self.opportunity.org_pay_per_visit) * number_of_visits for ocl in claim_limits
+        )
         return budget_change
 
     def clean_end_date(self):
