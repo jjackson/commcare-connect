@@ -234,7 +234,7 @@ def apply_or_decline_application(request, application_id, action, org_slug=None,
     }
 
     if action not in action_map:
-        return redirect(redirect_url)
+        return HttpResponse(headers={"HX-Redirect": redirect_url})
 
     application.status = action_map[action]["status"]
     application.modified_by = request.user.email
@@ -243,7 +243,7 @@ def apply_or_decline_application(request, application_id, action, org_slug=None,
     if action == "apply":
         send_program_invite_applied_email(application.id)
 
-    return redirect(redirect_url)
+    return HttpResponse(headers={"HX-Redirect": redirect_url})
 
 
 @org_viewer_required
@@ -296,7 +296,14 @@ def program_manager_home(request, org):
             payment__isnull=True,
         )
         .values("opportunity__id", "opportunity__name", "opportunity__organization__name")
-        .annotate(count=Concat(F("opportunity__currency"), Value(" "), Sum("amount"), output_field=CharField()))
+        .annotate(
+            count=Concat(
+                F("opportunity__currency_fk__code"),
+                Value(" "),
+                Sum("amount"),
+                output_field=CharField(),
+            )
+        )
     )
 
     pending_payments = _make_recent_activity_data(
