@@ -3,11 +3,13 @@ import pytest
 from commcare_connect.opportunity.deletion import OPPORTUNITY_DELETIONS, delete_opportunity_data
 from commcare_connect.opportunity.models import LabsRecord
 from commcare_connect.opportunity.tests import factories
+from commcare_connect.program.tests.factories import ManagedOpportunityFactory
 
 
 @pytest.mark.django_db
-def test_delete_opportunity_data_clears_registered_models():
-    opportunity = factories.OpportunityFactory()
+@pytest.mark.parametrize("opportunity_factory", [factories.OpportunityFactory, ManagedOpportunityFactory])
+def test_delete_opportunity_data_clears_registered_models(opportunity_factory):
+    opportunity = opportunity_factory()
     access = factories.OpportunityAccessFactory(opportunity=opportunity)
     payment_unit = factories.PaymentUnitFactory(opportunity=opportunity)
     deliver_unit = factories.DeliverUnitFactory(payment_unit=payment_unit)
