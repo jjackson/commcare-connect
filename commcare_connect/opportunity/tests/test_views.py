@@ -75,7 +75,7 @@ def test_add_budget_existing_users(
         url,
         data=dict(
             selected_users=[claim.id],
-            additional_visits=5,
+            number_of_visits=5,
             end_date=end_date,
             adjustment_type=AddBudgetExistingUsersForm.AdjustmentType.INCREASE_VISITS,
         ),
@@ -120,17 +120,17 @@ def test_add_budget_existing_users_for_managed_opportunity(
     url = reverse("opportunity:add_budget_existing_users", args=(opportunity.organization.slug, opportunity.pk))
     client.force_login(org_user_admin)
 
-    additional_visits = 10
+    number_of_visits = 10
     # Budget calculation breakdown: opp_budget=120 Initial_claimed: 60 increase: 60 Final: 120 - Still under opp_budget
 
-    budget_increase = (payment_per_visit + org_pay_per_visit) * additional_visits
+    budget_increase = (payment_per_visit + org_pay_per_visit) * number_of_visits
     expected_claimed_budget = budget_per_user + budget_increase
 
     response = client.post(
         url,
         data={
             "selected_users": [claim.id],
-            "additional_visits": additional_visits,
+            "number_of_visits": number_of_visits,
             "adjustment_type": AddBudgetExistingUsersForm.AdjustmentType.INCREASE_VISITS,
         },
     )
@@ -141,23 +141,23 @@ def test_add_budget_existing_users_for_managed_opportunity(
 
     assert opportunity.total_budget == initial_total_budget
     assert opportunity.claimed_budget == expected_claimed_budget
-    assert claim_limit.max_visits == max_visits_per_user + additional_visits
+    assert claim_limit.max_visits == max_visits_per_user + number_of_visits
 
-    additional_visits = 1
+    number_of_visits = 1
     # Budget calculation breakdown: Previous: claimed 120 increase: 6 final: 126 - Exceeds opp_budget budget of 120
 
     response = client.post(
         url,
         data={
             "selected_users": [claim.id],
-            "additional_visits": additional_visits,
+            "number_of_visits": number_of_visits,
             "adjustment_type": AddBudgetExistingUsersForm.AdjustmentType.INCREASE_VISITS,
         },
     )
     assert response.status_code == HTTPStatus.OK
     form = response.context["form"]
-    assert "additional_visits" in form.errors
-    assert form.errors["additional_visits"][0] == "Additional visits exceed the opportunity budget."
+    assert "number_of_visits" in form.errors
+    assert form.errors["number_of_visits"][0] == "Additional visits exceed the opportunity budget."
 
 
 @pytest.mark.django_db
@@ -183,7 +183,7 @@ def test_decrease_budget_existing_users(
         url,
         data=dict(
             selected_users=[claim.id],
-            additional_visits=5,
+            number_of_visits=5,
             adjustment_type=AddBudgetExistingUsersForm.AdjustmentType.DECREASE_VISITS,
             end_date=end_date,
         ),
@@ -239,7 +239,7 @@ def test_decrease_budget_existing_users_for_managed_opportunity(
         url,
         data={
             "selected_users": [claim.id],
-            "additional_visits": decrease_visits,
+            "number_of_visits": decrease_visits,
             "adjustment_type": AddBudgetExistingUsersForm.AdjustmentType.DECREASE_VISITS,
         },
     )
@@ -289,14 +289,14 @@ def test_decrease_budget_validation_error_completed_visits(
         url,
         data=dict(
             selected_users=[claim.id],
-            additional_visits=8,
+            number_of_visits=8,
             adjustment_type=AddBudgetExistingUsersForm.AdjustmentType.DECREASE_VISITS,
         ),
     )
     assert response.status_code == 200
     form = response.context["form"]
-    assert "additional_visits" in form.errors
-    error_message = form.errors["additional_visits"][0]
+    assert "number_of_visits" in form.errors
+    error_message = form.errors["number_of_visits"][0]
     assert "Cannot decrease the number of visits" in error_message
     assert "The visit count cannot be reduced below the number of already completed visits" in error_message
 
@@ -322,7 +322,7 @@ def test_adjustment_type_required_validation(
         url,
         data=dict(
             selected_users=[claim.id],
-            additional_visits=5,
+            number_of_visits=5,
         ),
     )
     assert response.status_code == 200

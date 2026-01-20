@@ -922,7 +922,7 @@ class AddBudgetExistingUsersForm(forms.Form):
         INCREASE_VISITS = "increase_visits", _("Increase Visits")
         DECREASE_VISITS = "decrease_visits", _("Decrease Visits")
 
-    additional_visits = forms.IntegerField(
+    number_of_visits = forms.IntegerField(
         widget=forms.NumberInput(attrs={"x-model": "additionalVisits", "min": 1}),
         required=False,
         min_value=1,
@@ -958,29 +958,29 @@ class AddBudgetExistingUsersForm(forms.Form):
     def clean(self):
         cleaned_data = super().clean()
         selected_users = cleaned_data.get("selected_users")
-        additional_visits = cleaned_data.get("additional_visits")
+        number_of_visits = cleaned_data.get("number_of_visits")
         adjustment_type = cleaned_data.get("adjustment_type")
 
         if not selected_users:
             raise forms.ValidationError({"selected_users": gettext("Please select workers to update.")})
-        elif not additional_visits and not cleaned_data.get("end_date"):
-            raise forms.ValidationError(gettext("Please specify either additional visits or end date."))
+        elif not number_of_visits and not cleaned_data.get("end_date"):
+            raise forms.ValidationError(gettext("Please specify either number of visits or end date."))
 
-        if additional_visits and not adjustment_type:
+        if number_of_visits and not adjustment_type:
             raise forms.ValidationError(
-                {"adjustment_type": gettext("Please select an adjustment type for additional visits.")}
+                {"adjustment_type": gettext("Please select an adjustment type for number of visits.")}
             )
 
-        if additional_visits and selected_users:
-            self.budget_change = self._get_budget_change(selected_users, additional_visits)
+        if number_of_visits and selected_users:
+            self.budget_change = self._get_budget_change(selected_users, number_of_visits)
             if adjustment_type == self.AdjustmentType.DECREASE_VISITS:
-                self._validate_decrease_additional_visits(selected_users, additional_visits)
+                self._validate_decrease_visits(selected_users, number_of_visits)
             else:
                 self._validate_budget_increase()
 
         return cleaned_data
 
-    def _validate_decrease_additional_visits(self, selected_users, additional_visits):
+    def _validate_decrease_visits(self, selected_users, number_of_visits):
         claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users).select_related(
             "opportunity_claim__opportunity_access__user", "opportunity_claim__opportunity_access", "payment_unit"
         )
@@ -989,7 +989,7 @@ class AddBudgetExistingUsersForm(forms.Form):
 
         invalid_users = []
         for claim_limit in claim_limits_list:
-            new_max_visits = claim_limit.max_visits - additional_visits
+            new_max_visits = claim_limit.max_visits - number_of_visits
             key = (claim_limit.opportunity_claim.opportunity_access.id, claim_limit.payment_unit.id)
             completed_count = completed_visits_map.get(key, 0)
 
@@ -1005,7 +1005,7 @@ class AddBudgetExistingUsersForm(forms.Form):
                 users_message = f"{len(usernames_set)} users"
             raise forms.ValidationError(
                 {
-                    "additional_visits": f"Cannot decrease the number of visits for {users_message}."
+                    "number_of_visits": f"Cannot decrease the number of visits for {users_message}."
                     f" The visit count cannot be reduced below the number of already"
                     f" completed visits."
                 }
@@ -1029,12 +1029,12 @@ class AddBudgetExistingUsersForm(forms.Form):
         }
         return visit_counts
 
-    def _get_budget_change(self, selected_users, additional_visits):
+    def _get_budget_change(self, selected_users, number_of_visits):
         claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
         if self.cleaned_data.get("adjustment_type") == self.AdjustmentType.DECREASE_VISITS:
-            additional_visits = -additional_visits
+            number_of_visits = -number_of_visits
         org_pay = self.opportunity.managedopportunity.org_pay_per_visit if self.opportunity.managed else 0
-        budget_change = sum((ocl.payment_unit.amount + org_pay) * additional_visits for ocl in claim_limits)
+        budget_change = sum((ocl.payment_unit.amount + org_pay) * number_of_visits for ocl in claim_limits)
         return budget_change
 
     def clean_end_date(self):
@@ -1048,19 +1048,21 @@ class AddBudgetExistingUsersForm(forms.Form):
             # NM cannot increase the opportunity budget they can only
             # assign new visits if the opportunity has remaining budget.
             if self.budget_change > self.opportunity.remaining_budget:
-                raise forms.ValidationError({"additional_visits": "Additional visits exceed the opportunity budget."})
+                raise forms.ValidationError(
+                    {"number_of_visits": "The number of visits being increased exceeds the opportunity budget."}
+                )
 
     def save(self):
         selected_users = self.cleaned_data["selected_users"]
-        additional_visits = self.cleaned_data["additional_visits"]
+        number_of_visits = self.cleaned_data["number_of_visits"]
         end_date = self.cleaned_data["end_date"]
 
-        if additional_visits:
+        if number_of_visits:
             claims = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
             if self.cleaned_data.get("adjustment_type") == self.AdjustmentType.DECREASE_VISITS:
-                claims.update(max_visits=F("max_visits") - additional_visits)
+                claims.update(max_visits=F("max_visits") - number_of_visits)
             else:
-                claims.update(max_visits=F("max_visits") + additional_visits)
+                claims.update(max_visits=F("max_visits") + number_of_visits)
 
             if not self.opportunity.managed:
                 self.opportunity.total_budget += self.budget_change
