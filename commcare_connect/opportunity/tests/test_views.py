@@ -157,7 +157,7 @@ def test_add_budget_existing_users_for_managed_opportunity(
     assert response.status_code == HTTPStatus.OK
     form = response.context["form"]
     assert "number_of_visits" in form.errors
-    assert form.errors["number_of_visits"][0] == "Additional visits exceed the opportunity budget."
+    assert form.errors["number_of_visits"][0] == "The number of visits being increased exceeds the opportunity budget."
 
 
 @pytest.mark.django_db
@@ -328,7 +328,7 @@ def test_adjustment_type_required_validation(
     assert response.status_code == 200
     form = response.context["form"]
     assert "adjustment_type" in form.errors
-    assert form.errors["adjustment_type"][0] == "Please select an adjustment type for additional visits."
+    assert form.errors["adjustment_type"][0] == "Please select an adjustment type for number of visits."
 
 
 @pytest.mark.parametrize(
