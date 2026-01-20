@@ -997,11 +997,12 @@ class AddBudgetExistingUsersForm(forms.Form):
                 invalid_users.append(claim_limit.opportunity_claim)
 
         if invalid_users:
-            if len(invalid_users) <= 10:
-                usernames = ", ".join(user.opportunity_access.user.username for user in invalid_users)
+            usernames_set = {user.opportunity_access.user.username for user in invalid_users}
+            if len(usernames_set) <= 10:
+                usernames = ", ".join(usernames_set)
                 users_message = f"user(s): {usernames}"
             else:
-                users_message = f"{len(invalid_users)} users"
+                users_message = f"{len(usernames_set)} users"
             raise forms.ValidationError(
                 {
                     "additional_visits": f"Cannot decrease the number of visits for {users_message}."
