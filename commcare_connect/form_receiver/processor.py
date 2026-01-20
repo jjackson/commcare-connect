@@ -275,7 +275,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
 
     # handle concurrent form submissions for same entity id
     lock_key = f"visit_processor:{access.id}:{deliver_unit.id}:{entity_id}"
-    with try_redis_lock(lock_key, timeout=10, blocking_timeout=2) as acquired, transaction.atomic():
+    with try_redis_lock(lock_key, timeout=30, blocking_timeout=5) as acquired, transaction.atomic():
         if not acquired:
             raise ProcessingError("Error processing form, please retry again.")
         counts = (
