@@ -1000,14 +1000,17 @@ class AddBudgetExistingUsersForm(forms.Form):
             usernames_set = {user.opportunity_access.user.username for user in invalid_users}
             if len(usernames_set) <= 10:
                 usernames = ", ".join(usernames_set)
-                users_message = f"user(s): {usernames}"
+                users_message = f"{gettext('user(s)')}: {usernames}"
             else:
-                users_message = f"{len(usernames_set)} users"
+                users_message = f"{len(usernames_set)} {gettext('user(s)')}"
             raise forms.ValidationError(
                 {
-                    "number_of_visits": f"Cannot decrease the number of visits for {users_message}."
-                    f" The visit count cannot be reduced below the number of already"
-                    f" completed visits."
+                    "number_of_visits": gettext(
+                        "Cannot decrease the number of visits for %(users)s."
+                        " The visit count cannot be reduced below the number of already"
+                        " completed visits."
+                    )
+                    % {"users": users_message}
                 }
             )
 
@@ -1041,7 +1044,7 @@ class AddBudgetExistingUsersForm(forms.Form):
     def clean_end_date(self):
         end_date = self.cleaned_data.get("end_date")
         if end_date and end_date < datetime.date.today():
-            raise forms.ValidationError("End date cannot be in the past.")
+            raise forms.ValidationError(gettext("End date cannot be in the past."))
         return end_date
 
     def _validate_budget_increase(self):
@@ -1050,7 +1053,11 @@ class AddBudgetExistingUsersForm(forms.Form):
             # assign new visits if the opportunity has remaining budget.
             if self.budget_change > self.opportunity.remaining_budget:
                 raise forms.ValidationError(
-                    {"number_of_visits": "The number of visits being increased exceeds the opportunity budget."}
+                    {
+                        "number_of_visits": gettext(
+                            "The number of visits being increased exceeds the opportunity budget."
+                        )
+                    }
                 )
 
     def save(self):
