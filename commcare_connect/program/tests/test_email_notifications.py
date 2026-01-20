@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from commcare_connect.opportunity.models import CompletedWorkStatus, VisitReviewStatus, VisitValidationStatus
+from commcare_connect.opportunity.models import CompletedWorkStatus, VisitValidationStatus
 from commcare_connect.opportunity.tests.factories import (
     CompletedWorkFactory,
     OpportunityAccessFactory,
@@ -125,8 +125,7 @@ class TestMonthlyDeliveryReminderEmail:
             opportunity=opportunity,
             user=access.user,
             opportunity_access=access,
-            status=VisitValidationStatus.approved,
-            review_status=VisitReviewStatus.pending,
+            status=VisitValidationStatus.pending,
             completed_work=completed_work,
         )
 
