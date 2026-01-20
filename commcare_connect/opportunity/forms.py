@@ -923,7 +923,7 @@ class AddBudgetExistingUsersForm(forms.Form):
         DECREASE_VISITS = "decrease_visits", _("Decrease Visits")
 
     number_of_visits = forms.IntegerField(
-        widget=forms.NumberInput(attrs={"x-model": "additionalVisits", "min": 1}),
+        widget=forms.NumberInput(attrs={"x-model": "numberOfVisits", "min": 1}),
         required=False,
         min_value=1,
         label=_("Number of Visits"),

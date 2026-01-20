@@ -35,7 +35,7 @@
   function handleExistingBudgetComponent(budgetPerVisit) {
     return {
       modalOpen: false,
-      additionalVisits: null,
+      numberOfVisits: null,
       adjustmentType: null,
       budgetPerVisit: budgetPerVisit,
       selected_users: [],
@@ -60,27 +60,27 @@
       }
     },
       totalVisits() {
-        return this.selected_users.length * (parseInt(this.additionalVisits) || 0);;
+        return this.selected_users.length * (parseInt(this.numberOfVisits) || 0);;
       },
       calculatedBudget() {
         return (this.totalVisits() * budgetPerVisit)
       },
       // Validation methods
-      hasAdditionalVisitsOrEndDate() {
-        return Boolean(this.additionalVisits > 0 || this.end_date);
+      hasnumberOfVisitsOrEndDate() {
+        return Boolean(this.numberOfVisits > 0 || this.end_date);
       },
       hasValidVisitsAndAdjustment() {
-        if (this.additionalVisits > 0 && !this.adjustmentType) {
+        if (this.numberOfVisits > 0 && !this.adjustmentType) {
           return false;
         }
-        if (this.adjustmentType && !(this.additionalVisits > 0)) {
+        if (this.adjustmentType && !(this.numberOfVisits > 0)) {
           return false;
         }
         return true;
       },
       isFormValid() {
         return this.selected_users.length > 0 &&
-               this.hasAdditionalVisitsOrEndDate() &&
+               this.hasnumberOfVisitsOrEndDate() &&
                this.hasValidVisitsAndAdjustment();
       },
       getValidationErrors() {
@@ -88,15 +88,15 @@
         if (this.selected_users.length === 0) {
           errors.push('Please select at least one worker');
         }
-        if (!this.hasAdditionalVisitsOrEndDate()) {
-          errors.push('Please specify either additional visits (>0) or end date');
+        if (!this.hasnumberOfVisitsOrEndDate()) {
+          errors.push('Please specify either number of visits (>0) or end date');
         }
         if (!this.hasValidVisitsAndAdjustment()) {
-          if (this.additionalVisits > 0 && !this.adjustmentType) {
+          if (this.numberOfVisits > 0 && !this.adjustmentType) {
             errors.push('Please select an adjustment type (Increase or Decrease)');
           }
-          if (this.adjustmentType && !(this.additionalVisits > 0)) {
-            errors.push('Please specify the number of additional visits');
+          if (this.adjustmentType && !(this.numberOfVisits > 0)) {
+            errors.push('Please specify the number of visits (>0)');
           }
         }
         return errors;
@@ -252,7 +252,7 @@
 
                   <!-- Success Messages -->
                   <div x-show="isFormValid()">
-                    <div x-show="additionalVisits && adjustmentType">
+                    <div x-show="numberOfVisits && adjustmentType">
                       You are about to <span x-text="adjustmentType === 'increase_visits' ? 'increase' : 'decrease'"></span>
                       by <b x-text="totalVisits()"></b> visit(s) which will result in a
                       budget <span x-text="adjustmentType === 'increase_visits' ? 'increase' : 'decrease'"></span> of
