@@ -69,8 +69,7 @@ class TestSendMonthlyDeliveryReminderEmail:
             opportunity=opportunity,
             user=access.user,
             opportunity_access=access,
-            status=VisitValidationStatus.approved,
-            review_status=VisitReviewStatus.pending,
+            status=VisitValidationStatus.pending,
             completed_work=completed_work,
         )
 
