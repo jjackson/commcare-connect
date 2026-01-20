@@ -584,14 +584,14 @@ def add_budget_existing_users(request, org_slug=None, opp_id=None):
     if form.is_valid():
         form.save()
 
-        additional_visits = form.cleaned_data.get("additional_visits")
+        number_of_visits = form.cleaned_data.get("number_of_visits")
         selected_users = form.cleaned_data.get("selected_users")
         end_date = form.cleaned_data.get("end_date")
         adjustment_type = form.cleaned_data.get("adjustment_type")
         message_parts = []
 
-        if additional_visits and selected_users:
-            visit_text = f"visits by {additional_visits}"
+        if number_of_visits and selected_users:
+            visit_text = f"visits by {number_of_visits}"
             user_text = f"{len(selected_users)} worker{'s' if len(selected_users) != 1 else ''}"
             change_type = "Increased" if adjustment_type == form.AdjustmentType.INCREASE_VISITS else "Decreased"
             message_parts.append(f"{change_type} {visit_text} for {user_text}.")
