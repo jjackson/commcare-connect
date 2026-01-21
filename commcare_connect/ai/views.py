@@ -1,165 +1,333 @@
 """
-Views for Pydantic AI demo.
+Views for AI streaming endpoints.
+
+Provides SSE streaming of AI responses for workflow and pipeline editing.
 """
+
+import asyncio
+import json
 import logging
-import uuid
+import queue
+import threading
 
-from celery.result import AsyncResult
-from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
-from django.shortcuts import render
-from django.views.decorators.http import require_GET, require_POST
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import JsonResponse, StreamingHttpResponse
+from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views import View
+from django.views.decorators.csrf import csrf_exempt
 
-from commcare_connect.utils.celery import CELERY_TASK_SUCCESS, get_task_progress_message
-
-from .session_store import get_message_history
-from .tasks import run_agent
+from commcare_connect.ai.types import UserDependencies
 
 logger = logging.getLogger(__name__)
 
 
-@login_required
-@require_POST
-def ai_demo_submit(request):
+def send_sse_event(
+    message: str = "",
+    event_type: str = "message",
+    data: dict | None = None,
+    error: str | None = None,
+) -> str:
     """
-    Submit a prompt and trigger a Celery task.
-    Returns the task ID for polling.
+    Format a message as a Server-Sent Event.
+
+    Args:
+        message: Status message or text content
+        event_type: Type of event (delta, complete, error, etc.)
+        data: Optional data payload
+        error: Optional error message
+
+    Returns:
+        Formatted SSE event string
     """
-    prompt = request.POST.get("prompt", "").strip()
-    session_id = request.POST.get("session_id", "").strip()
-    program_id = request.POST.get("program_id", "").strip()
-    agent = request.POST.get("agent", "").strip()
-    current_code = request.POST.get("current_code", "").strip()
+    event = {"event_type": event_type, "message": message}
+    if data:
+        event["data"] = data
+        event["complete"] = True
+    if error:
+        event["error"] = error
+        event["complete"] = True
+    return f"data: {json.dumps(event)}\n\n"
 
-    if not prompt:
-        return JsonResponse({"error": "Prompt is required"}, status=400)
 
-    if not agent:
-        return JsonResponse({"error": "Agent is required"}, status=400)
+@method_decorator(csrf_exempt, name="dispatch")
+class AIStreamView(LoginRequiredMixin, View):
+    """
+    SSE streaming endpoint for AI chat.
 
-    # Validate session_id format if provided
-    if session_id:
+    Provides real-time streaming of AI responses using Server-Sent Events.
+    Supports both workflow and pipeline agents with tool-based updates.
+
+    Accepts POST requests with JSON body:
+        agent: 'workflow' or 'pipeline'
+        prompt: User's message
+        definition_id: ID of the workflow/pipeline definition
+        opportunity_id: ID of the opportunity
+        current_definition: Current definition/schema object
+        current_render_code: Current render code string
+        model: Full model string (e.g., 'anthropic:claude-sonnet-4-20250514', 'openai:gpt-4o')
+    """
+
+    # Allowed models for security
+    ALLOWED_MODELS = {
+        "anthropic:claude-sonnet-4-20250514",
+        "anthropic:claude-opus-4-20250514",
+        "openai:gpt-4o",
+        "openai:gpt-4o-mini",
+    }
+    DEFAULT_MODEL = "anthropic:claude-sonnet-4-20250514"
+
+    def post(self, request):
+        """Handle POST request and return streaming response."""
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Not authenticated"}, status=401)
+
+        # Parse JSON body
         try:
-            uuid.UUID(session_id)
-        except ValueError:
-            logger.warning(f"Invalid session_id format: {session_id}")
-            session_id = None
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON body"}, status=400)
 
-    # Get program_id from POST or from labs_context (set by middleware)
-    # program_id is optional
-    program_id_int = None
-    if program_id:
-        try:
-            program_id_int = int(program_id)
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid program_id format: {program_id}")
-    elif hasattr(request, "labs_context"):
-        program_id_int = request.labs_context.get("program_id")
+        # Extract parameters from body
+        agent_type = body.get("agent", "").strip()
+        prompt = body.get("prompt", "").strip()
+        definition_id = str(body.get("definition_id", "")).strip()
+        opportunity_id = str(body.get("opportunity_id", "")).strip()
+        current_definition = body.get("current_definition")
+        current_render_code = body.get("current_render_code", "").strip() if body.get("current_render_code") else ""
+        model = body.get("model", self.DEFAULT_MODEL).strip()
 
-    # Extract OAuth token from session for the task
-    access_token = None
-    labs_oauth = request.session.get("labs_oauth", {})
-    if labs_oauth:
-        from django.utils import timezone
-
-        expires_at = labs_oauth.get("expires_at", 0)
-        if timezone.now().timestamp() < expires_at:
-            access_token = labs_oauth.get("access_token")
-
-    # Trigger the Celery task with prompt, session_id, user_id, access_token, program_id, agent, and current_code
-    # The task will retrieve history itself
-    result = run_agent.delay(
-        prompt,
-        session_id=session_id,
-        user_id=request.user.id,
-        access_token=access_token,
-        program_id=program_id_int,
-        agent=agent,
-        current_code=current_code,
-    )
-
-    return JsonResponse(
-        {
-            "success": True,
-            "task_id": result.id,
-            "session_id": session_id,
-        }
-    )
-
-
-@login_required
-@require_GET
-def ai_demo_status(request):
-    """
-    Check the status of a Celery task.
-    Returns task status and result when complete.
-    """
-    task_id = request.GET.get("task_id")
-
-    if not task_id:
-        return JsonResponse({"error": "task_id is required"}, status=400)
-
-    try:
-        task = AsyncResult(task_id)
-        task_meta = task._get_task_meta()
-        status = task_meta.get("status")
-
-        response_data = {
-            "status": status,
-            "complete": status == CELERY_TASK_SUCCESS,
-            "message": get_task_progress_message(task),
-        }
-
-        # If task is complete, include the result
-        if status == CELERY_TASK_SUCCESS:
-            task_result = task.result
-            response_data["result"] = task_result
-        elif status == "FAILURE":
-            response_data["error"] = str(task.result) if hasattr(task, "result") else str(task_meta.get("result"))
-
-        return JsonResponse(response_data)
-
-    except Exception as e:
-        logger.error(f"Error checking task status: {e}")
-        return JsonResponse({"error": str(e)}, status=500)
-
-
-@login_required
-@require_GET
-def ai_demo_history(request):
-    """
-    Retrieve message history for a session.
-    Returns the full conversation history.
-    """
-    session_id = request.GET.get("session_id", "").strip()
-
-    if not session_id:
-        return JsonResponse({"error": "session_id is required"}, status=400)
-
-    # Validate session_id format
-    try:
-        uuid.UUID(session_id)
-    except ValueError:
-        return JsonResponse({"error": "Invalid session_id format"}, status=400)
-
-    try:
-        message_history = get_message_history(session_id)
-        return JsonResponse(
-            {
-                "success": True,
-                "session_id": session_id,
-                "messages": message_history,
-            }
+        # Log request (without huge payloads)
+        logger.info(
+            f"[AI Stream] POST request: agent={agent_type}, model={model}, "
+            f"definition_id={definition_id}, prompt_length={len(prompt)}, "
+            f"render_code_length={len(current_render_code)}"
         )
-    except Exception as e:
-        logger.error(f"Error retrieving history for session {session_id}: {e}")
-        return JsonResponse({"error": str(e)}, status=500)
 
+        # Validate model
+        if model not in self.ALLOWED_MODELS:
+            logger.warning(f"[AI Stream] Invalid model {model}, using default")
+            model = self.DEFAULT_MODEL
 
-@login_required
-@require_GET
-def vibes(request):
-    """
-    Simple hello world page for the vibes endpoint.
-    """
-    return render(request, "ai/vibes.html")
+        # Validate required parameters
+        if not agent_type:
+            return JsonResponse({"error": "agent is required"}, status=400)
+        if agent_type not in ("workflow", "pipeline"):
+            return JsonResponse({"error": "agent must be 'workflow' or 'pipeline'"}, status=400)
+        if not prompt:
+            return JsonResponse({"error": "prompt is required"}, status=400)
+
+        # Get OAuth token from session
+        access_token = None
+        labs_oauth = request.session.get("labs_oauth", {})
+        if labs_oauth:
+            expires_at = labs_oauth.get("expires_at", 0)
+            if timezone.now().timestamp() < expires_at:
+                access_token = labs_oauth.get("access_token")
+
+        # Get program_id from labs_context
+        program_id = None
+        if hasattr(request, "labs_context"):
+            program_id = request.labs_context.get("program_id")
+
+        # Create sync generator that runs async code properly
+        def stream_generator():
+            yield from self._run_streaming_agent(
+                agent_type=agent_type,
+                prompt=prompt,
+                current_definition=current_definition,
+                current_render_code=current_render_code,
+                model=model,
+                user=request.user,
+                access_token=access_token,
+                program_id=program_id,
+                definition_id=definition_id,
+                opportunity_id=opportunity_id,
+            )
+
+        response = StreamingHttpResponse(
+            stream_generator(),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
+
+    def _run_streaming_agent(
+        self,
+        agent_type: str,
+        prompt: str,
+        current_definition: dict | None,
+        current_render_code: str | None,
+        model: str,
+        user,
+        access_token: str | None,
+        program_id: int | None,
+        definition_id: str | None,
+        opportunity_id: str | None,
+    ):
+        """
+        Run the streaming agent, yielding SSE events in real-time.
+
+        Uses a Queue to bridge async streaming to sync generator.
+        """
+        logger.debug(f"[AI Stream] Starting stream for agent={agent_type}, model={model}")
+
+        event_queue = queue.Queue()
+        DONE_SENTINEL = object()
+
+        user_deps = UserDependencies(user=user, request=None, program_id=program_id)
+
+        def run_async_in_thread():
+            """Run the async agent in a separate thread with its own event loop."""
+
+            async def run_agent():
+                if agent_type == "workflow":
+                    from commcare_connect.ai.agents.workflow_agent import (
+                        WorkflowAgentDeps,
+                        build_workflow_prompt,
+                        create_workflow_agent_with_model,
+                    )
+
+                    agent = create_workflow_agent_with_model(model)
+                    deps = WorkflowAgentDeps(user_deps=user_deps)
+                    full_prompt = build_workflow_prompt(prompt, current_definition, current_render_code)
+
+                else:  # pipeline
+                    from commcare_connect.ai.agents.pipeline_agent import (
+                        PipelineAgentDeps,
+                        build_pipeline_prompt,
+                        create_pipeline_agent_with_model,
+                    )
+
+                    agent = create_pipeline_agent_with_model(model)
+                    deps = PipelineAgentDeps(user_deps=user_deps)
+                    full_prompt = build_pipeline_prompt(prompt, current_definition, current_render_code)
+
+                try:
+                    async with agent.run_stream(full_prompt, deps=deps) as result:
+                        # Stream text as it arrives
+                        async for chunk in result.stream_text(delta=True):
+                            event_queue.put(send_sse_event(message=chunk, event_type="delta"))
+
+                        # Get final output
+                        final_text = await result.get_output()
+
+                    # Log tool call results
+                    logger.info(
+                        f"[AI Stream] Agent finished. Response length: {len(final_text)}, "
+                        f"definition_changed: {deps.definition_changed}, "
+                        f"render_code_changed: {deps.render_code_changed}"
+                    )
+                    if deps.render_code_changed and deps.pending_render_code:
+                        logger.info(f"[AI Stream] New render code length: {len(deps.pending_render_code)}")
+
+                    # Build completion data based on agent type
+                    if agent_type == "workflow":
+                        completion_data = {
+                            "message": final_text,
+                            "definition": deps.pending_definition,
+                            "definition_changed": deps.definition_changed,
+                            "render_code": deps.pending_render_code,
+                            "render_code_changed": deps.render_code_changed,
+                            "pipeline_actions": deps.pending_pipeline_actions,
+                        }
+                    else:  # pipeline
+                        completion_data = {
+                            "message": final_text,
+                            "schema": deps.pending_schema,
+                            "schema_changed": deps.schema_changed,
+                            "render_code": deps.pending_render_code,
+                            "render_code_changed": deps.render_code_changed,
+                        }
+
+                    def_changed = completion_data.get("definition_changed", completion_data.get("schema_changed"))
+                    render_changed = completion_data.get("render_code_changed")
+                    logger.info(
+                        f"[AI Stream] Complete: definition_changed={def_changed}, "
+                        f"render_code_changed={render_changed}"
+                    )
+
+                    event_queue.put(send_sse_event(message="Complete", event_type="complete", data=completion_data))
+
+                    # Save chat history
+                    self._save_chat_history_sync(
+                        agent_type=agent_type,
+                        definition_id=definition_id,
+                        opportunity_id=opportunity_id,
+                        access_token=access_token,
+                        program_id=program_id,
+                        user_prompt=prompt,
+                        assistant_response=final_text,
+                    )
+
+                except Exception as e:
+                    logger.error(f"[AI Stream] Agent error: {e}", exc_info=True)
+                    event_queue.put(send_sse_event(error=str(e), event_type="error"))
+
+            asyncio.run(run_agent())
+            event_queue.put(DONE_SENTINEL)
+
+        # Start the async agent in a separate thread
+        thread = threading.Thread(target=run_async_in_thread, daemon=True)
+        thread.start()
+
+        # Yield events from the queue as they arrive
+        while True:
+            try:
+                event = event_queue.get(timeout=120)
+                if event is DONE_SENTINEL:
+                    break
+                yield event
+            except queue.Empty:
+                logger.warning("[AI Stream] Timeout waiting for event")
+                yield send_sse_event(error="Request timed out", event_type="error")
+                break
+
+        thread.join(timeout=5)
+
+    def _save_chat_history_sync(
+        self,
+        agent_type: str,
+        definition_id: str | None,
+        opportunity_id: str | None,
+        access_token: str | None,
+        program_id: int | None,
+        user_prompt: str,
+        assistant_response: str,
+    ):
+        """Save chat messages to history (synchronous version)."""
+        if not definition_id or not access_token:
+            return
+
+        try:
+            definition_id_int = int(definition_id)
+            opportunity_id_int = int(opportunity_id) if opportunity_id else None
+        except (ValueError, TypeError):
+            return
+
+        try:
+            from commcare_connect.workflow.data_access import PipelineDataAccess, WorkflowDataAccess
+
+            if agent_type == "workflow":
+                data_access = WorkflowDataAccess(
+                    access_token=access_token,
+                    program_id=program_id,
+                    opportunity_id=opportunity_id_int,
+                )
+                data_access.add_chat_message(definition_id_int, "user", user_prompt)
+                data_access.add_chat_message(definition_id_int, "assistant", assistant_response)
+                data_access.close()
+            else:  # pipeline
+                data_access = PipelineDataAccess(
+                    access_token=access_token,
+                    program_id=program_id,
+                    opportunity_id=opportunity_id_int,
+                )
+                data_access.add_chat_message(definition_id_int, "user", user_prompt)
+                data_access.add_chat_message(definition_id_int, "assistant", assistant_response)
+                data_access.close()
+
+            logger.debug(f"[AI Stream] Saved chat history for {agent_type} definition {definition_id_int}")
+        except Exception as e:
+            logger.error(f"[AI Stream] Failed to save chat history: {e}")

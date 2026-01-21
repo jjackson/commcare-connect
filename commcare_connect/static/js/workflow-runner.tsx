@@ -4,15 +4,16 @@
  * This script:
  * 1. Loads workflow data from the DOM
  * 2. Renders workflow using DynamicWorkflow (AI-generated code)
- * 3. Handles state updates via API
- * 4. Includes AI chat panel for editing workflows
- * 5. Provides controls for saving/discarding changes and editing code
+ * 3. Fetches and passes pipeline data to the workflow component
+ * 4. Handles state updates via API
+ * 5. Includes AI chat panel for editing workflows
+ * 6. Provides controls for saving/discarding changes and editing code
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { DynamicWorkflow } from '@/components/workflow/DynamicWorkflow';
-import { WorkflowChat } from '@/components/workflow/WorkflowChat';
+import { AIChat } from '@/components/AIChat';
 import { DEFAULT_RENDER_CODE } from '@/components/workflow/defaultRenderCode';
 import type {
   WorkflowProps,
@@ -29,17 +30,23 @@ import type {
   OCSInitiateResult,
   CreateTaskWithOCSParams,
   TaskWithOCSResult,
+  PipelineResult,
 } from '@/components/workflow/types';
-import { MessageCircle, Code, Save, RotateCcw, X, Check } from 'lucide-react';
+import {
+  MessageCircle,
+  Code,
+  Save,
+  RotateCcw,
+  X,
+  Check,
+  Database,
+} from 'lucide-react';
 
 /**
  * Create action handlers for workflow operations.
  */
 function createActionHandlers(csrfToken: string): ActionHandlers {
   return {
-    /**
-     * Create a task for a worker.
-     */
     createTask: async (params: CreateTaskParams): Promise<TaskResult> => {
       try {
         const response = await fetch('/tasks/api/single-create/', {
@@ -70,9 +77,6 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
       }
     },
 
-    /**
-     * Check if OCS OAuth is configured and valid.
-     */
     checkOCSStatus: async (): Promise<OCSStatusResult> => {
       try {
         const response = await fetch('/labs/workflow/api/ocs/status/');
@@ -85,14 +89,10 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
       }
     },
 
-    /**
-     * List available OCS bots.
-     */
     listOCSBots: async (): Promise<OCSBotsResult> => {
       try {
         const response = await fetch('/labs/workflow/api/ocs/bots/');
 
-        // Handle 401 (not connected to OCS)
         if (response.status === 401) {
           const data = await response.json();
           return {
@@ -111,9 +111,6 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
       }
     },
 
-    /**
-     * Initiate an OCS session on an existing task.
-     */
     initiateOCSSession: async (
       taskId: number,
       params: OCSSessionParams,
@@ -149,13 +146,9 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
       }
     },
 
-    /**
-     * Create a task and optionally initiate an OCS session on it.
-     */
     createTaskWithOCS: async (
       params: CreateTaskWithOCSParams,
     ): Promise<TaskWithOCSResult> => {
-      // Step 1: Create task
       const taskResult = await createActionHandlers(csrfToken).createTask(
         params,
       );
@@ -163,7 +156,6 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
         return taskResult;
       }
 
-      // Step 2: Initiate OCS if configured
       if (params.ocs && taskResult.task_id) {
         const ocsResult = await createActionHandlers(
           csrfToken,
@@ -224,7 +216,7 @@ function createLinkHelpers(baseUrls: {
   };
 }
 
-// Extended data type that includes render_code, opportunity_id, and edit mode flag
+// Extended data type
 interface ExtendedWorkflowData extends WorkflowDataFromDjango {
   render_code?: string;
   opportunity_id?: number;
@@ -232,7 +224,7 @@ interface ExtendedWorkflowData extends WorkflowDataFromDjango {
 }
 
 /**
- * Main workflow runner component with state management and AI chat.
+ * Main workflow runner component with state management, pipeline data, and AI chat.
  */
 function WorkflowRunner({
   workflowData: initialData,
@@ -245,12 +237,16 @@ function WorkflowRunner({
   const originalRenderCode = initialData.render_code || DEFAULT_RENDER_CODE;
   const originalDefinition = initialData.definition;
 
-  // State for workflow definition and render code (can be updated by AI or manual edit)
+  // State
   const [definition, setDefinition] = useState(initialData.definition);
   const [renderCode, setRenderCode] = useState(originalRenderCode);
   const [instanceState, setInstanceState] = useState(
     initialData.instance.state,
   );
+  const [pipelineData, setPipelineData] = useState<
+    Record<string, PipelineResult>
+  >(initialData.pipeline_data || {});
+  const [isLoadingPipelines, setIsLoadingPipelines] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -267,13 +263,36 @@ function WorkflowRunner({
     return codeChanged || defChanged;
   }, [renderCode, definition, originalRenderCode, originalDefinition]);
 
-  // Check if we're in edit mode (temporary run, no persistence)
+  // Check if we're in edit mode
   const isEditMode = initialData.is_edit_mode === true;
+
+  // Fetch pipeline data
+  const fetchPipelineData = useCallback(async () => {
+    if (!initialData.apiEndpoints.getPipelineData) return;
+
+    setIsLoadingPipelines(true);
+    try {
+      const response = await fetch(initialData.apiEndpoints.getPipelineData);
+      if (response.ok) {
+        const data = await response.json();
+        setPipelineData(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch pipeline data:', e);
+    }
+    setIsLoadingPipelines(false);
+  }, [initialData.apiEndpoints.getPipelineData]);
+
+  // Load pipeline data on mount and when definition changes
+  useEffect(() => {
+    if (definition.pipeline_sources?.length) {
+      fetchPipelineData();
+    }
+  }, [definition.pipeline_sources, fetchPipelineData]);
 
   // Handle state updates
   const handleUpdateState = useCallback(
     async (newState: Record<string, unknown>) => {
-      // In edit mode, only update local state (no API call)
       if (isEditMode || !initialData.apiEndpoints.updateState) {
         setInstanceState((prev) => ({ ...prev, ...newState }));
         return;
@@ -313,7 +332,7 @@ function WorkflowRunner({
   const handleWorkflowUpdate = useCallback(
     (newDefinition: Record<string, unknown>) => {
       console.log('Workflow definition updated by AI:', newDefinition);
-      setDefinition(newDefinition);
+      setDefinition(newDefinition as typeof definition);
     },
     [],
   );
@@ -336,7 +355,6 @@ function WorkflowRunner({
     setError(null);
 
     try {
-      // Save render code
       const response = await fetch(
         `/labs/workflow/api/${initialData.definition_id}/render-code/`,
         {
@@ -360,8 +378,6 @@ function WorkflowRunner({
       if (result.success) {
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 2000);
-        // Reload the page to get fresh data
-        // window.location.reload();
       } else {
         throw new Error(result.error || 'Failed to save');
       }
@@ -393,7 +409,7 @@ function WorkflowRunner({
     setRenderError(null);
   }, [editingCode]);
 
-  // Create action handlers (memoized to avoid recreating on every render)
+  // Create action handlers
   const actions = useMemo(() => createActionHandlers(csrfToken), [csrfToken]);
 
   // Create props for workflow component
@@ -404,6 +420,7 @@ function WorkflowRunner({
       state: instanceState,
     },
     workers: initialData.workers,
+    pipelines: pipelineData,
     links: createLinkHelpers(initialData.links),
     actions: actions,
     onUpdateState: handleUpdateState,
@@ -430,7 +447,22 @@ function WorkflowRunner({
               Edit Code
             </button>
 
-            {/* Save/Discard buttons - only show when there are changes */}
+            {/* Pipeline Data Indicator */}
+            {definition.pipeline_sources &&
+              definition.pipeline_sources.length > 0 && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-blue-50 rounded-md">
+                  <Database size={16} />
+                  <span>
+                    {definition.pipeline_sources.length} pipeline
+                    {definition.pipeline_sources.length > 1 ? 's' : ''}
+                  </span>
+                  {isLoadingPipelines && (
+                    <i className="fa-solid fa-spinner fa-spin ml-1" />
+                  )}
+                </div>
+              )}
+
+            {/* Save/Discard buttons */}
             {hasChanges && (
               <>
                 <div className="h-4 w-px bg-gray-300" />
@@ -540,13 +572,16 @@ function WorkflowRunner({
         }`}
       >
         {isChatOpen && (
-          <WorkflowChat
-            definition={definition}
+          <AIChat
+            agentType="workflow"
             definitionId={initialData.definition_id}
             opportunityId={initialData.opportunity_id}
-            renderCode={renderCode}
-            onWorkflowUpdate={handleWorkflowUpdate}
+            currentDefinition={definition}
+            currentRenderCode={renderCode}
+            onDefinitionUpdate={handleWorkflowUpdate}
             onRenderCodeUpdate={handleRenderCodeUpdate}
+            historyEndpoint={`/labs/workflow/api/${initialData.definition_id}/chat/history/`}
+            clearEndpoint={`/labs/workflow/api/${initialData.definition_id}/chat/clear/`}
             onClose={() => setIsChatOpen(false)}
           />
         )}
@@ -605,7 +640,9 @@ function WorkflowRunner({
                 <code className="bg-gray-200 px-1 rounded">definition</code>,
                 <code className="bg-gray-200 px-1 rounded">instance</code>,
                 <code className="bg-gray-200 px-1 rounded">workers</code>,
+                <code className="bg-gray-200 px-1 rounded">pipelines</code>,
                 <code className="bg-gray-200 px-1 rounded">links</code>,
+                <code className="bg-gray-200 px-1 rounded">actions</code>,
                 <code className="bg-gray-200 px-1 rounded">onUpdateState</code>
               </p>
             </div>
@@ -623,7 +660,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (container) {
     try {
-      // Parse workflow data from json_script tag (Django's safe way to pass JSON)
       if (!dataScript) {
         console.error('No workflow data script found');
         return;
@@ -636,7 +672,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       console.log('Workflow data loaded:', workflowData);
 
-      // Create React root and render
       const root = createRoot(container);
       root.render(
         <React.StrictMode>

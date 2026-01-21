@@ -1,9 +1,11 @@
 /**
- * Default render code for workflows.
- * This is used as the initial template when no custom render code is provided.
+ * Default render code template for new workflows.
+ *
+ * This code is used when creating a new workflow without custom render code.
+ * It provides a basic worker table with status management and pipeline data display.
  */
 
-export const DEFAULT_RENDER_CODE = `function WorkflowUI({ definition, instance, workers, links, actions, onUpdateState }) {
+export const DEFAULT_RENDER_CODE = `function WorkflowUI({ definition, instance, workers, pipelines, links, actions, onUpdateState }) {
     const [sortBy, setSortBy] = React.useState('name');
     const [filterStatus, setFilterStatus] = React.useState('all');
 
@@ -65,6 +67,9 @@ export const DEFAULT_RENDER_CODE = `function WorkflowUI({ definition, instance, 
         return colorMap[status?.color] || colorMap.gray;
     };
 
+    // Check if we have pipeline data
+    const hasPipelines = pipelines && Object.keys(pipelines).length > 0;
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -97,6 +102,24 @@ export const DEFAULT_RENDER_CODE = `function WorkflowUI({ definition, instance, 
                             <div className="text-sm">{status.label}</div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Pipeline Data Summary (if available) */}
+            {hasPipelines && (
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <h3 className="font-medium text-blue-900 mb-2">Pipeline Data Sources</h3>
+                    <div className="flex flex-wrap gap-4">
+                        {Object.entries(pipelines).map(([alias, data]) => (
+                            <div key={alias} className="bg-white px-3 py-2 rounded shadow-sm">
+                                <div className="text-sm font-medium text-gray-700">{alias}</div>
+                                <div className="text-xs text-gray-500">
+                                    {data.metadata?.row_count || 0} rows
+                                    {data.metadata?.from_cache && ' (cached)'}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
 

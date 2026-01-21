@@ -15,7 +15,8 @@ from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
 
 from commcare_connect.workflow.data_access import WorkflowDataAccess
-from commcare_connect.workflow.management.commands.seed_example_workflow import TEMPLATES
+from commcare_connect.workflow.templates import TEMPLATES
+from commcare_connect.workflow.templates import create_workflow_from_template as create_from_template
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +192,14 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                 }
                 context["is_edit_mode"] = False
 
+            # Fetch pipeline data if workflow has pipeline sources
+            pipeline_data = {}
+            if definition.pipeline_sources:
+                try:
+                    pipeline_data = data_access.get_pipeline_data(definition_id, opportunity_id)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch pipeline data: {e}")
+
             # Prepare data for React (pass as dict, json_script will handle encoding)
             context["workflow_data"] = {
                 "definition": definition.data,
@@ -200,6 +209,7 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                 "instance": run_data,
                 "is_edit_mode": is_edit_mode,
                 "workers": workers,
+                "pipeline_data": pipeline_data,
                 "links": {
                     "auditUrlBase": "/labs/audit/create/",
                     "taskUrlBase": "/labs/tasks/new/",
@@ -208,6 +218,7 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                     # In edit mode, state updates are local only
                     "updateState": None if is_edit_mode else f"/labs/workflow/api/run/{run_data['id']}/state/",
                     "getWorkers": "/labs/workflow/api/workers/",
+                    "getPipelineData": f"/labs/workflow/api/{definition_id}/pipeline-data/",
                 },
             }
 
@@ -326,7 +337,7 @@ def get_run_api(request, run_id):
 
 @login_required
 @require_POST
-def create_workflow_from_template(request):
+def create_workflow_from_template_view(request):
     """Create a workflow from a template."""
     from django.contrib import messages
     from django.shortcuts import redirect
@@ -337,33 +348,9 @@ def create_workflow_from_template(request):
         messages.error(request, f"Unknown template: {template_key}")
         return redirect("labs:workflow:list")
 
-    template = TEMPLATES[template_key]
-    template_def = template["definition"]
-
     try:
         data_access = WorkflowDataAccess(request=request)
-
-        # Create the workflow definition
-        definition = data_access.create_definition(
-            name=template_def["name"],
-            description=template_def["description"],
-            version=template_def.get("version", 1),
-            statuses=template_def.get("statuses", []),
-            worker_fields=template_def.get("worker_fields", []),
-            # Pass any extra fields from the definition
-            **{
-                k: v
-                for k, v in template_def.items()
-                if k not in ["name", "description", "version", "statuses", "worker_fields"]
-            },
-        )
-
-        # Create the render code for this workflow
-        data_access.save_render_code(
-            definition_id=definition.id,
-            component_code=template["render_code"],
-            version=1,
-        )
+        definition, render_code = create_from_template(data_access, template_key)
 
         messages.success(request, f"Created workflow: {definition.name} (ID: {definition.id})")
         return redirect("labs:workflow:list")
@@ -378,11 +365,11 @@ def create_workflow_from_template(request):
 @login_required
 @require_POST
 def create_example_workflow(request):
-    """Create the example 'Weekly Performance Review' workflow. Deprecated: use create_workflow_from_template."""
+    """Create the example 'Weekly Performance Review' workflow. Deprecated: use create_workflow_from_template_view."""
     # Inject the template parameter and forward to the new function
     request.POST = request.POST.copy()
     request.POST["template"] = "performance_review"
-    return create_workflow_from_template(request)
+    return create_workflow_from_template_view(request)
 
 
 @login_required
@@ -564,3 +551,230 @@ def ocs_bots_api(request):
     except Exception as e:
         logger.error(f"Error listing OCS bots: {e}", exc_info=True)
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+# =============================================================================
+# Pipeline Data APIs
+# =============================================================================
+
+
+@login_required
+@require_GET
+def get_pipeline_data_api(request, definition_id):
+    """
+    API endpoint to fetch pipeline data for a workflow.
+
+    Returns data from all pipeline sources defined in the workflow.
+    """
+    labs_context = getattr(request, "labs_context", {})
+    opportunity_id = labs_context.get("opportunity_id") or request.GET.get("opportunity_id")
+
+    if not opportunity_id:
+        return JsonResponse({"error": "opportunity_id required"}, status=400)
+
+    try:
+        data_access = WorkflowDataAccess(request=request)
+        pipeline_data = data_access.get_pipeline_data(definition_id, int(opportunity_id))
+        data_access.close()
+
+        return JsonResponse(pipeline_data)
+
+    except Exception as e:
+        logger.error(f"Failed to fetch pipeline data for workflow {definition_id}: {e}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_GET
+def list_available_pipelines_api(request):
+    """
+    API endpoint to list pipelines available to add as sources.
+
+    Returns user's own pipelines plus shared pipelines.
+    """
+    from commcare_connect.workflow.data_access import PipelineDataAccess
+
+    try:
+        data_access = PipelineDataAccess(request=request)
+        pipelines = data_access.list_definitions(include_shared=True)
+        data_access.close()
+
+        result = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "description": p.description,
+                "is_shared": p.is_shared,
+                "shared_scope": p.shared_scope,
+            }
+            for p in pipelines
+        ]
+
+        return JsonResponse({"pipelines": result})
+
+    except Exception as e:
+        logger.error(f"Failed to list available pipelines: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def add_pipeline_source_api(request, definition_id):
+    """
+    API endpoint to add a pipeline as a data source for a workflow.
+    """
+    try:
+        data = json.loads(request.body)
+        pipeline_id = data.get("pipeline_id")
+        alias = data.get("alias")
+
+        if not pipeline_id or not alias:
+            return JsonResponse({"error": "pipeline_id and alias are required"}, status=400)
+
+        data_access = WorkflowDataAccess(request=request)
+        updated = data_access.add_pipeline_source(definition_id, int(pipeline_id), alias)
+        data_access.close()
+
+        if updated:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "definition_id": definition_id,
+                    "pipeline_sources": updated.pipeline_sources,
+                }
+            )
+        else:
+            return JsonResponse({"error": "Workflow not found"}, status=404)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to add pipeline source: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def remove_pipeline_source_api(request, definition_id):
+    """
+    API endpoint to remove a pipeline source from a workflow.
+    """
+    try:
+        data = json.loads(request.body)
+        alias = data.get("alias")
+
+        if not alias:
+            return JsonResponse({"error": "alias is required"}, status=400)
+
+        data_access = WorkflowDataAccess(request=request)
+        updated = data_access.remove_pipeline_source(definition_id, alias)
+        data_access.close()
+
+        if updated:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "definition_id": definition_id,
+                    "pipeline_sources": updated.pipeline_sources,
+                }
+            )
+        else:
+            return JsonResponse({"error": "Workflow not found"}, status=404)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to remove pipeline source: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+# =============================================================================
+# Sharing APIs
+# =============================================================================
+
+
+@login_required
+@require_POST
+def share_workflow_api(request, definition_id):
+    """API endpoint to share a workflow."""
+    try:
+        data = json.loads(request.body)
+        scope = data.get("scope", "global")
+
+        if scope not in ("program", "organization", "global"):
+            return JsonResponse({"error": "scope must be 'program', 'organization', or 'global'"}, status=400)
+
+        data_access = WorkflowDataAccess(request=request)
+        updated = data_access.share_workflow(definition_id, scope)
+        data_access.close()
+
+        if updated:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "definition_id": definition_id,
+                    "is_shared": True,
+                    "shared_scope": scope,
+                }
+            )
+        else:
+            return JsonResponse({"error": "Workflow not found"}, status=404)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to share workflow {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def unshare_workflow_api(request, definition_id):
+    """API endpoint to unshare a workflow."""
+    try:
+        data_access = WorkflowDataAccess(request=request)
+        updated = data_access.unshare_workflow(definition_id)
+        data_access.close()
+
+        if updated:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "definition_id": definition_id,
+                    "is_shared": False,
+                }
+            )
+        else:
+            return JsonResponse({"error": "Workflow not found"}, status=404)
+
+    except Exception as e:
+        logger.error(f"Failed to unshare workflow {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_GET
+def list_shared_workflows_api(request):
+    """API endpoint to list shared workflows."""
+    scope = request.GET.get("scope", "global")
+
+    try:
+        data_access = WorkflowDataAccess(request=request)
+        shared = data_access.list_shared_workflows(scope)
+        data_access.close()
+
+        result = [
+            {
+                "id": w.id,
+                "name": w.name,
+                "description": w.description,
+                "shared_scope": w.shared_scope,
+            }
+            for w in shared
+        ]
+
+        return JsonResponse({"workflows": result})
+
+    except Exception as e:
+        logger.error(f"Failed to list shared workflows: {e}")
+        return JsonResponse({"error": str(e)}, status=500)

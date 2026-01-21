@@ -1,32 +1,39 @@
 """
-Pipeline Agent for editing custom data pipeline schemas and visualizations via AI.
+Pipeline Agent for editing standalone pipeline schemas and visualizations via AI.
 
-This agent allows users to describe changes to their data pipeline in natural language
-and returns updated pipeline schema JSON and/or render code (React components).
+This agent uses tools instead of structured output to enable real-time streaming
+of the AI's explanation while capturing structured updates via tool calls.
+
+Architecture:
+- Agent outputs plain text (streams naturally token-by-token)
+- update_schema() tool captures pipeline schema changes
+- update_render_code() tool captures UI code changes
+- Tools are called during streaming, results available after completion
+
+Pipelines define how to extract and transform data from form submissions.
+They can be used standalone or referenced by Workflows as data sources.
 """
 
 import json
 import logging
+from dataclasses import dataclass
 
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.settings import ModelSettings
 
 from commcare_connect.ai.types import UserDependencies
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_INSTRUCTIONS = """
+PIPELINE_AGENT_INSTRUCTIONS = """
 You are an expert data analyst helping users build and modify data extraction pipelines.
 
-You can edit TWO things:
+## What You Can Edit
+
 1. **Schema** - JSON config defining what data to extract from form submissions
-2. **Render Code** - React/JSX code that visualizes the extracted data
+2. **Render Code** - React/JSX code that visualizes the extracted data (optional)
 
-## Schema Structure
-
-The schema defines how to extract and transform data from CommCare form submissions.
-Data is stored in `form_json` as nested JSON objects.
+## Pipeline Schema Structure
 
 ```json
 {
@@ -67,7 +74,7 @@ Each field extracts data from form_json using JSONB paths:
 {
     "name": "weight",
     "path": "form.anthropometric.child_weight",
-    "paths": ["form.path1", "form.path2"],  // Optional: try multiple paths
+    "paths": ["form.path1", "form.path2"],
     "aggregation": "first",
     "transform": "kg_to_g",
     "description": "Child weight in grams",
@@ -119,11 +126,9 @@ Form data is nested under `form_json`:
 - `form.meta.username` - Submitting user
 - `form.question_group.question_id` - Form questions
 
-## Render Code Guidelines
+## Render Code (Optional)
 
-The render code is a React functional component that receives pipeline results.
-
-### Props
+Pipelines can have their own visualization. The component receives:
 
 ```jsx
 function PipelineUI({ data, definition, onRefresh }) {
@@ -141,16 +146,9 @@ data.rows = [
         username: "flw123",
         visit_date: "2024-01-15",
         status: "approved",
-        flagged: false,
         entity_id: "case123",
-        entity_name: "John Doe",
-        computed: {
-            weight: 2500,
-            height: 45.5,
-            // ... other extracted fields
-        }
-    },
-    // ... more rows
+        computed: { weight: 2500, height: 45.5 }
+    }
 ]
 ```
 
@@ -162,148 +160,124 @@ data.rows = [
         username: "flw123",
         total_visits: 45,
         approved_visits: 40,
-        pending_visits: 3,
-        rejected_visits: 2,
-        flagged_visits: 1,
-        first_visit_date: "2024-01-01",
-        last_visit_date: "2024-03-15",
-        custom_fields: {
-            avg_weight: 2750,
-            total_muac_measurements: 42,
-            // ... other aggregated fields
-        }
-    },
-    // ... more FLWs
+        custom_fields: { avg_weight: 2750 }
+    }
 ]
-```
-
-### Example: Simple Table
-
-```jsx
-function PipelineUI({ data, definition, onRefresh }) {
-    const rows = data?.rows || [];
-    const schema = definition?.schema || {};
-
-    return (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold">{definition?.name}</h2>
-                <button
-                    onClick={onRefresh}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                    Refresh
-                </button>
-            </div>
-
-            <div className="bg-white rounded-lg shadow overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                User
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                Date
-                            </th>
-                            {schema.fields?.map(field => (
-                                <th key={field.name} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                                    {field.description || field.name}
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                        {rows.map((row, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 text-sm">{row.username}</td>
-                                <td className="px-6 py-4 text-sm">{row.visit_date}</td>
-                                {schema.fields?.map(field => (
-                                    <td key={field.name} className="px-6 py-4 text-sm">
-                                        {row.computed?.[field.name] ?? '-'}
-                                    </td>
-                                ))}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-
-            <div className="text-sm text-gray-500">
-                {rows.length} rows {data?.from_cache ? '(cached)' : ''}
-            </div>
-        </div>
-    );
-}
 ```
 
 ## Available CSS Classes (Tailwind)
 
-Use standard Tailwind CSS classes:
 - Layout: flex, grid, space-y-4, gap-4, p-4, m-2
 - Colors: bg-white, bg-gray-50, text-gray-900, text-blue-600
 - Borders: border, rounded-lg, shadow-sm
 - Typography: text-sm, text-xl, font-bold, font-medium
 
-## When to Change What
+## Tools Available
 
-- User asks about data extraction/fields/aggregation -> modify schema
-- User asks about layout/display/charts -> modify render_code
-- User asks about both -> modify both
+- `update_schema(schema)` - Update the pipeline schema
+- `update_render_code(code)` - Update the visualization UI
 
-## CRITICAL OUTPUT RULES
+## When to Use Which Tool
 
-1. If you set render_code_changed=true, you MUST include the complete render_code string
-2. If you set schema_changed=true, you MUST include the complete schema object
-3. ALWAYS return the COMPLETE code, not partial snippets or descriptions
-4. The render_code must be the entire component, not just the changed parts
-5. Never summarize code changes - always output the full working code
+- User asks about data extraction/fields/aggregation -> call update_schema
+- User asks about layout/display/charts -> call update_render_code
+- User asks about both -> call both tools
+
+## CRITICAL RULES
+
+1. ALWAYS explain what you're going to change before calling tools
+2. When calling update_render_code, provide the COMPLETE code, not snippets
+3. When calling update_schema, provide the COMPLETE schema object
+4. You may call zero, one, or both tools depending on the request
+5. After calling tools, summarize what was changed
 """
 
 
-class PipelineEditResponse(BaseModel):
-    """Response from pipeline edit agent."""
+@dataclass
+class PipelineAgentDeps:
+    """Dependencies for pipeline agent that capture tool results."""
 
-    message: str = Field(description="Explanation of what was changed")
-    schema: dict | None = Field(default=None, description="Updated pipeline schema JSON (if schema was changed)")
-    schema_changed: bool = Field(default=False, description="Whether the schema was modified")
-    render_code: str | None = Field(default=None, description="Updated React render code (if UI was changed)")
-    render_code_changed: bool = Field(default=False, description="Whether the render code was modified")
+    user_deps: UserDependencies
+    pending_schema: dict | None = None
+    pending_render_code: str | None = None
+    schema_changed: bool = False
+    render_code_changed: bool = False
 
 
-def get_pipeline_agent() -> Agent[UserDependencies, PipelineEditResponse]:
-    """Create and return the pipeline editing agent."""
+def create_pipeline_agent_with_model(model: str) -> Agent[PipelineAgentDeps, str]:
+    """
+    Create the pipeline agent with a specific model.
+
+    Args:
+        model: Full model string (e.g., 'anthropic:claude-sonnet-4-20250514', 'openai:gpt-4o')
+
+    Returns:
+        Agent configured with the specified model
+    """
+    logger.debug(f"[Pipeline Agent] Creating agent with model: {model}")
 
     agent = Agent(
-        "anthropic:claude-sonnet-4-20250514",
-        deps_type=UserDependencies,
-        output_type=PipelineEditResponse,
-        instructions=PIPELINE_INSTRUCTIONS,
+        model,
+        deps_type=PipelineAgentDeps,
+        output_type=str,  # Plain text output enables smooth streaming
+        instructions=PIPELINE_AGENT_INSTRUCTIONS,
         model_settings=ModelSettings(max_tokens=16384),
     )
+
+    @agent.tool
+    async def update_schema(ctx: RunContext[PipelineAgentDeps], schema: dict) -> str:
+        """
+        Update the pipeline schema JSON.
+
+        Call this tool when you need to modify the data extraction configuration,
+        including fields, aggregations, transforms, or histograms.
+
+        Args:
+            schema: Complete pipeline schema object with name, description,
+                   fields, grouping_key, terminal_stage, etc.
+        """
+        logger.debug("[Pipeline Agent] update_schema called")
+        ctx.deps.pending_schema = schema
+        ctx.deps.schema_changed = True
+        return "Pipeline schema will be updated."
+
+    @agent.tool
+    async def update_render_code(ctx: RunContext[PipelineAgentDeps], code: str) -> str:
+        """
+        Update the React render code for the pipeline visualization.
+
+        Call this tool when you need to modify how the data is displayed.
+        Always provide the COMPLETE component code, not just the changed parts.
+
+        Args:
+            code: Complete React functional component code as a string.
+        """
+        logger.debug("[Pipeline Agent] update_render_code called")
+        ctx.deps.pending_render_code = code
+        ctx.deps.render_code_changed = True
+        return "Render code will be updated."
 
     return agent
 
 
-def get_pipeline_agent_openai() -> Agent[UserDependencies, PipelineEditResponse]:
-    """Create and return the pipeline editing agent using OpenAI."""
+# Convenience functions for specific models
+def create_pipeline_agent() -> Agent[PipelineAgentDeps, str]:
+    """Create the pipeline agent with default Claude Sonnet 4 model."""
+    return create_pipeline_agent_with_model("anthropic:claude-sonnet-4-20250514")
 
-    agent = Agent(
-        "openai:gpt-4o",
-        deps_type=UserDependencies,
-        output_type=PipelineEditResponse,
-        instructions=PIPELINE_INSTRUCTIONS,
-        model_settings=ModelSettings(max_tokens=16384),
-    )
 
-    return agent
+def create_pipeline_agent_openai() -> Agent[PipelineAgentDeps, str]:
+    """Create the pipeline agent with GPT-4o."""
+    return create_pipeline_agent_with_model("openai:gpt-4o")
 
 
 def build_pipeline_prompt(
-    user_prompt: str, current_schema: dict | None = None, current_render_code: str | None = None
+    user_prompt: str,
+    current_schema: dict | None = None,
+    current_render_code: str | None = None,
 ) -> str:
     """
-    Build the prompt for the pipeline agent including current pipeline context.
+    Build the prompt for the pipeline agent including current context.
 
     Args:
         user_prompt: The user's request
@@ -336,7 +310,6 @@ DEFAULT_RENDER_CODE = """function PipelineUI({ data, definition, onRefresh }) {
     const schema = definition?.schema || {};
     const fields = schema.fields || [];
 
-    // Simple stats
     const totalRows = rows.length;
     const fromCache = data?.from_cache;
 
@@ -363,7 +336,6 @@ DEFAULT_RENDER_CODE = """function PipelineUI({ data, definition, onRefresh }) {
                             onClick={onRefresh}
                             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                         >
-                            <i className="fa-solid fa-arrows-rotate mr-2"></i>
                             Refresh
                         </button>
                     </div>
@@ -445,5 +417,4 @@ function formatValue(val) {
     if (typeof val === 'number') return val.toLocaleString();
     if (Array.isArray(val)) return val.length + ' items';
     return String(val);
-}
-"""
+}"""
