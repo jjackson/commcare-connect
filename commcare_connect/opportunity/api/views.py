@@ -6,7 +6,7 @@ from django.db.models import Q
 from django.http import Http404
 from django.utils.timezone import now
 from rest_framework import viewsets
-from rest_framework.generics import RetrieveAPIView, UpdateAPIView, get_object_or_404
+from rest_framework.generics import RetrieveAPIView, get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -151,11 +151,11 @@ class ConfirmPaymentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, *args, **kwargs):
-        paymeny_data = [{"id": kwargs.get("pk"), "confirmed": self.request.data.get("confirmed")}]
-        return confirm_payments(self.request.user, paymeny_data)
+        payment_data = [{"id": kwargs.get("pk"), "confirmed": self.request.data.get("confirmed")}]
+        return confirm_payments(self.request.user, payment_data)
 
 
-class ConfirmPaymentsView(UpdateAPIView):
+class ConfirmPaymentsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
