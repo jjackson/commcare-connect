@@ -1,10 +1,13 @@
 """
-Data Access Layer for Workflows.
+Data Access Layer for Workflows and Pipelines.
 
 This layer uses LabsRecordAPIClient to interact with production LabsRecord API.
 It handles:
-1. Managing workflow definitions, render code, and runs via production API
-2. Fetching worker data dynamically from Connect OAuth APIs
+1. Managing workflow definitions, render code, instances, and chat history
+2. Managing pipeline definitions, render code, and chat history
+3. Fetching pipeline data for workflows that reference pipelines as sources
+4. Sharing workflows and pipelines (making them available to others)
+5. Fetching worker data dynamically from Connect OAuth APIs
 
 This is a pure API client with no local database storage.
 """
@@ -23,6 +26,11 @@ from commcare_connect.labs.integrations.connect.api_client import LabsRecordAPIC
 from commcare_connect.labs.models import LocalLabsRecord
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Proxy Models for LabsRecords
+# =============================================================================
 
 
 class WorkflowDefinitionRecord(LocalLabsRecord):
@@ -44,6 +52,19 @@ class WorkflowDefinitionRecord(LocalLabsRecord):
     def render_code_id(self):
         return self.data.get("render_code_id")
 
+    @property
+    def pipeline_sources(self) -> list[dict]:
+        """List of pipeline sources: [{"pipeline_id": 123, "alias": "visits"}]"""
+        return self.data.get("pipeline_sources", [])
+
+    @property
+    def is_shared(self) -> bool:
+        return self.data.get("is_shared", False)
+
+    @property
+    def shared_scope(self) -> str:
+        return self.data.get("shared_scope", "global")
+
 
 class WorkflowRenderCodeRecord(LocalLabsRecord):
     """Proxy model for workflow render code LabsRecords."""
@@ -61,8 +82,8 @@ class WorkflowRenderCodeRecord(LocalLabsRecord):
         return self.data.get("version", 1)
 
 
-class WorkflowRunRecord(LocalLabsRecord):
-    """Proxy model for workflow run LabsRecords."""
+class WorkflowInstanceRecord(LocalLabsRecord):
+    """Proxy model for workflow instance LabsRecords."""
 
     @property
     def definition_id(self):
@@ -96,22 +117,75 @@ class WorkflowChatHistoryRecord(LocalLabsRecord):
     def messages(self):
         return self.data.get("messages", [])
 
-    @property
-    def created_at(self):
-        return self.data.get("created_at")
+
+class PipelineDefinitionRecord(LocalLabsRecord):
+    """Proxy model for pipeline definition LabsRecords."""
 
     @property
-    def updated_at(self):
-        return self.data.get("updated_at")
+    def name(self):
+        return self.data.get("name", "Untitled Pipeline")
+
+    @property
+    def description(self):
+        return self.data.get("description", "")
+
+    @property
+    def version(self):
+        return self.data.get("version", 1)
+
+    @property
+    def render_code_id(self):
+        return self.data.get("render_code_id")
+
+    @property
+    def schema(self) -> dict:
+        """Get the pipeline schema (fields, grouping, etc.)."""
+        return self.data.get("schema", {})
+
+    @property
+    def is_shared(self) -> bool:
+        return self.data.get("is_shared", False)
+
+    @property
+    def shared_scope(self) -> str:
+        return self.data.get("shared_scope", "global")
 
 
-class WorkflowDataAccess:
-    """
-    Data access layer for workflows that uses LabsRecordAPIClient for state
-    and fetches worker data via OAuth APIs.
-    """
+class PipelineRenderCodeRecord(LocalLabsRecord):
+    """Proxy model for pipeline render code LabsRecords."""
 
-    EXPERIMENT = "workflow"
+    @property
+    def definition_id(self):
+        return self.data.get("definition_id")
+
+    @property
+    def component_code(self):
+        return self.data.get("component_code", "")
+
+    @property
+    def version(self):
+        return self.data.get("version", 1)
+
+
+class PipelineChatHistoryRecord(LocalLabsRecord):
+    """Proxy model for pipeline chat history LabsRecords."""
+
+    @property
+    def definition_id(self):
+        return self.data.get("definition_id")
+
+    @property
+    def messages(self):
+        return self.data.get("messages", [])
+
+
+# =============================================================================
+# Base Data Access Class
+# =============================================================================
+
+
+class BaseDataAccess:
+    """Base class with shared functionality for data access."""
 
     def __init__(
         self,
@@ -123,14 +197,14 @@ class WorkflowDataAccess:
         access_token: str | None = None,
     ):
         """
-        Initialize the workflow data access layer.
+        Initialize data access layer.
 
         Args:
             opportunity_id: Optional opportunity ID for scoped API requests
             organization_id: Optional organization ID for scoped API requests
             program_id: Optional program ID for scoped API requests
             user: Django User object (for OAuth token extraction)
-            request: HttpRequest object (for extracting token and org context in labs mode)
+            request: HttpRequest object (for extracting token and org context)
             access_token: OAuth token for Connect production APIs
         """
         self.opportunity_id = opportunity_id
@@ -139,7 +213,7 @@ class WorkflowDataAccess:
         self.user = user
         self.request = request
 
-        # Use labs_context from middleware if available (takes precedence)
+        # Use labs_context from middleware if available
         if request and hasattr(request, "labs_context"):
             labs_context = request.labs_context
             if not opportunity_id and "opportunity_id" in labs_context:
@@ -151,7 +225,6 @@ class WorkflowDataAccess:
 
         # Get OAuth token
         if not access_token and request:
-            # Try to get token from labs session or SocialAccount
             if hasattr(request, "session") and "labs_oauth" in request.session:
                 access_token = request.session["labs_oauth"].get("access_token")
             elif user:
@@ -165,7 +238,7 @@ class WorkflowDataAccess:
                     pass
 
         if not access_token:
-            raise ValueError("OAuth access token required for workflow data access")
+            raise ValueError("OAuth access token required for data access")
 
         self.access_token = access_token
         self.production_url = settings.CONNECT_PRODUCTION_URL.rstrip("/")
@@ -176,7 +249,7 @@ class WorkflowDataAccess:
             timeout=120.0,
         )
 
-        # Initialize Labs API client for state management
+        # Initialize Labs API client
         self.labs_api = LabsRecordAPIClient(
             access_token,
             opportunity_id=self.opportunity_id,
@@ -189,33 +262,68 @@ class WorkflowDataAccess:
         if self.http_client:
             self.http_client.close()
 
+    def _call_connect_api(self, endpoint: str) -> httpx.Response:
+        """Call Connect production API with OAuth token."""
+        url = f"{self.production_url}{endpoint}"
+        response = self.http_client.get(url)
+        response.raise_for_status()
+        return response
+
+
+# =============================================================================
+# Workflow Data Access
+# =============================================================================
+
+
+class WorkflowDataAccess(BaseDataAccess):
+    """
+    Data access layer for workflows.
+
+    Handles workflow definitions, render code, instances, chat history,
+    and fetching pipeline data for workflows that reference pipelines.
+    """
+
+    EXPERIMENT = "workflow"
+
     # -------------------------------------------------------------------------
     # Workflow Definition Methods
     # -------------------------------------------------------------------------
 
-    def list_definitions(self) -> list[WorkflowDefinitionRecord]:
+    def list_definitions(self, include_shared: bool = False) -> list[WorkflowDefinitionRecord]:
         """
-        List all workflow definitions.
+        List workflow definitions.
+
+        Args:
+            include_shared: If True, also include shared workflows from others
 
         Returns:
             List of WorkflowDefinitionRecord instances
         """
-        return self.labs_api.get_records(
+        # Get user's own workflows
+        records = self.labs_api.get_records(
             experiment=self.EXPERIMENT,
             type="workflow_definition",
             model_class=WorkflowDefinitionRecord,
         )
 
+        if include_shared:
+            # Also get shared workflows (public=True)
+            shared_records = self.labs_api.get_records(
+                experiment=self.EXPERIMENT,
+                type="workflow_definition",
+                model_class=WorkflowDefinitionRecord,
+                public=True,
+            )
+            # Merge, avoiding duplicates
+            seen_ids = {r.id for r in records}
+            for r in shared_records:
+                if r.id not in seen_ids:
+                    records.append(r)
+
+        return records
+
     def get_definition(self, definition_id: int) -> WorkflowDefinitionRecord | None:
-        """
-        Get a workflow definition by ID.
-
-        Args:
-            definition_id: Definition ID
-
-        Returns:
-            WorkflowDefinitionRecord or None if not found
-        """
+        """Get a workflow definition by ID."""
         return self.labs_api.get_record_by_id(
             record_id=definition_id,
             experiment=self.EXPERIMENT,
@@ -230,7 +338,7 @@ class WorkflowDataAccess:
         Args:
             name: Workflow name
             description: Workflow description
-            **kwargs: Additional data fields
+            **kwargs: Additional data fields (statuses, config, pipeline_sources)
 
         Returns:
             Created WorkflowDefinitionRecord
@@ -239,7 +347,17 @@ class WorkflowDataAccess:
             "name": name,
             "description": description,
             "version": 1,
-            **kwargs,
+            "statuses": kwargs.get(
+                "statuses",
+                [
+                    {"id": "pending", "label": "Pending", "color": "gray"},
+                    {"id": "reviewed", "label": "Reviewed", "color": "green"},
+                ],
+            ),
+            "config": kwargs.get("config", {"showSummaryCards": True, "showFilters": True}),
+            "pipeline_sources": kwargs.get("pipeline_sources", []),
+            "is_shared": False,
+            "shared_scope": "global",
         }
 
         record = self.labs_api.create_record(
@@ -259,16 +377,7 @@ class WorkflowDataAccess:
         )
 
     def update_definition(self, definition_id: int, data: dict) -> WorkflowDefinitionRecord | None:
-        """
-        Update a workflow definition.
-
-        Args:
-            definition_id: Definition ID
-            data: Updated data
-
-        Returns:
-            Updated WorkflowDefinitionRecord or None
-        """
+        """Update a workflow definition."""
         result = self.labs_api.update_record(
             record_id=definition_id,
             experiment=self.EXPERIMENT,
@@ -287,46 +396,28 @@ class WorkflowDataAccess:
             )
         return None
 
+    def delete_definition(self, definition_id: int) -> None:
+        """Delete a workflow definition and related records."""
+        self.labs_api.delete_record(definition_id)
+
     # -------------------------------------------------------------------------
     # Workflow Render Code Methods
     # -------------------------------------------------------------------------
 
     def get_render_code(self, definition_id: int) -> WorkflowRenderCodeRecord | None:
-        """
-        Get render code for a workflow definition.
-
-        Args:
-            definition_id: Definition ID
-
-        Returns:
-            WorkflowRenderCodeRecord or None if not found
-        """
+        """Get render code for a workflow definition."""
         records = self.labs_api.get_records(
             experiment=self.EXPERIMENT,
             type="workflow_render_code",
             model_class=WorkflowRenderCodeRecord,
         )
-
-        # Find the one matching this definition
         for record in records:
             if record.data.get("definition_id") == definition_id:
                 return record
-
         return None
 
     def save_render_code(self, definition_id: int, component_code: str, version: int = 1) -> WorkflowRenderCodeRecord:
-        """
-        Save render code for a workflow definition.
-
-        Args:
-            definition_id: Definition ID
-            component_code: React component code
-            version: Code version
-
-        Returns:
-            Created or updated WorkflowRenderCodeRecord
-        """
-        # Check if render code already exists
+        """Save render code for a workflow definition."""
         existing = self.get_render_code(definition_id)
 
         data = {
@@ -336,7 +427,6 @@ class WorkflowDataAccess:
         }
 
         if existing:
-            # Update existing
             result = self.labs_api.update_record(
                 record_id=existing.id,
                 experiment=self.EXPERIMENT,
@@ -344,7 +434,6 @@ class WorkflowDataAccess:
                 data=data,
             )
         else:
-            # Create new
             result = self.labs_api.create_record(
                 experiment=self.EXPERIMENT,
                 type="workflow_render_code",
@@ -362,70 +451,47 @@ class WorkflowDataAccess:
         )
 
     # -------------------------------------------------------------------------
-    # Workflow Run Methods
+    # Workflow Instance Methods
     # -------------------------------------------------------------------------
 
-    def list_runs(self, definition_id: int | None = None) -> list[WorkflowRunRecord]:
-        """
-        List workflow runs.
-
-        Args:
-            definition_id: Optional filter by definition ID
-
-        Returns:
-            List of WorkflowRunRecord instances
-        """
+    def list_instances(self, definition_id: int | None = None) -> list[WorkflowInstanceRecord]:
+        """List workflow instances."""
         records = self.labs_api.get_records(
             experiment=self.EXPERIMENT,
-            type="workflow_run",
-            model_class=WorkflowRunRecord,
+            type="workflow_instance",
+            model_class=WorkflowInstanceRecord,
         )
-
         if definition_id:
             records = [r for r in records if r.data.get("definition_id") == definition_id]
-
         return records
 
-    def get_run(self, run_id: int) -> WorkflowRunRecord | None:
-        """
-        Get a workflow run by ID.
+    def list_runs(self, definition_id: int | None = None) -> list[WorkflowInstanceRecord]:
+        """Alias for list_instances."""
+        return self.list_instances(definition_id)
 
-        Args:
-            run_id: Run ID
-
-        Returns:
-            WorkflowRunRecord or None if not found
-        """
+    def get_instance(self, instance_id: int) -> WorkflowInstanceRecord | None:
+        """Get a workflow instance by ID."""
         return self.labs_api.get_record_by_id(
-            record_id=run_id,
+            record_id=instance_id,
             experiment=self.EXPERIMENT,
-            type="workflow_run",
-            model_class=WorkflowRunRecord,
+            type="workflow_instance",
+            model_class=WorkflowInstanceRecord,
         )
 
-    def get_or_create_run(self, definition_id: int, opportunity_id: int) -> WorkflowRunRecord:
-        """
-        Get or create a workflow run for the current week.
-
-        Args:
-            definition_id: Definition ID
-            opportunity_id: Opportunity ID
-
-        Returns:
-            WorkflowRunRecord (existing or newly created)
-        """
-        # Calculate current week boundaries
+    def get_or_create_instance(self, definition_id: int, opportunity_id: int) -> WorkflowInstanceRecord:
+        """Get or create a workflow instance for the current week."""
         today = datetime.now().date()
-        week_start = today - timedelta(days=today.weekday())  # Monday
-        week_end = week_start + timedelta(days=6)  # Sunday
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
 
-        # Look for existing run for this week
-        runs = self.list_runs(definition_id)
-        for run in runs:
-            if run.opportunity_id == opportunity_id and run.data.get("period_start") == week_start.isoformat():
-                return run
+        instances = self.list_instances(definition_id)
+        for instance in instances:
+            if (
+                instance.opportunity_id == opportunity_id
+                and instance.data.get("period_start") == week_start.isoformat()
+            ):
+                return instance
 
-        # Create new run
         data = {
             "definition_id": definition_id,
             "period_start": week_start.isoformat(),
@@ -436,11 +502,11 @@ class WorkflowDataAccess:
 
         record = self.labs_api.create_record(
             experiment=self.EXPERIMENT,
-            type="workflow_run",
+            type="workflow_instance",
             data=data,
         )
 
-        return WorkflowRunRecord(
+        return WorkflowInstanceRecord(
             {
                 "id": record.id,
                 "experiment": record.experiment,
@@ -450,76 +516,24 @@ class WorkflowDataAccess:
             }
         )
 
-    def create_run(
-        self, definition_id: int, opportunity_id: int, period_start: str, period_end: str, initial_state: dict = None
-    ) -> WorkflowRunRecord:
-        """
-        Create a new workflow run.
-
-        Args:
-            definition_id: Definition ID
-            opportunity_id: Opportunity ID
-            period_start: Period start date (ISO format)
-            period_end: Period end date (ISO format)
-            initial_state: Initial state data
-
-        Returns:
-            Created WorkflowRunRecord
-        """
-        data = {
-            "definition_id": definition_id,
-            "period_start": period_start,
-            "period_end": period_end,
-            "status": "in_progress",
-            "state": initial_state or {},
-        }
-
-        record = self.labs_api.create_record(
-            experiment=self.EXPERIMENT,
-            type="workflow_run",
-            data=data,
-        )
-
-        return WorkflowRunRecord(
-            {
-                "id": record.id,
-                "experiment": record.experiment,
-                "type": record.type,
-                "data": record.data,
-                "opportunity_id": record.opportunity_id,
-            }
-        )
-
-    def update_run_state(self, run_id: int, new_state: dict) -> WorkflowRunRecord | None:
-        """
-        Update workflow run state.
-
-        Args:
-            run_id: Run ID
-            new_state: New state data (merged with existing)
-
-        Returns:
-            Updated WorkflowRunRecord or None
-        """
-        run = self.get_run(run_id)
-        if not run:
+    def update_instance_state(self, instance_id: int, new_state: dict) -> WorkflowInstanceRecord | None:
+        """Update workflow instance state (merge with existing)."""
+        instance = self.get_instance(instance_id)
+        if not instance:
             return None
 
-        # Merge state
-        current_state = run.data.get("state", {})
+        current_state = instance.data.get("state", {})
         merged_state = {**current_state, **new_state}
-
-        # Update data
-        updated_data = {**run.data, "state": merged_state}
+        updated_data = {**instance.data, "state": merged_state}
 
         result = self.labs_api.update_record(
-            record_id=run_id,
+            record_id=instance_id,
             experiment=self.EXPERIMENT,
-            type="workflow_run",
+            type="workflow_instance",
             data=updated_data,
         )
         if result:
-            return WorkflowRunRecord(
+            return WorkflowInstanceRecord(
                 {
                     "id": result.id,
                     "experiment": result.experiment,
@@ -530,30 +544,106 @@ class WorkflowDataAccess:
             )
         return None
 
-    def complete_run(self, run_id: int) -> WorkflowRunRecord | None:
-        """
-        Mark a workflow run as completed.
+    # -------------------------------------------------------------------------
+    # Pipeline Source Methods
+    # -------------------------------------------------------------------------
 
-        Args:
-            run_id: Run ID
-
-        Returns:
-            Updated WorkflowRunRecord or None
-        """
-        run = self.get_run(run_id)
-        if not run:
+    def add_pipeline_source(self, definition_id: int, pipeline_id: int, alias: str) -> WorkflowDefinitionRecord | None:
+        """Add a pipeline as a data source for a workflow."""
+        definition = self.get_definition(definition_id)
+        if not definition:
             return None
 
-        updated_data = {**run.data, "status": "completed", "completed_at": datetime.now().isoformat()}
+        sources = definition.data.get("pipeline_sources", [])
+        # Check if already exists
+        for source in sources:
+            if source.get("alias") == alias:
+                source["pipeline_id"] = pipeline_id
+                break
+        else:
+            sources.append({"pipeline_id": pipeline_id, "alias": alias})
 
+        updated_data = {**definition.data, "pipeline_sources": sources}
+        return self.update_definition(definition_id, updated_data)
+
+    def remove_pipeline_source(self, definition_id: int, alias: str) -> WorkflowDefinitionRecord | None:
+        """Remove a pipeline source from a workflow."""
+        definition = self.get_definition(definition_id)
+        if not definition:
+            return None
+
+        sources = definition.data.get("pipeline_sources", [])
+        sources = [s for s in sources if s.get("alias") != alias]
+
+        updated_data = {**definition.data, "pipeline_sources": sources}
+        return self.update_definition(definition_id, updated_data)
+
+    def get_pipeline_data(self, definition_id: int, opportunity_id: int) -> dict[str, dict]:
+        """
+        Fetch data from all pipeline sources defined in a workflow.
+
+        Returns:
+            Dict mapping alias to pipeline result: {"visits": {"rows": [...], "metadata": {...}}}
+        """
+        definition = self.get_definition(definition_id)
+        if not definition:
+            return {}
+
+        sources = definition.pipeline_sources
+        if not sources:
+            return {}
+
+        results = {}
+        pipeline_access = PipelineDataAccess(
+            access_token=self.access_token,
+            opportunity_id=opportunity_id,
+            organization_id=self.organization_id,
+            program_id=self.program_id,
+        )
+
+        for source in sources:
+            pipeline_id = source.get("pipeline_id")
+            alias = source.get("alias")
+
+            if not pipeline_id or not alias:
+                continue
+
+            try:
+                pipeline_result = pipeline_access.execute_pipeline(pipeline_id, opportunity_id)
+                results[alias] = pipeline_result
+            except Exception as e:
+                logger.error(f"Failed to execute pipeline {pipeline_id}: {e}")
+                results[alias] = {"rows": [], "metadata": {"error": str(e)}}
+
+        pipeline_access.close()
+        return results
+
+    # -------------------------------------------------------------------------
+    # Sharing Methods
+    # -------------------------------------------------------------------------
+
+    def share_workflow(self, definition_id: int, scope: str = "global") -> WorkflowDefinitionRecord | None:
+        """Share a workflow (make it available to others)."""
+        definition = self.get_definition(definition_id)
+        if not definition:
+            return None
+
+        updated_data = {**definition.data, "is_shared": True, "shared_scope": scope}
+
+        # Update the record with public=True so others can see it
         result = self.labs_api.update_record(
-            record_id=run_id,
+            record_id=definition_id,
             experiment=self.EXPERIMENT,
-            type="workflow_run",
+            type="workflow_definition",
             data=updated_data,
         )
+
+        # Also need to update the record to be public
+        # This requires a separate call or modification to the API client
+        # For now, we store is_shared in data
+
         if result:
-            return WorkflowRunRecord(
+            return WorkflowDefinitionRecord(
                 {
                     "id": result.id,
                     "experiment": result.experiment,
@@ -563,73 +653,54 @@ class WorkflowDataAccess:
                 }
             )
         return None
+
+    def unshare_workflow(self, definition_id: int) -> WorkflowDefinitionRecord | None:
+        """Unshare a workflow."""
+        definition = self.get_definition(definition_id)
+        if not definition:
+            return None
+
+        updated_data = {**definition.data, "is_shared": False}
+        return self.update_definition(definition_id, updated_data)
+
+    def list_shared_workflows(self, scope: str = "global") -> list[WorkflowDefinitionRecord]:
+        """List workflows shared by others."""
+        records = self.labs_api.get_records(
+            experiment=self.EXPERIMENT,
+            type="workflow_definition",
+            model_class=WorkflowDefinitionRecord,
+            public=True,
+        )
+        # Filter by scope and is_shared flag
+        return [r for r in records if r.is_shared and r.shared_scope == scope]
 
     # -------------------------------------------------------------------------
     # Chat History Methods
     # -------------------------------------------------------------------------
 
     def get_chat_history(self, definition_id: int) -> WorkflowChatHistoryRecord | None:
-        """
-        Get chat history for a workflow definition.
-
-        Args:
-            definition_id: Definition ID
-
-        Returns:
-            WorkflowChatHistoryRecord or None if not found
-        """
+        """Get chat history for a workflow definition."""
         records = self.labs_api.get_records(
             experiment=self.EXPERIMENT,
             type="workflow_chat_history",
             model_class=WorkflowChatHistoryRecord,
         )
-
-        logger.info(
-            f"Looking for chat history for definition {definition_id}, found {len(records)} chat history records"
-        )
-
-        # Find the one matching this definition (compare as int to handle type differences)
         definition_id_int = int(definition_id)
         for record in records:
             record_def_id = record.data.get("definition_id")
-            logger.debug(
-                f"Checking record {record.id}: definition_id={record_def_id} (type={type(record_def_id).__name__})"
-            )
             if record_def_id is not None and int(record_def_id) == definition_id_int:
-                logger.info(f"Found chat history record {record.id} with {len(record.messages)} messages")
                 return record
-
-        logger.info(f"No chat history found for definition {definition_id}")
         return None
 
     def get_chat_messages(self, definition_id: int) -> list[dict]:
-        """
-        Get chat messages for a workflow definition.
-
-        Args:
-            definition_id: Definition ID
-
-        Returns:
-            List of message dicts with 'role' and 'content' keys
-        """
+        """Get chat messages for a workflow definition."""
         record = self.get_chat_history(definition_id)
-        if record:
-            return record.messages
-        return []
+        return record.messages if record else []
 
     def save_chat_history(self, definition_id: int, messages: list[dict]) -> WorkflowChatHistoryRecord:
-        """
-        Save chat history for a workflow definition.
-
-        Args:
-            definition_id: Definition ID
-            messages: List of message dicts
-
-        Returns:
-            Created or updated WorkflowChatHistoryRecord
-        """
+        """Save chat history for a workflow definition."""
         now = datetime.now().isoformat()
-        definition_id_int = int(definition_id)  # Ensure it's stored as int
+        definition_id_int = int(definition_id)
         existing = self.get_chat_history(definition_id_int)
 
         data = {
@@ -639,7 +710,6 @@ class WorkflowDataAccess:
         }
 
         if existing:
-            # Update existing - preserve created_at
             data["created_at"] = existing.data.get("created_at", now)
             result = self.labs_api.update_record(
                 record_id=existing.id,
@@ -648,7 +718,6 @@ class WorkflowDataAccess:
                 data=data,
             )
         else:
-            # Create new
             data["created_at"] = now
             result = self.labs_api.create_record(
                 experiment=self.EXPERIMENT,
@@ -667,36 +736,16 @@ class WorkflowDataAccess:
         )
 
     def add_chat_message(self, definition_id: int, role: str, content: str) -> bool:
-        """
-        Add a single message to the chat history.
-
-        Args:
-            definition_id: Definition ID
-            role: Message role ('user' or 'assistant')
-            content: Message content
-
-        Returns:
-            True if successful
-        """
+        """Add a single message to the chat history."""
         messages = self.get_chat_messages(definition_id)
         messages.append({"role": role, "content": content})
         self.save_chat_history(definition_id, messages)
         return True
 
     def clear_chat_history(self, definition_id: int) -> bool:
-        """
-        Clear chat history for a workflow definition.
-
-        Args:
-            definition_id: Definition ID
-
-        Returns:
-            True if cleared, False if not found
-        """
+        """Clear chat history for a workflow definition."""
         existing = self.get_chat_history(definition_id)
         if existing:
-            # Delete the record by setting messages to empty
-            # (or we could actually delete the record if the API supports it)
             self.save_chat_history(definition_id, [])
             return True
         return False
@@ -705,38 +754,22 @@ class WorkflowDataAccess:
     # Worker Data Methods
     # -------------------------------------------------------------------------
 
-    def _call_connect_api(self, endpoint: str) -> httpx.Response:
-        """Call Connect production API with OAuth token."""
-        url = f"{self.production_url}{endpoint}"
-        response = self.http_client.get(url)
-        response.raise_for_status()
-        return response
-
     def get_workers(self, opportunity_id: int) -> list[dict]:
         """
         Get workers for an opportunity from Connect API.
 
-        Args:
-            opportunity_id: Opportunity ID
-
         Returns:
             List of worker dicts with username, name, visit_count, last_active
         """
-        # Download user data CSV
         endpoint = f"/export/opportunity/{opportunity_id}/user_data/"
         response = self._call_connect_api(endpoint)
 
-        # Save to temp file
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".csv")
         try:
             with os.fdopen(tmp_fd, "wb") as f:
                 f.write(response.content)
 
-            # Parse CSV
             df = pd.read_csv(tmp_path)
-
-            logger.info(f"CSV columns for opportunity {opportunity_id}: {list(df.columns)}")
-            logger.info(f"CSV has {len(df)} rows")
 
             workers = []
             for idx, row in df.iterrows():
@@ -749,14 +782,7 @@ class WorkflowDataAccess:
                         "last_active": str(row.get("last_active")) if pd.notna(row.get("last_active")) else None,
                     }
 
-                    # Add optional fields if available
-                    optional_fields = [
-                        "phone_number",
-                        "approved_visits",
-                        "flagged_visits",
-                        "rejected_visits",
-                        "email",
-                    ]
+                    optional_fields = ["phone_number", "approved_visits", "flagged_visits", "rejected_visits", "email"]
                     for field in optional_fields:
                         if field in row and pd.notna(row[field]):
                             worker[field] = str(row[field]) if not isinstance(row[field], (int, float)) else row[field]
@@ -767,3 +793,486 @@ class WorkflowDataAccess:
 
         finally:
             os.unlink(tmp_path)
+
+
+# =============================================================================
+# Pipeline Data Access
+# =============================================================================
+
+
+class PipelineDataAccess(BaseDataAccess):
+    """
+    Data access layer for pipelines.
+
+    Handles pipeline definitions, render code, chat history, and execution.
+    """
+
+    EXPERIMENT = "pipeline"
+
+    # -------------------------------------------------------------------------
+    # Pipeline Definition Methods
+    # -------------------------------------------------------------------------
+
+    def list_definitions(self, include_shared: bool = False) -> list[PipelineDefinitionRecord]:
+        """List pipeline definitions."""
+        records = self.labs_api.get_records(
+            experiment=self.EXPERIMENT,
+            type="pipeline_definition",
+            model_class=PipelineDefinitionRecord,
+        )
+
+        if include_shared:
+            shared_records = self.labs_api.get_records(
+                experiment=self.EXPERIMENT,
+                type="pipeline_definition",
+                model_class=PipelineDefinitionRecord,
+                public=True,
+            )
+            seen_ids = {r.id for r in records}
+            for r in shared_records:
+                if r.id not in seen_ids:
+                    records.append(r)
+
+        return records
+
+    def get_definition(self, definition_id: int) -> PipelineDefinitionRecord | None:
+        """Get a pipeline definition by ID."""
+        return self.labs_api.get_record_by_id(
+            definition_id,
+            experiment=self.EXPERIMENT,
+            type="pipeline_definition",
+            model_class=PipelineDefinitionRecord,
+        )
+
+    def create_definition(
+        self,
+        name: str,
+        description: str,
+        schema: dict,
+        render_code: str = "",
+    ) -> PipelineDefinitionRecord:
+        """Create a new pipeline definition."""
+        definition_data = {
+            "name": name,
+            "description": description,
+            "version": 1,
+            "schema": schema,
+            "is_shared": False,
+            "shared_scope": "global",
+        }
+
+        result = self.labs_api.create_record(
+            experiment=self.EXPERIMENT,
+            type="pipeline_definition",
+            data=definition_data,
+        )
+
+        definition_id = result.id
+
+        if render_code:
+            render_result = self.labs_api.create_record(
+                experiment=self.EXPERIMENT,
+                type="pipeline_render_code",
+                data={
+                    "definition_id": definition_id,
+                    "component_code": render_code,
+                    "version": 1,
+                },
+            )
+            definition_data["render_code_id"] = render_result.id
+            self.labs_api.update_record(
+                definition_id,
+                experiment=self.EXPERIMENT,
+                type="pipeline_definition",
+                data=definition_data,
+            )
+
+        return PipelineDefinitionRecord(
+            {
+                "id": definition_id,
+                "experiment": self.EXPERIMENT,
+                "type": "pipeline_definition",
+                "data": definition_data,
+                "opportunity_id": self.opportunity_id,
+            }
+        )
+
+    def update_definition(
+        self,
+        definition_id: int,
+        name: str | None = None,
+        description: str | None = None,
+        schema: dict | None = None,
+    ) -> PipelineDefinitionRecord | None:
+        """Update a pipeline definition."""
+        existing = self.get_definition(definition_id)
+        if not existing:
+            return None
+
+        data = existing.data.copy()
+
+        if name is not None:
+            data["name"] = name
+        if description is not None:
+            data["description"] = description
+        if schema is not None:
+            data["schema"] = schema
+            data["version"] = data.get("version", 1) + 1
+
+        self.labs_api.update_record(
+            definition_id,
+            experiment=self.EXPERIMENT,
+            type="pipeline_definition",
+            data=data,
+        )
+
+        return PipelineDefinitionRecord(
+            {
+                "id": definition_id,
+                "experiment": self.EXPERIMENT,
+                "type": "pipeline_definition",
+                "data": data,
+                "opportunity_id": self.opportunity_id,
+            }
+        )
+
+    def delete_definition(self, definition_id: int) -> None:
+        """Delete a pipeline definition."""
+        self.labs_api.delete_record(definition_id)
+
+    # -------------------------------------------------------------------------
+    # Pipeline Render Code Methods
+    # -------------------------------------------------------------------------
+
+    def get_render_code(self, definition_id: int) -> PipelineRenderCodeRecord | None:
+        """Get render code for a pipeline definition."""
+        definition = self.get_definition(definition_id)
+        if not definition or not definition.render_code_id:
+            return None
+
+        return self.labs_api.get_record_by_id(
+            definition.render_code_id,
+            experiment=self.EXPERIMENT,
+            type="pipeline_render_code",
+            model_class=PipelineRenderCodeRecord,
+        )
+
+    def save_render_code(self, definition_id: int, component_code: str) -> PipelineRenderCodeRecord:
+        """Save render code for a pipeline definition."""
+        definition = self.get_definition(definition_id)
+        if not definition:
+            raise ValueError(f"Pipeline definition {definition_id} not found")
+
+        if definition.render_code_id:
+            existing = self.labs_api.get_record_by_id(
+                definition.render_code_id,
+                experiment=self.EXPERIMENT,
+                type="pipeline_render_code",
+            )
+            if existing:
+                data = existing.data.copy()
+                data["component_code"] = component_code
+                data["version"] = data.get("version", 1) + 1
+
+                self.labs_api.update_record(
+                    definition.render_code_id,
+                    experiment=self.EXPERIMENT,
+                    type="pipeline_render_code",
+                    data=data,
+                )
+
+                return PipelineRenderCodeRecord(
+                    {
+                        "id": definition.render_code_id,
+                        "experiment": self.EXPERIMENT,
+                        "type": "pipeline_render_code",
+                        "data": data,
+                        "opportunity_id": self.opportunity_id,
+                    }
+                )
+
+        render_data = {
+            "definition_id": definition_id,
+            "component_code": component_code,
+            "version": 1,
+        }
+
+        result = self.labs_api.create_record(
+            experiment=self.EXPERIMENT,
+            type="pipeline_render_code",
+            data=render_data,
+        )
+
+        # Update definition with render_code_id
+        def_data = definition.data.copy()
+        def_data["render_code_id"] = result.id
+        self.labs_api.update_record(
+            definition_id,
+            experiment=self.EXPERIMENT,
+            type="pipeline_definition",
+            data=def_data,
+        )
+
+        return PipelineRenderCodeRecord(
+            {
+                "id": result.id,
+                "experiment": self.EXPERIMENT,
+                "type": "pipeline_render_code",
+                "data": render_data,
+                "opportunity_id": self.opportunity_id,
+            }
+        )
+
+    # -------------------------------------------------------------------------
+    # Sharing Methods
+    # -------------------------------------------------------------------------
+
+    def share_pipeline(self, definition_id: int, scope: str = "global") -> PipelineDefinitionRecord | None:
+        """Share a pipeline."""
+        definition = self.get_definition(definition_id)
+        if not definition:
+            return None
+
+        data = definition.data.copy()
+        data["is_shared"] = True
+        data["shared_scope"] = scope
+
+        return self.update_definition(definition_id, schema=data.get("schema"))
+
+    def unshare_pipeline(self, definition_id: int) -> PipelineDefinitionRecord | None:
+        """Unshare a pipeline."""
+        definition = self.get_definition(definition_id)
+        if not definition:
+            return None
+
+        data = definition.data.copy()
+        data["is_shared"] = False
+
+        self.labs_api.update_record(
+            definition_id,
+            experiment=self.EXPERIMENT,
+            type="pipeline_definition",
+            data=data,
+        )
+
+        return PipelineDefinitionRecord(
+            {
+                "id": definition_id,
+                "experiment": self.EXPERIMENT,
+                "type": "pipeline_definition",
+                "data": data,
+                "opportunity_id": self.opportunity_id,
+            }
+        )
+
+    def list_shared_pipelines(self, scope: str = "global") -> list[PipelineDefinitionRecord]:
+        """List pipelines shared by others."""
+        records = self.labs_api.get_records(
+            experiment=self.EXPERIMENT,
+            type="pipeline_definition",
+            model_class=PipelineDefinitionRecord,
+            public=True,
+        )
+        return [r for r in records if r.is_shared and r.shared_scope == scope]
+
+    # -------------------------------------------------------------------------
+    # Chat History Methods
+    # -------------------------------------------------------------------------
+
+    def get_chat_history(self, definition_id: int) -> list[dict]:
+        """Get chat history for a pipeline definition."""
+        records = self.labs_api.get_records(
+            experiment=self.EXPERIMENT,
+            type="pipeline_chat_history",
+            model_class=PipelineChatHistoryRecord,
+        )
+        for record in records:
+            if record.data.get("definition_id") == definition_id:
+                return record.data.get("messages", [])
+        return []
+
+    def add_chat_message(self, definition_id: int, role: str, content: str) -> None:
+        """Add a message to chat history."""
+        records = self.labs_api.get_records(
+            experiment=self.EXPERIMENT,
+            type="pipeline_chat_history",
+            model_class=PipelineChatHistoryRecord,
+        )
+
+        existing_record = None
+        for record in records:
+            if record.data.get("definition_id") == definition_id:
+                existing_record = record
+                break
+
+        message = {
+            "role": role,
+            "content": content,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        if existing_record:
+            data = existing_record.data.copy()
+            messages = data.get("messages", [])
+            messages.append(message)
+            data["messages"] = messages
+            data["updated_at"] = datetime.now().isoformat()
+
+            self.labs_api.update_record(
+                existing_record.id,
+                experiment=self.EXPERIMENT,
+                type="pipeline_chat_history",
+                data=data,
+            )
+        else:
+            self.labs_api.create_record(
+                experiment=self.EXPERIMENT,
+                type="pipeline_chat_history",
+                data={
+                    "definition_id": definition_id,
+                    "messages": [message],
+                    "created_at": datetime.now().isoformat(),
+                    "updated_at": datetime.now().isoformat(),
+                },
+            )
+
+    def clear_chat_history(self, definition_id: int) -> None:
+        """Clear chat history for a pipeline definition."""
+        records = self.labs_api.get_records(
+            experiment=self.EXPERIMENT,
+            type="pipeline_chat_history",
+            model_class=PipelineChatHistoryRecord,
+        )
+
+        for record in records:
+            if record.data.get("definition_id") == definition_id:
+                data = record.data.copy()
+                data["messages"] = []
+                data["updated_at"] = datetime.now().isoformat()
+
+                self.labs_api.update_record(
+                    record.id,
+                    experiment=self.EXPERIMENT,
+                    type="pipeline_chat_history",
+                    data=data,
+                )
+                break
+
+    # -------------------------------------------------------------------------
+    # Pipeline Execution
+    # -------------------------------------------------------------------------
+
+    def execute_pipeline(self, definition_id: int, opportunity_id: int) -> dict:
+        """
+        Execute a pipeline and return results.
+
+        Returns:
+            Dict with rows and metadata
+        """
+        from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
+
+        definition = self.get_definition(definition_id)
+        if not definition:
+            return {"rows": [], "metadata": {"error": "Pipeline not found"}}
+
+        schema = definition.schema
+        if not schema:
+            return {"rows": [], "metadata": {"error": "Pipeline has no schema"}}
+
+        try:
+            # Convert schema to pipeline config
+            config = self._schema_to_config(schema, definition_id)
+
+            # Execute pipeline
+            pipeline = AnalysisPipeline(
+                config=config,
+                opportunity_id=opportunity_id,
+                access_token=self.access_token,
+            )
+
+            result = pipeline.run()
+
+            return {
+                "rows": result.get("rows", []),
+                "metadata": {
+                    "row_count": len(result.get("rows", [])),
+                    "from_cache": result.get("from_cache", False),
+                    "pipeline_name": definition.name,
+                    "terminal_stage": schema.get("terminal_stage", "visit_level"),
+                },
+            }
+
+        except Exception as e:
+            logger.error(f"Pipeline execution failed: {e}", exc_info=True)
+            return {"rows": [], "metadata": {"error": str(e)}}
+
+    def _schema_to_config(self, schema: dict, definition_id: int):
+        """Convert JSON schema to AnalysisPipelineConfig."""
+        from commcare_connect.labs.analysis.config import (
+            AnalysisPipelineConfig,
+            CacheStage,
+            FieldComputation,
+            HistogramComputation,
+        )
+
+        # Transform registry
+        transform_registry = {
+            "kg_to_g": lambda x: int(float(x) * 1000)
+            if x and str(x).replace(".", "").replace("-", "").isdigit()
+            else None,
+            "float": lambda x: float(x) if x else None,
+            "int": lambda x: int(float(x)) if x else None,
+            "date": None,
+            "string": lambda x: str(x) if x else None,
+        }
+
+        def get_transform(name):
+            if not name:
+                return None
+            return transform_registry.get(name)
+
+        fields = []
+        for field_def in schema.get("fields", []):
+            fields.append(
+                FieldComputation(
+                    name=field_def["name"],
+                    path=field_def.get("path", ""),
+                    paths=field_def.get("paths"),
+                    aggregation=field_def.get("aggregation", "first"),
+                    transform=get_transform(field_def.get("transform")),
+                    description=field_def.get("description", ""),
+                    default=field_def.get("default"),
+                )
+            )
+
+        histograms = []
+        for hist_def in schema.get("histograms", []):
+            histograms.append(
+                HistogramComputation(
+                    name=hist_def["name"],
+                    path=hist_def.get("path", ""),
+                    paths=hist_def.get("paths"),
+                    lower_bound=hist_def["lower_bound"],
+                    upper_bound=hist_def["upper_bound"],
+                    num_bins=hist_def["num_bins"],
+                    bin_name_prefix=hist_def.get("bin_name_prefix", ""),
+                    transform=get_transform(hist_def.get("transform")),
+                    description=hist_def.get("description", ""),
+                    include_out_of_range=hist_def.get("include_out_of_range", True),
+                )
+            )
+
+        terminal_stage = CacheStage.VISIT_LEVEL
+        if schema.get("terminal_stage") == "aggregated":
+            terminal_stage = CacheStage.AGGREGATED
+
+        return AnalysisPipelineConfig(
+            grouping_key=schema.get("grouping_key", "username"),
+            fields=fields,
+            histograms=histograms,
+            filters=schema.get("filters", {}),
+            date_field=schema.get("date_field", "visit_date"),
+            experiment=f"pipeline_{definition_id}",
+            terminal_stage=terminal_stage,
+            linking_field=schema.get("linking_field", "entity_id"),
+        )

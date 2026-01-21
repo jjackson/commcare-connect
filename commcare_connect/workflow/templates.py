@@ -1,21 +1,9 @@
 """
-Management command to seed workflow templates.
+Workflow Templates - Pre-built workflow definitions and render code.
 
-This creates workflow definitions and render code as LabsRecords
-that can be used to test the workflow system.
-
-Usage:
-    python manage.py seed_example_workflow --settings=config.settings.labs
-    python manage.py seed_example_workflow --template=ocs_outreach --settings=config.settings.labs
-    python manage.py seed_example_workflow --list --settings=config.settings.labs
+This module provides template definitions that can be used to create
+new workflows. Both the views and integration tests import from here.
 """
-
-import json
-import logging
-
-from django.core.management.base import BaseCommand
-
-logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Template: Performance Review
@@ -36,9 +24,10 @@ PERFORMANCE_REVIEW_DEFINITION = {
         "showSummaryCards": True,
         "showFilters": True,
     },
+    "pipeline_sources": [],
 }
 
-PERFORMANCE_REVIEW_RENDER_CODE = """function WorkflowUI({ definition, instance, workers, links, actions, onUpdateState }) {
+PERFORMANCE_REVIEW_RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines, links, actions, onUpdateState }) {
     const [sortBy, setSortBy] = React.useState('name');
     const [filterStatus, setFilterStatus] = React.useState('all');
 
@@ -250,9 +239,10 @@ OCS_OUTREACH_DEFINITION = {
         {"id": "in_progress", "label": "In Progress", "color": "yellow"},
         {"id": "completed", "label": "Completed", "color": "green"},
     ],
+    "pipeline_sources": [],
 }
 
-OCS_OUTREACH_RENDER_CODE = """function WorkflowUI({ definition, instance, workers, links, actions, onUpdateState }) {
+OCS_OUTREACH_RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines, links, actions, onUpdateState }) {
     // OCS State
     const [ocsConnected, setOcsConnected] = React.useState(false);
     const [ocsLoading, setOcsLoading] = React.useState(true);
@@ -268,7 +258,6 @@ OCS_OUTREACH_RENDER_CODE = """function WorkflowUI({ definition, instance, worker
     // Progress Tracking
     const [isRunning, setIsRunning] = React.useState(false);
     const [progress, setProgress] = React.useState({});
-    // progress[username] = { status: 'pending'|'creating'|'task_created'|'ocs_initiated'|'error', task_id, error }
 
     const workerStates = instance.state?.worker_states || {};
 
@@ -294,15 +283,10 @@ OCS_OUTREACH_RENDER_CODE = """function WorkflowUI({ definition, instance, worker
         }).catch(() => setOcsLoading(false));
     }, []);
 
-    // Toggle worker selection
     const toggleWorker = (username) => {
-        setSelectedWorkers(prev => ({
-            ...prev,
-            [username]: !prev[username]
-        }));
+        setSelectedWorkers(prev => ({ ...prev, [username]: !prev[username] }));
     };
 
-    // Select/deselect all
     const handleSelectAll = () => {
         const newState = !selectAll;
         setSelectAll(newState);
@@ -311,10 +295,8 @@ OCS_OUTREACH_RENDER_CODE = """function WorkflowUI({ definition, instance, worker
         setSelectedWorkers(newSelected);
     };
 
-    // Count selected workers
     const selectedCount = Object.values(selectedWorkers).filter(Boolean).length;
 
-    // Run bulk outreach
     const handleCreateTasks = async () => {
         const workersToProcess = workers.filter(w => selectedWorkers[w.username]);
         if (workersToProcess.length === 0) return;
@@ -322,47 +304,31 @@ OCS_OUTREACH_RENDER_CODE = """function WorkflowUI({ definition, instance, worker
         setIsRunning(true);
 
         for (const worker of workersToProcess) {
-            // Update progress: creating
-            setProgress(prev => ({
-                ...prev,
-                [worker.username]: { status: 'creating' }
-            }));
+            setProgress(prev => ({ ...prev, [worker.username]: { status: 'creating' } }));
 
             try {
-                // Build task title
                 const title = (definition.taskTitleTemplate || 'Outreach: {name}')
                     .replace('{name}', worker.name || worker.username);
 
-                // Create task with OCS if bot selected
                 const result = await actions.createTaskWithOCS({
                     username: worker.username,
                     title: title,
                     description: promptText,
                     priority: 'medium',
-                    ocs: selectedBot ? {
-                        experiment: selectedBot,
-                        prompt_text: promptText
-                    } : undefined
+                    ocs: selectedBot ? { experiment: selectedBot, prompt_text: promptText } : undefined
                 });
 
                 if (result.success) {
                     const newStatus = selectedBot && result.ocs?.success ? 'ocs_initiated' : 'task_created';
                     setProgress(prev => ({
                         ...prev,
-                        [worker.username]: {
-                            status: newStatus,
-                            task_id: result.task_id
-                        }
+                        [worker.username]: { status: newStatus, task_id: result.task_id }
                     }));
 
-                    // Update workflow state
                     await onUpdateState({
                         worker_states: {
                             ...instance.state?.worker_states,
-                            [worker.username]: {
-                                task_id: result.task_id,
-                                status: 'outreach_initiated'
-                            }
+                            [worker.username]: { task_id: result.task_id, status: 'outreach_initiated' }
                         }
                     });
                 } else {
@@ -382,7 +348,6 @@ OCS_OUTREACH_RENDER_CODE = """function WorkflowUI({ definition, instance, worker
         setIsRunning(false);
     };
 
-    // Get status badge
     const getProgressBadge = (username) => {
         const p = progress[username];
         if (!p) return null;
@@ -405,28 +370,13 @@ OCS_OUTREACH_RENDER_CODE = """function WorkflowUI({ definition, instance, worker
         );
     };
 
-    // Get existing state badge
-    const getStateBadge = (username) => {
-        const state = workerStates[username];
-        if (!state?.task_id) return null;
-
-        return (
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                <i className="fa-solid fa-check"></i>
-                Has Task
-            </span>
-        );
-    };
-
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="bg-white rounded-lg shadow-sm p-6">
                 <h1 className="text-2xl font-bold text-gray-900">{definition.name}</h1>
                 <p className="text-gray-600 mt-1">{definition.description}</p>
             </div>
 
-            {/* OCS Status Banner */}
             {ocsLoading ? (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                     <div className="flex items-center gap-2 text-gray-600">
@@ -439,12 +389,9 @@ OCS_OUTREACH_RENDER_CODE = """function WorkflowUI({ definition, instance, worker
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 text-yellow-800">
                             <i className="fa-solid fa-exclamation-triangle"></i>
-                            <span>Open Chat Studio not connected. Tasks will be created without AI sessions.</span>
+                            <span>Open Chat Studio not connected.</span>
                         </div>
-                        <a
-                            href={ocsLoginUrl + '?next=' + encodeURIComponent(window.location.pathname)}
-                            className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm font-medium"
-                        >
+                        <a href={ocsLoginUrl} className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm font-medium">
                             Connect to OCS
                         </a>
                     </div>
@@ -458,81 +405,35 @@ OCS_OUTREACH_RENDER_CODE = """function WorkflowUI({ definition, instance, worker
                 </div>
             )}
 
-            {/* Configuration */}
             <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
                 <h2 className="text-lg font-semibold text-gray-900">Configuration</h2>
-
-                {/* Bot Selector */}
                 {ocsConnected && bots.length > 0 && (
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            <i className="fa-solid fa-robot mr-2"></i>
-                            Select AI Bot
-                        </label>
-                        <select
-                            value={selectedBot}
-                            onChange={e => setSelectedBot(e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                            disabled={isRunning}
-                        >
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Select AI Bot</label>
+                        <select value={selectedBot} onChange={e => setSelectedBot(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" disabled={isRunning}>
                             <option value="">No AI Bot (create tasks only)</option>
-                            {bots.map(bot => (
-                                <option key={bot.id} value={bot.id}>{bot.name}</option>
-                            ))}
+                            {bots.map(bot => (<option key={bot.id} value={bot.id}>{bot.name}</option>))}
                         </select>
                     </div>
                 )}
-
-                {/* Prompt */}
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        <i className="fa-solid fa-message mr-2"></i>
-                        {selectedBot ? 'AI Prompt / Task Description' : 'Task Description'}
-                    </label>
-                    <textarea
-                        value={promptText}
-                        onChange={e => setPromptText(e.target.value)}
-                        rows={4}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 resize-none"
-                        placeholder="Enter instructions for the AI bot or task description..."
-                        disabled={isRunning}
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Task Description</label>
+                    <textarea value={promptText} onChange={e => setPromptText(e.target.value)} rows={4} className="w-full border border-gray-300 rounded-lg px-3 py-2 resize-none" disabled={isRunning} />
                 </div>
             </div>
 
-            {/* Worker Selection */}
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <h2 className="text-lg font-semibold text-gray-900">Select Workers</h2>
-                        <span className="text-sm text-gray-500">
-                            {selectedCount} of {workers.length} selected
-                        </span>
+                        <span className="text-sm text-gray-500">{selectedCount} of {workers.length} selected</span>
                     </div>
                     <div className="flex items-center gap-3">
-                        <button
-                            onClick={handleSelectAll}
-                            className="text-sm text-blue-600 hover:text-blue-800"
-                            disabled={isRunning}
-                        >
+                        <button onClick={handleSelectAll} className="text-sm text-blue-600 hover:text-blue-800" disabled={isRunning}>
                             {selectAll ? 'Deselect All' : 'Select All'}
                         </button>
-                        <button
-                            onClick={handleCreateTasks}
-                            disabled={selectedCount === 0 || isRunning || !promptText.trim()}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-2"
-                        >
-                            {isRunning ? (
-                                <>
-                                    <i className="fa-solid fa-spinner fa-spin"></i>
-                                    Processing...
-                                </>
-                            ) : (
-                                <>
-                                    <i className="fa-solid fa-paper-plane"></i>
-                                    Create Tasks ({selectedCount})
-                                </>
-                            )}
+                        <button onClick={handleCreateTasks} disabled={selectedCount === 0 || isRunning || !promptText.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 text-sm font-medium">
+                            {isRunning ? 'Processing...' : 'Create Tasks (' + selectedCount + ')'}
                         </button>
                     </div>
                 </div>
@@ -541,82 +442,29 @@ OCS_OUTREACH_RENDER_CODE = """function WorkflowUI({ definition, instance, worker
                     <thead className="bg-gray-50">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">
-                                <input
-                                    type="checkbox"
-                                    checked={selectAll}
-                                    onChange={handleSelectAll}
-                                    disabled={isRunning}
-                                    className="rounded border-gray-300"
-                                />
+                                <input type="checkbox" checked={selectAll} onChange={handleSelectAll} disabled={isRunning} className="rounded border-gray-300" />
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Worker</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Visits</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Active</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Task</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {workers.map(worker => {
-                            const isSelected = selectedWorkers[worker.username] || false;
-                            const progressItem = progress[worker.username];
-                            const existingState = workerStates[worker.username];
-
-                            return (
-                                <tr key={worker.username} className={isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}>
-                                    <td className="px-6 py-4">
-                                        <input
-                                            type="checkbox"
-                                            checked={isSelected}
-                                            onChange={() => toggleWorker(worker.username)}
-                                            disabled={isRunning}
-                                            className="rounded border-gray-300"
-                                        />
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="font-medium text-gray-900">{worker.name || worker.username}</div>
-                                        <div className="text-sm text-gray-500">{worker.username}</div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {worker.visit_count || 0}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {worker.last_active || 'Never'}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        {getProgressBadge(worker.username) || getStateBadge(worker.username) || (
-                                            <span className="text-sm text-gray-400">-</span>
-                                        )}
-                                        {progressItem?.status === 'error' && (
-                                            <div className="text-xs text-red-600 mt-1">{progressItem.error}</div>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                        {(progressItem?.task_id || existingState?.task_id) ? (
-                                            <a
-                                                href={"/tasks/" + (progressItem?.task_id || existingState?.task_id) + "/edit/"}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                                            >
-                                                <i className="fa-solid fa-external-link"></i>
-                                                View Task
-                                            </a>
-                                        ) : (
-                                            <span className="text-gray-400">-</span>
-                                        )}
-                                    </td>
-                                </tr>
-                            );
-                        })}
+                        {workers.map(worker => (
+                            <tr key={worker.username} className={selectedWorkers[worker.username] ? 'bg-blue-50' : 'hover:bg-gray-50'}>
+                                <td className="px-6 py-4">
+                                    <input type="checkbox" checked={selectedWorkers[worker.username] || false} onChange={() => toggleWorker(worker.username)} disabled={isRunning} className="rounded border-gray-300" />
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="font-medium text-gray-900">{worker.name || worker.username}</div>
+                                    <div className="text-sm text-gray-500">{worker.username}</div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{worker.visit_count || 0}</td>
+                                <td className="px-6 py-4 whitespace-nowrap">{getProgressBadge(worker.username)}</td>
+                            </tr>
+                        ))}
                     </tbody>
                 </table>
-
-                {workers.length === 0 && (
-                    <div className="px-6 py-12 text-center text-gray-500">
-                        No workers available in this opportunity.
-                    </div>
-                )}
             </div>
         </div>
     );
@@ -642,75 +490,64 @@ TEMPLATES = {
 }
 
 
-class Command(BaseCommand):
-    help = "Seed workflow templates to LabsRecord"
+def get_template(template_key: str) -> dict | None:
+    """
+    Get a workflow template by key.
 
-    def add_arguments(self, parser):
-        parser.add_argument(
-            "--template",
-            type=str,
-            default="performance_review",
-            choices=list(TEMPLATES.keys()),
-            help="Which template to create (default: performance_review)",
-        )
-        parser.add_argument(
-            "--list",
-            action="store_true",
-            help="List available templates",
-        )
-        parser.add_argument(
-            "--dry-run",
-            action="store_true",
-            help="Show what would be created without actually creating it",
-        )
+    Args:
+        template_key: One of 'performance_review', 'ocs_outreach'
 
-    def handle(self, *args, **options):
-        # List templates
-        if options["list"]:
-            self.stdout.write("\nAvailable workflow templates:\n")
-            for key, template in TEMPLATES.items():
-                self.stdout.write(f"  {key}:")
-                self.stdout.write(f"    Name: {template['name']}")
-                self.stdout.write(f"    Description: {template['description']}\n")
-            return
+    Returns:
+        Template dict with 'name', 'description', 'definition', 'render_code'
+        or None if not found
+    """
+    return TEMPLATES.get(template_key)
 
-        template_key = options["template"]
-        dry_run = options["dry_run"]
 
-        template = TEMPLATES[template_key]
+def list_templates() -> list[dict]:
+    """
+    List all available templates.
 
-        self.stdout.write(f"Seeding workflow template: {template_key}\n")
+    Returns:
+        List of dicts with 'key', 'name', 'description'
+    """
+    return [{"key": key, "name": t["name"], "description": t["description"]} for key, t in TEMPLATES.items()]
 
-        if dry_run:
-            self.stdout.write(self.style.WARNING("DRY RUN - no changes will be made\n"))
 
-        # Show what will be created
-        self.stdout.write("\nWorkflow Definition:")
-        self.stdout.write(f"  Name: {template['definition']['name']}")
-        self.stdout.write(f"  Description: {template['definition']['description']}")
-        self.stdout.write(f"  Statuses: {[s['id'] for s in template['definition']['statuses']]}")
+def create_workflow_from_template(data_access, template_key: str) -> tuple:
+    """
+    Create a workflow from a template using the data access layer.
 
-        self.stdout.write("\nRender Code:")
-        self.stdout.write("  Type: React Component")
-        self.stdout.write(f"  Lines: {len(template['render_code'].splitlines())}")
+    Args:
+        data_access: WorkflowDataAccess instance with valid OAuth
+        template_key: Template key (e.g., 'performance_review')
 
-        if dry_run:
-            self.stdout.write(self.style.SUCCESS("\nDry run complete. Use without --dry-run to create."))
-            return
+    Returns:
+        Tuple of (definition_record, render_code_record) or raises ValueError
 
-        # Print instructions
-        self.stdout.write(
-            self.style.WARNING(
-                "\nNote: This command requires OAuth authentication to create LabsRecords.\n"
-                "To seed the workflow:\n"
-                "1. Log into the labs environment\n"
-                "2. Use the workflow data access layer with a valid OAuth token\n"
-                "3. Or use the 'Create Workflow' button in the UI\n"
-            )
-        )
+    Raises:
+        ValueError: If template not found
+    """
+    template = get_template(template_key)
+    if not template:
+        raise ValueError(f"Unknown template: {template_key}")
 
-        # Print the JSON for manual creation
-        self.stdout.write("\nDefinition JSON for manual creation:")
-        self.stdout.write(json.dumps(template["definition"], indent=2))
+    template_def = template["definition"]
 
-        self.stdout.write(self.style.SUCCESS(f"\n{template['name']} template ready."))
+    # Create the workflow definition
+    definition = data_access.create_definition(
+        name=template_def["name"],
+        description=template_def["description"],
+        statuses=template_def.get("statuses", []),
+        config=template_def.get("config", {}),
+        pipeline_sources=template_def.get("pipeline_sources", []),
+    )
+
+    # Create the render code
+    render_code = data_access.save_render_code(
+        definition_id=definition.id,
+        component_code=template["render_code"],
+        version=1,
+    )
+
+    return definition, render_code

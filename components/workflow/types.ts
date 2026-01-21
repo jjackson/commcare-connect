@@ -2,7 +2,8 @@
  * TypeScript types for Workflow components.
  *
  * These types define the contract between Django and React for workflow rendering.
- * The workflow render code receives WorkflowProps and can render any React UI.
+ * Workflows can reference Pipelines as data sources - pipeline data is passed
+ * via the `pipelines` prop.
  */
 
 // =============================================================================
@@ -23,6 +24,9 @@ export interface WorkflowProps {
   /** Workers in this opportunity */
   workers: WorkerData[];
 
+  /** Data from pipeline sources (keyed by alias) */
+  pipelines: Record<string, PipelineResult>;
+
   /** Helper functions for generating URLs to other Labs features */
   links: LinkHelpers;
 
@@ -31,6 +35,93 @@ export interface WorkflowProps {
 
   /** Callback to update workflow instance state */
   onUpdateState: (newState: Record<string, unknown>) => Promise<void>;
+}
+
+// =============================================================================
+// Pipeline Data Types
+// =============================================================================
+
+/**
+ * Result from a pipeline execution.
+ * Workflows reference pipelines as data sources and receive this structure.
+ */
+export interface PipelineResult {
+  /** Array of data rows from the pipeline */
+  rows: PipelineRow[];
+
+  /** Metadata about the pipeline execution */
+  metadata: PipelineMetadata;
+}
+
+/**
+ * A single row from a pipeline result.
+ * Structure varies based on pipeline schema and terminal_stage.
+ */
+export interface PipelineRow {
+  /** Username (always present) */
+  username: string;
+
+  /** Visit date (for visit_level stage) */
+  visit_date?: string;
+
+  /** Visit status */
+  status?: string;
+
+  /** Entity ID (for linked visits) */
+  entity_id?: string;
+
+  /** Entity name */
+  entity_name?: string;
+
+  /** Computed fields from pipeline schema (visit_level) */
+  computed?: Record<string, unknown>;
+
+  /** Total visits (for aggregated stage) */
+  total_visits?: number;
+
+  /** Approved visits (for aggregated stage) */
+  approved_visits?: number;
+
+  /** Pending visits (for aggregated stage) */
+  pending_visits?: number;
+
+  /** Rejected visits (for aggregated stage) */
+  rejected_visits?: number;
+
+  /** Flagged visits (for aggregated stage) */
+  flagged_visits?: number;
+
+  /** First visit date (for aggregated stage) */
+  first_visit_date?: string;
+
+  /** Last visit date (for aggregated stage) */
+  last_visit_date?: string;
+
+  /** Custom aggregated fields (for aggregated stage) */
+  custom_fields?: Record<string, unknown>;
+
+  /** Additional fields */
+  [key: string]: unknown;
+}
+
+/**
+ * Metadata about a pipeline execution.
+ */
+export interface PipelineMetadata {
+  /** Number of rows returned */
+  row_count: number;
+
+  /** Whether the data came from cache */
+  from_cache: boolean;
+
+  /** Name of the pipeline */
+  pipeline_name: string;
+
+  /** Terminal stage: visit_level or aggregated */
+  terminal_stage: 'visit_level' | 'aggregated';
+
+  /** Error message if execution failed */
+  error?: string;
 }
 
 // =============================================================================
@@ -57,8 +148,45 @@ export interface WorkflowDefinition {
   /** Status options for workers (optional, workflow-defined) */
   statuses?: StatusConfig[];
 
+  /** Configuration options */
+  config?: WorkflowConfig;
+
+  /** Pipeline data sources */
+  pipeline_sources?: PipelineSource[];
+
+  /** Whether this workflow is shared with others */
+  is_shared?: boolean;
+
+  /** Sharing scope: program, organization, or global */
+  shared_scope?: 'program' | 'organization' | 'global';
+
   /** Additional fields defined by the workflow creator */
   [key: string]: unknown;
+}
+
+/**
+ * Configuration options for a workflow.
+ */
+export interface WorkflowConfig {
+  /** Show summary cards at top */
+  showSummaryCards?: boolean;
+
+  /** Show filter controls */
+  showFilters?: boolean;
+
+  /** Additional config options */
+  [key: string]: unknown;
+}
+
+/**
+ * Reference to a pipeline as a data source.
+ */
+export interface PipelineSource {
+  /** ID of the pipeline to fetch data from */
+  pipeline_id: number;
+
+  /** Alias used to access the data in render code */
+  alias: string;
 }
 
 /**
@@ -189,17 +317,11 @@ export interface WorkerData {
 export interface LinkHelpers {
   /**
    * Generate URL to create an audit.
-   *
-   * @param params - Audit creation parameters
-   * @returns URL string for audit creation page
    */
   auditUrl(params: AuditUrlParams): string;
 
   /**
    * Generate URL to create a task.
-   *
-   * @param params - Task creation parameters
-   * @returns URL string for task creation page
    */
   taskUrl(params: TaskUrlParams): string;
 }
@@ -208,37 +330,16 @@ export interface LinkHelpers {
  * Parameters for audit URL generation.
  */
 export interface AuditUrlParams {
-  /** FLW username to audit */
   username?: string;
-
-  /** Multiple FLW usernames (comma-separated) */
   usernames?: string;
-
-  /** Number of visits for last_n types */
   count?: number;
-
-  /** Audit type: date_range, last_n_per_flw, last_n_per_opp, last_n_across_all */
   audit_type?: string;
-
-  /** Granularity: combined, per_opp, per_flw */
   granularity?: string;
-
-  /** Start date for date_range (YYYY-MM-DD) */
   start_date?: string;
-
-  /** End date for date_range (YYYY-MM-DD) */
   end_date?: string;
-
-  /** Audit title */
   title?: string;
-
-  /** Audit tag */
   tag?: string;
-
-  /** Auto-submit the form */
   auto_create?: boolean;
-
-  /** Additional parameters */
   [key: string]: unknown;
 }
 
@@ -246,35 +347,93 @@ export interface AuditUrlParams {
  * Parameters for task URL generation.
  */
 export interface TaskUrlParams {
-  /** FLW username */
   username?: string;
-
-  /** Task title */
   title?: string;
-
-  /** Task description */
   description?: string;
-
-  /** Link to audit that triggered this task */
   audit_session_id?: number;
-
-  /** Link to workflow instance that triggered this task */
   workflow_instance_id?: number;
-
-  /** Task priority: low, medium, high */
   priority?: string;
-
-  /** Additional parameters */
   [key: string]: unknown;
+}
+
+// =============================================================================
+// Action Handlers - For programmatic operations
+// =============================================================================
+
+/**
+ * Action handlers available to workflow components.
+ */
+export interface ActionHandlers {
+  createTask(params: CreateTaskParams): Promise<TaskResult>;
+  checkOCSStatus(): Promise<OCSStatusResult>;
+  listOCSBots(): Promise<OCSBotsResult>;
+  initiateOCSSession(
+    taskId: number,
+    params: OCSSessionParams,
+  ): Promise<OCSInitiateResult>;
+  createTaskWithOCS(
+    params: CreateTaskWithOCSParams,
+  ): Promise<TaskWithOCSResult>;
+}
+
+export interface CreateTaskParams {
+  username: string;
+  title: string;
+  description?: string;
+  priority?: 'low' | 'medium' | 'high';
+}
+
+export interface TaskResult {
+  success: boolean;
+  task_id?: number;
+  error?: string;
+}
+
+export interface OCSStatusResult {
+  connected: boolean;
+  login_url?: string;
+  error?: string;
+}
+
+export interface OCSBotsResult {
+  success: boolean;
+  bots?: OCSBot[];
+  needs_oauth?: boolean;
+  error?: string;
+}
+
+export interface OCSBot {
+  id: string;
+  name: string;
+  version?: number;
+}
+
+export interface OCSSessionParams {
+  identifier: string;
+  experiment: string;
+  prompt_text: string;
+  platform?: string;
+  start_new_session?: boolean;
+}
+
+export interface OCSInitiateResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+export interface CreateTaskWithOCSParams extends CreateTaskParams {
+  ocs?: Omit<OCSSessionParams, 'identifier'>;
+}
+
+export interface TaskWithOCSResult extends TaskResult {
+  ocs?: OCSInitiateResult;
 }
 
 // =============================================================================
 // API Response Types
 // =============================================================================
 
-/**
- * Response from update state API.
- */
 export interface UpdateStateResponse {
   success: boolean;
   instance?: {
@@ -284,153 +443,15 @@ export interface UpdateStateResponse {
   error?: string;
 }
 
-/**
- * Response from get workers API.
- */
 export interface GetWorkersResponse {
   workers: WorkerData[];
   error?: string;
 }
 
 // =============================================================================
-// Action Handlers - For programmatic operations
-// =============================================================================
-
-/**
- * Action handlers available to workflow components.
- * These allow workflows to create tasks, initiate OCS sessions, etc.
- */
-export interface ActionHandlers {
-  /**
-   * Create a task for a worker.
-   */
-  createTask(params: CreateTaskParams): Promise<TaskResult>;
-
-  /**
-   * Check if OCS OAuth is configured and valid.
-   */
-  checkOCSStatus(): Promise<OCSStatusResult>;
-
-  /**
-   * List available OCS bots.
-   */
-  listOCSBots(): Promise<OCSBotsResult>;
-
-  /**
-   * Initiate an OCS session on an existing task.
-   */
-  initiateOCSSession(
-    taskId: number,
-    params: OCSSessionParams,
-  ): Promise<OCSInitiateResult>;
-
-  /**
-   * Create a task and optionally initiate an OCS session on it.
-   * This is a convenience method that combines createTask + initiateOCSSession.
-   */
-  createTaskWithOCS(
-    params: CreateTaskWithOCSParams,
-  ): Promise<TaskWithOCSResult>;
-}
-
-/**
- * Parameters for creating a task.
- */
-export interface CreateTaskParams {
-  /** FLW username */
-  username: string;
-  /** Task title */
-  title: string;
-  /** Task description */
-  description?: string;
-  /** Priority: low, medium, high */
-  priority?: 'low' | 'medium' | 'high';
-}
-
-/**
- * Result from creating a task.
- */
-export interface TaskResult {
-  success: boolean;
-  task_id?: number;
-  error?: string;
-}
-
-/**
- * Result from checking OCS status.
- */
-export interface OCSStatusResult {
-  connected: boolean;
-  login_url?: string;
-  error?: string;
-}
-
-/**
- * Result from listing OCS bots.
- */
-export interface OCSBotsResult {
-  success: boolean;
-  bots?: OCSBot[];
-  needs_oauth?: boolean;
-  error?: string;
-}
-
-/**
- * OCS bot information.
- */
-export interface OCSBot {
-  id: string;
-  name: string;
-  version?: number;
-}
-
-/**
- * Parameters for initiating an OCS session.
- */
-export interface OCSSessionParams {
-  /** Participant identifier (usually FLW username) */
-  identifier: string;
-  /** OCS experiment/bot ID */
-  experiment: string;
-  /** Prompt instructions for the bot */
-  prompt_text: string;
-  /** Platform identifier */
-  platform?: string;
-  /** Start a new session even if one exists */
-  start_new_session?: boolean;
-}
-
-/**
- * Result from initiating an OCS session.
- */
-export interface OCSInitiateResult {
-  success: boolean;
-  message?: string;
-  error?: string;
-}
-
-/**
- * Parameters for creating a task with optional OCS session.
- */
-export interface CreateTaskWithOCSParams extends CreateTaskParams {
-  /** Optional OCS configuration - if provided, initiates OCS session after task creation */
-  ocs?: Omit<OCSSessionParams, 'identifier'>; // identifier comes from username
-}
-
-/**
- * Result from creating a task with OCS.
- */
-export interface TaskWithOCSResult extends TaskResult {
-  ocs?: OCSInitiateResult;
-}
-
-// =============================================================================
 // Utility Types
 // =============================================================================
 
-/**
- * Type for workflow component function.
- */
 export type WorkflowComponent = React.FC<WorkflowProps>;
 
 /**
@@ -439,6 +460,7 @@ export type WorkflowComponent = React.FC<WorkflowProps>;
 export interface WorkflowDataFromDjango {
   definition: WorkflowDefinition;
   definition_id: number;
+  opportunity_id?: number;
   instance: {
     id: number;
     definition_id: number;
@@ -447,6 +469,7 @@ export interface WorkflowDataFromDjango {
     state: WorkflowState;
   };
   workers: WorkerData[];
+  pipeline_data?: Record<string, PipelineResult>;
   links: {
     auditUrlBase: string;
     taskUrlBase: string;
@@ -454,5 +477,8 @@ export interface WorkflowDataFromDjango {
   apiEndpoints: {
     updateState: string;
     getWorkers: string;
+    getPipelineData?: string;
   };
+  render_code?: string;
+  is_edit_mode?: boolean;
 }

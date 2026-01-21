@@ -4,8 +4,8 @@
  * DynamicWorkflow - Renders AI-generated workflow components.
  *
  * This component takes JSX code as a string, transpiles it using Babel,
- * and renders it dynamically. It provides the workflow props to the
- * generated component.
+ * and renders it dynamically. It provides the workflow props including
+ * pipeline data to the generated component.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -158,6 +158,7 @@ export function DynamicWorkflow({
   definition,
   instance,
   workers,
+  pipelines,
   links,
   actions,
   onUpdateState,
@@ -239,6 +240,7 @@ export function DynamicWorkflow({
         definition={definition}
         instance={instance}
         workers={workers}
+        pipelines={pipelines}
         links={links}
         actions={actions}
         onUpdateState={onUpdateState}
