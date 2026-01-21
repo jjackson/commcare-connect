@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% load static i18n %}
+
+{% block content %}
+<div class="max-w-full mx-auto px-4 py-4">
+  <div class="mb-4">
+    <a href="javascript:history.back()" class="text-brand-indigo hover:text-brand-deep-purple hover:underline">
+      <i class="fa-solid fa-arrow-left mr-2"></i>Back
+    </a>
+  </div>
+
+  {% if error %}
+  <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+    <div class="flex items-center gap-2">
+      <i class="fa-solid fa-exclamation-circle text-red-600"></i>
+      <h3 class="text-lg font-semibold text-red-800">Error</h3>
+    </div>
+    <p class="text-sm text-red-700 mt-2">{{ error }}</p>
+  </div>
+  {% else %}
+  <div class="bg-white rounded-lg shadow-sm p-4">
+    <h1 class="text-xl font-bold text-brand-deep-purple mb-4">
+      <i class="fa-solid fa-file-lines mr-2"></i>Visit {{ visit_id }} Details
+    </h1>
+    
+    <div class="visit-detail-content">
+      {% if visit_detail_html %}
+        {# Extract and display the visit-details div content #}
+        {# The HTML from production includes the full page, we need to extract the relevant part #}
+        {{ visit_detail_html|safe }}
+      {% else %}
+        <p class="text-gray-500">Loading visit details...</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+  /* Ensure the embedded content displays properly */
+  .visit-detail-content {
+    width: 100%;
+    overflow-x: auto;
+  }
+  
+  /* Style adjustments for embedded Connect production content */
+  .visit-detail-content .flex {
+    display: flex;
+  }
+  
+  .visit-detail-content img {
+    max-width: 100%;
+    height: auto;
+  }
+</style>
+{% endblock %}

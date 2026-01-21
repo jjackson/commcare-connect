@@ -52,4 +52,6 @@ urlpatterns = [
         views.ExperimentAuditImageConnectView.as_view(),
         name="audit_image_connect",
     ),
+    # Visit detail from production
+    path("visits/<int:visit_id>/", views.VisitDetailFromProductionView.as_view(), name="visit_detail_from_production"),
 ]
