@@ -156,7 +156,7 @@ def process_assessments(user, xform: XForm, app: CommCareApp, opportunity: Oppor
             opportunity_access=access,
             xform_id=xform.id,
             defaults={
-                "date": xform.received_on,
+                "date": xform.metadata.timeEnd,
                 "score": score,
                 "passing_score": passing_score,
                 "passed": score >= passing_score,
