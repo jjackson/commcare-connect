@@ -3,9 +3,10 @@ import logging
 
 from django.db import transaction
 from django.db.models import Q
+from django.http import Http404
 from django.utils.timezone import now
 from rest_framework import viewsets
-from rest_framework.generics import RetrieveAPIView, get_object_or_404
+from rest_framework.generics import RetrieveAPIView, UpdateAPIView, get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -25,6 +26,7 @@ from commcare_connect.opportunity.models import (
     Payment,
 )
 from commcare_connect.users.helpers import create_hq_user_and_link
+from commcare_connect.users.models import User
 from commcare_connect.utils.error_codes import ErrorCodes
 
 logger = logging.getLogger(__name__)
@@ -105,25 +107,56 @@ class ClaimOpportunityView(APIView):
         return Response(status=201)
 
 
+def confirm_payments(user: User, payments_data: list):
+    if not payments_data or not isinstance(payments_data, list):
+        return Response(status=400)
+
+    payment_map = {}
+
+    for item in payments_data:
+        payment_id = item.get("id")
+        confirmed = item.get("confirmed")
+
+        if payment_id is None:
+            return Response(status=400)
+
+        if confirmed and confirmed == "true":
+            confirmed = True
+        elif confirmed and confirmed == "false":
+            confirmed = False
+        else:
+            return Response({"error_code": ErrorCodes.INVALID_FLAG}, status=400)
+
+        payment_map[payment_id] = confirmed
+
+    payments = Payment.objects.filter(
+        pk__in=payment_map.keys(),
+    ).filter(
+        Q(organization__memberships__user=user) | Q(opportunity_access__user=user),
+    )
+
+    if payments.count() != len(payment_map):
+        raise Http404
+
+    for payment in payments:
+        payment.confirmed = payment_map[payment.pk]
+        payment.confirmation_date = now()
+
+    Payment.objects.bulk_update(payments, ["confirmed", "confirmation_date"])
+
+    return Response(status=200)
+
+
 class ConfirmPaymentView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, *args, **kwargs):
-        payment_query = Payment.objects.filter(
-            pk=kwargs.get("pk"),
-        ).filter(
-            Q(organization__memberships__user=self.request.user) | Q(opportunity_access__user=self.request.user),
-        )
-        payment = get_object_or_404(payment_query)
+        paymeny_data = [{"id": kwargs.get("pk"), "confirmed": self.request.data.get("confirmed")}]
+        return confirm_payments(self.request.user, paymeny_data)
 
-        confirmed_value = self.request.data["confirmed"]
-        if confirmed_value == "false":
-            confirmed = False
-        elif confirmed_value == "true":
-            confirmed = True
-        else:
-            return Response({"error_code": ErrorCodes.INVALID_FLAG}, status=400)
-        payment.confirmed = confirmed
-        payment.confirmation_date = now()
-        payment.save()
-        return Response(status=200)
+
+class ConfirmPaymentsView(UpdateAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        return confirm_payments(request.user, request.data.get("payments", []))
