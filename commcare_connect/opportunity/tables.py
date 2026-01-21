@@ -806,7 +806,7 @@ class UserVisitVerificationTable(tables.Table):
                 "x-model": "selectAll",
                 "name": "select_all",
                 "type": "checkbox",
-                "class": "checkbox",
+                "class": "checkbox ga-all-visit-checkbox",
             },
             "td__input": {
                 "x-model": "selected",
