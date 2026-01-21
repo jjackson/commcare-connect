@@ -152,6 +152,10 @@ def labs_commcare_callback(request: HttpRequest) -> HttpResponseRedirect:
         logger.info(f"CommCare OAuth successful for user {request.user.username}")
         messages.success(request, "Successfully connected to CommCare!")
 
+        # Ensure next_url is valid - default to /audit/ if empty or invalid
+        if not next_url or not next_url.startswith('/'):
+            next_url = "/audit/"
+
         return redirect(next_url)
 
     except Exception as e:

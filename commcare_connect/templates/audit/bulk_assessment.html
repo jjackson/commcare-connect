@@ -262,6 +262,7 @@
               <div class="truncate">
                 <i class="fa-solid fa-hashtag mr-1"></i>
                 <a :href="'{% url "audit:visit_detail_from_production" 0 %}'.replace('/0/', '/' + assessment.visit_id + '/')"
+                   target="_blank"
                    class="text-brand-indigo hover:text-brand-deep-purple hover:underline"
                    x-text="'Visit ' + assessment.visit_id"></a>
               </div>
@@ -335,6 +336,7 @@
               <tr>
                 <td class="px-4 py-3">
                   <a :href="'{% url "audit:visit_detail_from_production" 0 %}'.replace('/0/', '/' + visit.visit_id + '/')"
+                     target="_blank"
                      class="text-sm font-medium text-brand-indigo hover:text-brand-deep-purple hover:underline"
                      x-text="visit.visit_id"></a>
                   <div class="text-xs text-gray-500" x-text="visit.visit_date"></div>
