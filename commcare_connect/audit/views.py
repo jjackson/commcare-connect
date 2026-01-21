@@ -9,8 +9,12 @@ Templates are reused from the existing audit views for consistency.
 """
 
 import json
+import logging
+import re
 from collections import defaultdict
 
+import httpx
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from django.urls import reverse, reverse_lazy
@@ -23,6 +27,8 @@ from commcare_connect.audit.data_access import AuditDataAccess
 from commcare_connect.audit.models import AuditSessionRecord
 from commcare_connect.audit.tables import AuditTable
 from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
+
+logger = logging.getLogger(__name__)
 
 
 class ExperimentAuditCreateView(LoginRequiredMixin, TemplateView):
@@ -1061,3 +1067,158 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
         finally:
             if data_access:
                 data_access.close()
+
+
+class VisitDetailFromProductionView(LoginRequiredMixin, TemplateView):
+    """Fetch and display visit detail HTML from Connect production."""
+
+    template_name = "audit/visit_detail_from_production.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        visit_id = self.kwargs.get("visit_id")
+
+        if not visit_id:
+            context["error"] = "Visit ID is required"
+            return context
+
+        # Get OAuth token from session
+        labs_oauth = self.request.session.get("labs_oauth", {})
+        access_token = labs_oauth.get("access_token")
+
+        if not access_token:
+            context["error"] = "OAuth token not found. Please log in again."
+            return context
+
+        # Get visit data to find opportunity_id
+        data_access = AuditDataAccess(request=self.request)
+        try:
+            # Try to get visit data from any opportunity the user has access to
+            visit_data = None
+            opportunity_id = None
+            org_slug = ""
+
+            # Get opportunity_id from labs_context if available
+            labs_context = getattr(self.request, "labs_context", {})
+            opportunity_id = labs_context.get("opportunity_id")
+
+            # If not in context, try to find visit across all opportunities
+            if not opportunity_id:
+                org_data = getattr(self.request.user, "_org_data", {})
+                opportunities = org_data.get("opportunities", [])
+                for opp in opportunities:
+                    opp_id = opp.get("id")
+                    if opp_id:
+                        visit_data = data_access.get_visit_data(visit_id, opportunity_id=opp_id)
+                        if visit_data:
+                            opportunity_id = opp_id
+                            org_slug = opp.get("organization", "")
+                            break
+            else:
+                # Get org_slug from user's org_data
+                org_data = getattr(self.request.user, "_org_data", {})
+                opportunities = org_data.get("opportunities", [])
+                for opp in opportunities:
+                    if opp.get("id") == opportunity_id:
+                        org_slug = opp.get("organization", "")
+                        break
+                visit_data = data_access.get_visit_data(visit_id, opportunity_id=opportunity_id)
+
+            if not visit_data or not opportunity_id or not org_slug:
+                context["error"] = f"Visit {visit_id} not found or you don't have access to it."
+                return context
+
+            # Validate that we have all required components for the URL
+            if not org_slug.strip():
+                context["error"] = f"Unable to determine organization for visit {visit_id}."
+                return context
+
+            # Fetch HTML from Connect production
+            production_url = settings.CONNECT_PRODUCTION_URL.rstrip("/")
+            visit_detail_url = f"{production_url}/a/{org_slug}/opportunity/{opportunity_id}/user_visit_details/{visit_id}/"
+
+            try:
+                http_client = httpx.Client(
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    timeout=30.0,
+                    follow_redirects=True,
+                )
+                response = http_client.get(visit_detail_url)
+                http_client.close()
+
+                if response.status_code == 200:
+                    # Extract the visit detail HTML from the response
+                    html_content = response.text
+
+                    # Extract the visit-details div content
+                    # Find the opening tag of div with id="visit-details"
+                    opening_tag_pattern = r'<div[^>]*id=["\']visit-details["\'][^>]*>'
+                    opening_match = re.search(opening_tag_pattern, html_content, re.IGNORECASE)
+                    
+                    if opening_match:
+                        start_pos = opening_match.start()
+                        # Find the matching closing </div> tag by counting nested divs
+                        div_count = 0
+                        pos = start_pos
+                        while pos < len(html_content):
+                            # Check for opening div tag (but skip HTML comments)
+                            if html_content[pos:pos+4] == "<div":
+                                # Make sure it's not a closing tag, comment, or script/style tag
+                                if (pos + 4 < len(html_content) and 
+                                    html_content[pos+1] != "/" and
+                                    not html_content[pos:pos+9].startswith("<!--")):
+                                    div_count += 1
+                            # Check for closing div tag
+                            elif html_content[pos:pos+6] == "</div>":
+                                div_count -= 1
+                                if div_count == 0:
+                                    end_pos = pos + 6
+                                    context["visit_detail_html"] = html_content[start_pos:end_pos]
+                                    break
+                            pos += 1
+                        else:
+                            # Couldn't find matching closing tag, use a simple fallback
+                            # Try to find the div with x-data containing slides
+                            slides_match = re.search(
+                                r'<div[^>]*x-data=["\'][^>]*slides[^>]*>',
+                                html_content,
+                                re.IGNORECASE
+                            )
+                            if slides_match:
+                                context["visit_detail_html"] = html_content[slides_match.start():]
+                            else:
+                                context["visit_detail_html"] = html_content
+                    else:
+                        # Fallback: try to find div with x-data containing "slides"
+                        slides_match = re.search(
+                            r'<div[^>]*x-data=["\'][^>]*slides[^>]*>',
+                            html_content,
+                            re.IGNORECASE
+                        )
+                        if slides_match:
+                            context["visit_detail_html"] = html_content[slides_match.start():]
+                        else:
+                            # Last resort: use body content or full HTML
+                            body_match = re.search(r'<body[^>]*>(.*?)</body>', html_content, re.DOTALL | re.IGNORECASE)
+                            if body_match:
+                                context["visit_detail_html"] = body_match.group(1)
+                            else:
+                                context["visit_detail_html"] = html_content
+
+                    context["visit_id"] = visit_id
+                else:
+                    logger.error(
+                        f"Failed to fetch visit detail: {response.status_code} - {response.text[:200]}"
+                    )
+                    context["error"] = f"Failed to load visit details (HTTP {response.status_code})"
+            except httpx.RequestError as e:
+                logger.error(f"Error fetching visit detail: {str(e)}")
+                context["error"] = f"Error connecting to Connect production: {str(e)}"
+            except Exception as e:
+                logger.error(f"Unexpected error: {str(e)}")
+                context["error"] = f"Unexpected error: {str(e)}"
+
+        finally:
+            data_access.close()
+
+        return context
