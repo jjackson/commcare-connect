@@ -20,7 +20,7 @@ class User(AbstractUser):
 
     username_validator = UnicodeUsernameValidator()
 
-    user_id = models.UUIDField(editable=False, null=False, default=uuid4)
+    user_id = models.UUIDField(editable=False, null=False, default=uuid4, unique=True)
     # First and last name do not cover name patterns around the globe
     name = models.CharField(_("Name of User"), blank=True, max_length=255)
     first_name = None  # type: ignore
