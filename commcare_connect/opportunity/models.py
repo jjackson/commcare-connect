@@ -77,7 +77,7 @@ class Country(models.Model):
 
 
 class Opportunity(BaseModel):
-    opportunity_id = models.UUIDField(editable=False, null=True, default=uuid4)
+    opportunity_id = models.UUIDField(editable=False, null=False, default=uuid4)
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
