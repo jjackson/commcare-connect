@@ -188,7 +188,7 @@ class SQLCacheManager:
                 visit_id=v["visit_id"],
                 username=v["username"],
                 # Base fields (allow None/NULL for missing values)
-                visit_date=v.get("visit_date"),
+                visit_date=_parse_date(v.get("visit_date")),
                 status=v.get("status") or None,
                 flagged=v.get("flagged", False),
                 location=v.get("location") or None,
@@ -264,8 +264,8 @@ class SQLCacheManager:
                 pending_visits=f.get("pending_visits", 0),
                 rejected_visits=f.get("rejected_visits", 0),
                 flagged_visits=f.get("flagged_visits", 0),
-                first_visit_date=f.get("first_visit_date"),
-                last_visit_date=f.get("last_visit_date"),
+                first_visit_date=_parse_date(f.get("first_visit_date")),
+                last_visit_date=_parse_date(f.get("last_visit_date")),
             )
             for f in flw_data
         ]

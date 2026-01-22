@@ -254,8 +254,9 @@ def build_flw_aggregation_query(
         "COUNT(*) FILTER (WHERE status = 'pending') as pending_visits",
         "COUNT(*) FILTER (WHERE status = 'rejected') as rejected_visits",
         "COUNT(*) FILTER (WHERE flagged = true) as flagged_visits",
-        "MIN(visit_date) as first_visit_date",
-        "MAX(visit_date) as last_visit_date",
+        # Use _base_ prefix to avoid conflicts with custom config fields of the same name
+        "MIN(visit_date) as _base_first_visit_date",
+        "MAX(visit_date) as _base_last_visit_date",
     ]
 
     # Add custom fields from config

@@ -40,7 +40,9 @@ import {
   X,
   Check,
   Database,
+  Settings,
 } from 'lucide-react';
+import { PipelineEditor } from './pipeline-editor';
 
 /**
  * Create action handlers for workflow operations.
@@ -255,6 +257,19 @@ function WorkflowRunner({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Tab state for switching between workflow and pipeline editing
+  const [activeTab, setActiveTab] = useState<'workflow' | 'pipeline'>(
+    'workflow',
+  );
+  const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(
+    null,
+  );
+  const [selectedPipelineData, setSelectedPipelineData] = useState<{
+    definition: Record<string, unknown>;
+    previewData?: Record<string, unknown>;
+  } | null>(null);
+  const [isLoadingPipelineEditor, setIsLoadingPipelineEditor] = useState(false);
+
   // Check if there are unsaved changes
   const hasChanges = useMemo(() => {
     const codeChanged = renderCode !== originalRenderCode;
@@ -289,6 +304,53 @@ function WorkflowRunner({
       fetchPipelineData();
     }
   }, [definition.pipeline_sources, fetchPipelineData]);
+
+  // Load pipeline definition for editing
+  const loadPipelineForEditing = useCallback(
+    async (pipelineId: number) => {
+      setIsLoadingPipelineEditor(true);
+      setSelectedPipelineId(pipelineId);
+      setActiveTab('pipeline');
+
+      try {
+        // Fetch pipeline definition
+        const defResponse = await fetch(
+          `/labs/workflow/api/pipeline/${pipelineId}/`,
+        );
+        if (!defResponse.ok) throw new Error('Failed to load pipeline');
+        const defData = await defResponse.json();
+
+        // Fetch preview data
+        const previewResponse = await fetch(
+          `/labs/workflow/api/pipeline/${pipelineId}/preview/?opportunity_id=${initialData.opportunity_id}`,
+        );
+        const previewData = previewResponse.ok
+          ? await previewResponse.json()
+          : { rows: [], metadata: {} };
+
+        setSelectedPipelineData({
+          definition: defData.definition,
+          previewData: previewData,
+        });
+      } catch (e) {
+        console.error('Failed to load pipeline for editing:', e);
+        setError(String(e));
+        setActiveTab('workflow');
+      } finally {
+        setIsLoadingPipelineEditor(false);
+      }
+    },
+    [initialData.opportunity_id],
+  );
+
+  // Handle returning to workflow tab
+  const handleReturnToWorkflow = useCallback(() => {
+    setActiveTab('workflow');
+    setSelectedPipelineId(null);
+    setSelectedPipelineData(null);
+    // Refresh pipeline data in case schema changed
+    fetchPipelineData();
+  }, [fetchPipelineData]);
 
   // Handle state updates
   const handleUpdateState = useCallback(
@@ -434,124 +496,243 @@ function WorkflowRunner({
           isChatOpen ? 'mr-96' : ''
         }`}
       >
-        {/* Control Bar */}
-        <div className="bg-white border-b border-gray-200 px-4 py-2 mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* Edit Code Button */}
-            <button
-              onClick={handleOpenCodeEditor}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-              title="Edit render code"
-            >
-              <Code size={16} />
-              Edit Code
-            </button>
+        {/* Tab Bar - Only show when pipelines exist */}
+        {definition.pipeline_sources &&
+          definition.pipeline_sources.length > 0 && (
+            <div className="bg-white border-b border-gray-200 px-4">
+              <div className="flex items-center gap-1">
+                {/* Workflow Tab */}
+                <button
+                  onClick={() => handleReturnToWorkflow()}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'workflow'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Workflow
+                </button>
+                {/* Pipeline Tabs */}
+                {definition.pipeline_sources.map(
+                  (source: { pipeline_id: number; alias: string }) => (
+                    <button
+                      key={source.pipeline_id}
+                      onClick={() => loadPipelineForEditing(source.pipeline_id)}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                        activeTab === 'pipeline' &&
+                        selectedPipelineId === source.pipeline_id
+                          ? 'border-orange-600 text-orange-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      <Database size={14} />
+                      {source.alias}
+                      {isLoadingPipelineEditor &&
+                        selectedPipelineId === source.pipeline_id && (
+                          <i className="fa-solid fa-spinner fa-spin ml-1" />
+                        )}
+                    </button>
+                  ),
+                )}
+              </div>
+            </div>
+          )}
 
-            {/* Pipeline Data Indicator */}
-            {definition.pipeline_sources &&
-              definition.pipeline_sources.length > 0 && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-blue-50 rounded-md">
-                  <Database size={16} />
-                  <span>
-                    {definition.pipeline_sources.length} pipeline
-                    {definition.pipeline_sources.length > 1 ? 's' : ''}
+        {/* Control Bar - Only show for workflow tab */}
+        {activeTab === 'workflow' && (
+          <div className="bg-white border-b border-gray-200 px-4 py-2 mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {/* Edit Code Button */}
+              <button
+                onClick={handleOpenCodeEditor}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                title="Edit render code"
+              >
+                <Code size={16} />
+                Edit Code
+              </button>
+
+              {/* Pipeline Data Indicator */}
+              {definition.pipeline_sources &&
+                definition.pipeline_sources.length > 0 && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-blue-50 rounded-md">
+                    <Database size={16} />
+                    <span>
+                      {definition.pipeline_sources.length} pipeline
+                      {definition.pipeline_sources.length > 1 ? 's' : ''}
+                    </span>
+                    {isLoadingPipelines && (
+                      <i className="fa-solid fa-spinner fa-spin ml-1" />
+                    )}
+                  </div>
+                )}
+
+              {/* Save/Discard buttons */}
+              {hasChanges && (
+                <>
+                  <div className="h-4 w-px bg-gray-300" />
+                  <span className="text-sm text-amber-600 font-medium">
+                    Unsaved changes
                   </span>
-                  {isLoadingPipelines && (
-                    <i className="fa-solid fa-spinner fa-spin ml-1" />
-                  )}
-                </div>
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-green-400 rounded-md transition-colors"
+                  >
+                    {isSaving ? (
+                      <i className="fa-solid fa-spinner fa-spin" />
+                    ) : saveSuccess ? (
+                      <Check size={16} />
+                    ) : (
+                      <Save size={16} />
+                    )}
+                    {saveSuccess ? 'Saved!' : 'Save'}
+                  </button>
+                  <button
+                    onClick={handleDiscard}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 rounded-md transition-colors"
+                  >
+                    <RotateCcw size={16} />
+                    Discard
+                  </button>
+                </>
               )}
+            </div>
 
-            {/* Save/Discard buttons */}
-            {hasChanges && (
-              <>
-                <div className="h-4 w-px bg-gray-300" />
-                <span className="text-sm text-amber-600 font-medium">
-                  Unsaved changes
-                </span>
-                <button
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-green-400 rounded-md transition-colors"
-                >
-                  {isSaving ? (
-                    <i className="fa-solid fa-spinner fa-spin" />
-                  ) : saveSuccess ? (
-                    <Check size={16} />
-                  ) : (
-                    <Save size={16} />
-                  )}
-                  {saveSuccess ? 'Saved!' : 'Save'}
-                </button>
-                <button
-                  onClick={handleDiscard}
-                  disabled={isSaving}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 rounded-md transition-colors"
-                >
-                  <RotateCcw size={16} />
-                  Discard
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Right side - status */}
-          <div className="text-xs text-gray-500">
-            {renderError ? (
-              <span className="text-red-600">Render error</span>
-            ) : (
-              <span className="text-green-600">Ready</span>
-            )}
-          </div>
-        </div>
-
-        {/* Show error if any */}
-        {error && (
-          <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4 mx-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <i className="fa-solid fa-circle-exclamation text-red-400"></i>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-red-700">{error}</p>
-                <button
-                  onClick={() => setError(null)}
-                  className="text-sm text-red-600 underline mt-1"
-                >
-                  Dismiss
-                </button>
-              </div>
+            {/* Right side - status */}
+            <div className="text-xs text-gray-500">
+              {renderError ? (
+                <span className="text-red-600">Render error</span>
+              ) : (
+                <span className="text-green-600">Ready</span>
+              )}
             </div>
           </div>
         )}
 
-        {/* Render error */}
-        {renderError && (
-          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4 mx-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <i className="fa-solid fa-exclamation-triangle text-yellow-400"></i>
+        {/* Workflow Content - Only show when workflow tab is active */}
+        {activeTab === 'workflow' && (
+          <>
+            {/* Show error if any */}
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4 mx-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <i className="fa-solid fa-circle-exclamation text-red-400"></i>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{error}</p>
+                    <button
+                      onClick={() => setError(null)}
+                      className="text-sm text-red-600 underline mt-1"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="ml-3">
-                <p className="text-sm text-yellow-700">
-                  Render error: {renderError}
-                </p>
-                <p className="text-xs text-yellow-600 mt-1">
-                  Open the code editor to fix the issue.
-                </p>
+            )}
+
+            {/* Render error */}
+            {renderError && (
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4 mx-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <i className="fa-solid fa-exclamation-triangle text-yellow-400"></i>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-yellow-700">
+                      Render error: {renderError}
+                    </p>
+                    <p className="text-xs text-yellow-600 mt-1">
+                      Open the code editor to fix the issue.
+                    </p>
+                  </div>
+                </div>
               </div>
+            )}
+
+            {/* Render the workflow */}
+            <div className="px-4">
+              <DynamicWorkflow
+                {...workflowProps}
+                renderCode={renderCode}
+                onError={handleRenderError}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Pipeline Editor - Show when pipeline tab is active */}
+        {activeTab === 'pipeline' &&
+          selectedPipelineId &&
+          selectedPipelineData && (
+            <div className="h-[calc(100vh-120px)]">
+              <PipelineEditor
+                definitionId={selectedPipelineId}
+                opportunityId={initialData.opportunity_id || 0}
+                initialDefinition={{
+                  id: selectedPipelineId,
+                  name:
+                    ((
+                      selectedPipelineData.definition as Record<string, unknown>
+                    ).name as string) || '',
+                  description:
+                    ((
+                      selectedPipelineData.definition as Record<string, unknown>
+                    ).description as string) || '',
+                  version:
+                    ((
+                      selectedPipelineData.definition as Record<string, unknown>
+                    ).version as number) || 1,
+                  schema:
+                    ((
+                      selectedPipelineData.definition as Record<string, unknown>
+                    ).schema as Record<string, unknown>) || {},
+                  is_shared:
+                    ((
+                      selectedPipelineData.definition as Record<string, unknown>
+                    ).is_shared as boolean) || false,
+                  shared_scope:
+                    ((
+                      selectedPipelineData.definition as Record<string, unknown>
+                    ).shared_scope as string) || 'global',
+                }}
+                initialPreviewData={
+                  selectedPipelineData.previewData as {
+                    rows: Record<string, unknown>[];
+                    metadata: Record<string, unknown>;
+                  }
+                }
+                isEmbedded={true}
+                onClose={handleReturnToWorkflow}
+                onSave={() => {
+                  // Refresh pipeline data when saved
+                  fetchPipelineData();
+                }}
+                apiEndpoints={{
+                  getDefinition: `/labs/workflow/api/pipeline/${selectedPipelineId}/`,
+                  updateSchema: `/labs/workflow/api/pipeline/${selectedPipelineId}/schema/`,
+                  preview: `/labs/workflow/api/pipeline/${selectedPipelineId}/preview/`,
+                  chatHistory: `/labs/workflow/api/pipeline/${selectedPipelineId}/chat/history/`,
+                  chatClear: `/labs/workflow/api/pipeline/${selectedPipelineId}/chat/clear/`,
+                }}
+              />
+            </div>
+          )}
+
+        {/* Loading state for pipeline editor */}
+        {activeTab === 'pipeline' && isLoadingPipelineEditor && (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <i className="fa-solid fa-spinner fa-spin text-2xl text-gray-400 mb-2" />
+              <p className="text-sm text-gray-500">
+                Loading pipeline editor...
+              </p>
             </div>
           </div>
         )}
-
-        {/* Render the workflow */}
-        <div className="px-4">
-          <DynamicWorkflow
-            {...workflowProps}
-            renderCode={renderCode}
-            onError={handleRenderError}
-          />
-        </div>
       </div>
 
       {/* Chat Toggle Button */}
@@ -580,6 +761,50 @@ function WorkflowRunner({
             currentRenderCode={renderCode}
             onDefinitionUpdate={handleWorkflowUpdate}
             onRenderCodeUpdate={handleRenderCodeUpdate}
+            onPipelineSchemaUpdate={async (pipelineId, schema) => {
+              // Save pipeline schema via API
+              try {
+                const response = await fetch(
+                  `/labs/workflow/api/pipeline/${pipelineId}/schema/`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({ schema }),
+                  },
+                );
+                if (response.ok) {
+                  // Refresh pipeline data if we're viewing this pipeline
+                  if (selectedPipelineId === pipelineId) {
+                    loadPipelineForEditing(pipelineId);
+                  }
+                  // Also refresh workflow pipeline data
+                  fetchPipelineData();
+                }
+              } catch (e) {
+                console.error('Failed to update pipeline schema:', e);
+              }
+            }}
+            activeContext={
+              activeTab === 'pipeline' &&
+              selectedPipelineId &&
+              selectedPipelineData
+                ? {
+                    active_tab: 'pipeline',
+                    pipeline_id: selectedPipelineId,
+                    pipeline_alias:
+                      definition.pipeline_sources?.find(
+                        (s: { pipeline_id: number }) =>
+                          s.pipeline_id === selectedPipelineId,
+                      )?.alias || '',
+                    pipeline_schema: (
+                      selectedPipelineData.definition as Record<string, unknown>
+                    )?.schema as Record<string, unknown>,
+                  }
+                : { active_tab: 'workflow' }
+            }
             historyEndpoint={`/labs/workflow/api/${initialData.definition_id}/chat/history/`}
             clearEndpoint={`/labs/workflow/api/${initialData.definition_id}/chat/clear/`}
             onClose={() => setIsChatOpen(false)}

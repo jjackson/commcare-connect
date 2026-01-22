@@ -125,7 +125,7 @@ class Command(BaseCommand):
         from commcare_connect.workflow.data_access import WorkflowDataAccess
         from commcare_connect.workflow.templates import create_workflow_from_template
 
-        result = {"success": False, "error": None, "definition_id": None}
+        result = {"success": False, "error": None, "definition_id": None, "pipeline_id": None}
         data_access = None
 
         try:
@@ -133,10 +133,15 @@ class Command(BaseCommand):
             data_access = WorkflowDataAccess(access_token=access_token, opportunity_id=opportunity_id)
 
             # Create workflow from template
+            # Note: pipeline won't be created in CLI context (no request object)
             self.stdout.write("  Creating workflow...")
-            definition, render_code = create_workflow_from_template(data_access, template_key)
+            definition, render_code, pipeline = create_workflow_from_template(data_access, template_key)
             result["definition_id"] = definition.id
-            self.stdout.write(f"  Created definition ID: {definition.id}")
+            if pipeline:
+                result["pipeline_id"] = pipeline.id
+                self.stdout.write(f"  Created definition ID: {definition.id} with pipeline ID: {pipeline.id}")
+            else:
+                self.stdout.write(f"  Created definition ID: {definition.id} (no pipeline - CLI mode)")
 
             # Verify definition loads
             self.stdout.write("  Verifying definition...")

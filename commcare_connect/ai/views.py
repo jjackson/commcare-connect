@@ -103,6 +103,7 @@ class AIStreamView(LoginRequiredMixin, View):
         current_definition = body.get("current_definition")
         current_render_code = body.get("current_render_code", "").strip() if body.get("current_render_code") else ""
         model = body.get("model", self.DEFAULT_MODEL).strip()
+        active_context = body.get("active_context")  # {active_tab, pipeline_id, pipeline_alias, pipeline_schema}
 
         # Log request (without huge payloads)
         logger.info(
@@ -150,6 +151,7 @@ class AIStreamView(LoginRequiredMixin, View):
                 program_id=program_id,
                 definition_id=definition_id,
                 opportunity_id=opportunity_id,
+                active_context=active_context,
             )
 
         response = StreamingHttpResponse(
@@ -172,6 +174,7 @@ class AIStreamView(LoginRequiredMixin, View):
         program_id: int | None,
         definition_id: str | None,
         opportunity_id: str | None,
+        active_context: dict | None = None,
     ):
         """
         Run the streaming agent, yielding SSE events in real-time.
@@ -198,7 +201,12 @@ class AIStreamView(LoginRequiredMixin, View):
 
                     agent = create_workflow_agent_with_model(model)
                     deps = WorkflowAgentDeps(user_deps=user_deps)
-                    full_prompt = build_workflow_prompt(prompt, current_definition, current_render_code)
+                    full_prompt = build_workflow_prompt(
+                        prompt,
+                        current_definition,
+                        current_render_code,
+                        active_context=active_context,
+                    )
 
                 else:  # pipeline
                     from commcare_connect.ai.agents.pipeline_agent import (
@@ -212,16 +220,30 @@ class AIStreamView(LoginRequiredMixin, View):
                     full_prompt = build_pipeline_prompt(prompt, current_definition, current_render_code)
 
                 try:
-                    # NOTE: Using agent.run() instead of run_stream() due to pydantic-ai bugs
-                    # where tools aren't executed when text arrives before tool calls in streaming.
-                    # See: https://github.com/pydantic/pydantic-ai/issues/3574 (text before tools)
-                    #      https://github.com/pydantic/pydantic-ai/issues/1763 (no final turn)
-                    # This trades real-time token streaming for reliable tool execution.
-                    result = await agent.run(full_prompt, deps=deps)
-                    final_text = result.output
+                    # Use agent.iter() for streaming with proper tool execution
+                    # This runs the agent graph to completion even if text was received ahead of tool calls
+                    # See: https://ai.pydantic.dev/agents/#streaming
+                    from pydantic_ai import Agent
+                    from pydantic_ai.messages import PartDeltaEvent, TextPartDelta
 
-                    # Send the complete text as a single delta event
-                    event_queue.put(send_sse_event(message=final_text, event_type="delta"))
+                    final_text = ""
+                    async with agent.iter(full_prompt, deps=deps) as run:
+                        async for node in run:
+                            if Agent.is_model_request_node(node):
+                                # Stream text as it arrives from the model
+                                async with node.stream(run.ctx) as request_stream:
+                                    async for event in request_stream:
+                                        if isinstance(event, PartDeltaEvent):
+                                            if isinstance(event.delta, TextPartDelta):
+                                                chunk = event.delta.content_delta
+                                                final_text += chunk
+                                                event_queue.put(send_sse_event(message=chunk, event_type="delta"))
+
+                    # If no text was streamed (e.g., only tool calls), get the final output
+                    if not final_text:
+                        final_text = str(run.result.output) if run.result else ""
+                        if final_text:
+                            event_queue.put(send_sse_event(message=final_text, event_type="delta"))
 
                     # Log tool call results
                     logger.info(
@@ -241,6 +263,8 @@ class AIStreamView(LoginRequiredMixin, View):
                             "render_code": deps.pending_render_code,
                             "render_code_changed": deps.render_code_changed,
                             "pipeline_actions": deps.pending_pipeline_actions,
+                            "pipeline_schema_updates": deps.pending_pipeline_schema_updates,
+                            "pipeline_schema_changed": deps.pipeline_schema_changed,
                         }
                     else:  # pipeline
                         completion_data = {

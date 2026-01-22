@@ -481,7 +481,10 @@ class SQLBackend:
             {
                 "visit_id": int(row.id),
                 "username": row.username,
-                "visit_date": row.visit_date.date() if row.visit_date else None,
+                # Handle both date and datetime objects
+                "visit_date": row.visit_date.date()
+                if row.visit_date and hasattr(row.visit_date, "date") and callable(row.visit_date.date)
+                else row.visit_date,
                 "status": row.status,
                 "flagged": row.flagged,
                 "location": row.location
@@ -553,6 +556,7 @@ class SQLBackend:
 
         for row in flw_data:
             # Standard fields
+            # Note: use _base_ prefix for date fields to avoid conflicts with custom config fields
             flw_row = FLWRow(
                 username=row["username"],
                 total_visits=row.get("total_visits", 0),
@@ -560,8 +564,8 @@ class SQLBackend:
                 pending_visits=row.get("pending_visits", 0),
                 rejected_visits=row.get("rejected_visits", 0),
                 flagged_visits=row.get("flagged_visits", 0),
-                first_visit_date=row.get("first_visit_date"),
-                last_visit_date=row.get("last_visit_date"),
+                first_visit_date=row.get("_base_first_visit_date"),
+                last_visit_date=row.get("_base_last_visit_date"),
             )
 
             # Custom fields (from config fields + histograms)
