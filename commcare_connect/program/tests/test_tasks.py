@@ -2,12 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from commcare_connect.opportunity.models import (
-    CompletedWorkStatus,
-    Opportunity,
-    VisitReviewStatus,
-    VisitValidationStatus,
-)
+from commcare_connect.opportunity.models import CompletedWorkStatus, VisitReviewStatus, VisitValidationStatus
 from commcare_connect.opportunity.tests.factories import (
     CompletedWorkFactory,
     OpportunityAccessFactory,
@@ -241,20 +236,26 @@ class TestSendMonthlyDeliveryReminderEmail:
 
         assert send_mock.call_count == 2
 
-        pm_org_2_opportunities = Opportunity.objects.filter(id__in=[pm_opportunity.id, managed_opportunity_2.id])
         pm_org_2_member_emails = list(pm_org_2.members.values_list("email", flat=True))
-
-        nm_org_opportunities = Opportunity.objects.filter(id__in=[nm_opportunity.id, managed_opportunity_1.id])
         nm_org_member_emails = list(nm_org.members.values_list("email", flat=True))
 
         args_list = send_mock.call_args_list
         call_1_args = args_list[0][1]
         call_2_args = args_list[1][1]
 
-        call_1_args["organization"] == pm_org_2
-        call_1_args["opportunities"] == pm_org_2_opportunities
-        call_1_args["recipient_emails"] == pm_org_2_member_emails
+        pm_call_args = args_list[0][1] if call_1_args["organization"] == pm_org_2 else args_list[1][1]
+        nm_call_args = args_list[1][1] if call_2_args["organization"] == nm_org else args_list[0][1]
 
-        call_2_args["organization"] == nm_org
-        call_2_args["opportunities"] == nm_org_opportunities
-        call_2_args["recipient_emails"] == nm_org_member_emails
+        assert pm_call_args["organization"] == pm_org_2
+        assert pm_call_args["recipient_emails"] == pm_org_2_member_emails
+        assert pm_call_args["opportunities"].count() == 2
+        expected_opp_ids = {pm_opportunity.id, managed_opportunity_2.id}
+        actual_opp_ids = {pm_call_args["opportunities"][0].id, pm_call_args["opportunities"][1].id}
+        assert expected_opp_ids == actual_opp_ids
+
+        assert nm_call_args["organization"] == nm_org
+        assert nm_call_args["recipient_emails"] == nm_org_member_emails
+        assert nm_call_args["opportunities"].count() == 2
+        expected_opp_ids = {nm_opportunity.id, managed_opportunity_1.id}
+        actual_opp_ids = {nm_call_args["opportunities"][0].id, nm_call_args["opportunities"][1].id}
+        assert expected_opp_ids == actual_opp_ids
