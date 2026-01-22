@@ -2,7 +2,12 @@ from unittest.mock import patch
 
 import pytest
 
-from commcare_connect.opportunity.models import CompletedWorkStatus, VisitReviewStatus, VisitValidationStatus
+from commcare_connect.opportunity.models import (
+    CompletedWorkStatus,
+    Opportunity,
+    VisitReviewStatus,
+    VisitValidationStatus,
+)
 from commcare_connect.opportunity.tests.factories import (
     CompletedWorkFactory,
     OpportunityAccessFactory,
@@ -10,21 +15,120 @@ from commcare_connect.opportunity.tests.factories import (
     UserVisitFactory,
 )
 from commcare_connect.program.tasks import (
+    get_org_managed_opps_ids_for_review,
+    get_org_opps_ids_for_review,
     send_monthly_delivery_reminder_email,
-    send_nm_reminder_for_opportunities,
-    send_pm_reminder_for_opportunities,
 )
 from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
-from commcare_connect.users.tests.factories import OrganizationFactory, ProgramManagerOrgWithUsersFactory
+from commcare_connect.users.tests.factories import (
+    OrganizationFactory,
+    OrgWithUsersFactory,
+    ProgramManagerOrgWithUsersFactory,
+)
+
+
+@pytest.mark.django_db
+class TestGetOrgOppsIdsForReview:
+    def test_org_no_opps_for_review(self):
+        opportunity = OpportunityFactory()
+
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
+
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=access.user,
+            opportunity_access=access,
+            status=VisitValidationStatus.approved,
+            completed_work=completed_work,
+        )
+        opp_ids = get_org_opps_ids_for_review(opportunity.organization)
+        assert len(opp_ids) == 0
+
+    def test_org_opps_for_review(self):
+        opportunity = OpportunityFactory()
+
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
+
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=access.user,
+            opportunity_access=access,
+            status=VisitValidationStatus.pending,
+            completed_work=completed_work,
+        )
+        opp_ids = get_org_opps_ids_for_review(opportunity.organization)
+        assert len(opp_ids) == 1
+        assert opp_ids[0] == opportunity.id
+
+
+@pytest.mark.django_db
+class TestGetOrgManagedOppsIdsForReview:
+    def test_org_no_managed_opps_for_review(self):
+        pm_org = ProgramManagerOrgWithUsersFactory()
+        nm_org = OrganizationFactory()
+
+        program = ProgramFactory(organization=pm_org)
+        managed_opportunity = ManagedOpportunityFactory(organization=nm_org, program=program)
+
+        access = OpportunityAccessFactory(opportunity=managed_opportunity)
+        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
+
+        UserVisitFactory(
+            opportunity=managed_opportunity,
+            user=access.user,
+            opportunity_access=access,
+            status=VisitValidationStatus.pending,
+            completed_work=completed_work,
+        )
+        opp_ids = get_org_managed_opps_ids_for_review(pm_org)
+        assert len(opp_ids) == 0
+
+    def test_org_managed_opps_for_review(self):
+        pm_org = ProgramManagerOrgWithUsersFactory()
+        nm_org = OrganizationFactory()
+
+        program = ProgramFactory(organization=pm_org)
+        managed_opportunity = ManagedOpportunityFactory(organization=nm_org, program=program)
+
+        access = OpportunityAccessFactory(opportunity=managed_opportunity)
+        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
+
+        UserVisitFactory(
+            opportunity=managed_opportunity,
+            user=access.user,
+            opportunity_access=access,
+            status=VisitValidationStatus.approved,
+            review_status=VisitReviewStatus.pending,
+            completed_work=completed_work,
+        )
+        opp_ids = get_org_managed_opps_ids_for_review(pm_org)
+        assert len(opp_ids) == 1
+        assert opp_ids[0] == managed_opportunity.id
 
 
 @pytest.mark.django_db
 @patch("commcare_connect.program.tasks.send_mail_async")
 class TestSendMonthlyDeliveryReminderEmail:
-    def test_send_reminder_email_with_pending_deliveries(self, send_mock):
-        org = ProgramManagerOrgWithUsersFactory()
-        program = ProgramFactory(organization=org)
-        opportunity = ManagedOpportunityFactory(organization=org, program=program)
+    def test_send_reminder_email_for_nm_org_with_no_pending_deliveries(self, send_mock):
+        opportunity = OpportunityFactory()
+
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
+
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=access.user,
+            opportunity_access=access,
+            status=VisitValidationStatus.rejected,
+            completed_work=completed_work,
+        )
+        send_monthly_delivery_reminder_email()
+        send_mock.delay.assert_not_called()
+
+    def test_send_reminder_email_for_nm_org_with_pending_deliveries(self, send_mock):
+        opportunity = OpportunityFactory(organization=OrgWithUsersFactory())
 
         access = OpportunityAccessFactory(opportunity=opportunity)
         completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
@@ -36,89 +140,12 @@ class TestSendMonthlyDeliveryReminderEmail:
             status=VisitValidationStatus.pending,
             completed_work=completed_work,
         )
-
         send_monthly_delivery_reminder_email()
+        send_mock.delay.assert_called_once()
 
-        assert send_mock.delay.called
-        call_args = send_mock.delay.call_args
-        assert "Reminder: Please Review Pending Deliveries" in call_args.kwargs["subject"]
-        assert org.get_member_emails() == call_args.kwargs["recipient_list"]
-
-    def test_no_email_sent_without_pending_deliveries(self, send_mock):
-        org = ProgramManagerOrgWithUsersFactory()
-        program = ProgramFactory(organization=org)
-        opportunity = ManagedOpportunityFactory(organization=org, program=program)
-
-        access = OpportunityAccessFactory(opportunity=opportunity)
-        CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.approved)
-
-        send_monthly_delivery_reminder_email()
-
-        assert not send_mock.delay.called
-
-    def test_no_email_sent_without_recipient_emails(self, send_mock):
-        org = ProgramManagerOrgWithUsersFactory()
-        org.memberships.all().delete()
-
-        program = ProgramFactory(organization=org)
-        opportunity = ManagedOpportunityFactory(organization=org, program=program)
-        access = OpportunityAccessFactory(opportunity=opportunity)
-        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
-
-        UserVisitFactory(
-            opportunity=opportunity,
-            user=access.user,
-            opportunity_access=access,
-            status=VisitValidationStatus.pending,
-            completed_work=completed_work,
-        )
-
-        send_monthly_delivery_reminder_email()
-
-        assert not send_mock.delay.called
-
-    def test_send_reminder_email_for_multiple_organizations(self, send_mock):
-        org1 = ProgramManagerOrgWithUsersFactory()
-        org2 = ProgramManagerOrgWithUsersFactory()
-
-        program1 = ProgramFactory(organization=org1)
-        program2 = ProgramFactory(organization=org2)
-        opportunity1 = ManagedOpportunityFactory(organization=org1, program=program1)
-        opportunity2 = ManagedOpportunityFactory(organization=org2, program=program2)
-
-        access1 = OpportunityAccessFactory(opportunity=opportunity1)
-        access2 = OpportunityAccessFactory(opportunity=opportunity2)
-
-        completed_work1 = CompletedWorkFactory(opportunity_access=access1, status=CompletedWorkStatus.pending)
-        completed_work2 = CompletedWorkFactory(opportunity_access=access2, status=CompletedWorkStatus.pending)
-
-        UserVisitFactory(
-            opportunity=opportunity1,
-            user=access1.user,
-            opportunity_access=access1,
-            status=VisitValidationStatus.pending,
-            completed_work=completed_work1,
-        )
-        UserVisitFactory(
-            opportunity=opportunity2,
-            user=access2.user,
-            opportunity_access=access2,
-            status=VisitValidationStatus.pending,
-            completed_work=completed_work2,
-        )
-
-        send_monthly_delivery_reminder_email()
-
-        assert send_mock.delay.call_count == 2
-
-
-@pytest.mark.django_db
-@patch("commcare_connect.program.tasks._send_org_email_for_opportunities")
-class TestSendNmReminderForOpportunities:
-    def test_send_nm_reminder_with_pending_visits(self, send_email_mock):
-        nm_org = OrganizationFactory()
-        program = ProgramFactory()
-        opportunity = ManagedOpportunityFactory(organization=nm_org, program=program)
+    def test_send_reminder_email_for_nm_org_with_no_recipients(self, send_mock):
+        opportunity = OpportunityFactory()
+        assert opportunity.organization.members.count() == 0
 
         access = OpportunityAccessFactory(opportunity=opportunity)
         completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
@@ -130,222 +157,104 @@ class TestSendNmReminderForOpportunities:
             status=VisitValidationStatus.pending,
             completed_work=completed_work,
         )
+        send_monthly_delivery_reminder_email()
+        send_mock.delay.assert_not_called()
 
-        send_nm_reminder_for_opportunities(nm_org)
-
-        assert send_email_mock.called
-        call_args = send_email_mock.call_args[1]
-        assert call_args["organization"] == nm_org
-        assert len(call_args["opportunities"]) == 1
-        assert call_args["opportunities"][0].id == opportunity.id
-
-    def test_nm_reminder_not_sent_for_approved_visits(self, send_email_mock):
-        nm_org = OrganizationFactory()
-        program = ProgramFactory()
-        opportunity = ManagedOpportunityFactory(organization=nm_org, program=program)
-
-        access = OpportunityAccessFactory(opportunity=opportunity)
-        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
-
-        UserVisitFactory(
-            opportunity=opportunity,
-            user=access.user,
-            opportunity_access=access,
-            status=VisitValidationStatus.approved,
-            completed_work=completed_work,
-        )
-
-        send_nm_reminder_for_opportunities(nm_org)
-
-        assert not send_email_mock.called
-
-    def test_nm_reminder_with_multiple_opportunities(self, send_email_mock):
-        nm_org = OrganizationFactory()
-        program1 = ProgramFactory()
-        program2 = ProgramFactory()
-        opportunity1 = ManagedOpportunityFactory(organization=nm_org, program=program1)
-        opportunity2 = ManagedOpportunityFactory(organization=nm_org, program=program2)
-
-        access1 = OpportunityAccessFactory(opportunity=opportunity1)
-        access2 = OpportunityAccessFactory(opportunity=opportunity2)
-
-        completed_work1 = CompletedWorkFactory(opportunity_access=access1, status=CompletedWorkStatus.pending)
-        completed_work2 = CompletedWorkFactory(opportunity_access=access2, status=CompletedWorkStatus.pending)
-
-        UserVisitFactory(
-            opportunity=opportunity1,
-            user=access1.user,
-            opportunity_access=access1,
-            status=VisitValidationStatus.pending,
-            completed_work=completed_work1,
-        )
-        UserVisitFactory(
-            opportunity=opportunity2,
-            user=access2.user,
-            opportunity_access=access2,
-            status=VisitValidationStatus.pending,
-            completed_work=completed_work2,
-        )
-
-        send_nm_reminder_for_opportunities(nm_org)
-
-        assert send_email_mock.called
-        call_args = send_email_mock.call_args[1]
-        assert len(call_args["opportunities"]) == 2
-        opportunity_ids = {opp.id for opp in call_args["opportunities"]}
-        assert opportunity_ids == {opportunity1.id, opportunity2.id}
-
-
-@pytest.mark.django_db
-@patch("commcare_connect.program.tasks._send_org_email_for_opportunities")
-class TestSendPmReminderForOpportunities:
-    def test_send_pm_reminder_with_pending_review(self, send_email_mock):
-        nm_org = OrganizationFactory()
+    def test_send_reminder_email_for_pm_org_with_pending_managed_deliveries(self, send_mock):
         pm_org = ProgramManagerOrgWithUsersFactory()
-        program = ProgramFactory(organization=pm_org)
-        opportunity = ManagedOpportunityFactory(organization=nm_org, program=program)
+        nm_org = OrganizationFactory()
 
-        access = OpportunityAccessFactory(opportunity=opportunity)
+        program = ProgramFactory(organization=pm_org)
+        managed_opportunity = ManagedOpportunityFactory(organization=nm_org, program=program)
+
+        access = OpportunityAccessFactory(opportunity=managed_opportunity)
         completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
 
         UserVisitFactory(
-            opportunity=opportunity,
+            opportunity=managed_opportunity,
             user=access.user,
             opportunity_access=access,
             status=VisitValidationStatus.approved,
             review_status=VisitReviewStatus.pending,
             completed_work=completed_work,
         )
+        send_monthly_delivery_reminder_email()
+        send_mock.delay.assert_called_once()
 
-        send_pm_reminder_for_opportunities(nm_org)
+    @patch("commcare_connect.program.tasks._send_org_email_for_opportunities")
+    def test_send_reminder_email_for_multiple_orgs(self, send_mock, _):
+        pm_org_1 = ProgramManagerOrgWithUsersFactory()
+        pm_org_2 = ProgramManagerOrgWithUsersFactory()
+        nm_org = OrgWithUsersFactory()
 
-        assert send_email_mock.called
-        call_args = send_email_mock.call_args[1]
-        assert call_args["organization"] == nm_org
-        assert len(call_args["opportunities"]) == 1
-        assert call_args["opportunities"][0].id == opportunity.id
-        # Should include PM organization member emails
-        expected_emails = set(pm_org.get_member_emails())
-        actual_emails = set(call_args["recipient_emails"])
-        assert actual_emails == expected_emails
+        program_1 = ProgramFactory(organization=pm_org_1)
+        program_2 = ProgramFactory(organization=pm_org_2)
 
-    def test_pm_reminder_not_sent_for_non_approved_visits(self, send_email_mock):
-        nm_org = OrganizationFactory()
-        pm_org = ProgramManagerOrgWithUsersFactory()
-        program = ProgramFactory(organization=pm_org)
-        opportunity = ManagedOpportunityFactory(organization=nm_org, program=program)
+        managed_opportunity_1 = ManagedOpportunityFactory(organization=nm_org, program=program_1)
+        managed_opportunity_2 = ManagedOpportunityFactory(organization=nm_org, program=program_2)
+        nm_opportunity = OpportunityFactory(organization=nm_org)
+        pm_opportunity = OpportunityFactory(organization=pm_org_2)
 
-        access = OpportunityAccessFactory(opportunity=opportunity)
-        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
+        access_1 = OpportunityAccessFactory(opportunity=managed_opportunity_1)
+        access_2 = OpportunityAccessFactory(opportunity=managed_opportunity_2)
+        access_3 = OpportunityAccessFactory(opportunity=nm_opportunity)
+        access_4 = OpportunityAccessFactory(opportunity=pm_opportunity)
+
+        completed_work_1 = CompletedWorkFactory(opportunity_access=access_1, status=CompletedWorkStatus.pending)
+        completed_work_2 = CompletedWorkFactory(opportunity_access=access_2, status=CompletedWorkStatus.pending)
+        completed_work_3 = CompletedWorkFactory(opportunity_access=access_3, status=CompletedWorkStatus.pending)
+        completed_work_4 = CompletedWorkFactory(opportunity_access=access_4, status=CompletedWorkStatus.pending)
 
         UserVisitFactory(
-            opportunity=opportunity,
-            user=access.user,
-            opportunity_access=access,
+            opportunity=managed_opportunity_1,
+            user=access_1.user,
+            opportunity_access=access_1,
             status=VisitValidationStatus.pending,
             review_status=VisitReviewStatus.pending,
-            completed_work=completed_work,
+            completed_work=completed_work_1,
         )
-
-        send_pm_reminder_for_opportunities(nm_org)
-
-        assert not send_email_mock.called
-
-    def test_pm_reminder_not_sent_for_completed_review(self, send_email_mock):
-        nm_org = OrganizationFactory()
-        pm_org = ProgramManagerOrgWithUsersFactory()
-        program = ProgramFactory(organization=pm_org)
-        opportunity = ManagedOpportunityFactory(organization=nm_org, program=program)
-
-        access = OpportunityAccessFactory(opportunity=opportunity)
-        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
-
         UserVisitFactory(
-            opportunity=opportunity,
-            user=access.user,
-            opportunity_access=access,
-            status=VisitValidationStatus.approved,
-            review_status=VisitReviewStatus.agree,
-            completed_work=completed_work,
-        )
-
-        send_pm_reminder_for_opportunities(nm_org)
-
-        assert not send_email_mock.called
-
-    def test_pm_reminder_not_sent_for_unmanaged_opportunity(self, send_email_mock):
-        nm_org = OrganizationFactory()
-
-        opportunity = OpportunityFactory(organization=nm_org)
-
-        access = OpportunityAccessFactory(opportunity=opportunity)
-        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
-
-        UserVisitFactory(
-            opportunity=opportunity,
-            user=access.user,
-            opportunity_access=access,
+            opportunity=managed_opportunity_2,
+            user=access_2.user,
+            opportunity_access=access_2,
             status=VisitValidationStatus.approved,
             review_status=VisitReviewStatus.pending,
-            completed_work=completed_work,
+            completed_work=completed_work_2,
         )
-
-        send_pm_reminder_for_opportunities(nm_org)
-
-        assert not send_email_mock.called
-
-    def test_pm_reminder_with_multiple_pm_organizations(self, send_email_mock):
-        nm_org = OrganizationFactory()
-        pm_org1 = ProgramManagerOrgWithUsersFactory()
-        pm_org2 = ProgramManagerOrgWithUsersFactory()
-
-        program1 = ProgramFactory(organization=pm_org1)
-        program2 = ProgramFactory(organization=pm_org2)
-        opportunity1 = ManagedOpportunityFactory(organization=nm_org, program=program1)
-        opportunity2 = ManagedOpportunityFactory(organization=nm_org, program=program2)
-
-        access1 = OpportunityAccessFactory(opportunity=opportunity1)
-        access2 = OpportunityAccessFactory(opportunity=opportunity2)
-
-        completed_work1 = CompletedWorkFactory(opportunity_access=access1, status=CompletedWorkStatus.pending)
-        completed_work2 = CompletedWorkFactory(opportunity_access=access2, status=CompletedWorkStatus.pending)
-
+        # Opportunity visit on NM
         UserVisitFactory(
-            opportunity=opportunity1,
-            user=access1.user,
-            opportunity_access=access1,
-            status=VisitValidationStatus.approved,
-            review_status=VisitReviewStatus.pending,
-            completed_work=completed_work1,
+            opportunity=nm_opportunity,
+            user=access_3.user,
+            opportunity_access=access_3,
+            status=VisitValidationStatus.pending,
+            completed_work=completed_work_3,
         )
+        # Opportunity visit on PM 2
         UserVisitFactory(
-            opportunity=opportunity2,
-            user=access2.user,
-            opportunity_access=access2,
-            status=VisitValidationStatus.approved,
-            review_status=VisitReviewStatus.pending,
-            completed_work=completed_work2,
+            opportunity=pm_opportunity,
+            user=access_4.user,
+            opportunity_access=access_4,
+            status=VisitValidationStatus.pending,
+            completed_work=completed_work_4,
         )
+        send_monthly_delivery_reminder_email()
 
-        send_pm_reminder_for_opportunities(nm_org)
+        assert send_mock.call_count == 2
 
-        assert send_email_mock.called
-        call_args = send_email_mock.call_args[1]
-        assert len(call_args["opportunities"]) == 2
+        pm_org_2_opportunities = Opportunity.objects.filter(id__in=[pm_opportunity.id, managed_opportunity_2.id])
+        pm_org_2_member_emails = list(pm_org_2.members.values_list("email", flat=True))
 
-        # Should include emails from both PM organizations
-        expected_emails = set(pm_org1.get_member_emails() + pm_org2.get_member_emails())
-        actual_emails = set(call_args["recipient_emails"])
-        assert actual_emails == expected_emails
+        nm_org_opportunities = Opportunity.objects.filter(id__in=[nm_opportunity.id, managed_opportunity_1.id])
+        nm_org_member_emails = list(nm_org.members.values_list("email", flat=True))
 
-    def test_pm_reminder_not_sent_without_pending_review(self, send_email_mock):
-        nm_org = OrganizationFactory()
-        program = ProgramFactory()
-        opportunity = ManagedOpportunityFactory(organization=nm_org, program=program)
+        args_list = send_mock.call_args_list
+        call_1_args = args_list[0][1]
+        call_2_args = args_list[1][1]
 
-        access = OpportunityAccessFactory(opportunity=opportunity)
-        CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.approved)
+        call_1_args["organization"] == pm_org_2
+        call_1_args["opportunities"] == pm_org_2_opportunities
+        call_1_args["recipient_emails"] == pm_org_2_member_emails
 
-        send_pm_reminder_for_opportunities(nm_org)
-
-        assert not send_email_mock.called
+        call_2_args["organization"] == nm_org
+        call_2_args["opportunities"] == nm_org_opportunities
+        call_2_args["recipient_emails"] == nm_org_member_emails

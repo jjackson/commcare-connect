@@ -1,5 +1,5 @@
 from allauth.utils import build_absolute_uri
-from django.db.models import F
+from django.db.models import Q
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext as _
@@ -106,21 +106,36 @@ def _get_program_home_url(org_slug):
 
 @celery_app.task()
 def send_monthly_delivery_reminder_email():
+    # Find organizations with pending delivery review or pending managed delivery reviews
     organizations_with_pending_deliveries = Organization.objects.filter(
-        opportunity__opportunityaccess__completedwork__status=CompletedWorkStatus.pending
+        Q(opportunity__opportunityaccess__completedwork__status=CompletedWorkStatus.pending)
+        | Q(
+            program__managedopportunity__opportunityaccess__completedwork__uservisit__review_status=VisitReviewStatus.pending  # noqa:E501
+        ),
     ).distinct()
 
     for organization in organizations_with_pending_deliveries.iterator(chunk_size=50):
-        send_nm_reminder_for_opportunities(
+        opps_ids = get_org_opps_ids_for_review(organization)
+
+        if organization.program_manager:
+            opps_ids.extend(get_org_managed_opps_ids_for_review(organization))
+
+        if not opps_ids:
+            continue
+
+        opportunities = Opportunity.objects.filter(
+            id__in=opps_ids,
+        ).only("name", "id")
+
+        _send_org_email_for_opportunities(
             organization=organization,
-        )
-        send_pm_reminder_for_opportunities(
-            organization=organization,
+            opportunities=opportunities,
+            recipient_emails=_get_membership_users_emails(organization),
         )
 
 
-def send_nm_reminder_for_opportunities(organization):
-    opp_ids_pending_review = (
+def get_org_opps_ids_for_review(organization):
+    return list(
         CompletedWork.objects.filter(
             opportunity_access__opportunity__organization=organization,
             uservisit__status=VisitValidationStatus.pending,
@@ -129,47 +144,17 @@ def send_nm_reminder_for_opportunities(organization):
         .distinct()
     )
 
-    if not opp_ids_pending_review:
-        return
 
-    opportunities = organization.opportunities.filter(
-        id__in=opp_ids_pending_review,
-    ).only("name", "id")
-
-    _send_org_email_for_opportunities(
-        organization=organization,
-        opportunities=opportunities,
-        recipient_emails=_get_membership_users_emails(organization),
-    )
-
-
-def send_pm_reminder_for_opportunities(organization):
-    opp_ids_pending_pm_review = (
+def get_org_managed_opps_ids_for_review(organization):
+    return list(
         CompletedWork.objects.filter(
-            opportunity_access__opportunity__organization=organization,
             opportunity_access__opportunity__managed=True,
+            opportunity_access__opportunity__managedopportunity__program__organization=organization,
             uservisit__review_status=VisitReviewStatus.pending,
             uservisit__status=VisitValidationStatus.approved,
         )
         .values_list("opportunity_access__opportunity_id", flat=True)
         .distinct()
-    )
-
-    if not opp_ids_pending_pm_review:
-        return
-
-    opportunities = Opportunity.objects.filter(id__in=opp_ids_pending_pm_review).annotate(
-        program_organization=F("managedopportunity__program__organization")
-    )
-
-    recipient_emails = set()
-    for opp in opportunities:
-        recipient_emails.update(_get_membership_users_emails(opp.program_organization))
-
-    _send_org_email_for_opportunities(
-        organization=organization,
-        opportunities=opportunities,
-        recipient_emails=list(recipient_emails),
     )
 
 
