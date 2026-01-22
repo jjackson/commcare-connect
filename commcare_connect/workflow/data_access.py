@@ -1179,24 +1179,36 @@ class PipelineDataAccess(BaseDataAccess):
         if not schema:
             return {"rows": [], "metadata": {"error": "Pipeline has no schema"}}
 
+        # Require request object for analysis pipeline
+        if not self.request:
+            return {"rows": [], "metadata": {"error": "Request object required for pipeline execution"}}
+
         try:
             # Convert schema to pipeline config
             config = self._schema_to_config(schema, definition_id)
 
-            # Execute pipeline
-            pipeline = AnalysisPipeline(
-                config=config,
-                opportunity_id=opportunity_id,
-                access_token=self.access_token,
-            )
+            # Execute pipeline using the AnalysisPipeline
+            pipeline = AnalysisPipeline(self.request)
+            result = pipeline.stream_analysis_ignore_events(config, opportunity_id)
 
-            result = pipeline.run()
+            # Convert result to dict format
+            rows = []
+            if hasattr(result, "rows"):
+                for row in result.rows:
+                    row_dict = {}
+                    if hasattr(row, "username"):
+                        row_dict["username"] = row.username
+                    if hasattr(row, "visit_date"):
+                        row_dict["visit_date"] = str(row.visit_date) if row.visit_date else None
+                    if hasattr(row, "computed"):
+                        row_dict.update(row.computed or {})
+                    rows.append(row_dict)
 
             return {
-                "rows": result.get("rows", []),
+                "rows": rows,
                 "metadata": {
-                    "row_count": len(result.get("rows", [])),
-                    "from_cache": result.get("from_cache", False),
+                    "row_count": len(rows),
+                    "from_cache": getattr(result, "from_cache", False),
                     "pipeline_name": definition.name,
                     "terminal_stage": schema.get("terminal_stage", "visit_level"),
                 },

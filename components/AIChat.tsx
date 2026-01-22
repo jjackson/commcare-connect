@@ -30,6 +30,13 @@ interface Message {
   isStreaming?: boolean;
 }
 
+interface ActiveContext {
+  active_tab: 'workflow' | 'pipeline';
+  pipeline_id?: number;
+  pipeline_alias?: string;
+  pipeline_schema?: Record<string, unknown>;
+}
+
 interface AIChatProps {
   /** Agent type: 'workflow' or 'pipeline' */
   agentType: 'workflow' | 'pipeline';
@@ -45,6 +52,13 @@ interface AIChatProps {
   onDefinitionUpdate: (newDefinition: Record<string, unknown>) => void;
   /** Callback when render code is updated */
   onRenderCodeUpdate?: (newRenderCode: string) => void;
+  /** Callback when pipeline schema is updated (for workflow agent with pipeline tools) */
+  onPipelineSchemaUpdate?: (
+    pipelineId: number,
+    schema: Record<string, unknown>,
+  ) => void;
+  /** Active context - tells the AI which tab the user is on */
+  activeContext?: ActiveContext;
   /** API endpoint for chat history */
   historyEndpoint: string;
   /** API endpoint to clear chat history */
@@ -112,6 +126,8 @@ export function AIChat({
   currentRenderCode,
   onDefinitionUpdate,
   onRenderCodeUpdate,
+  onPipelineSchemaUpdate,
+  activeContext,
   historyEndpoint,
   clearEndpoint,
   onClose,
@@ -260,6 +276,7 @@ export function AIChat({
             current_definition: currentDefinition,
             current_render_code: currentRenderCode || '',
             model: modelString,
+            active_context: activeContext || null,
           }),
           signal: abortController.signal,
         });
@@ -339,6 +356,23 @@ export function AIChat({
                   ) {
                     onRenderCodeUpdate(result.render_code);
                   }
+
+                  // Handle pipeline schema updates (from workflow agent)
+                  if (
+                    result.pipeline_schema_changed &&
+                    result.pipeline_schema_updates &&
+                    onPipelineSchemaUpdate
+                  ) {
+                    // pipeline_schema_updates is { pipeline_id: schema }
+                    Object.entries(result.pipeline_schema_updates).forEach(
+                      ([pipelineId, schema]) => {
+                        onPipelineSchemaUpdate(
+                          parseInt(pipelineId, 10),
+                          schema as Record<string, unknown>,
+                        );
+                      },
+                    );
+                  }
                 } else if (data.event_type === 'error') {
                   setError(data.error || 'An error occurred');
                   setMessages((prev) => {
@@ -403,6 +437,8 @@ export function AIChat({
       selectedModel,
       onDefinitionUpdate,
       onRenderCodeUpdate,
+      onPipelineSchemaUpdate,
+      activeContext,
     ],
   );
 
@@ -509,7 +545,26 @@ export function AIChat({
               <p className="whitespace-pre-wrap">
                 {message.content}
                 {message.isStreaming && (
-                  <span className="inline-block w-2 h-4 ml-1 bg-gray-400 animate-pulse" />
+                  <span className="inline-flex items-center ml-1">
+                    <span
+                      className="animate-bounce"
+                      style={{ animationDelay: '0ms' }}
+                    >
+                      .
+                    </span>
+                    <span
+                      className="animate-bounce"
+                      style={{ animationDelay: '150ms' }}
+                    >
+                      .
+                    </span>
+                    <span
+                      className="animate-bounce"
+                      style={{ animationDelay: '300ms' }}
+                    >
+                      .
+                    </span>
+                  </span>
                 )}
               </p>
               {(message.definitionChanged || message.renderCodeChanged) && (

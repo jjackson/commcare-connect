@@ -29,10 +29,23 @@ logger = logging.getLogger(__name__)
 WORKFLOW_AGENT_INSTRUCTIONS = """
 You are an expert helping users build data-driven workflows with custom React UIs.
 
+## Context Awareness
+
+The user may be viewing different parts of the workflow:
+- **Workflow tab**: Focus on workflow definition and render code (UI)
+- **Pipeline tab**: Focus on pipeline schema (data extraction configuration)
+
+The prompt will include "Active Context" telling you which tab the user is on.
+Use this to determine which tools to call:
+- On workflow tab: primarily use update_definition() and update_render_code()
+- On pipeline tab: primarily use update_pipeline_schema(), but also update_render_code() if UI changes are needed
+- Some requests may require changes to both (e.g., "add a new data field and display it")
+
 ## What You Can Edit
 
 1. **Workflow Definition** - Name, description, statuses, config, pipeline sources
 2. **Render Code** - React/JSX UI that displays workflow data and pipeline results
+3. **Pipeline Schema** - Fields, grouping, aggregation for data extraction
 
 ## Workflow Definition Structure
 
@@ -145,6 +158,38 @@ const result = await actions.createTaskWithOCS({
 - `update_render_code(code)` - Update the React UI component
 - `add_pipeline_source(pipeline_id, alias)` - Add a pipeline as a data source
 - `remove_pipeline_source(alias)` - Remove a pipeline source by alias
+- `update_pipeline_schema(pipeline_id, schema)` - Update a pipeline's data extraction schema
+
+## Pipeline Schema Structure
+
+When modifying pipeline schemas with update_pipeline_schema(), use this structure:
+
+```json
+{
+    "name": "Worker Performance Data",
+    "description": "Extract metrics from form submissions",
+    "grouping_key": "username",  // or "entity_id", "deliver_unit_id"
+    "terminal_stage": "aggregated",  // or "visit_level"
+    "fields": [
+        {
+            "name": "visit_count",
+            "path": "form.meta.instanceID",
+            "aggregation": "count",
+            "description": "Total submissions"
+        },
+        {
+            "name": "last_date",
+            "path": "form.meta.timeEnd",
+            "aggregation": "last",
+            "description": "Most recent submission"
+        }
+    ],
+    "histograms": [],
+    "filters": {}
+}
+```
+
+Field aggregation options: first, last, sum, avg, count, min, max, list, count_unique
 
 ## When to Use Which Tool
 
@@ -153,6 +198,8 @@ const result = await actions.createTaskWithOCS({
 - User wants to add data from a pipeline -> call add_pipeline_source
 - User wants to remove a data source -> call remove_pipeline_source
 - User asks about both definition and UI -> call both tools
+- User is on pipeline tab and asks to add/modify fields -> call update_pipeline_schema
+- User wants to add a field to pipeline AND show it in UI -> call update_pipeline_schema AND update_render_code
 
 ## CRITICAL RULES
 
@@ -177,8 +224,10 @@ class WorkflowAgentDeps:
     pending_definition: dict | None = None
     pending_render_code: str | None = None
     pending_pipeline_actions: list = field(default_factory=list)
+    pending_pipeline_schema_updates: dict = field(default_factory=dict)  # {pipeline_id: schema}
     definition_changed: bool = False
     render_code_changed: bool = False
+    pipeline_schema_changed: bool = False
 
 
 def create_workflow_agent_with_model(model: str) -> Agent[WorkflowAgentDeps, str]:
@@ -276,6 +325,38 @@ def create_workflow_agent_with_model(model: str) -> Agent[WorkflowAgentDeps, str
         )
         return f"Pipeline source '{alias}' will be removed."
 
+    @agent.tool
+    async def update_pipeline_schema(ctx: RunContext[WorkflowAgentDeps], pipeline_id: int, schema: dict) -> str:
+        """
+        Update a pipeline's schema (fields, grouping, filters).
+
+        Call this when the user wants to modify what data a pipeline extracts.
+        Use this when the user is focused on a pipeline tab or asks to modify pipeline fields.
+
+        The schema should include:
+        - name: Pipeline name
+        - description: What the pipeline extracts
+        - grouping_key: How to group data ("username", "entity_id", "deliver_unit_id")
+        - terminal_stage: Output level ("visit_level" or "aggregated")
+        - fields: Array of field definitions with name, path, aggregation, description
+
+        Field definition structure:
+        {
+            "name": "field_name",
+            "path": "form.path.to.value",
+            "aggregation": "first|last|sum|avg|count|min|max|list|count_unique",
+            "description": "What this field represents"
+        }
+
+        Args:
+            pipeline_id: ID of the pipeline to update
+            schema: Complete pipeline schema object
+        """
+        logger.info(f"[Workflow Agent] TOOL CALLED: update_pipeline_schema({pipeline_id})")
+        ctx.deps.pending_pipeline_schema_updates[pipeline_id] = schema
+        ctx.deps.pipeline_schema_changed = True
+        return f"Pipeline {pipeline_id} schema will be updated."
+
     logger.info("[Workflow Agent] All tools registered successfully")
     return agent
 
@@ -296,6 +377,7 @@ def build_workflow_prompt(
     current_definition: dict | None = None,
     current_render_code: str | None = None,
     available_pipelines: list[dict] | None = None,
+    active_context: dict | None = None,
 ) -> str:
     """
     Build the prompt for the workflow agent including current context.
@@ -305,11 +387,32 @@ def build_workflow_prompt(
         current_definition: The current workflow definition JSON
         current_render_code: The current React render code
         available_pipelines: List of available pipelines user can add as sources
+        active_context: Dict with active_tab, pipeline_id, pipeline_schema if on pipeline tab
 
     Returns:
         The full prompt to send to the agent
     """
     prompt_parts = []
+
+    # Add active context first so the agent knows what the user is focused on
+    if active_context:
+        active_tab = active_context.get("active_tab", "workflow")
+        prompt_parts.append("## Active Context")
+        if active_tab == "workflow":
+            prompt_parts.append("The user is viewing the **Workflow** tab (UI/render code focused).")
+        elif active_tab == "pipeline":
+            pipeline_id = active_context.get("pipeline_id")
+            pipeline_alias = active_context.get("pipeline_alias", "")
+            prompt_parts.append(f"The user is viewing the **Pipeline** tab: '{pipeline_alias}' (ID: {pipeline_id})")
+            prompt_parts.append("Focus on pipeline schema modifications unless the user explicitly asks about UI.")
+
+            # Include pipeline schema if available
+            pipeline_schema = active_context.get("pipeline_schema")
+            if pipeline_schema:
+                prompt_parts.append("")
+                prompt_parts.append("### Current Pipeline Schema")
+                prompt_parts.append(f"```json\n{json.dumps(pipeline_schema, indent=2)}\n```")
+        prompt_parts.append("")
 
     if current_definition:
         prompt_parts.append("## Current Workflow Definition")

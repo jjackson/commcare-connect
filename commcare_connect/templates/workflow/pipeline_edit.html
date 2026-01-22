@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% load static i18n %}
+
+{% block title %}Edit Pipeline{% endblock %}
+
+{% block content %}
+<style>[x-cloak] { display: none !important; }</style>
+
+{% if not has_context %}
+<!-- No Context Warning -->
+<div class="max-w-4xl mx-auto px-4 py-8">
+    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-exclamation-triangle text-yellow-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-yellow-700">
+                    Please select an opportunity from the header dropdown to edit this pipeline.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% elif error %}
+<!-- Error Display -->
+<div class="max-w-4xl mx-auto px-4 py-8">
+    <div class="bg-red-50 border-l-4 border-red-400 p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-circle-exclamation text-red-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-red-700">{{ error }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<!-- Breadcrumb -->
+<div class="bg-white border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 py-3">
+        <nav class="flex items-center gap-2 text-sm">
+            <a href="{% url 'labs:workflow:list' %}" class="text-gray-500 hover:text-gray-700">
+                Workflows
+            </a>
+            <span class="text-gray-400">/</span>
+            <a href="{% url 'labs:workflow:summary' %}" class="text-gray-500 hover:text-gray-700">
+                Summary
+            </a>
+            <span class="text-gray-400">/</span>
+            <span class="text-gray-900 font-medium">{{ definition.name }}</span>
+        </nav>
+    </div>
+</div>
+
+<!-- Pipeline Editor Container -->
+<div id="pipeline-editor-root" class="h-[calc(100vh-120px)]"></div>
+
+<!-- Data for React -->
+{{ pipeline_data|json_script:"pipeline-data" }}
+
+<!-- Load Pipeline Editor Bundle -->
+<script src="{% static 'bundles/js/pipeline-editor-bundle.js' %}"></script>
+{% endif %}
+{% endblock %}

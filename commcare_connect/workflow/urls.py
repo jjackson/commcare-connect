@@ -5,6 +5,10 @@ from . import views
 app_name = "workflow"
 
 urlpatterns = [
+    # Opportunity summary (all objects for current opportunity)
+    path("summary/", views.OpportunitySummaryView.as_view(), name="summary"),
+    # Pipeline editor (standalone)
+    path("pipeline/<int:definition_id>/edit/", views.PipelineEditView.as_view(), name="pipeline_edit"),
     # List all workflow definitions
     path("", views.WorkflowListView.as_view(), name="list"),
     # Create workflow from template
@@ -42,6 +46,20 @@ urlpatterns = [
         name="api_remove_pipeline_source",
     ),
     path("api/available-pipelines/", views.list_available_pipelines_api, name="api_available_pipelines"),
+    # API endpoints - Pipeline editor
+    path("api/pipeline/<int:definition_id>/", views.get_pipeline_definition_api, name="api_pipeline_definition"),
+    path("api/pipeline/<int:definition_id>/schema/", views.update_pipeline_schema_api, name="api_pipeline_schema"),
+    path("api/pipeline/<int:definition_id>/preview/", views.execute_pipeline_preview_api, name="api_pipeline_preview"),
+    path(
+        "api/pipeline/<int:definition_id>/chat/history/",
+        views.get_pipeline_chat_history_api,
+        name="api_pipeline_chat_history",
+    ),
+    path(
+        "api/pipeline/<int:definition_id>/chat/clear/",
+        views.clear_pipeline_chat_history_api,
+        name="api_pipeline_chat_clear",
+    ),
     # API endpoints - Sharing
     path("api/<int:definition_id>/share/", views.share_workflow_api, name="api_share"),
     path("api/<int:definition_id>/unshare/", views.unshare_workflow_api, name="api_unshare"),

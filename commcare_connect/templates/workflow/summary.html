@@ -1,0 +1,311 @@
+{% extends 'base.html' %}
+{% load static i18n %}
+
+{% block title %}Opportunity Summary{% endblock %}
+
+{% block content %}
+<style>[x-cloak] { display: none !important; }</style>
+<div class="max-w-6xl mx-auto px-4 py-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Opportunity Summary</h1>
+            <p class="text-gray-600 mt-1">
+                {% if opportunity_name %}
+                {{ opportunity_name }}
+                {% else %}
+                All objects for the selected opportunity
+                {% endif %}
+            </p>
+        </div>
+        {% if has_context %}
+        <div class="text-sm text-gray-500">
+            <span class="font-medium">Opportunity ID:</span> {{ opportunity_id }}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if not has_context %}
+    <!-- No Context Warning -->
+    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-exclamation-triangle text-yellow-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-yellow-700">
+                    Please select an opportunity from the header dropdown to view its summary.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% elif error %}
+    <!-- Error Display -->
+    <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-circle-exclamation text-red-400"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-red-700">{{ error }}</p>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Summary Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Tasks Card -->
+        <div class="bg-white rounded-lg shadow-sm overflow-hidden" x-data="{ expanded: false }">
+            <div class="px-6 py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors"
+                 @click="expanded = !expanded">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-tasks text-purple-600"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Tasks</h3>
+                            <p class="text-sm text-gray-500">{{ tasks_summary.total }} total</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        {% if tasks_summary.by_status.unassigned %}
+                        <span class="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded">
+                            {{ tasks_summary.by_status.unassigned }} unassigned
+                        </span>
+                        {% endif %}
+                        {% if tasks_summary.by_status.action_underway %}
+                        <span class="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded">
+                            {{ tasks_summary.by_status.action_underway }} in progress
+                        </span>
+                        {% endif %}
+                        <i class="fa-solid fa-chevron-down text-gray-400 transition-transform duration-200"
+                           :class="{ 'rotate-180': expanded }"></i>
+                    </div>
+                </div>
+            </div>
+            <div x-show="expanded" x-cloak x-collapse>
+                <div class="px-6 py-4 bg-gray-50">
+                    {% if tasks_summary.error %}
+                    <p class="text-sm text-red-600">{{ tasks_summary.error }}</p>
+                    {% elif tasks_summary.recent %}
+                    <div class="space-y-2 mb-4">
+                        {% for task in tasks_summary.recent %}
+                        <a href="{% url 'tasks:edit' task.id %}"
+                           class="flex items-center justify-between p-2 bg-white rounded border border-gray-200 hover:border-blue-300 transition-colors">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 truncate">{{ task.title }}</p>
+                                <p class="text-xs text-gray-500">{{ task.username|default:"-" }}</p>
+                            </div>
+                            <span class="text-xs px-2 py-1 rounded
+                                {% if task.status == 'resolved' %}bg-green-100 text-green-700
+                                {% elif task.status == 'action_underway' %}bg-yellow-100 text-yellow-700
+                                {% else %}bg-gray-100 text-gray-700{% endif %}">
+                                {{ task.status|default:"unknown" }}
+                            </span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-gray-500">No tasks found.</p>
+                    {% endif %}
+                    <a href="{% url 'tasks:list' %}"
+                       class="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium">
+                        View all tasks
+                        <i class="fa-solid fa-arrow-right ml-2"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audits Card -->
+        <div class="bg-white rounded-lg shadow-sm overflow-hidden" x-data="{ expanded: false }">
+            <div class="px-6 py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors"
+                 @click="expanded = !expanded">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-clipboard-check text-blue-600"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Audits</h3>
+                            <p class="text-sm text-gray-500">{{ audits_summary.total }} total</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        {% if audits_summary.by_status.in_progress %}
+                        <span class="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded">
+                            {{ audits_summary.by_status.in_progress }} in progress
+                        </span>
+                        {% endif %}
+                        {% if audits_summary.by_status.completed %}
+                        <span class="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">
+                            {{ audits_summary.by_status.completed }} completed
+                        </span>
+                        {% endif %}
+                        <i class="fa-solid fa-chevron-down text-gray-400 transition-transform duration-200"
+                           :class="{ 'rotate-180': expanded }"></i>
+                    </div>
+                </div>
+            </div>
+            <div x-show="expanded" x-cloak x-collapse>
+                <div class="px-6 py-4 bg-gray-50">
+                    {% if audits_summary.error %}
+                    <p class="text-sm text-red-600">{{ audits_summary.error }}</p>
+                    {% elif audits_summary.recent %}
+                    <div class="space-y-2 mb-4">
+                        {% for audit in audits_summary.recent %}
+                        <a href="{% url 'audit:bulk_assessment' audit.id %}"
+                           class="flex items-center justify-between p-2 bg-white rounded border border-gray-200 hover:border-blue-300 transition-colors">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 truncate">{{ audit.title }}</p>
+                                <p class="text-xs text-gray-500">{{ audit.visit_count }} visits</p>
+                            </div>
+                            <span class="text-xs px-2 py-1 rounded
+                                {% if audit.status == 'completed' %}bg-green-100 text-green-700
+                                {% elif audit.status == 'in_progress' %}bg-yellow-100 text-yellow-700
+                                {% else %}bg-gray-100 text-gray-700{% endif %}">
+                                {{ audit.status|default:"unknown" }}
+                            </span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-gray-500">No audits found.</p>
+                    {% endif %}
+                    <a href="{% url 'audit:session_list' %}"
+                       class="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium">
+                        View all audits
+                        <i class="fa-solid fa-arrow-right ml-2"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflows Card -->
+        <div class="bg-white rounded-lg shadow-sm overflow-hidden" x-data="{ expanded: false }">
+            <div class="px-6 py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors"
+                 @click="expanded = !expanded">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-diagram-project text-green-600"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Workflows</h3>
+                            <p class="text-sm text-gray-500">{{ workflows_summary.total }} total</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <i class="fa-solid fa-chevron-down text-gray-400 transition-transform duration-200"
+                           :class="{ 'rotate-180': expanded }"></i>
+                    </div>
+                </div>
+            </div>
+            <div x-show="expanded" x-cloak x-collapse>
+                <div class="px-6 py-4 bg-gray-50">
+                    {% if workflows_summary.error %}
+                    <p class="text-sm text-red-600">{{ workflows_summary.error }}</p>
+                    {% elif workflows_summary.items %}
+                    <div class="space-y-2 mb-4">
+                        {% for workflow in workflows_summary.items %}
+                        <a href="{% url 'labs:workflow:run' workflow.id %}?edit=true"
+                           class="flex items-center justify-between p-2 bg-white rounded border border-gray-200 hover:border-blue-300 transition-colors">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 truncate">{{ workflow.name }}</p>
+                                <p class="text-xs text-gray-500 truncate">{{ workflow.description|default:"-" }}</p>
+                            </div>
+                            {% if workflow.is_shared %}
+                            <span class="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                                shared
+                            </span>
+                            {% endif %}
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-gray-500">No workflows found.</p>
+                    {% endif %}
+                    <a href="{% url 'labs:workflow:list' %}"
+                       class="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium">
+                        View all workflows
+                        <i class="fa-solid fa-arrow-right ml-2"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pipelines Card -->
+        <div class="bg-white rounded-lg shadow-sm overflow-hidden" x-data="{ expanded: false }">
+            <div class="px-6 py-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors"
+                 @click="expanded = !expanded">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-database text-orange-600"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Pipelines</h3>
+                            <p class="text-sm text-gray-500">{{ pipelines_summary.total }} total</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <i class="fa-solid fa-chevron-down text-gray-400 transition-transform duration-200"
+                           :class="{ 'rotate-180': expanded }"></i>
+                    </div>
+                </div>
+            </div>
+            <div x-show="expanded" x-cloak x-collapse>
+                <div class="px-6 py-4 bg-gray-50">
+                    {% if pipelines_summary.error %}
+                    <p class="text-sm text-red-600">{{ pipelines_summary.error }}</p>
+                    {% elif pipelines_summary.items %}
+                    <div class="space-y-2 mb-4">
+                        {% for pipeline in pipelines_summary.items %}
+                        <div class="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 truncate">{{ pipeline.name }}</p>
+                                <p class="text-xs text-gray-500 truncate">{{ pipeline.description|default:"-" }}</p>
+                            </div>
+                            {% if pipeline.is_shared %}
+                            <span class="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                                shared
+                            </span>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-gray-500">No pipelines found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="mt-8">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+        <div class="flex flex-wrap gap-3">
+            <a href="{% url 'tasks:new' %}"
+               class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                <i class="fa-solid fa-plus mr-2 text-purple-600"></i>
+                New Task
+            </a>
+            <a href="{% url 'audit:creation_wizard' %}"
+               class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                <i class="fa-solid fa-plus mr-2 text-blue-600"></i>
+                New Audit
+            </a>
+            <a href="{% url 'labs:workflow:list' %}"
+               class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                <i class="fa-solid fa-plus mr-2 text-green-600"></i>
+                New Workflow
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

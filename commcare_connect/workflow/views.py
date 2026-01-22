@@ -254,6 +254,185 @@ class WorkflowRunDetailView(LoginRequiredMixin, TemplateView):
         return context
 
 
+class OpportunitySummaryView(LoginRequiredMixin, TemplateView):
+    """
+    Summary view showing all objects (tasks, audits, workflows, pipelines)
+    associated with a particular opportunity.
+    """
+
+    template_name = "workflow/summary.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Get labs context
+        labs_context = getattr(self.request, "labs_context", {})
+        opportunity_id = labs_context.get("opportunity_id")
+        context["opportunity_id"] = opportunity_id
+        context["opportunity_name"] = labs_context.get("opportunity_name")
+        context["has_context"] = bool(opportunity_id)
+
+        if not opportunity_id:
+            context["error"] = "Please select an opportunity to view its summary."
+            return context
+
+        # Initialize summary data
+        context["tasks_summary"] = self._get_tasks_summary()
+        context["audits_summary"] = self._get_audits_summary()
+        context["workflows_summary"] = self._get_workflows_summary()
+        context["pipelines_summary"] = self._get_pipelines_summary()
+
+        return context
+
+    def _get_tasks_summary(self):
+        """Get task summary data."""
+        from commcare_connect.tasks.data_access import TaskDataAccess
+
+        summary = {
+            "total": 0,
+            "by_status": {},
+            "recent": [],
+            "error": None,
+        }
+
+        try:
+            data_access = TaskDataAccess(user=self.request.user, request=self.request)
+            tasks = data_access.get_tasks()
+            data_access.close()
+
+            summary["total"] = len(tasks)
+
+            # Count by status
+            status_counts = {}
+            for task in tasks:
+                status = task.status or "unknown"
+                status_counts[status] = status_counts.get(status, 0) + 1
+            summary["by_status"] = status_counts
+
+            # Get recent tasks (last 5, sorted by ID desc)
+            sorted_tasks = sorted(tasks, key=lambda x: x.id, reverse=True)
+            summary["recent"] = [
+                {
+                    "id": t.id,
+                    "title": t.title,
+                    "status": t.status,
+                    "username": t.data.get("username", ""),
+                }
+                for t in sorted_tasks[:5]
+            ]
+
+        except Exception as e:
+            logger.error(f"Failed to fetch tasks summary: {e}")
+            summary["error"] = str(e)
+
+        return summary
+
+    def _get_audits_summary(self):
+        """Get audit summary data."""
+        from commcare_connect.audit.data_access import AuditDataAccess
+
+        summary = {
+            "total": 0,
+            "by_status": {},
+            "recent": [],
+            "error": None,
+        }
+
+        try:
+            data_access = AuditDataAccess(request=self.request)
+            audits = data_access.get_audit_sessions()
+            data_access.close()
+
+            summary["total"] = len(audits)
+
+            # Count by status
+            status_counts = {}
+            for audit in audits:
+                status = audit.data.get("status", "unknown")
+                status_counts[status] = status_counts.get(status, 0) + 1
+            summary["by_status"] = status_counts
+
+            # Get recent audits (last 5)
+            sorted_audits = sorted(audits, key=lambda x: x.id, reverse=True)
+            summary["recent"] = [
+                {
+                    "id": a.id,
+                    "title": a.data.get("title", f"Audit {a.id}"),
+                    "status": a.data.get("status", "unknown"),
+                    "visit_count": a.data.get("visit_count", 0),
+                }
+                for a in sorted_audits[:5]
+            ]
+
+        except Exception as e:
+            logger.error(f"Failed to fetch audits summary: {e}")
+            summary["error"] = str(e)
+
+        return summary
+
+    def _get_workflows_summary(self):
+        """Get workflow summary data."""
+        summary = {
+            "total": 0,
+            "items": [],
+            "error": None,
+        }
+
+        try:
+            data_access = WorkflowDataAccess(request=self.request)
+            definitions = data_access.list_definitions()
+            data_access.close()
+
+            summary["total"] = len(definitions)
+            summary["items"] = [
+                {
+                    "id": d.id,
+                    "name": d.name,
+                    "description": d.description,
+                    "is_shared": d.is_shared,
+                }
+                for d in definitions
+            ]
+
+        except Exception as e:
+            logger.error(f"Failed to fetch workflows summary: {e}")
+            summary["error"] = str(e)
+
+        return summary
+
+    def _get_pipelines_summary(self):
+        """Get pipeline summary data."""
+        from commcare_connect.workflow.data_access import PipelineDataAccess
+
+        summary = {
+            "total": 0,
+            "items": [],
+            "error": None,
+        }
+
+        try:
+            data_access = PipelineDataAccess(request=self.request)
+            definitions = data_access.list_definitions()
+            data_access.close()
+
+            summary["total"] = len(definitions)
+            summary["items"] = [
+                {
+                    "id": d.id,
+                    "name": d.name,
+                    "description": d.description,
+                    "is_shared": d.is_shared,
+                }
+                for d in definitions
+            ]
+
+        except Exception as e:
+            logger.error(f"Failed to fetch pipelines summary: {e}")
+            summary["error"] = str(e)
+
+        return summary
+
+
 @login_required
 @require_GET
 def get_workers_api(request):
@@ -350,9 +529,14 @@ def create_workflow_from_template_view(request):
 
     try:
         data_access = WorkflowDataAccess(request=request)
-        definition, render_code = create_from_template(data_access, template_key)
+        definition, render_code, pipeline = create_from_template(data_access, template_key, request=request)
 
-        messages.success(request, f"Created workflow: {definition.name} (ID: {definition.id})")
+        if pipeline:
+            messages.success(
+                request, f"Created workflow: {definition.name} (ID: {definition.id}) with pipeline: {pipeline.name}"
+            )
+        else:
+            messages.success(request, f"Created workflow: {definition.name} (ID: {definition.id})")
         return redirect("labs:workflow:list")
 
     except Exception as e:
@@ -777,4 +961,248 @@ def list_shared_workflows_api(request):
 
     except Exception as e:
         logger.error(f"Failed to list shared workflows: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+# =============================================================================
+# Pipeline Editor Views and APIs
+# =============================================================================
+
+
+class PipelineEditView(LoginRequiredMixin, TemplateView):
+    """
+    Standalone pipeline editor view.
+
+    Allows editing pipeline schema and previewing extracted data.
+    Can also be embedded in workflow UI via tabs.
+    """
+
+    template_name = "workflow/pipeline_edit.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        definition_id = self.kwargs.get("definition_id")
+
+        # Get labs context
+        labs_context = getattr(self.request, "labs_context", {})
+        opportunity_id = labs_context.get("opportunity_id")
+        context["opportunity_id"] = opportunity_id
+        context["opportunity_name"] = labs_context.get("opportunity_name")
+        context["has_context"] = bool(opportunity_id)
+
+        if not opportunity_id:
+            context["error"] = "Please select an opportunity to edit this pipeline."
+            return context
+
+        try:
+            from commcare_connect.workflow.data_access import PipelineDataAccess
+
+            data_access = PipelineDataAccess(request=self.request)
+
+            # Get pipeline definition
+            definition = data_access.get_definition(definition_id)
+            if not definition:
+                context["error"] = f"Pipeline {definition_id} not found."
+                return context
+
+            context["definition"] = definition
+            context["definition_id"] = definition_id
+
+            # Get initial data preview (limited rows for performance)
+            try:
+                preview_data = data_access.execute_pipeline(definition_id, opportunity_id)
+                # Limit to 100 rows for preview
+                if preview_data.get("rows"):
+                    preview_data["rows"] = preview_data["rows"][:100]
+                    preview_data["metadata"]["preview_limited"] = len(preview_data["rows"]) >= 100
+                context["preview_data"] = preview_data
+            except Exception as e:
+                logger.warning(f"Failed to get pipeline preview: {e}")
+                context["preview_data"] = {"rows": [], "metadata": {"error": str(e)}}
+
+            # Prepare data for React component
+            context["pipeline_data"] = {
+                "definition_id": definition_id,
+                "opportunity_id": opportunity_id,
+                "definition": definition.data,
+                "preview_data": context.get("preview_data", {}),
+                "apiEndpoints": {
+                    "getDefinition": f"/labs/workflow/api/pipeline/{definition_id}/",
+                    "updateSchema": f"/labs/workflow/api/pipeline/{definition_id}/schema/",
+                    "preview": f"/labs/workflow/api/pipeline/{definition_id}/preview/",
+                    "chatHistory": f"/labs/workflow/api/pipeline/{definition_id}/chat/history/",
+                    "chatClear": f"/labs/workflow/api/pipeline/{definition_id}/chat/clear/",
+                },
+            }
+
+            data_access.close()
+
+        except Exception as e:
+            logger.error(f"Failed to load pipeline {definition_id}: {e}", exc_info=True)
+            context["error"] = str(e)
+
+        return context
+
+
+@login_required
+@require_GET
+def get_pipeline_definition_api(request, definition_id):
+    """API endpoint to get a pipeline definition."""
+    from commcare_connect.workflow.data_access import PipelineDataAccess
+
+    try:
+        data_access = PipelineDataAccess(request=request)
+        definition = data_access.get_definition(definition_id)
+        data_access.close()
+
+        if not definition:
+            return JsonResponse({"error": "Pipeline not found"}, status=404)
+
+        return JsonResponse(
+            {
+                "success": True,
+                "definition": {
+                    "id": definition.id,
+                    "name": definition.name,
+                    "description": definition.description,
+                    "version": definition.version,
+                    "schema": definition.schema,
+                    "is_shared": definition.is_shared,
+                    "shared_scope": definition.shared_scope,
+                },
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get pipeline definition {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def update_pipeline_schema_api(request, definition_id):
+    """API endpoint to update a pipeline schema."""
+    from commcare_connect.workflow.data_access import PipelineDataAccess
+
+    try:
+        data = json.loads(request.body)
+        schema = data.get("schema")
+        name = data.get("name")
+        description = data.get("description")
+
+        if schema is None:
+            return JsonResponse({"error": "schema is required"}, status=400)
+
+        data_access = PipelineDataAccess(request=request)
+        updated = data_access.update_definition(
+            definition_id,
+            name=name,
+            description=description,
+            schema=schema,
+        )
+        data_access.close()
+
+        if not updated:
+            return JsonResponse({"error": "Pipeline not found"}, status=404)
+
+        return JsonResponse(
+            {
+                "success": True,
+                "definition": {
+                    "id": updated.id,
+                    "name": updated.name,
+                    "description": updated.description,
+                    "version": updated.version,
+                    "schema": updated.schema,
+                },
+            }
+        )
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to update pipeline schema {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_GET
+def execute_pipeline_preview_api(request, definition_id):
+    """
+    API endpoint to execute a pipeline and return preview data.
+
+    Optionally accepts a schema in query params for previewing unsaved changes.
+    """
+    from commcare_connect.workflow.data_access import PipelineDataAccess
+
+    labs_context = getattr(request, "labs_context", {})
+    opportunity_id = labs_context.get("opportunity_id") or request.GET.get("opportunity_id")
+
+    if not opportunity_id:
+        return JsonResponse({"error": "opportunity_id required"}, status=400)
+
+    try:
+        data_access = PipelineDataAccess(request=request)
+        result = data_access.execute_pipeline(definition_id, int(opportunity_id))
+        data_access.close()
+
+        # Limit to 100 rows for preview
+        if result.get("rows"):
+            total_rows = len(result["rows"])
+            result["rows"] = result["rows"][:100]
+            result["metadata"]["total_rows"] = total_rows
+            result["metadata"]["preview_limited"] = total_rows > 100
+
+        return JsonResponse(result)
+
+    except Exception as e:
+        logger.error(f"Failed to execute pipeline preview {definition_id}: {e}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_GET
+def get_pipeline_chat_history_api(request, definition_id):
+    """API endpoint to get chat history for a pipeline."""
+    from commcare_connect.workflow.data_access import PipelineDataAccess
+
+    try:
+        data_access = PipelineDataAccess(request=request)
+        messages = data_access.get_chat_history(definition_id)
+        data_access.close()
+
+        return JsonResponse(
+            {
+                "success": True,
+                "definition_id": definition_id,
+                "messages": messages,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get pipeline chat history {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def clear_pipeline_chat_history_api(request, definition_id):
+    """API endpoint to clear chat history for a pipeline."""
+    from commcare_connect.workflow.data_access import PipelineDataAccess
+
+    try:
+        data_access = PipelineDataAccess(request=request)
+        data_access.clear_chat_history(definition_id)
+        data_access.close()
+
+        return JsonResponse(
+            {
+                "success": True,
+                "definition_id": definition_id,
+                "cleared": True,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to clear pipeline chat history {definition_id}: {e}")
         return JsonResponse({"error": str(e)}, status=500)

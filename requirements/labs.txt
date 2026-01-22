@@ -308,9 +308,9 @@ pydantic[email]==2.12.4
     #   pydantic-evals
     #   pydantic-graph
     #   pydantic-settings
-pydantic-ai==1.18.0
+pydantic-ai==1.44.0
     # via -r requirements/labs.in
-pydantic-ai-slim[ag-ui,anthropic,bedrock,cli,cohere,evals,fastmcp,google,groq,huggingface,logfire,mcp,mistral,openai,retries,temporal,ui,vertexai]==1.18.0
+pydantic-ai-slim[ag-ui,anthropic,bedrock,cli,cohere,evals,fastmcp,google,groq,huggingface,logfire,mcp,mistral,openai,retries,temporal,ui,vertexai]==1.44.0
     # via
     #   pydantic-ai
     #   pydantic-ai-slim

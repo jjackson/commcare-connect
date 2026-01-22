@@ -9,6 +9,43 @@ new workflows. Both the views and integration tests import from here.
 # Template: Performance Review
 # =============================================================================
 
+# Pipeline schema for extracting worker performance data
+PERFORMANCE_REVIEW_PIPELINE_SCHEMA = {
+    "name": "Worker Performance Data",
+    "description": "Extract performance metrics from form submissions for each worker",
+    "version": 1,
+    "grouping_key": "username",
+    "terminal_stage": "aggregated",
+    "fields": [
+        {
+            "name": "visit_count",
+            "path": "form.meta.instanceID",
+            "aggregation": "count",
+            "description": "Total form submissions",
+        },
+        {
+            "name": "last_visit_date",
+            "path": "form.meta.timeEnd",
+            "aggregation": "last",
+            "description": "Date of most recent submission",
+        },
+        {
+            "name": "first_visit_date",
+            "path": "form.meta.timeEnd",
+            "aggregation": "first",
+            "description": "Date of first submission",
+        },
+        {
+            "name": "app_version",
+            "path": "form.meta.appVersion",
+            "aggregation": "last",
+            "description": "Application version used",
+        },
+    ],
+    "histograms": [],
+    "filters": {},
+}
+
 PERFORMANCE_REVIEW_DEFINITION = {
     "name": "Weekly Performance Review",
     "description": "Review each worker's performance and mark as confirmed, needs audit, or create a task",
@@ -24,7 +61,7 @@ PERFORMANCE_REVIEW_DEFINITION = {
         "showSummaryCards": True,
         "showFilters": True,
     },
-    "pipeline_sources": [],
+    "pipeline_sources": [],  # Will be populated when pipeline is created
 }
 
 PERFORMANCE_REVIEW_RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines, links, actions, onUpdateState }) {
@@ -480,12 +517,14 @@ TEMPLATES = {
         "description": "Review worker performance and mark as confirmed, needs audit, or create tasks",
         "definition": PERFORMANCE_REVIEW_DEFINITION,
         "render_code": PERFORMANCE_REVIEW_RENDER_CODE,
+        "pipeline_schema": PERFORMANCE_REVIEW_PIPELINE_SCHEMA,
     },
     "ocs_outreach": {
         "name": "OCS Bulk Outreach",
         "description": "Create tasks and initiate AI chatbot conversations for multiple workers",
         "definition": OCS_OUTREACH_DEFINITION,
         "render_code": OCS_OUTREACH_RENDER_CODE,
+        "pipeline_schema": None,  # No pipeline for this template
     },
 }
 
@@ -514,16 +553,20 @@ def list_templates() -> list[dict]:
     return [{"key": key, "name": t["name"], "description": t["description"]} for key, t in TEMPLATES.items()]
 
 
-def create_workflow_from_template(data_access, template_key: str) -> tuple:
+def create_workflow_from_template(data_access, template_key: str, request=None) -> tuple:
     """
     Create a workflow from a template using the data access layer.
+
+    If the template includes a pipeline_schema, a pipeline will also be created
+    and linked to the workflow.
 
     Args:
         data_access: WorkflowDataAccess instance with valid OAuth
         template_key: Template key (e.g., 'performance_review')
+        request: Optional HttpRequest for creating pipelines (needed for PipelineDataAccess)
 
     Returns:
-        Tuple of (definition_record, render_code_record) or raises ValueError
+        Tuple of (definition_record, render_code_record, pipeline_record or None)
 
     Raises:
         ValueError: If template not found
@@ -533,14 +576,37 @@ def create_workflow_from_template(data_access, template_key: str) -> tuple:
         raise ValueError(f"Unknown template: {template_key}")
 
     template_def = template["definition"]
+    pipeline_schema = template.get("pipeline_schema")
+    pipeline_record = None
+    pipeline_sources = []
 
-    # Create the workflow definition
+    # Create pipeline if template has one
+    if pipeline_schema and request:
+        from commcare_connect.workflow.data_access import PipelineDataAccess
+
+        pipeline_data_access = PipelineDataAccess(request=request)
+        pipeline_record = pipeline_data_access.create_definition(
+            name=pipeline_schema["name"],
+            description=pipeline_schema["description"],
+            schema=pipeline_schema,
+        )
+        pipeline_data_access.close()
+
+        # Add pipeline as a source with a default alias
+        pipeline_sources = [
+            {
+                "pipeline_id": pipeline_record.id,
+                "alias": "performance_data",
+            }
+        ]
+
+    # Create the workflow definition with pipeline source if created
     definition = data_access.create_definition(
         name=template_def["name"],
         description=template_def["description"],
         statuses=template_def.get("statuses", []),
         config=template_def.get("config", {}),
-        pipeline_sources=template_def.get("pipeline_sources", []),
+        pipeline_sources=pipeline_sources,
     )
 
     # Create the render code
@@ -550,4 +616,4 @@ def create_workflow_from_template(data_access, template_key: str) -> tuple:
         version=1,
     )
 
-    return definition, render_code
+    return definition, render_code, pipeline_record
