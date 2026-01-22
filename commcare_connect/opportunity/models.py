@@ -713,7 +713,7 @@ class UserVisitQuerySet(models.QuerySet):
 class UserVisit(XFormBaseModel):
     objects = UserVisitQuerySet.as_manager()
 
-    user_visit_id = models.UUIDField(editable=False, null=False, default=uuid4)
+    user_visit_id = models.UUIDField(editable=False, null=False, default=uuid4, unique=True)
     opportunity = models.ForeignKey(
         Opportunity,
         on_delete=models.CASCADE,
