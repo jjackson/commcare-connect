@@ -68,14 +68,21 @@ class AIStreamView(LoginRequiredMixin, View):
         model: Full model string (e.g., 'anthropic:claude-sonnet-4-20250514', 'openai:gpt-4o')
     """
 
-    # Allowed models for security
+    # Allowed models for security - using latest 2025/2026 models
     ALLOWED_MODELS = {
+        # Claude 4.5 models (late 2025)
+        "anthropic:claude-sonnet-4.5-20250929",
+        "anthropic:claude-opus-4.5-20251124",
+        # GPT-5.2 models (December 2025)
+        "openai:gpt-5.2",
+        "openai:gpt-5.2-2025-12-11",
+        # Legacy models for backwards compatibility
         "anthropic:claude-sonnet-4-20250514",
         "anthropic:claude-opus-4-20250514",
         "openai:gpt-4o",
         "openai:gpt-4o-mini",
     }
-    DEFAULT_MODEL = "anthropic:claude-sonnet-4-20250514"
+    DEFAULT_MODEL = "anthropic:claude-sonnet-4.5-20250929"
 
     def post(self, request):
         """Handle POST request and return streaming response."""
@@ -205,13 +212,16 @@ class AIStreamView(LoginRequiredMixin, View):
                     full_prompt = build_pipeline_prompt(prompt, current_definition, current_render_code)
 
                 try:
-                    async with agent.run_stream(full_prompt, deps=deps) as result:
-                        # Stream text as it arrives
-                        async for chunk in result.stream_text(delta=True):
-                            event_queue.put(send_sse_event(message=chunk, event_type="delta"))
+                    # NOTE: Using agent.run() instead of run_stream() due to pydantic-ai bugs
+                    # where tools aren't executed when text arrives before tool calls in streaming.
+                    # See: https://github.com/pydantic/pydantic-ai/issues/3574 (text before tools)
+                    #      https://github.com/pydantic/pydantic-ai/issues/1763 (no final turn)
+                    # This trades real-time token streaming for reliable tool execution.
+                    result = await agent.run(full_prompt, deps=deps)
+                    final_text = result.output
 
-                        # Get final output
-                        final_text = await result.get_output()
+                    # Send the complete text as a single delta event
+                    event_queue.put(send_sse_event(message=final_text, event_type="delta"))
 
                     # Log tool call results
                     logger.info(

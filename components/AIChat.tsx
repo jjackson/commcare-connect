@@ -64,38 +64,38 @@ const MODEL_STORAGE_KEY = 'ai_chat_model';
 // Available models
 const AVAILABLE_MODELS = [
   {
-    id: 'claude-sonnet-4',
+    id: 'claude-sonnet-4.5',
     provider: 'anthropic',
-    model: 'anthropic:claude-sonnet-4-20250514',
-    name: 'Sonnet 4',
-    fullName: 'Claude Sonnet 4',
+    model: 'anthropic:claude-sonnet-4.5-20250929',
+    name: 'Sonnet 4.5',
+    fullName: 'Claude Sonnet 4.5',
   },
   {
-    id: 'claude-opus-4',
+    id: 'claude-opus-4.5',
     provider: 'anthropic',
-    model: 'anthropic:claude-opus-4-20250514',
-    name: 'Opus 4',
-    fullName: 'Claude Opus 4',
+    model: 'anthropic:claude-opus-4.5-20251124',
+    name: 'Opus 4.5',
+    fullName: 'Claude Opus 4.5',
   },
   {
-    id: 'gpt-4o',
+    id: 'gpt-5.2',
     provider: 'openai',
-    model: 'openai:gpt-4o',
-    name: 'GPT-4o',
-    fullName: 'GPT-4o',
+    model: 'openai:gpt-5.2',
+    name: 'GPT-5.2',
+    fullName: 'GPT-5.2',
   },
   {
-    id: 'gpt-4o-mini',
+    id: 'gpt-5.2-snapshot',
     provider: 'openai',
-    model: 'openai:gpt-4o-mini',
-    name: 'GPT-4o Mini',
-    fullName: 'GPT-4o Mini',
+    model: 'openai:gpt-5.2-2025-12-11',
+    name: 'GPT-5.2 Dec',
+    fullName: 'GPT-5.2 (Dec 2025)',
   },
 ] as const;
 
 type ModelId = (typeof AVAILABLE_MODELS)[number]['id'];
 
-const DEFAULT_MODEL: ModelId = 'claude-sonnet-4';
+const DEFAULT_MODEL: ModelId = 'claude-sonnet-4.5';
 
 function getCSRFToken(): string {
   const tokenInput = document.querySelector<HTMLInputElement>(
@@ -243,7 +243,7 @@ export function AIChat({
 
       try {
         const modelString =
-          selectedModel?.model || 'anthropic:claude-sonnet-4-20250514';
+          selectedModel?.model || 'anthropic:claude-sonnet-4.5-20250929';
 
         // Use POST with JSON body instead of GET with query params
         const response = await fetch('/ai/stream/', {
