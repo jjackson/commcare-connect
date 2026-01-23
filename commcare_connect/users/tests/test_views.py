@@ -222,7 +222,7 @@ class TestStartLearnAppView:
 class TestUserToggleView:
     def test_no_toggles(self, mobile_user: User, rf: RequestFactory):
         user_toggle_view = UserToggleView.as_view()
-        request = rf.get("/fake-url/", data={"username": "abc"})
+        request = rf.get("/fake-url/", data={"username": mobile_user.username})
         request.user = mobile_user
         with mock.patch(
             "oauth2_provider.views.mixins.ClientProtectedResourceMixin.authenticate_client"
