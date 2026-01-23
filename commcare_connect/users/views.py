@@ -240,13 +240,13 @@ class UserToggleView(ClientProtectedResourceMixin, View):
         users = []
         if username is not None:
             users = User.objects.filter(username=username)
-        elif number:
+        elif number is not None:
             users = User.objects.filter(phone_number=number)
         for user in users:
             active_flags.update(Flag.active_flags_for_user(user, True).values_list("name", flat=True))
         all_flags = list(Flag.objects.all().values("name", "created", "modified"))
-    for flag in all_flags:
-        flag["active"] = flag["name"] in active_flags
+        for flag in all_flags:
+            flag["active"] = flag["name"] in active_flags
         switches = list(Switch.objects.all().values("name", "active", "created", "modified"))
         toggles = all_flags + switches
         return JsonResponse({"toggles": toggles})
