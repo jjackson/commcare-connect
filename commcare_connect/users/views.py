@@ -245,11 +245,8 @@ class UserToggleView(ClientProtectedResourceMixin, View):
             for user in users:
                 active_flags.update(Flag.active_flags_for_user(user, True).values_list("name", flat=True))
         all_flags = list(Flag.objects.all().values("name", "created", "modified"))
-        for flag in all_flags:
-            if flag["name"] in active_flags:
-                flag["active"] = True
-            else:
-                flag["active"] = False
+    for flag in all_flags:
+        flag["active"] = flag["name"] in active_flags
         switches = list(Switch.objects.all().values("name", "active", "created", "modified"))
         toggles = all_flags + switches
         return JsonResponse({"toggles": toggles})
