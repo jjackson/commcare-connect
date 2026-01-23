@@ -237,13 +237,13 @@ class UserToggleView(ClientProtectedResourceMixin, View):
         username = request.GET.get("username")
         number = request.GET.get("number")
         active_flags = set()
+        users = []
         if username is not None:
-            user = User.objects.get(username=username)
-            active_flags.update(Flag.active_flags_for_user(user, True).values_list("name", flat=True))
+            users = User.objects.filter(username=username)
         elif number:
             users = User.objects.filter(phone_number=number)
-            for user in users:
-                active_flags.update(Flag.active_flags_for_user(user, True).values_list("name", flat=True))
+        for user in users:
+            active_flags.update(Flag.active_flags_for_user(user, True).values_list("name", flat=True))
         all_flags = list(Flag.objects.all().values("name", "created", "modified"))
     for flag in all_flags:
         flag["active"] = flag["name"] in active_flags
