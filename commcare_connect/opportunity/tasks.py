@@ -172,8 +172,9 @@ def delete_stale_opportunities():
             opportunity.name,
             opportunity.date_created,
         )
-        delete_opportunity(opportunity)
-        count += 1
+        deleted = delete_opportunity(opportunity)
+        if deleted:
+            count += 1
     logger.info("Deleted %s stale opportunities created before %s", count, cutoff)
 
 

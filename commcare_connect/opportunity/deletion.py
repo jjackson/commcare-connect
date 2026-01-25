@@ -77,7 +77,8 @@ def delete_opportunity(opportunity_or_id):
                 )
             logger.info("Deleted %s total rows tied to Opportunity %s", total_deleted, opportunity_id)
             opportunity.delete()
+            return True
     except Exception:
         sentry_sdk.capture_exception()
         logger.exception("Failed to delete Opportunity %s", opportunity_id)
-        raise
+        return False
