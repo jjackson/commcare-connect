@@ -43,8 +43,9 @@ def test_delete_opportunity_clears_registered_models(opportunity_factory):
         data={},
     )
 
-    delete_opportunity(opportunity)
+    result = delete_opportunity(opportunity)
 
+    assert result is True
     for deletion in OPPORTUNITY_DELETIONS:
         assert not deletion.model.objects.filter(**{deletion._opp_id_filter: opportunity_id}).exists()
     assert not Opportunity.objects.filter(pk=opportunity_id).exists()
@@ -66,8 +67,8 @@ def test_delete_opportunity_is_atomic(monkeypatch):
 
     monkeypatch.setattr(ModelDeletion, "delete", fake_delete)
 
-    with pytest.raises(IntegrityError):
-        delete_opportunity(opportunity)
+    result = delete_opportunity(opportunity)
 
+    assert result is False
     assert Opportunity.objects.filter(pk=opportunity_id).exists()
     assert opportunity.completedmodule_set.exists()
