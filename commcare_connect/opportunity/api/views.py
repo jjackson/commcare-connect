@@ -27,7 +27,7 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.users.helpers import create_hq_user_and_link
 from commcare_connect.users.models import User
-from commcare_connect.utils.db import get_object_for_api_version
+from commcare_connect.utils.db import get_object_or_list_for_api_version
 from commcare_connect.utils.error_codes import ErrorCodes
 
 logger = logging.getLogger(__name__)
@@ -46,10 +46,10 @@ class UserLearnProgressView(RetrieveAPIView):
     serializer_class = UserLearnProgressSerializer
 
     def get_object(self):
-        opportunity_access = get_object_for_api_version(
+        opportunity_access = get_object_or_list_for_api_version(
             request=self.request,
             queryset=OpportunityAccess.objects.filter(user=self.request.user),
-            pk=self.kwargs.get("pk"),
+            pk_or_pk_list=self.kwargs.get("pk"),
             uuid_field="opportunity__opportunity_id",
             int_field="opportunity_id",
         )
@@ -75,10 +75,10 @@ class DeliveryProgressView(RetrieveAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
-        return get_object_for_api_version(
+        return get_object_or_list_for_api_version(
             request=self.request,
             queryset=OpportunityAccess.objects.filter(user=self.request.user),
-            pk=self.kwargs.get("pk"),
+            pk_or_pk_list=self.kwargs.get("pk"),
             uuid_field="opportunity__opportunity_id",
             int_field="opportunity_id",
         )
@@ -88,10 +88,10 @@ class ClaimOpportunityView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, *args, **kwargs):
-        opportunity_access = get_object_for_api_version(
+        opportunity_access = get_object_or_list_for_api_version(
             request=self.request,
             queryset=OpportunityAccess.objects.filter(user=self.request.user),
-            pk=kwargs.get("pk"),
+            pk_or_pk_list=kwargs.get("pk"),
             uuid_field="opportunity__opportunity_id",
             int_field="opportunity_id",
         )
@@ -124,7 +124,7 @@ class ClaimOpportunityView(APIView):
         return Response(status=201)
 
 
-def confirm_payments(user: User, payments_data: list):
+def confirm_payments(request, user: User, payments_data: list):
     if not payments_data or not isinstance(payments_data, list):
         return Response(status=400)
 
@@ -146,12 +146,14 @@ def confirm_payments(user: User, payments_data: list):
 
         payment_map[payment_id] = confirmed
 
-    payments = Payment.objects.filter(
-        pk__in=payment_map.keys(),
-    ).filter(
-        Q(organization__memberships__user=user) | Q(opportunity_access__user=user),
+    payments = get_object_or_list_for_api_version(
+        request,
+        queryset=Payment.objects.filter(
+            Q(organization__memberships__user=user) | Q(opportunity_access__user=user),
+        ),
+        pk_or_pk_list=payment_map.keys(),
+        uuid_field="payment_id",
     )
-
 
     if payments.count() != len(payment_map):
         raise Http404
@@ -170,11 +172,11 @@ class ConfirmPaymentView(APIView):
 
     def post(self, *args, **kwargs):
         payment_data = [{"id": kwargs.get("pk"), "confirmed": self.request.data.get("confirmed")}]
-        return confirm_payments(self.request.user, payment_data)
+        return confirm_payments(self.request, self.request.user, payment_data)
 
 
 class ConfirmPaymentsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        return confirm_payments(request.user, request.data.get("payments", []))
+        return confirm_payments(request, request.user, request.data.get("payments", []))
