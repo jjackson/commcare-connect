@@ -1278,7 +1278,6 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
         )
 
         self.fields["duplicate"].required = False
-        self.fields["location"].required = False
         self.fields["gps"].required = False
         self.fields["catchment_areas"].required = False
         if self.instance:
