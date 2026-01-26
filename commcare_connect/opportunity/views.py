@@ -1192,7 +1192,7 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
     remove_opportunity_access_cache(access.user, access.opportunity)
 
     url = reverse("opportunity:user_visits_list", args=(org_slug, opp_id))
-    return redirect(f"{url}?user={access.user_id}")
+    return redirect(f"{url}?user={access.user.user_id}")
 
 
 @require_POST

@@ -197,7 +197,7 @@ class DeliverStatusTable(OrgContextTable):
             "opportunity:user_visits_list",
             kwargs={"org_slug": self.org_slug, "opp_id": record.opportunity.opportunity_id},
         )
-        url = f"{base_url}?{urlencode({'user': record.user_id})}"
+        url = f"{base_url}?{urlencode({'user': record.user.user_id})}"
         return mark_safe(f'<a href="{url}">View Details</a>')
 
     def render_last_visit_date(self, record, value):
