@@ -715,6 +715,7 @@ function WorkflowRunner({
                   getDefinition: `/labs/workflow/api/pipeline/${selectedPipelineId}/`,
                   updateSchema: `/labs/workflow/api/pipeline/${selectedPipelineId}/schema/`,
                   preview: `/labs/workflow/api/pipeline/${selectedPipelineId}/preview/`,
+                  sqlPreview: `/labs/workflow/api/pipeline/${selectedPipelineId}/sql/`,
                   chatHistory: `/labs/workflow/api/pipeline/${selectedPipelineId}/chat/history/`,
                   chatClear: `/labs/workflow/api/pipeline/${selectedPipelineId}/chat/clear/`,
                 }}

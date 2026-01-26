@@ -23,6 +23,8 @@ import {
   MessageSquare,
   AlertCircle,
   Check,
+  Code,
+  Copy,
 } from 'lucide-react';
 
 // Import AIChat component
@@ -88,9 +90,26 @@ interface PipelineEditorProps {
     getDefinition: string;
     updateSchema: string;
     preview: string;
+    sqlPreview?: string;
     chatHistory: string;
     chatClear: string;
   };
+}
+
+interface SqlPreviewData {
+  terminal_stage: string;
+  visit_extraction_sql: string;
+  flw_aggregation_sql: string | null;
+  computed_fields: string[];
+  field_expressions: Record<
+    string,
+    {
+      paths: string[];
+      extraction_sql: string;
+      transformed_sql: string;
+      aggregation: string;
+    }
+  >;
 }
 
 // Aggregation options
@@ -430,6 +449,181 @@ function DataPreviewTable({
   );
 }
 
+// SQL Preview Component
+function SqlPreviewPanel({
+  data,
+  isLoading,
+  onRefresh,
+  error,
+}: {
+  data: SqlPreviewData | null;
+  isLoading: boolean;
+  onRefresh: () => void;
+  error: string | null;
+}) {
+  const [copiedSection, setCopiedSection] = useState<string | null>(null);
+
+  const copyToClipboard = useCallback((text: string, section: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedSection(section);
+      setTimeout(() => setCopiedSection(null), 2000);
+    });
+  }, []);
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center gap-2">
+          <Code size={16} className="text-gray-500" />
+          <span className="font-medium text-sm text-gray-700">SQL Preview</span>
+          {data?.terminal_stage && (
+            <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">
+              {data.terminal_stage}
+            </span>
+          )}
+        </div>
+        <button
+          onClick={onRefresh}
+          disabled={isLoading}
+          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+        >
+          <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
+          Refresh
+        </button>
+      </div>
+
+      {/* Error State */}
+      {error && (
+        <div className="p-4 bg-red-50 border-b border-red-200">
+          <div className="flex items-center gap-2 text-red-700">
+            <AlertCircle size={16} />
+            <span className="text-sm">{error}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-4 space-y-4">
+        {isLoading && !data ? (
+          <div className="p-8 text-center text-gray-500">
+            <RefreshCw size={24} className="mx-auto mb-2 animate-spin" />
+            <p className="text-sm">Loading SQL preview...</p>
+          </div>
+        ) : !data ? (
+          <div className="p-8 text-center text-gray-500">
+            <Code size={32} className="mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No SQL preview available</p>
+            <button
+              onClick={onRefresh}
+              className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+            >
+              Generate SQL Preview
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Visit Extraction SQL */}
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+                <span className="text-sm font-medium text-gray-700">
+                  Visit Extraction Query
+                </span>
+                <button
+                  onClick={() =>
+                    copyToClipboard(data.visit_extraction_sql, 'visit')
+                  }
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded"
+                >
+                  {copiedSection === 'visit' ? (
+                    <>
+                      <Check size={12} className="text-green-600" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={12} />
+                      Copy
+                    </>
+                  )}
+                </button>
+              </div>
+              <pre className="p-3 text-xs font-mono bg-gray-900 text-gray-100 overflow-x-auto whitespace-pre-wrap">
+                {data.visit_extraction_sql}
+              </pre>
+            </div>
+
+            {/* FLW Aggregation SQL (if applicable) */}
+            {data.flw_aggregation_sql && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+                  <span className="text-sm font-medium text-gray-700">
+                    FLW Aggregation Query
+                  </span>
+                  <button
+                    onClick={() =>
+                      copyToClipboard(data.flw_aggregation_sql!, 'flw')
+                    }
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded"
+                  >
+                    {copiedSection === 'flw' ? (
+                      <>
+                        <Check size={12} className="text-green-600" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={12} />
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+                <pre className="p-3 text-xs font-mono bg-gray-900 text-gray-100 overflow-x-auto whitespace-pre-wrap">
+                  {data.flw_aggregation_sql}
+                </pre>
+              </div>
+            )}
+
+            {/* Field Expressions */}
+            {Object.keys(data.field_expressions).length > 0 && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
+                  <span className="text-sm font-medium text-gray-700">
+                    Field Expressions
+                  </span>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {Object.entries(data.field_expressions).map(
+                    ([name, expr]) => (
+                      <div key={name} className="p-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-sm text-gray-900">
+                            {name}
+                          </span>
+                          <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
+                            {expr.aggregation}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 mb-1">
+                          Path: {expr.paths.join(' | ')}
+                        </div>
+                        <pre className="text-xs font-mono bg-gray-50 p-2 rounded text-gray-700 overflow-x-auto">
+                          {expr.transformed_sql}
+                        </pre>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Main Pipeline Editor Component
 export function PipelineEditor({
   definitionId,
@@ -457,6 +651,14 @@ export function PipelineEditor({
   const [error, setError] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Tab and SQL Preview state
+  const [activeTab, setActiveTab] = useState<'data' | 'sql'>('data');
+  const [sqlPreviewData, setSqlPreviewData] = useState<SqlPreviewData | null>(
+    null,
+  );
+  const [isLoadingSql, setIsLoadingSql] = useState(false);
+  const [sqlError, setSqlError] = useState<string | null>(null);
 
   const csrfToken = useMemo(() => getCSRFToken(), []);
 
@@ -554,6 +756,61 @@ export function PipelineEditor({
       setIsLoadingPreview(false);
     }
   }, [apiEndpoints.preview, opportunityId, csrfToken]);
+
+  // Refresh SQL preview
+  const refreshSqlPreview = useCallback(async () => {
+    console.log(
+      '[SQL Preview] refreshSqlPreview called, endpoint:',
+      apiEndpoints.sqlPreview,
+    );
+    if (!apiEndpoints.sqlPreview) {
+      console.log('[SQL Preview] No sqlPreview endpoint, returning');
+      return;
+    }
+
+    setIsLoadingSql(true);
+    setSqlError(null);
+
+    const url = `${apiEndpoints.sqlPreview}?opportunity_id=${opportunityId}`;
+    console.log('[SQL Preview] Fetching:', url);
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'X-CSRFToken': csrfToken,
+        },
+        credentials: 'same-origin',
+      });
+
+      console.log('[SQL Preview] Response status:', response.status);
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('[SQL Preview] Response not ok:', text.substring(0, 200));
+        throw new Error('Failed to fetch SQL preview');
+      }
+
+      const data = await response.json();
+      console.log('[SQL Preview] Data received:', data.success);
+      if (data.success) {
+        setSqlPreviewData(data.sql_preview);
+      } else {
+        throw new Error(data.error || 'Failed to generate SQL');
+      }
+    } catch (e) {
+      console.error('[SQL Preview] Error:', e);
+      setSqlError(String(e));
+    } finally {
+      setIsLoadingSql(false);
+    }
+  }, [apiEndpoints.sqlPreview, opportunityId, csrfToken]);
+
+  // Load SQL preview when switching to SQL tab
+  useEffect(() => {
+    if (activeTab === 'sql' && !sqlPreviewData && !isLoadingSql) {
+      refreshSqlPreview();
+    }
+  }, [activeTab, sqlPreviewData, isLoadingSql, refreshSqlPreview]);
 
   // Save changes
   const handleSave = useCallback(async () => {
@@ -697,133 +954,170 @@ export function PipelineEditor({
 
       {/* Main Content - Split View */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left: Schema Editor */}
+        {/* Left: Schema Editor / SQL Preview with Tabs */}
         <div className="w-1/2 border-r border-gray-200 flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-gray-100 bg-gray-50">
-            <h3 className="text-sm font-medium text-gray-700">
-              Schema Configuration
-            </h3>
+          {/* Tab Bar */}
+          <div className="flex border-b border-gray-200 bg-gray-50">
+            <button
+              onClick={() => setActiveTab('data')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'data'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Database size={14} />
+                Schema
+              </div>
+            </button>
+            {apiEndpoints.sqlPreview && (
+              <button
+                onClick={() => setActiveTab('sql')}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'sql'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Code size={14} />
+                  SQL Preview
+                </div>
+              </button>
+            )}
           </div>
-          <div className="flex-1 overflow-auto p-4 space-y-4">
-            {/* Basic Settings */}
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Pipeline Name
-                </label>
-                <input
-                  type="text"
-                  value={schema.name || ''}
-                  onChange={(e) =>
-                    setSchema((prev) => ({ ...prev, name: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="My Pipeline"
-                />
-              </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={schema.description || ''}
-                  onChange={(e) =>
-                    setSchema((prev) => ({
-                      ...prev,
-                      description: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="What this pipeline extracts..."
-                  rows={2}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+          {/* Left Pane Content */}
+          {activeTab === 'data' ? (
+            <div className="flex-1 overflow-auto p-4 space-y-4">
+              {/* Basic Settings */}
+              <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Grouping
+                    Pipeline Name
                   </label>
-                  <select
-                    value={schema.grouping_key || 'username'}
+                  <input
+                    type="text"
+                    value={schema.name || ''}
                     onChange={(e) =>
-                      setSchema((prev) => ({
-                        ...prev,
-                        grouping_key: e.target.value,
-                      }))
+                      setSchema((prev) => ({ ...prev, name: e.target.value }))
                     }
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {GROUPING_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Output Level
-                  </label>
-                  <select
-                    value={schema.terminal_stage || 'visit_level'}
-                    onChange={(e) =>
-                      setSchema((prev) => ({
-                        ...prev,
-                        terminal_stage: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {TERMINAL_STAGE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Fields Section */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-medium text-gray-700">Fields</h4>
-                <button
-                  onClick={addField}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                >
-                  <Plus size={14} />
-                  Add Field
-                </button>
-              </div>
-              <div className="space-y-2">
-                {(schema.fields || []).map((field, index) => (
-                  <FieldEditor
-                    key={index}
-                    field={field}
-                    index={index}
-                    onUpdate={updateField}
-                    onDelete={deleteField}
-                    isExpanded={expandedFields.has(index)}
-                    onToggle={() => toggleFieldExpanded(index)}
+                    placeholder="My Pipeline"
                   />
-                ))}
-                {(!schema.fields || schema.fields.length === 0) && (
-                  <div className="p-4 text-center text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
-                    <p className="text-sm">No fields configured</p>
-                    <button
-                      onClick={addField}
-                      className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    value={schema.description || ''}
+                    onChange={(e) =>
+                      setSchema((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="What this pipeline extracts..."
+                    rows={2}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Grouping
+                    </label>
+                    <select
+                      value={schema.grouping_key || 'username'}
+                      onChange={(e) =>
+                        setSchema((prev) => ({
+                          ...prev,
+                          grouping_key: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      Add your first field
-                    </button>
+                      {GROUPING_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                )}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Output Level
+                    </label>
+                    <select
+                      value={schema.terminal_stage || 'visit_level'}
+                      onChange={(e) =>
+                        setSchema((prev) => ({
+                          ...prev,
+                          terminal_stage: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      {TERMINAL_STAGE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fields Section */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium text-gray-700">Fields</h4>
+                  <button
+                    onClick={addField}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                  >
+                    <Plus size={14} />
+                    Add Field
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {(schema.fields || []).map((field, index) => (
+                    <FieldEditor
+                      key={index}
+                      field={field}
+                      index={index}
+                      onUpdate={updateField}
+                      onDelete={deleteField}
+                      isExpanded={expandedFields.has(index)}
+                      onToggle={() => toggleFieldExpanded(index)}
+                    />
+                  ))}
+                  {(!schema.fields || schema.fields.length === 0) && (
+                    <div className="p-4 text-center text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
+                      <p className="text-sm">No fields configured</p>
+                      <button
+                        onClick={addField}
+                        className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        Add your first field
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <SqlPreviewPanel
+              data={sqlPreviewData}
+              isLoading={isLoadingSql}
+              onRefresh={refreshSqlPreview}
+              error={sqlError}
+            />
+          )}
         </div>
 
         {/* Right: Data Preview */}
