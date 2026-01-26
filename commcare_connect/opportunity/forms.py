@@ -1115,7 +1115,7 @@ class PaymentUnitForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
 
-        self.fields["org_amount"].required = self.opportunity.managed
+        self.fields["org_amount"].required = self.opportunity.managed if self.opportunity else False
 
         self.helper = FormHelper(self)
         self.helper.layout = Layout(
