@@ -1808,7 +1808,7 @@ def user_visit_verification(request, org_slug, opp_id):
         )
         filtered_queryset = filter_set.qs
         selected_user_id_raw = cleaned_data.get("user")
-        selected_user_id = int(selected_user_id_raw) if selected_user_id_raw else None
+        selected_user_id = str(selected_user_id_raw) if selected_user_id_raw else None
         selected_flags = set(cleaned_data.get("flags") or [])
     else:
         filters_applied_count = 0
@@ -1819,7 +1819,7 @@ def user_visit_verification(request, org_slug, opp_id):
     selected_opportunity_access = None
     if selected_user_id:
         selected_opportunity_access = (
-            OpportunityAccess.objects.filter(opportunity=opportunity, user_id=selected_user_id)
+            OpportunityAccess.objects.filter(opportunity=opportunity, user__user_id=selected_user_id)
             .select_related("user")
             .first()
         )
