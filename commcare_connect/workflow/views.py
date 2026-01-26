@@ -38,21 +38,49 @@ class WorkflowListView(LoginRequiredMixin, TemplateView):
         # Get workflow definitions and their runs
         if context["has_context"]:
             try:
+                from commcare_connect.workflow.data_access import PipelineDataAccess
+
                 data_access = WorkflowDataAccess(request=self.request)
+                pipeline_access = PipelineDataAccess(request=self.request)
                 definitions = data_access.list_definitions()
 
-                # For each definition, get its runs
+                # Build a cache of pipeline names
+                pipeline_cache = {}
+
+                # For each definition, get its runs and pipeline info
                 workflows_with_runs = []
                 for definition in definitions:
                     runs = data_access.list_runs(definition.id)
+
+                    # Get pipeline details for this workflow
+                    pipelines = []
+                    for source in definition.pipeline_sources:
+                        pipeline_id = source.get("pipeline_id")
+                        alias = source.get("alias")
+                        if pipeline_id:
+                            # Use cache to avoid repeated lookups
+                            if pipeline_id not in pipeline_cache:
+                                pipeline_def = pipeline_access.get_definition(pipeline_id)
+                                pipeline_cache[pipeline_id] = pipeline_def
+                            pipeline_def = pipeline_cache.get(pipeline_id)
+                            pipelines.append(
+                                {
+                                    "id": pipeline_id,
+                                    "alias": alias,
+                                    "name": pipeline_def.name if pipeline_def else f"Pipeline {pipeline_id}",
+                                }
+                            )
+
                     workflows_with_runs.append(
                         {
                             "definition": definition,
                             "runs": runs,
                             "run_count": len(runs),
+                            "pipelines": pipelines,
                         }
                     )
 
+                pipeline_access.close()
                 context["workflows"] = workflows_with_runs
                 context["definitions"] = definitions  # Keep for backwards compatibility
             except Exception as e:
@@ -63,6 +91,47 @@ class WorkflowListView(LoginRequiredMixin, TemplateView):
         else:
             context["workflows"] = []
             context["definitions"] = []
+
+        return context
+
+
+class PipelineListView(LoginRequiredMixin, TemplateView):
+    """List all pipeline definitions the user can access."""
+
+    template_name = "workflow/pipeline_list.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from commcare_connect.workflow.data_access import PipelineDataAccess
+
+        # Check for labs context
+        labs_context = getattr(self.request, "labs_context", {})
+        context["has_context"] = bool(labs_context.get("opportunity_id") or labs_context.get("program_id"))
+        context["opportunity_id"] = labs_context.get("opportunity_id")
+        context["opportunity_name"] = labs_context.get("opportunity_name")
+
+        # Get pipeline definitions
+        if context["has_context"]:
+            try:
+                data_access = PipelineDataAccess(request=self.request)
+                definitions = data_access.list_definitions()
+                data_access.close()
+
+                pipelines = []
+                for definition in definitions:
+                    pipelines.append(
+                        {
+                            "definition": definition,
+                        }
+                    )
+
+                context["pipelines"] = pipelines
+            except Exception as e:
+                logger.error(f"Failed to load pipeline definitions: {e}")
+                context["pipelines"] = []
+                context["error"] = str(e)
+        else:
+            context["pipelines"] = []
 
         return context
 
@@ -937,6 +1006,72 @@ def unshare_workflow_api(request, definition_id):
 
 
 @login_required
+@require_POST
+def delete_workflow_api(request, definition_id):
+    """API endpoint to delete a workflow definition."""
+    try:
+        data_access = WorkflowDataAccess(request=request)
+        data_access.delete_definition(definition_id)
+        data_access.close()
+
+        return JsonResponse({"success": True, "definition_id": definition_id})
+
+    except Exception as e:
+        logger.error(f"Failed to delete workflow {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def rename_workflow_api(request, definition_id):
+    """API endpoint to rename a workflow definition."""
+    try:
+        data = json.loads(request.body)
+        new_name = data.get("name", "").strip()
+
+        if not new_name:
+            return JsonResponse({"error": "name is required"}, status=400)
+
+        data_access = WorkflowDataAccess(request=request)
+        definition = data_access.get_definition(definition_id)
+
+        if not definition:
+            return JsonResponse({"error": "Workflow not found"}, status=404)
+
+        # Update the name in the definition data
+        definition_data = definition.data or {}
+        definition_data["name"] = new_name
+        data_access.update_definition(definition_id, definition_data)
+        data_access.close()
+
+        return JsonResponse({"success": True, "definition_id": definition_id, "name": new_name})
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to rename workflow {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def delete_pipeline_api(request, definition_id):
+    """API endpoint to delete a pipeline definition."""
+    from commcare_connect.workflow.data_access import PipelineDataAccess
+
+    try:
+        data_access = PipelineDataAccess(request=request)
+        data_access.delete_definition(definition_id)
+        data_access.close()
+
+        return JsonResponse({"success": True, "definition_id": definition_id})
+
+    except Exception as e:
+        logger.error(f"Failed to delete pipeline {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
 @require_GET
 def list_shared_workflows_api(request):
     """API endpoint to list shared workflows."""
@@ -1030,6 +1165,7 @@ class PipelineEditView(LoginRequiredMixin, TemplateView):
                     "getDefinition": f"/labs/workflow/api/pipeline/{definition_id}/",
                     "updateSchema": f"/labs/workflow/api/pipeline/{definition_id}/schema/",
                     "preview": f"/labs/workflow/api/pipeline/{definition_id}/preview/",
+                    "sqlPreview": f"/labs/workflow/api/pipeline/{definition_id}/sql/",
                     "chatHistory": f"/labs/workflow/api/pipeline/{definition_id}/chat/history/",
                     "chatClear": f"/labs/workflow/api/pipeline/{definition_id}/chat/clear/",
                 },
@@ -1157,6 +1293,56 @@ def execute_pipeline_preview_api(request, definition_id):
 
     except Exception as e:
         logger.error(f"Failed to execute pipeline preview {definition_id}: {e}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_GET
+def get_pipeline_sql_preview_api(request, definition_id):
+    """
+    API endpoint to get the SQL that would be generated from a pipeline schema.
+
+    Returns the SQL queries without executing them, useful for debugging
+    and understanding what the pipeline will do.
+    """
+    from commcare_connect.labs.analysis.backends.sql.query_builder import generate_sql_preview
+    from commcare_connect.workflow.data_access import PipelineDataAccess
+
+    labs_context = getattr(request, "labs_context", {})
+    opportunity_id = labs_context.get("opportunity_id") or request.GET.get("opportunity_id")
+
+    if not opportunity_id:
+        return JsonResponse({"error": "opportunity_id required"}, status=400)
+
+    try:
+        data_access = PipelineDataAccess(request=request)
+        definition = data_access.get_definition(definition_id)
+
+        if not definition:
+            data_access.close()
+            return JsonResponse({"error": "Pipeline not found"}, status=404)
+
+        # definition is a PipelineDefinitionRecord object, access .data for the dict
+        schema = definition.data.get("schema", {})
+
+        # Convert schema to config (before closing data_access)
+        config = data_access._schema_to_config(schema, definition_id)
+        data_access.close()
+
+        # Generate SQL preview
+        sql_preview = generate_sql_preview(config, int(opportunity_id))
+
+        return JsonResponse(
+            {
+                "success": True,
+                "definition_id": definition_id,
+                "opportunity_id": opportunity_id,
+                "sql_preview": sql_preview,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to generate SQL preview for pipeline {definition_id}: {e}", exc_info=True)
         return JsonResponse({"error": str(e)}, status=500)
 
 

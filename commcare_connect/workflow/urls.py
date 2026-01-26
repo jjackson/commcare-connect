@@ -7,6 +7,8 @@ app_name = "workflow"
 urlpatterns = [
     # Opportunity summary (all objects for current opportunity)
     path("summary/", views.OpportunitySummaryView.as_view(), name="summary"),
+    # Pipeline list
+    path("pipelines/", views.PipelineListView.as_view(), name="pipeline_list"),
     # Pipeline editor (standalone)
     path("pipeline/<int:definition_id>/edit/", views.PipelineEditView.as_view(), name="pipeline_edit"),
     # List all workflow definitions
@@ -50,6 +52,7 @@ urlpatterns = [
     path("api/pipeline/<int:definition_id>/", views.get_pipeline_definition_api, name="api_pipeline_definition"),
     path("api/pipeline/<int:definition_id>/schema/", views.update_pipeline_schema_api, name="api_pipeline_schema"),
     path("api/pipeline/<int:definition_id>/preview/", views.execute_pipeline_preview_api, name="api_pipeline_preview"),
+    path("api/pipeline/<int:definition_id>/sql/", views.get_pipeline_sql_preview_api, name="api_pipeline_sql"),
     path(
         "api/pipeline/<int:definition_id>/chat/history/",
         views.get_pipeline_chat_history_api,
@@ -64,4 +67,9 @@ urlpatterns = [
     path("api/<int:definition_id>/share/", views.share_workflow_api, name="api_share"),
     path("api/<int:definition_id>/unshare/", views.unshare_workflow_api, name="api_unshare"),
     path("api/shared/", views.list_shared_workflows_api, name="api_list_shared"),
+    # API endpoints - Workflow management
+    path("api/<int:definition_id>/delete/", views.delete_workflow_api, name="api_delete"),
+    path("api/<int:definition_id>/rename/", views.rename_workflow_api, name="api_rename"),
+    # API endpoints - Pipeline management
+    path("api/pipeline/<int:definition_id>/delete/", views.delete_pipeline_api, name="api_pipeline_delete"),
 ]

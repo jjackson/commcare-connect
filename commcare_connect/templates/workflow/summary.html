@@ -53,7 +53,7 @@
     </div>
     {% else %}
     <!-- Summary Cards Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
 
         <!-- Tasks Card -->
         <div class="bg-white rounded-lg shadow-sm overflow-hidden" x-data="{ expanded: false }">
@@ -263,7 +263,8 @@
                     {% elif pipelines_summary.items %}
                     <div class="space-y-2 mb-4">
                         {% for pipeline in pipelines_summary.items %}
-                        <div class="flex items-center justify-between p-2 bg-white rounded border border-gray-200">
+                        <a href="{% url 'labs:workflow:pipeline_edit' pipeline.id %}"
+                           class="flex items-center justify-between p-2 bg-white rounded border border-gray-200 hover:border-blue-300 transition-colors">
                             <div class="flex-1 min-w-0">
                                 <p class="text-sm font-medium text-gray-900 truncate">{{ pipeline.name }}</p>
                                 <p class="text-xs text-gray-500 truncate">{{ pipeline.description|default:"-" }}</p>
@@ -273,12 +274,17 @@
                                 shared
                             </span>
                             {% endif %}
-                        </div>
+                        </a>
                         {% endfor %}
                     </div>
                     {% else %}
                     <p class="text-sm text-gray-500">No pipelines found.</p>
                     {% endif %}
+                    <a href="{% url 'labs:workflow:pipeline_list' %}"
+                       class="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium">
+                        View all pipelines
+                        <i class="fa-solid fa-arrow-right ml-2"></i>
+                    </a>
                 </div>
             </div>
         </div>
@@ -303,6 +309,11 @@
                class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
                 <i class="fa-solid fa-plus mr-2 text-green-600"></i>
                 New Workflow
+            </a>
+            <a href="{% url 'labs:workflow:pipeline_list' %}"
+               class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                <i class="fa-solid fa-database mr-2 text-orange-600"></i>
+                View Pipelines
             </a>
         </div>
     </div>
