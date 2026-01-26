@@ -77,7 +77,7 @@ def get_object_by_uuid_or_int(
 
 
 def get_list_by_uuid_or_int(queryset: QuerySet, lookup_list: list[str], uuid_field: str, int_field: str = "pk"):
-    if lookup_list[0].isdigit():
+    if all(val.isdigit() for val in lookup_list):
         lookup_list_int = [int(val) for val in lookup_list]
         return get_list_or_404(queryset, **{f"{int_field}__in": lookup_list_int})
 

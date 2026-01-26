@@ -144,22 +144,26 @@ def confirm_payments(request, user: User, payments_data: list):
         else:
             return Response({"error_code": ErrorCodes.INVALID_FLAG}, status=400)
 
-        payment_map[payment_id] = confirmed
+        payment_map[str(payment_id)] = confirmed
 
     payments = get_object_or_list_for_api_version(
         request,
         queryset=Payment.objects.filter(
             Q(organization__memberships__user=user) | Q(opportunity_access__user=user),
         ),
-        pk_or_pk_list=payment_map.keys(),
+        pk_or_pk_list=list(payment_map.keys()),
         uuid_field="payment_id",
     )
 
-    if payments.count() != len(payment_map):
+    if len(payments) != len(payment_map):
         raise Http404
 
+    lookup_keys = list(payment_map.keys())
+    use_int_pk = request.version == "1.0" and lookup_keys and all(val.isdigit() for val in lookup_keys)
+
     for payment in payments:
-        payment.confirmed = payment_map[payment.pk]
+        payment_key = str(payment.pk) if use_int_pk else str(payment.payment_id)
+        payment.confirmed = payment_map[payment_key]
         payment.confirmation_date = now()
 
     Payment.objects.bulk_update(payments, ["confirmed", "confirmation_date"])
