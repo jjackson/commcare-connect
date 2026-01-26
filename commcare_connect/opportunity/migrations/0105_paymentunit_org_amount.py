@@ -23,7 +23,7 @@ def backfill_org_amount(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0098_alter_formjsonvalidationrules_form_json_validation_rules_id_and_more"),
+        ("opportunity", "0104_alter_uservisit_user_visit_id"),
     ]
 
     operations = [
