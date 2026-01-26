@@ -9,13 +9,12 @@ from commcare_connect.utils.db import BaseModel, slugify_uniquely
 
 
 class Program(BaseModel):
-    program_id = models.UUIDField(default=uuid4, unique=True, editable=False)
+    program_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
     description = models.CharField()
     delivery_type = models.ForeignKey(DeliveryType, on_delete=models.PROTECT)
     budget = models.PositiveBigIntegerField()
-    currency = models.CharField(max_length=3)
     currency_fk = models.ForeignKey(Currency, on_delete=models.PROTECT, null=True)
     country = models.ForeignKey(Country, on_delete=models.PROTECT, null=True)
     start_date = models.DateField()
@@ -57,7 +56,7 @@ class ProgramApplicationStatus(models.TextChoices):
 
 
 class ProgramApplication(BaseModel):
-    program_application_id = models.UUIDField(default=uuid4, unique=True, editable=False)
+    program_application_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     program = models.ForeignKey(Program, on_delete=models.CASCADE)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
     status = models.CharField(

@@ -41,7 +41,6 @@ def valid_opportunity(organization):
         name="Test Opportunity",
         description="Test Description",
         short_description="Short Description",
-        currency="USD",
         is_test=False,
         end_date=datetime.date.today() + datetime.timedelta(days=30),
     )
@@ -602,7 +601,7 @@ class TestAutomatedPaymentInvoiceForm:
                 "local_amount": 100.0,
                 "start_date": None,
                 "end_date": None,
-                "notes": "",
+                "description": "",
                 "title": "",
             },
             is_opportunity_pm=False,
@@ -622,8 +621,9 @@ class TestAutomatedPaymentInvoiceForm:
                 "amount": 100.0,
                 "start_date": None,
                 "end_date": None,
-                "notes": "",
+                "description": "A mandatory description",
                 "title": "",
+                "date_of_expense": "2025-11-05",
             },
             is_opportunity_pm=False,
         )
@@ -647,7 +647,8 @@ class TestAutomatedPaymentInvoiceForm:
                 "title": "Consulting Services Invoice",
                 "start_date": "2025-10-01",
                 "end_date": "2025-10-31",
-                "notes": "Monthly consulting services rendered.",
+                "description": "Monthly consulting services rendered.",
+                "date_of_expense": "2025-11-05",
             },
             is_opportunity_pm=False,
         )
@@ -656,7 +657,6 @@ class TestAutomatedPaymentInvoiceForm:
         assert not invoice.service_delivery
         assert invoice.start_date is None
         assert invoice.end_date is None
-        assert invoice.notes is None
         assert invoice.title is None
         mock_link_invoice.assert_not_called()
 
@@ -674,7 +674,7 @@ class TestAutomatedPaymentInvoiceForm:
                 "title": "Consulting Services Invoice",
                 "start_date": "2025-10-01",
                 "end_date": "2025-10-31",
-                "notes": "Monthly consulting services rendered.",
+                "description": "Monthly consulting services rendered.",
             },
             is_opportunity_pm=False,
         )
@@ -683,7 +683,7 @@ class TestAutomatedPaymentInvoiceForm:
         assert invoice.service_delivery
         assert str(invoice.start_date) == "2025-10-01"
         assert str(invoice.end_date) == "2025-10-31"
-        assert invoice.notes == "Monthly consulting services rendered."
+        assert invoice.description == "Monthly consulting services rendered."
 
         mock_link_invoice.assert_called_once()
 
@@ -708,7 +708,7 @@ class TestAutomatedPaymentInvoiceForm:
                 "title": "Consulting Services Invoice",
                 "start_date": "2025-10-01",
                 "end_date": "2025-10-31",
-                "notes": "Monthly consulting services rendered.",
+                "description": "Monthly consulting services rendered.",
             },
             is_opportunity_pm=False,
         )
@@ -738,7 +738,7 @@ class TestAutomatedPaymentInvoiceForm:
         )
 
         for name, field in form.fields.items():
-            if name == "notes":
+            if name == "description":
                 assert field.widget.attrs.get("readonly") is None
             else:
                 assert field.widget.attrs.get("readonly") == "readonly"
