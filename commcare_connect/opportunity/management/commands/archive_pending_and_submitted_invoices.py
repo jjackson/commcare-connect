@@ -17,7 +17,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options.get("dry_run")
         cutoff_date = datetime(2025, 11, 1)
-        invoices = PaymentInvoice.objects.filter(opportunity__end_date__lt=cutoff_date, status=InvoiceStatus.PENDING)
+        invoices = PaymentInvoice.objects.filter(
+            opportunity__end_date__lt=cutoff_date, status__in=[InvoiceStatus.SUBMITTED, InvoiceStatus.PENDING]
+        )
 
         if dry_run:
             print(f"Found {invoices.count()} Pending invoices.")
