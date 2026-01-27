@@ -1,10 +1,16 @@
+import waffle
 from django.conf import settings
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
 
+from commcare_connect.flags.switch_names import MICROPLANNING
+
 
 @require_GET
 def microplanning_home(request, *args, **kwargs):
+    if not waffle.switch_is_active(MICROPLANNING):
+        return render(request, "404.html", status=404)
+
     return render(
         request,
         template_name="microplanning/home.html",
