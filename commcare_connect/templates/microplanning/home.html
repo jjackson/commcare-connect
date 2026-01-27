@@ -1,5 +1,71 @@
 {% extends 'base.html' %}
 
-{% block content %}
-<div>Hello!</div>
+{% block css %}
+{{ block.super }}
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.css" rel="stylesheet">
 {% endblock %}
+
+{% block javascript %}
+{{ block.super }}
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.js"></script>
+{% endblock javascript %}
+
+{% block content %}
+<div class="w-full h-screen grid grid-cols-12 gap-2" x-data="mapController()">
+    <div id="map-wrapper" class="relative h-full" :class="panelOpen ? 'col-span-10' : 'col-span-12'">
+        <div id="map" class="w-full h-full"></div>
+        <button
+            id="toggle-sidebar"
+            class="absolute top-4 right-4 z-50 bg-white p-2 rounded shadow-md hover:cursor-pointer"
+            @click="togglePanel()"
+        >
+            <i x-show="panelOpen" class="fa fa-chevron-right"></i>
+            <i x-show="!panelOpen" class="fa fa-chevron-left"></i>
+        </button>
+    </div>
+    <aside id="sidebar" class="col-span-2 h-full bg-white shadow-md p-4 overflow-auto" x-transition x-show="panelOpen">
+        <h2 class="text-lg font-semibold mb-2">Settings</h2>
+        <!-- Sidebar content goes here -->
+    </aside>
+</div>
+{% endblock %}
+
+{% block inline_javascript %}
+<script>
+    document.addEventListener("alpine:init", () => {
+        Alpine.data("mapController", () => ({
+            panelOpen: true,
+            map: null,
+
+            init() {
+                this.$nextTick(() => {
+                    this.initializeMap();
+                });
+            },
+
+            initializeMap() {
+                mapboxgl.accessToken = '{{ mapbox_api_key }}';
+                this.map = new mapboxgl.Map({
+                    container: 'map',
+                    style: 'mapbox://styles/mapbox/standard',
+                    projection: 'globe',
+                    zoom: 6,
+                    center: [8.675, 9.082]
+                });
+
+                this.map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+                this.map.scrollZoom.disable();
+
+                this.map.on('style.load', () => {
+                    this.map.setFog({});
+                });
+            },
+
+            togglePanel() {
+                this.panelOpen = !this.panelOpen;
+                setTimeout(() => this.map.resize(), 300);
+            }
+        }));
+    });
+</script>
+{% endblock inline_javascript %}

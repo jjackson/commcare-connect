@@ -400,3 +400,6 @@ WAFFLE_CREATE_MISSING_SWITCHES = True
 GTM_ID = env("GTM_ID", default="")
 GA_MEASUREMENT_ID = env("GA_MEASUREMENT_ID", default="")
 GA_API_SECRET = env("GA_API_SECRET", default="")
+
+
+MAPBOX_API_KEY = env("MAPBOX_API_KEY", default="")
