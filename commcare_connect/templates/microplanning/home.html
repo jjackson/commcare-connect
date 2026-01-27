@@ -22,6 +22,10 @@
         <button
             id="toggle-sidebar"
             title="Toggle Settings Panel"
+            aria-label="{% translate 'Toggle Settings Panel' %}"
+            :aria-expanded="panelOpen"
+            aria-controls="sidebar"
+            type="button"
             class="absolute top-4 right-4 z-50 bg-white p-2 rounded shadow-md hover:cursor-pointer"
             @click="togglePanel()">
             <i x-show="panelOpen" class="fa fa-chevron-right"></i>
@@ -51,7 +55,12 @@
             },
 
             initializeMap() {
-                mapboxgl.accessToken = '{{ mapbox_api_key }}';
+                const accessToken = '{{ mapbox_api_key|escapejs }}';
+                if (!accessToken) {
+                    console.error('Mapbox access token is not provided.');
+                    return;
+                }
+                mapboxgl.accessToken = accessToken;
                 this.map = new mapboxgl.Map({
                     container: 'map',
                     style: 'mapbox://styles/mapbox/standard',
