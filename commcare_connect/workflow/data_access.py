@@ -469,6 +469,63 @@ class WorkflowDataAccess(BaseDataAccess):
         """Alias for list_instances."""
         return self.list_instances(definition_id)
 
+    def get_run(self, run_id: int) -> WorkflowInstanceRecord | None:
+        """Get a workflow run by ID. Alias for get_instance."""
+        return self.get_instance(run_id)
+
+    def create_run(
+        self,
+        definition_id: int,
+        opportunity_id: int,
+        period_start: str,
+        period_end: str,
+        initial_state: dict | None = None,
+    ) -> WorkflowInstanceRecord:
+        """
+        Create a new workflow run.
+
+        Args:
+            definition_id: ID of the workflow definition
+            opportunity_id: ID of the opportunity
+            period_start: Start date of the period (ISO format)
+            period_end: End date of the period (ISO format)
+            initial_state: Optional initial state dict
+
+        Returns:
+            Created WorkflowInstanceRecord
+        """
+        data = {
+            "definition_id": definition_id,
+            "period_start": period_start,
+            "period_end": period_end,
+            "status": "in_progress",
+            "state": initial_state or {},
+        }
+
+        record = self.labs_api.create_record(
+            experiment=self.EXPERIMENT,
+            type="workflow_instance",
+            data=data,
+        )
+
+        return WorkflowInstanceRecord(
+            {
+                "id": record.id,
+                "experiment": record.experiment,
+                "type": record.type,
+                "data": record.data,
+                "opportunity_id": record.opportunity_id,
+            }
+        )
+
+    def update_run_state(self, run_id: int, new_state: dict) -> WorkflowInstanceRecord | None:
+        """Update workflow run state (merge with existing). Alias for update_instance_state."""
+        return self.update_instance_state(run_id, new_state)
+
+    def delete_run(self, run_id: int) -> None:
+        """Delete a workflow run."""
+        self.labs_api.delete_record(run_id)
+
     def get_instance(self, instance_id: int) -> WorkflowInstanceRecord | None:
         """Get a workflow instance by ID."""
         return self.labs_api.get_record_by_id(
@@ -595,6 +652,7 @@ class WorkflowDataAccess(BaseDataAccess):
 
         results = {}
         pipeline_access = PipelineDataAccess(
+            request=self.request,
             access_token=self.access_token,
             opportunity_id=opportunity_id,
             organization_id=self.organization_id,
@@ -623,24 +681,25 @@ class WorkflowDataAccess(BaseDataAccess):
     # -------------------------------------------------------------------------
 
     def share_workflow(self, definition_id: int, scope: str = "global") -> WorkflowDefinitionRecord | None:
-        """Share a workflow (make it available to others)."""
+        """Share a workflow (make it available to others).
+
+        Sets both the data.is_shared metadata flag AND the record-level public flag
+        to make the workflow queryable by others without scope parameters.
+        """
         definition = self.get_definition(definition_id)
         if not definition:
             return None
 
         updated_data = {**definition.data, "is_shared": True, "shared_scope": scope}
 
-        # Update the record with public=True so others can see it
+        # Update the record with public=True so others can query it
         result = self.labs_api.update_record(
             record_id=definition_id,
             experiment=self.EXPERIMENT,
             type="workflow_definition",
             data=updated_data,
+            public=True,  # Set ACL flag to make record publicly queryable
         )
-
-        # Also need to update the record to be public
-        # This requires a separate call or modification to the API client
-        # For now, we store is_shared in data
 
         if result:
             return WorkflowDefinitionRecord(
@@ -655,13 +714,37 @@ class WorkflowDataAccess(BaseDataAccess):
         return None
 
     def unshare_workflow(self, definition_id: int) -> WorkflowDefinitionRecord | None:
-        """Unshare a workflow."""
+        """Unshare a workflow (make it private again).
+
+        Sets both the data.is_shared metadata flag to False AND the record-level
+        public flag to False to restrict visibility.
+        """
         definition = self.get_definition(definition_id)
         if not definition:
             return None
 
-        updated_data = {**definition.data, "is_shared": False}
-        return self.update_definition(definition_id, updated_data)
+        updated_data = {**definition.data, "is_shared": False, "shared_scope": None}
+
+        # Update the record with public=False to restrict access
+        result = self.labs_api.update_record(
+            record_id=definition_id,
+            experiment=self.EXPERIMENT,
+            type="workflow_definition",
+            data=updated_data,
+            public=False,  # Set ACL flag to make record private
+        )
+
+        if result:
+            return WorkflowDefinitionRecord(
+                {
+                    "id": result.id,
+                    "experiment": result.experiment,
+                    "type": result.type,
+                    "data": result.data,
+                    "opportunity_id": result.opportunity_id,
+                }
+            )
+        return None
 
     def list_shared_workflows(self, scope: str = "global") -> list[WorkflowDefinitionRecord]:
         """List workflows shared by others."""
@@ -673,6 +756,83 @@ class WorkflowDataAccess(BaseDataAccess):
         )
         # Filter by scope and is_shared flag
         return [r for r in records if r.is_shared and r.shared_scope == scope]
+
+    def copy_workflow(
+        self, definition_id: int, new_name: str | None = None, source_is_public: bool = False
+    ) -> WorkflowDefinitionRecord | None:
+        """Create a copy of a workflow definition.
+
+        Args:
+            definition_id: ID of the workflow to copy
+            new_name: Optional new name for the copy (defaults to "Copy of {original_name}")
+            source_is_public: If True, fetch the source from public records (for copying shared workflows)
+
+        Returns:
+            The newly created workflow definition, or None if source not found
+        """
+        # Fetch the source definition
+        if source_is_public:
+            # Fetch from public records (for copying shared workflows)
+            records = self.labs_api.get_records(
+                experiment=self.EXPERIMENT,
+                type="workflow_definition",
+                model_class=WorkflowDefinitionRecord,
+                public=True,
+            )
+            source = next((r for r in records if r.id == definition_id), None)
+        else:
+            source = self.get_definition(definition_id)
+
+        if not source:
+            return None
+
+        # Prepare data for the copy (reset sharing flags)
+        copied_data = {
+            "name": new_name or f"Copy of {source.name}",
+            "description": source.description,
+            "version": 1,
+            "statuses": source.data.get("statuses", []),
+            "config": source.data.get("config", {}),
+            "pipeline_sources": source.data.get("pipeline_sources", []),
+            "is_shared": False,
+            "shared_scope": "global",
+        }
+
+        # Create the new definition (private by default)
+        result = self.labs_api.create_record(
+            experiment=self.EXPERIMENT,
+            type="workflow_definition",
+            data=copied_data,
+            public=False,
+        )
+
+        new_definition = WorkflowDefinitionRecord(
+            {
+                "id": result.id,
+                "experiment": result.experiment,
+                "type": result.type,
+                "data": result.data,
+                "opportunity_id": result.opportunity_id,
+            }
+        )
+
+        # Copy render code if exists
+        if source_is_public:
+            # Fetch render code from public records
+            render_records = self.labs_api.get_records(
+                experiment=self.EXPERIMENT,
+                type="workflow_render_code",
+                model_class=WorkflowRenderCodeRecord,
+                public=True,
+            )
+            source_render = next((r for r in render_records if r.data.get("definition_id") == definition_id), None)
+        else:
+            source_render = self.get_render_code(definition_id)
+
+        if source_render:
+            self.save_render_code(new_definition.id, source_render.component_code)
+
+        return new_definition
 
     # -------------------------------------------------------------------------
     # Chat History Methods
@@ -1028,7 +1188,11 @@ class PipelineDataAccess(BaseDataAccess):
     # -------------------------------------------------------------------------
 
     def share_pipeline(self, definition_id: int, scope: str = "global") -> PipelineDefinitionRecord | None:
-        """Share a pipeline."""
+        """Share a pipeline (make it available to others).
+
+        Sets both the data.is_shared metadata flag AND the record-level public flag
+        to make the pipeline queryable by others without scope parameters.
+        """
         definition = self.get_definition(definition_id)
         if not definition:
             return None
@@ -1037,33 +1201,61 @@ class PipelineDataAccess(BaseDataAccess):
         data["is_shared"] = True
         data["shared_scope"] = scope
 
-        return self.update_definition(definition_id, schema=data.get("schema"))
+        # Update the record with public=True so others can query it
+        result = self.labs_api.update_record(
+            definition_id,
+            experiment=self.EXPERIMENT,
+            type="pipeline_definition",
+            data=data,
+            public=True,  # Set ACL flag to make record publicly queryable
+        )
+
+        if result:
+            return PipelineDefinitionRecord(
+                {
+                    "id": result.id,
+                    "experiment": self.EXPERIMENT,
+                    "type": "pipeline_definition",
+                    "data": result.data,
+                    "opportunity_id": self.opportunity_id,
+                }
+            )
+        return None
 
     def unshare_pipeline(self, definition_id: int) -> PipelineDefinitionRecord | None:
-        """Unshare a pipeline."""
+        """Unshare a pipeline (make it private again).
+
+        Sets both the data.is_shared metadata flag to False AND the record-level
+        public flag to False to restrict visibility.
+        """
         definition = self.get_definition(definition_id)
         if not definition:
             return None
 
         data = definition.data.copy()
         data["is_shared"] = False
+        data["shared_scope"] = None
 
-        self.labs_api.update_record(
+        # Update the record with public=False to restrict access
+        result = self.labs_api.update_record(
             definition_id,
             experiment=self.EXPERIMENT,
             type="pipeline_definition",
             data=data,
+            public=False,  # Set ACL flag to make record private
         )
 
-        return PipelineDefinitionRecord(
-            {
-                "id": definition_id,
-                "experiment": self.EXPERIMENT,
-                "type": "pipeline_definition",
-                "data": data,
-                "opportunity_id": self.opportunity_id,
-            }
-        )
+        if result:
+            return PipelineDefinitionRecord(
+                {
+                    "id": result.id,
+                    "experiment": self.EXPERIMENT,
+                    "type": "pipeline_definition",
+                    "data": result.data,
+                    "opportunity_id": self.opportunity_id,
+                }
+            )
+        return None
 
     def list_shared_pipelines(self, scope: str = "global") -> list[PipelineDefinitionRecord]:
         """List pipelines shared by others."""
@@ -1074,6 +1266,63 @@ class PipelineDataAccess(BaseDataAccess):
             public=True,
         )
         return [r for r in records if r.is_shared and r.shared_scope == scope]
+
+    def copy_pipeline(
+        self, definition_id: int, new_name: str | None = None, source_is_public: bool = False
+    ) -> PipelineDefinitionRecord | None:
+        """Create a copy of a pipeline definition.
+
+        Args:
+            definition_id: ID of the pipeline to copy
+            new_name: Optional new name for the copy (defaults to "Copy of {original_name}")
+            source_is_public: If True, fetch the source from public records (for copying shared pipelines)
+
+        Returns:
+            The newly created pipeline definition, or None if source not found
+        """
+        # Fetch the source definition
+        if source_is_public:
+            # Fetch from public records (for copying shared pipelines)
+            records = self.labs_api.get_records(
+                experiment=self.EXPERIMENT,
+                type="pipeline_definition",
+                model_class=PipelineDefinitionRecord,
+                public=True,
+            )
+            source = next((r for r in records if r.id == definition_id), None)
+        else:
+            source = self.get_definition(definition_id)
+
+        if not source:
+            return None
+
+        # Prepare data for the copy (reset sharing flags)
+        copied_data = {
+            "name": new_name or f"Copy of {source.name}",
+            "description": source.description,
+            "version": 1,
+            "schema": source.schema,
+            "is_shared": False,
+            "shared_scope": "global",
+        }
+
+        # Create the new definition (private by default)
+        result = self.labs_api.create_record(
+            experiment=self.EXPERIMENT,
+            type="pipeline_definition",
+            data=copied_data,
+            public=False,
+        )
+
+        return PipelineDefinitionRecord(
+            {
+                "id": result.id,
+                "experiment": self.EXPERIMENT,
+                "type": "pipeline_definition",
+                "data": result.data,
+                "opportunity_id": self.opportunity_id,
+            }
+        )
 
     # -------------------------------------------------------------------------
     # Chat History Methods

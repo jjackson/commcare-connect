@@ -56,6 +56,107 @@
         </div>
     </div>
     {% else %}
+    <!-- Shared Library Section -->
+    <div class="mb-6" x-data="{
+        expanded: false,
+        loading: false,
+        sharedPipelines: [],
+        scope: 'global',
+        copying: null,
+        async loadShared() {
+            this.loading = true;
+            try {
+                const response = await fetch('{% url 'labs:workflow:api_pipeline_list_shared' %}?scope=' + this.scope);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.sharedPipelines = data.pipelines || [];
+                }
+            } catch (e) {
+                console.error('Failed to load shared pipelines:', e);
+            }
+            this.loading = false;
+        },
+        async copyShared(id, name) {
+            this.copying = id;
+            try {
+                const response = await fetch('{% url 'labs:workflow:api_pipeline_copy' 0 %}'.replace('/0/', '/' + id + '/'), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({ source_is_public: true })
+                });
+                if (response.ok) {
+                    window.location.reload();
+                    return;
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to copy');
+                }
+            } catch (e) {
+                alert('Failed to copy: ' + e.message);
+            }
+            this.copying = null;
+        }
+    }" x-init="if(expanded) loadShared()">
+        <div class="bg-purple-50 border border-purple-200 rounded-lg">
+            <button @click="expanded = !expanded; if(expanded && sharedPipelines.length === 0) loadShared()"
+                    class="w-full px-4 py-3 flex items-center justify-between text-left">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-share-nodes text-purple-600"></i>
+                    <span class="font-medium text-purple-900">Shared Library</span>
+                    <span class="text-sm text-purple-600">Browse pipelines shared by others</span>
+                </div>
+                <i class="fa-solid fa-chevron-right text-purple-400 transition-transform duration-200"
+                   :class="{ 'rotate-90': expanded }"></i>
+            </button>
+            <div x-show="expanded" x-collapse class="border-t border-purple-200">
+                <div class="p-4">
+                    <!-- Scope Filter -->
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="text-sm text-gray-600">Filter by scope:</span>
+                        <select x-model="scope" @change="loadShared()"
+                                class="text-sm border-gray-300 rounded-md focus:border-purple-500 focus:ring-purple-500">
+                            <option value="global">Global (Everyone)</option>
+                            <option value="organization">My Organization</option>
+                            <option value="program">This Program</option>
+                        </select>
+                        <button @click="loadShared()" :disabled="loading"
+                                class="text-sm text-purple-600 hover:text-purple-800">
+                            <i class="fa-solid" :class="loading ? 'fa-spinner fa-spin' : 'fa-refresh'"></i>
+                        </button>
+                    </div>
+                    <!-- Shared Pipelines List -->
+                    <div x-show="loading" class="text-center py-4 text-gray-500">
+                        <i class="fa-solid fa-spinner fa-spin mr-2"></i> Loading shared pipelines...
+                    </div>
+                    <div x-show="!loading && sharedPipelines.length === 0" class="text-center py-4 text-gray-500">
+                        No shared pipelines found for this scope.
+                    </div>
+                    <div x-show="!loading && sharedPipelines.length > 0" class="space-y-2">
+                        <template x-for="pipeline in sharedPipelines" :key="pipeline.id">
+                            <div class="flex items-center justify-between bg-white rounded-lg p-3 border border-gray-200">
+                                <div>
+                                    <span class="font-medium text-gray-900" x-text="pipeline.name"></span>
+                                    <span class="text-xs text-gray-500 ml-2">#<span x-text="pipeline.id"></span></span>
+                                    <p class="text-sm text-gray-500" x-text="pipeline.description || 'No description'"></p>
+                                </div>
+                                <button @click="copyShared(pipeline.id, pipeline.name)"
+                                        :disabled="copying === pipeline.id"
+                                        class="inline-flex items-center px-3 py-1.5 border border-purple-300 rounded-md text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 hover:border-purple-400 transition-colors disabled:opacity-50">
+                                    <i class="fa-solid mr-1.5" :class="copying === pipeline.id ? 'fa-spinner fa-spin' : 'fa-copy'"></i>
+                                    <span x-show="copying !== pipeline.id">Copy to My Pipelines</span>
+                                    <span x-show="copying === pipeline.id" x-cloak>Copying...</span>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Pipeline Definitions List -->
     <div class="space-y-4">
         {% if pipelines %}
@@ -65,7 +166,12 @@
                  editing: false,
                  saving: false,
                  deleting: false,
+                 copying: false,
+                 sharing: false,
                  showDeleteConfirm: false,
+                 showShareMenu: false,
+                 isShared: {{ pipeline.definition.is_shared|yesno:'true,false' }},
+                 sharedScope: '{{ pipeline.definition.shared_scope|default:'global' }}',
                  name: '{{ pipeline.definition.name|escapejs }}',
                  originalName: '{{ pipeline.definition.name|escapejs }}',
                  async saveName() {
@@ -120,6 +226,74 @@
                     }
                     this.deleting = false;
                     this.showDeleteConfirm = false;
+                },
+                async copyPipeline() {
+                    this.copying = true;
+                    try {
+                        const response = await fetch('{% url 'labs:workflow:api_pipeline_copy' pipeline.definition.id %}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': '{{ csrf_token }}'
+                            },
+                            body: JSON.stringify({})
+                        });
+                        if (response.ok) {
+                            window.location.reload();
+                            return;
+                        } else {
+                            const data = await response.json();
+                            alert(data.error || 'Failed to copy');
+                        }
+                    } catch (e) {
+                        alert('Failed to copy: ' + e.message);
+                    }
+                    this.copying = false;
+                },
+                async sharePipeline(scope) {
+                    this.sharing = true;
+                    this.showShareMenu = false;
+                    try {
+                        const response = await fetch('{% url 'labs:workflow:api_pipeline_share' pipeline.definition.id %}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': '{{ csrf_token }}'
+                            },
+                            body: JSON.stringify({ scope: scope })
+                        });
+                        if (response.ok) {
+                            this.isShared = true;
+                            this.sharedScope = scope;
+                        } else {
+                            const data = await response.json();
+                            alert(data.error || 'Failed to share');
+                        }
+                    } catch (e) {
+                        alert('Failed to share: ' + e.message);
+                    }
+                    this.sharing = false;
+                },
+                async unsharePipeline() {
+                    this.sharing = true;
+                    try {
+                        const response = await fetch('{% url 'labs:workflow:api_pipeline_unshare' pipeline.definition.id %}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': '{{ csrf_token }}'
+                            }
+                        });
+                        if (response.ok) {
+                            this.isShared = false;
+                        } else {
+                            const data = await response.json();
+                            alert(data.error || 'Failed to unshare');
+                        }
+                    } catch (e) {
+                        alert('Failed to unshare: ' + e.message);
+                    }
+                    this.sharing = false;
                 }
              }">
             <!-- Pipeline Header Row -->
@@ -160,11 +334,9 @@
                             <span class="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded">
                                 #{{ pipeline.definition.id }}
                             </span>
-                            {% if pipeline.definition.is_shared %}
-                            <span class="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                                shared
+                            <span x-show="isShared" x-cloak class="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded inline-flex items-center">
+                                <i class="fa-solid fa-share-nodes mr-1"></i> Shared (<span x-text="sharedScope"></span>)
                             </span>
-                            {% endif %}
                         </div>
                         <p class="text-sm text-gray-500 mt-1">{{ pipeline.definition.description|default:"-"|truncatewords:20 }}</p>
                     </div>
@@ -174,8 +346,56 @@
                 <div class="flex items-center gap-2">
                     <a href="{% url 'labs:workflow:pipeline_edit' pipeline.definition.id %}"
                        class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 transition-colors">
-                        <i class="fa-solid fa-pen-to-square mr-1.5"></i> Edit Pipeline
+                        <i class="fa-solid fa-pen-to-square mr-1.5"></i> Edit
                     </a>
+                    <!-- Copy Button -->
+                    <button @click="copyPipeline()"
+                            :disabled="copying"
+                            class="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 transition-colors disabled:opacity-50">
+                        <i class="fa-solid mr-1.5" :class="copying ? 'fa-spinner fa-spin' : 'fa-copy'"></i>
+                        <span x-show="!copying">Copy</span>
+                        <span x-show="copying" x-cloak>Copying...</span>
+                    </button>
+                    <!-- Share Button -->
+                    <div class="relative">
+                        <template x-if="!isShared">
+                            <button @click="showShareMenu = !showShareMenu"
+                                    :disabled="sharing"
+                                    class="inline-flex items-center px-3 py-1.5 border border-purple-300 rounded-md text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 hover:border-purple-400 transition-colors disabled:opacity-50">
+                                <i class="fa-solid mr-1.5" :class="sharing ? 'fa-spinner fa-spin' : 'fa-share-nodes'"></i>
+                                <span x-show="!sharing">Share</span>
+                                <span x-show="sharing" x-cloak>Sharing...</span>
+                            </button>
+                        </template>
+                        <template x-if="isShared">
+                            <button @click="unsharePipeline()"
+                                    :disabled="sharing"
+                                    class="inline-flex items-center px-3 py-1.5 border border-purple-300 rounded-md text-sm font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 hover:border-purple-400 transition-colors disabled:opacity-50">
+                                <i class="fa-solid mr-1.5" :class="sharing ? 'fa-spinner fa-spin' : 'fa-share-nodes'"></i>
+                                <span x-show="!sharing">Unshare</span>
+                                <span x-show="sharing" x-cloak>Updating...</span>
+                            </button>
+                        </template>
+                        <!-- Share Scope Menu -->
+                        <div x-show="showShareMenu"
+                             x-cloak
+                             @click.outside="showShareMenu = false"
+                             class="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50">
+                            <p class="px-4 py-1 text-xs font-medium text-gray-500 uppercase">Share with</p>
+                            <button @click="sharePipeline('global')"
+                                    class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700">
+                                <i class="fa-solid fa-globe mr-2"></i> Everyone (Global)
+                            </button>
+                            <button @click="sharePipeline('organization')"
+                                    class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700">
+                                <i class="fa-solid fa-building mr-2"></i> My Organization
+                            </button>
+                            <button @click="sharePipeline('program')"
+                                    class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700">
+                                <i class="fa-solid fa-folder mr-2"></i> This Program
+                            </button>
+                        </div>
+                    </div>
                     <!-- Delete Button -->
                     <div class="relative">
                         <button @click="showDeleteConfirm = true"
