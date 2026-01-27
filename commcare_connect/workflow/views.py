@@ -10,11 +10,12 @@ import logging
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
+from django.views import View
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
 
-from commcare_connect.workflow.data_access import WorkflowDataAccess
+from commcare_connect.workflow.data_access import PipelineDataAccess, WorkflowDataAccess
 from commcare_connect.workflow.templates import TEMPLATES
 from commcare_connect.workflow.templates import create_workflow_from_template as create_from_template
 
@@ -261,13 +262,9 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                 }
                 context["is_edit_mode"] = False
 
-            # Fetch pipeline data if workflow has pipeline sources
+            # Pipeline data will be loaded async via SSE - don't block page load
+            # Pass empty data initially; frontend will connect to SSE stream
             pipeline_data = {}
-            if definition.pipeline_sources:
-                try:
-                    pipeline_data = data_access.get_pipeline_data(definition_id, opportunity_id)
-                except Exception as e:
-                    logger.warning(f"Failed to fetch pipeline data: {e}")
 
             # Prepare data for React (pass as dict, json_script will handle encoding)
             context["workflow_data"] = {
@@ -288,6 +285,8 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                     "updateState": None if is_edit_mode else f"/labs/workflow/api/run/{run_data['id']}/state/",
                     "getWorkers": "/labs/workflow/api/workers/",
                     "getPipelineData": f"/labs/workflow/api/{definition_id}/pipeline-data/",
+                    # SSE stream for async pipeline data loading
+                    "streamPipelineData": f"/labs/workflow/api/{definition_id}/pipeline-data/stream/",
                 },
             }
 
@@ -1099,6 +1098,160 @@ def list_shared_workflows_api(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
+@login_required
+@require_POST
+def copy_workflow_api(request, definition_id):
+    """API endpoint to copy a workflow definition."""
+    try:
+        data = json.loads(request.body) if request.body else {}
+        new_name = data.get("name")
+        source_is_public = data.get("source_is_public", False)
+
+        data_access = WorkflowDataAccess(request=request)
+        copied = data_access.copy_workflow(definition_id, new_name, source_is_public)
+        data_access.close()
+
+        if copied:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "definition_id": copied.id,
+                    "name": copied.name,
+                }
+            )
+        else:
+            return JsonResponse({"error": "Workflow not found"}, status=404)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to copy workflow {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+# =============================================================================
+# Pipeline Sharing APIs
+# =============================================================================
+
+
+@login_required
+@require_POST
+def share_pipeline_api(request, definition_id):
+    """API endpoint to share a pipeline."""
+    try:
+        data = json.loads(request.body) if request.body else {}
+        scope = data.get("scope", "global")
+
+        if scope not in ("program", "organization", "global"):
+            return JsonResponse({"error": "scope must be 'program', 'organization', or 'global'"}, status=400)
+
+        data_access = PipelineDataAccess(request=request)
+        updated = data_access.share_pipeline(definition_id, scope)
+        data_access.close()
+
+        if updated:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "definition_id": definition_id,
+                    "is_shared": True,
+                    "shared_scope": scope,
+                }
+            )
+        else:
+            return JsonResponse({"error": "Pipeline not found"}, status=404)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to share pipeline {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def unshare_pipeline_api(request, definition_id):
+    """API endpoint to unshare a pipeline."""
+    try:
+        data_access = PipelineDataAccess(request=request)
+        updated = data_access.unshare_pipeline(definition_id)
+        data_access.close()
+
+        if updated:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "definition_id": definition_id,
+                    "is_shared": False,
+                }
+            )
+        else:
+            return JsonResponse({"error": "Pipeline not found"}, status=404)
+
+    except Exception as e:
+        logger.error(f"Failed to unshare pipeline {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_GET
+def list_shared_pipelines_api(request):
+    """API endpoint to list shared pipelines."""
+    scope = request.GET.get("scope", "global")
+
+    try:
+        data_access = PipelineDataAccess(request=request)
+        shared = data_access.list_shared_pipelines(scope)
+        data_access.close()
+
+        result = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "description": p.description,
+                "shared_scope": p.shared_scope,
+            }
+            for p in shared
+        ]
+
+        return JsonResponse({"pipelines": result})
+
+    except Exception as e:
+        logger.error(f"Failed to list shared pipelines: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def copy_pipeline_api(request, definition_id):
+    """API endpoint to copy a pipeline definition."""
+    try:
+        data = json.loads(request.body) if request.body else {}
+        new_name = data.get("name")
+        source_is_public = data.get("source_is_public", False)
+
+        data_access = PipelineDataAccess(request=request)
+        copied = data_access.copy_pipeline(definition_id, new_name, source_is_public)
+        data_access.close()
+
+        if copied:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "definition_id": copied.id,
+                    "name": copied.name,
+                }
+            )
+        else:
+            return JsonResponse({"error": "Pipeline not found"}, status=404)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to copy pipeline {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
 # =============================================================================
 # Pipeline Editor Views and APIs
 # =============================================================================
@@ -1391,4 +1544,407 @@ def clear_pipeline_chat_history_api(request, definition_id):
 
     except Exception as e:
         logger.error(f"Failed to clear pipeline chat history {definition_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+# =============================================================================
+# Workflow Job APIs
+# =============================================================================
+
+
+@login_required
+@require_POST
+def start_job_api(request, run_id):
+    """
+    Start an async workflow job.
+
+    Kicks off a Celery task to execute a multi-stage job (pipeline + processing).
+    Results are saved incrementally to workflow run state.
+    """
+    from commcare_connect.workflow.tasks import run_workflow_job
+
+    try:
+        data = json.loads(request.body)
+        job_config = data.get("job_config")
+
+        if not job_config:
+            return JsonResponse({"error": "job_config required"}, status=400)
+
+        access_token = request.session.get("labs_oauth", {}).get("access_token")
+        if not access_token:
+            return JsonResponse({"error": "Not authenticated"}, status=401)
+
+        # Get opportunity_id from labs_context
+        labs_context = getattr(request, "labs_context", {})
+        opportunity_id = labs_context.get("opportunity_id")
+        if not opportunity_id:
+            return JsonResponse({"error": "opportunity_id required in context"}, status=400)
+
+        # Start async task
+        task = run_workflow_job.delay(
+            job_config=job_config,
+            access_token=access_token,
+            run_id=run_id,
+            opportunity_id=opportunity_id,
+        )
+
+        logger.info(f"[StartJob] Started job {task.id} for run {run_id}")
+
+        return JsonResponse(
+            {
+                "success": True,
+                "task_id": task.id,
+                "run_id": run_id,
+                "status": "pending",
+            }
+        )
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to start job for run {run_id}: {e}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+class JobStatusStreamView(LoginRequiredMixin, View):
+    """
+    SSE endpoint for real-time multi-stage job progress streaming.
+
+    Follows same pattern as custom_analysis SSE views.
+    Shows stage progress: "Stage 1/2: Loading data...", "Stage 2/2: Validating 5/10"
+
+    Results are already being saved to workflow state by the task.
+    This endpoint is for live viewing - user can close and return later.
+    """
+
+    def get(self, request, task_id):
+        from celery.result import AsyncResult
+
+        from commcare_connect.labs.analysis.sse_streaming import send_sse_event
+
+        def stream_progress():
+            task = AsyncResult(task_id)
+
+            while True:
+                task_meta = task._get_task_meta()
+                status = task_meta.get("status")
+
+                if status == "SUCCESS":
+                    yield send_sse_event(
+                        "Complete!",
+                        data={
+                            "status": "completed",
+                            "results": task.get(),
+                        },
+                    )
+                    break
+                elif status == "FAILURE":
+                    error_msg = str(task.result) if task.result else "Unknown error"
+                    yield send_sse_event("Failed", error=error_msg)
+                    break
+                elif status == "REVOKED":
+                    yield send_sse_event(
+                        "Cancelled",
+                        data={"status": "cancelled"},
+                    )
+                    break
+                else:
+                    meta = task_meta.get("result", {}) or {}
+
+                    # Build event data with stage info
+                    event_data = {
+                        "status": "running",
+                        "current_stage": meta.get("current_stage", 1),
+                        "total_stages": meta.get("total_stages", 1),
+                        "stage_name": meta.get("stage_name", "Processing"),
+                        "processed": meta.get("processed", 0),
+                        "total": meta.get("total", 0),
+                    }
+
+                    # Include item_result for real-time row updates
+                    if meta.get("item_result"):
+                        event_data["item_result"] = meta["item_result"]
+
+                    yield send_sse_event(
+                        meta.get("message", "Processing..."),
+                        data=event_data,
+                    )
+
+                import time
+
+                time.sleep(0.5)  # Poll every 500ms for responsive updates
+
+        response = StreamingHttpResponse(
+            stream_progress(),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
+
+
+@login_required
+@require_POST
+def cancel_job_api(request, task_id):
+    """
+    Cancel a running job.
+
+    Revokes the Celery task. Partial results are preserved in workflow state.
+    """
+    from datetime import datetime
+
+    from celery.result import AsyncResult
+
+    from config import celery_app
+
+    try:
+        data = json.loads(request.body) if request.body else {}
+        run_id = data.get("run_id")
+
+        task = AsyncResult(task_id)
+
+        # Check if task is still running
+        if task.state in ("PENDING", "STARTED", "PROGRESS", "RETRY"):
+            # Revoke the task (terminate if running)
+            celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
+
+            # Update job state in workflow run if run_id provided
+            if run_id:
+                access_token = request.session.get("labs_oauth", {}).get("access_token")
+                labs_context = getattr(request, "labs_context", {})
+                opportunity_id = labs_context.get("opportunity_id")
+
+                if access_token and opportunity_id:
+                    data_access = WorkflowDataAccess(request=request)
+                    run = data_access.get_run(int(run_id))
+                    if run:
+                        current_state = run.data.get("state", {})
+                        current_job = current_state.get("active_job", {})
+                        current_job.update(
+                            {
+                                "status": "cancelled",
+                                "cancelled_at": datetime.now().isoformat(),
+                                "cancelled_by": request.user.username if request.user else None,
+                            }
+                        )
+                        data_access.update_run_state(int(run_id), {"active_job": current_job})
+                    data_access.close()
+
+            logger.info(f"[CancelJob] Cancelled job {task_id}")
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "task_id": task_id,
+                    "status": "cancelled",
+                }
+            )
+        else:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": f"Task is not running (state: {task.state})",
+                },
+                status=400,
+            )
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to cancel job {task_id}: {e}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+class PipelineDataStreamView(LoginRequiredMixin, View):
+    """
+    SSE endpoint for streaming pipeline data loading progress.
+
+    Follows same pattern as custom_analysis KMCChildListStreamView.
+    Page loads instantly, SSE streams progress, data renders when complete.
+    """
+
+    def get(self, request, definition_id):
+        from collections.abc import Generator
+
+        from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
+        from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, send_sse_event
+
+        labs_context = getattr(request, "labs_context", {})
+        opportunity_id = labs_context.get("opportunity_id") or request.GET.get("opportunity_id")
+
+        def stream_data() -> Generator[str, None, None]:
+            """Stream pipeline data loading progress via SSE."""
+            mixin = AnalysisPipelineSSEMixin()
+
+            try:
+                if not opportunity_id:
+                    yield send_sse_event("Error", error="No opportunity selected")
+                    return
+
+                # Check for OAuth token
+                labs_oauth = request.session.get("labs_oauth", {})
+                if not labs_oauth.get("access_token"):
+                    yield send_sse_event("Error", error="No OAuth token found. Please log in to Connect.")
+                    return
+
+                # Get workflow definition to find pipeline sources
+                data_access = WorkflowDataAccess(request=request)
+                definition = data_access.get_definition(definition_id)
+
+                if not definition:
+                    yield send_sse_event("Error", error=f"Workflow {definition_id} not found")
+                    return
+
+                if not definition.pipeline_sources:
+                    yield send_sse_event("No pipelines", data={"pipelines": {}})
+                    return
+
+                yield send_sse_event("Loading pipeline configurations...")
+
+                # Execute each pipeline source with streaming
+                pipeline_data = {}
+
+                for source in definition.pipeline_sources:
+                    pipeline_id = source.get("pipeline_id")
+                    alias = source.get("alias", f"pipeline_{pipeline_id}")
+
+                    if not pipeline_id:
+                        continue
+
+                    # Get pipeline definition
+                    pipeline_access = PipelineDataAccess(
+                        request=request,
+                        access_token=labs_oauth.get("access_token"),
+                        opportunity_id=opportunity_id,
+                    )
+
+                    pipeline_def = pipeline_access.get_definition(pipeline_id)
+                    if not pipeline_def:
+                        yield send_sse_event(f"Pipeline {pipeline_id} not found")
+                        continue
+
+                    yield send_sse_event(f"Executing pipeline: {pipeline_def.name}...")
+
+                    # Convert schema to config
+                    config = pipeline_access._schema_to_config(pipeline_def.schema, pipeline_id)
+
+                    # Execute with streaming using AnalysisPipeline
+                    pipeline = AnalysisPipeline(request)
+                    pipeline_stream = pipeline.stream_analysis(config, opportunity_id=opportunity_id)
+
+                    logger.info(f"[PipelineStream] Starting stream for pipeline {pipeline_id}, opp {opportunity_id}")
+
+                    # Stream all pipeline events as SSE (using mixin pattern)
+                    yield from mixin.stream_pipeline_events(pipeline_stream)
+
+                    # Result is now available
+                    result = mixin._pipeline_result
+                    from_cache = mixin._pipeline_from_cache
+
+                    if result:
+                        logger.info(
+                            f"[PipelineStream] Got {len(result.rows) if hasattr(result, 'rows') else 0} rows"
+                            f" (cache: {from_cache})"
+                        )
+
+                        yield send_sse_event(f"Processing {alias} data...")
+
+                        # Convert result to serializable format
+                        rows = []
+                        for row in result.rows:
+                            # Handle visit_date - may be datetime or string depending on backend
+                            visit_date = row.visit_date
+                            if visit_date and hasattr(visit_date, "isoformat"):
+                                visit_date = visit_date.isoformat()
+                            # Already a string or None - use as-is
+
+                            row_dict = {
+                                "entity_id": row.entity_id,
+                                "entity_name": row.entity_name,
+                                "username": row.username,
+                                "visit_date": visit_date,
+                            }
+                            # Add computed fields
+                            if row.computed:
+                                row_dict.update(row.computed)
+                            rows.append(row_dict)
+
+                        pipeline_data[alias] = {
+                            "rows": rows,
+                            "metadata": {
+                                "pipeline_id": pipeline_id,
+                                "pipeline_name": pipeline_def.name,
+                                "row_count": len(rows),
+                                "from_cache": from_cache,
+                            },
+                        }
+
+                    pipeline_access.close()
+
+                # Send final complete event with all data
+                yield send_sse_event(
+                    f"Loaded {sum(len(p.get('rows', [])) for p in pipeline_data.values())} records",
+                    data={"pipelines": pipeline_data},
+                )
+
+            except Exception as e:
+                logger.error(f"[PipelineStream] Error: {e}", exc_info=True)
+                yield send_sse_event("Error", error=str(e))
+
+        response = StreamingHttpResponse(
+            stream_data(),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
+
+
+@login_required
+@require_POST
+def delete_run_api(request, run_id):
+    """
+    Delete a workflow run and all its results.
+
+    Cancels any running job first, then deletes the run record.
+    """
+    from config import celery_app
+
+    try:
+        access_token = request.session.get("labs_oauth", {}).get("access_token")
+        if not access_token:
+            return JsonResponse({"error": "Not authenticated"}, status=401)
+
+        data_access = WorkflowDataAccess(request=request)
+        run = data_access.get_run(run_id)
+
+        if not run:
+            data_access.close()
+            return JsonResponse({"error": "Run not found"}, status=404)
+
+        # Cancel any running job first
+        active_job = run.data.get("state", {}).get("active_job", {})
+        if active_job.get("status") == "running" and active_job.get("job_id"):
+            try:
+                celery_app.control.revoke(active_job["job_id"], terminate=True)
+                logger.info(f"[DeleteRun] Cancelled job {active_job['job_id']} before deleting run {run_id}")
+            except Exception as e:
+                logger.warning(f"Failed to revoke task {active_job['job_id']}: {e}")
+
+        # Delete the run record
+        data_access.delete_run(run_id)
+        data_access.close()
+
+        logger.info(f"[DeleteRun] Deleted run {run_id}")
+
+        return JsonResponse(
+            {
+                "success": True,
+                "run_id": run_id,
+                "deleted": True,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to delete run {run_id}: {e}", exc_info=True)
         return JsonResponse({"error": str(e)}, status=500)

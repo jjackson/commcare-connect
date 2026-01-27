@@ -477,3 +477,11 @@ GA_API_SECRET = env("GA_API_SECRET", default="")
 # ------------------------------------------------------------------------------
 OCS_BASE_URL = env("OCS_BASE_URL", default="")
 OCS_API_KEY = env("OCS_API_KEY", default="")
+
+# Scale Image Validation API Configuration (KMC weight verification)
+# ------------------------------------------------------------------------------
+SCALE_VALIDATION_API_URL = env(
+    "SCALE_VALIDATION_API_URL",
+    default="https://image-pipeline-scale-gw-4pc8jsfa.uc.gateway.dev",
+)
+SCALE_VALIDATION_API_KEY = env("SCALE_VALIDATION_API_KEY", default="")

@@ -256,6 +256,7 @@ class LabsRecordAPIClient:
         username: str | None = None,
         program_id: int | None = None,
         labs_record_id: int | None = None,
+        public: bool | None = None,
     ) -> LocalLabsRecord:
         """Update an existing record in production (upsert).
 
@@ -267,6 +268,7 @@ class LabsRecordAPIClient:
             username: Updated username
             program_id: Updated program ID
             labs_record_id: Updated parent record ID
+            public: Whether record is publicly queryable without scope (for sharing)
 
         Returns:
             Updated LocalLabsRecord instance
@@ -314,6 +316,10 @@ class LabsRecordAPIClient:
             payload["labs_record_id"] = labs_record_id
         elif current.labs_record_id:
             payload["labs_record_id"] = current.labs_record_id
+
+        # Set public flag for sharing/unsharing (ACL control)
+        if public is not None:
+            payload["public"] = public
 
         try:
             url = f"{self.base_url}/export/labs_record/"

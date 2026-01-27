@@ -374,6 +374,22 @@ export interface ActionHandlers {
   createTaskWithOCS(
     params: CreateTaskWithOCSParams,
   ): Promise<TaskWithOCSResult>;
+
+  // Job Management Actions
+  startJob(
+    runId: number,
+    jobConfig: Record<string, unknown>,
+  ): Promise<StartJobResult>;
+  cancelJob(taskId: string, runId?: number): Promise<CancelJobResult>;
+  deleteRun(runId: number): Promise<DeleteRunResult>;
+  streamJobProgress(
+    taskId: string,
+    onProgress: (data: JobProgressData) => void,
+    onItemResult: (item: Record<string, unknown>) => void,
+    onComplete: (results: Record<string, unknown>) => void,
+    onError: (error: string) => void,
+    onCancelled: () => void,
+  ): () => void; // Returns cleanup function
 }
 
 export interface CreateTaskParams {
@@ -428,6 +444,88 @@ export interface CreateTaskWithOCSParams extends CreateTaskParams {
 
 export interface TaskWithOCSResult extends TaskResult {
   ocs?: OCSInitiateResult;
+}
+
+// =============================================================================
+// Job Management Types
+// =============================================================================
+
+/**
+ * Result from starting a job.
+ */
+export interface StartJobResult {
+  success: boolean;
+  task_id?: string;
+  run_id?: number;
+  error?: string;
+}
+
+/**
+ * Result from cancelling a job.
+ */
+export interface CancelJobResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Result from deleting a run.
+ */
+export interface DeleteRunResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Progress data from job execution.
+ */
+export interface JobProgressData {
+  status: string;
+  current_stage?: number;
+  total_stages?: number;
+  stage_name?: string;
+  processed?: number;
+  total?: number;
+  message?: string;
+}
+
+/**
+ * Configuration for starting a job.
+ */
+export interface JobConfig {
+  job_type: string;
+  params?: Record<string, unknown>;
+  pipeline_source?: {
+    pipeline_id?: number;
+    alias?: string;
+  };
+  records?: Record<string, unknown>[];
+}
+
+/**
+ * Active job state stored in workflow instance state.
+ */
+export interface ActiveJobState {
+  job_id?: string;
+  job_type?: string;
+  status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  started_at?: string;
+  completed_at?: string;
+  failed_at?: string;
+  cancelled_at?: string;
+  cancelled_by?: string;
+  current_stage?: number;
+  total_stages?: number;
+  stage_name?: string;
+  processed?: number;
+  total?: number;
+  error?: string;
+  pipeline_loaded?: boolean;
+  pipeline_record_count?: number;
+  summary?: {
+    successful?: number;
+    failed?: number;
+  };
 }
 
 // =============================================================================

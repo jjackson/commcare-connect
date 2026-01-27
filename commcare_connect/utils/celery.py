@@ -9,8 +9,18 @@ CELERY_TASK_IN_PROGRESS = "PROGRESS"
 CELERY_TASK_PENDING = "PENDING"
 
 
-def set_task_progress(task, message, is_complete=False):
-    task.update_state(state=CELERY_TASK_SUCCESS if is_complete else CELERY_TASK_IN_PROGRESS, meta={"message": message})
+def set_task_progress(task, message, is_complete=False, **extra_meta):
+    """
+    Update task progress state.
+
+    Args:
+        task: The Celery task instance
+        message: Progress message
+        is_complete: Whether task is complete
+        **extra_meta: Additional metadata (e.g., current_stage, total_stages)
+    """
+    meta = {"message": message, **extra_meta}
+    task.update_state(state=CELERY_TASK_SUCCESS if is_complete else CELERY_TASK_IN_PROGRESS, meta=meta)
 
 
 def get_task_progress_message(task):

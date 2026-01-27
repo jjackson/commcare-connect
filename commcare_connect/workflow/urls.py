@@ -40,6 +40,11 @@ urlpatterns = [
     # API endpoints - Pipeline data
     path("api/<int:definition_id>/pipeline-data/", views.get_pipeline_data_api, name="api_pipeline_data"),
     path(
+        "api/<int:definition_id>/pipeline-data/stream/",
+        views.PipelineDataStreamView.as_view(),
+        name="api_pipeline_data_stream",
+    ),
+    path(
         "api/<int:definition_id>/pipeline-sources/add/", views.add_pipeline_source_api, name="api_add_pipeline_source"
     ),
     path(
@@ -63,13 +68,24 @@ urlpatterns = [
         views.clear_pipeline_chat_history_api,
         name="api_pipeline_chat_clear",
     ),
-    # API endpoints - Sharing
+    # API endpoints - Workflow Sharing
     path("api/<int:definition_id>/share/", views.share_workflow_api, name="api_share"),
     path("api/<int:definition_id>/unshare/", views.unshare_workflow_api, name="api_unshare"),
+    path("api/<int:definition_id>/copy/", views.copy_workflow_api, name="api_copy"),
     path("api/shared/", views.list_shared_workflows_api, name="api_list_shared"),
+    # API endpoints - Pipeline Sharing
+    path("api/pipeline/<int:definition_id>/share/", views.share_pipeline_api, name="api_pipeline_share"),
+    path("api/pipeline/<int:definition_id>/unshare/", views.unshare_pipeline_api, name="api_pipeline_unshare"),
+    path("api/pipeline/<int:definition_id>/copy/", views.copy_pipeline_api, name="api_pipeline_copy"),
+    path("api/pipeline/shared/", views.list_shared_pipelines_api, name="api_pipeline_list_shared"),
     # API endpoints - Workflow management
     path("api/<int:definition_id>/delete/", views.delete_workflow_api, name="api_delete"),
     path("api/<int:definition_id>/rename/", views.rename_workflow_api, name="api_rename"),
     # API endpoints - Pipeline management
     path("api/pipeline/<int:definition_id>/delete/", views.delete_pipeline_api, name="api_pipeline_delete"),
+    # API endpoints - Workflow Jobs
+    path("api/run/<int:run_id>/job/start/", views.start_job_api, name="api_start_job"),
+    path("api/job/<str:task_id>/status/", views.JobStatusStreamView.as_view(), name="api_job_status"),
+    path("api/job/<str:task_id>/cancel/", views.cancel_job_api, name="api_cancel_job"),
+    path("api/run/<int:run_id>/delete/", views.delete_run_api, name="api_delete_run"),
 ]

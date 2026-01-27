@@ -170,6 +170,154 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
 
       return taskResult;
     },
+
+    // Job Management Actions
+    startJob: async (
+      runId: number,
+      jobConfig: Record<string, unknown>,
+    ): Promise<{ success: boolean; task_id?: string; error?: string }> => {
+      try {
+        const response = await fetch(
+          `/labs/workflow/api/run/${runId}/job/start/`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({ job_config: jobConfig }),
+          },
+        );
+
+        return await response.json();
+      } catch (e) {
+        return {
+          success: false,
+          error: e instanceof Error ? e.message : 'Failed to start job',
+        };
+      }
+    },
+
+    cancelJob: async (
+      taskId: string,
+      runId?: number,
+    ): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const response = await fetch(
+          `/labs/workflow/api/job/${taskId}/cancel/`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify({ run_id: runId }),
+          },
+        );
+
+        return await response.json();
+      } catch (e) {
+        return {
+          success: false,
+          error: e instanceof Error ? e.message : 'Failed to cancel job',
+        };
+      }
+    },
+
+    deleteRun: async (
+      runId: number,
+    ): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const response = await fetch(
+          `/labs/workflow/api/run/${runId}/delete/`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken,
+            },
+          },
+        );
+
+        return await response.json();
+      } catch (e) {
+        return {
+          success: false,
+          error: e instanceof Error ? e.message : 'Failed to delete run',
+        };
+      }
+    },
+
+    streamJobProgress: (
+      taskId: string,
+      onProgress: (data: {
+        status: string;
+        current_stage?: number;
+        total_stages?: number;
+        stage_name?: string;
+        processed?: number;
+        total?: number;
+        message?: string;
+      }) => void,
+      onItemResult: (item: Record<string, unknown>) => void,
+      onComplete: (results: Record<string, unknown>) => void,
+      onError: (error: string) => void,
+      onCancelled: () => void,
+    ): (() => void) => {
+      const eventSource = new EventSource(
+        `/labs/workflow/api/job/${taskId}/status/`,
+      );
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.error) {
+            onError(data.error);
+            eventSource.close();
+            return;
+          }
+
+          if (data.data?.status === 'completed') {
+            onComplete(data.data.results || {});
+            eventSource.close();
+            return;
+          }
+
+          if (data.data?.status === 'cancelled') {
+            onCancelled();
+            eventSource.close();
+            return;
+          }
+
+          // Stream item result for real-time row updates
+          if (data.data?.item_result) {
+            onItemResult(data.data.item_result);
+          }
+
+          // Progress update
+          onProgress({
+            status: data.data?.status || 'running',
+            current_stage: data.data?.current_stage,
+            total_stages: data.data?.total_stages,
+            stage_name: data.data?.stage_name,
+            processed: data.data?.processed,
+            total: data.data?.total,
+            message: data.message,
+          });
+        } catch {
+          console.error('Failed to parse SSE event:', event.data);
+        }
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        onError('Connection lost');
+      };
+
+      // Return cleanup function
+      return () => eventSource.close();
+    },
   };
 }
 
@@ -895,6 +1043,12 @@ document.addEventListener('DOMContentLoaded', () => {
         dataScript.textContent || '{}',
       ) as ExtendedWorkflowData;
       const csrfToken = container.dataset.csrfToken || '';
+
+      // Expose API endpoints globally for render code to use
+      // This allows workflow render code to access SSE streaming URLs
+      (
+        window as unknown as { WORKFLOW_API_ENDPOINTS: Record<string, string> }
+      ).WORKFLOW_API_ENDPOINTS = workflowData.apiEndpoints || {};
 
       console.log('Workflow data loaded:', workflowData);
 
