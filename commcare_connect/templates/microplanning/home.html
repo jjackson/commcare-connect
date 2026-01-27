@@ -19,7 +19,9 @@
 <div x-ref="mapContainer" class="w-full h-screen grid grid-cols-12 gap-2" x-data="mapController()">
     <div id="map-wrapper" class="relative h-full shadow-md" :class="panelOpen ? 'col-span-9' : 'col-span-12'">
         <div id="map" class="w-full h-full"></div>
-        <button id="toggle-sidebar"
+        <button
+            id="toggle-sidebar"
+            title="Toggle Settings Panel"
             class="absolute top-4 right-4 z-50 bg-white p-2 rounded shadow-md hover:cursor-pointer"
             @click="togglePanel()">
             <i x-show="panelOpen" class="fa fa-chevron-right"></i>
