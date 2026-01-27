@@ -1,16 +1,21 @@
 {% extends 'base.html' %}
+{% load i18n %}
 
 {% block css %}
 {{ block.super }}
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.css" rel="stylesheet">
+<link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.5.1/mapbox-gl-draw.css"
+    type="text/css">
 {% endblock %}
 
 {% block javascript %}
 {{ block.super }}
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.js"></script>
+<script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.5.1/mapbox-gl-draw.js"></script>
 {% endblock javascript %}
 
 {% block content %}
+<h2 class="mb-4 text-brand-deep-purple font-medium">{% translate "Select Opportunity Area" %}</h2>
 <div x-ref="mapContainer" class="w-full h-screen grid grid-cols-12 gap-2" x-data="mapController()">
     <div id="map-wrapper" class="relative h-full shadow-md" :class="panelOpen ? 'col-span-9' : 'col-span-12'">
         <div id="map" class="w-full h-full"></div>
@@ -54,11 +59,34 @@
                 });
 
                 this.map.addControl(new mapboxgl.NavigationControl(), 'top-left');
-                this.map.scrollZoom.disable();
+
+                const draw = new MapboxDraw({
+                    displayControlsDefault: false,
+                    controls: {
+                        polygon: true,
+                        trash: true
+                    }
+                });
+                this.map.addControl(draw, 'top-left');
 
                 this.map.on('style.load', () => {
                     this.map.setFog({});
                 });
+                this.map.on('draw.create', this.onMapDrawCreate.bind(this));
+                this.map.on('draw.delete', this.onMapDrawDelete.bind(this));
+                this.map.on('draw.update', this.onMapDrawUpdate.bind(this));
+            },
+
+            onMapDrawCreate(event) {
+                // Todo
+            },
+
+            onMapDrawUpdate(event) {
+                // Todo
+            },
+
+            onMapDrawDelete(event) {
+                // Todo
             },
 
             setMapHeight() {
