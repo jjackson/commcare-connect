@@ -2,7 +2,10 @@ FROM python:3.11-slim-bookworm as build-python
 RUN apt-get update \
   # dependencies for building Python packages
   # libgdal-dev needed for GeoDjango/GDAL bindings
-  && apt-get install -y build-essential libpq-dev libgdal-dev
+  # libproj-dev needed for pyproj (geopandas dependency)
+  # libgeos-dev needed for shapely
+  # cargo/rustc needed for temporalio (pydantic-ai dependency)
+  && apt-get install -y build-essential libpq-dev libgdal-dev libproj-dev libgeos-dev cargo rustc
 COPY ./requirements /requirements
 # Build wheels for each requirement file separately to avoid conflicts
 RUN pip wheel --no-cache-dir --wheel-dir /wheels -r /requirements/base.txt
