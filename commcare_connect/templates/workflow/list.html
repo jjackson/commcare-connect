@@ -12,12 +12,43 @@
             <h1 class="text-3xl font-bold text-gray-900">Workflows</h1>
             <p class="text-gray-600 mt-1">Dynamic workflows for managing workers and tasks</p>
         </div>
-        <div class="flex items-center gap-4" x-data="{ showTemplateModal: false, creating: false, selectedTemplate: null }">
+        <div class="flex items-center gap-4" x-data="{
+            showTemplateModal: false,
+            creating: false,
+            selectedTemplate: null,
+            templates: [],
+            loadingTemplates: false,
+            colorClasses: {
+                green: { bg: 'bg-green-100', text: 'text-green-600', hover: 'hover:border-green-400 hover:bg-green-50' },
+                blue: { bg: 'bg-blue-100', text: 'text-blue-600', hover: 'hover:border-blue-400 hover:bg-blue-50' },
+                purple: { bg: 'bg-purple-100', text: 'text-purple-600', hover: 'hover:border-purple-400 hover:bg-purple-50' },
+                orange: { bg: 'bg-orange-100', text: 'text-orange-600', hover: 'hover:border-orange-400 hover:bg-orange-50' },
+                red: { bg: 'bg-red-100', text: 'text-red-600', hover: 'hover:border-red-400 hover:bg-red-50' },
+                gray: { bg: 'bg-gray-100', text: 'text-gray-600', hover: 'hover:border-gray-400 hover:bg-gray-50' }
+            },
+            async loadTemplates() {
+                if (this.templates.length > 0) return;
+                this.loadingTemplates = true;
+                try {
+                    const response = await fetch('{% url 'labs:workflow:api_templates' %}');
+                    const data = await response.json();
+                    this.templates = data.templates || [];
+                } catch (e) {
+                    console.error('Failed to load templates:', e);
+                } finally {
+                    this.loadingTemplates = false;
+                }
+            },
+            getColorClass(color, type) {
+                return (this.colorClasses[color] || this.colorClasses.gray)[type];
+            }
+        }"
+        @click="if ($event.target.closest('[data-open-modal]')) { showTemplateModal = true; loadTemplates(); }">
             {% if has_context %}
             <div class="text-sm text-gray-500">
                 <span class="font-medium">Opportunity:</span> {{ opportunity_name|default:"Selected" }}
             </div>
-            <button @click="showTemplateModal = true"
+            <button data-open-modal
                     type="button"
                     class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                 <i class="fa-solid fa-plus mr-2"></i>
@@ -46,95 +77,47 @@
                         </div>
 
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">Choose a Template</h3>
-                        <p class="text-sm text-gray-500 mb-6" x-show="!creating">Select a workflow template to get started.</p>
+                        <p class="text-sm text-gray-500 mb-6" x-show="!creating && !loadingTemplates">Select a workflow template to get started.</p>
                         <p class="text-sm text-blue-600 mb-6" x-show="creating" x-cloak>
                             <i class="fa-solid fa-spinner fa-spin mr-2"></i>Creating your workflow, please wait...
                         </p>
+                        <p class="text-sm text-gray-500 mb-6" x-show="loadingTemplates && !creating" x-cloak>
+                            <i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading templates...
+                        </p>
 
                         <div class="space-y-3">
-                            <!-- Performance Review Template -->
-                            <form method="post" action="{% url 'labs:workflow:create_from_template' %}"
-                                  @submit="if(creating) { $event.preventDefault(); return; } creating = true; selectedTemplate = 'performance_review';">
-                                {% csrf_token %}
-                                <input type="hidden" name="template" value="performance_review">
-                                <button type="submit"
-                                        :disabled="creating"
-                                        :class="creating ? (selectedTemplate === 'performance_review' ? 'border-blue-400 bg-blue-50' : 'opacity-50 cursor-not-allowed') : 'hover:border-blue-400 hover:bg-blue-50'"
-                                        class="w-full text-left p-4 border border-gray-200 rounded-lg transition-colors group">
-                                    <div class="flex items-start gap-4">
-                                        <div class="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                            <i x-show="!(creating && selectedTemplate === 'performance_review')" class="fa-solid fa-clipboard-check text-green-600"></i>
-                                            <i x-show="creating && selectedTemplate === 'performance_review'" x-cloak class="fa-solid fa-spinner fa-spin text-blue-600"></i>
+                            <!-- Dynamic Template List -->
+                            <template x-for="t in templates" :key="t.key">
+                                <form method="post" action="{% url 'labs:workflow:create_from_template' %}"
+                                      @submit="if(creating) { $event.preventDefault(); return; } creating = true; selectedTemplate = t.key;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="template" :value="t.key">
+                                    <button type="submit"
+                                            :disabled="creating"
+                                            :class="creating ? (selectedTemplate === t.key ? 'border-blue-400 bg-blue-50' : 'opacity-50 cursor-not-allowed') : getColorClass(t.color, 'hover')"
+                                            class="w-full text-left p-4 border border-gray-200 rounded-lg transition-colors group">
+                                        <div class="flex items-start gap-4">
+                                            <div class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center"
+                                                 :class="getColorClass(t.color, 'bg')">
+                                                <i x-show="!(creating && selectedTemplate === t.key)"
+                                                   class="fa-solid"
+                                                   :class="[t.icon, getColorClass(t.color, 'text')]"></i>
+                                                <i x-show="creating && selectedTemplate === t.key" x-cloak
+                                                   class="fa-solid fa-spinner fa-spin"
+                                                   :class="getColorClass(t.color, 'text')"></i>
+                                            </div>
+                                            <div class="flex-1">
+                                                <h4 class="font-medium text-gray-900 group-hover:text-blue-700" x-text="t.name"></h4>
+                                                <p class="text-sm text-gray-500 mt-1" x-text="t.description"></p>
+                                            </div>
+                                            <div class="flex-shrink-0 text-gray-400 group-hover:text-blue-600">
+                                                <i x-show="!(creating && selectedTemplate === t.key)" class="fa-solid fa-arrow-right"></i>
+                                                <i x-show="creating && selectedTemplate === t.key" x-cloak class="fa-solid fa-circle-notch fa-spin text-blue-600"></i>
+                                            </div>
                                         </div>
-                                        <div class="flex-1">
-                                            <h4 class="font-medium text-gray-900" :class="!creating && 'group-hover:text-blue-700'">Weekly Performance Review</h4>
-                                            <p class="text-sm text-gray-500 mt-1">
-                                                Review worker performance, mark as confirmed, flag for audit, or create tasks.
-                                            </p>
-                                        </div>
-                                        <div class="flex-shrink-0 text-gray-400" :class="!creating && 'group-hover:text-blue-600'">
-                                            <i x-show="!(creating && selectedTemplate === 'performance_review')" class="fa-solid fa-arrow-right"></i>
-                                            <i x-show="creating && selectedTemplate === 'performance_review'" x-cloak class="fa-solid fa-circle-notch fa-spin text-blue-600"></i>
-                                        </div>
-                                    </div>
-                                </button>
-                            </form>
-
-                            <!-- OCS Bulk Outreach Template -->
-                            <form method="post" action="{% url 'labs:workflow:create_from_template' %}"
-                                  @submit="if(creating) { $event.preventDefault(); return; } creating = true; selectedTemplate = 'ocs_outreach';">
-                                {% csrf_token %}
-                                <input type="hidden" name="template" value="ocs_outreach">
-                                <button type="submit"
-                                        :disabled="creating"
-                                        :class="creating ? (selectedTemplate === 'ocs_outreach' ? 'border-blue-400 bg-blue-50' : 'opacity-50 cursor-not-allowed') : 'hover:border-blue-400 hover:bg-blue-50'"
-                                        class="w-full text-left p-4 border border-gray-200 rounded-lg transition-colors group">
-                                    <div class="flex items-start gap-4">
-                                        <div class="flex-shrink-0 w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                                            <i x-show="!(creating && selectedTemplate === 'ocs_outreach')" class="fa-solid fa-robot text-purple-600"></i>
-                                            <i x-show="creating && selectedTemplate === 'ocs_outreach'" x-cloak class="fa-solid fa-spinner fa-spin text-blue-600"></i>
-                                        </div>
-                                        <div class="flex-1">
-                                            <h4 class="font-medium text-gray-900" :class="!creating && 'group-hover:text-blue-700'">OCS Bulk Outreach</h4>
-                                            <p class="text-sm text-gray-500 mt-1">
-                                                Create tasks and initiate AI chatbot conversations for multiple workers at once.
-                                            </p>
-                                        </div>
-                                        <div class="flex-shrink-0 text-gray-400" :class="!creating && 'group-hover:text-blue-600'">
-                                            <i x-show="!(creating && selectedTemplate === 'ocs_outreach')" class="fa-solid fa-arrow-right"></i>
-                                            <i x-show="creating && selectedTemplate === 'ocs_outreach'" x-cloak class="fa-solid fa-circle-notch fa-spin text-blue-600"></i>
-                                        </div>
-                                    </div>
-                                </button>
-                            </form>
-
-                            <!-- KMC Scale Validation Template -->
-                            <form method="post" action="{% url 'labs:workflow:create_from_template' %}"
-                                  @submit="if(creating) { $event.preventDefault(); return; } creating = true; selectedTemplate = 'kmc_scale_validation';">
-                                {% csrf_token %}
-                                <input type="hidden" name="template" value="kmc_scale_validation">
-                                <button type="submit"
-                                        :disabled="creating"
-                                        :class="creating ? (selectedTemplate === 'kmc_scale_validation' ? 'border-blue-400 bg-blue-50' : 'opacity-50 cursor-not-allowed') : 'hover:border-blue-400 hover:bg-blue-50'"
-                                        class="w-full text-left p-4 border border-gray-200 rounded-lg transition-colors group">
-                                    <div class="flex items-start gap-4">
-                                        <div class="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                            <i x-show="!(creating && selectedTemplate === 'kmc_scale_validation')" class="fa-solid fa-scale-balanced text-blue-600"></i>
-                                            <i x-show="creating && selectedTemplate === 'kmc_scale_validation'" x-cloak class="fa-solid fa-spinner fa-spin text-blue-600"></i>
-                                        </div>
-                                        <div class="flex-1">
-                                            <h4 class="font-medium text-gray-900" :class="!creating && 'group-hover:text-blue-700'">KMC Scale Validation</h4>
-                                            <p class="text-sm text-gray-500 mt-1">
-                                                Validate KMC weight readings against scale images using ML vision analysis.
-                                            </p>
-                                        </div>
-                                        <div class="flex-shrink-0 text-gray-400" :class="!creating && 'group-hover:text-blue-600'">
-                                            <i x-show="!(creating && selectedTemplate === 'kmc_scale_validation')" class="fa-solid fa-arrow-right"></i>
-                                            <i x-show="creating && selectedTemplate === 'kmc_scale_validation'" x-cloak class="fa-solid fa-circle-notch fa-spin text-blue-600"></i>
-                                        </div>
-                                    </div>
-                                </button>
-                            </form>
+                                    </button>
+                                </form>
+                            </template>
                         </div>
 
                         <div class="mt-6 pt-4 border-t border-gray-200">

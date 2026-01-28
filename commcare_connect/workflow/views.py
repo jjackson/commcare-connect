@@ -18,8 +18,17 @@ from django.views.generic import TemplateView
 from commcare_connect.workflow.data_access import PipelineDataAccess, WorkflowDataAccess
 from commcare_connect.workflow.templates import TEMPLATES
 from commcare_connect.workflow.templates import create_workflow_from_template as create_from_template
+from commcare_connect.workflow.templates import list_templates
 
 logger = logging.getLogger(__name__)
+
+
+class WorkflowTemplateListAPIView(LoginRequiredMixin, View):
+    """API endpoint to list available workflow templates."""
+
+    def get(self, request):
+        """Return list of workflow templates with metadata for UI rendering."""
+        return JsonResponse({"templates": list_templates()})
 
 
 class WorkflowListView(LoginRequiredMixin, TemplateView):

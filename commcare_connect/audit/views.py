@@ -901,6 +901,346 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 data_access.close()
 
 
+class ExperimentAuditCreateAsyncAPIView(LoginRequiredMixin, View):
+    """API endpoint for async audit creation (returns immediately with task_id)."""
+
+    def post(self, request):
+        data_access = None
+        try:
+            data = json.loads(request.body)
+            opportunities = data.get("opportunities", [])
+            criteria = data.get("criteria", {})
+            visit_ids = data.get("visit_ids", [])
+            flw_visit_ids = data.get("flw_visit_ids", {})
+            template_overrides = data.get("template_overrides", {})
+            workflow_run_id = data.get("workflow_run_id")
+            ai_agent_id = data.get("ai_agent_id")  # Optional AI agent to run after creation
+
+            if not opportunities:
+                return JsonResponse({"error": "No opportunities provided"}, status=400)
+
+            # Get OAuth token from session
+            labs_oauth = request.session.get("labs_oauth", {})
+            access_token = labs_oauth.get("access_token")
+            if not access_token:
+                return JsonResponse({"error": "Not authenticated"}, status=401)
+
+            # Get username
+            username = request.user.username if request.user else "anonymous"
+
+            # Build opportunity dicts with id and name
+            opportunity_dicts = []
+            for opp_id in opportunities:
+                if isinstance(opp_id, dict):
+                    opportunity_dicts.append(opp_id)
+                else:
+                    opportunity_dicts.append({"id": opp_id, "name": ""})
+
+            # Generate task ID upfront so we can create the job record first
+            # This fixes a race condition where eager mode runs the task before the job exists
+            import uuid
+
+            task_id = str(uuid.uuid4())
+
+            # Create a job record BEFORE queueing the task
+            # This ensures the task can find and update the job record
+            opp_id = opportunity_dicts[0]["id"] if opportunity_dicts else None
+            data_access = AuditDataAccess(opportunity_id=opp_id, request=request)
+            title = criteria.get("title", "") or "Audit Creation"
+            job = data_access.create_audit_creation_job(
+                username=username,
+                task_id=task_id,
+                title=title,
+                criteria=criteria,
+                opportunities=opportunity_dicts,
+            )
+
+            logger.info(f"[AuditCreateAsync] Created job {job['id']} with task_id {task_id}")
+
+            # Now queue the Celery task with the pre-generated task ID
+            from commcare_connect.audit.tasks import run_audit_creation
+
+            run_audit_creation.apply_async(
+                kwargs={
+                    "access_token": access_token,
+                    "username": username,
+                    "opportunities": opportunity_dicts,
+                    "criteria": criteria,
+                    "visit_ids": visit_ids or None,
+                    "flw_visit_ids": flw_visit_ids or None,
+                    "template_overrides": template_overrides or None,
+                    "workflow_run_id": workflow_run_id,
+                    "ai_agent_id": ai_agent_id,  # Optional AI agent to run
+                },
+                task_id=task_id,
+            )
+
+            logger.info(f"[AuditCreateAsync] Queued task {task_id} for user {username}")
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "task_id": task_id,
+                    "job_id": job["id"],
+                    "message": "Audit creation started",
+                }
+            )
+
+        except Exception as e:
+            import traceback
+
+            print(f"[ERROR] {traceback.format_exc()}")
+            return JsonResponse({"error": str(e)}, status=500)
+        finally:
+            if data_access:
+                data_access.close()
+
+
+class AuditCreationJobsAPIView(LoginRequiredMixin, View):
+    """API endpoint to list audit creation jobs."""
+
+    def get(self, request):
+        data_access = None
+        try:
+            data_access = AuditDataAccess(request=request)
+            jobs = data_access.get_audit_creation_jobs()
+
+            # Filter to only pending/running jobs or recently completed (last hour)
+            from datetime import datetime, timedelta
+
+            one_hour_ago = (datetime.now() - timedelta(hours=1)).isoformat()
+            filtered_jobs = []
+            for job in jobs:
+                status = job.get("status", "")
+                if status in ("pending", "running"):
+                    filtered_jobs.append(job)
+                elif status in ("completed", "failed"):
+                    # Include if created within last hour
+                    created_at = job.get("created_at", "")
+                    if created_at > one_hour_ago:
+                        filtered_jobs.append(job)
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "jobs": filtered_jobs,
+                }
+            )
+
+        except Exception as e:
+            import traceback
+
+            print(f"[ERROR] {traceback.format_exc()}")
+            return JsonResponse({"error": str(e), "jobs": []}, status=500)
+        finally:
+            if data_access:
+                data_access.close()
+
+
+class AuditCreationJobCancelAPIView(LoginRequiredMixin, View):
+    """API endpoint to cancel an async audit creation job."""
+
+    def post(self, request, job_id):
+        data_access = None
+        try:
+            data_access = AuditDataAccess(request=request)
+
+            # Get the job record
+            from commcare_connect.labs.models import LocalLabsRecord
+
+            records = data_access.labs_api.get_records(
+                experiment="audit",
+                type="AuditCreationJob",
+                model_class=LocalLabsRecord,
+            )
+
+            job_record = None
+            for record in records:
+                if record.id == job_id:
+                    job_record = record
+                    break
+
+            if not job_record:
+                return JsonResponse({"error": "Job not found"}, status=404)
+
+            task_id = job_record.data.get("task_id")
+            current_status = job_record.data.get("status")
+
+            # Only allow cancelling pending/running jobs
+            if current_status not in ("pending", "running"):
+                return JsonResponse({"error": f"Cannot cancel job with status '{current_status}'"}, status=400)
+
+            # Revoke the Celery task
+            if task_id:
+                from config.celery_app import app as celery_app
+
+                celery_app.control.revoke(task_id, terminate=True)
+                logger.info(f"[AuditJobCancel] Revoked Celery task {task_id}")
+
+            # Delete the job record (no need to keep cancelled jobs)
+            deleted = data_access.delete_audit_creation_job(job_id)
+
+            if deleted:
+                logger.info(f"[AuditJobCancel] Cancelled and deleted job {job_id}")
+            else:
+                logger.warning(f"[AuditJobCancel] Cancelled job {job_id} but failed to delete")
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": "Job cancelled",
+                    "deleted": deleted,
+                }
+            )
+
+        except Exception as e:
+            import traceback
+
+            print(f"[ERROR] {traceback.format_exc()}")
+            return JsonResponse({"error": str(e)}, status=500)
+        finally:
+            if data_access:
+                data_access.close()
+
+
+class AuditCreationProgressStreamView(LoginRequiredMixin, View):
+    """SSE endpoint for streaming audit creation progress."""
+
+    def get(self, request, task_id):
+        import time
+
+        from celery.result import AsyncResult
+
+        def event_stream():
+            """Generate SSE events for task progress."""
+            result = AsyncResult(task_id)
+            last_state = None
+
+            while True:
+                try:
+                    state = result.state
+                    info = result.info or {}
+
+                    # Build progress data
+                    if state == "PENDING":
+                        progress_data = {
+                            "status": "pending",
+                            "message": "Waiting to start...",
+                        }
+                    elif state == "PROGRESS":
+                        progress_data = {
+                            "status": "running",
+                            "message": info.get("message", "Processing..."),
+                            "current_stage": info.get("current_stage", 1),
+                            "total_stages": info.get("total_stages", 4),
+                            "stage_name": info.get("stage_name", ""),
+                            "processed": info.get("processed", 0),
+                            "total": info.get("total", 0),
+                        }
+                    elif state == "SUCCESS":
+                        task_result = info if isinstance(info, dict) else {}
+                        progress_data = {
+                            "status": "completed",
+                            "message": "Complete",
+                            "result": task_result,
+                        }
+                        yield f"data: {json.dumps(progress_data)}\n\n"
+                        break
+                    elif state == "FAILURE":
+                        error_msg = str(info) if info else "Unknown error"
+                        progress_data = {
+                            "status": "failed",
+                            "message": f"Failed: {error_msg}",
+                            "error": error_msg,
+                        }
+                        yield f"data: {json.dumps(progress_data)}\n\n"
+                        break
+                    else:
+                        progress_data = {
+                            "status": state.lower(),
+                            "message": f"Status: {state}",
+                        }
+
+                    # Only send if state changed
+                    current_state = json.dumps(progress_data)
+                    if current_state != last_state:
+                        yield f"data: {current_state}\n\n"
+                        last_state = current_state
+
+                    time.sleep(0.5)
+
+                except GeneratorExit:
+                    break
+                except Exception as e:
+                    logger.error(f"[AuditProgressStream] Error: {e}")
+                    yield f"data: {json.dumps({'status': 'error', 'error': str(e)})}\n\n"
+                    break
+
+        response = HttpResponse(
+            event_stream(),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
+
+
+class AuditCreationStatusAPIView(LoginRequiredMixin, View):
+    """API endpoint to check audit creation task status (polling alternative to SSE)."""
+
+    def get(self, request, task_id):
+        from celery.result import AsyncResult
+
+        result = AsyncResult(task_id)
+        state = result.state
+        info = result.info or {}
+
+        if state == "PENDING":
+            return JsonResponse(
+                {
+                    "status": "pending",
+                    "message": "Waiting to start...",
+                }
+            )
+        elif state == "PROGRESS":
+            return JsonResponse(
+                {
+                    "status": "running",
+                    "message": info.get("message", "Processing..."),
+                    "current_stage": info.get("current_stage", 1),
+                    "total_stages": info.get("total_stages", 4),
+                    "stage_name": info.get("stage_name", ""),
+                    "processed": info.get("processed", 0),
+                    "total": info.get("total", 0),
+                }
+            )
+        elif state == "SUCCESS":
+            task_result = info if isinstance(info, dict) else {}
+            return JsonResponse(
+                {
+                    "status": "completed",
+                    "message": "Complete",
+                    "result": task_result,
+                }
+            )
+        elif state == "FAILURE":
+            error_msg = str(info) if info else "Unknown error"
+            return JsonResponse(
+                {
+                    "status": "failed",
+                    "message": f"Failed: {error_msg}",
+                    "error": error_msg,
+                }
+            )
+        else:
+            return JsonResponse(
+                {
+                    "status": state.lower(),
+                    "message": f"Status: {state}",
+                }
+            )
+
+
 class ExperimentOpportunitySearchAPIView(LoginRequiredMixin, View):
     """API endpoint for searching opportunities (experiment-based)"""
 
@@ -1251,10 +1591,10 @@ class VisitDetailFromProductionView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class AIReviewAPIView(LoginRequiredMixin, View):
-    """API endpoint for running AI review agents on assessments."""
+class AIAgentsListAPIView(LoginRequiredMixin, View):
+    """API endpoint for listing available AI review agents."""
 
-    def get(self, request, session_id):
+    def get(self, request):
         """
         Get available AI agents and their metadata.
 
@@ -1265,14 +1605,7 @@ class AIReviewAPIView(LoginRequiredMixin, View):
                         "agent_id": str,
                         "name": str,
                         "description": str,
-                        "result_actions": {
-                            "action_id": {
-                                "ai_result": str,
-                                "human_result": str,
-                                "button_label": str
-                            },
-                            ...
-                        }
+                        "result_actions": {...}
                     },
                     ...
                 ]
@@ -1292,6 +1625,13 @@ class AIReviewAPIView(LoginRequiredMixin, View):
             )
 
         return JsonResponse({"agents": agents_data})
+
+
+class AIReviewAPIView(LoginRequiredMixin, View):
+    """API endpoint for running AI review agents on assessments.
+
+    Note: For listing available agents, use AIAgentsListAPIView at /api/ai-agents/
+    """
 
     def post(self, request, session_id):
         """

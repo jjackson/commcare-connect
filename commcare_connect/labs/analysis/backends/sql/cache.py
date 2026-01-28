@@ -587,6 +587,13 @@ class SQLCacheManager:
         from django.db.models import F, Window
         from django.db.models.functions import RowNumber
 
+        # DEBUG: Log filter parameters
+        logger.info(
+            f"[SQLCache.filter_visits] last_n_total={last_n_total}, "
+            f"last_n_per_user={last_n_per_user}, usernames={usernames is not None}, "
+            f"sample_percentage={sample_percentage}"
+        )
+
         # Start with base queryset (valid cache)
         qs = self.get_raw_visits_queryset()
 
@@ -613,6 +620,7 @@ class SQLCacheManager:
 
         # Apply last_n_total
         if last_n_total:
+            logger.info(f"[SQLCache.filter_visits] Applying last_n_total={last_n_total} LIMIT")
             qs = qs.order_by("-visit_date")[:last_n_total]
 
         # Apply sampling (using random ordering)

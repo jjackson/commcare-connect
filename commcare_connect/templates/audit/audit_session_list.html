@@ -10,7 +10,90 @@
 
 {% block content %}
 {% csrf_token %}
-<div class="flex flex-col gap-2 w-full max-w-full">
+<div class="flex flex-col gap-4 w-full max-w-full" x-data="auditListPage()" data-cancel-url="{% url 'audit:audit_job_cancel' job_id=0 %}">
+  <!-- Running Jobs Section -->
+  <template x-if="runningJobs.length > 0">
+    <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+        <div class="flex items-center gap-2">
+          <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+          <span class="text-sm font-medium text-gray-700">Audit Creation Jobs</span>
+          <span class="text-xs text-gray-500" x-text="'(' + runningJobs.length + ')'"></span>
+        </div>
+        <button @click="clearCompletedJobs()"
+                class="text-xs text-gray-500 hover:text-gray-700 hover:underline"
+                x-show="runningJobs.some(j => j.status === 'completed' || j.status === 'cancelled' || j.status === 'failed')">
+          Clear completed
+        </button>
+      </div>
+      <div class="divide-y divide-gray-100">
+        <template x-for="job in runningJobs" :key="job.task_id">
+          <div class="px-4 py-3 hover:bg-gray-50 transition-colors">
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-3 mb-2">
+                  <span class="text-sm font-medium text-gray-900 truncate" x-text="job.title || 'Audit Creation'"></span>
+                  <span class="flex-shrink-0 text-xs px-2 py-0.5 rounded font-medium"
+                        :class="{
+                          'bg-amber-100 text-amber-700': job.status === 'pending',
+                          'bg-blue-100 text-blue-700': job.status === 'running',
+                          'bg-green-100 text-green-700': job.status === 'completed',
+                          'bg-red-100 text-red-700': job.status === 'failed',
+                          'bg-gray-100 text-gray-600': job.status === 'cancelled'
+                        }"
+                        x-text="job.status"></span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div class="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full transition-all duration-500 ease-out"
+                         :class="job.status === 'failed' ? 'bg-red-500' : (job.status === 'completed' ? 'bg-green-500' : 'bg-blue-500')"
+                         :style="'width: ' + (job.total_stages > 0 ? (job.current_stage / job.total_stages * 100) : 0) + '%'"></div>
+                  </div>
+                  <span class="flex-shrink-0 text-xs text-gray-500 tabular-nums" x-text="job.current_stage + '/' + job.total_stages"></span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1" x-text="job.stage_name || job.message || 'Waiting to start...'"></p>
+              </div>
+              <div class="flex-shrink-0 ml-4">
+                <button x-show="job.status === 'pending' || job.status === 'running'"
+                        @click.stop="cancelJob(job.id)"
+                        :disabled="job.cancelling === true"
+                        type="button"
+                        :class="job.cancelling ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:bg-red-100 hover:border-red-300'"
+                        class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded transition-colors">
+                  <svg x-show="!job.cancelling" class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                  <svg x-show="job.cancelling" class="w-3.5 h-3.5 mr-1.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span x-text="job.cancelling ? 'Cancelling...' : 'Cancel'"></span>
+                </button>
+                <button x-show="job.status === 'completed' || job.status === 'cancelled' || job.status === 'failed'"
+                        @click.stop="removeJob(job.id)"
+                        type="button"
+                        class="inline-flex items-center px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 border border-gray-200 rounded cursor-pointer transition-colors">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <template x-if="job.status === 'completed' && job.result">
+              <p class="text-xs text-green-600 mt-2">
+                Created <span x-text="job.result?.sessions?.length || 0" class="font-medium"></span> session(s)
+                with <span x-text="job.result?.total_visits || 0" class="font-medium"></span> visits
+              </p>
+            </template>
+            <template x-if="job.status === 'failed' && job.error">
+              <p class="text-xs text-red-600 mt-2" x-text="job.error"></p>
+            </template>
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
+
   <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
     <p class="text-sm text-brand-deep-purple">{% translate "Audit Sessions" %}</p>
     <div class="flex gap-x-3 items-center">
@@ -52,4 +135,191 @@
   </div>
 </div>
 
+{% endblock %}
+
+{% block inline_javascript %}
+<script>
+function auditListPage() {
+  return {
+    runningJobs: [],
+    pollInterval: null,
+    loading: true,
+    cancelUrlTemplate: '',
+
+    init() {
+      // Store the cancel URL template from the data attribute
+      this.cancelUrlTemplate = this.$el.dataset.cancelUrl || '';
+      // Load jobs from API
+      this.loadJobs();
+    },
+
+    async loadJobs() {
+      this.loading = true;
+      try {
+        const response = await fetch('{% url "audit:audit_jobs_list" %}');
+        const data = await response.json();
+
+        if (data.success && data.jobs) {
+          this.runningJobs = data.jobs.map(job => ({
+            id: job.id,
+            task_id: job.task_id,
+            title: job.title,
+            status: job.status,
+            current_stage: job.progress?.current_stage || 0,
+            total_stages: job.progress?.total_stages || 4,
+            stage_name: job.progress?.stage_name || '',
+            message: job.progress?.message || '',
+            processed: job.progress?.processed || 0,
+            total: job.progress?.total || 0,
+            result: job.result,
+            error: job.error,
+            cancelling: false,
+          }));
+
+          // Start polling if there are active jobs
+          const hasActiveJobs = this.runningJobs.some(j => j.status === 'pending' || j.status === 'running');
+          if (hasActiveJobs) {
+            this.startPolling();
+          }
+        }
+      } catch (e) {
+        console.error('Error loading jobs:', e);
+        this.runningJobs = [];
+      }
+      this.loading = false;
+    },
+
+    startPolling() {
+      if (this.pollInterval) return;
+      // Poll every 2 seconds
+      this.pollInterval = setInterval(() => this.pollJobStatus(), 2000);
+    },
+
+    stopPolling() {
+      if (this.pollInterval) {
+        clearInterval(this.pollInterval);
+        this.pollInterval = null;
+      }
+    },
+
+    async pollJobStatus() {
+      const activeJobs = this.runningJobs.filter(j => j.status === 'pending' || j.status === 'running');
+      if (activeJobs.length === 0) {
+        this.stopPolling();
+        return;
+      }
+
+      // Refresh from API
+      try {
+        const response = await fetch('{% url "audit:audit_jobs_list" %}');
+        const data = await response.json();
+
+        if (data.success && data.jobs) {
+          // Check if any job just completed
+          const wasRunning = this.runningJobs.some(j => j.status === 'pending' || j.status === 'running');
+
+          // Preserve cancelling state when updating
+          const existingJobs = Object.fromEntries(this.runningJobs.map(j => [j.id, j]));
+          this.runningJobs = data.jobs.map(job => ({
+            id: job.id,
+            task_id: job.task_id,
+            title: job.title,
+            status: job.status,
+            current_stage: job.progress?.current_stage || 0,
+            total_stages: job.progress?.total_stages || 4,
+            stage_name: job.progress?.stage_name || '',
+            message: job.progress?.message || '',
+            processed: job.progress?.processed || 0,
+            total: job.progress?.total || 0,
+            result: job.result,
+            error: job.error,
+            cancelling: existingJobs[job.id]?.cancelling || false,
+          }));
+
+          const nowRunning = this.runningJobs.some(j => j.status === 'pending' || j.status === 'running');
+
+          // If a job just completed, reload the page to show new sessions
+          if (wasRunning && !nowRunning) {
+            this.stopPolling();
+            setTimeout(() => window.location.reload(), 1000);
+            return;
+          }
+
+          if (!nowRunning) {
+            this.stopPolling();
+          }
+        }
+      } catch (e) {
+        console.error('Error polling job status:', e);
+      }
+    },
+
+    removeJob(jobId) {
+      // Just hide from UI for now (could add delete API)
+      this.runningJobs = this.runningJobs.filter(j => j.id !== jobId);
+    },
+
+    clearCompletedJobs() {
+      this.runningJobs = this.runningJobs.filter(j => j.status === 'pending' || j.status === 'running');
+    },
+
+    async cancelJob(jobId) {
+      const job = this.runningJobs.find(j => j.id === jobId);
+      if (!job) {
+        console.error('Job not found:', jobId);
+        return;
+      }
+
+      job.cancelling = true;
+
+      try {
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+        // Build URL from stored template - replace placeholder job_id
+        const cancelUrl = this.cancelUrlTemplate.replace('/0/', `/${jobId}/`);
+
+        console.log('Cancelling job:', jobId, 'URL:', cancelUrl);
+
+        const response = await fetch(cancelUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+          },
+        });
+
+        // Check if response is a redirect (login required)
+        if (response.redirected) {
+          console.error('Request was redirected to:', response.url);
+          alert('Session expired. Please refresh the page.');
+          return;
+        }
+
+        // Check for non-JSON response (e.g., HTML error page)
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          console.error('Non-JSON response:', response.status, contentType);
+          const text = await response.text();
+          console.error('Response body:', text.substring(0, 500));
+          alert(`Failed to cancel job: Server returned ${response.status}`);
+          return;
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Remove from list since it's deleted
+          this.runningJobs = this.runningJobs.filter(j => j.id !== jobId);
+        } else {
+          alert(data.error || 'Failed to cancel job');
+        }
+      } catch (e) {
+        console.error('Error cancelling job:', e);
+        alert('Failed to cancel job: ' + e.message);
+      } finally {
+        job.cancelling = false;
+      }
+    }
+  };
+}
+</script>
 {% endblock %}

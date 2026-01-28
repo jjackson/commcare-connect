@@ -667,6 +667,7 @@ function bulkAssessmentInterface() {
     completeUrl: '{% url "audit:audit_complete" session.pk %}',
     uncompleteUrl: '{% url "audit:audit_uncomplete" session.pk %}',
     bulkDataUrl: '{{ bulk_data_url }}',
+    aiAgentsUrl: '{% url "audit:ai_agents_list" %}',
     aiReviewUrl: '{% url "audit:ai_review" session.pk %}',
     csrfToken: '',
     loading: true,
@@ -720,7 +721,7 @@ function bulkAssessmentInterface() {
     },
     async fetchAgents() {
       try {
-        const response = await fetch(this.aiReviewUrl);
+        const response = await fetch(this.aiAgentsUrl);
         const data = await response.json();
         this.availableAgents = data.agents || [];
       } catch (e) {

@@ -19,8 +19,30 @@ urlpatterns = [
         name="program_search",
     ),
     path("api/audit/create/", views.ExperimentAuditCreateAPIView.as_view(), name="create_session"),
+    path("api/audit/create-async/", views.ExperimentAuditCreateAsyncAPIView.as_view(), name="create_session_async"),
     path("api/audit/preview/", views.ExperimentAuditPreviewAPIView.as_view(), name="preview_audit"),
     path("api/audit/progress/", views.ExperimentAuditProgressAPIView.as_view(), name="audit_progress"),
+    # Async creation progress endpoints
+    path(
+        "api/audit/jobs/",
+        views.AuditCreationJobsAPIView.as_view(),
+        name="audit_jobs_list",
+    ),
+    path(
+        "api/audit/jobs/<int:job_id>/cancel/",
+        views.AuditCreationJobCancelAPIView.as_view(),
+        name="audit_job_cancel",
+    ),
+    path(
+        "api/audit/task/<str:task_id>/status/",
+        views.AuditCreationStatusAPIView.as_view(),
+        name="audit_task_status",
+    ),
+    path(
+        "api/audit/task/<str:task_id>/stream/",
+        views.AuditCreationProgressStreamView.as_view(),
+        name="audit_task_stream",
+    ),
     # API endpoints for session interaction during auditing (bulk assessment)
     path(
         "api/<int:session_id>/save/",
@@ -52,7 +74,14 @@ urlpatterns = [
         views.ExperimentAuditImageConnectView.as_view(),
         name="audit_image_connect",
     ),
-    # AI Review endpoint
+    # AI Review endpoints
+    # List available agents (no session required)
+    path(
+        "api/ai-agents/",
+        views.AIAgentsListAPIView.as_view(),
+        name="ai_agents_list",
+    ),
+    # Session-specific AI review (run agents on assessments)
     path(
         "api/<int:session_id>/ai-review/",
         views.AIReviewAPIView.as_view(),

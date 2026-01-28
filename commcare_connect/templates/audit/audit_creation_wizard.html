@@ -738,6 +738,43 @@
         </div>
       </div>
     </div>
+
+    <!-- AI Review Agent Section -->
+    <div class="mt-6 pt-6 border-t border-gray-200">
+      <h3 class="text-md font-medium text-gray-800 mb-3">
+        <i class="fa-solid fa-robot mr-2 text-purple-600"></i>
+        AI Review Agent (Optional)
+      </h3>
+      <p class="text-sm text-gray-600 mb-4">
+        Optionally run an AI review agent automatically after creating the audit. The agent will analyze images and pre-populate review results.
+      </p>
+
+      <div class="space-y-3">
+        <!-- Agent Selection -->
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Select AI Agent</label>
+          <select x-model="selectedAIAgent"
+                  class="w-full md:w-1/2 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-brand-indigo focus:border-brand-indigo">
+            <option value="">None - Skip AI review</option>
+            <template x-for="agent in availableAIAgents" :key="agent.agent_id">
+              <option :value="agent.agent_id" x-text="agent.name"></option>
+            </template>
+          </select>
+          <p class="text-xs text-gray-400 mt-1">AI agents can automatically validate images against form data</p>
+        </div>
+
+        <!-- Agent Description -->
+        <div x-show="selectedAIAgent" class="bg-purple-50 border border-purple-200 rounded-md p-3">
+          <div class="flex items-start gap-2">
+            <i class="fa-solid fa-info-circle text-purple-600 mt-0.5"></i>
+            <div class="text-xs text-purple-800">
+              <p class="font-medium mb-1" x-text="getSelectedAgentName()"></p>
+              <p x-text="getSelectedAgentDescription()"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Step 6: Audit Metadata and Action Buttons -->
@@ -780,12 +817,100 @@
         Clear All
       </button>
       <button
+        @click="createAuditSessionAsync()"
+        :disabled="!isAuditCriteriaValid() || creating || creatingAsync"
+        class="px-4 py-2 text-brand-indigo bg-white border border-brand-indigo rounded-md hover:bg-brand-indigo/5 disabled:bg-gray-100 disabled:border-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed flex items-center gap-2">
+        <i class="fa-solid fa-clock" :class="{'fa-spin': creatingAsync}"></i>
+        <span x-text="creatingAsync ? 'Starting...' : 'Create Asynchronously'"></span>
+      </button>
+      <button
         @click="createAuditSession()"
-        :disabled="!isAuditCriteriaValid() || creating"
+        :disabled="!isAuditCriteriaValid() || creating || creatingAsync"
         class="px-4 py-2 bg-brand-indigo text-white rounded-md hover:bg-brand-indigo/90 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
         <i class="fa-solid fa-plus" :class="{'fa-spin': creating}"></i>
         <span x-text="creating ? 'Creating...' : 'Create Audit Session'"></span>
       </button>
+    </div>
+  </div>
+
+  <!-- Async Creation Progress Modal -->
+  <div x-show="showAsyncModal"
+       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+       x-cloak>
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+      <div class="mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">Audit Creation In Progress</h3>
+        <p class="text-sm text-gray-600 mt-1" x-text="asyncMessage"></p>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="mb-4">
+        <div class="flex justify-between text-sm text-gray-600 mb-1">
+          <span x-text="asyncStageName || 'Starting...'"></span>
+          <span x-text="asyncCurrentStage + ' / ' + asyncTotalStages"></span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-2.5">
+          <div class="bg-brand-indigo h-2.5 rounded-full transition-all duration-300"
+               :style="'width: ' + (asyncTotalStages > 0 ? (asyncCurrentStage / asyncTotalStages * 100) : 0) + '%'"></div>
+        </div>
+      </div>
+
+      <!-- Sub-progress (for per-FLW session creation) -->
+      <div x-show="asyncProcessed > 0 || asyncTotal > 0" class="mb-4 text-sm text-gray-600">
+        <span>Sessions: <span x-text="asyncProcessed"></span> / <span x-text="asyncTotal"></span></span>
+      </div>
+
+      <!-- Status -->
+      <div class="mb-4">
+        <span x-show="asyncStatus === 'pending'" class="inline-flex items-center gap-2 text-gray-600">
+          <i class="fa-solid fa-clock"></i> Waiting to start...
+        </span>
+        <span x-show="asyncStatus === 'running'" class="inline-flex items-center gap-2 text-brand-indigo">
+          <i class="fa-solid fa-spinner fa-spin"></i> Running...
+        </span>
+        <span x-show="asyncStatus === 'completed'" class="inline-flex items-center gap-2 text-green-600">
+          <i class="fa-solid fa-check-circle"></i> Complete!
+        </span>
+        <span x-show="asyncStatus === 'failed'" class="inline-flex items-center gap-2 text-red-600">
+          <i class="fa-solid fa-times-circle"></i> Failed
+        </span>
+      </div>
+
+      <!-- Error Message -->
+      <div x-show="asyncError" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+        <p class="text-sm text-red-800" x-text="asyncError"></p>
+      </div>
+
+      <!-- Result Summary -->
+      <div x-show="asyncResult" class="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+        <p class="text-sm text-green-800">
+          Created <span x-text="asyncResult?.sessions?.length || 0"></span> session(s)
+          with <span x-text="asyncResult?.total_visits || 0"></span> visits
+          and <span x-text="asyncResult?.total_images || 0"></span> images.
+        </p>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex justify-end gap-3">
+        <button
+          x-show="asyncStatus === 'completed'"
+          @click="window.location.href = '{% url 'audit:session_list' %}'"
+          class="px-4 py-2 bg-brand-indigo text-white rounded-md hover:bg-brand-indigo/90">
+          View Audit Sessions
+        </button>
+        <button
+          x-show="asyncStatus === 'completed' || asyncStatus === 'failed'"
+          @click="showAsyncModal = false; resetAsyncState()"
+          class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+          Close
+        </button>
+        <button
+          x-show="asyncStatus === 'pending' || asyncStatus === 'running'"
+          @click="showAsyncModal = false"
+          class="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+          Run in Background
+        </button>
+      </div>
     </div>
   </div>
 
@@ -912,6 +1037,10 @@ function auditCreationPage() {
       relatedFields: []  // Array of {imagePath, fieldPath, label, filterByImage, filterByField} rules
     },
 
+    // AI Review Agent state
+    availableAIAgents: [],
+    selectedAIAgent: '',  // agent_id or empty string for none
+
     // Preview state
     previewResults: [],
     precomputedVisitIds: [],  // Pre-computed visit IDs from preview (optimization)
@@ -919,6 +1048,21 @@ function auditCreationPage() {
     auditDefinitionId: null,  // Stores the audit definition ID from preview
     updating: false,
     creating: false,
+
+    // Async creation state
+    creatingAsync: false,
+    showAsyncModal: false,
+    asyncTaskId: null,
+    asyncStatus: 'pending',
+    asyncMessage: '',
+    asyncStageName: '',
+    asyncCurrentStage: 0,
+    asyncTotalStages: 4,
+    asyncProcessed: 0,
+    asyncTotal: 0,
+    asyncError: null,
+    asyncResult: null,
+    asyncEventSource: null,
 
     // FLW selection state
     selectedFlwUserIds: [],  // Array of usernames (or user_ids) for selected FLWs - TODO: check with team on naming
@@ -1426,6 +1570,196 @@ function auditCreationPage() {
       }
     },
 
+    // Create audit session asynchronously
+    async createAuditSessionAsync() {
+      if (!this.selectedOpportunities.length || !this.isAuditCriteriaValid()) {
+        alert('Please select opportunities and configure valid audit criteria');
+        return;
+      }
+
+      this.creatingAsync = true;
+
+      try {
+        // Build FLW visit IDs mapping for selected FLWs only
+        const selectedFlwVisitIds = {};
+        for (const username of this.selectedFlwUserIds) {
+          if (this.precomputedFlwVisitIds[username]) {
+            selectedFlwVisitIds[username] = this.precomputedFlwVisitIds[username];
+          }
+        }
+
+        // Build criteria
+        const criteria = {
+          audit_type: this.auditCriteria.type,
+          granularity: this.auditCriteria.granularity,
+          sample_percentage: this.auditCriteria.samplePercentage,
+          countPerFlw: this.auditCriteria.countPerFlw,
+          countPerOpp: this.auditCriteria.countPerOpp,
+          countAcrossAll: this.auditCriteria.countAcrossAll,
+          title: this.auditTitle,
+          tag: this.auditTag,
+          selected_flw_user_ids: this.selectedFlwUserIds,
+          relatedFields: this.auditCriteria.relatedFields.filter(
+            rule => rule.imagePath && rule.fieldPath
+          )
+        };
+
+        if (this.auditCriteria.type === 'date_range') {
+          criteria.startDate = this.auditCriteria.startDate;
+          criteria.endDate = this.auditCriteria.endDate;
+        }
+
+        // Build opportunity dicts with id and name
+        const opportunityDicts = this.selectedOpportunities.map(o => ({
+          id: o.id,
+          name: o.name || ''
+        }));
+
+        const payload = {
+          opportunities: opportunityDicts,
+          criteria: criteria,
+          visit_ids: this.precomputedVisitIds,
+          flw_visit_ids: selectedFlwVisitIds,
+          ai_agent_id: this.selectedAIAgent || null  // Optional AI agent to run after creation
+        };
+
+        // DEBUG: Log what we're sending
+        console.log('[AuditWizard] Creating async audit with payload:', JSON.stringify(payload, null, 2));
+        console.log('[AuditWizard] audit_type:', criteria.audit_type, 'countAcrossAll:', criteria.countAcrossAll);
+        if (this.selectedAIAgent) {
+          console.log('[AuditWizard] AI Agent:', this.selectedAIAgent);
+        }
+
+        // Start async creation
+        const response = await fetch('{% url "audit:create_session_async" %}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+          alert(data.error || 'Failed to start async creation');
+          this.creatingAsync = false;
+          return;
+        }
+
+        // Redirect to audit list immediately - job runs in background
+        // Job is tracked via LabsRecord, will be visible on the list page
+        window.location.href = '{% url 'audit:session_list' %}';
+
+      } catch (error) {
+        console.error('Async creation error:', error);
+        alert('Failed to start async creation: ' + error.message);
+        this.creatingAsync = false;
+      }
+    },
+
+    resetAsyncState() {
+      this.asyncTaskId = null;
+      this.asyncStatus = 'pending';
+      this.asyncMessage = '';
+      this.asyncStageName = '';
+      this.asyncCurrentStage = 0;
+      this.asyncTotalStages = 4;
+      this.asyncProcessed = 0;
+      this.asyncTotal = 0;
+      this.asyncError = null;
+      this.asyncResult = null;
+      if (this.asyncEventSource) {
+        this.asyncEventSource.close();
+        this.asyncEventSource = null;
+      }
+    },
+
+    startProgressStream() {
+      if (!this.asyncTaskId) return;
+
+      // Close any existing stream
+      if (this.asyncEventSource) {
+        this.asyncEventSource.close();
+      }
+
+      const streamUrl = `{% url "audit:audit_task_stream" task_id="TASK_ID" %}`.replace('TASK_ID', this.asyncTaskId);
+      this.asyncEventSource = new EventSource(streamUrl);
+
+      this.asyncEventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.asyncStatus = data.status;
+          this.asyncMessage = data.message || '';
+          this.asyncStageName = data.stage_name || '';
+          this.asyncCurrentStage = data.current_stage || 0;
+          this.asyncTotalStages = data.total_stages || 4;
+          this.asyncProcessed = data.processed || 0;
+          this.asyncTotal = data.total || 0;
+
+          if (data.error) {
+            this.asyncError = data.error;
+          }
+
+          if (data.result) {
+            this.asyncResult = data.result;
+          }
+
+          // Close stream when complete or failed
+          if (data.status === 'completed' || data.status === 'failed') {
+            this.asyncEventSource.close();
+            this.asyncEventSource = null;
+          }
+        } catch (e) {
+          console.error('Error parsing SSE data:', e);
+        }
+      };
+
+      this.asyncEventSource.onerror = (error) => {
+        console.error('SSE error:', error);
+        // Fall back to polling if SSE fails
+        this.asyncEventSource.close();
+        this.asyncEventSource = null;
+        this.pollProgress();
+      };
+    },
+
+    async pollProgress() {
+      if (!this.asyncTaskId) return;
+      if (this.asyncStatus === 'completed' || this.asyncStatus === 'failed') return;
+
+      try {
+        const statusUrl = `{% url "audit:audit_task_status" task_id="TASK_ID" %}`.replace('TASK_ID', this.asyncTaskId);
+        const response = await fetch(statusUrl);
+        const data = await response.json();
+
+        this.asyncStatus = data.status;
+        this.asyncMessage = data.message || '';
+        this.asyncStageName = data.stage_name || '';
+        this.asyncCurrentStage = data.current_stage || 0;
+        this.asyncTotalStages = data.total_stages || 4;
+        this.asyncProcessed = data.processed || 0;
+        this.asyncTotal = data.total || 0;
+
+        if (data.error) {
+          this.asyncError = data.error;
+        }
+
+        if (data.result) {
+          this.asyncResult = data.result;
+        }
+
+        // Continue polling if still running
+        if (data.status !== 'completed' && data.status !== 'failed') {
+          setTimeout(() => this.pollProgress(), 1000);
+        }
+      } catch (e) {
+        console.error('Polling error:', e);
+        setTimeout(() => this.pollProgress(), 2000);
+      }
+    },
+
     // Apply quick params from URL
     applyQuickParams() {
       if (!this.quickParams || Object.keys(this.quickParams).length === 0) {
@@ -1512,6 +1846,34 @@ function auditCreationPage() {
 
       // Apply quick params from URL (pre-populates FLW selection)
       this.applyQuickParams();
+
+      // Load available AI agents
+      this.loadAIAgents();
+    },
+
+    // Load available AI agents
+    async loadAIAgents() {
+      try {
+        const response = await fetch('{% url "audit:ai_agents_list" %}');
+        if (response.ok) {
+          const data = await response.json();
+          this.availableAIAgents = data.agents || [];
+        }
+      } catch (e) {
+        console.error('Failed to load AI agents:', e);
+      }
+    },
+
+    // Get selected agent name
+    getSelectedAgentName() {
+      const agent = this.availableAIAgents.find(a => a.agent_id === this.selectedAIAgent);
+      return agent ? agent.name : '';
+    },
+
+    // Get selected agent description
+    getSelectedAgentDescription() {
+      const agent = this.availableAIAgents.find(a => a.agent_id === this.selectedAIAgent);
+      return agent ? agent.description : '';
     }
   }
 }
