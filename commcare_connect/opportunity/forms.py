@@ -1,5 +1,6 @@
 import datetime
 import json
+from functools import cached_property
 from urllib.parse import urlencode
 
 from crispy_forms.helper import FormHelper
@@ -955,6 +956,13 @@ class AddBudgetExistingUsersForm(forms.Form):
         choices = [(opp_claim.id, opp_claim.id) for opp_claim in opportunity_claims]
         self.fields["selected_users"] = forms.MultipleChoiceField(choices=choices, widget=forms.CheckboxSelectMultiple)
 
+    @cached_property
+    def claim_limits(self):
+        selected_users = self.cleaned_data.get("selected_users", [])
+        return OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users).select_related(
+            "opportunity_claim__opportunity_access__user", "opportunity_claim__opportunity_access", "payment_unit"
+        )
+
     def clean(self):
         cleaned_data = super().clean()
         selected_users = cleaned_data.get("selected_users")
@@ -972,19 +980,16 @@ class AddBudgetExistingUsersForm(forms.Form):
             )
 
         if number_of_visits and selected_users:
-            self.budget_change = self._get_budget_change(selected_users, number_of_visits)
+            self.budget_change = self._get_budget_change(number_of_visits)
             if adjustment_type == self.AdjustmentType.DECREASE_VISITS:
-                self._validate_decrease_visits(selected_users, number_of_visits)
+                self._validate_decrease_visits(number_of_visits)
             else:
                 self._validate_budget_increase()
 
         return cleaned_data
 
-    def _validate_decrease_visits(self, selected_users, number_of_visits):
-        claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users).select_related(
-            "opportunity_claim__opportunity_access__user", "opportunity_claim__opportunity_access", "payment_unit"
-        )
-        claim_limits_list = list(claim_limits)
+    def _validate_decrease_visits(self, number_of_visits):
+        claim_limits_list = list(self.claim_limits)
         completed_visits_map = self._get_completed_visits_map(claim_limits_list)
 
         invalid_users = []
@@ -1032,12 +1037,12 @@ class AddBudgetExistingUsersForm(forms.Form):
         }
         return visit_counts
 
-    def _get_budget_change(self, selected_users, number_of_visits):
-        claim_limits = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
+    def _get_budget_change(self, number_of_visits):
         if self.cleaned_data.get("adjustment_type") == self.AdjustmentType.DECREASE_VISITS:
             number_of_visits = -number_of_visits
         budget_change = sum(
-            (ocl.payment_unit.amount + self.opportunity.org_pay_per_visit) * number_of_visits for ocl in claim_limits
+            (ocl.payment_unit.amount + self.opportunity.org_pay_per_visit) * number_of_visits
+            for ocl in self.claim_limits
         )
         return budget_change
 
@@ -1066,11 +1071,10 @@ class AddBudgetExistingUsersForm(forms.Form):
         end_date = self.cleaned_data["end_date"]
 
         if number_of_visits:
-            claims = OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users)
             if self.cleaned_data.get("adjustment_type") == self.AdjustmentType.DECREASE_VISITS:
-                claims.update(max_visits=F("max_visits") - number_of_visits)
+                self.claim_limits.update(max_visits=F("max_visits") - number_of_visits)
             else:
-                claims.update(max_visits=F("max_visits") + number_of_visits)
+                self.claim_limits.update(max_visits=F("max_visits") + number_of_visits)
 
             if not self.opportunity.managed:
                 self.opportunity.total_budget += self.budget_change
@@ -1078,7 +1082,7 @@ class AddBudgetExistingUsersForm(forms.Form):
 
         if end_date:
             OpportunityClaim.objects.filter(pk__in=selected_users).update(end_date=end_date)
-            OpportunityClaimLimit.objects.filter(opportunity_claim__in=selected_users).update(end_date=end_date)
+            self.claim_limits.update(end_date=end_date)
 
 
 class AddBudgetNewUsersForm(forms.Form):
