@@ -650,11 +650,101 @@
     </div>
   </div>
 
-  <!-- Step 5: Audit Metadata and Action Buttons -->
+  <!-- Step 5: Related Fields Configuration (Optional) -->
+  <div x-show="previewResults.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
+      <i class="fa-solid fa-link mr-2"></i>
+      Step 5: Related Fields Configuration (Optional)
+    </h2>
+
+    <p class="text-sm text-gray-600 mb-4">
+      Associate form field values with specific images. These values will be displayed alongside images during review.
+    </p>
+
+    <!-- Rules List -->
+    <div class="space-y-3 mb-4">
+      <template x-for="(rule, index) in auditCriteria.relatedFields" :key="index">
+        <div class="border border-gray-200 rounded-md p-4 bg-gray-50">
+          <div class="flex justify-between items-start mb-3">
+            <span class="text-xs font-medium text-gray-500">
+              Rule <span x-text="index + 1"></span>
+            </span>
+            <button @click="auditCriteria.relatedFields.splice(index, 1)" type="button"
+                    class="text-red-500 hover:text-red-700 text-xs transition-colors">
+              <i class="fa-solid fa-times mr-1"></i>Remove
+            </button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Image Path</label>
+              <input type="text" x-model="rule.imagePath"
+                     placeholder="form/photo_field"
+                     class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-brand-indigo focus:border-brand-indigo">
+              <p class="text-xs text-gray-400 mt-1">Path to the image question</p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Related Field Path</label>
+              <input type="text" x-model="rule.fieldPath"
+                     placeholder="form/related_field"
+                     class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-brand-indigo focus:border-brand-indigo">
+              <p class="text-xs text-gray-400 mt-1">Path to extract value from</p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Display Label</label>
+              <input type="text" x-model="rule.label"
+                     placeholder="Field Label"
+                     class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-brand-indigo focus:border-brand-indigo">
+              <p class="text-xs text-gray-400 mt-1">Label shown during review</p>
+            </div>
+          </div>
+
+          <!-- Filter Options -->
+          <div class="mt-3 pt-3 border-t border-gray-200">
+            <div class="flex flex-wrap gap-4">
+              <label class="flex items-center cursor-pointer">
+                <input type="checkbox" x-model="rule.filterByImage"
+                       class="h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300 rounded">
+                <span class="ml-2 text-xs text-gray-700">Only include visits with this image</span>
+              </label>
+              <label class="flex items-center cursor-pointer">
+                <input type="checkbox" x-model="rule.filterByField"
+                       class="h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300 rounded">
+                <span class="ml-2 text-xs text-gray-700">Only include visits with this field value</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Add Rule Button -->
+    <button @click="auditCriteria.relatedFields.push({imagePath: '', fieldPath: '', label: '', filterByImage: false, filterByField: false})"
+            type="button"
+            class="text-sm text-brand-indigo hover:text-brand-deep-purple transition-colors">
+      <i class="fa-solid fa-plus mr-1"></i>Add Related Field Rule
+    </button>
+
+    <!-- Help Text -->
+    <div class="mt-4 bg-blue-50 border border-blue-200 rounded-md p-3">
+      <div class="flex items-start gap-2">
+        <i class="fa-solid fa-info-circle text-blue-600 mt-0.5"></i>
+        <div class="text-xs text-blue-800">
+          <p class="font-medium mb-1">How related fields work:</p>
+          <ul class="list-disc list-inside space-y-1 text-blue-700">
+            <li>When an image's question path matches the "Image Path", the related field value is extracted</li>
+            <li>The extracted value and label are displayed alongside the image during review</li>
+            <li>Use the filter checkboxes to only include visits that have the specified image or field value</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 6: Audit Metadata and Action Buttons -->
   <div x-show="selectedOpportunities.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
       <i class="fa-solid fa-tag mr-2"></i>
-      Step 5: Audit Metadata & Creation
+      Step 6: Audit Metadata & Creation
     </h2>
 
     <div class="grid grid-cols-2 gap-4 mb-6">
@@ -818,7 +908,8 @@ function auditCreationPage() {
       countPerOpp: 500,
       countAcrossAll: 1000,
       allVisitsPerFlw: false,
-      samplePercentage: 100
+      samplePercentage: 100,
+      relatedFields: []  // Array of {imagePath, fieldPath, label, filterByImage, filterByField} rules
     },
 
     // Preview state
@@ -1287,7 +1378,11 @@ function auditCreationPage() {
           countAcrossAll: this.auditCriteria.countAcrossAll,
           title: this.auditTitle,
           tag: this.auditTag,
-          selected_flw_user_ids: this.selectedFlwUserIds  // Include FLW selections
+          selected_flw_user_ids: this.selectedFlwUserIds,  // Include FLW selections
+          // Include related fields configuration (filter out incomplete rules)
+          relatedFields: this.auditCriteria.relatedFields.filter(
+            rule => rule.imagePath && rule.fieldPath
+          )
         };
 
         // Only include date filters for date_range audit type

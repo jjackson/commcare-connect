@@ -52,6 +52,12 @@ urlpatterns = [
         views.ExperimentAuditImageConnectView.as_view(),
         name="audit_image_connect",
     ),
+    # AI Review endpoint
+    path(
+        "api/<int:session_id>/ai-review/",
+        views.AIReviewAPIView.as_view(),
+        name="ai_review",
+    ),
     # Visit detail from production
     path("visits/<int:visit_id>/", views.VisitDetailFromProductionView.as_view(), name="visit_detail_from_production"),
 ]

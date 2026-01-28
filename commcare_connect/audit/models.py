@@ -212,7 +212,16 @@ class AuditSessionRecord(LocalLabsRecord):
         """
         return self.data.get("visit_results", {}).get(str(visit_id), {}).get("assessments", {})
 
-    def set_assessment(self, visit_id: int, blob_id: str, question_id: str, result: str | None, notes: str):
+    def set_assessment(
+        self,
+        visit_id: int,
+        blob_id: str,
+        question_id: str,
+        result: str | None,
+        notes: str,
+        ai_result: str | None = None,
+        ai_notes: str | None = None,
+    ):
         """
         Set/update assessment for an image.
 
@@ -222,6 +231,8 @@ class AuditSessionRecord(LocalLabsRecord):
             question_id: CommCare question path
             result: "pass" or "fail"
             notes: Notes about the assessment
+            ai_result: AI review result ("match", "no_match", "error", or None)
+            ai_notes: AI review notes/details
         """
         visit_key = str(visit_id)
 
@@ -236,11 +247,18 @@ class AuditSessionRecord(LocalLabsRecord):
         if "assessments" not in visit_result:
             visit_result["assessments"] = {}
 
-        visit_result["assessments"][blob_id] = {
+        assessment = {
             "question_id": question_id,
             "result": result,
             "notes": notes,
         }
+        # Include AI fields if provided
+        if ai_result is not None:
+            assessment["ai_result"] = ai_result
+        if ai_notes is not None:
+            assessment["ai_notes"] = ai_notes
+
+        visit_result["assessments"][blob_id] = assessment
 
     def clear_assessment(self, visit_id: int, blob_id: str):
         """

@@ -463,7 +463,11 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
 
                 # Convert to dict for easy lookup
                 blob_metadata = {
-                    img["blob_id"]: {"question_id": img["question_id"], "filename": img["name"]}
+                    img["blob_id"]: {
+                        "question_id": img["question_id"],
+                        "filename": img["name"],
+                        "related_fields": img.get("related_fields", []),
+                    }
                     for img in images_metadata
                 }
 
@@ -496,6 +500,9 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                             "visit_date_sort": visit_date_sort,
                             "entity_name": entity_name,
                             "username": username,
+                            "related_fields": metadata.get("related_fields", []),
+                            "ai_result": assessment_data.get("ai_result", ""),
+                            "ai_notes": assessment_data.get("ai_notes", ""),
                         }
                     )
                     seen_blob_ids.add(blob_id)
@@ -525,6 +532,8 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                             "visit_date_sort": visit_date_sort,
                             "entity_name": entity_name,
                             "username": username,
+                            "ai_result": assessment_data.get("ai_result", ""),
+                            "ai_notes": assessment_data.get("ai_notes", ""),
                         }
                     )
 
@@ -665,6 +674,18 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
             audit_type = criteria.get("type", criteria.get("audit_type", "date_range"))
 
             # Map frontend camelCase to backend snake_case
+            # Handle related_fields - normalize from camelCase and filter out incomplete rules
+            related_fields_raw = criteria.get("related_fields") or criteria.get("relatedFields", [])
+            related_fields = [
+                {
+                    "image_path": rf.get("image_path") or rf.get("imagePath", ""),
+                    "field_path": rf.get("field_path") or rf.get("fieldPath", ""),
+                    "label": rf.get("label", ""),
+                }
+                for rf in related_fields_raw
+                if (rf.get("image_path") or rf.get("imagePath")) and (rf.get("field_path") or rf.get("fieldPath"))
+            ]
+
             normalized_criteria = {
                 "audit_type": audit_type,
                 "start_date": criteria.get("startDate"),
@@ -674,6 +695,7 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 "count_across_all": criteria.get("countAcrossAll", 100),
                 "sample_percentage": criteria.get("sample_percentage", criteria.get("samplePercentage", 100)),
                 "selected_flw_user_ids": criteria.get("selected_flw_user_ids", []),
+                "related_fields": related_fields or None,
             }
 
             # Check if preview passed pre-computed visit IDs (optimization: skip re-fetch)
@@ -755,7 +777,9 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
 
                 # OPTIMIZATION: Extract images for ALL visits at once (1 CSV parse instead of N)
                 opp_id = opportunity_ids[0] if opportunity_ids else None
-                all_visit_images = data_access.extract_images_for_visits(all_flw_visit_ids, opp_id)
+                all_visit_images = data_access.extract_images_for_visits(
+                    all_flw_visit_ids, opp_id, related_fields=related_fields
+                )
 
                 # OPTIMIZATION: Create ONE template for all sessions (1 POST instead of N)
                 template = data_access.create_audit_template(
@@ -829,7 +853,7 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
 
             # OPTIMIZATION: Extract images for all visits at once (1 CSV parse)
             opp_id = opportunity_ids[0] if opportunity_ids else None
-            all_visit_images = data_access.extract_images_for_visits(visit_ids, opp_id)
+            all_visit_images = data_access.extract_images_for_visits(visit_ids, opp_id, related_fields=related_fields)
 
             # Create template
             template = data_access.create_audit_template(
@@ -1140,7 +1164,9 @@ class VisitDetailFromProductionView(LoginRequiredMixin, TemplateView):
 
             # Fetch HTML from Connect production
             production_url = settings.CONNECT_PRODUCTION_URL.rstrip("/")
-            visit_detail_url = f"{production_url}/a/{org_slug}/opportunity/{opportunity_id}/user_visit_details/{visit_id}/"
+            visit_detail_url = (
+                f"{production_url}/a/{org_slug}/opportunity/{opportunity_id}/user_visit_details/{visit_id}/"
+            )
 
             try:
                 http_client = httpx.Client(
@@ -1159,7 +1185,7 @@ class VisitDetailFromProductionView(LoginRequiredMixin, TemplateView):
                     # Find the opening tag of div with id="visit-details"
                     opening_tag_pattern = r'<div[^>]*id=["\']visit-details["\'][^>]*>'
                     opening_match = re.search(opening_tag_pattern, html_content, re.IGNORECASE)
-                    
+
                     if opening_match:
                         start_pos = opening_match.start()
                         # Find the matching closing </div> tag by counting nested divs
@@ -1167,14 +1193,16 @@ class VisitDetailFromProductionView(LoginRequiredMixin, TemplateView):
                         pos = start_pos
                         while pos < len(html_content):
                             # Check for opening div tag (but skip HTML comments)
-                            if html_content[pos:pos+4] == "<div":
+                            if html_content[pos : pos + 4] == "<div":
                                 # Make sure it's not a closing tag, comment, or script/style tag
-                                if (pos + 4 < len(html_content) and 
-                                    html_content[pos+1] != "/" and
-                                    not html_content[pos:pos+9].startswith("<!--")):
+                                if (
+                                    pos + 4 < len(html_content)
+                                    and html_content[pos + 1] != "/"
+                                    and not html_content[pos : pos + 9].startswith("<!--")
+                                ):
                                     div_count += 1
                             # Check for closing div tag
-                            elif html_content[pos:pos+6] == "</div>":
+                            elif html_content[pos : pos + 6] == "</div>":
                                 div_count -= 1
                                 if div_count == 0:
                                     end_pos = pos + 6
@@ -1185,26 +1213,22 @@ class VisitDetailFromProductionView(LoginRequiredMixin, TemplateView):
                             # Couldn't find matching closing tag, use a simple fallback
                             # Try to find the div with x-data containing slides
                             slides_match = re.search(
-                                r'<div[^>]*x-data=["\'][^>]*slides[^>]*>',
-                                html_content,
-                                re.IGNORECASE
+                                r'<div[^>]*x-data=["\'][^>]*slides[^>]*>', html_content, re.IGNORECASE
                             )
                             if slides_match:
-                                context["visit_detail_html"] = html_content[slides_match.start():]
+                                context["visit_detail_html"] = html_content[slides_match.start() :]
                             else:
                                 context["visit_detail_html"] = html_content
                     else:
                         # Fallback: try to find div with x-data containing "slides"
                         slides_match = re.search(
-                            r'<div[^>]*x-data=["\'][^>]*slides[^>]*>',
-                            html_content,
-                            re.IGNORECASE
+                            r'<div[^>]*x-data=["\'][^>]*slides[^>]*>', html_content, re.IGNORECASE
                         )
                         if slides_match:
-                            context["visit_detail_html"] = html_content[slides_match.start():]
+                            context["visit_detail_html"] = html_content[slides_match.start() :]
                         else:
                             # Last resort: use body content or full HTML
-                            body_match = re.search(r'<body[^>]*>(.*?)</body>', html_content, re.DOTALL | re.IGNORECASE)
+                            body_match = re.search(r"<body[^>]*>(.*?)</body>", html_content, re.DOTALL | re.IGNORECASE)
                             if body_match:
                                 context["visit_detail_html"] = body_match.group(1)
                             else:
@@ -1212,9 +1236,7 @@ class VisitDetailFromProductionView(LoginRequiredMixin, TemplateView):
 
                     context["visit_id"] = visit_id
                 else:
-                    logger.error(
-                        f"Failed to fetch visit detail: {response.status_code} - {response.text[:200]}"
-                    )
+                    logger.error(f"Failed to fetch visit detail: {response.status_code} - {response.text[:200]}")
                     context["error"] = f"Failed to load visit details (HTTP {response.status_code})"
             except httpx.RequestError as e:
                 logger.error(f"Error fetching visit detail: {str(e)}")
@@ -1227,3 +1249,199 @@ class VisitDetailFromProductionView(LoginRequiredMixin, TemplateView):
             data_access.close()
 
         return context
+
+
+class AIReviewAPIView(LoginRequiredMixin, View):
+    """API endpoint for running AI review agents on assessments."""
+
+    def get(self, request, session_id):
+        """
+        Get available AI agents and their metadata.
+
+        Response:
+            {
+                "agents": [
+                    {
+                        "agent_id": str,
+                        "name": str,
+                        "description": str,
+                        "result_actions": {
+                            "action_id": {
+                                "ai_result": str,
+                                "human_result": str,
+                                "button_label": str
+                            },
+                            ...
+                        }
+                    },
+                    ...
+                ]
+            }
+        """
+        from commcare_connect.labs.ai_review_agents.registry import list_agents
+
+        agents_data = []
+        for agent_id, agent_class in list_agents():
+            agents_data.append(
+                {
+                    "agent_id": agent_id,
+                    "name": agent_class.name,
+                    "description": agent_class.description,
+                    "result_actions": agent_class.result_actions,
+                }
+            )
+
+        return JsonResponse({"agents": agents_data})
+
+    def post(self, request, session_id):
+        """
+        Run AI review on one or more assessments.
+
+        Request body (JSON):
+            {
+                "assessments": [
+                    {
+                        "visit_id": int,
+                        "blob_id": str,
+                        "reading": str  # The value to validate (e.g., weight reading)
+                    },
+                    ...
+                ],
+                "agent_id": str  # Optional, defaults to "scale_validation"
+            }
+
+        Response:
+            {
+                "results": [
+                    {
+                        "visit_id": int,
+                        "blob_id": str,
+                        "ai_result": "match" | "no_match" | "error",
+                        "ai_notes": str  # Details about the result
+                    },
+                    ...
+                ]
+            }
+        """
+        try:
+            data = json.loads(request.body)
+            assessments = data.get("assessments", [])
+            agent_id = data.get("agent_id", "scale_validation")
+            opportunity_id = data.get("opportunity_id")
+
+            if not assessments:
+                return JsonResponse({"error": "No assessments provided"}, status=400)
+
+            if not opportunity_id:
+                return JsonResponse({"error": "opportunity_id is required"}, status=400)
+
+            # Import the agent registry
+            from commcare_connect.labs.ai_review_agents.registry import get_agent
+            from commcare_connect.labs.ai_review_agents.types import ReviewContext
+
+            # Get the agent
+            try:
+                agent = get_agent(agent_id)
+            except KeyError as e:
+                return JsonResponse({"error": str(e)}, status=400)
+
+            import base64
+
+            # Initialize data access for image fetching (only used if image_base64 not provided)
+            data_access = AuditDataAccess(opportunity_id=opportunity_id, request=request)
+
+            results = []
+            try:
+                for assessment in assessments:
+                    visit_id = assessment.get("visit_id")
+                    blob_id = assessment.get("blob_id")
+                    reading = assessment.get("reading", "")
+                    image_base64 = assessment.get("image_base64")
+
+                    if not visit_id or not blob_id:
+                        results.append(
+                            {
+                                "visit_id": visit_id,
+                                "blob_id": blob_id,
+                                "ai_result": "error",
+                                "ai_notes": "Missing visit_id or blob_id",
+                            }
+                        )
+                        continue
+
+                    if not reading:
+                        results.append(
+                            {
+                                "visit_id": visit_id,
+                                "blob_id": blob_id,
+                                "ai_result": "error",
+                                "ai_notes": "No reading value - configure related_fields to extract",
+                            }
+                        )
+                        continue
+
+                    try:
+                        # Use provided base64 image or fetch from Connect API
+                        if image_base64:
+                            image_bytes = base64.b64decode(image_base64)
+                        else:
+                            image_bytes = data_access.download_image_from_connect(blob_id, opportunity_id)
+
+                        # Create review context
+                        context = ReviewContext(
+                            images={"scale": image_bytes},
+                            form_data={"reading": reading},
+                            metadata={
+                                "visit_id": visit_id,
+                                "blob_id": blob_id,
+                                "opportunity_id": opportunity_id,
+                            },
+                        )
+
+                        # Run the agent
+                        result = agent.review(context)
+
+                        # Map result to ai_result
+                        if result.passed:
+                            ai_result = "match"
+                            ai_notes = ""
+                        elif result.failed:
+                            ai_result = "no_match"
+                            ai_notes = ""
+                        else:
+                            ai_result = "error"
+                            # Only show notes for errors (actual error messages)
+                            ai_notes = "; ".join(result.errors) if result.errors else ""
+
+                        results.append(
+                            {
+                                "visit_id": visit_id,
+                                "blob_id": blob_id,
+                                "ai_result": ai_result,
+                                "ai_notes": ai_notes,
+                            }
+                        )
+
+                    except Exception as e:
+                        logger.error(f"AI review failed for blob_id={blob_id}: {e}")
+                        results.append(
+                            {
+                                "visit_id": visit_id,
+                                "blob_id": blob_id,
+                                "ai_result": "error",
+                                "ai_notes": f"Error: {str(e)}",
+                            }
+                        )
+
+            finally:
+                data_access.close()
+
+            return JsonResponse({"results": results})
+
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        except Exception as e:
+            import traceback
+
+            logger.error(f"AI review API error: {traceback.format_exc()}")
+            return JsonResponse({"error": str(e)}, status=500)

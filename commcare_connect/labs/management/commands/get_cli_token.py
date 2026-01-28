@@ -8,8 +8,6 @@ Or with custom settings:
     python manage.py get_cli_token --port 8888 --save-to my_token.json
 """
 
-import os
-
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
