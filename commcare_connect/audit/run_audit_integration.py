@@ -16,6 +16,10 @@ Available configs:
     opp772_date            - Opp 772, wrong date range (demonstrates 0 visits)
     opp772_lastN_with_dates - Opp 772, last 10 per FLW with old dates in criteria
                              (dates should be ignored for lastN audit types)
+    opp524_related_fields  - Opp 524, last 100 visits with related fields
+                             (tests related_fields extraction for weight images)
+    opp874_related_fields  - Opp 874, last 100 visits with related fields
+                             (tests related_fields extraction for weight images)
 """
 
 import os
@@ -37,6 +41,7 @@ class TestConfig:
     selected_flw_user_ids: list[str] | None = None
     start_date: str | None = None
     end_date: str | None = None
+    related_fields: list[dict] | None = None  # List of {image_path, field_path, label}
 
 
 TEST_CONFIGS = {
@@ -87,6 +92,20 @@ TEST_CONFIGS = {
         start_date="2024-01-01",
         end_date="2024-01-31",
     ),
+    "opp874_related_fields": TestConfig(
+        name="Opp 874 - Last 20 with Related Fields",
+        search_query="874",
+        select_count=1,
+        audit_type="last_n_across_all",
+        count_across_all=20,
+        related_fields=[
+            {
+                "image_path": "anthropometric/upload_weight_image",
+                "field_path": "child_weight_visit",
+                "label": "Child Weight",
+            },
+        ],
+    ),
 }
 
 
@@ -127,6 +146,10 @@ def test_optimized_audit_flow(config_name="opp385_last10"):
         print(f"Date Range: {config.start_date or 'any'} to {config.end_date or 'any'}")
     if config.selected_flw_user_ids:
         print(f"Selected FLWs: {', '.join(config.selected_flw_user_ids)}")
+    if config.related_fields:
+        print(f"Related Fields: {len(config.related_fields)} rule(s)")
+        for rf in config.related_fields:
+            print(f"  - {rf.get('image_path')} -> {rf.get('field_path')} ({rf.get('label')})")
     print("=" * 80)
 
     # Step 1: Get OAuth token
@@ -210,6 +233,7 @@ def test_optimized_audit_flow(config_name="opp385_last10"):
             selected_flw_user_ids=config.selected_flw_user_ids,
             start_date=config.start_date,
             end_date=config.end_date,
+            related_fields=config.related_fields,
         )
 
         start = time.time()
@@ -250,12 +274,19 @@ def test_optimized_audit_flow(config_name="opp385_last10"):
         # Step 5: Extract images (USES PIPELINE - chunked parsing for form_json)
         print("\n[5] Extracting images with question IDs (using analysis pipeline)...")
         start = time.time()
-        visit_images = data_access.extract_images_for_visits(visit_ids, test_opp_id)
+        visit_images = data_access.extract_images_for_visits(
+            visit_ids, test_opp_id, related_fields=config.related_fields
+        )
         elapsed = time.time() - start
         print(f"[OK] Extracted images for {len(visit_images)} visits in {elapsed:.2f}s")
 
         total_images = sum(len(imgs) for imgs in visit_images.values())
         print(f"     Total images: {total_images}")
+
+        # Count images with related fields
+        if config.related_fields:
+            images_with_related = sum(1 for imgs in visit_images.values() for img in imgs if img.get("related_fields"))
+            print(f"     Images with related fields: {images_with_related}")
 
         # Show sample
         for visit_id_str, images in list(visit_images.items())[:3]:
@@ -265,6 +296,12 @@ def test_optimized_audit_flow(config_name="opp385_last10"):
                 print(f"       - blob_id: {img.get('blob_id', '')[:20]}...")
                 print(f"         question_id: {img.get('question_id')}")
                 print(f"         name: {img.get('name')}")
+                # Show related fields if present
+                related_fields = img.get("related_fields", [])
+                if related_fields:
+                    print("         related_fields:")
+                    for rf in related_fields:
+                        print(f"           - {rf.get('label')}: {rf.get('value')}")
 
         # Step 6: Create template
         print("\n[6] Creating audit template...")

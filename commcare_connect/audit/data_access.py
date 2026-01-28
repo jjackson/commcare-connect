@@ -46,10 +46,27 @@ class AuditCriteria:
     count_across_all: int = 100
     sample_percentage: int = 100
     selected_flw_user_ids: list[str] | None = None
+    related_fields: list[dict] | None = None  # List of {image_path, field_path, label}
 
     @classmethod
     def from_dict(cls, data: dict) -> "AuditCriteria":
         """Create from dict, handling both snake_case and camelCase keys."""
+        # Handle related_fields with camelCase normalization
+        related_fields_raw = data.get("related_fields") or data.get("relatedFields", [])
+        related_fields = None
+        if related_fields_raw:
+            related_fields = [
+                {
+                    "image_path": rf.get("image_path") or rf.get("imagePath", ""),
+                    "field_path": rf.get("field_path") or rf.get("fieldPath", ""),
+                    "label": rf.get("label", ""),
+                    "filter_by_image": rf.get("filter_by_image") or rf.get("filterByImage", False),
+                    "filter_by_field": rf.get("filter_by_field") or rf.get("filterByField", False),
+                }
+                for rf in related_fields_raw
+                if (rf.get("image_path") or rf.get("imagePath")) and (rf.get("field_path") or rf.get("fieldPath"))
+            ]
+
         return cls(
             audit_type=data.get("audit_type") or data.get("type", "date_range"),
             start_date=data.get("start_date") or data.get("startDate"),
@@ -59,6 +76,7 @@ class AuditCriteria:
             count_across_all=data.get("count_across_all") or data.get("countAcrossAll", 100),
             sample_percentage=data.get("sample_percentage") or data.get("samplePercentage", 100),
             selected_flw_user_ids=data.get("selected_flw_user_ids", []),
+            related_fields=related_fields or None,
         )
 
 
@@ -362,23 +380,29 @@ class AuditDataAccess:
                 else:
                     all_visit_ids.extend(result)
 
+        # Apply last_n_per_opp filtering (works for single or multiple opportunities)
+        if criteria.audit_type == "last_n_per_opp":
+            # Group by opportunity and take N per opp
+            # This requires post-filtering since the backend doesn't support per-opp limits
+            if return_visits and all_visits:
+                df = pd.DataFrame(all_visits)
+                if "opportunity_id" in df.columns and "visit_date" in df.columns:
+                    df["visit_date"] = pd.to_datetime(df["visit_date"], format="mixed", utc=True, errors="coerce")
+                    df = df.sort_values("visit_date", ascending=False)
+                    df = df.groupby("opportunity_id").head(criteria.count_per_opp)
+                    if "visit_date" in df.columns:
+                        df["visit_date"] = df["visit_date"].apply(lambda x: x.isoformat() if pd.notna(x) else None)
+                    all_visits = df.to_dict("records")
+                    all_visit_ids = [v["id"] for v in all_visits]
+            elif not return_visits and all_visit_ids:
+                # Need to fetch visit data to apply per-opp grouping
+                # For now, use a simple limit as approximation for single opp
+                if len(opportunity_ids) == 1:
+                    all_visit_ids = all_visit_ids[: criteria.count_per_opp]
+
         # Apply cross-opportunity limits if multiple opportunities
         if len(opportunity_ids) > 1:
-            if criteria.audit_type == "last_n_per_opp":
-                # Group by opportunity and take N per opp
-                # This requires re-filtering since we can't do it in the backend
-                if return_visits and all_visits:
-                    df = pd.DataFrame(all_visits)
-                    if "opportunity_id" in df.columns and "visit_date" in df.columns:
-                        df["visit_date"] = pd.to_datetime(df["visit_date"], format="mixed", utc=True, errors="coerce")
-                        df = df.sort_values("visit_date", ascending=False)
-                        df = df.groupby("opportunity_id").head(criteria.count_per_opp)
-                        if "visit_date" in df.columns:
-                            df["visit_date"] = df["visit_date"].apply(lambda x: x.isoformat() if pd.notna(x) else None)
-                        all_visits = df.to_dict("records")
-                        all_visit_ids = [v["id"] for v in all_visits]
-
-            elif criteria.audit_type == "last_n_across_all":
+            if criteria.audit_type == "last_n_across_all":
                 # Sort by date and take top N
                 if return_visits and all_visits:
                     df = pd.DataFrame(all_visits)
@@ -444,16 +468,157 @@ class AuditDataAccess:
     # Image Extraction (uses analysis pipeline's FieldComputation)
     # =========================================================================
 
+    @staticmethod
+    def _extract_field_value(data: dict, path: str) -> str | None:
+        """
+        Extract a value from form data using slash-separated path or field name search.
+
+        Args:
+            data: Form data dict to traverse
+            path: Slash-separated path (e.g., "form/building_area") or just a field name
+                  (e.g., "child_weight_visit") to search for in the tree
+
+        Returns:
+            Extracted value as string, or None if not found
+        """
+        if not path or not data:
+            return None
+
+        # Strip leading/trailing slashes
+        path = path.strip("/")
+
+        # If path contains slashes, try exact path traversal first
+        if "/" in path:
+            parts = path.split("/")
+            current = data
+
+            for part in parts:
+                if not part:  # Skip empty parts
+                    continue
+                if isinstance(current, dict) and part in current:
+                    current = current[part]
+                else:
+                    current = None
+                    break
+
+            if current is not None and isinstance(current, (str, int, float, bool)):
+                return str(current)
+
+        # If exact path failed or no slashes, search the tree for the field name
+        field_name = path.split("/")[-1] if "/" in path else path
+        result = AuditDataAccess._find_field_in_tree(data, field_name)
+        if result is not None:
+            return str(result)
+
+        return None
+
+    @staticmethod
+    def _find_field_in_tree(data: dict, field_name: str) -> str | int | float | bool | None:
+        """
+        Recursively search for a field name in a nested dict structure.
+
+        Args:
+            data: Dict to search
+            field_name: Field name to find
+
+        Returns:
+            The first matching primitive value found, or None
+        """
+        if not isinstance(data, dict):
+            return None
+
+        # Check if field exists at this level
+        if field_name in data:
+            value = data[field_name]
+            if isinstance(value, (str, int, float, bool)):
+                return value
+
+        # Recursively search nested dicts
+        for key, value in data.items():
+            if isinstance(value, dict):
+                result = AuditDataAccess._find_field_in_tree(value, field_name)
+                if result is not None:
+                    return result
+
+        return None
+
+    def _add_related_fields_to_images(
+        self,
+        visit_images: dict[str, list],
+        visit_dicts: list[dict],
+        related_fields: list[dict],
+    ) -> dict[str, list]:
+        """
+        Add related field values to extracted images.
+
+        For each image, looks up related field rules that match the image's question_id
+        and extracts the corresponding field values from the visit's form_json.
+
+        Args:
+            visit_images: Dict mapping visit_id to list of image dicts
+            visit_dicts: List of visit dicts with form_json
+            related_fields: List of {image_path, field_path, label} rules
+
+        Returns:
+            Updated visit_images with related_fields added to each image
+        """
+        if not related_fields:
+            return visit_images
+
+        # Build visit_id -> form_json lookup
+        visit_form_data = {}
+        for v in visit_dicts:
+            vid = str(v.get("id", ""))
+            form_json = v.get("form_json", {})
+            # Get the form data (handle both direct and nested structures)
+            visit_form_data[vid] = form_json.get("form", form_json)
+
+        # Process each visit's images
+        for visit_id, images in visit_images.items():
+            form_data = visit_form_data.get(visit_id, {})
+
+            for image in images:
+                question_id = image.get("question_id")
+                if not question_id:
+                    image["related_fields"] = []
+                    continue
+
+                # Find matching related field rules and extract values
+                image_related_fields = []
+                for rule in related_fields:
+                    if rule.get("image_path") == question_id:
+                        field_path = rule.get("field_path", "")
+                        value = self._extract_field_value(form_data, field_path)
+                        if value is not None:
+                            image_related_fields.append(
+                                {
+                                    "path": field_path,
+                                    "label": rule.get("label") or field_path,
+                                    "value": value,
+                                }
+                            )
+
+                image["related_fields"] = image_related_fields
+
+        return visit_images
+
     def extract_images_for_visits(
         self,
         visit_ids: list[int],
         opportunity_id: int | None = None,
+        related_fields: list[dict] | None = None,
     ) -> dict[str, list]:
         """
         Extract images with question IDs for selected visits.
 
         Uses the analysis pipeline's compute_visit_fields with custom extractor.
         Memory efficient - only loads form_json for selected visits.
+
+        Args:
+            visit_ids: List of visit IDs to extract images for
+            opportunity_id: Optional opportunity ID (uses self.opportunity_id if not provided)
+            related_fields: Optional list of related field rules to extract and attach to images.
+                           Each rule is a dict with {image_path, field_path, label}.
 
         Returns:
             Dict mapping visit_id (str) to list of image dicts
@@ -487,7 +652,72 @@ class AuditDataAccess:
             if str(vid) not in result:
                 result[str(vid)] = []
 
+        # Add related field values if rules provided
+        if related_fields:
+            result = self._add_related_fields_to_images(result, visit_dicts, related_fields)
+            # Filter visits based on related field filter rules
+            result = self._filter_visits_by_related_fields(result, related_fields)
+
         return result
+
+    def _filter_visits_by_related_fields(
+        self,
+        visit_images: dict[str, list],
+        related_fields: list[dict],
+    ) -> dict[str, list]:
+        """
+        Filter visits based on related field filter rules.
+
+        If any rule has filter_by_image=True, only include visits with that image.
+        If any rule has filter_by_field=True, only include visits with that field value.
+
+        Args:
+            visit_images: Dict mapping visit_id to list of image dicts (with related_fields attached)
+            related_fields: List of related field rules with filter options
+
+        Returns:
+            Filtered visit_images dict
+        """
+        # Check if any filtering is enabled
+        filter_rules = [r for r in related_fields if r.get("filter_by_image") or r.get("filter_by_field")]
+        if not filter_rules:
+            return visit_images
+
+        filtered_result = {}
+        for visit_id, images in visit_images.items():
+            include_visit = True
+
+            for rule in filter_rules:
+                image_path = rule.get("image_path", "")
+                field_path = rule.get("field_path", "")
+                filter_by_image = rule.get("filter_by_image", False)
+                filter_by_field = rule.get("filter_by_field", False)
+
+                # Check if this visit has the required image
+                if filter_by_image:
+                    has_matching_image = any(img.get("question_id") == image_path for img in images)
+                    if not has_matching_image:
+                        include_visit = False
+                        break
+
+                # Check if this visit has the required field value
+                if filter_by_field:
+                    has_field_value = False
+                    for img in images:
+                        for rf in img.get("related_fields", []):
+                            if rf.get("path") == field_path and rf.get("value"):
+                                has_field_value = True
+                                break
+                        if has_field_value:
+                            break
+                    if not has_field_value:
+                        include_visit = False
+                        break
+
+            if include_visit:
+                filtered_result[visit_id] = images
+
+        return filtered_result
 
     # =========================================================================
     # Template Management
@@ -521,6 +751,7 @@ class AuditDataAccess:
             "count_per_opp": criteria.count_per_opp,
             "count_across_all": criteria.count_across_all,
             "sample_percentage": criteria.sample_percentage,
+            "related_fields": criteria.related_fields or [],
         }
 
         record = self.labs_api.create_record(
@@ -561,6 +792,7 @@ class AuditDataAccess:
         visits_cache: list[dict] | None = None,  # Kept for backward compat, not used
         opportunity_name: str | None = None,  # Pass to avoid redundant API call
         visit_images: dict[str, list] | None = None,  # Pass pre-extracted images for batch operations
+        related_fields: list[dict] | None = None,  # Related field rules for image extraction
     ) -> AuditSessionRecord:
         """Create an audit session with extracted image metadata."""
         opp_id = opportunity_id or self.opportunity_id
@@ -575,16 +807,20 @@ class AuditDataAccess:
 
         # Generate description
         description = ""
+        # Get related_fields from criteria if not provided directly
         if criteria:
             if isinstance(criteria, dict):
                 if audit_type and "audit_type" not in criteria:
                     criteria["audit_type"] = audit_type
                 criteria = AuditCriteria.from_dict(criteria)
             description = generate_audit_description(criteria)
+            # Use related_fields from criteria if not passed directly
+            if related_fields is None:
+                related_fields = criteria.related_fields
 
         # Extract images (use passed value to avoid redundant CSV parsing in batch operations)
         if visit_images is None:
-            visit_images = self.extract_images_for_visits(visit_ids, opp_id)
+            visit_images = self.extract_images_for_visits(visit_ids, opp_id, related_fields=related_fields)
 
         data = {
             "title": title,
@@ -599,6 +835,7 @@ class AuditDataAccess:
             "opportunity_name": opportunity_name,
             "description": description,
             "visit_images": visit_images,
+            "related_fields": related_fields or [],  # Store config for reference
         }
 
         record = self.labs_api.create_record(

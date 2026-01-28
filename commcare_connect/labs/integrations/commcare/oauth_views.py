@@ -153,7 +153,7 @@ def labs_commcare_callback(request: HttpRequest) -> HttpResponseRedirect:
         messages.success(request, "Successfully connected to CommCare!")
 
         # Ensure next_url is valid - default to /audit/ if empty or invalid
-        if not next_url or not next_url.startswith('/'):
+        if not next_url or not next_url.startswith("/"):
             next_url = "/audit/"
 
         return redirect(next_url)

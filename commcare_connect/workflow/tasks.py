@@ -502,10 +502,10 @@ def handle_scale_validation_job(job_config: dict, access_token: str, progress_ca
     Returns:
         Results dict with successful/failed counts and item details
     """
-    from commcare_connect.labs.integrations.scale_validation.api_client import (
-        ScaleValidationClient,
-        ScaleValidationError,
+    from commcare_connect.labs.ai_review_agents.agents.scale_validation import (
+        ScaleValidationAgent as ScaleValidationClient,
     )
+    from commcare_connect.labs.ai_review_agents.agents.scale_validation import ScaleValidationError
 
     params = job_config.get("params", {})
     image_filename_field = params.get("image_field", "scale_image_filename")

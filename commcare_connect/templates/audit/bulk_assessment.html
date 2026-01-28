@@ -173,6 +173,56 @@
                 class="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium disabled:opacity-50">
           <i class="fa-solid fa-eraser mr-1"></i>Clear All Assessments
         </button>
+        <div class="border-l border-gray-300 h-8 mx-2"></div>
+        <!-- AI Review Section -->
+        <div class="flex gap-2 items-center">
+          <!-- AI Review Dropdown -->
+          <div class="relative" x-data="{ showAiMenu: false }">
+            <button @click="showAiMenu = !showAiMenu"
+                    :disabled="loading || bulkProcessing || bulkAiProcessing"
+                    class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 flex items-center gap-1">
+              <i class="fa-solid fa-robot" :class="{'fa-spin': bulkAiProcessing}"></i>
+              <span x-text="bulkAiProcessing ? ('AI: ' + aiProcessingStatus) : 'Run AI Review Agent'"></span>
+              <i class="fa-solid fa-chevron-down text-xs ml-1" x-show="!bulkAiProcessing"></i>
+            </button>
+          <div x-show="showAiMenu"
+               @click.away="showAiMenu = false"
+               x-transition
+               class="absolute right-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+            <div class="py-1">
+                <template x-for="agent in availableAgents" :key="agent.agent_id">
+                  <button @click="runBulkAiReview(agent.agent_id); showAiMenu = false"
+                          :disabled="bulkAiProcessing"
+                          class="w-full text-left px-4 py-2 text-sm hover:bg-blue-50 disabled:opacity-50 flex items-center gap-2">
+                    <i class="fa-solid fa-weight-scale text-blue-600"></i>
+                    <div>
+                      <div class="font-medium" x-text="agent.name"></div>
+                      <div class="text-xs text-gray-500" x-text="agent.description"></div>
+                    </div>
+                  </button>
+                </template>
+              </div>
+            </div>
+          </div>
+          <!-- AI Result Action Buttons -->
+          <template x-if="currentAgentActions && Object.keys(currentAgentActions).length > 0">
+            <div class="flex gap-1 items-center">
+              <template x-for="(action, actionId) in currentAgentActions" :key="actionId">
+                <button @click="applyAiResultAction(action)"
+                        :disabled="loading || bulkProcessing"
+                        class="px-2 py-1.5 text-xs font-medium rounded transition-colors flex items-center gap-1"
+                        :class="{
+                          'bg-blue-100 text-blue-700 hover:bg-blue-200': action.human_result === 'pass',
+                          'bg-orange-100 text-orange-700 hover:bg-orange-200': action.human_result === 'fail'
+                        }">
+                  <i class="fa-solid fa-robot"></i>
+                  <span x-text="action.button_label"></span>
+                  <span class="bg-white/50 px-1 rounded" x-text="'(' + countAiResults(action.ai_result) + ')'"></span>
+                </button>
+              </template>
+            </div>
+          </template>
+        </div>
       </div>
     </div>
   </div>
@@ -199,9 +249,15 @@
                visitId: assessment.visit_id,
                blobId: assessment.blob_id,
                questionId: assessment.question_id || '',
-               result: assessment.result || '',
                notes: assessment.notes || '',
                saving: false,
+               // Use getters so they stay in sync with parent assessment object
+               get result() { return assessment.result || ''; },
+               set result(v) { assessment.result = v; },
+               get aiResult() { return assessment.ai_result || ''; },
+               set aiResult(v) { assessment.ai_result = v; },
+               get aiNotes() { return assessment.ai_notes || ''; },
+               set aiNotes(v) { assessment.ai_notes = v; },
                updateResult(newResult) {
                  if (this.saving) return;
                  this.$dispatch('update-assessment', {
@@ -210,6 +266,8 @@
                    questionId: this.questionId,
                    result: newResult,
                    notes: this.notes,
+                   aiResult: this.aiResult,
+                   aiNotes: this.aiNotes,
                    callback: (normalized) => { this.result = normalized; }
                  });
                },
@@ -220,7 +278,9 @@
                    blobId: this.blobId,
                    questionId: this.questionId,
                    result: this.result,
-                   notes: this.notes
+                   notes: this.notes,
+                   aiResult: this.aiResult,
+                   aiNotes: this.aiNotes
                  });
                },
                handleKeydown(event, currentId) {
@@ -241,6 +301,23 @@
                  alt="Assessment image"
                  class="w-full h-full object-contain"
                  loading="lazy">
+            <!-- AI Result Badge - Top Left -->
+            <div class="absolute top-2 left-2"
+                 x-show="aiResult"
+                 x-transition>
+              <span class="px-2 py-1 rounded text-xs font-bold text-white"
+                    :class="{
+                      'bg-blue-500': aiResult === 'match',
+                      'bg-red-500': aiResult === 'no_match',
+                      'bg-gray-500': aiResult === 'error'
+                    }">
+                <i class="fa-solid fa-robot mr-1"></i>
+                <span x-show="aiResult === 'match'">Match</span>
+                <span x-show="aiResult === 'no_match'">No Match</span>
+                <span x-show="aiResult === 'error'">Error</span>
+              </span>
+            </div>
+            <!-- Human Result Badge - Top Right -->
             <div class="absolute top-2 right-2"
                  x-show="result"
                  x-transition>
@@ -254,56 +331,92 @@
               </span>
             </div>
           </div>
-          <div class="p-3">
-            <div class="text-xs text-gray-600 mb-2">
-              <div class="truncate">
-                <i class="fa-solid fa-calendar mr-1"></i><span x-text="assessment.visit_date"></span>
-              </div>
-              <div class="truncate">
-                <i class="fa-solid fa-hashtag mr-1"></i>
-                <a :href="'{% url "audit:visit_detail_from_production" 0 %}'.replace('/0/', '/' + assessment.visit_id + '/')"
-                   target="_blank"
-                   class="text-brand-indigo hover:text-brand-deep-purple hover:underline"
-                   x-text="'Visit ' + assessment.visit_id"></a>
-              </div>
-              <div class="truncate" x-show="assessment.question_id">
-                <i class="fa-solid fa-tag mr-1"></i><span x-text="assessment.question_id"></span>
-              </div>
+          <div class="p-2">
+            <!-- Metadata Section -->
+            <div class="text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-0.5 mb-2">
+              <span><i class="fa-solid fa-calendar mr-1"></i><span x-text="assessment.visit_date"></span></span>
+              <a :href="'{% url "audit:visit_detail_from_production" 0 %}'.replace('/0/', '/' + assessment.visit_id + '/')"
+                 target="_blank"
+                 class="text-brand-indigo hover:underline">
+                <i class="fa-solid fa-hashtag mr-0.5"></i><span x-text="assessment.visit_id"></span>
+              </a>
+              <span x-show="assessment.question_id" class="truncate max-w-[120px]" :title="assessment.question_id">
+                <i class="fa-solid fa-tag mr-0.5"></i><span x-text="assessment.question_id.split('/').pop()"></span>
+              </span>
             </div>
-            <div class="flex gap-2 mb-2">
+
+            <!-- Related Fields Section -->
+            <template x-if="(assessment.related_fields || []).length > 0">
+              <div class="bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mb-2">
+                <template x-for="field in (assessment.related_fields || [])" :key="field.path">
+                  <div class="flex items-center gap-1 text-xs">
+                    <span class="text-amber-700 font-medium" x-text="field.label + ':'"></span>
+                    <span class="text-amber-900 font-semibold" x-text="field.value"></span>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+            <!-- AI Result Section -->
+            <template x-if="aiResult">
+              <div class="rounded px-2 py-1.5 mb-2 text-xs"
+                   :class="{
+                     'bg-blue-50 border border-blue-200': aiResult === 'match',
+                     'bg-orange-50 border border-orange-200': aiResult === 'no_match',
+                     'bg-gray-50 border border-gray-200': aiResult === 'error'
+                   }">
+                <div class="flex items-center gap-1.5">
+                  <i class="fa-solid fa-robot"
+                     :class="{
+                       'text-blue-600': aiResult === 'match',
+                       'text-orange-600': aiResult === 'no_match',
+                       'text-gray-500': aiResult === 'error'
+                     }"></i>
+                  <span class="font-medium"
+                        :class="{
+                          'text-blue-700': aiResult === 'match',
+                          'text-orange-700': aiResult === 'no_match',
+                          'text-gray-600': aiResult === 'error'
+                        }"
+                        x-text="aiResult === 'match' ? 'Match' : (aiResult === 'no_match' ? 'No Match' : 'Error')"></span>
+                </div>
+                <div class="text-gray-600 mt-0.5 leading-tight" x-show="aiNotes" x-text="aiNotes"></div>
+              </div>
+            </template>
+
+            <!-- Human Review Section -->
+            <div class="flex gap-1.5 mb-1.5">
               <button @click="updateResult(result === 'pass' ? '' : 'pass')"
                       :disabled="saving"
                       :class="{
-                        'bg-green-600 text-white': result === 'pass',
-                        'bg-gray-100 text-gray-700 hover:bg-green-50': result !== 'pass'
+                        'bg-green-600 text-white shadow-sm': result === 'pass',
+                        'bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-700': result !== 'pass'
                       }"
-                      class="flex-1 py-2 px-3 rounded text-sm font-medium transition-colors disabled:opacity-50">
+                      class="flex-1 py-1.5 px-2 rounded text-xs font-medium transition-colors disabled:opacity-50">
                 <i class="fa-solid fa-check mr-1"></i>Pass
               </button>
               <button @click="updateResult(result === 'fail' ? '' : 'fail')"
                       :disabled="saving"
                       :class="{
-                        'bg-red-600 text-white': result === 'fail',
-                        'bg-gray-100 text-gray-700 hover:bg-red-50': result !== 'fail'
+                        'bg-red-600 text-white shadow-sm': result === 'fail',
+                        'bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-700': result !== 'fail'
                       }"
-                      class="flex-1 py-2 px-3 rounded text-sm font-medium transition-colors disabled:opacity-50">
+                      class="flex-1 py-1.5 px-2 rounded text-xs font-medium transition-colors disabled:opacity-50">
                 <i class="fa-solid fa-times mr-1"></i>Fail
               </button>
             </div>
-            <div x-data="{ showNotes: false }">
+            <div x-data="{ showNotes: notes ? true : false }">
               <button @click="showNotes = !showNotes"
-                      class="text-xs text-brand-indigo hover:text-brand-deep-purple mb-1">
-                <i class="fa-solid fa-sticky-note mr-1"></i>
-                <span x-text="showNotes ? 'Hide Notes' : 'Add Notes'"></span>
+                      class="text-xs text-gray-500 hover:text-brand-indigo">
+                <i class="fa-solid fa-comment mr-1"></i>
+                <span x-text="notes ? 'Notes' : (showNotes ? 'Hide' : 'Add Note')"></span>
               </button>
-              <div x-show="showNotes"
-                   x-transition
-                   class="mt-1">
+              <div x-show="showNotes" x-transition class="mt-1">
                 <textarea x-model="notes"
                           @blur="saveNotes()"
                           :disabled="saving"
-                          placeholder="Enter notes..."
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-sm resize-none disabled:opacity-50"
+                          placeholder="Add notes..."
+                          class="w-full border border-gray-200 rounded px-2 py-1 text-xs resize-none disabled:opacity-50 focus:border-brand-indigo focus:ring-1 focus:ring-brand-indigo"
                           rows="2"></textarea>
               </div>
             </div>
@@ -534,6 +647,10 @@
 
 {% block inline_javascript %}
 <script>
+// Global variables for AI review (accessible from widget scope)
+const sessionId = {{ session.pk }};
+const opportunityId = {{ opportunity_id|default:"null" }};
+
 function bulkAssessmentInterface() {
   return {
     selectedQuestionId: '{{ selected_question_id }}',
@@ -550,12 +667,17 @@ function bulkAssessmentInterface() {
     completeUrl: '{% url "audit:audit_complete" session.pk %}',
     uncompleteUrl: '{% url "audit:audit_uncomplete" session.pk %}',
     bulkDataUrl: '{{ bulk_data_url }}',
+    aiReviewUrl: '{% url "audit:ai_review" session.pk %}',
     csrfToken: '',
     loading: true,
     loadCancelled: false,
     loadError: null,
     controller: null,
     bulkProcessing: false,
+    bulkAiProcessing: false,
+    aiProcessingStatus: '',
+    availableAgents: [],
+    currentAgentActions: {},
     hasUnsavedChanges: false,
     saving: false,
     showApplyModal: false,
@@ -586,6 +708,7 @@ function bulkAssessmentInterface() {
       this.csrfToken = tokenInput ? tokenInput.value : '';
       this.updateUrlParams();
       this.fetchData();
+      this.fetchAgents();
 
       // Warn user about unsaved changes
       window.addEventListener('beforeunload', (event) => {
@@ -594,6 +717,15 @@ function bulkAssessmentInterface() {
           event.returnValue = '';
         }
       });
+    },
+    async fetchAgents() {
+      try {
+        const response = await fetch(this.aiReviewUrl);
+        const data = await response.json();
+        this.availableAgents = data.agents || [];
+      } catch (e) {
+        console.error('Failed to fetch AI agents:', e);
+      }
     },
     updateUrlParams() {
       const url = new URL(window.location);
@@ -736,7 +868,7 @@ function bulkAssessmentInterface() {
         fail: failCount,
       };
     },
-    updateAssessmentLocal(visitId, blobId, questionId, resultValue, notesValue) {
+    updateAssessmentLocal(visitId, blobId, questionId, resultValue, notesValue, aiResult, aiNotes) {
       // Update local visitResults structure
       const visitKey = String(visitId);
       if (!this.visitResults[visitKey]) {
@@ -746,11 +878,14 @@ function bulkAssessmentInterface() {
         this.visitResults[visitKey].assessments = {};
       }
 
-      if (resultValue || notesValue) {
+      if (resultValue || notesValue || aiResult || aiNotes) {
+        const existing = this.visitResults[visitKey].assessments[blobId] || {};
         this.visitResults[visitKey].assessments[blobId] = {
-          question_id: questionId || '',
-          result: resultValue || '',
-          notes: notesValue || '',
+          question_id: questionId || existing.question_id || '',
+          result: resultValue !== undefined ? resultValue : (existing.result || ''),
+          notes: notesValue !== undefined ? notesValue : (existing.notes || ''),
+          ai_result: aiResult !== undefined ? aiResult : (existing.ai_result || ''),
+          ai_notes: aiNotes !== undefined ? aiNotes : (existing.ai_notes || ''),
         };
       } else {
         // Clear assessment if no result or notes
@@ -760,22 +895,30 @@ function bulkAssessmentInterface() {
       // Update allAssessments array for UI display
       const assessment = this.allAssessments.find((a) => a.visit_id === visitId && a.blob_id === blobId);
       if (assessment) {
-        assessment.result = resultValue || '';
-        assessment.notes = notesValue || '';
-        assessment.status = resultValue || 'pending';
+        if (resultValue !== undefined) {
+          assessment.result = resultValue || '';
+          assessment.status = resultValue || 'pending';
+        }
+        if (notesValue !== undefined) assessment.notes = notesValue || '';
+        if (aiResult !== undefined) assessment.ai_result = aiResult || '';
+        if (aiNotes !== undefined) assessment.ai_notes = aiNotes || '';
       }
 
       // Update filtered assessments array
       const filteredAssessment = this.assessments.find((a) => a.visit_id === visitId && a.blob_id === blobId);
       if (filteredAssessment) {
-        filteredAssessment.result = resultValue || '';
-        filteredAssessment.notes = notesValue || '';
-        filteredAssessment.status = resultValue || 'pending';
+        if (resultValue !== undefined) {
+          filteredAssessment.result = resultValue || '';
+          filteredAssessment.status = resultValue || 'pending';
+        }
+        if (notesValue !== undefined) filteredAssessment.notes = notesValue || '';
+        if (aiResult !== undefined) filteredAssessment.ai_result = aiResult || '';
+        if (aiNotes !== undefined) filteredAssessment.ai_notes = aiNotes || '';
       }
 
       // Force reactivity by reassigning arrays (Alpine doesn't always detect mutations)
       // Skip during bulk processing - we'll do it once at the end
-      if (!this.bulkProcessing) {
+      if (!this.bulkProcessing && !this.bulkAiProcessing) {
         this.allAssessments = [...this.allAssessments];
         this.assessments = [...this.assessments];
         this.recalculateStats();
@@ -790,7 +933,9 @@ function bulkAssessmentInterface() {
         detail.blobId,
         detail.questionId,
         detail.result,
-        detail.notes
+        detail.notes,
+        detail.aiResult,
+        detail.aiNotes
       );
       if (detail.callback) {
         detail.callback(normalized);
@@ -802,7 +947,9 @@ function bulkAssessmentInterface() {
         detail.blobId,
         detail.questionId,
         detail.result,
-        detail.notes
+        detail.notes,
+        detail.aiResult,
+        detail.aiNotes
       );
     },
     passAllPending() {
@@ -876,6 +1023,149 @@ function bulkAssessmentInterface() {
       this.allAssessments = [...this.allAssessments];
       this.assessments = [...this.assessments];
       this.recalculateStats();
+    },
+    countAiResults(aiResult) {
+      return this.assessments.filter(a => a.ai_result === aiResult).length;
+    },
+    applyAiResultAction(action) {
+      if (this.loading || this.bulkProcessing) {
+        return;
+      }
+      const matchingAssessments = this.assessments.filter(a =>
+        a.ai_result === action.ai_result && a.result !== action.human_result
+      );
+      if (matchingAssessments.length === 0) {
+        return;
+      }
+      this.bulkProcessing = true;
+      for (const assessment of matchingAssessments) {
+        this.updateAssessmentLocal(
+          assessment.visit_id,
+          assessment.blob_id,
+          assessment.question_id,
+          action.human_result,
+          assessment.notes,
+        );
+      }
+      this.bulkProcessing = false;
+      this.allAssessments = [...this.allAssessments];
+      this.assessments = [...this.assessments];
+      this.recalculateStats();
+    },
+    async fetchImageAsBase64(imageUrl) {
+      try {
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            // Remove data URL prefix to get just base64
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (e) {
+        console.error('Failed to fetch image:', e);
+        return null;
+      }
+    },
+    async runBulkAiReview(agentId = 'scale_validation') {
+      if (this.loading || this.bulkProcessing || this.bulkAiProcessing) {
+        return;
+      }
+
+      // Set current agent actions for the action buttons
+      const agent = this.availableAgents.find(a => a.agent_id === agentId);
+      if (agent) {
+        this.currentAgentActions = agent.result_actions || {};
+      }
+
+      // Use filtered assessments (visible based on current filter)
+      // Find assessments that have related_fields with values (needed for AI review)
+      const eligibleAssessments = this.assessments.filter((a) => {
+        const relatedFields = a.related_fields || [];
+        return relatedFields.some(f => f.value) && !a.ai_result;
+      });
+
+      if (eligibleAssessments.length === 0) {
+        return;
+      }
+
+      this.bulkAiProcessing = true;
+      this.aiProcessingStatus = `0 / ${eligibleAssessments.length}`;
+
+      let processedCount = 0;
+      let errorCount = 0;
+
+      try {
+        // Process one at a time for granular progress updates
+        for (const assessment of eligibleAssessments) {
+          const relatedFields = assessment.related_fields || [];
+          const readingField = relatedFields.find(f => f.value);
+
+          // Fetch image as base64 (reuse already-downloaded image)
+          const imageBase64 = await this.fetchImageAsBase64(assessment.image_url);
+
+          const response = await fetch(this.aiReviewUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': this.csrfToken
+            },
+            body: JSON.stringify({
+              opportunity_id: opportunityId,
+              agent_id: agentId,
+              assessments: [{
+                visit_id: assessment.visit_id,
+                blob_id: assessment.blob_id,
+                reading: readingField ? readingField.value : '',
+                image_base64: imageBase64
+              }]
+            })
+          });
+
+          const data = await response.json();
+
+          if (data.results) {
+            for (const result of data.results) {
+              this.updateAssessmentLocal(
+                result.visit_id,
+                result.blob_id,
+                undefined,  // questionId - keep existing
+                undefined,  // result - keep existing
+                undefined,  // notes - keep existing
+                result.ai_result,
+                result.ai_notes
+              );
+              processedCount++;
+              if (result.ai_result === 'error') {
+                errorCount++;
+              }
+            }
+            // Update UI immediately after each batch
+            this.aiProcessingStatus = `${processedCount} / ${eligibleAssessments.length}`;
+            this.allAssessments = [...this.allAssessments];
+            this.assessments = [...this.assessments];
+          }
+        }
+      } catch (e) {
+        console.error('Bulk AI review failed:', e);
+        alert('Bulk AI review failed: ' + e.message);
+      } finally {
+        this.bulkAiProcessing = false;
+        this.aiProcessingStatus = '';
+        // Final reactivity trigger
+        this.allAssessments = [...this.allAssessments];
+        this.assessments = [...this.assessments];
+
+        if (processedCount > 0) {
+          const matchCount = eligibleAssessments.filter(a => a.ai_result === 'match').length;
+          const noMatchCount = eligibleAssessments.filter(a => a.ai_result === 'no_match').length;
+          console.log(`AI Review complete: ${processedCount} processed, ${matchCount} matches, ${noMatchCount} no-matches, ${errorCount} errors`);
+        }
+      }
     },
     setVisitResult(visitId, result) {
       if (this.loading) {
