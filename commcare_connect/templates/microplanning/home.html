@@ -16,7 +16,7 @@
 
 {% block content %}
 <h2 class="mb-4 text-brand-deep-purple font-medium">{% translate "Select Opportunity Area" %}</h2>
-<div x-ref="mapContainer" class="w-full h-screen grid grid-cols-12 gap-2" x-data="mapController()">
+<div x-ref="mapContainer" class="w-full grid grid-cols-12 gap-2 h-[max(calc(100vh-150px),200px)]" x-data="mapController()">
     <div id="map-wrapper" class="relative h-full shadow-md" :class="panelOpen ? 'col-span-9' : 'col-span-12'">
         <div id="map" class="w-full h-full"></div>
         <button
@@ -49,8 +49,6 @@
             init() {
                 this.$nextTick(() => {
                     this.initializeMap();
-                    this.setMapHeight();
-                    window.addEventListener('resize', this.setMapHeight.bind(this));
                 });
             },
 
@@ -100,20 +98,8 @@
                 // Todo
             },
 
-            setMapHeight() {
-                try {
-                    const top = this.$refs.mapContainer.getBoundingClientRect().top;
-                    const height = Math.max(window.innerHeight - top - 10, 200);
-                    this.$refs.mapContainer.style.height = height + 'px';
-                    if (this.map) {
-                        this.map.resize();
-                    }
-                } catch (e) {}
-            },
-
             togglePanel() {
                 this.panelOpen = !this.panelOpen;
-                setTimeout(() => this.setMapHeight(), 300);
             }
         }));
     });
