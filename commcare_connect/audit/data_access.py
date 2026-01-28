@@ -30,6 +30,44 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# Mock Request for Celery Tasks
+# =============================================================================
+
+
+def create_mock_request(access_token: str, opportunity_id: int | None = None):
+    """
+    Create a mock request object for use in Celery tasks.
+
+    Celery tasks don't have access to the original HTTP request, but
+    AuditDataAccess needs request-like object to extract OAuth tokens
+    and context. This creates a minimal object with the required attributes.
+
+    Args:
+        access_token: OAuth access token for API calls
+        opportunity_id: Optional opportunity ID for context
+
+    Returns:
+        Mock object with session, labs_context, user, GET, POST attributes
+    """
+    import time
+
+    class MockRequest:
+        def __init__(self):
+            self.session = {
+                "labs_oauth": {
+                    "access_token": access_token,
+                    "expires_at": time.time() + 3600,
+                }
+            }
+            self.labs_context = {"opportunity_id": opportunity_id} if opportunity_id else {}
+            self.user = None
+            self.GET = {}
+            self.POST = {}
+
+    return MockRequest()
+
+
+# =============================================================================
 # Filtering Logic
 # =============================================================================
 
@@ -348,6 +386,14 @@ class AuditDataAccess:
             end_date = criteria.end_date
         # Note: "last_n_per_opp" is handled at the aggregate level below
 
+        # DEBUG: Log filter parameters
+        logger.info(
+            f"[get_visit_ids_for_audit] audit_type={criteria.audit_type}, "
+            f"last_n_total={last_n_total}, last_n_per_user={last_n_per_user}, "
+            f"count_across_all={criteria.count_across_all}, "
+            f"opportunity_ids={opportunity_ids}"
+        )
+
         all_visit_ids = []
         all_visits = []
 
@@ -363,13 +409,19 @@ class AuditDataAccess:
                     all_visits.extend(filtered)
             else:
                 # Use backend-optimized filtering (SQL or pandas depending on backend)
+                effective_last_n = last_n_total if len(opportunity_ids) == 1 else None
+                logger.info(
+                    f"[get_visit_ids_for_audit] Calling pipeline.filter_visits_for_audit: "
+                    f"opp_id={opp_id}, last_n_total={effective_last_n}, "
+                    f"num_opps={len(opportunity_ids)}"
+                )
                 result = self.pipeline.filter_visits_for_audit(
                     opportunity_id=opp_id,
                     usernames=criteria.selected_flw_user_ids or None,
                     start_date=start_date,
                     end_date=end_date,
                     last_n_per_user=last_n_per_user,
-                    last_n_total=last_n_total if len(opportunity_ids) == 1 else None,
+                    last_n_total=effective_last_n,
                     sample_percentage=criteria.sample_percentage if len(opportunity_ids) == 1 else 100,
                     return_visit_data=return_visits,
                 )
@@ -377,8 +429,10 @@ class AuditDataAccess:
                     visit_ids, visits = result
                     all_visit_ids.extend(visit_ids)
                     all_visits.extend(visits)
+                    logger.info(f"[get_visit_ids_for_audit] Backend returned {len(visit_ids)} visit IDs")
                 else:
                     all_visit_ids.extend(result)
+                    logger.info(f"[get_visit_ids_for_audit] Backend returned {len(result)} visit IDs")
 
         # Apply last_n_per_opp filtering (works for single or multiple opportunities)
         if criteria.audit_type == "last_n_per_opp":
@@ -1004,3 +1058,172 @@ class AuditDataAccess:
         )
         response.raise_for_status()
         return response.content
+
+    # =========================================================================
+    # Audit Creation Job Management (for async creation tracking)
+    # =========================================================================
+
+    def create_audit_creation_job(
+        self,
+        username: str,
+        task_id: str,
+        title: str,
+        criteria: dict,
+        opportunities: list[dict],
+    ) -> dict:
+        """Create an audit creation job record for tracking async creation."""
+        from datetime import datetime
+
+        data = {
+            "task_id": task_id,
+            "title": title,
+            "status": "pending",
+            "criteria": criteria,
+            "opportunities": opportunities,
+            "progress": {
+                "current_stage": 0,
+                "total_stages": 4,
+                "stage_name": "",
+                "message": "Starting...",
+                "processed": 0,
+                "total": 0,
+            },
+            "result": None,
+            "error": None,
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+        }
+
+        record = self.labs_api.create_record(
+            experiment="audit",
+            type="AuditCreationJob",
+            data=data,
+            username=username,
+        )
+
+        return {
+            "id": record.id,
+            "task_id": task_id,
+            "data": record.data,
+        }
+
+    def get_audit_creation_jobs(
+        self,
+        username: str | None = None,
+        status: str | None = None,
+    ) -> list[dict]:
+        """Get audit creation jobs, optionally filtered by username or status."""
+        from commcare_connect.labs.models import LocalLabsRecord
+
+        records = self.labs_api.get_records(
+            experiment="audit",
+            type="AuditCreationJob",
+            username=username,
+            model_class=LocalLabsRecord,
+        )
+
+        jobs = []
+        for record in records:
+            job_data = record.data
+            # Filter by status if specified
+            if status and job_data.get("status") != status:
+                continue
+            jobs.append(
+                {
+                    "id": record.id,
+                    "task_id": job_data.get("task_id"),
+                    "title": job_data.get("title"),
+                    "status": job_data.get("status"),
+                    "progress": job_data.get("progress", {}),
+                    "result": job_data.get("result"),
+                    "error": job_data.get("error"),
+                    "created_at": job_data.get("created_at"),
+                    "updated_at": job_data.get("updated_at"),
+                }
+            )
+
+        return jobs
+
+    def get_audit_creation_job_by_task_id(self, task_id: str) -> dict | None:
+        """Get an audit creation job by its Celery task ID."""
+        from commcare_connect.labs.models import LocalLabsRecord
+
+        records = self.labs_api.get_records(
+            experiment="audit",
+            type="AuditCreationJob",
+            model_class=LocalLabsRecord,
+        )
+
+        for record in records:
+            if record.data.get("task_id") == task_id:
+                return {
+                    "id": record.id,
+                    "task_id": task_id,
+                    "data": record.data,
+                }
+        return None
+
+    def update_audit_creation_job(
+        self,
+        job_id: int,
+        username: str,
+        status: str | None = None,
+        progress: dict | None = None,
+        result: dict | None = None,
+        error: str | None = None,
+    ) -> dict | None:
+        """Update an audit creation job record."""
+        from datetime import datetime
+
+        from commcare_connect.labs.models import LocalLabsRecord
+
+        # Get current record
+        records = self.labs_api.get_records(
+            experiment="audit",
+            type="AuditCreationJob",
+            model_class=LocalLabsRecord,
+        )
+
+        current_record = None
+        for record in records:
+            if record.id == job_id:
+                current_record = record
+                break
+
+        if not current_record:
+            return None
+
+        # Update fields
+        data = current_record.data
+        if status is not None:
+            data["status"] = status
+        if progress is not None:
+            data["progress"] = progress
+        if result is not None:
+            data["result"] = result
+        if error is not None:
+            data["error"] = error
+        data["updated_at"] = datetime.now().isoformat()
+
+        # Save
+        updated = self.labs_api.update_record(
+            record_id=job_id,
+            experiment="audit",
+            type="AuditCreationJob",
+            data=data,
+            username=username,
+        )
+
+        return {
+            "id": updated.id,
+            "task_id": data.get("task_id"),
+            "data": updated.data,
+        }
+
+    def delete_audit_creation_job(self, job_id: int) -> bool:
+        """Delete an audit creation job record."""
+        try:
+            self.labs_api.delete_record(job_id)
+            return True
+        except Exception:
+            return False

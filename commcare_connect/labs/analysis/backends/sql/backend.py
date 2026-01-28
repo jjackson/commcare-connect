@@ -668,6 +668,13 @@ class SQLBackend:
         if end_date:
             end_date_obj = parse_date(end_date)
 
+        # DEBUG: Log incoming filter parameters
+        logger.info(
+            f"[SQL] filter_visits_for_audit called with: last_n_total={last_n_total}, "
+            f"last_n_per_user={last_n_per_user}, usernames={usernames}, "
+            f"start_date={start_date_obj}, end_date={end_date_obj}, sample_pct={sample_percentage}"
+        )
+
         if return_visit_data:
             # Get both IDs and slim visit data in one query
             visits = cache_manager.get_filtered_visits_slim(

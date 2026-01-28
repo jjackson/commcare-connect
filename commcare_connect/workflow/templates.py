@@ -1297,6 +1297,616 @@ KMC_SCALE_VALIDATION_RENDER_CODE = """function WorkflowUI({ definition, instance
 }"""
 
 # =============================================================================
+# Template: Audit with AI Review
+# =============================================================================
+
+AUDIT_WITH_AI_REVIEW_DEFINITION = {
+    "name": "Audit with AI Review",
+    "description": "Create audit sessions and optionally run AI review agents to pre-validate images",
+    "version": 1,
+    "templateType": "audit_with_ai_review",
+    "statuses": [
+        {"id": "configuring", "label": "Configuring", "color": "gray"},
+        {"id": "creating", "label": "Creating Audits", "color": "blue"},
+        {"id": "ai_reviewing", "label": "Running AI Review", "color": "purple"},
+        {"id": "completed", "label": "Completed", "color": "green"},
+        {"id": "failed", "label": "Failed", "color": "red"},
+    ],
+    "config": {
+        "showSummaryCards": True,
+        "defaultAuditType": "date_range",
+        "defaultGranularity": "combined",
+    },
+    "pipeline_sources": [],
+}
+
+AUDIT_WITH_AI_REVIEW_RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines, links, actions, onUpdateState }) {
+    // Audit configuration state
+    const [auditType, setAuditType] = React.useState(instance.state?.audit_config?.audit_type || 'date_range');
+    const [granularity, setGranularity] = React.useState(instance.state?.audit_config?.granularity || 'combined');
+    const [countAcrossAll, setCountAcrossAll] = React.useState(instance.state?.audit_config?.count_across_all || 50);
+    const [countPerFlw, setCountPerFlw] = React.useState(instance.state?.audit_config?.count_per_flw || 10);
+    const [startDate, setStartDate] = React.useState(instance.state?.audit_config?.start_date || '');
+    const [endDate, setEndDate] = React.useState(instance.state?.audit_config?.end_date || '');
+    const [titleSuffix, setTitleSuffix] = React.useState(instance.state?.audit_config?.title_suffix || '');
+
+    // AI Agent state
+    const [availableAgents, setAvailableAgents] = React.useState([]);
+    const [selectedAgent, setSelectedAgent] = React.useState(instance.state?.audit_config?.ai_agent_id || '');
+    const [loadingAgents, setLoadingAgents] = React.useState(true);
+
+    // Related fields configuration
+    const [relatedFields, setRelatedFields] = React.useState(instance.state?.audit_config?.related_fields || []);
+
+    // Execution state
+    const [isRunning, setIsRunning] = React.useState(false);
+    const [progress, setProgress] = React.useState(null);
+    const [taskId, setTaskId] = React.useState(null);
+    const cleanupRef = React.useRef(null);
+
+    // Results
+    const auditResults = instance.state?.audit_results || null;
+
+    // Get opportunity from URL or instance state
+    const urlParams = new URLSearchParams(window.location.search);
+    const opportunityId = parseInt(urlParams.get('opportunity_id')) || instance.state?.opportunity_id;
+    const opportunityName = instance.state?.opportunity_name || 'Selected Opportunity';
+
+    // Load AI agents on mount
+    React.useEffect(() => {
+        setLoadingAgents(true);
+        fetch('/labs/audit/api/ai-agents/')
+            .then(res => res.json())
+            .then(data => {
+                setAvailableAgents(data.agents || []);
+                setLoadingAgents(false);
+            })
+            .catch(err => {
+                console.error('Failed to load AI agents:', err);
+                setLoadingAgents(false);
+            });
+    }, []);
+
+    // Set default dates (last 30 days)
+    React.useEffect(() => {
+        if (!startDate && !endDate) {
+            const today = new Date();
+            const thirtyDaysAgo = new Date(today);
+            thirtyDaysAgo.setDate(today.getDate() - 30);
+            setStartDate(thirtyDaysAgo.toISOString().split('T')[0]);
+            setEndDate(today.toISOString().split('T')[0]);
+        }
+    }, []);
+
+    // Cleanup on unmount
+    React.useEffect(() => {
+        return () => {
+            if (cleanupRef.current) cleanupRef.current();
+        };
+    }, []);
+
+    // Add related field rule
+    const addRelatedField = () => {
+        setRelatedFields([...relatedFields, { imagePath: '', fieldPath: '', label: '' }]);
+    };
+
+    // Remove related field rule
+    const removeRelatedField = (index) => {
+        setRelatedFields(relatedFields.filter((_, i) => i !== index));
+    };
+
+    // Update related field
+    const updateRelatedField = (index, field, value) => {
+        const updated = [...relatedFields];
+        updated[index] = { ...updated[index], [field]: value };
+        setRelatedFields(updated);
+    };
+
+    // Build audit criteria
+    const buildCriteria = () => {
+        const criteria = {
+            audit_type: auditType,
+            granularity: granularity,
+            title: titleSuffix,
+            relatedFields: relatedFields.filter(rf => rf.imagePath && rf.fieldPath),
+        };
+
+        if (auditType === 'date_range') {
+            criteria.startDate = startDate;
+            criteria.endDate = endDate;
+        } else if (auditType === 'last_n_total') {
+            criteria.countAcrossAll = countAcrossAll;
+        } else if (auditType === 'last_n_per_flw') {
+            criteria.countPerFlw = countPerFlw;
+        }
+
+        return criteria;
+    };
+
+    // Start audit creation
+    const handleCreateAudit = async () => {
+        if (!opportunityId) {
+            alert('No opportunity selected');
+            return;
+        }
+
+        setIsRunning(true);
+        setProgress({ status: 'starting', message: 'Initializing...' });
+
+        // Save config to workflow state
+        const auditConfig = {
+            audit_type: auditType,
+            granularity: granularity,
+            count_across_all: countAcrossAll,
+            count_per_flw: countPerFlw,
+            start_date: startDate,
+            end_date: endDate,
+            title_suffix: titleSuffix,
+            ai_agent_id: selectedAgent,
+            related_fields: relatedFields,
+        };
+
+        await onUpdateState({
+            audit_config: auditConfig,
+            opportunity_id: opportunityId,
+        });
+
+        // Build request
+        const criteria = buildCriteria();
+
+        try {
+            const result = await actions.createAudit({
+                opportunities: [{ id: opportunityId, name: opportunityName }],
+                criteria: criteria,
+                workflow_run_id: instance.id,
+                ai_agent_id: selectedAgent || undefined,
+            });
+
+            if (result.success && result.task_id) {
+                setTaskId(result.task_id);
+
+                // Stream progress
+                const cleanup = actions.streamAuditProgress(
+                    result.task_id,
+                    (progressData) => {
+                        setProgress(progressData);
+                    },
+                    async (finalResult) => {
+                        setIsRunning(false);
+                        setProgress({ status: 'completed', ...finalResult });
+
+                        // Save results to workflow state
+                        await onUpdateState({
+                            audit_results: finalResult,
+                            status: 'completed',
+                        });
+                    },
+                    (error) => {
+                        setIsRunning(false);
+                        setProgress({ status: 'failed', error });
+                    }
+                );
+                cleanupRef.current = cleanup;
+            } else {
+                setIsRunning(false);
+                setProgress({ status: 'failed', error: result.error || 'Failed to start audit creation' });
+            }
+        } catch (err) {
+            setIsRunning(false);
+            setProgress({ status: 'failed', error: err.message || 'Unknown error' });
+        }
+    };
+
+    // Get selected agent info
+    const selectedAgentInfo = availableAgents.find(a => a.agent_id === selectedAgent);
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900">{definition.name}</h1>
+                        <p className="text-gray-600 mt-1">{definition.description}</p>
+                    </div>
+                    {opportunityId && (
+                        <div className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded">
+                            Opportunity: {opportunityName} (ID: {opportunityId})
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Results Summary (if completed) */}
+            {auditResults && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                    <h2 className="text-lg font-semibold text-green-800 mb-4">
+                        <i className="fa-solid fa-check-circle mr-2"></i>Audit Created Successfully
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white p-3 rounded shadow-sm">
+                            <div className="text-2xl font-bold text-gray-900">{auditResults.sessions?.length || 0}</div>
+                            <div className="text-sm text-gray-600">Sessions Created</div>
+                        </div>
+                        <div className="bg-white p-3 rounded shadow-sm">
+                            <div className="text-2xl font-bold text-gray-900">{auditResults.total_visits || 0}</div>
+                            <div className="text-sm text-gray-600">Total Visits</div>
+                        </div>
+                        <div className="bg-white p-3 rounded shadow-sm">
+                            <div className="text-2xl font-bold text-gray-900">{auditResults.total_images || 0}</div>
+                            <div className="text-sm text-gray-600">Total Images</div>
+                        </div>
+                        {auditResults.ai_review && (
+                            <div className="bg-purple-50 p-3 rounded shadow-sm border border-purple-200">
+                                <div className="text-2xl font-bold text-purple-700">{auditResults.ai_review.total_reviewed || 0}</div>
+                                <div className="text-sm text-purple-600">AI Reviewed</div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* AI Review Summary */}
+                    {auditResults.ai_review && (
+                        <div className="mt-4 p-4 bg-purple-50 rounded border border-purple-200">
+                            <h3 className="font-medium text-purple-800 mb-2">
+                                <i className="fa-solid fa-robot mr-2"></i>
+                                AI Review Results ({auditResults.ai_review.agent_name})
+                            </h3>
+                            <div className="flex gap-4 text-sm">
+                                <span className="text-green-700">
+                                    <i className="fa-solid fa-check mr-1"></i>
+                                    Passed: {auditResults.ai_review.total_passed || 0}
+                                </span>
+                                <span className="text-red-700">
+                                    <i className="fa-solid fa-xmark mr-1"></i>
+                                    Failed: {auditResults.ai_review.total_failed || 0}
+                                </span>
+                                <span className="text-yellow-700">
+                                    <i className="fa-solid fa-exclamation-triangle mr-1"></i>
+                                    Errors: {auditResults.ai_review.total_errors || 0}
+                                </span>
+                                <span className="text-gray-600">
+                                    <i className="fa-solid fa-forward mr-1"></i>
+                                    Skipped: {auditResults.ai_review.total_skipped || 0}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Session Links */}
+                    {auditResults.sessions && auditResults.sessions.length > 0 && (
+                        <div className="mt-4">
+                            <h3 className="font-medium text-gray-800 mb-2">Created Sessions:</h3>
+                            <div className="flex flex-wrap gap-2">
+                                {auditResults.sessions.map(session => (
+                                    <a
+                                        key={session.id}
+                                        href={'/labs/audit/' + session.id + '/bulk/'}
+                                        className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded hover:bg-blue-200"
+                                    >
+                                        <i className="fa-solid fa-external-link mr-2"></i>
+                                        {session.title} ({session.visits} visits)
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Progress */}
+            {isRunning && progress && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                            <i className="fa-solid fa-spinner fa-spin text-blue-600"></i>
+                            <span className="font-medium text-blue-800">
+                                {progress.stage_name || 'Processing...'}
+                            </span>
+                        </div>
+                        {progress.current_stage && progress.total_stages && (
+                            <span className="text-sm text-blue-600">
+                                Stage {progress.current_stage}/{progress.total_stages}
+                            </span>
+                        )}
+                    </div>
+                    {progress.total > 0 && (
+                        <div className="w-full bg-blue-200 rounded-full h-2">
+                            <div
+                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                style={{ width: (progress.processed / progress.total * 100) + '%' }}
+                            ></div>
+                        </div>
+                    )}
+                    <div className="mt-2 text-sm text-blue-700">{progress.message}</div>
+                </div>
+            )}
+
+            {/* Error */}
+            {progress?.status === 'failed' && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-red-800">
+                        <i className="fa-solid fa-circle-exclamation"></i>
+                        <span className="font-medium">Error: {progress.error}</span>
+                    </div>
+                </div>
+            )}
+
+            {/* Configuration (only show if not completed) */}
+            {!auditResults && (
+                <>
+                    {/* Audit Type Selection */}
+                    <div className="bg-white rounded-lg shadow-sm p-6">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                            <i className="fa-solid fa-filter mr-2 text-blue-600"></i>
+                            Audit Type
+                        </h2>
+                        <div className="space-y-3">
+                            <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                                <input
+                                    type="radio"
+                                    name="auditType"
+                                    value="date_range"
+                                    checked={auditType === 'date_range'}
+                                    onChange={e => setAuditType(e.target.value)}
+                                    className="mt-1"
+                                />
+                                <div>
+                                    <div className="font-medium">Date Range</div>
+                                    <div className="text-sm text-gray-600">Audit all visits within a date range</div>
+                                    {auditType === 'date_range' && (
+                                        <div className="mt-3 flex gap-4">
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+                                                <input
+                                                    type="date"
+                                                    value={startDate}
+                                                    onChange={e => setStartDate(e.target.value)}
+                                                    className="border rounded px-3 py-1 text-sm"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1">End Date</label>
+                                                <input
+                                                    type="date"
+                                                    value={endDate}
+                                                    onChange={e => setEndDate(e.target.value)}
+                                                    className="border rounded px-3 py-1 text-sm"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </label>
+
+                            <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                                <input
+                                    type="radio"
+                                    name="auditType"
+                                    value="last_n_total"
+                                    checked={auditType === 'last_n_total'}
+                                    onChange={e => setAuditType(e.target.value)}
+                                    className="mt-1"
+                                />
+                                <div>
+                                    <div className="font-medium">Last N Visits (Total)</div>
+                                    <div className="text-sm text-gray-600">Audit the most recent N visits across all FLWs</div>
+                                    {auditType === 'last_n_total' && (
+                                        <div className="mt-3">
+                                            <label className="block text-xs text-gray-500 mb-1">Number of Visits</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="1000"
+                                                value={countAcrossAll}
+                                                onChange={e => setCountAcrossAll(parseInt(e.target.value) || 50)}
+                                                className="border rounded px-3 py-1 text-sm w-24"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </label>
+
+                            <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                                <input
+                                    type="radio"
+                                    name="auditType"
+                                    value="last_n_per_flw"
+                                    checked={auditType === 'last_n_per_flw'}
+                                    onChange={e => setAuditType(e.target.value)}
+                                    className="mt-1"
+                                />
+                                <div>
+                                    <div className="font-medium">Last N Visits per FLW</div>
+                                    <div className="text-sm text-gray-600">Audit the most recent N visits for each field worker</div>
+                                    {auditType === 'last_n_per_flw' && (
+                                        <div className="mt-3">
+                                            <label className="block text-xs text-gray-500 mb-1">Visits per FLW</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="100"
+                                                value={countPerFlw}
+                                                onChange={e => setCountPerFlw(parseInt(e.target.value) || 10)}
+                                                className="border rounded px-3 py-1 text-sm w-24"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Granularity */}
+                    <div className="bg-white rounded-lg shadow-sm p-6">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                            <i className="fa-solid fa-layer-group mr-2 text-blue-600"></i>
+                            Audit Granularity
+                        </h2>
+                        <div className="flex gap-4">
+                            <label className="flex items-center gap-2">
+                                <input
+                                    type="radio"
+                                    name="granularity"
+                                    value="combined"
+                                    checked={granularity === 'combined'}
+                                    onChange={e => setGranularity(e.target.value)}
+                                />
+                                <span>Single audit for all</span>
+                            </label>
+                            <label className="flex items-center gap-2">
+                                <input
+                                    type="radio"
+                                    name="granularity"
+                                    value="per_flw"
+                                    checked={granularity === 'per_flw'}
+                                    onChange={e => setGranularity(e.target.value)}
+                                />
+                                <span>One audit per FLW</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Related Fields */}
+                    <div className="bg-white rounded-lg shadow-sm p-6">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                            <i className="fa-solid fa-link mr-2 text-blue-600"></i>
+                            Related Fields (Optional)
+                        </h2>
+                        <p className="text-sm text-gray-600 mb-4">
+                            Associate form field values with images for display during review.
+                        </p>
+                        <div className="space-y-3">
+                            {relatedFields.map((rf, index) => (
+                                <div key={index} className="flex gap-3 items-end p-3 bg-gray-50 rounded">
+                                    <div className="flex-1">
+                                        <label className="block text-xs text-gray-500 mb-1">Image Path</label>
+                                        <input
+                                            type="text"
+                                            value={rf.imagePath}
+                                            onChange={e => updateRelatedField(index, 'imagePath', e.target.value)}
+                                            placeholder="form/photo_field"
+                                            className="w-full border rounded px-3 py-1 text-sm"
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="block text-xs text-gray-500 mb-1">Field Path</label>
+                                        <input
+                                            type="text"
+                                            value={rf.fieldPath}
+                                            onChange={e => updateRelatedField(index, 'fieldPath', e.target.value)}
+                                            placeholder="form/related_field"
+                                            className="w-full border rounded px-3 py-1 text-sm"
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="block text-xs text-gray-500 mb-1">Label</label>
+                                        <input
+                                            type="text"
+                                            value={rf.label}
+                                            onChange={e => updateRelatedField(index, 'label', e.target.value)}
+                                            placeholder="Display Label"
+                                            className="w-full border rounded px-3 py-1 text-sm"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={() => removeRelatedField(index)}
+                                        className="text-red-500 hover:text-red-700 px-2 py-1"
+                                    >
+                                        <i className="fa-solid fa-times"></i>
+                                    </button>
+                                </div>
+                            ))}
+                            <button
+                                onClick={addRelatedField}
+                                className="text-sm text-blue-600 hover:text-blue-800"
+                            >
+                                <i className="fa-solid fa-plus mr-1"></i>Add Related Field Rule
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* AI Agent Selection */}
+                    <div className="bg-white rounded-lg shadow-sm p-6">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                            <i className="fa-solid fa-robot mr-2 text-purple-600"></i>
+                            AI Review Agent (Optional)
+                        </h2>
+                        <p className="text-sm text-gray-600 mb-4">
+                            Run an AI agent to automatically pre-validate images after the audit is created.
+                        </p>
+                        {loadingAgents ? (
+                            <div className="text-gray-500">
+                                <i className="fa-solid fa-spinner fa-spin mr-2"></i>Loading agents...
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <select
+                                    value={selectedAgent}
+                                    onChange={e => setSelectedAgent(e.target.value)}
+                                    className="border rounded px-3 py-2 w-full md:w-1/2"
+                                >
+                                    <option value="">None - Skip AI review</option>
+                                    {availableAgents.map(agent => (
+                                        <option key={agent.agent_id} value={agent.agent_id}>
+                                            {agent.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {selectedAgentInfo && (
+                                    <div className="p-3 bg-purple-50 rounded border border-purple-200">
+                                        <div className="font-medium text-purple-800">{selectedAgentInfo.name}</div>
+                                        <div className="text-sm text-purple-700">{selectedAgentInfo.description}</div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Title */}
+                    <div className="bg-white rounded-lg shadow-sm p-6">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                            <i className="fa-solid fa-tag mr-2 text-blue-600"></i>
+                            Audit Title
+                        </h2>
+                        <input
+                            type="text"
+                            value={titleSuffix}
+                            onChange={e => setTitleSuffix(e.target.value)}
+                            placeholder="e.g., Week of Jan 1-7, 2024"
+                            className="border rounded px-3 py-2 w-full md:w-1/2"
+                        />
+                        <p className="text-sm text-gray-500 mt-2">
+                            This will be appended to the audit session title
+                        </p>
+                    </div>
+
+                    {/* Create Button */}
+                    <div className="bg-white rounded-lg shadow-sm p-6">
+                        <button
+                            onClick={handleCreateAudit}
+                            disabled={isRunning || !opportunityId}
+                            className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium text-lg"
+                        >
+                            {isRunning ? (
+                                <><i className="fa-solid fa-spinner fa-spin mr-2"></i>Creating...</>
+                            ) : (
+                                <><i className="fa-solid fa-play mr-2"></i>Create Audit{selectedAgent && ' with AI Review'}</>
+                            )}
+                        </button>
+                        {!opportunityId && (
+                            <p className="mt-2 text-sm text-red-600">
+                                No opportunity selected. Add ?opportunity_id=XXX to the URL.
+                            </p>
+                        )}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}"""
+
+
+# =============================================================================
 # Template Registry
 # =============================================================================
 
@@ -1304,6 +1914,8 @@ TEMPLATES = {
     "performance_review": {
         "name": "Weekly Performance Review",
         "description": "Review worker performance and mark as confirmed, needs audit, or create tasks",
+        "icon": "fa-clipboard-check",
+        "color": "green",
         "definition": PERFORMANCE_REVIEW_DEFINITION,
         "render_code": PERFORMANCE_REVIEW_RENDER_CODE,
         "pipeline_schema": PERFORMANCE_REVIEW_PIPELINE_SCHEMA,
@@ -1311,6 +1923,8 @@ TEMPLATES = {
     "ocs_outreach": {
         "name": "OCS Bulk Outreach",
         "description": "Create tasks and initiate AI chatbot conversations for multiple workers",
+        "icon": "fa-robot",
+        "color": "orange",
         "definition": OCS_OUTREACH_DEFINITION,
         "render_code": OCS_OUTREACH_RENDER_CODE,
         "pipeline_schema": None,  # No pipeline for this template
@@ -1318,9 +1932,20 @@ TEMPLATES = {
     "kmc_scale_validation": {
         "name": "KMC Scale Validation",
         "description": "Validate KMC weight readings against scale images using ML vision",
+        "icon": "fa-scale-balanced",
+        "color": "blue",
         "definition": KMC_SCALE_VALIDATION_DEFINITION,
         "render_code": KMC_SCALE_VALIDATION_RENDER_CODE,
         "pipeline_schema": KMC_SCALE_VALIDATION_PIPELINE_SCHEMA,
+    },
+    "audit_with_ai_review": {
+        "name": "Audit with AI Review",
+        "description": "Create audit sessions and run AI review agents to pre-validate images",
+        "icon": "fa-clipboard-check",
+        "color": "purple",
+        "definition": AUDIT_WITH_AI_REVIEW_DEFINITION,
+        "render_code": AUDIT_WITH_AI_REVIEW_RENDER_CODE,
+        "pipeline_schema": None,  # No pipeline needed - uses audit creation API
     },
 }
 
@@ -1344,9 +1969,18 @@ def list_templates() -> list[dict]:
     List all available templates.
 
     Returns:
-        List of dicts with 'key', 'name', 'description'
+        List of dicts with 'key', 'name', 'description', 'icon', 'color'
     """
-    return [{"key": key, "name": t["name"], "description": t["description"]} for key, t in TEMPLATES.items()]
+    return [
+        {
+            "key": key,
+            "name": t["name"],
+            "description": t["description"],
+            "icon": t.get("icon", "fa-cog"),
+            "color": t.get("color", "gray"),
+        }
+        for key, t in TEMPLATES.items()
+    ]
 
 
 def create_workflow_from_template(data_access, template_key: str, request=None) -> tuple:

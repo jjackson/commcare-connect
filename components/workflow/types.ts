@@ -390,6 +390,16 @@ export interface ActionHandlers {
     onError: (error: string) => void,
     onCancelled: () => void,
   ): () => void; // Returns cleanup function
+
+  // Audit Creation Actions
+  createAudit(config: CreateAuditConfig): Promise<CreateAuditResult>;
+  getAuditStatus(taskId: string): Promise<AuditStatusResult>;
+  streamAuditProgress(
+    taskId: string,
+    onProgress: (data: AuditProgressData) => void,
+    onComplete: (result: AuditCreationResult) => void,
+    onError: (error: string) => void,
+  ): () => void; // Returns cleanup function
 }
 
 export interface CreateTaskParams {
@@ -500,6 +510,90 @@ export interface JobConfig {
     alias?: string;
   };
   records?: Record<string, unknown>[];
+}
+
+// =============================================================================
+// Audit Creation Types
+// =============================================================================
+
+/**
+ * Configuration for creating an audit asynchronously.
+ */
+export interface CreateAuditConfig {
+  /** Opportunities to audit (with id and optional name) */
+  opportunities: Array<{ id: number; name?: string }>;
+
+  /** Audit criteria */
+  criteria: Record<string, unknown>;
+
+  /** Pre-computed visit IDs (optional) */
+  visit_ids?: number[];
+
+  /** Pre-computed FLW to visit IDs mapping (optional) */
+  flw_visit_ids?: Record<string, number[]>;
+
+  /** Values to override in the template (e.g., date ranges from workflow) */
+  template_overrides?: Record<string, unknown>;
+
+  /** Workflow run ID if triggered from a workflow */
+  workflow_run_id?: number;
+
+  /** AI agent ID to run after audit creation (optional) */
+  ai_agent_id?: string;
+}
+
+/**
+ * Result from creating an audit.
+ */
+export interface CreateAuditResult {
+  success: boolean;
+  task_id?: string;
+  error?: string;
+}
+
+/**
+ * Result from getting audit task status.
+ */
+export interface AuditStatusResult {
+  status: string;
+  message?: string;
+  current_stage?: number;
+  total_stages?: number;
+  stage_name?: string;
+  processed?: number;
+  total?: number;
+  result?: AuditCreationResult;
+  error?: string;
+}
+
+/**
+ * Progress data from audit creation.
+ */
+export interface AuditProgressData {
+  status: string;
+  message?: string;
+  current_stage?: number;
+  total_stages?: number;
+  stage_name?: string;
+  processed?: number;
+  total?: number;
+}
+
+/**
+ * Final result from audit creation.
+ */
+export interface AuditCreationResult {
+  success?: boolean;
+  template_id?: number;
+  sessions?: Array<{
+    id: number;
+    title: string;
+    visits: number;
+    images: number;
+  }>;
+  total_visits?: number;
+  total_images?: number;
+  error?: string;
 }
 
 /**

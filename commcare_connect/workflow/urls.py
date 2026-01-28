@@ -15,6 +15,8 @@ urlpatterns = [
     path("", views.WorkflowListView.as_view(), name="list"),
     # Create workflow from template
     path("create/", views.create_workflow_from_template_view, name="create_from_template"),
+    # API endpoint - List available templates
+    path("api/templates/", views.WorkflowTemplateListAPIView.as_view(), name="api_templates"),
     # Legacy: Create example workflow (redirects to create_from_template)
     path("create-example/", views.create_example_workflow, name="create_example"),
     # View workflow definition details (JSON view)

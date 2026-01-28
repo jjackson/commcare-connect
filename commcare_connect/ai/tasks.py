@@ -8,17 +8,15 @@ import logging
 from django.contrib.auth import get_user_model
 
 from commcare_connect.ai.agents.pipeline_agent import (
-    PipelineEditResponse,
     build_pipeline_prompt,
-    get_pipeline_agent,
-    get_pipeline_agent_openai,
+    create_pipeline_agent,
+    create_pipeline_agent_openai,
 )
 from commcare_connect.ai.agents.solicitation_agent import get_solicitation_agent
 from commcare_connect.ai.agents.workflow_agent import (
-    WorkflowEditResponse,
     build_workflow_prompt,
-    get_workflow_agent,
-    get_workflow_agent_openai,
+    create_workflow_agent,
+    create_workflow_agent_openai,
 )
 
 # Coding agent is optional - only needed for "vibes" agent type
@@ -205,18 +203,18 @@ def run_agent(
         elif agent == "workflow":
             # Use the appropriate model based on user selection
             if model_provider == "openai":
-                agent_instance = get_workflow_agent_openai()
+                agent_instance = create_workflow_agent_openai()
             else:
-                agent_instance = get_workflow_agent()
+                agent_instance = create_workflow_agent()
 
             # Build prompt with current workflow context (definition and render code)
             actual_prompt = build_workflow_prompt(prompt, current_definition, current_render_code)
         elif agent == "pipeline":
             # Use the appropriate model based on user selection
             if model_provider == "openai":
-                agent_instance = get_pipeline_agent_openai()
+                agent_instance = create_pipeline_agent_openai()
             else:
-                agent_instance = get_pipeline_agent()
+                agent_instance = create_pipeline_agent()
 
             # Build prompt with current pipeline context (schema and render code)
             # For pipeline, current_definition contains the schema
@@ -280,89 +278,7 @@ Please generate React code to fulfill the user's request. The code should be com
                     "code": result.output.code,
                 }
 
-        # Handle structured output for workflow agent
-        if agent == "workflow" and isinstance(result.output, WorkflowEditResponse):
-            # Debug logging to understand what the AI returned
-            logger.warning(
-                f"[AI TASK] WorkflowEditResponse received: "
-                f"message_len={len(result.output.message)}, "
-                f"definition_changed={result.output.definition_changed}, "
-                f"render_code_changed={result.output.render_code_changed}, "
-                f"has_definition={result.output.definition is not None}, "
-                f"has_render_code={result.output.render_code is not None}, "
-                f"render_code_len={len(result.output.render_code) if result.output.render_code else 0}"
-            )
-
-            response_dict = {
-                "message": result.output.message,
-                "definition_changed": result.output.definition_changed,
-                "render_code_changed": result.output.render_code_changed,
-            }
-            if result.output.definition:
-                response_dict["definition"] = result.output.definition
-            if result.output.render_code:
-                response_dict["render_code"] = result.output.render_code
-
-            # Validate: if render_code_changed is True but render_code is missing, fix the flag
-            if result.output.render_code_changed and not result.output.render_code:
-                logger.warning(
-                    "[AI TASK] AI claimed render_code_changed=True but didn't provide render_code. "
-                    "This may be due to output token limits. Setting render_code_changed=False."
-                )
-                response_dict["render_code_changed"] = False
-                response_dict["message"] += (
-                    "\n\n(Note: I tried to update the UI code but the response was too long. "
-                    "Please try a simpler request or update the code manually.)"
-                )
-
-            # Same validation for definition
-            if result.output.definition_changed and not result.output.definition:
-                logger.warning("[AI TASK] AI claimed definition_changed=True but didn't provide definition.")
-                response_dict["definition_changed"] = False
-
-            return response_dict
-
-        # Handle structured output for pipeline agent
-        if agent == "pipeline" and isinstance(result.output, PipelineEditResponse):
-            logger.warning(
-                f"[AI TASK] PipelineEditResponse received: "
-                f"message_len={len(result.output.message)}, "
-                f"schema_changed={result.output.schema_changed}, "
-                f"render_code_changed={result.output.render_code_changed}, "
-                f"has_schema={result.output.schema is not None}, "
-                f"has_render_code={result.output.render_code is not None}, "
-                f"render_code_len={len(result.output.render_code) if result.output.render_code else 0}"
-            )
-
-            response_dict = {
-                "message": result.output.message,
-                "schema_changed": result.output.schema_changed,
-                "render_code_changed": result.output.render_code_changed,
-            }
-            if result.output.schema:
-                response_dict["schema"] = result.output.schema
-            if result.output.render_code:
-                response_dict["render_code"] = result.output.render_code
-
-            # Validate: if render_code_changed is True but render_code is missing, fix the flag
-            if result.output.render_code_changed and not result.output.render_code:
-                logger.warning(
-                    "[AI TASK] AI claimed render_code_changed=True but didn't provide render_code. "
-                    "Setting render_code_changed=False."
-                )
-                response_dict["render_code_changed"] = False
-                response_dict["message"] += (
-                    "\n\n(Note: I tried to update the UI code but the response was too long. "
-                    "Please try a simpler request or update the code manually.)"
-                )
-
-            # Same validation for schema
-            if result.output.schema_changed and not result.output.schema:
-                logger.warning("[AI TASK] AI claimed schema_changed=True but didn't provide schema.")
-                response_dict["schema_changed"] = False
-
-            return response_dict
-
+        # Workflow and pipeline agents return string output directly
         return result.output
 
     try:

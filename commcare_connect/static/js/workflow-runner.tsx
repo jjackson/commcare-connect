@@ -318,6 +318,121 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
       // Return cleanup function
       return () => eventSource.close();
     },
+
+    // Audit Creation Actions
+    createAudit: async (config: {
+      opportunities: Array<{ id: number; name?: string }>;
+      criteria: Record<string, unknown>;
+      visit_ids?: number[];
+      flw_visit_ids?: Record<string, number[]>;
+      template_overrides?: Record<string, unknown>;
+      workflow_run_id?: number;
+      ai_agent_id?: string; // Optional AI agent to run after creation
+    }): Promise<{
+      success: boolean;
+      task_id?: string;
+      error?: string;
+    }> => {
+      try {
+        const response = await fetch('/labs/audit/api/audit/create-async/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+          },
+          body: JSON.stringify(config),
+        });
+
+        return await response.json();
+      } catch (e) {
+        return {
+          success: false,
+          error: e instanceof Error ? e.message : 'Failed to create audit',
+        };
+      }
+    },
+
+    getAuditStatus: async (
+      taskId: string,
+    ): Promise<{
+      status: string;
+      message?: string;
+      current_stage?: number;
+      total_stages?: number;
+      stage_name?: string;
+      processed?: number;
+      total?: number;
+      result?: Record<string, unknown>;
+      error?: string;
+    }> => {
+      try {
+        const response = await fetch(
+          `/labs/audit/api/audit/task/${taskId}/status/`,
+        );
+        return await response.json();
+      } catch (e) {
+        return {
+          status: 'error',
+          error: e instanceof Error ? e.message : 'Failed to get status',
+        };
+      }
+    },
+
+    streamAuditProgress: (
+      taskId: string,
+      onProgress: (data: {
+        status: string;
+        message?: string;
+        current_stage?: number;
+        total_stages?: number;
+        stage_name?: string;
+        processed?: number;
+        total?: number;
+      }) => void,
+      onComplete: (result: Record<string, unknown>) => void,
+      onError: (error: string) => void,
+    ): (() => void) => {
+      const eventSource = new EventSource(
+        `/labs/audit/api/audit/task/${taskId}/stream/`,
+      );
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.status === 'completed') {
+            onComplete(data.result || {});
+            eventSource.close();
+            return;
+          }
+
+          if (data.status === 'failed' || data.error) {
+            onError(data.error || data.message || 'Audit creation failed');
+            eventSource.close();
+            return;
+          }
+
+          onProgress({
+            status: data.status,
+            message: data.message,
+            current_stage: data.current_stage,
+            total_stages: data.total_stages,
+            stage_name: data.stage_name,
+            processed: data.processed,
+            total: data.total,
+          });
+        } catch {
+          console.error('Failed to parse SSE event:', event.data);
+        }
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        onError('Connection lost');
+      };
+
+      return () => eventSource.close();
+    },
   };
 }
 
