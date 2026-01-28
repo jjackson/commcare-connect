@@ -171,6 +171,8 @@ const MapboxUtils = {
   },
 
   createMarker(map, opts) {
+    // Creating markers using HTML might present performance issues at scale, so better
+    // to use layers instead for large datasets.
     opts = opts || {};
     const markerOpts = {};
     if (opts.color) markerOpts.color = opts.color;
