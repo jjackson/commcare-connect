@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block css %}
 {{ block.super }}
@@ -12,22 +12,19 @@
 {{ block.super }}
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.18.1/mapbox-gl.js"></script>
 <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.5.1/mapbox-gl-draw.js"></script>
+<script src="{% static 'bundles/js/mapbox-utils.js' %}"></script>
 {% endblock javascript %}
 
 {% block content %}
 <h2 class="mb-4 text-brand-deep-purple font-medium">{% translate "Select Opportunity Area" %}</h2>
-<div x-ref="mapContainer" class="w-full grid grid-cols-12 gap-2 h-[max(calc(100vh-150px),200px)]" x-data="mapController()">
+<div x-ref="mapContainer" class="w-full grid grid-cols-12 gap-2 h-[max(calc(100vh-150px),200px)]"
+    x-data="mapController()">
     <div id="map-wrapper" class="relative h-full shadow-md" :class="panelOpen ? 'col-span-9' : 'col-span-12'">
         <div id="map" class="w-full h-full"></div>
-        <button
-            id="toggle-sidebar"
-            title="Toggle Settings Panel"
-            aria-label="{% translate 'Toggle Settings Panel' %}"
-            :aria-expanded="panelOpen"
-            aria-controls="sidebar"
-            type="button"
+        <button id="toggle-sidebar" title="Toggle Settings Panel"
             class="absolute top-4 right-4 z-50 bg-white p-2 rounded shadow-md hover:cursor-pointer"
-            @click="togglePanel()">
+            @click="togglePanel()" aria-label="{% translate 'Toggle Settings Panel' %}" :aria-expanded="panelOpen"
+            aria-controls="sidebar" type="button">
             <i x-show="panelOpen" class="fa fa-chevron-right"></i>
             <i x-show="!panelOpen" class="fa fa-chevron-left"></i>
         </button>
@@ -54,12 +51,9 @@
 
             initializeMap() {
                 const accessToken = '{{ mapbox_api_key|escapejs }}';
-                if (!accessToken) {
-                    console.error('Mapbox access token is not provided.');
-                    return;
-                }
-                mapboxgl.accessToken = accessToken;
-                this.map = new mapboxgl.Map({
+                if (!MapboxUtils.setAccessToken(accessToken)) return;
+
+                this.map = MapboxUtils.createMap({
                     container: 'map',
                     style: 'mapbox://styles/mapbox/standard',
                     projection: 'globe',
@@ -67,16 +61,9 @@
                     center: [8.675, 9.082]
                 });
 
-                this.map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+                MapboxUtils.addNavigation(this.map, 'top-left');
 
-                const draw = new MapboxDraw({
-                    displayControlsDefault: false,
-                    controls: {
-                        polygon: true,
-                        trash: true
-                    }
-                });
-                this.map.addControl(draw, 'top-left');
+                const draw = MapboxUtils.addDrawControls(this.map);
 
                 this.map.on('style.load', () => {
                     this.map.setFog({});
