@@ -1,6 +1,8 @@
 import waffle
 from django.conf import settings
+from django.http import Http404
 from django.shortcuts import render
+from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_GET
 
 from commcare_connect.flags.switch_names import MICROPLANNING
@@ -11,7 +13,7 @@ from commcare_connect.organization.decorators import org_viewer_required
 @org_viewer_required
 def microplanning_home(request, *args, **kwargs):
     if not waffle.switch_is_active(MICROPLANNING):
-        return render(request, "404.html", status=404)
+        raise Http404(_("Microplanning feature is not available"))
 
     return render(
         request,
