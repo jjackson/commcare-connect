@@ -125,7 +125,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"Subscription '{SUBSCRIPTION_NAME}' created successfully."))
             self.stdout.write("Granting select permissions to superset postgres user...")
             superset_user = "superset_readonly"
-            superset_user = input(f"Enter superset username on primary [{superset_user}]: ").strip() or superset_user
+            superset_user = input(f"Enter superset postgres username [{superset_user}]: ").strip() or superset_user
             cursor.execute(
                 psycopg2.sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA public TO {};").format(
                     psycopg2.sql.Identifier(superset_user)
