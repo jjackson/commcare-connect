@@ -17,6 +17,6 @@ def microplanning_home(request, *args, **kwargs):
         request,
         template_name="microplanning/home.html",
         context={
-            "mapbox_api_key": settings.MAPBOX_API_KEY,
+            "mapbox_api_key": settings.MAPBOX_TOKEN,
         },
     )
