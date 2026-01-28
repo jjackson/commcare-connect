@@ -71,6 +71,12 @@
                 this.map.on('draw.create', this.onMapDrawCreate.bind(this));
                 this.map.on('draw.delete', this.onMapDrawDelete.bind(this));
                 this.map.on('draw.update', this.onMapDrawUpdate.bind(this));
+
+                const $mapContainer = document.getElementById('map');
+                const observer = new ResizeObserver(() => {
+                    this.map.resize();
+                });
+                observer.observe($mapContainer);
             },
 
             onMapDrawCreate(event) {
