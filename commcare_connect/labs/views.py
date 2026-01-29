@@ -149,6 +149,13 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
                 "color": "purple",
             },
             {
+                "name": "Workflows",
+                "url": "/labs/workflow/",
+                "icon": "fa-diagram-project",
+                "description": "Build and run automated data pipelines with AI-powered agents",
+                "color": "amber",
+            },
+            {
                 "name": "Coverage",
                 "url": "/coverage/",
                 "icon": "fa-map-marked-alt",
