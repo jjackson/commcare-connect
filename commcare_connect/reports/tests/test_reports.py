@@ -295,8 +295,9 @@ def test_get_table_data_for_year_month_by_country_currency(opp_currency, filter_
         json={},
     )
     data = get_table_data_for_year_month(country_currency=filter_currency)
+    assert len(data)
+
     if opp_currency == filter_currency:
-        assert len(data)
         for row in data:
             if row["month_group"].month != now.month or row["month_group"].year != now.year:
                 continue
@@ -311,7 +312,6 @@ def test_get_table_data_for_year_month_by_country_currency(opp_currency, filter_
             assert row["organization_funding_deployed"] == 1000
             assert row["avg_top_earned_flws"] == 900
     else:
-        assert len(data)
         for row in data:
             if row["month_group"].month != now.month or row["month_group"].year != now.year:
                 continue
