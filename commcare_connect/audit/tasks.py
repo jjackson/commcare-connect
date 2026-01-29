@@ -102,6 +102,7 @@ def _run_ai_review_on_sessions(
     # Get the agent
     agent = get_agent(ai_agent_id)
     logger.info(f"[AIReview] Running agent '{ai_agent_id}' on {len(session_ids)} sessions")
+    logger.info(f"[AIReview] Session IDs to process: {session_ids}")
 
     # First pass: count only images that will actually be reviewed
     # (those with related_fields containing a valid reading value)
@@ -146,6 +147,10 @@ def _run_ai_review_on_sessions(
             # Get visit_images from session data
             # This contains the images and their related field data
             visit_images = session.data.get("visit_images", {})
+            logger.info(
+                f"[AIReview] Session {session_id}: found {len(visit_images)} visits with images, "
+                f"data keys: {list(session.data.keys())}"
+            )
             if not visit_images:
                 logger.info(f"[AIReview] Session {session_id} has no visit_images")
                 continue
@@ -155,6 +160,7 @@ def _run_ai_review_on_sessions(
 
             # Iterate through visits and their images
             for visit_id_str, images in visit_images.items():
+                logger.debug(f"[AIReview] Visit {visit_id_str}: {len(images)} images")
                 for image_data in images:
                     try:
                         blob_id = image_data.get("blob_id")
@@ -162,14 +168,18 @@ def _run_ai_review_on_sessions(
                             continue
 
                         # Get reading and question_id from related_fields
-                        # The related_fields structure is: [{label, value, field_path}, ...]
+                        # The related_fields structure is: [{label, value, path}, ...]
                         related_fields = image_data.get("related_fields", [])
+                        logger.debug(
+                            f"[AIReview] Image {blob_id}: related_fields={related_fields}, "
+                            f"keys={list(image_data.keys())}"
+                        )
                         reading = None
                         question_id = ""
                         for rf in related_fields:
                             if rf.get("value"):
                                 reading = str(rf.get("value"))
-                                question_id = rf.get("field_path", "")
+                                question_id = rf.get("path", "")
                                 break
 
                         if not reading:
@@ -246,10 +256,19 @@ def _run_ai_review_on_sessions(
             # Save session if we made any updates
             if session_updated:
                 try:
+                    # Debug: log the visit_results before saving
+                    visit_results = session.data.get("visit_results", {})
+                    assessment_count = sum(len(vr.get("assessments", {})) for vr in visit_results.values())
+                    logger.info(
+                        f"[AIReview] Saving session {session_id} with {assessment_count} assessments "
+                        f"in {len(visit_results)} visits"
+                    )
                     data_access.save_audit_session(session)
-                    logger.info(f"[AIReview] Saved AI results for session {session_id}")
+                    logger.info(f"[AIReview] Successfully saved AI results for session {session_id}")
                 except Exception as e:
                     logger.warning(f"[AIReview] Failed to save session {session_id}: {e}")
+            else:
+                logger.info(f"[AIReview] No updates to save for session {session_id}")
 
         except Exception as e:
             logger.warning(f"[AIReview] Failed to process session {session_id}: {e}")
@@ -490,6 +509,14 @@ def run_audit_creation(
         session_title = criteria.get("title", "")
         session_tag = criteria.get("tag", "")
 
+        # Fetch FLW display names for use in session titles
+        flw_display_names = {}
+        try:
+            flw_display_names = data_access.get_flw_names(opp_id)
+            logger.info(f"[AuditCreation] Loaded {len(flw_display_names)} FLW display names")
+        except Exception as e:
+            logger.warning(f"[AuditCreation] Failed to load FLW names, using usernames: {e}")
+
         if is_per_flw:
             # Create one session per FLW
             # If flw_visit_ids is provided, use it; otherwise group from extracted images
@@ -518,7 +545,9 @@ def run_audit_creation(
                 # Filter images to this FLW's visits
                 flw_images = {str(vid): all_visit_images.get(str(vid), []) for vid in flw_visit_list}
 
-                flw_title = f"{flw_id} - {session_title}" if session_title else flw_id
+                # Use display name if available, fallback to username
+                flw_display_name = flw_display_names.get(flw_id, flw_id)
+                flw_title = f"{flw_display_name} - {session_title}" if session_title else flw_display_name
 
                 session = data_access.create_audit_session(
                     username=username,

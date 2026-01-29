@@ -158,7 +158,6 @@ def create_workflow_from_template(
 
         # Determine alias based on template type
         alias_map = {
-            "kmc_scale_validation": "visits",
             "performance_review": "performance_data",
         }
         pipeline_alias = alias_map.get(template_key, "data")
@@ -195,7 +194,7 @@ def create_workflow_from_template(
 # =============================================================================
 
 # Re-export individual template modules for direct access if needed
-from . import audit_with_ai_review, kmc_scale_validation, ocs_outreach, performance_review  # noqa: E402
+from . import audit_with_ai_review, ocs_outreach, performance_review  # noqa: E402
 
 __all__ = [
     "TEMPLATES",
@@ -205,6 +204,5 @@ __all__ = [
     # Individual template modules
     "performance_review",
     "ocs_outreach",
-    "kmc_scale_validation",
     "audit_with_ai_review",
 ]

@@ -38,7 +38,7 @@ from commcare_connect.labs.analysis.config import (
     FieldComputation,
     HistogramComputation,
 )
-from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
+from commcare_connect.labs.analysis.data_access import fetch_flw_names, get_flw_names_for_opportunity
 from commcare_connect.labs.analysis.models import (
     AnalysisResult,
     FLWAnalysisResult,
@@ -89,5 +89,6 @@ __all__ = [
     "AnalysisResult",
     "LocalUserVisit",
     # Data access
+    "fetch_flw_names",
     "get_flw_names_for_opportunity",
 ]

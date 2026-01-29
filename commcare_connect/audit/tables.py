@@ -4,13 +4,16 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext as _
 
-from commcare_connect.utils.tables import IndexColumn
-
 
 class AuditTable(tables.Table):
     """Styled table for displaying experiment-based audit sessions."""
 
-    index = IndexColumn()
+    record_id = tables.Column(
+        verbose_name=_("ID"),
+        accessor="pk",
+        orderable=True,
+        attrs={"td": {"class": "text-sm text-gray-600 font-mono"}},
+    )
 
     title = tables.Column(
         verbose_name=_("Title"),
@@ -71,7 +74,7 @@ class AuditTable(tables.Table):
         # Note: AuditSessionRecord is not a Django model, it's a Python class
         # So we don't specify model= here
         fields = (
-            "index",
+            "record_id",
             "title",
             "opportunity_name",
             "description",

@@ -1934,10 +1934,13 @@ def delete_run_api(request, run_id):
     """
     Delete a workflow run and all its results.
 
-    Cancels any running job first, then deletes the run record.
+    Cancels any running celery job first, then deletes:
+    - Linked audit sessions
+    - The run record itself
     """
     from config import celery_app
 
+    data_access = None
     try:
         access_token = request.session.get("labs_oauth", {}).get("access_token")
         if not access_token:
@@ -1947,32 +1950,54 @@ def delete_run_api(request, run_id):
         run = data_access.get_run(run_id)
 
         if not run:
-            data_access.close()
             return JsonResponse({"error": "Run not found"}, status=404)
 
-        # Cancel any running job first
-        active_job = run.data.get("state", {}).get("active_job", {})
-        if active_job.get("status") == "running" and active_job.get("job_id"):
-            try:
-                celery_app.control.revoke(active_job["job_id"], terminate=True)
-                logger.info(f"[DeleteRun] Cancelled job {active_job['job_id']} before deleting run {run_id}")
-            except Exception as e:
-                logger.warning(f"Failed to revoke task {active_job['job_id']}: {e}")
+        job_cancelled = False
+        cancelled_job_id = None
 
-        # Delete the run record
-        data_access.delete_run(run_id)
-        data_access.close()
+        # Cancel any running celery job first
+        try:
+            # Use the state property which safely handles None data
+            state = run.state if hasattr(run, "state") else (run.data or {}).get("state", {})
+            active_job = state.get("active_job", {}) if isinstance(state, dict) else {}
 
-        logger.info(f"[DeleteRun] Deleted run {run_id}")
+            if active_job.get("status") == "running" and active_job.get("job_id"):
+                cancelled_job_id = active_job["job_id"]
+                try:
+                    celery_app.control.revoke(cancelled_job_id, terminate=True)
+                    job_cancelled = True
+                    logger.info(f"[DeleteRun] Cancelled celery job {cancelled_job_id} before deleting run {run_id}")
+                except Exception as e:
+                    logger.warning(f"[DeleteRun] Failed to revoke celery task {cancelled_job_id}: {e}")
+        except Exception as e:
+            logger.warning(f"[DeleteRun] Error accessing job state for run {run_id}: {e}")
+
+        # Delete the run and all linked records (audit sessions, etc.)
+        deleted_counts = data_access.delete_run(run_id, delete_linked=True)
+
+        logger.info(
+            f"[DeleteRun] Deleted run {run_id}: "
+            f"{deleted_counts.get('audit_sessions', 0)} audit sessions, "
+            f"job_cancelled={job_cancelled}"
+        )
 
         return JsonResponse(
             {
                 "success": True,
                 "run_id": run_id,
                 "deleted": True,
+                "deleted_counts": deleted_counts,
+                "job_cancelled": job_cancelled,
+                "cancelled_job_id": cancelled_job_id,
             }
         )
 
     except Exception as e:
-        logger.error(f"Failed to delete run {run_id}: {e}", exc_info=True)
+        logger.error(f"[DeleteRun] Failed to delete run {run_id}: {e}", exc_info=True)
         return JsonResponse({"error": str(e)}, status=500)
+    finally:
+        if data_access:
+            try:
+                data_access.close()
+            except Exception:
+                pass

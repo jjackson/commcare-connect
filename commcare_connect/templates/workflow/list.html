@@ -552,33 +552,24 @@
                         <div x-show="showDeleteConfirm"
                              x-cloak
                              @click.outside="showDeleteConfirm = false"
-                             class="absolute right-0 top-full mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
-                            <p class="text-sm font-medium text-gray-900 mb-2">Delete this workflow?</p>
-                            <p class="text-xs text-gray-500 mb-3">Choose whether to also delete runs and their audit sessions.</p>
-                            <div class="flex flex-col gap-2">
+                             class="absolute right-0 top-full mt-2 w-auto bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
+                            <p class="text-sm font-medium text-gray-900 mb-3">Delete this workflow?</p>
+                            <div class="flex gap-2">
                                 <button @click="deleteWorkflow(false)"
                                         :disabled="deleting"
-                                        class="w-full px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50 text-left">
-                                    <span x-show="!deleting" class="flex items-center">
-                                        <i class="fa-solid fa-file-lines mr-2 text-gray-500"></i>
-                                        Delete Workflow Only
-                                    </span>
-                                    <span x-show="deleting" x-cloak><i class="fa-solid fa-spinner fa-spin"></i> Deleting...</span>
-                                    <span class="block text-xs text-gray-500 ml-6">Keeps runs and audit sessions</span>
+                                        class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50 whitespace-nowrap">
+                                    <span x-show="!deleting"><i class="fa-solid fa-file-lines mr-2"></i>Workflow Only</span>
+                                    <span x-show="deleting" x-cloak><i class="fa-solid fa-spinner fa-spin mr-2"></i>Deleting...</span>
                                 </button>
                                 <button @click="deleteWorkflow(true)"
                                         :disabled="deleting"
-                                        class="w-full px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50 text-left">
-                                    <span x-show="!deleting" class="flex items-center">
-                                        <i class="fa-solid fa-trash mr-2"></i>
-                                        Delete Workflow and Linked Records
-                                    </span>
-                                    <span x-show="deleting" x-cloak><i class="fa-solid fa-spinner fa-spin"></i> Deleting...</span>
-                                    <span class="block text-xs text-red-200 ml-6">Also removes runs and audit sessions</span>
+                                        class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50 whitespace-nowrap">
+                                    <span x-show="!deleting"><i class="fa-solid fa-trash mr-2"></i>Workflow + Linked Data</span>
+                                    <span x-show="deleting" x-cloak><i class="fa-solid fa-spinner fa-spin mr-2"></i>Deleting...</span>
                                 </button>
                                 <button @click="showDeleteConfirm = false"
                                         :disabled="deleting"
-                                        class="w-full px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 rounded-md mt-1">
+                                        class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md whitespace-nowrap">
                                     Cancel
                                 </button>
                             </div>
@@ -608,6 +599,84 @@
                                 x-data="{
                                     deletingRun: false,
                                     showRunDeleteConfirm: false,
+                                    // Live job progress state
+                                    jobStatus: '{{ run.state.active_job.status|default:'' }}',
+                                    jobId: '{{ run.state.active_job.job_id|default:'' }}',
+                                    stageName: '{{ run.state.active_job.stage_name|default:'' }}',
+                                    processed: {{ run.state.active_job.processed|default:0 }},
+                                    total: {{ run.state.active_job.total|default:0 }},
+                                    eventSource: null,
+                                    pollInterval: null,
+                                    init() {
+                                        // Auto-connect to SSE if job is running
+                                        if (this.jobStatus === 'running' && this.jobId) {
+                                            this.connectToJobStream();
+                                        }
+                                        // Cleanup on component destroy
+                                        this.$cleanup(() => {
+                                            if (this.eventSource) this.eventSource.close();
+                                            if (this.pollInterval) clearInterval(this.pollInterval);
+                                        });
+                                    },
+                                    connectToJobStream() {
+                                        if (this.eventSource) this.eventSource.close();
+                                        const streamUrl = '/audit/api/audit/task/' + this.jobId + '/stream/';
+                                        this.eventSource = new EventSource(streamUrl);
+
+                                        this.eventSource.onmessage = (event) => {
+                                            try {
+                                                const data = JSON.parse(event.data);
+                                                if (data.error) {
+                                                    this.jobStatus = 'failed';
+                                                    this.eventSource.close();
+                                                    return;
+                                                }
+                                                if (data.status === 'completed' || data.complete) {
+                                                    this.jobStatus = 'completed';
+                                                    this.eventSource.close();
+                                                    return;
+                                                }
+                                                // Update progress
+                                                this.stageName = data.stage_name || data.message || 'Processing';
+                                                this.processed = data.processed || 0;
+                                                this.total = data.total || 0;
+                                            } catch (e) {
+                                                console.error('SSE parse error:', e);
+                                            }
+                                        };
+
+                                        this.eventSource.onerror = () => {
+                                            // SSE failed, fall back to polling
+                                            this.eventSource.close();
+                                            this.startPolling();
+                                        };
+                                    },
+                                    startPolling() {
+                                        if (this.pollInterval) return;
+                                        const statusUrl = '/audit/api/audit/task/' + this.jobId + '/status/';
+                                        this.pollInterval = setInterval(async () => {
+                                            try {
+                                                const res = await fetch(statusUrl);
+                                                const data = await res.json();
+                                                if (data.status === 'completed' || data.status === 'SUCCESS') {
+                                                    this.jobStatus = 'completed';
+                                                    clearInterval(this.pollInterval);
+                                                    return;
+                                                }
+                                                if (data.status === 'failed' || data.status === 'FAILURE') {
+                                                    this.jobStatus = 'failed';
+                                                    clearInterval(this.pollInterval);
+                                                    return;
+                                                }
+                                                // Update progress from polling
+                                                this.stageName = data.stage_name || data.message || 'Processing';
+                                                this.processed = data.processed || 0;
+                                                this.total = data.total || 0;
+                                            } catch (e) {
+                                                console.error('Polling error:', e);
+                                            }
+                                        }, 3000); // Poll every 3 seconds
+                                    },
                                     async deleteRun() {
                                         this.deletingRun = true;
                                         try {
@@ -641,7 +710,7 @@
                                     </span>
                                 </td>
                                 <td class="py-3">
-                                    <div class="flex items-center gap-2">
+                                    <div class="flex items-center gap-2 flex-wrap">
                                         {% if run.status == "completed" %}
                                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
                                             <i class="fa-solid fa-check mr-1"></i> Completed
@@ -656,30 +725,31 @@
                                         </span>
                                         {% endif %}
 
-                                        {# Job status badge #}
-                                        {% with active_job=run.state.active_job %}
-                                        {% if active_job.status == "running" %}
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
-                                            <i class="fa-solid fa-cog fa-spin mr-1"></i>
-                                            Processing
-                                            {% if active_job.processed and active_job.total %}
-                                            {{ active_job.processed }}/{{ active_job.total }}
-                                            {% endif %}
-                                        </span>
-                                        {% elif active_job.status == "completed" %}
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
-                                            <i class="fa-solid fa-circle-check mr-1"></i> Job Done
-                                        </span>
-                                        {% elif active_job.status == "failed" %}
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                                            <i class="fa-solid fa-triangle-exclamation mr-1"></i> Job Failed
-                                        </span>
-                                        {% elif active_job.status == "cancelled" %}
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                                            <i class="fa-solid fa-ban mr-1"></i> Cancelled
-                                        </span>
-                                        {% endif %}
-                                        {% endwith %}
+                                        {# Live job status badge - uses Alpine.js for real-time updates #}
+                                        <template x-if="jobStatus === 'running'">
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                                                <i class="fa-solid fa-cog fa-spin mr-1"></i>
+                                                <span x-text="stageName || 'Processing'"></span>
+                                                <template x-if="total > 0">
+                                                    <span class="ml-1" x-text="'(' + processed + '/' + total + ')'"></span>
+                                                </template>
+                                            </span>
+                                        </template>
+                                        <template x-if="jobStatus === 'completed'">
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
+                                                <i class="fa-solid fa-circle-check mr-1"></i> Job Done
+                                            </span>
+                                        </template>
+                                        <template x-if="jobStatus === 'failed'">
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                                <i class="fa-solid fa-triangle-exclamation mr-1"></i> Job Failed
+                                            </span>
+                                        </template>
+                                        <template x-if="jobStatus === 'cancelled'">
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                                                <i class="fa-solid fa-ban mr-1"></i> Cancelled
+                                            </span>
+                                        </template>
                                     </div>
                                 </td>
                                 <td class="py-3 text-right">

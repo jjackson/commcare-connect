@@ -155,6 +155,10 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
                 "description": "Build and run automated data pipelines with AI-powered agents",
                 "color": "amber",
             },
+        ]
+
+        # Define custom analysis projects with descriptions
+        context["custom_analysis_projects"] = [
             {
                 "name": "Coverage",
                 "url": "/coverage/",
@@ -172,10 +176,6 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
                     },
                 ],
             },
-        ]
-
-        # Define custom analysis projects with descriptions
-        context["custom_analysis_projects"] = [
             {
                 "name": "CHC Nutrition",
                 "url": "/custom_analysis/chc_nutrition/",

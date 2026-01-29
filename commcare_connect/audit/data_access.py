@@ -1095,6 +1095,33 @@ class AuditDataAccess:
         response.raise_for_status()
         return response.content
 
+    def get_flw_names(self, opportunity_id: int | None = None) -> dict[str, str]:
+        """
+        Get FLW display names for the opportunity.
+
+        Convenience method that uses the shared fetch_flw_names utility.
+
+        Args:
+            opportunity_id: Opportunity ID (defaults to self.opportunity_id)
+
+        Returns:
+            Dictionary mapping username to display name.
+            Falls back to username if display name is empty.
+            Example: {"e5e685ae3f024fb6848d0d87138d526f": "John Doe"}
+        """
+        from commcare_connect.labs.analysis import fetch_flw_names
+
+        opp_id = opportunity_id or self.opportunity_id
+        if not opp_id:
+            logger.warning("[FLWNames] No opportunity ID provided")
+            return {}
+
+        try:
+            return fetch_flw_names(self.access_token, opp_id)
+        except Exception as e:
+            logger.warning(f"[FLWNames] Failed to fetch FLW names for opportunity {opp_id}: {e}")
+            return {}
+
     # =========================================================================
     # Audit Creation Job Management (for async creation tracking)
     # =========================================================================
