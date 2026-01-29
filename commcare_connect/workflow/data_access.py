@@ -396,9 +396,59 @@ class WorkflowDataAccess(BaseDataAccess):
             )
         return None
 
-    def delete_definition(self, definition_id: int) -> None:
-        """Delete a workflow definition and related records."""
+    def delete_definition(self, definition_id: int, delete_linked: bool = False) -> dict:
+        """Delete a workflow definition and optionally related records.
+
+        Args:
+            definition_id: ID of the workflow definition to delete
+            delete_linked: If True, also delete runs and their linked audit sessions.
+                          Render code and chat history are always deleted with the definition.
+
+        Returns:
+            dict with counts of deleted records:
+            {"definition": 1, "render_code": N, "runs": N, "audit_sessions": N, "chat_history": N}
+        """
+        deleted_counts = {"definition": 0, "render_code": 0, "runs": 0, "audit_sessions": 0, "chat_history": 0}
+
+        # Always delete render code (belongs to the definition)
+        render_code = self.get_render_code(definition_id)
+        if render_code:
+            self.labs_api.delete_record(render_code.id)
+            deleted_counts["render_code"] = 1
+
+        # Always delete chat history (belongs to the definition)
+        chat_history = self.get_chat_history(definition_id)
+        if chat_history:
+            self.labs_api.delete_record(chat_history.id)
+            deleted_counts["chat_history"] = 1
+
+        if delete_linked:
+            # Delete all instances/runs and their linked audit sessions
+            instances = self.list_instances(definition_id)
+            for instance in instances:
+                # Find and delete audit sessions linked to this run
+                # Audit sessions store workflow_run_id in labs_record_id field
+                try:
+                    audit_sessions = self.labs_api.get_records(
+                        experiment="audit",
+                        type="AuditSession",
+                        labs_record_id=instance.id,
+                    )
+                    for session in audit_sessions:
+                        self.labs_api.delete_record(session.id)
+                        deleted_counts["audit_sessions"] += 1
+                except Exception as e:
+                    logger.warning(f"Failed to query/delete audit sessions for run {instance.id}: {e}")
+
+                # Delete the run itself
+                self.labs_api.delete_record(instance.id)
+                deleted_counts["runs"] += 1
+
+        # Delete the definition itself
         self.labs_api.delete_record(definition_id)
+        deleted_counts["definition"] = 1
+
+        return deleted_counts
 
     # -------------------------------------------------------------------------
     # Workflow Render Code Methods

@@ -34,6 +34,10 @@ module.exports = {
       __dirname,
       '../commcare_connect/static/js/pipeline-editor.tsx',
     ),
+    'task-progress': path.resolve(
+      __dirname,
+      '../commcare_connect/static/js/task-progress.ts',
+    ),
   },
   output: {
     path: path.resolve(__dirname, '../commcare_connect/static/bundles/'),

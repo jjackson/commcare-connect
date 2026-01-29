@@ -27,6 +27,7 @@ from commcare_connect.audit.data_access import AuditDataAccess
 from commcare_connect.audit.models import AuditSessionRecord
 from commcare_connect.audit.tables import AuditTable
 from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
+from commcare_connect.labs.analysis.sse_streaming import CeleryTaskStreamView
 
 logger = logging.getLogger(__name__)
 
@@ -781,17 +782,7 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                     all_flw_visit_ids, opp_id, related_fields=related_fields
                 )
 
-                # OPTIMIZATION: Create ONE template for all sessions (1 POST instead of N)
-                template = data_access.create_audit_template(
-                    username=username,
-                    opportunity_ids=opportunity_ids,
-                    audit_type=audit_type,
-                    granularity=granularity,
-                    criteria=criteria,
-                    preview_data=[],
-                )
-
-                # Create one session per FLW, reusing template and pre-extracted data
+                # Create one session per FLW with pre-extracted data
                 sessions_created = []
                 for flw_id, flw_visit_ids in flw_visit_id_map.items():
                     # Construct title: FLW Name - suffix
@@ -801,9 +792,8 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                     # Filter pre-extracted images to just this FLW's visits
                     flw_images = {str(vid): all_visit_images.get(str(vid), []) for vid in flw_visit_ids}
 
-                    # Create session with pre-computed data (no redundant API calls)
+                    # Create session (from wizard UI, no workflow link)
                     session = data_access.create_audit_session(
-                        template_id=template.id,
                         username=username,
                         visit_ids=flw_visit_ids,
                         title=session_title,
@@ -813,6 +803,7 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                         criteria=normalized_criteria,
                         opportunity_name=opp_name or "",
                         visit_images=flw_images,
+                        workflow_run_id=None,  # Created from wizard UI
                     )
                     sessions_created.append({"session_id": session.id, "flw_id": flw_id, "visits": len(flw_visit_ids)})
 
@@ -855,19 +846,8 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
             opp_id = opportunity_ids[0] if opportunity_ids else None
             all_visit_images = data_access.extract_images_for_visits(visit_ids, opp_id, related_fields=related_fields)
 
-            # Create template
-            template = data_access.create_audit_template(
-                username=username,
-                opportunity_ids=opportunity_ids,
-                audit_type=audit_type,
-                granularity=granularity,
-                criteria=criteria,
-                preview_data=[],
-            )
-
-            # Create session with pre-computed data (no redundant API calls)
+            # Create session (from wizard UI, no workflow link)
             session = data_access.create_audit_session(
-                template_id=template.id,
                 username=username,
                 visit_ids=visit_ids,
                 title=session_title,
@@ -877,6 +857,7 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 criteria=normalized_criteria,
                 opportunity_name=opp_name or "",
                 visit_images=all_visit_images,
+                workflow_run_id=None,  # Created from wizard UI
             )
 
             # Determine redirect URL
@@ -1038,151 +1019,77 @@ class AuditCreationJobsAPIView(LoginRequiredMixin, View):
 
 
 class AuditCreationJobCancelAPIView(LoginRequiredMixin, View):
-    """API endpoint to cancel an async audit creation job."""
+    """API endpoint to cancel an async audit creation job by job_id."""
 
     def post(self, request, job_id):
+        """Cancel a job by its job record ID."""
         data_access = None
         try:
             data_access = AuditDataAccess(request=request)
+            result = data_access.cancel_audit_creation(job_id=job_id, cleanup_objects=True)
 
-            # Get the job record
-            from commcare_connect.labs.models import LocalLabsRecord
-
-            records = data_access.labs_api.get_records(
-                experiment="audit",
-                type="AuditCreationJob",
-                model_class=LocalLabsRecord,
-            )
-
-            job_record = None
-            for record in records:
-                if record.id == job_id:
-                    job_record = record
-                    break
-
-            if not job_record:
-                return JsonResponse({"error": "Job not found"}, status=404)
-
-            task_id = job_record.data.get("task_id")
-            current_status = job_record.data.get("status")
-
-            # Only allow cancelling pending/running jobs
-            if current_status not in ("pending", "running"):
-                return JsonResponse({"error": f"Cannot cancel job with status '{current_status}'"}, status=400)
-
-            # Revoke the Celery task
-            if task_id:
-                from config.celery_app import app as celery_app
-
-                celery_app.control.revoke(task_id, terminate=True)
-                logger.info(f"[AuditJobCancel] Revoked Celery task {task_id}")
-
-            # Delete the job record (no need to keep cancelled jobs)
-            deleted = data_access.delete_audit_creation_job(job_id)
-
-            if deleted:
-                logger.info(f"[AuditJobCancel] Cancelled and deleted job {job_id}")
-            else:
-                logger.warning(f"[AuditJobCancel] Cancelled job {job_id} but failed to delete")
+            if not result["success"]:
+                status_code = 404 if "not found" in result.get("error", "").lower() else 400
+                return JsonResponse({"error": result.get("error")}, status=status_code)
 
             return JsonResponse(
                 {
                     "success": True,
                     "message": "Job cancelled",
-                    "deleted": deleted,
+                    "task_id": result.get("task_id"),
+                    "cleaned_up": result.get("cleaned_up", []),
                 }
             )
 
         except Exception as e:
-            import traceback
-
-            print(f"[ERROR] {traceback.format_exc()}")
+            logger.error(f"[AuditJobCancel] Error: {e}")
             return JsonResponse({"error": str(e)}, status=500)
         finally:
             if data_access:
                 data_access.close()
 
 
-class AuditCreationProgressStreamView(LoginRequiredMixin, View):
-    """SSE endpoint for streaming audit creation progress."""
+class AuditCreationTaskCancelAPIView(LoginRequiredMixin, View):
+    """API endpoint to cancel an async audit creation by task_id."""
 
-    def get(self, request, task_id):
-        import time
+    def post(self, request, task_id):
+        """Cancel a task by its Celery task ID."""
+        data_access = None
+        try:
+            data_access = AuditDataAccess(request=request)
+            result = data_access.cancel_audit_creation(task_id=task_id, cleanup_objects=True)
 
-        from celery.result import AsyncResult
+            if not result["success"]:
+                return JsonResponse({"error": result.get("error")}, status=400)
 
-        def event_stream():
-            """Generate SSE events for task progress."""
-            result = AsyncResult(task_id)
-            last_state = None
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": "Task cancelled",
+                    "task_id": result.get("task_id"),
+                    "previous_state": result.get("previous_state"),
+                    "cleaned_up": result.get("cleaned_up", []),
+                }
+            )
 
-            while True:
-                try:
-                    state = result.state
-                    info = result.info or {}
+        except Exception as e:
+            logger.error(f"[AuditTaskCancel] Error: {e}")
+            return JsonResponse({"error": str(e)}, status=500)
+        finally:
+            if data_access:
+                data_access.close()
 
-                    # Build progress data
-                    if state == "PENDING":
-                        progress_data = {
-                            "status": "pending",
-                            "message": "Waiting to start...",
-                        }
-                    elif state == "PROGRESS":
-                        progress_data = {
-                            "status": "running",
-                            "message": info.get("message", "Processing..."),
-                            "current_stage": info.get("current_stage", 1),
-                            "total_stages": info.get("total_stages", 4),
-                            "stage_name": info.get("stage_name", ""),
-                            "processed": info.get("processed", 0),
-                            "total": info.get("total", 0),
-                        }
-                    elif state == "SUCCESS":
-                        task_result = info if isinstance(info, dict) else {}
-                        progress_data = {
-                            "status": "completed",
-                            "message": "Complete",
-                            "result": task_result,
-                        }
-                        yield f"data: {json.dumps(progress_data)}\n\n"
-                        break
-                    elif state == "FAILURE":
-                        error_msg = str(info) if info else "Unknown error"
-                        progress_data = {
-                            "status": "failed",
-                            "message": f"Failed: {error_msg}",
-                            "error": error_msg,
-                        }
-                        yield f"data: {json.dumps(progress_data)}\n\n"
-                        break
-                    else:
-                        progress_data = {
-                            "status": state.lower(),
-                            "message": f"Status: {state}",
-                        }
 
-                    # Only send if state changed
-                    current_state = json.dumps(progress_data)
-                    if current_state != last_state:
-                        yield f"data: {current_state}\n\n"
-                        last_state = current_state
+class AuditCreationProgressStreamView(CeleryTaskStreamView):
+    """SSE endpoint for streaming audit creation progress.
 
-                    time.sleep(0.5)
+    Uses the shared CeleryTaskStreamView base class for standard
+    Celery task progress streaming.
+    """
 
-                except GeneratorExit:
-                    break
-                except Exception as e:
-                    logger.error(f"[AuditProgressStream] Error: {e}")
-                    yield f"data: {json.dumps({'status': 'error', 'error': str(e)})}\n\n"
-                    break
-
-        response = HttpResponse(
-            event_stream(),
-            content_type="text/event-stream",
-        )
-        response["Cache-Control"] = "no-cache"
-        response["X-Accel-Buffering"] = "no"
-        return response
+    def get_task_id(self, request) -> str:
+        """Extract task ID from URL kwargs."""
+        return self.kwargs.get("task_id")
 
 
 class AuditCreationStatusAPIView(LoginRequiredMixin, View):
@@ -1193,7 +1100,8 @@ class AuditCreationStatusAPIView(LoginRequiredMixin, View):
 
         result = AsyncResult(task_id)
         state = result.state
-        info = result.info or {}
+        # result.info may be an exception object if task failed, so check it's a dict
+        info = result.info if isinstance(result.info, dict) else {}
 
         if state == "PENDING":
             return JsonResponse(
@@ -1215,7 +1123,13 @@ class AuditCreationStatusAPIView(LoginRequiredMixin, View):
                 }
             )
         elif state == "SUCCESS":
-            task_result = info if isinstance(info, dict) else {}
+            # When set_task_progress is called with is_complete=True, the result is nested
+            # under info['result']. When the task returns naturally, info IS the result.
+            if isinstance(info, dict):
+                # Check for nested result from set_task_progress(is_complete=True)
+                task_result = info.get("result", info)
+            else:
+                task_result = {}
             return JsonResponse(
                 {
                     "status": "completed",
@@ -1627,6 +1541,60 @@ class AIAgentsListAPIView(LoginRequiredMixin, View):
         return JsonResponse({"agents": agents_data})
 
 
+class WorkflowSessionsAPIView(LoginRequiredMixin, View):
+    """API endpoint to get audit sessions linked to a workflow run."""
+
+    def get(self, request, workflow_run_id):
+        """
+        Get all audit sessions created by a workflow run.
+
+        Sessions are linked via labs_record_id pointing to the workflow run.
+
+        Response:
+            {
+                "success": bool,
+                "sessions": [
+                    {
+                        "id": int,
+                        "title": str,
+                        "status": str,
+                        "overall_result": str | null,
+                        "opportunity_name": str,
+                        "description": str,
+                        "visit_count": int,
+                        "assessment_stats": {
+                            "total": int,
+                            "pass": int,
+                            "fail": int,
+                            "pending": int,
+                            "ai_match": int,
+                            "ai_no_match": int,
+                            "ai_error": int,
+                            "ai_pending": int
+                        },
+                        "workflow_run_id": int
+                    },
+                    ...
+                ]
+            }
+        """
+        try:
+            data_access = AuditDataAccess(request=request)
+            try:
+                sessions = data_access.get_sessions_by_workflow_run(workflow_run_id)
+                return JsonResponse(
+                    {
+                        "success": True,
+                        "sessions": [s.to_summary_dict() for s in sessions],
+                    }
+                )
+            finally:
+                data_access.close()
+        except Exception as e:
+            logger.error(f"Error fetching workflow sessions: {e}")
+            return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
 class AIReviewAPIView(LoginRequiredMixin, View):
     """API endpoint for running AI review agents on assessments.
 
@@ -1677,7 +1645,6 @@ class AIReviewAPIView(LoginRequiredMixin, View):
 
             # Import the agent registry
             from commcare_connect.labs.ai_review_agents.registry import get_agent
-            from commcare_connect.labs.ai_review_agents.types import ReviewContext
 
             # Get the agent
             try:
@@ -1727,10 +1694,13 @@ class AIReviewAPIView(LoginRequiredMixin, View):
                         else:
                             image_bytes = data_access.download_image_from_connect(blob_id, opportunity_id)
 
-                        # Create review context
-                        context = ReviewContext(
-                            images={"scale": image_bytes},
-                            form_data={"reading": reading},
+                        # Run AI review using shared utility
+                        from commcare_connect.audit.ai_review import run_single_ai_review
+
+                        ai_result = run_single_ai_review(
+                            agent=agent,
+                            image_bytes=image_bytes,
+                            reading=reading,
                             metadata={
                                 "visit_id": visit_id,
                                 "blob_id": blob_id,
@@ -1738,27 +1708,12 @@ class AIReviewAPIView(LoginRequiredMixin, View):
                             },
                         )
 
-                        # Run the agent
-                        result = agent.review(context)
-
-                        # Map result to ai_result
-                        if result.passed:
-                            ai_result = "match"
-                            ai_notes = ""
-                        elif result.failed:
-                            ai_result = "no_match"
-                            ai_notes = ""
-                        else:
-                            ai_result = "error"
-                            # Only show notes for errors (actual error messages)
-                            ai_notes = "; ".join(result.errors) if result.errors else ""
-
                         results.append(
                             {
                                 "visit_id": visit_id,
                                 "blob_id": blob_id,
                                 "ai_result": ai_result,
-                                "ai_notes": ai_notes,
+                                "ai_notes": "",
                             }
                         )
 

@@ -5,33 +5,52 @@ description: Create and modify workflow templates for CommCare Connect. Use when
 
 # Creating Workflow Templates
 
-Workflow templates define reusable workflow types with UI render code. Templates are stored in `commcare_connect/workflow/templates.py` and displayed in the UI via `commcare_connect/templates/workflow/list.html`.
+Workflow templates define reusable workflow types with UI render code. Templates are stored as individual Python files in `commcare_connect/workflow/templates/` and auto-discovered by the registry.
 
 ## Quick Start
 
 To add a new workflow template:
 
-1. Add definition, render code, and optional pipeline schema to `templates.py`
-2. Register in the `TEMPLATES` dict with `icon` and `color` metadata
+1. Create a new file in `commcare_connect/workflow/templates/` (e.g., `my_template.py`)
+2. Export a `TEMPLATE` dict with required fields
 3. Done - UI automatically loads templates from API
 
-## Template Structure
+## File Structure
 
-Each template has 4 components:
+```
+workflow/
+  templates/
+    __init__.py              # Auto-discovery registry
+    base.py                  # Type definitions
+    performance_review.py    # Individual template
+    ocs_outreach.py
+    kmc_scale_validation.py
+    audit_with_ai_review.py
+```
+
+## Template File Structure
+
+Each template file should export a `TEMPLATE` dict:
 
 ```python
-# 1. Pipeline Schema (optional) - data extraction config
-MY_TEMPLATE_PIPELINE_SCHEMA = {
+"""
+My Template Workflow.
+
+Brief description of what this workflow does.
+"""
+
+# Optional: Pipeline Schema for data extraction
+PIPELINE_SCHEMA = {
     "name": "...",
     "description": "...",
     "version": 1,
-    "grouping_key": "username",  # How to group data
+    "grouping_key": "username",
     "terminal_stage": "visit_level" | "aggregated",
-    "fields": [...],  # Field extraction rules
+    "fields": [...],
 }
 
-# 2. Definition - workflow metadata
-MY_TEMPLATE_DEFINITION = {
+# Workflow Definition
+DEFINITION = {
     "name": "Human-readable Name",
     "description": "What this workflow does",
     "version": 1,
@@ -44,23 +63,22 @@ MY_TEMPLATE_DEFINITION = {
     "pipeline_sources": [],
 }
 
-# 3. Render Code - React component as string
-MY_TEMPLATE_RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines, links, actions, onUpdateState }) {
+# React Component as string (JSX)
+RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines, links, actions, onUpdateState }) {
     // React component code
     return (<div>...</div>);
 }"""
 
-# 4. Registry Entry
-TEMPLATES = {
-    "my_template_key": {
-        "name": "...",
-        "description": "...",
-        "icon": "fa-cog",              # Font Awesome icon class
-        "color": "blue",                # Tailwind color: green, blue, purple, orange, red, gray
-        "definition": MY_TEMPLATE_DEFINITION,
-        "render_code": MY_TEMPLATE_RENDER_CODE,
-        "pipeline_schema": MY_TEMPLATE_PIPELINE_SCHEMA,  # or None
-    },
+# REQUIRED: Template export dict
+TEMPLATE = {
+    "key": "my_template_key",           # Unique identifier
+    "name": "Human-readable Name",
+    "description": "Brief description",
+    "icon": "fa-cog",                   # Font Awesome icon class
+    "color": "blue",                    # Tailwind color: green, blue, purple, orange, red, gray
+    "definition": DEFINITION,
+    "render_code": RENDER_CODE,
+    "pipeline_schema": PIPELINE_SCHEMA, # or None if no pipeline
 }
 ```
 
@@ -201,16 +219,17 @@ const getStatusBadge = (statusId) => {
 
 ## Existing Templates
 
-| Key                    | Purpose                                 | Has Pipeline |
-| ---------------------- | --------------------------------------- | ------------ |
-| `performance_review`   | Review worker performance, create tasks | Yes          |
-| `ocs_outreach`         | Bulk AI chatbot outreach                | No           |
-| `kmc_scale_validation` | ML validation of scale images           | Yes          |
-| `audit_with_ai_review` | Create audits with AI pre-validation    | No           |
+| Key                    | File                      | Purpose                                 | Has Pipeline |
+| ---------------------- | ------------------------- | --------------------------------------- | ------------ |
+| `performance_review`   | `performance_review.py`   | Review worker performance, create tasks | Yes          |
+| `ocs_outreach`         | `ocs_outreach.py`         | Bulk AI chatbot outreach                | No           |
+| `kmc_scale_validation` | `kmc_scale_validation.py` | ML validation of scale images           | Yes          |
+| `audit_with_ai_review` | `audit_with_ai_review.py` | Create audits with AI pre-validation    | No           |
 
 ## Files Reference
 
-- **Template definitions**: `commcare_connect/workflow/templates.py`
+- **Template files**: `commcare_connect/workflow/templates/` (individual .py files)
+- **Registry**: `commcare_connect/workflow/templates/__init__.py`
 - **UI list**: `commcare_connect/templates/workflow/list.html`
 - **Action handlers**: `commcare_connect/static/js/workflow-runner.tsx`
 - **TypeScript types**: `components/workflow/types.ts`

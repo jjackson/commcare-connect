@@ -2,10 +2,12 @@
 Base classes and utilities for Server-Sent Events (SSE) streaming views.
 
 Provides reusable infrastructure for streaming analysis progress to the frontend.
+Includes support for both AnalysisPipeline streaming and Celery task progress streaming.
 """
 
 import json
 import logging
+import time
 from collections.abc import Callable, Generator
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -193,4 +195,155 @@ class AnalysisPipelineSSEMixin:
             elif event_type == EVENT_RESULT:
                 logger.debug("[SSE Mixin] Received result event")
                 self._pipeline_result = event_data
+                break
+
+
+class CeleryTaskStreamView(BaseSSEStreamView):
+    """
+    Base view for streaming Celery task progress via SSE.
+
+    Polls Celery task state and streams progress updates to the frontend.
+    Subclasses must implement get_task_id() to extract the task ID from the request.
+
+    Features:
+    - Automatic Celery state polling
+    - Standard progress data structure (status, message, stage_name, current_stage, etc.)
+    - Configurable poll interval
+    - Handles SUCCESS, FAILURE, PROGRESS, PENDING states
+
+    Progress data structure:
+    {
+        "status": "running" | "pending" | "completed" | "failed",
+        "message": "Human-readable progress message",
+        "stage_name": "Current stage name",
+        "current_stage": 1,
+        "total_stages": 4,
+        "processed": 50,  # Items processed in current stage
+        "total": 100,     # Total items in current stage
+        "result": {...},  # Only on completion
+        "error": "...",   # Only on failure
+    }
+
+    Example:
+        class MyTaskStreamView(CeleryTaskStreamView):
+            def get_task_id(self, request) -> str:
+                return self.kwargs.get("task_id")
+    """
+
+    poll_interval: float = 0.5  # Seconds between Celery state polls
+
+    def get_task_id(self, request) -> str:
+        """
+        Extract the Celery task ID from the request.
+
+        Must be implemented by subclasses.
+
+        Args:
+            request: HttpRequest object
+
+        Returns:
+            Celery task ID string
+
+        Raises:
+            NotImplementedError: If not implemented by subclass
+        """
+        raise NotImplementedError("Subclasses must implement get_task_id()")
+
+    def build_progress_data(self, state: str, info: dict) -> dict:
+        """
+        Build standard progress data from Celery task state.
+
+        Args:
+            state: Celery task state (PENDING, PROGRESS, SUCCESS, FAILURE, etc.)
+            info: Task info/meta dict from result.info
+
+        Returns:
+            Standard progress data dict
+        """
+        if state == "PENDING":
+            return {
+                "status": "pending",
+                "message": "Waiting to start...",
+            }
+        elif state == "PROGRESS":
+            return {
+                "status": "running",
+                "message": info.get("message", "Processing..."),
+                "stage_name": info.get("stage_name", ""),
+                "current_stage": info.get("current_stage", 1),
+                "total_stages": info.get("total_stages", 4),
+                "processed": info.get("processed", 0),
+                "total": info.get("total", 0),
+            }
+        elif state == "SUCCESS":
+            # When set_task_progress is called with is_complete=True, the result is nested
+            # under info['result']. When the task returns naturally, info IS the result.
+            if isinstance(info, dict):
+                # Check for nested result from set_task_progress(is_complete=True)
+                task_result = info.get("result", info)
+            else:
+                task_result = {}
+            return {
+                "status": "completed",
+                "message": "Complete",
+                "result": task_result,
+            }
+        elif state == "FAILURE":
+            error_msg = str(info) if info else "Unknown error"
+            return {
+                "status": "failed",
+                "message": f"Failed: {error_msg}",
+                "error": error_msg,
+            }
+        else:
+            return {
+                "status": state.lower(),
+                "message": f"Status: {state}",
+            }
+
+    def stream_data(self, request) -> Generator[str, None, None]:
+        """
+        Stream Celery task progress as SSE events.
+
+        Polls Celery task state at poll_interval and yields progress updates.
+        Only yields when state changes to reduce bandwidth.
+        Terminates on SUCCESS or FAILURE.
+
+        Args:
+            request: HttpRequest object
+
+        Yields:
+            Formatted SSE event strings with progress data
+        """
+        from celery.result import AsyncResult
+
+        task_id = self.get_task_id(request)
+        result = AsyncResult(task_id)
+        last_state_json = None
+
+        while True:
+            try:
+                state = result.state
+                # result.info may be an exception object if task failed, so check it's a dict
+                info = result.info if isinstance(result.info, dict) else {}
+
+                progress_data = self.build_progress_data(state, info)
+                current_json = json.dumps(progress_data)
+
+                # Only send if state changed
+                if current_json != last_state_json:
+                    yield f"data: {current_json}\n\n"
+                    last_state_json = current_json
+
+                # Terminate on final states
+                if state in ("SUCCESS", "FAILURE"):
+                    break
+
+                time.sleep(self.poll_interval)
+
+            except GeneratorExit:
+                break
+            except Exception as e:
+                logger.error(f"[CeleryTaskStream] Error: {e}")
+                yield f"data: {json.dumps({'status': 'error', 'error': str(e)})}\n\n"
                 break
