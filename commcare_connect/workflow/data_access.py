@@ -82,8 +82,8 @@ class WorkflowRenderCodeRecord(LocalLabsRecord):
         return self.data.get("version", 1)
 
 
-class WorkflowInstanceRecord(LocalLabsRecord):
-    """Proxy model for workflow instance LabsRecords."""
+class WorkflowRunRecord(LocalLabsRecord):
+    """Proxy model for workflow run LabsRecords."""
 
     @property
     def definition_id(self):
@@ -423,25 +423,25 @@ class WorkflowDataAccess(BaseDataAccess):
             deleted_counts["chat_history"] = 1
 
         if delete_linked:
-            # Delete all instances/runs and their linked audit sessions
-            instances = self.list_instances(definition_id)
-            for instance in instances:
+            # Delete all runs and their linked audit sessions
+            runs = self.list_runs(definition_id)
+            for run in runs:
                 # Find and delete audit sessions linked to this run
                 # Audit sessions store workflow_run_id in labs_record_id field
                 try:
                     audit_sessions = self.labs_api.get_records(
                         experiment="audit",
                         type="AuditSession",
-                        labs_record_id=instance.id,
+                        labs_record_id=run.id,
                     )
                     for session in audit_sessions:
                         self.labs_api.delete_record(session.id)
                         deleted_counts["audit_sessions"] += 1
                 except Exception as e:
-                    logger.warning(f"Failed to query/delete audit sessions for run {instance.id}: {e}")
+                    logger.warning(f"Failed to query/delete audit sessions for run {run.id}: {e}")
 
                 # Delete the run itself
-                self.labs_api.delete_record(instance.id)
+                self.labs_api.delete_record(run.id)
                 deleted_counts["runs"] += 1
 
         # Delete the definition itself
@@ -501,27 +501,32 @@ class WorkflowDataAccess(BaseDataAccess):
         )
 
     # -------------------------------------------------------------------------
-    # Workflow Instance Methods
+    # Workflow Run Methods
     # -------------------------------------------------------------------------
 
-    def list_instances(self, definition_id: int | None = None) -> list[WorkflowInstanceRecord]:
-        """List workflow instances."""
+    def list_runs(self, definition_id: int | None = None) -> list[WorkflowRunRecord]:
+        """List workflow runs."""
         records = self.labs_api.get_records(
             experiment=self.EXPERIMENT,
-            type="workflow_instance",
-            model_class=WorkflowInstanceRecord,
+            type="workflow_run",
+            model_class=WorkflowRunRecord,
         )
         if definition_id:
             records = [r for r in records if r.data.get("definition_id") == definition_id]
         return records
 
-    def list_runs(self, definition_id: int | None = None) -> list[WorkflowInstanceRecord]:
-        """Alias for list_instances."""
-        return self.list_instances(definition_id)
+    def list_instances(self, definition_id: int | None = None) -> list[WorkflowRunRecord]:
+        """Alias for list_runs (deprecated)."""
+        return self.list_runs(definition_id)
 
-    def get_run(self, run_id: int) -> WorkflowInstanceRecord | None:
-        """Get a workflow run by ID. Alias for get_instance."""
-        return self.get_instance(run_id)
+    def get_run(self, run_id: int) -> WorkflowRunRecord | None:
+        """Get a workflow run by ID."""
+        return self.labs_api.get_record_by_id(
+            record_id=run_id,
+            experiment=self.EXPERIMENT,
+            type="workflow_run",
+            model_class=WorkflowRunRecord,
+        )
 
     def create_run(
         self,
@@ -530,7 +535,7 @@ class WorkflowDataAccess(BaseDataAccess):
         period_start: str,
         period_end: str,
         initial_state: dict | None = None,
-    ) -> WorkflowInstanceRecord:
+    ) -> WorkflowRunRecord:
         """
         Create a new workflow run.
 
@@ -542,7 +547,7 @@ class WorkflowDataAccess(BaseDataAccess):
             initial_state: Optional initial state dict
 
         Returns:
-            Created WorkflowInstanceRecord
+            Created WorkflowRunRecord
         """
         data = {
             "definition_id": definition_id,
@@ -554,11 +559,11 @@ class WorkflowDataAccess(BaseDataAccess):
 
         record = self.labs_api.create_record(
             experiment=self.EXPERIMENT,
-            type="workflow_instance",
+            type="workflow_run",
             data=data,
         )
 
-        return WorkflowInstanceRecord(
+        return WorkflowRunRecord(
             {
                 "id": record.id,
                 "experiment": record.experiment,
@@ -568,36 +573,56 @@ class WorkflowDataAccess(BaseDataAccess):
             }
         )
 
-    def update_run_state(self, run_id: int, new_state: dict) -> WorkflowInstanceRecord | None:
-        """Update workflow run state (merge with existing). Alias for update_instance_state."""
-        return self.update_instance_state(run_id, new_state)
+    def delete_run(self, run_id: int, delete_linked: bool = True) -> dict:
+        """Delete a workflow run and optionally its linked records.
 
-    def delete_run(self, run_id: int) -> None:
-        """Delete a workflow run."""
+        Args:
+            run_id: ID of the workflow run to delete
+            delete_linked: If True, also delete linked audit sessions
+
+        Returns:
+            dict with counts of deleted records:
+            {"run": 1, "audit_sessions": N}
+        """
+        deleted_counts = {"run": 0, "audit_sessions": 0}
+
+        if delete_linked:
+            # Find and delete audit sessions linked to this run
+            # Audit sessions store workflow_run_id in labs_record_id field
+            try:
+                audit_sessions = self.labs_api.get_records(
+                    experiment="audit",
+                    type="AuditSession",
+                    labs_record_id=run_id,
+                )
+                for session in audit_sessions:
+                    self.labs_api.delete_record(session.id)
+                    deleted_counts["audit_sessions"] += 1
+                if deleted_counts["audit_sessions"] > 0:
+                    logger.info(f"Deleted {deleted_counts['audit_sessions']} audit sessions linked to run {run_id}")
+            except Exception as e:
+                logger.warning(f"Failed to query/delete audit sessions for run {run_id}: {e}")
+
+        # Delete the run itself
         self.labs_api.delete_record(run_id)
+        deleted_counts["run"] = 1
 
-    def get_instance(self, instance_id: int) -> WorkflowInstanceRecord | None:
-        """Get a workflow instance by ID."""
-        return self.labs_api.get_record_by_id(
-            record_id=instance_id,
-            experiment=self.EXPERIMENT,
-            type="workflow_instance",
-            model_class=WorkflowInstanceRecord,
-        )
+        return deleted_counts
 
-    def get_or_create_instance(self, definition_id: int, opportunity_id: int) -> WorkflowInstanceRecord:
-        """Get or create a workflow instance for the current week."""
+    def get_instance(self, instance_id: int) -> WorkflowRunRecord | None:
+        """Alias for get_run (deprecated)."""
+        return self.get_run(instance_id)
+
+    def get_or_create_run(self, definition_id: int, opportunity_id: int) -> WorkflowRunRecord:
+        """Get or create a workflow run for the current week."""
         today = datetime.now().date()
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
 
-        instances = self.list_instances(definition_id)
-        for instance in instances:
-            if (
-                instance.opportunity_id == opportunity_id
-                and instance.data.get("period_start") == week_start.isoformat()
-            ):
-                return instance
+        runs = self.list_runs(definition_id)
+        for run in runs:
+            if run.opportunity_id == opportunity_id and run.data.get("period_start") == week_start.isoformat():
+                return run
 
         data = {
             "definition_id": definition_id,
@@ -609,11 +634,11 @@ class WorkflowDataAccess(BaseDataAccess):
 
         record = self.labs_api.create_record(
             experiment=self.EXPERIMENT,
-            type="workflow_instance",
+            type="workflow_run",
             data=data,
         )
 
-        return WorkflowInstanceRecord(
+        return WorkflowRunRecord(
             {
                 "id": record.id,
                 "experiment": record.experiment,
@@ -623,24 +648,28 @@ class WorkflowDataAccess(BaseDataAccess):
             }
         )
 
-    def update_instance_state(self, instance_id: int, new_state: dict) -> WorkflowInstanceRecord | None:
-        """Update workflow instance state (merge with existing)."""
-        instance = self.get_instance(instance_id)
-        if not instance:
+    def get_or_create_instance(self, definition_id: int, opportunity_id: int) -> WorkflowRunRecord:
+        """Alias for get_or_create_run (deprecated)."""
+        return self.get_or_create_run(definition_id, opportunity_id)
+
+    def update_run_state(self, run_id: int, new_state: dict) -> WorkflowRunRecord | None:
+        """Update workflow run state (merge with existing)."""
+        run = self.get_run(run_id)
+        if not run:
             return None
 
-        current_state = instance.data.get("state", {})
+        current_state = run.data.get("state", {})
         merged_state = {**current_state, **new_state}
-        updated_data = {**instance.data, "state": merged_state}
+        updated_data = {**run.data, "state": merged_state}
 
         result = self.labs_api.update_record(
-            record_id=instance_id,
+            record_id=run_id,
             experiment=self.EXPERIMENT,
-            type="workflow_instance",
+            type="workflow_run",
             data=updated_data,
         )
         if result:
-            return WorkflowInstanceRecord(
+            return WorkflowRunRecord(
                 {
                     "id": result.id,
                     "experiment": result.experiment,
@@ -650,6 +679,10 @@ class WorkflowDataAccess(BaseDataAccess):
                 }
             )
         return None
+
+    def update_instance_state(self, instance_id: int, new_state: dict) -> WorkflowRunRecord | None:
+        """Alias for update_run_state (deprecated)."""
+        return self.update_run_state(instance_id, new_state)
 
     # -------------------------------------------------------------------------
     # Pipeline Source Methods

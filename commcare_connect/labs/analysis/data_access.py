@@ -18,41 +18,36 @@ from commcare_connect.labs.analysis.utils import DJANGO_CACHE_TTL
 logger = logging.getLogger(__name__)
 
 
-def get_flw_names_for_opportunity(request: HttpRequest) -> dict[str, str]:
+def fetch_flw_names(access_token: str, opportunity_id: int, use_cache: bool = True) -> dict[str, str]:
     """
-    Get FLW display names for the opportunity in request context.
+    Fetch FLW display names for an opportunity from Connect API.
 
-    Fetches username to display name mapping from Connect API and caches it.
+    This is the low-level function that can be used by both views (via request)
+    and Celery tasks (via raw parameters).
 
     Args:
-        request: HttpRequest with labs_oauth and labs_context in session
+        access_token: OAuth Bearer token for Connect API
+        opportunity_id: Opportunity ID to fetch FLW names for
+        use_cache: Whether to use Django cache (default True)
 
     Returns:
-        Dictionary mapping username to display name
+        Dictionary mapping username to display name.
+        Falls back to username if display name is empty.
         Example: {"e5e685ae3f024fb6848d0d87138d526f": "John Doe"}
 
     Raises:
-        ValueError: If no OAuth token or opportunity context found
+        RuntimeError: If API call fails or times out
     """
-    access_token = request.session.get("labs_oauth", {}).get("access_token")
-    labs_context = getattr(request, "labs_context", {})
-    opportunity_id = labs_context.get("opportunity_id")
-
-    if not access_token:
-        raise ValueError("No labs OAuth token found in session")
-
-    if not opportunity_id:
-        raise ValueError("No opportunity selected in labs context")
-
     # Try cache first
-    cache_key = f"flw_names_{opportunity_id}"
-    try:
-        cached = cache.get(cache_key)
-        if cached is not None:
-            logger.debug(f"FLW names loaded from cache for opp {opportunity_id}")
-            return cached
-    except Exception as e:
-        logger.warning(f"Cache get failed for {cache_key}: {e}")
+    if use_cache:
+        cache_key = f"flw_names_{opportunity_id}"
+        try:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                logger.debug(f"FLW names loaded from cache for opp {opportunity_id}")
+                return cached
+        except Exception as e:
+            logger.warning(f"Cache get failed for {cache_key}: {e}")
 
     # Fetch from API
     url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_data/"
@@ -85,10 +80,41 @@ def get_flw_names_for_opportunity(request: HttpRequest) -> dict[str, str]:
             flw_names[username] = name if name else username
 
     # Cache the result
-    try:
-        cache.set(cache_key, flw_names, DJANGO_CACHE_TTL)
-        logger.debug(f"FLW names cached for opp {opportunity_id}")
-    except Exception as e:
-        logger.warning(f"Cache set failed for {cache_key}: {e}")
+    if use_cache:
+        try:
+            cache.set(cache_key, flw_names, DJANGO_CACHE_TTL)
+            logger.debug(f"FLW names cached for opp {opportunity_id}")
+        except Exception as e:
+            logger.warning(f"Cache set failed for {cache_key}: {e}")
 
     return flw_names
+
+
+def get_flw_names_for_opportunity(request: HttpRequest) -> dict[str, str]:
+    """
+    Get FLW display names for the opportunity in request context.
+
+    Convenience wrapper around fetch_flw_names() that extracts credentials
+    from the request session.
+
+    Args:
+        request: HttpRequest with labs_oauth and labs_context in session
+
+    Returns:
+        Dictionary mapping username to display name
+        Example: {"e5e685ae3f024fb6848d0d87138d526f": "John Doe"}
+
+    Raises:
+        ValueError: If no OAuth token or opportunity context found
+    """
+    access_token = request.session.get("labs_oauth", {}).get("access_token")
+    labs_context = getattr(request, "labs_context", {})
+    opportunity_id = labs_context.get("opportunity_id")
+
+    if not access_token:
+        raise ValueError("No labs OAuth token found in session")
+
+    if not opportunity_id:
+        raise ValueError("No opportunity selected in labs context")
+
+    return fetch_flw_names(access_token, opportunity_id)

@@ -74,6 +74,18 @@
     <div class="record-meta">
       <h3 class="text-lg font-semibold mb-3 text-brand-deep-purple">Record Information</h3>
       <div class="record-meta-item">
+        <span class="record-meta-label">Parent Record:</span>
+        <span>
+          {% if record.labs_record_id %}
+          <a href="{% url 'explorer:edit' pk=record.labs_record_id %}?opportunity_id={{ record.opportunity_id }}">
+            Record #{{ record.labs_record_id }}
+          </a>
+          {% else %}
+          —
+          {% endif %}
+        </span>
+      </div>
+      <div class="record-meta-item">
         <span class="record-meta-label">ID:</span>
         <span>{{ record.id }}</span>
       </div>

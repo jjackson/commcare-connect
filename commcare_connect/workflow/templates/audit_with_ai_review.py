@@ -77,6 +77,73 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // Has sessions to display?
     const hasLinkedSessions = linkedSessions.length > 0;
 
+    // Reconnect to running job on page load (if user refreshes during execution)
+    React.useEffect(() => {
+        try {
+            const activeJob = instance.state?.active_job;
+            if (!actions?.streamAuditProgress) return; // Safety check
+            if (activeJob?.status === 'running' && activeJob?.job_id) {
+                console.log('[AuditWorkflow] Reconnecting to running job:', activeJob.job_id);
+                setIsRunning(true);
+                setTaskId(activeJob.job_id);
+                setProgress({
+                    status: 'running',
+                    stage_name: activeJob.stage_name || 'Processing',
+                    processed: activeJob.processed || 0,
+                    total: activeJob.total || 0,
+                });
+
+                // Reconnect to SSE stream
+                const cleanup = actions.streamAuditProgress(
+                    activeJob.job_id,
+                    (progressData) => {
+                        setProgress(progressData);
+                    },
+                    (finalResult) => {
+                        setIsRunning(false);
+                        setProgress({ status: 'completed', ...finalResult });
+                        onUpdateState({
+                            status: 'completed',
+                            active_job: {
+                                job_id: activeJob.job_id,
+                                status: 'completed',
+                                completed_at: new Date().toISOString(),
+                            },
+                        }).catch(err => console.warn('Failed to update state:', err));
+                        // Refresh linked sessions
+                        fetch('/audit/api/workflow/' + instance.id + '/sessions/')
+                            .then(res => res.json())
+                            .then(data => {
+                                if (data.success && data.sessions) {
+                                    setLinkedSessions(data.sessions);
+                                }
+                            })
+                            .catch(err => console.error('Failed to refresh sessions:', err));
+                    },
+                    (error) => {
+                        setIsRunning(false);
+                        setProgress({ status: 'failed', error });
+                        onUpdateState({
+                            status: 'failed',
+                            active_job: {
+                                job_id: activeJob.job_id,
+                                status: 'failed',
+                                error: error,
+                            },
+                        }).catch(err => console.warn('Failed to update state:', err));
+                    }
+                );
+                cleanupRef.current = cleanup;
+
+                return () => {
+                    if (cleanup) cleanup();
+                };
+            }
+        } catch (err) {
+            console.error('[AuditWorkflow] Error in reconnection:', err);
+        }
+    }, []); // Run once on mount
+
     // Get opportunity from URL or instance state
     const urlParams = new URLSearchParams(window.location.search);
     const opportunityId = parseInt(urlParams.get('opportunity_id')) || instance.state?.opportunity_id;
@@ -277,20 +344,35 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             if (result.success && result.task_id) {
                 setTaskId(result.task_id);
 
+                // Persist active job to workflow state for list page SSE tracking (fire and forget)
+                onUpdateState({
+                    active_job: {
+                        job_id: result.task_id,
+                        status: 'running',
+                        started_at: new Date().toISOString(),
+                    },
+                }).catch(err => console.warn('Failed to persist active_job:', err));
+
                 // Stream progress
                 const cleanup = actions.streamAuditProgress(
                     result.task_id,
                     (progressData) => {
+                        // Update local UI state only (list page gets updates via its own SSE)
                         setProgress(progressData);
                     },
-                    async (finalResult) => {
+                    (finalResult) => {
                         setIsRunning(false);
                         setProgress({ status: 'completed', ...finalResult });
 
-                        // Save status to workflow state
-                        await onUpdateState({
+                        // Save status and mark job as completed
+                        onUpdateState({
                             status: 'completed',
-                        });
+                            active_job: {
+                                job_id: result.task_id,
+                                status: 'completed',
+                                completed_at: new Date().toISOString(),
+                            },
+                        }).catch(err => console.warn('Failed to update state:', err));
 
                         // Refresh linked sessions from API to show the table
                         fetch('/audit/api/workflow/' + instance.id + '/sessions/')
@@ -305,6 +387,15 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     (error) => {
                         setIsRunning(false);
                         setProgress({ status: 'failed', error });
+                        // Mark job as failed
+                        onUpdateState({
+                            status: 'failed',
+                            active_job: {
+                                job_id: result.task_id,
+                                status: 'failed',
+                                error: error,
+                            },
+                        }).catch(err => console.warn('Failed to update state:', err));
                     }
                 );
                 cleanupRef.current = cleanup;
@@ -337,10 +428,15 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             const result = await actions.cancelAudit(taskId);
             if (result.success) {
                 setProgress({ status: 'cancelled', message: 'Audit creation cancelled' });
-                // Clear any partial results
+                // Clear any partial results and mark job as cancelled
                 await onUpdateState({
                     audit_results: null,
                     status: 'cancelled',
+                    active_job: {
+                        job_id: taskId,
+                        status: 'cancelled',
+                        cancelled_at: new Date().toISOString(),
+                    },
                 });
             } else {
                 // Cancel API failed but we've already stopped the UI

@@ -24,7 +24,6 @@ workflow/
     base.py                  # Type definitions
     performance_review.py    # Individual template
     ocs_outreach.py
-    kmc_scale_validation.py
     audit_with_ai_review.py
 ```
 
@@ -217,20 +216,11 @@ const getStatusBadge = (statusId) => {
 };
 ```
 
-## Existing Templates
+## Key Files
 
-| Key                    | File                      | Purpose                                 | Has Pipeline |
-| ---------------------- | ------------------------- | --------------------------------------- | ------------ |
-| `performance_review`   | `performance_review.py`   | Review worker performance, create tasks | Yes          |
-| `ocs_outreach`         | `ocs_outreach.py`         | Bulk AI chatbot outreach                | No           |
-| `kmc_scale_validation` | `kmc_scale_validation.py` | ML validation of scale images           | Yes          |
-| `audit_with_ai_review` | `audit_with_ai_review.py` | Create audits with AI pre-validation    | No           |
+- **Templates directory**: `commcare_connect/workflow/templates/` - Add new `.py` files here
+- **Registry**: `commcare_connect/workflow/templates/__init__.py` - Auto-discovers templates
+- **Action handlers**: `commcare_connect/static/js/workflow-runner.tsx` - Client-side actions
+- **View handlers**: `commcare_connect/workflow/views.py` - Server-side endpoints
 
-## Files Reference
-
-- **Template files**: `commcare_connect/workflow/templates/` (individual .py files)
-- **Registry**: `commcare_connect/workflow/templates/__init__.py`
-- **UI list**: `commcare_connect/templates/workflow/list.html`
-- **Action handlers**: `commcare_connect/static/js/workflow-runner.tsx`
-- **TypeScript types**: `components/workflow/types.ts`
-- **View handlers**: `commcare_connect/workflow/views.py`
+To see existing templates for reference, browse the templates directory.

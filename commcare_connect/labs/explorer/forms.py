@@ -72,9 +72,9 @@ class RecordFilterForm(forms.Form):
                     css_class="row mb-3",
                 ),
                 Div(
-                    Submit("apply", "Apply Filters", css_class="btn btn-primary"),
-                    Submit("clear", "Clear Filters", css_class="btn btn-secondary ms-2"),
-                    css_class="d-flex gap-2",
+                    Submit("apply", "Apply Filters", css_class="button button-sm primary-dark"),
+                    Submit("clear", "Clear Filters", css_class="button button-sm outline-style"),
+                    css_class="flex gap-2",
                 ),
                 css_class="filter-form",
             )
