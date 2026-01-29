@@ -27,6 +27,10 @@ urlpatterns = [
     path("cache/", views.CacheManagerView.as_view(), name="cache_manager"),
     path("cache/delete/", views.CacheDeleteView.as_view(), name="cache_delete"),
     path("cache/stats/", views.CacheStatsAPIView.as_view(), name="cache_stats"),
+    # Task Manager
+    path("tasks/", views.TaskManagerView.as_view(), name="task_manager"),
+    path("tasks/kill/", views.TaskKillView.as_view(), name="task_kill"),
+    path("tasks/status/<str:task_id>/", views.TaskStatusAPIView.as_view(), name="task_status"),
     # Admin Boundaries
     path("boundaries/", include("commcare_connect.labs.admin_boundaries.urls")),
 ]

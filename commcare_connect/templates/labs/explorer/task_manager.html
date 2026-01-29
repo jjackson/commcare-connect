@@ -1,0 +1,488 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-7xl">
+  <!-- Header -->
+  <div class="mb-8">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">
+          <i class="fa-solid fa-list-check text-orange-600 mr-3"></i>
+          Task Manager
+        </h1>
+        <p class="text-gray-600">
+          Monitor and manage Celery background tasks
+        </p>
+      </div>
+      <a href="{% url 'explorer:index' %}" class="inline-flex items-center text-gray-600 hover:text-gray-900">
+        <i class="fa-solid fa-arrow-left mr-2"></i>
+        Back to Explorer
+      </a>
+    </div>
+  </div>
+
+  {% if error %}
+  <!-- Error Alert -->
+  <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+    <div class="flex items-center">
+      <i class="fa-solid fa-triangle-exclamation text-red-600 mr-3"></i>
+      <div>
+        <p class="text-red-800 font-medium">Connection Error</p>
+        <p class="text-red-700 text-sm">{{ error }}</p>
+        <p class="text-red-600 text-sm mt-1">
+          Make sure Celery workers are running: <code class="bg-red-100 px-1 rounded">celery -A config.celery_app worker -l info</code>
+        </p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Summary Statistics -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+      <div class="text-sm text-gray-600 mb-1">Active Tasks</div>
+      <div class="text-2xl font-bold {% if active_count > 0 %}text-green-600{% else %}text-gray-900{% endif %}">
+        {{ active_count }}
+      </div>
+    </div>
+    <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+      <div class="text-sm text-gray-600 mb-1">Scheduled</div>
+      <div class="text-2xl font-bold text-blue-600">{{ scheduled_count }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+      <div class="text-sm text-gray-600 mb-1">Reserved</div>
+      <div class="text-2xl font-bold text-yellow-600">{{ reserved_count }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+      <div class="text-sm text-gray-600 mb-1">Workers Online</div>
+      <div class="text-2xl font-bold {% if workers_online %}text-green-600{% else %}text-red-600{% endif %}">
+        {% if workers_online %}Yes{% else %}No{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <form method="get" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Task Name Filter -->
+        <div>
+          <label for="task_name" class="block text-sm font-medium text-gray-700 mb-1">
+            Task Name
+          </label>
+          <select name="task_name" id="task_name"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <option value="">All Tasks</option>
+            {% for name in task_names %}
+              <option value="{{ name }}" {% if task_name_filter == name %}selected{% endif %}>
+                {{ name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Status Filter -->
+        <div>
+          <label for="status" class="block text-sm font-medium text-gray-700 mb-1">
+            Status
+          </label>
+          <select name="status" id="status"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <option value="">All Statuses</option>
+            <option value="active" {% if status_filter == "active" %}selected{% endif %}>Active</option>
+            <option value="scheduled" {% if status_filter == "scheduled" %}selected{% endif %}>Scheduled</option>
+            <option value="reserved" {% if status_filter == "reserved" %}selected{% endif %}>Reserved</option>
+            <option value="completed" {% if status_filter == "completed" %}selected{% endif %}>Completed</option>
+            <option value="failed" {% if status_filter == "failed" %}selected{% endif %}>Failed</option>
+            <option value="running" {% if status_filter == "running" %}selected{% endif %}>Running</option>
+          </select>
+        </div>
+
+        <!-- Filter Button -->
+        <div class="flex items-end gap-2">
+          <button type="submit"
+                  class="flex-1 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors">
+            <i class="fa-solid fa-filter mr-2"></i>
+            Apply Filters
+          </button>
+          <button type="button" onclick="location.reload()"
+                  class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">
+            <i class="fa-solid fa-rotate"></i>
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Active Tasks Section -->
+  {% if active_tasks %}
+  <div class="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
+    <div class="px-6 py-4 bg-green-50 border-b border-green-200">
+      <h2 class="text-lg font-bold text-green-800">
+        <i class="fa-solid fa-play text-green-600 mr-2"></i>
+        Active Tasks ({{ active_count }})
+      </h2>
+      <p class="text-sm text-green-700">Currently executing on workers</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task ID</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Worker</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Runtime</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {% for task in active_tasks %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm font-mono text-gray-600">
+              <span title="{{ task.id }}" class="cursor-help">
+                {{ task.id|truncatechars:12 }}
+              </span>
+            </td>
+            <td class="px-4 py-3 text-sm">
+              <span class="font-medium text-gray-900">{{ task.name_short }}</span>
+              <br>
+              <span class="text-xs text-gray-500" title="{{ task.name }}">{{ task.name|truncatechars:50 }}</span>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-600">
+              {{ task.worker }}
+            </td>
+            <td class="px-4 py-3 text-sm">
+              {% if task.runtime_display %}
+                <span class="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  {{ task.runtime_display }}
+                </span>
+              {% else %}
+                <span class="text-gray-400">-</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-sm">
+              <button onclick="killTask('{{ task.id }}', true)"
+                      class="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors">
+                <i class="fa-solid fa-stop mr-1"></i>
+                Terminate
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Scheduled Tasks Section -->
+  {% if scheduled_tasks %}
+  <div class="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
+    <div class="px-6 py-4 bg-blue-50 border-b border-blue-200">
+      <h2 class="text-lg font-bold text-blue-800">
+        <i class="fa-solid fa-clock text-blue-600 mr-2"></i>
+        Scheduled Tasks ({{ scheduled_count }})
+      </h2>
+      <p class="text-sm text-blue-700">Tasks with ETA/countdown waiting to execute</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task ID</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Worker</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ETA</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {% for task in scheduled_tasks %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm font-mono text-gray-600">
+              {{ task.id|truncatechars:12 }}
+            </td>
+            <td class="px-4 py-3 text-sm">
+              <span class="font-medium text-gray-900">{{ task.name_short }}</span>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-600">{{ task.worker }}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">{{ task.eta|default:"-" }}</td>
+            <td class="px-4 py-3 text-sm">
+              <button onclick="killTask('{{ task.id }}', false)"
+                      class="px-3 py-1 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700 transition-colors">
+                <i class="fa-solid fa-ban mr-1"></i>
+                Revoke
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Reserved Tasks Section -->
+  {% if reserved_tasks %}
+  <div class="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
+    <div class="px-6 py-4 bg-yellow-50 border-b border-yellow-200">
+      <h2 class="text-lg font-bold text-yellow-800">
+        <i class="fa-solid fa-inbox text-yellow-600 mr-2"></i>
+        Reserved Tasks ({{ reserved_count }})
+      </h2>
+      <p class="text-sm text-yellow-700">Tasks received by workers but not yet started</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task ID</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Worker</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {% for task in reserved_tasks %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm font-mono text-gray-600">
+              {{ task.id|truncatechars:12 }}
+            </td>
+            <td class="px-4 py-3 text-sm">
+              <span class="font-medium text-gray-900">{{ task.name_short }}</span>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-600">{{ task.worker }}</td>
+            <td class="px-4 py-3 text-sm">
+              <button onclick="killTask('{{ task.id }}', false)"
+                      class="px-3 py-1 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700 transition-colors">
+                <i class="fa-solid fa-ban mr-1"></i>
+                Revoke
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Recent Workflow Tasks Section -->
+  {% if recent_tasks %}
+  <div class="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
+    <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+      <h2 class="text-lg font-bold text-gray-800">
+        <i class="fa-solid fa-history text-gray-600 mr-2"></i>
+        Recent Workflow Tasks ({{ recent_count }})
+      </h2>
+      <p class="text-sm text-gray-600">Recent workflow job history from database</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task ID</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job Type</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Started</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Summary</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {% for task in recent_tasks %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm font-mono text-gray-600">
+              <span title="{{ task.id }}" class="cursor-help">
+                {{ task.id|truncatechars:12 }}
+              </span>
+            </td>
+            <td class="px-4 py-3 text-sm">
+              <span class="font-medium text-gray-900">{{ task.name_short }}</span>
+            </td>
+            <td class="px-4 py-3 text-sm">
+              {% if task.status == "completed" %}
+                <span class="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  Completed
+                </span>
+              {% elif task.status == "failed" %}
+                <span class="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                  Failed
+                </span>
+              {% elif task.status == "running" %}
+                <span class="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  Running
+                </span>
+              {% else %}
+                <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                  {{ task.status }}
+                </span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-600">
+              {{ task.started_at|default:"-" }}
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-600">
+              {% if task.summary %}
+                <span class="text-green-600">{{ task.summary.successful|default:0 }} ok</span>
+                {% if task.summary.failed %}
+                  / <span class="text-red-600">{{ task.summary.failed }} failed</span>
+                {% endif %}
+              {% elif task.error %}
+                <span class="text-red-600 text-xs" title="{{ task.error }}">
+                  {{ task.error|truncatechars:30 }}
+                </span>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-sm">
+              {% if task.status == "running" %}
+                <button onclick="killTask('{{ task.id }}', true)"
+                        class="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors">
+                  <i class="fa-solid fa-stop mr-1"></i>
+                  Terminate
+                </button>
+              {% else %}
+                <span class="text-gray-400 text-xs">-</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- No Tasks Message -->
+  {% if not active_tasks and not scheduled_tasks and not reserved_tasks and not recent_tasks and not error %}
+  <div class="bg-white rounded-lg shadow-sm p-12 text-center">
+    <i class="fa-solid fa-inbox text-gray-300 text-6xl mb-4"></i>
+    <h3 class="text-xl font-medium text-gray-600 mb-2">No Tasks Found</h3>
+    <p class="text-gray-500">
+      No active, scheduled, or recent tasks matching your filters.
+    </p>
+    {% if not workers_online %}
+    <p class="text-orange-600 mt-4">
+      <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+      Workers may be offline. Start a worker with: <code class="bg-orange-100 px-2 py-1 rounded">celery -A config.celery_app worker -l info</code>
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Kill Confirmation Modal -->
+<div id="killModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+  <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+    <h3 class="text-lg font-bold text-gray-900 mb-4">
+      <i class="fa-solid fa-triangle-exclamation text-red-600 mr-2"></i>
+      Confirm Task Termination
+    </h3>
+    <p class="text-sm text-gray-600 mb-2">
+      Are you sure you want to <span id="killAction" class="font-bold"></span> this task?
+    </p>
+    <p class="text-xs text-gray-500 mb-4" id="killTaskId"></p>
+    <div id="terminateWarning" class="hidden bg-red-50 border border-red-200 rounded p-3 mb-4">
+      <p class="text-sm text-red-700">
+        <strong>Warning:</strong> Terminating a running task sends SIGTERM to the worker process.
+        This may leave data in an inconsistent state.
+      </p>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="confirmKill()"
+              class="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+        Yes, <span id="killActionBtn"></span> Task
+      </button>
+      <button onclick="hideKillModal()"
+              class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// CSRF token for Django
+const csrftoken = '{{ csrf_token }}';
+
+// Current kill target
+let currentKillTaskId = null;
+let currentKillTerminate = false;
+
+// Show kill confirmation modal
+function killTask(taskId, terminate) {
+  currentKillTaskId = taskId;
+  currentKillTerminate = terminate;
+
+  const action = terminate ? 'terminate' : 'revoke';
+  document.getElementById('killAction').textContent = action;
+  document.getElementById('killActionBtn').textContent = action;
+  document.getElementById('killTaskId').textContent = `Task ID: ${taskId}`;
+
+  // Show warning for terminate
+  const warning = document.getElementById('terminateWarning');
+  if (terminate) {
+    warning.classList.remove('hidden');
+  } else {
+    warning.classList.add('hidden');
+  }
+
+  document.getElementById('killModal').classList.remove('hidden');
+}
+
+// Hide kill modal
+function hideKillModal() {
+  document.getElementById('killModal').classList.add('hidden');
+  currentKillTaskId = null;
+  currentKillTerminate = false;
+}
+
+// Confirm and execute kill
+function confirmKill() {
+  if (!currentKillTaskId) return;
+
+  fetch("{% url 'explorer:task_kill' %}", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-CSRFToken': csrftoken
+    },
+    body: new URLSearchParams({
+      task_id: currentKillTaskId,
+      terminate: currentKillTerminate ? 'true' : 'false'
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      alert(data.message);
+      hideKillModal();
+      location.reload();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(error => {
+    alert('Error: ' + error);
+  });
+}
+
+// Auto-refresh every 10 seconds (optional - can be toggled)
+let autoRefreshEnabled = false;
+let autoRefreshInterval = null;
+
+function toggleAutoRefresh() {
+  autoRefreshEnabled = !autoRefreshEnabled;
+  if (autoRefreshEnabled) {
+    autoRefreshInterval = setInterval(() => location.reload(), 10000);
+  } else if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+  }
+}
+</script>
+
+{% endblock %}
