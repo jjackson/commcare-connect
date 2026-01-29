@@ -186,8 +186,9 @@ class Command(BaseCommand):
                 for i in range(20):
                     time.sleep(0.5)
                     state = async_result.state
-                    info = async_result.info or {}
-                    msg = info.get("message", "") if isinstance(info, dict) else ""
+                    # result.info may be an exception object if task failed
+                    info = async_result.info if isinstance(async_result.info, dict) else {}
+                    msg = info.get("message", "")
                     self.stdout.write(f"      [{i*0.5:.1f}s] State: {state}, Message: {msg}")
 
                     if state == "SUCCESS":
@@ -441,7 +442,6 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.SUCCESS(
                         f"\n    [OK] Audit creation completed!\n"
-                        f"         Template ID: {result.get('template_id')}\n"
                         f"         Sessions: {len(result.get('sessions', []))}\n"
                         f"         Visits: {result.get('total_visits')}\n"
                         f"         Images: {result.get('total_images')}"

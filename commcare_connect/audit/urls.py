@@ -43,6 +43,11 @@ urlpatterns = [
         views.AuditCreationProgressStreamView.as_view(),
         name="audit_task_stream",
     ),
+    path(
+        "api/audit/task/<str:task_id>/cancel/",
+        views.AuditCreationTaskCancelAPIView.as_view(),
+        name="audit_task_cancel",
+    ),
     # API endpoints for session interaction during auditing (bulk assessment)
     path(
         "api/<int:session_id>/save/",
@@ -73,6 +78,12 @@ urlpatterns = [
         "image/<int:opp_id>/<str:blob_id>/",
         views.ExperimentAuditImageConnectView.as_view(),
         name="audit_image_connect",
+    ),
+    # Workflow integration endpoints
+    path(
+        "api/workflow/<int:workflow_run_id>/sessions/",
+        views.WorkflowSessionsAPIView.as_view(),
+        name="workflow_sessions",
     ),
     # AI Review endpoints
     # List available agents (no session required)

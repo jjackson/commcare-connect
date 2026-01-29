@@ -78,12 +78,13 @@ def _run_ai_review_on_sessions(
     ai_agent_id: str,
     access_token: str,
     opp_id: int,
+    progress_callback=None,
 ) -> dict:
     """
     Run AI review agent on the specified audit sessions.
 
     This runs the AI agent on each image in the session that has related field data.
-    Results are logged but not yet persisted to the session (future enhancement).
+    Results are persisted to each session's assessment data.
 
     Args:
         data_access: AuditDataAccess instance
@@ -91,22 +92,48 @@ def _run_ai_review_on_sessions(
         ai_agent_id: ID of the AI agent to use
         access_token: OAuth token for API access
         opp_id: Opportunity ID
+        progress_callback: Optional callback for progress updates (processed, total, message)
 
     Returns:
         Dict with review results summary
     """
     from commcare_connect.labs.ai_review_agents.registry import get_agent
-    from commcare_connect.labs.ai_review_agents.types import ReviewContext
 
     # Get the agent
     agent = get_agent(ai_agent_id)
     logger.info(f"[AIReview] Running agent '{ai_agent_id}' on {len(session_ids)} sessions")
+
+    # First pass: count only images that will actually be reviewed
+    # (those with related_fields containing a valid reading value)
+    total_images_to_review = 0
+    session_image_counts = {}
+    for session_id in session_ids:
+        try:
+            session = data_access.get_audit_session(session_id)
+            if session:
+                visit_images = session.data.get("visit_images", {})
+                reviewable_count = 0
+                for images in visit_images.values():
+                    for image_data in images:
+                        # Only count images with related_fields that have a reading value
+                        related_fields = image_data.get("related_fields", [])
+                        has_reading = any(rf.get("value") for rf in related_fields)
+                        if has_reading and image_data.get("blob_id"):
+                            reviewable_count += 1
+                session_image_counts[session_id] = reviewable_count
+                total_images_to_review += reviewable_count
+        except Exception:
+            pass
+
+    if progress_callback:
+        progress_callback(0, total_images_to_review, f"Starting AI review of {total_images_to_review} images...")
 
     total_reviewed = 0
     total_passed = 0
     total_failed = 0
     total_errors = 0
     total_skipped = 0
+    images_processed = 0
 
     for session_id in session_ids:
         try:
@@ -123,6 +150,9 @@ def _run_ai_review_on_sessions(
                 logger.info(f"[AIReview] Session {session_id} has no visit_images")
                 continue
 
+            # Track if we made any updates to this session
+            session_updated = False
+
             # Iterate through visits and their images
             for visit_id_str, images in visit_images.items():
                 for image_data in images:
@@ -131,17 +161,20 @@ def _run_ai_review_on_sessions(
                         if not blob_id:
                             continue
 
-                        # Get reading from related_fields
+                        # Get reading and question_id from related_fields
                         # The related_fields structure is: [{label, value, field_path}, ...]
                         related_fields = image_data.get("related_fields", [])
                         reading = None
+                        question_id = ""
                         for rf in related_fields:
                             if rf.get("value"):
                                 reading = str(rf.get("value"))
+                                question_id = rf.get("field_path", "")
                                 break
 
                         if not reading:
                             total_skipped += 1
+                            images_processed += 1
                             continue
 
                         # Fetch the image from Connect API
@@ -149,16 +182,21 @@ def _run_ai_review_on_sessions(
                             image_bytes = data_access.download_image_from_connect(blob_id, opp_id)
                             if not image_bytes:
                                 total_skipped += 1
+                                images_processed += 1
                                 continue
                         except Exception as e:
                             logger.warning(f"[AIReview] Failed to fetch image {blob_id}: {e}")
                             total_skipped += 1
+                            images_processed += 1
                             continue
 
-                        # Create review context
-                        context = ReviewContext(
-                            images={"scale": image_bytes},
-                            form_data={"reading": reading},
+                        # Run AI review using shared utility
+                        from commcare_connect.audit.ai_review import run_single_ai_review
+
+                        ai_result = run_single_ai_review(
+                            agent=agent,
+                            image_bytes=image_bytes,
+                            reading=reading,
                             metadata={
                                 "visit_id": visit_id_str,
                                 "blob_id": blob_id,
@@ -166,24 +204,52 @@ def _run_ai_review_on_sessions(
                                 "session_id": session_id,
                             },
                         )
-
-                        # Run review
-                        result = agent.review(context)
                         total_reviewed += 1
+                        images_processed += 1
 
-                        if result.passed:
+                        # Update counters based on result
+                        if ai_result == "match":
                             total_passed += 1
                             logger.debug(f"[AIReview] PASS: blob={blob_id}, reading={reading}")
-                        elif result.failed:
+                        elif ai_result == "no_match":
                             total_failed += 1
                             logger.debug(f"[AIReview] FAIL: blob={blob_id}, reading={reading}")
                         else:
                             total_errors += 1
-                            logger.debug(f"[AIReview] ERROR: blob={blob_id}, errors={result.errors}")
+                            logger.debug(f"[AIReview] ERROR: blob={blob_id}")
+
+                        # Persist AI result to session assessment data
+                        session.set_assessment(
+                            visit_id=int(visit_id_str),
+                            blob_id=blob_id,
+                            question_id=question_id,
+                            result=None,  # Don't set human result
+                            notes="",
+                            ai_result=ai_result,
+                        )
+                        session_updated = True
+
+                        # Report progress after each review
+                        if progress_callback:
+                            progress_callback(
+                                images_processed,
+                                total_images_to_review,
+                                f"Reviewed {images_processed}/{total_images_to_review} images "
+                                f"({total_passed} passed, {total_failed} failed)",
+                            )
 
                     except Exception as e:
                         logger.warning(f"[AIReview] Failed to review image: {e}")
                         total_errors += 1
+                        images_processed += 1
+
+            # Save session if we made any updates
+            if session_updated:
+                try:
+                    data_access.save_audit_session(session)
+                    logger.info(f"[AIReview] Saved AI results for session {session_id}")
+                except Exception as e:
+                    logger.warning(f"[AIReview] Failed to save session {session_id}: {e}")
 
         except Exception as e:
             logger.warning(f"[AIReview] Failed to process session {session_id}: {e}")
@@ -219,14 +285,16 @@ def run_audit_creation(
     ai_agent_id: str | None = None,
 ) -> dict:
     """
-    Create audit template and session(s) asynchronously.
+    Create audit session(s) asynchronously.
+
+    Sessions are self-contained and store their own criteria. If created from
+    a workflow, sessions link to the workflow run via labs_record_id.
 
     Stages:
     1. Fetch visit IDs (if not provided)
     2. Extract images with related fields
-    3. Create template
-    4. Create session(s)
-    5. Run AI review agent (if specified)
+    3. Create session(s)
+    4. Run AI review agent (if specified)
 
     Args:
         access_token: OAuth token for API calls
@@ -236,11 +304,11 @@ def run_audit_creation(
         visit_ids: Pre-computed visit IDs (optional, skips fetch)
         flw_visit_ids: Pre-computed FLW->visit_ids mapping (optional)
         template_overrides: Values to override in criteria (from workflow)
-        workflow_run_id: Workflow run ID if triggered from workflow
+        workflow_run_id: Workflow run ID if triggered from workflow (sessions will link to it)
         ai_agent_id: Optional AI review agent to run after creation
 
     Returns:
-        Result dict with template_id, session_ids, etc.
+        Result dict with session_ids, etc.
     """
     from commcare_connect.audit.data_access import AuditCriteria, AuditDataAccess, create_mock_request
 
@@ -266,6 +334,7 @@ def run_audit_creation(
     # DEBUG: Log the parsed criteria
     logger.info(
         f"[AuditCreation] Parsed criteria: audit_type={audit_type}, "
+        f"start_date={audit_criteria.start_date}, end_date={audit_criteria.end_date}, "
         f"count_across_all={audit_criteria.count_across_all}, "
         f"count_per_flw={audit_criteria.count_per_flw}, "
         f"count_per_opp={audit_criteria.count_per_opp}, "
@@ -277,8 +346,8 @@ def run_audit_creation(
     needs_visit_fetch = not visit_ids
     is_per_flw = granularity == "per_flw"
     has_ai_agent = bool(ai_agent_id)
-    # Base stages: (fetch visits) + extract images + create template + create sessions + (AI review)
-    total_stages = 4 if needs_visit_fetch else 3
+    # Base stages: (fetch visits) + extract images + create sessions + (AI review)
+    total_stages = 3 if needs_visit_fetch else 2
     if has_ai_agent:
         total_stages += 1  # Add AI review stage
 
@@ -328,7 +397,21 @@ def run_audit_creation(
                 message=msg,
             )
 
-            visit_ids = data_access.get_visit_ids_for_audit(opportunity_ids, audit_criteria)
+            # Progress callback for granular updates during visit fetching
+            def on_visit_fetch_progress(processed: int, total: int, message: str):
+                set_task_progress(
+                    self,
+                    f"Stage {current_stage}/{total_stages}: {message}",
+                    current_stage=current_stage,
+                    total_stages=total_stages,
+                    stage_name="Fetching visits",
+                    processed=processed,
+                    total=total,
+                )
+
+            visit_ids = data_access.get_visit_ids_for_audit(
+                opportunity_ids, criteria=audit_criteria, progress_callback=on_visit_fetch_progress
+            )
             logger.info(f"[AuditCreation] Fetched {len(visit_ids)} visit IDs")
 
             current_stage += 1
@@ -346,7 +429,8 @@ def run_audit_creation(
         # =========================================================================
         # STAGE 2: Extract images
         # =========================================================================
-        msg = f"Stage {current_stage}/{total_stages}: Extracting images..."
+        total_visits_for_extraction = len(visit_ids)
+        msg = f"Stage {current_stage}/{total_stages}: Extracting images from {total_visits_for_extraction} visits..."
         set_task_progress(
             self, msg, current_stage=current_stage, total_stages=total_stages, stage_name="Extracting images"
         )
@@ -361,43 +445,31 @@ def run_audit_creation(
             message=msg,
         )
 
-        all_visit_images = data_access.extract_images_for_visits(visit_ids, opp_id, related_fields=related_fields)
+        # Progress callback for granular updates during image extraction
+        # Capture current_stage in closure for the callback
+        _extraction_stage = current_stage
+
+        def on_extraction_progress(processed: int, total: int, message: str):
+            set_task_progress(
+                self,
+                f"Stage {_extraction_stage}/{total_stages}: {message}",
+                current_stage=_extraction_stage,
+                total_stages=total_stages,
+                stage_name="Extracting images",
+                processed=processed,
+                total=total,
+            )
+
+        all_visit_images = data_access.extract_images_for_visits(
+            visit_ids, opp_id, related_fields=related_fields, progress_callback=on_extraction_progress
+        )
         image_count = sum(len(imgs) for imgs in all_visit_images.values())
         logger.info(f"[AuditCreation] Extracted {image_count} images from {len(visit_ids)} visits")
 
         current_stage += 1
 
         # =========================================================================
-        # STAGE 3: Create template
-        # =========================================================================
-        msg = f"Stage {current_stage}/{total_stages}: Creating template..."
-        set_task_progress(
-            self, msg, current_stage=current_stage, total_stages=total_stages, stage_name="Creating template"
-        )
-        _update_job_progress(
-            data_access,
-            task_id,
-            username,
-            status="running",
-            current_stage=current_stage,
-            total_stages=total_stages,
-            stage_name="Creating template",
-            message=msg,
-        )
-
-        template = data_access.create_audit_template(
-            username=username,
-            opportunity_ids=opportunity_ids,
-            audit_type=audit_type,
-            granularity=granularity,
-            criteria=audit_criteria,
-        )
-        logger.info(f"[AuditCreation] Created template {template.id}")
-
-        current_stage += 1
-
-        # =========================================================================
-        # STAGE 4: Create session(s)
+        # STAGE 3: Create session(s)
         # =========================================================================
         msg = f"Stage {current_stage}/{total_stages}: Creating session(s)..."
         set_task_progress(
@@ -418,11 +490,28 @@ def run_audit_creation(
         session_title = criteria.get("title", "")
         session_tag = criteria.get("tag", "")
 
-        if is_per_flw and flw_visit_ids and selected_flw_user_ids:
+        if is_per_flw:
             # Create one session per FLW
-            total_flws = len(selected_flw_user_ids)
-            for idx, flw_id in enumerate(selected_flw_user_ids):
-                flw_visit_list = flw_visit_ids.get(flw_id, [])
+            # If flw_visit_ids is provided, use it; otherwise group from extracted images
+            if flw_visit_ids and selected_flw_user_ids:
+                # Use provided FLW grouping
+                flw_groups = {flw_id: flw_visit_ids.get(flw_id, []) for flw_id in selected_flw_user_ids}
+            else:
+                # Group visits by username from image data
+                flw_groups = {}
+                for visit_id_str, images in all_visit_images.items():
+                    if not images:
+                        continue
+                    # Get username from first image of this visit
+                    flw_username = images[0].get("username", "Unknown")
+                    visit_id = int(visit_id_str)
+                    if flw_username not in flw_groups:
+                        flw_groups[flw_username] = []
+                    flw_groups[flw_username].append(visit_id)
+                logger.info(f"[AuditCreation] Grouped visits into {len(flw_groups)} FLWs from image data")
+
+            total_flws = len(flw_groups)
+            for idx, (flw_id, flw_visit_list) in enumerate(flw_groups.items()):
                 if not flw_visit_list:
                     continue
 
@@ -432,7 +521,6 @@ def run_audit_creation(
                 flw_title = f"{flw_id} - {session_title}" if session_title else flw_id
 
                 session = data_access.create_audit_session(
-                    template_id=template.id,
                     username=username,
                     visit_ids=flw_visit_list,
                     title=flw_title,
@@ -442,6 +530,7 @@ def run_audit_creation(
                     opportunity_name=opportunities[0].get("name") if opportunities else None,
                     visit_images=flw_images,
                     related_fields=related_fields,
+                    workflow_run_id=workflow_run_id,
                 )
 
                 sessions_created.append(
@@ -464,13 +553,12 @@ def run_audit_creation(
                 )
 
             logger.info(f"[AuditCreation] Created {len(sessions_created)} per-FLW sessions")
-        else:
+        elif not is_per_flw:
             # Create single combined session
             opp_name = opportunities[0].get("name") if opportunities else ""
             combined_title = f"{opp_name} - {session_title}" if session_title else opp_name
 
             session = data_access.create_audit_session(
-                template_id=template.id,
                 username=username,
                 visit_ids=visit_ids,
                 title=combined_title,
@@ -480,6 +568,7 @@ def run_audit_creation(
                 opportunity_name=opp_name,
                 visit_images=all_visit_images,
                 related_fields=related_fields,
+                workflow_run_id=workflow_run_id,
             )
 
             sessions_created.append(
@@ -496,7 +585,7 @@ def run_audit_creation(
         current_stage += 1
 
         # =========================================================================
-        # STAGE 5 (optional): Run AI Review Agent
+        # STAGE 4 (optional): Run AI Review Agent
         # =========================================================================
         ai_review_results = None
         if has_ai_agent and sessions_created:
@@ -515,6 +604,20 @@ def run_audit_creation(
                 message=msg,
             )
 
+            # Progress callback for AI review
+            _ai_review_stage = current_stage
+
+            def on_ai_review_progress(processed: int, total: int, message: str):
+                set_task_progress(
+                    self,
+                    f"Stage {_ai_review_stage}/{total_stages}: {message}",
+                    current_stage=_ai_review_stage,
+                    total_stages=total_stages,
+                    stage_name="AI Review",
+                    processed=processed,
+                    total=total,
+                )
+
             try:
                 ai_review_results = _run_ai_review_on_sessions(
                     data_access=data_access,
@@ -522,6 +625,7 @@ def run_audit_creation(
                     ai_agent_id=ai_agent_id,
                     access_token=access_token,
                     opp_id=opp_id,
+                    progress_callback=on_ai_review_progress,
                 )
                 logger.info(f"[AuditCreation] AI review complete: {ai_review_results}")
             except Exception as e:
@@ -533,10 +637,10 @@ def run_audit_creation(
         # Mark complete
         result = {
             "success": True,
-            "template_id": template.id,
             "sessions": sessions_created,
             "total_visits": sum(s["visits"] for s in sessions_created),
             "total_images": sum(s["images"] for s in sessions_created),
+            "workflow_run_id": workflow_run_id,
         }
         if ai_review_results:
             result["ai_review"] = ai_review_results

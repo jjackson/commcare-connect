@@ -10,7 +10,15 @@ from commcare_connect.labs.models import LocalLabsRecord
 
 
 class AuditTemplateRecord(LocalLabsRecord):
-    """Proxy model for AuditTemplate-type LocalLabsRecords."""
+    """
+    Proxy model for AuditTemplate-type LocalLabsRecords.
+
+    DEPRECATED: AuditTemplates are no longer created. Sessions now store their
+    own criteria directly and optionally link to workflow runs instead of templates.
+
+    This class is kept for backward compatibility to read existing template records
+    that older sessions may reference via labs_record_id.
+    """
 
     # Properties for convenient access to template configuration
     @property
@@ -133,6 +141,26 @@ class AuditSessionRecord(LocalLabsRecord):
     def description(self):
         """Human-readable description of how this audit session was created."""
         return self.data.get("description", "")
+
+    @property
+    def criteria(self):
+        """
+        Audit criteria used to create this session.
+
+        Returns dict with audit_type, start_date, end_date, count_per_flw, etc.
+        May be None for sessions created before criteria storage was added.
+        """
+        return self.data.get("criteria")
+
+    @property
+    def workflow_run_id(self):
+        """
+        ID of the workflow run that created this session, if any.
+
+        Returns the labs_record_id which points to a workflow run record,
+        or None if created from the wizard UI.
+        """
+        return self.labs_record_id
 
     @property
     def visit_results(self):
@@ -304,3 +332,78 @@ class AuditSessionRecord(LocalLabsRecord):
     def get_visit_count(self) -> int:
         """Get total number of visits in this audit."""
         return len(self.visit_ids)
+
+    def get_assessment_stats(self) -> dict:
+        """
+        Calculate comprehensive assessment statistics.
+
+        Returns:
+            Dict with counts for human assessment and AI review:
+            {
+                "total": int,           # Total assessments
+                "pass": int,            # Human: pass count
+                "fail": int,            # Human: fail count
+                "pending": int,         # Human: not yet assessed
+                "ai_match": int,        # AI: match count
+                "ai_no_match": int,     # AI: no_match count
+                "ai_error": int,        # AI: error count
+                "ai_pending": int,      # AI: not yet reviewed
+            }
+        """
+        stats = {
+            "total": 0,
+            "pass": 0,
+            "fail": 0,
+            "pending": 0,
+            "ai_match": 0,
+            "ai_no_match": 0,
+            "ai_error": 0,
+            "ai_pending": 0,
+        }
+
+        for visit_result in self.data.get("visit_results", {}).values():
+            for assessment in visit_result.get("assessments", {}).values():
+                stats["total"] += 1
+
+                # Human assessment result
+                result = assessment.get("result")
+                if result == "pass":
+                    stats["pass"] += 1
+                elif result == "fail":
+                    stats["fail"] += 1
+                else:
+                    stats["pending"] += 1
+
+                # AI review result
+                ai_result = assessment.get("ai_result")
+                if ai_result == "match":
+                    stats["ai_match"] += 1
+                elif ai_result == "no_match":
+                    stats["ai_no_match"] += 1
+                elif ai_result == "error":
+                    stats["ai_error"] += 1
+                else:
+                    stats["ai_pending"] += 1
+
+        return stats
+
+    def to_summary_dict(self) -> dict:
+        """
+        Convert session to a summary dict for API responses.
+
+        Includes core fields and computed statistics for display.
+        """
+        stats = self.get_assessment_stats()
+        return {
+            "id": self.id,
+            "title": self.title,
+            "tag": self.tag,
+            "status": self.status,
+            "overall_result": self.overall_result,
+            "opportunity_id": self.opportunity_id,
+            "opportunity_name": self.opportunity_name,
+            "description": self.description,
+            "visit_count": self.get_visit_count(),
+            "assessment_stats": stats,
+            "workflow_run_id": self.workflow_run_id,
+        }

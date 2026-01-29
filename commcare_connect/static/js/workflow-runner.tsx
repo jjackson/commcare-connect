@@ -15,6 +15,7 @@ import { createRoot } from 'react-dom/client';
 import { DynamicWorkflow } from '@/components/workflow/DynamicWorkflow';
 import { AIChat } from '@/components/AIChat';
 import { DEFAULT_RENDER_CODE } from '@/components/workflow/defaultRenderCode';
+import { streamTaskProgress } from './task-progress';
 import type {
   WorkflowProps,
   WorkflowDataFromDjango,
@@ -31,6 +32,7 @@ import type {
   CreateTaskWithOCSParams,
   TaskWithOCSResult,
   PipelineResult,
+  ActiveJobState,
 } from '@/components/workflow/types';
 import {
   MessageCircle,
@@ -334,7 +336,7 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
       error?: string;
     }> => {
       try {
-        const response = await fetch('/labs/audit/api/audit/create-async/', {
+        const response = await fetch('/audit/api/audit/create-async/', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -366,9 +368,7 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
       error?: string;
     }> => {
       try {
-        const response = await fetch(
-          `/labs/audit/api/audit/task/${taskId}/status/`,
-        );
+        const response = await fetch(`/audit/api/audit/task/${taskId}/status/`);
         return await response.json();
       } catch (e) {
         return {
@@ -392,46 +392,47 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
       onComplete: (result: Record<string, unknown>) => void,
       onError: (error: string) => void,
     ): (() => void) => {
-      const eventSource = new EventSource(
-        `/labs/audit/api/audit/task/${taskId}/stream/`,
+      // Use the shared task-progress utility with polling fallback
+      return streamTaskProgress(
+        {
+          streamUrl: `/audit/api/audit/task/${taskId}/stream/`,
+          statusUrl: `/audit/api/audit/task/${taskId}/status/`,
+          useFallback: true,
+        },
+        { onProgress, onComplete, onError },
       );
+    },
 
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
+    cancelAudit: async (
+      taskId: string,
+    ): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const response = await fetch(
+          `/audit/api/audit/task/${taskId}/cancel/`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCSRFToken(),
+            },
+          },
+        );
 
-          if (data.status === 'completed') {
-            onComplete(data.result || {});
-            eventSource.close();
-            return;
-          }
-
-          if (data.status === 'failed' || data.error) {
-            onError(data.error || data.message || 'Audit creation failed');
-            eventSource.close();
-            return;
-          }
-
-          onProgress({
-            status: data.status,
-            message: data.message,
-            current_stage: data.current_stage,
-            total_stages: data.total_stages,
-            stage_name: data.stage_name,
-            processed: data.processed,
-            total: data.total,
-          });
-        } catch {
-          console.error('Failed to parse SSE event:', event.data);
+        if (!response.ok) {
+          const errorData = await response.json();
+          return {
+            success: false,
+            error: errorData.error || 'Failed to cancel',
+          };
         }
-      };
 
-      eventSource.onerror = () => {
-        eventSource.close();
-        onError('Connection lost');
-      };
-
-      return () => eventSource.close();
+        return { success: true };
+      } catch (e) {
+        return {
+          success: false,
+          error: e instanceof Error ? e.message : 'Failed to cancel',
+        };
+      }
     },
   };
 }
@@ -567,6 +568,139 @@ function WorkflowRunner({
       fetchPipelineData();
     }
   }, [definition.pipeline_sources, fetchPipelineData]);
+
+  // Auto-reconnect to running jobs on page load
+  // This allows users to close the browser and return later while the Celery task continues
+  useEffect(() => {
+    const activeJob = initialData.instance.state?.active_job as
+      | ActiveJobState
+      | undefined;
+
+    // Only reconnect if there's a running job with a task ID
+    if (activeJob?.status !== 'running' || !activeJob?.job_id) {
+      return;
+    }
+
+    console.log(
+      '[WorkflowRunner] Reconnecting to running job:',
+      activeJob.job_id,
+    );
+
+    // Connect to the SSE stream for the running job
+    const eventSource = new EventSource(
+      `/labs/workflow/api/job/${activeJob.job_id}/status/`,
+    );
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.error) {
+          console.error('[WorkflowRunner] Job error:', data.error);
+          // Update state to reflect error
+          setInstanceState((prev) => {
+            const prevJob = (prev.active_job as ActiveJobState) || {};
+            return {
+              ...prev,
+              active_job: {
+                ...prevJob,
+                status: 'failed' as const,
+                error: data.error,
+              },
+            };
+          });
+          eventSource.close();
+          return;
+        }
+
+        if (data.data?.status === 'completed') {
+          console.log('[WorkflowRunner] Job completed');
+          setInstanceState((prev) => {
+            const prevJob = (prev.active_job as ActiveJobState) || {};
+            const results = data.data.results || {};
+            return {
+              ...prev,
+              active_job: {
+                ...prevJob,
+                status: 'completed' as const,
+              },
+              // Merge any results
+              ...results,
+            };
+          });
+          eventSource.close();
+          return;
+        }
+
+        if (data.data?.status === 'cancelled') {
+          console.log('[WorkflowRunner] Job was cancelled');
+          setInstanceState((prev) => {
+            const prevJob = (prev.active_job as ActiveJobState) || {};
+            return {
+              ...prev,
+              active_job: {
+                ...prevJob,
+                status: 'cancelled' as const,
+              },
+            };
+          });
+          eventSource.close();
+          return;
+        }
+
+        // Stream item result for real-time row updates
+        if (data.data?.item_result) {
+          setInstanceState((prev) => {
+            const existingResults =
+              (prev.validation_results as Record<string, unknown>) || {};
+            const itemId =
+              data.data.item_result.id || data.data.item_result.username;
+            return {
+              ...prev,
+              validation_results: {
+                ...existingResults,
+                [itemId]: data.data.item_result,
+              },
+            };
+          });
+        }
+
+        // Update progress in active_job
+        if (data.data) {
+          setInstanceState((prev) => {
+            const prevJob = (prev.active_job as ActiveJobState) || {};
+            return {
+              ...prev,
+              active_job: {
+                ...prevJob,
+                status: (data.data.status ||
+                  'running') as ActiveJobState['status'],
+                processed: data.data.processed,
+                total: data.data.total,
+                current_stage: data.data.current_stage,
+                total_stages: data.data.total_stages,
+                stage_name: data.data.stage_name,
+              },
+            };
+          });
+        }
+      } catch (e) {
+        console.error('[WorkflowRunner] Failed to parse SSE event:', e);
+      }
+    };
+
+    eventSource.onerror = () => {
+      console.log(
+        '[WorkflowRunner] SSE connection lost, will poll state on next refresh',
+      );
+      eventSource.close();
+    };
+
+    // Cleanup on unmount
+    return () => {
+      eventSource.close();
+    };
+  }, []); // Only run once on mount
 
   // Load pipeline definition for editing
   const loadPipelineForEditing = useCallback(
@@ -759,8 +893,9 @@ function WorkflowRunner({
           isChatOpen ? 'mr-96' : ''
         }`}
       >
-        {/* Tab Bar - Only show when pipelines exist */}
-        {definition.pipeline_sources &&
+        {/* Tab Bar - Only show in edit mode when pipelines exist */}
+        {isEditMode &&
+          definition.pipeline_sources &&
           definition.pipeline_sources.length > 0 && (
             <div className="bg-white border-b border-gray-200 px-4">
               <div className="flex items-center gap-1">
@@ -801,8 +936,8 @@ function WorkflowRunner({
             </div>
           )}
 
-        {/* Control Bar - Only show for workflow tab */}
-        {activeTab === 'workflow' && (
+        {/* Control Bar - Only show for workflow tab in edit mode */}
+        {activeTab === 'workflow' && isEditMode && (
           <div className="bg-white border-b border-gray-200 px-4 py-2 mb-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               {/* Edit Code Button */}
@@ -999,8 +1134,8 @@ function WorkflowRunner({
         )}
       </div>
 
-      {/* Chat Toggle Button */}
-      {!isChatOpen && (
+      {/* Chat Toggle Button - Only show in edit mode */}
+      {isEditMode && !isChatOpen && (
         <button
           onClick={() => setIsChatOpen(true)}
           className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all duration-300 bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
@@ -1010,74 +1145,79 @@ function WorkflowRunner({
         </button>
       )}
 
-      {/* Chat Panel */}
-      <div
-        className={`fixed top-0 right-0 h-full w-96 bg-white shadow-2xl z-40 transform transition-transform duration-300 ease-in-out ${
-          isChatOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
-        {isChatOpen && (
-          <AIChat
-            agentType="workflow"
-            definitionId={initialData.definition_id}
-            opportunityId={initialData.opportunity_id}
-            currentDefinition={definition}
-            currentRenderCode={renderCode}
-            onDefinitionUpdate={handleWorkflowUpdate}
-            onRenderCodeUpdate={handleRenderCodeUpdate}
-            onPipelineSchemaUpdate={async (pipelineId, schema) => {
-              // Save pipeline schema via API
-              try {
-                const response = await fetch(
-                  `/labs/workflow/api/pipeline/${pipelineId}/schema/`,
-                  {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'X-CSRFToken': csrfToken,
+      {/* Chat Panel - Only show in edit mode */}
+      {isEditMode && (
+        <div
+          className={`fixed top-0 right-0 h-full w-96 bg-white shadow-2xl z-40 transform transition-transform duration-300 ease-in-out ${
+            isChatOpen ? 'translate-x-0' : 'translate-x-full'
+          }`}
+        >
+          {isChatOpen && (
+            <AIChat
+              agentType="workflow"
+              definitionId={initialData.definition_id}
+              opportunityId={initialData.opportunity_id}
+              currentDefinition={definition}
+              currentRenderCode={renderCode}
+              onDefinitionUpdate={handleWorkflowUpdate}
+              onRenderCodeUpdate={handleRenderCodeUpdate}
+              onPipelineSchemaUpdate={async (pipelineId, schema) => {
+                // Save pipeline schema via API
+                try {
+                  const response = await fetch(
+                    `/labs/workflow/api/pipeline/${pipelineId}/schema/`,
+                    {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                      },
+                      body: JSON.stringify({ schema }),
                     },
-                    body: JSON.stringify({ schema }),
-                  },
-                );
-                if (response.ok) {
-                  // Refresh pipeline data if we're viewing this pipeline
-                  if (selectedPipelineId === pipelineId) {
-                    loadPipelineForEditing(pipelineId);
+                  );
+                  if (response.ok) {
+                    // Refresh pipeline data if we're viewing this pipeline
+                    if (selectedPipelineId === pipelineId) {
+                      loadPipelineForEditing(pipelineId);
+                    }
+                    // Also refresh workflow pipeline data
+                    fetchPipelineData();
                   }
-                  // Also refresh workflow pipeline data
-                  fetchPipelineData();
+                } catch (e) {
+                  console.error('Failed to update pipeline schema:', e);
                 }
-              } catch (e) {
-                console.error('Failed to update pipeline schema:', e);
+              }}
+              activeContext={
+                activeTab === 'pipeline' &&
+                selectedPipelineId &&
+                selectedPipelineData
+                  ? {
+                      active_tab: 'pipeline',
+                      pipeline_id: selectedPipelineId,
+                      pipeline_alias:
+                        definition.pipeline_sources?.find(
+                          (s: { pipeline_id: number }) =>
+                            s.pipeline_id === selectedPipelineId,
+                        )?.alias || '',
+                      pipeline_schema: (
+                        selectedPipelineData.definition as Record<
+                          string,
+                          unknown
+                        >
+                      )?.schema as Record<string, unknown>,
+                    }
+                  : { active_tab: 'workflow' }
               }
-            }}
-            activeContext={
-              activeTab === 'pipeline' &&
-              selectedPipelineId &&
-              selectedPipelineData
-                ? {
-                    active_tab: 'pipeline',
-                    pipeline_id: selectedPipelineId,
-                    pipeline_alias:
-                      definition.pipeline_sources?.find(
-                        (s: { pipeline_id: number }) =>
-                          s.pipeline_id === selectedPipelineId,
-                      )?.alias || '',
-                    pipeline_schema: (
-                      selectedPipelineData.definition as Record<string, unknown>
-                    )?.schema as Record<string, unknown>,
-                  }
-                : { active_tab: 'workflow' }
-            }
-            historyEndpoint={`/labs/workflow/api/${initialData.definition_id}/chat/history/`}
-            clearEndpoint={`/labs/workflow/api/${initialData.definition_id}/chat/clear/`}
-            onClose={() => setIsChatOpen(false)}
-          />
-        )}
-      </div>
+              historyEndpoint={`/labs/workflow/api/${initialData.definition_id}/chat/history/`}
+              clearEndpoint={`/labs/workflow/api/${initialData.definition_id}/chat/clear/`}
+              onClose={() => setIsChatOpen(false)}
+            />
+          )}
+        </div>
+      )}
 
-      {/* Code Editor Modal */}
-      {isCodeEditorOpen && (
+      {/* Code Editor Modal - Only show in edit mode */}
+      {isEditMode && isCodeEditorOpen && (
         <div className="fixed inset-0 z-50 overflow-hidden">
           {/* Backdrop */}
           <div

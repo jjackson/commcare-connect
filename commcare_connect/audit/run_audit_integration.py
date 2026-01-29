@@ -303,22 +303,10 @@ def test_optimized_audit_flow(config_name="opp385_last10"):
                     for rf in related_fields:
                         print(f"           - {rf.get('label')}: {rf.get('value')}")
 
-        # Step 6: Create template
-        print("\n[6] Creating audit template...")
-        template = data_access.create_audit_template(
-            username=username,
-            opportunity_ids=[test_opp_id],
-            criteria=criteria,
-            granularity="combined",
-            preview_data=[{"total_visits": len(visit_ids)}],
-        )
-        print(f"[OK] Created template ID: {template.id}")
-
-        # Step 7: Create session (passing pre-extracted images to avoid redundant fetch)
-        print("\n[7] Creating audit session...")
+        # Step 6: Create session (passing pre-extracted images to avoid redundant fetch)
+        print("\n[6] Creating audit session...")
         start = time.time()
         session = data_access.create_audit_session(
-            template_id=template.id,
             username=username,
             visit_ids=visit_ids,
             title="Optimized Integration Test",
@@ -326,6 +314,7 @@ def test_optimized_audit_flow(config_name="opp385_last10"):
             opportunity_id=test_opp_id,
             criteria=criteria,
             visit_images=visit_images,  # Pass pre-extracted images (optimization)
+            workflow_run_id=None,  # Not created from a workflow
         )
         elapsed = time.time() - start
         print(f"[OK] Created session ID: {session.id} in {elapsed:.2f}s")
@@ -338,8 +327,8 @@ def test_optimized_audit_flow(config_name="opp385_last10"):
         session_total_images = sum(len(imgs) for imgs in session_images.values())
         print(f"     Images in session: {session_total_images}")
 
-        # Step 8: Complete session
-        print("\n[8] Completing audit session...")
+        # Step 7: Complete session
+        print("\n[7] Completing audit session...")
         session = data_access.complete_audit_session(
             session=session,
             overall_result="pass",
@@ -354,7 +343,6 @@ def test_optimized_audit_flow(config_name="opp385_last10"):
         print("INTEGRATION TEST COMPLETE")
         print("=" * 80)
         print(f"\nSession ID: {session.id}")
-        print(f"Template ID: {template.id}")
         print(f"Total visits: {len(session.visit_ids)}")
         print(f"Total images: {session_total_images}")
 

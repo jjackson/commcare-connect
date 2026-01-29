@@ -1016,13 +1016,32 @@ def unshare_workflow_api(request, definition_id):
 @login_required
 @require_POST
 def delete_workflow_api(request, definition_id):
-    """API endpoint to delete a workflow definition."""
+    """API endpoint to delete a workflow definition.
+
+    Accepts JSON body with optional:
+        delete_linked: bool - if True, also deletes render code, runs, and chat history
+    """
     try:
+        # Parse request body for options
+        delete_linked = False
+        if request.body:
+            try:
+                body = json.loads(request.body)
+                delete_linked = body.get("delete_linked", False)
+            except json.JSONDecodeError:
+                pass  # Treat as delete_linked=False
+
         data_access = WorkflowDataAccess(request=request)
-        data_access.delete_definition(definition_id)
+        deleted_counts = data_access.delete_definition(definition_id, delete_linked=delete_linked)
         data_access.close()
 
-        return JsonResponse({"success": True, "definition_id": definition_id})
+        return JsonResponse(
+            {
+                "success": True,
+                "definition_id": definition_id,
+                "deleted_counts": deleted_counts,
+            }
+        )
 
     except Exception as e:
         logger.error(f"Failed to delete workflow {definition_id}: {e}")
