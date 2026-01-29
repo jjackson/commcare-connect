@@ -1562,6 +1562,8 @@ class WorkflowSessionsAPIView(LoginRequiredMixin, View):
                         "opportunity_name": str,
                         "description": str,
                         "visit_count": int,
+                        "flw_username": str,
+                        "flw_display_name": str,
                         "assessment_stats": {
                             "total": int,
                             "pass": int,
@@ -1582,10 +1584,28 @@ class WorkflowSessionsAPIView(LoginRequiredMixin, View):
             data_access = AuditDataAccess(request=request)
             try:
                 sessions = data_access.get_sessions_by_workflow_run(workflow_run_id)
+                session_dicts = [s.to_summary_dict() for s in sessions]
+
+                # Fetch FLW display names and add to each session
+                # Get opportunity_id from first session (all should be same opportunity)
+                if session_dicts:
+                    opp_id = session_dicts[0].get("opportunity_id")
+                    if opp_id:
+                        try:
+                            flw_names = data_access.get_flw_names(opp_id)
+                            for session_dict in session_dicts:
+                                username = session_dict.get("flw_username", "")
+                                session_dict["flw_display_name"] = flw_names.get(username, username)
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch FLW names: {e}")
+                            # Fall back to username if fetch fails
+                            for session_dict in session_dicts:
+                                session_dict["flw_display_name"] = session_dict.get("flw_username", "")
+
                 return JsonResponse(
                     {
                         "success": True,
-                        "sessions": [s.to_summary_dict() for s in sessions],
+                        "sessions": session_dicts,
                     }
                 )
             finally:

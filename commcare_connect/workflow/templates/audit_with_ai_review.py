@@ -505,7 +505,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                 <tr>
                                     <th className={'px-4 py-3 text-left text-xs font-medium ' +
                                         'text-gray-500 uppercase tracking-wider'}>
-                                        Session
+                                        FLW
                                     </th>
                                     <th className={'px-4 py-3 text-center text-xs font-medium ' +
                                         'text-gray-500 uppercase tracking-wider'}>
@@ -542,11 +542,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         <tr key={session.id} className="hover:bg-gray-50">
                                             <td className="px-4 py-4">
                                                 <div className="text-sm font-medium text-gray-900">
-                                                    {session.title || 'Untitled'}
+                                                    {session.flw_display_name || session.flw_username || 'Unknown'}
                                                 </div>
-                                                {session.description && (
-                                                    <div className="text-xs text-gray-500 mt-1">
-                                                        {session.description}
+                                                {session.flw_display_name !== session.flw_username
+                                                    && session.flw_username && (
+                                                    <div className="text-xs text-gray-400 mt-0.5 font-mono">
+                                                        {session.flw_username}
                                                     </div>
                                                 )}
                                             </td>

@@ -406,4 +406,5 @@ class AuditSessionRecord(LocalLabsRecord):
             "visit_count": self.get_visit_count(),
             "assessment_stats": stats,
             "workflow_run_id": self.workflow_run_id,
+            "flw_username": self.flw_username,
         }

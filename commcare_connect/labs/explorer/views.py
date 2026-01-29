@@ -869,3 +869,302 @@ class CacheStatsAPIView(LoginRequiredMixin, View):
                 },
                 status=500,
             )
+
+
+# =============================================================================
+# Task Manager Views
+# =============================================================================
+
+
+class TaskManagerView(LoginRequiredMixin, TemplateView):
+    """
+    Task Manager page for inspecting and managing Celery tasks.
+
+    Shows active, scheduled, and recent tasks with the ability to terminate them.
+    """
+
+    template_name = "labs/explorer/task_manager.html"
+
+    def get_context_data(self, **kwargs):
+        """Provide task information context."""
+        context = super().get_context_data(**kwargs)
+
+        from config.celery_app import app as celery_app
+
+        # Get filter parameters
+        task_name_filter = self.request.GET.get("task_name", "")
+        status_filter = self.request.GET.get("status", "")
+
+        context["task_name_filter"] = task_name_filter
+        context["status_filter"] = status_filter
+
+        try:
+            # Get active tasks from all workers
+            inspect = celery_app.control.inspect()
+
+            active_tasks = []
+            scheduled_tasks = []
+            reserved_tasks = []
+
+            # Active tasks (currently executing)
+            active = inspect.active() or {}
+            for worker, tasks in active.items():
+                for task in tasks:
+                    task_info = self._format_task_info(task, worker, "active")
+                    if self._matches_filters(task_info, task_name_filter, status_filter):
+                        active_tasks.append(task_info)
+
+            # Scheduled tasks (with ETA/countdown)
+            scheduled = inspect.scheduled() or {}
+            for worker, tasks in scheduled.items():
+                for task in tasks:
+                    task_info = self._format_task_info(task, worker, "scheduled")
+                    if self._matches_filters(task_info, task_name_filter, status_filter):
+                        scheduled_tasks.append(task_info)
+
+            # Reserved tasks (received but not started)
+            reserved = inspect.reserved() or {}
+            for worker, tasks in reserved.items():
+                for task in tasks:
+                    task_info = self._format_task_info(task, worker, "reserved")
+                    if self._matches_filters(task_info, task_name_filter, status_filter):
+                        reserved_tasks.append(task_info)
+
+            # Get recent task results from backend (if available)
+            recent_tasks = self._get_recent_tasks(task_name_filter, status_filter)
+
+            context["active_tasks"] = active_tasks
+            context["scheduled_tasks"] = scheduled_tasks
+            context["reserved_tasks"] = reserved_tasks
+            context["recent_tasks"] = recent_tasks
+
+            # Summary stats
+            context["active_count"] = len(active_tasks)
+            context["scheduled_count"] = len(scheduled_tasks)
+            context["reserved_count"] = len(reserved_tasks)
+            context["recent_count"] = len(recent_tasks)
+
+            # Get unique task names for filter dropdown
+            all_task_names = set()
+            for task in active_tasks + scheduled_tasks + reserved_tasks + recent_tasks:
+                all_task_names.add(task.get("name", "unknown"))
+            context["task_names"] = sorted(all_task_names)
+
+            context["workers_online"] = bool(active or scheduled or reserved)
+
+        except Exception as e:
+            logger.error(f"[TaskManager] Failed to get task info: {e}")
+            context["error"] = f"Failed to connect to Celery workers: {e}"
+            context["active_tasks"] = []
+            context["scheduled_tasks"] = []
+            context["reserved_tasks"] = []
+            context["recent_tasks"] = []
+            context["active_count"] = 0
+            context["scheduled_count"] = 0
+            context["reserved_count"] = 0
+            context["recent_count"] = 0
+            context["task_names"] = []
+            context["workers_online"] = False
+
+        return context
+
+    def _format_task_info(self, task: dict, worker: str, status: str) -> dict:
+        """Format task info for display."""
+        from datetime import datetime
+
+        # Handle different task info formats
+        task_id = task.get("id") or task.get("request", {}).get("id", "unknown")
+        task_name = task.get("name") or task.get("request", {}).get("name", "unknown")
+        args = task.get("args") or task.get("request", {}).get("args", [])
+        kwargs_data = task.get("kwargs") or task.get("request", {}).get("kwargs", {})
+
+        # Get timing info
+        time_start = task.get("time_start")
+        eta = task.get("eta")
+
+        # Calculate runtime if active
+        runtime = None
+        if time_start:
+            try:
+                start_time = datetime.fromtimestamp(time_start)
+                runtime = (datetime.now() - start_time).total_seconds()
+            except (TypeError, ValueError):
+                pass
+
+        return {
+            "id": task_id,
+            "name": task_name,
+            "name_short": task_name.split(".")[-1] if "." in task_name else task_name,
+            "args": args,
+            "kwargs": kwargs_data,
+            "worker": worker,
+            "status": status,
+            "time_start": time_start,
+            "eta": eta,
+            "runtime": runtime,
+            "runtime_display": self._format_runtime(runtime) if runtime else None,
+        }
+
+    def _format_runtime(self, seconds: float) -> str:
+        """Format runtime in human-readable form."""
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        elif seconds < 3600:
+            minutes = seconds / 60
+            return f"{minutes:.1f}m"
+        else:
+            hours = seconds / 3600
+            return f"{hours:.1f}h"
+
+    def _matches_filters(self, task: dict, task_name_filter: str, status_filter: str) -> bool:
+        """Check if task matches current filters."""
+        if task_name_filter and task.get("name") != task_name_filter:
+            return False
+        if status_filter and task.get("status") != status_filter:
+            return False
+        return True
+
+    def _get_recent_tasks(self, task_name_filter: str, status_filter: str) -> list:
+        """Get recent tasks from workflow run states."""
+        # This gets recent workflow jobs from the database
+        # since Celery's Redis backend doesn't keep a full history
+        from django.db import connection
+
+        recent = []
+
+        try:
+            # Query workflow runs that have active_job state
+            # This gives us visibility into workflow-related tasks
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        data->'state'->'active_job'->>'job_id' as task_id,
+                        data->'state'->'active_job'->>'job_type' as job_type,
+                        data->'state'->'active_job'->>'status' as status,
+                        data->'state'->'active_job'->>'started_at' as started_at,
+                        data->'state'->'active_job'->>'completed_at' as completed_at,
+                        data->'state'->'active_job'->>'failed_at' as failed_at,
+                        data->'state'->'active_job'->>'error' as error,
+                        data->'state'->'active_job'->'summary' as summary
+                    FROM labs_labsrecord
+                    WHERE data->'state'->'active_job'->>'job_id' IS NOT NULL
+                    ORDER BY (data->'state'->'active_job'->>'started_at')::timestamp DESC NULLS LAST
+                    LIMIT 50
+                """
+                )
+
+                columns = [col[0] for col in cursor.description]
+                for row in cursor.fetchall():
+                    row_dict = dict(zip(columns, row))
+
+                    task_info = {
+                        "id": row_dict.get("task_id"),
+                        "name": "commcare_connect.workflow.tasks.run_workflow_job",
+                        "name_short": row_dict.get("job_type") or "workflow_job",
+                        "status": row_dict.get("status") or "unknown",
+                        "started_at": row_dict.get("started_at"),
+                        "completed_at": row_dict.get("completed_at"),
+                        "failed_at": row_dict.get("failed_at"),
+                        "error": row_dict.get("error"),
+                        "summary": row_dict.get("summary"),
+                        "run_id": row_dict.get("id"),
+                        "source": "workflow_run",
+                    }
+
+                    # Apply filters
+                    if task_name_filter and task_info["name"] != task_name_filter:
+                        continue
+                    if status_filter:
+                        if status_filter == "completed" and task_info["status"] != "completed":
+                            continue
+                        if status_filter == "failed" and task_info["status"] != "failed":
+                            continue
+                        if status_filter == "running" and task_info["status"] != "running":
+                            continue
+
+                    recent.append(task_info)
+
+        except Exception as e:
+            logger.warning(f"[TaskManager] Could not fetch recent workflow tasks: {e}")
+
+        return recent
+
+
+class TaskKillView(LoginRequiredMixin, View):
+    """Handle task termination requests."""
+
+    def post(self, request):
+        """Terminate a task by ID."""
+        from config.celery_app import app as celery_app
+
+        task_id = request.POST.get("task_id")
+        terminate = request.POST.get("terminate", "false") == "true"
+
+        if not task_id:
+            return JsonResponse(
+                {"success": False, "error": "task_id is required"},
+                status=400,
+            )
+
+        try:
+            # Revoke the task
+            # terminate=True sends SIGTERM to the worker process
+            # terminate=False just prevents the task from executing if not started
+            celery_app.control.revoke(task_id, terminate=terminate)
+
+            action = "terminated" if terminate else "revoked"
+            logger.info(f"[TaskManager] Task {task_id} {action}")
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": f"Task {task_id} has been {action}",
+                    "task_id": task_id,
+                    "action": action,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"[TaskManager] Failed to kill task {task_id}: {e}")
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": f"Failed to kill task: {str(e)}",
+                },
+                status=500,
+            )
+
+
+class TaskStatusAPIView(LoginRequiredMixin, View):
+    """AJAX endpoint for task status."""
+
+    def get(self, request, task_id):
+        """Get status of a specific task."""
+        from celery.result import AsyncResult
+
+        try:
+            result = AsyncResult(task_id)
+            meta = result._get_task_meta()
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "task_id": task_id,
+                    "status": meta.get("status"),
+                    "result": meta.get("result") if meta.get("status") == "SUCCESS" else None,
+                    "error": str(meta.get("result")) if meta.get("status") == "FAILURE" else None,
+                    "info": result.info if isinstance(result.info, dict) else None,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"[TaskManager] Failed to get task status: {e}")
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": f"Failed to get task status: {str(e)}",
+                },
+                status=500,
+            )
