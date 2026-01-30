@@ -512,7 +512,20 @@ function WorkflowRunner({
   const [pipelineData, setPipelineData] = useState<
     Record<string, PipelineResult>
   >(initialData.pipeline_data || {});
-  const [isLoadingPipelines, setIsLoadingPipelines] = useState(false);
+  // Pipeline loading status - null means loaded/ready, string means loading with message
+  const [pipelineLoadingStatus, setPipelineLoadingStatus] = useState<
+    string | null
+  >(
+    // Already have data from server render?
+    initialData.pipeline_data &&
+      Object.keys(initialData.pipeline_data).length > 0
+      ? null
+      : // No pipelines configured?
+      !initialData.definition.pipeline_sources?.length
+      ? null
+      : // Need to load
+        'Connecting...',
+  );
   const [error, setError] = useState<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -545,29 +558,80 @@ function WorkflowRunner({
   // Check if we're in edit mode
   const isEditMode = initialData.is_edit_mode === true;
 
-  // Fetch pipeline data
-  const fetchPipelineData = useCallback(async () => {
-    if (!initialData.apiEndpoints.getPipelineData) return;
+  // Stream pipeline data via SSE - shows progress during loading
+  const streamPipelineData = useCallback(() => {
+    if (!initialData.apiEndpoints.streamPipelineData) return;
+    if (!definition.pipeline_sources?.length) return;
 
-    setIsLoadingPipelines(true);
-    try {
-      const response = await fetch(initialData.apiEndpoints.getPipelineData);
-      if (response.ok) {
-        const data = await response.json();
-        setPipelineData(data);
+    setPipelineLoadingStatus('Connecting to pipeline stream...');
+
+    const url = new URL(
+      initialData.apiEndpoints.streamPipelineData,
+      window.location.origin,
+    );
+    if (initialData.opportunity_id) {
+      url.searchParams.set(
+        'opportunity_id',
+        String(initialData.opportunity_id),
+      );
+    }
+
+    const eventSource = new EventSource(url.toString());
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.error) {
+          setPipelineLoadingStatus(null);
+          setError(data.error);
+          eventSource.close();
+          return;
+        }
+
+        // Progress update - show status message
+        if (data.message) {
+          setPipelineLoadingStatus(data.message);
+        }
+
+        // Data complete - update state and allow render
+        if (data.data?.pipelines) {
+          setPipelineData(data.data.pipelines);
+          setPipelineLoadingStatus(null);
+          eventSource.close();
+        }
+      } catch (e) {
+        console.error(
+          '[WorkflowRunner] Failed to parse pipeline SSE event:',
+          e,
+        );
       }
-    } catch (e) {
-      console.error('Failed to fetch pipeline data:', e);
-    }
-    setIsLoadingPipelines(false);
-  }, [initialData.apiEndpoints.getPipelineData]);
+    };
 
-  // Load pipeline data on mount and when definition changes
+    eventSource.onerror = () => {
+      setPipelineLoadingStatus(null);
+      setError('Pipeline stream connection lost');
+      eventSource.close();
+    };
+
+    return () => eventSource.close();
+  }, [
+    initialData.apiEndpoints.streamPipelineData,
+    initialData.opportunity_id,
+    definition.pipeline_sources,
+  ]);
+
+  // Load pipeline data on mount via SSE streaming
   useEffect(() => {
-    if (definition.pipeline_sources?.length) {
-      fetchPipelineData();
+    // Only stream if we have pipeline sources and no data yet
+    if (
+      definition.pipeline_sources?.length &&
+      !Object.keys(pipelineData).length
+    ) {
+      const cleanup = streamPipelineData();
+      return cleanup;
     }
-  }, [definition.pipeline_sources, fetchPipelineData]);
+  }, [definition.pipeline_sources, pipelineData, streamPipelineData]);
 
   // Auto-reconnect to running jobs on page load
   // This allows users to close the browser and return later while the Celery task continues
@@ -712,7 +776,7 @@ function WorkflowRunner({
       try {
         // Fetch pipeline definition
         const defResponse = await fetch(
-          `/labs/workflow/api/pipeline/${pipelineId}/`,
+          `/labs/workflow/api/pipeline/${pipelineId}/?opportunity_id=${initialData.opportunity_id}`,
         );
         if (!defResponse.ok) throw new Error('Failed to load pipeline');
         const defData = await defResponse.json();
@@ -746,8 +810,8 @@ function WorkflowRunner({
     setSelectedPipelineId(null);
     setSelectedPipelineData(null);
     // Refresh pipeline data in case schema changed
-    fetchPipelineData();
-  }, [fetchPipelineData]);
+    streamPipelineData();
+  }, [streamPipelineData]);
 
   // Handle state updates
   const handleUpdateState = useCallback(
@@ -959,7 +1023,7 @@ function WorkflowRunner({
                       {definition.pipeline_sources.length} pipeline
                       {definition.pipeline_sources.length > 1 ? 's' : ''}
                     </span>
-                    {isLoadingPipelines && (
+                    {pipelineLoadingStatus && (
                       <i className="fa-solid fa-spinner fa-spin ml-1" />
                     )}
                   </div>
@@ -1051,13 +1115,20 @@ function WorkflowRunner({
               </div>
             )}
 
-            {/* Render the workflow */}
+            {/* Render the workflow - only when pipeline data is loaded */}
             <div className="px-4">
-              <DynamicWorkflow
-                {...workflowProps}
-                renderCode={renderCode}
-                onError={handleRenderError}
-              />
+              {pipelineLoadingStatus ? (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+                  <i className="fa-solid fa-spinner fa-spin text-2xl mb-3" />
+                  <p className="text-sm">{pipelineLoadingStatus}</p>
+                </div>
+              ) : (
+                <DynamicWorkflow
+                  {...workflowProps}
+                  renderCode={renderCode}
+                  onError={handleRenderError}
+                />
+              )}
             </div>
           </>
         )}
@@ -1106,8 +1177,8 @@ function WorkflowRunner({
                 isEmbedded={true}
                 onClose={handleReturnToWorkflow}
                 onSave={() => {
-                  // Refresh pipeline data when saved
-                  fetchPipelineData();
+                  // Re-stream pipeline data - may have become stale after schema change
+                  streamPipelineData();
                 }}
                 apiEndpoints={{
                   getDefinition: `/labs/workflow/api/pipeline/${selectedPipelineId}/`,
@@ -1181,7 +1252,7 @@ function WorkflowRunner({
                       loadPipelineForEditing(pipelineId);
                     }
                     // Also refresh workflow pipeline data
-                    fetchPipelineData();
+                    streamPipelineData();
                   }
                 } catch (e) {
                   console.error('Failed to update pipeline schema:', e);

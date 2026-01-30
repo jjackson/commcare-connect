@@ -1,0 +1,364 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load static %}
+
+{% block css %}
+{{ block.super }}
+<style>
+  .table-container {
+    background: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    overflow: hidden;
+  }
+
+  .opp-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .opp-table th,
+  .opp-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .opp-table th {
+    background: #f9fafb;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #374151;
+    white-space: nowrap;
+  }
+
+  .opp-table tbody tr:hover {
+    background: #f9fafb;
+  }
+
+  .opp-table td {
+    font-size: 0.875rem;
+  }
+
+  .checkbox-cell {
+    width: 40px;
+    text-align: center;
+  }
+
+  .app-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .app-badge.has-app {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .app-badge.no-app {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .download-link {
+    color: #2563eb;
+    text-decoration: none;
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+  }
+
+  .download-link:hover {
+    text-decoration: underline;
+  }
+
+  .action-bar {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .selection-info {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin-left: auto;
+  }
+</style>
+{% endblock css %}
+
+{% block content %}
+{% csrf_token %}
+<div class="flex flex-col gap-4 w-full max-w-full" x-data="appDownloader()">
+  <!-- Header -->
+  <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
+    <div>
+      <a href="{% url 'explorer:index' %}" class="text-sm text-blue-600 hover:underline mr-2">
+        <i class="fa-solid fa-arrow-left mr-1"></i> Labs Explorer
+      </a>
+      <span class="text-sm text-brand-deep-purple font-semibold">App Downloader</span>
+    </div>
+    <div class="flex gap-x-3 items-center">
+      {% if has_connect_token %}
+      <div class="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-md">
+        <i class="fa-solid fa-check-circle text-green-600"></i>
+        <span class="text-xs text-green-700">Connected to Connect</span>
+      </div>
+      {% else %}
+      <div class="flex items-center gap-2 px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-md">
+        <i class="fa-solid fa-exclamation-triangle text-yellow-600"></i>
+        <span class="text-xs text-yellow-700">Not Connected</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Error Message -->
+  {% if error %}
+  <div class="bg-red-50 border-l-4 border-red-400 p-4">
+    <div class="flex">
+      <div class="flex-shrink-0">
+        <i class="fa-solid fa-exclamation-circle text-red-400"></i>
+      </div>
+      <div class="ml-3">
+        <p class="text-sm text-red-700">{{ error }}</p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Main Content -->
+  {% if has_connect_token %}
+  <div class="bg-white rounded-xl shadow-sm p-6">
+    <div class="mb-6">
+      <h2 class="text-xl font-bold text-gray-900 mb-2">
+        <i class="fa-solid fa-mobile-screen text-purple-600 mr-2"></i>
+        Download CommCare Apps
+      </h2>
+      <p class="text-sm text-gray-600">
+        Select active opportunities and download their Learn or Deliver app CCZ files.
+        Showing {{ opportunity_count|default:0 }} active opportunities (is_active=true, end_date >= today).
+      </p>
+    </div>
+
+    <!-- Action Bar -->
+    <div class="action-bar mb-4 p-4 bg-gray-50 rounded-lg">
+      <button
+        @click="downloadSelected('learn')"
+        :disabled="selectedCount === 0 || downloading"
+        class="button button-sm primary-dark disabled:opacity-50 disabled:cursor-not-allowed">
+        <i class="fa-solid fa-graduation-cap mr-2"></i>
+        Download Learn Apps
+      </button>
+      <button
+        @click="downloadSelected('deliver')"
+        :disabled="selectedCount === 0 || downloading"
+        class="button button-sm outline-style disabled:opacity-50 disabled:cursor-not-allowed">
+        <i class="fa-solid fa-truck mr-2"></i>
+        Download Deliver Apps
+      </button>
+      <span class="selection-info" x-show="!downloading">
+        <span x-text="selectedCount"></span> of {{ opportunity_count|default:0 }} selected
+      </span>
+      <span class="selection-info text-blue-600" x-show="downloading" x-cloak>
+        <i class="fa-solid fa-spinner fa-spin mr-1"></i>
+        <span x-text="downloadProgress"></span>
+      </span>
+    </div>
+
+    <!-- Table -->
+    <div class="table-container">
+      <table class="opp-table">
+        <thead>
+          <tr>
+            <th class="checkbox-cell">
+              <input
+                type="checkbox"
+                @change="toggleSelectAll($event)"
+                :checked="allSelected"
+                :indeterminate="someSelected && !allSelected"
+                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+            </th>
+            <th>Opportunity</th>
+            <th>Organization</th>
+            <th>Program</th>
+            <th>End Date</th>
+            <th>Download</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for opp in opportunities %}
+          <tr>
+            <td class="checkbox-cell">
+              <input
+                type="checkbox"
+                :checked="selectedIds.includes({{ opp.id }})"
+                @change="toggleSelection({{ opp.id }})"
+                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+            </td>
+            <td>
+              <div class="font-medium text-gray-900">{{ opp.name }}</div>
+              <div class="text-xs text-gray-500">ID: {{ opp.id }}</div>
+            </td>
+            <td>{{ opp.organization_name|default:opp.organization }}</td>
+            <td>{{ opp.program_name|default:"-" }}</td>
+            <td class="text-nowrap">{{ opp.end_date }}</td>
+            <td class="whitespace-nowrap">
+              <a href="{% url 'explorer:download_app' opp_id=opp.id app_type='learn' %}" class="button button-sm outline-style mr-2" title="Download Learn App CCZ">Learn</a>
+              <a href="{% url 'explorer:download_app' opp_id=opp.id app_type='deliver' %}" class="button button-sm outline-style" title="Download Deliver App CCZ">Deliver</a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-8 text-gray-500">
+              <i class="fa-solid fa-inbox text-4xl mb-4 block text-gray-300"></i>
+              No active opportunities found.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <!-- Not Connected Message -->
+  <div class="bg-white rounded-xl shadow-sm p-8 text-center">
+    <i class="fa-solid fa-plug text-6xl text-gray-300 mb-4"></i>
+    <h2 class="text-xl font-bold text-gray-900 mb-2">Connect to CommCare Connect</h2>
+    <p class="text-gray-600 mb-4">
+      Please authenticate with CommCare Connect to view and download apps.
+    </p>
+    <a href="{% url 'labs:overview' %}" class="button primary-dark">
+      <i class="fa-solid fa-sign-in-alt mr-2"></i>
+      Go to Labs Home
+    </a>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function appDownloader() {
+  return {
+    selectedIds: [],
+    allOpportunityIds: [{% for opp in opportunities %}{{ opp.id }}{% if not forloop.last %}, {% endif %}{% endfor %}],
+    downloading: false,
+    downloadProgress: '',
+
+    get selectedCount() {
+      return this.selectedIds.length;
+    },
+
+    get allSelected() {
+      return this.allOpportunityIds.length > 0 && this.selectedIds.length === this.allOpportunityIds.length;
+    },
+
+    get someSelected() {
+      return this.selectedIds.length > 0;
+    },
+
+    toggleSelection(id) {
+      const index = this.selectedIds.indexOf(id);
+      if (index === -1) {
+        this.selectedIds.push(id);
+      } else {
+        this.selectedIds.splice(index, 1);
+      }
+    },
+
+    toggleSelectAll(event) {
+      if (event.target.checked) {
+        this.selectedIds = [...this.allOpportunityIds];
+      } else {
+        this.selectedIds = [];
+      }
+    },
+
+    async downloadSelected(appType) {
+      if (this.selectedIds.length === 0) {
+        alert('Please select at least one opportunity');
+        return;
+      }
+
+      this.downloading = true;
+      this.downloadProgress = 'Fetching download URLs...';
+
+      try {
+        // Get download URLs from server
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', csrfToken);
+        formData.append('app_type', appType);
+        formData.append('opp_ids', this.selectedIds.join(','));
+
+        const response = await fetch('{% url "explorer:bulk_download_apps" %}', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          alert(data.error || 'Failed to get download URLs');
+          return;
+        }
+
+        // Show errors if any
+        if (data.errors && data.errors.length > 0) {
+          console.warn('Some apps could not be downloaded:', data.errors);
+        }
+
+        // Trigger downloads directly from CommCare HQ
+        const downloads = data.downloads || [];
+        if (downloads.length === 0) {
+          alert('No apps available to download.\n\nErrors:\n' + (data.errors || []).join('\n'));
+          return;
+        }
+
+        this.downloadProgress = `Starting ${downloads.length} download(s)...`;
+
+        // Trigger each download with a small delay to avoid browser blocking
+        for (let i = 0; i < downloads.length; i++) {
+          const dl = downloads[i];
+          this.downloadProgress = `Downloading ${i + 1}/${downloads.length}: ${dl.opp_name}`;
+
+          // Create a temporary link and click it to trigger download
+          const link = document.createElement('a');
+          link.href = dl.url;
+          link.target = '_blank';  // Open in new tab to handle any redirects
+          link.rel = 'noopener noreferrer';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          // Small delay between downloads to avoid browser blocking multiple downloads
+          if (i < downloads.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+
+        this.downloadProgress = `Completed ${downloads.length} download(s)`;
+
+        // Show summary
+        if (data.errors && data.errors.length > 0) {
+          setTimeout(() => {
+            alert(`Downloaded ${downloads.length} app(s).\n\nSkipped ${data.errors.length} app(s):\n` + data.errors.slice(0, 5).join('\n'));
+          }, 500);
+        }
+
+      } catch (error) {
+        console.error('Download error:', error);
+        alert('Download failed: ' + error.message);
+      } finally {
+        setTimeout(() => {
+          this.downloading = false;
+          this.downloadProgress = '';
+        }, 2000);
+      }
+    }
+  };
+}
+</script>
+{% endblock %}

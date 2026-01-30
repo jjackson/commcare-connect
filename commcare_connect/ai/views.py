@@ -71,8 +71,8 @@ class AIStreamView(LoginRequiredMixin, View):
     # Allowed models for security - using latest 2025/2026 models
     ALLOWED_MODELS = {
         # Claude 4.5 models (late 2025)
-        "anthropic:claude-sonnet-4.5-20250929",
-        "anthropic:claude-opus-4.5-20251124",
+        "anthropic:claude-sonnet-4-5-20250929",
+        "anthropic:claude-opus-4-5-20251101",
         # GPT-5.2 models (December 2025)
         "openai:gpt-5.2",
         "openai:gpt-5.2-2025-12-11",
@@ -82,7 +82,7 @@ class AIStreamView(LoginRequiredMixin, View):
         "openai:gpt-4o",
         "openai:gpt-4o-mini",
     }
-    DEFAULT_MODEL = "anthropic:claude-sonnet-4.5-20250929"
+    DEFAULT_MODEL = "anthropic:claude-sonnet-4-5-20250929"
 
     def post(self, request):
         """Handle POST request and return streaming response."""
@@ -104,6 +104,7 @@ class AIStreamView(LoginRequiredMixin, View):
         current_render_code = body.get("current_render_code", "").strip() if body.get("current_render_code") else ""
         model = body.get("model", self.DEFAULT_MODEL).strip()
         active_context = body.get("active_context")  # {active_tab, pipeline_id, pipeline_alias, pipeline_schema}
+        conversation_history = body.get("messages", [])  # List of {role, content} dicts
 
         # Log request (without huge payloads)
         logger.info(
@@ -152,6 +153,7 @@ class AIStreamView(LoginRequiredMixin, View):
                 definition_id=definition_id,
                 opportunity_id=opportunity_id,
                 active_context=active_context,
+                conversation_history=conversation_history,
             )
 
         response = StreamingHttpResponse(
@@ -175,6 +177,7 @@ class AIStreamView(LoginRequiredMixin, View):
         definition_id: str | None,
         opportunity_id: str | None,
         active_context: dict | None = None,
+        conversation_history: list | None = None,
     ):
         """
         Run the streaming agent, yielding SSE events in real-time.
@@ -206,6 +209,7 @@ class AIStreamView(LoginRequiredMixin, View):
                         current_definition,
                         current_render_code,
                         active_context=active_context,
+                        conversation_history=conversation_history,
                     )
 
                 else:  # pipeline
@@ -217,7 +221,12 @@ class AIStreamView(LoginRequiredMixin, View):
 
                     agent = create_pipeline_agent_with_model(model)
                     deps = PipelineAgentDeps(user_deps=user_deps)
-                    full_prompt = build_pipeline_prompt(prompt, current_definition, current_render_code)
+                    full_prompt = build_pipeline_prompt(
+                        prompt,
+                        current_definition,
+                        current_render_code,
+                        conversation_history=conversation_history,
+                    )
 
                 try:
                     # Use agent.iter() for streaming with proper tool execution

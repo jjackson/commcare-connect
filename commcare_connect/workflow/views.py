@@ -1880,21 +1880,31 @@ class PipelineDataStreamView(LoginRequiredMixin, View):
                         # Convert result to serializable format
                         rows = []
                         for row in result.rows:
-                            # Handle visit_date - may be datetime or string depending on backend
-                            visit_date = row.visit_date
-                            if visit_date and hasattr(visit_date, "isoformat"):
-                                visit_date = visit_date.isoformat()
-                            # Already a string or None - use as-is
+                            # Handle dates - may be datetime or string depending on backend
+                            def format_date(d):
+                                if d and hasattr(d, "isoformat"):
+                                    return d.isoformat()
+                                return d
 
                             row_dict = {
                                 "entity_id": row.entity_id,
                                 "entity_name": row.entity_name,
                                 "username": row.username,
-                                "visit_date": visit_date,
+                                "visit_date": format_date(row.visit_date),
+                                # Built-in FLW aggregation fields
+                                "total_visits": getattr(row, "total_visits", 0),
+                                "approved_visits": getattr(row, "approved_visits", 0),
+                                "pending_visits": getattr(row, "pending_visits", 0),
+                                "rejected_visits": getattr(row, "rejected_visits", 0),
+                                "flagged_visits": getattr(row, "flagged_visits", 0),
+                                "first_visit_date": format_date(getattr(row, "first_visit_date", None)),
+                                "last_visit_date": format_date(getattr(row, "last_visit_date", None)),
                             }
-                            # Add computed fields
-                            if row.computed:
-                                row_dict.update(row.computed)
+                            # Add computed fields (custom fields from config)
+                            # FLWRow uses custom_fields, VisitRow uses computed
+                            custom = getattr(row, "custom_fields", None) or getattr(row, "computed", None)
+                            if custom:
+                                row_dict.update(custom)
                             rows.append(row_dict)
 
                         pipeline_data[alias] = {
