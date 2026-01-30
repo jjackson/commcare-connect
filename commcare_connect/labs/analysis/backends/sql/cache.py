@@ -98,10 +98,7 @@ class SQLCacheManager:
         """
         expires_at = self._get_expires_at()
 
-        # Clear old cache for this opportunity
-        RawVisitCache.objects.filter(opportunity_id=self.opportunity_id).delete()
-
-        # Bulk create new rows
+        # Build rows first (outside transaction for speed)
         rows = []
         for v in visit_dicts:
             rows.append(
@@ -133,7 +130,10 @@ class SQLCacheManager:
                 )
             )
 
+        # DELETE and INSERT in same transaction to prevent race condition
+        # where concurrent requests could both insert, causing duplicates
         with transaction.atomic():
+            RawVisitCache.objects.filter(opportunity_id=self.opportunity_id).delete()
             RawVisitCache.objects.bulk_create(rows, batch_size=1000)
 
         logger.info(f"[SQLCache] Stored {len(rows)} raw visits for opp {self.opportunity_id}")
@@ -173,12 +173,7 @@ class SQLCacheManager:
 
         expires_at = self._get_expires_at()
 
-        # Clear old cache for this config
-        ComputedVisitCache.objects.filter(
-            opportunity_id=self.opportunity_id,
-            config_hash=self.config_hash,
-        ).delete()
-
+        # Build rows first (outside transaction for speed)
         rows = [
             ComputedVisitCache(
                 opportunity_id=self.opportunity_id,
@@ -202,7 +197,13 @@ class SQLCacheManager:
             for v in visits_data
         ]
 
+        # DELETE and INSERT in same transaction to prevent race condition
+        # where concurrent requests could both insert, causing duplicates
         with transaction.atomic():
+            ComputedVisitCache.objects.filter(
+                opportunity_id=self.opportunity_id,
+                config_hash=self.config_hash,
+            ).delete()
             ComputedVisitCache.objects.bulk_create(rows, batch_size=1000)
 
         logger.info(f"[SQLCache] Stored {len(rows)} computed visits for opp {self.opportunity_id}")
@@ -245,12 +246,7 @@ class SQLCacheManager:
 
         expires_at = self._get_expires_at()
 
-        # Clear old cache for this config
-        ComputedFLWCache.objects.filter(
-            opportunity_id=self.opportunity_id,
-            config_hash=self.config_hash,
-        ).delete()
-
+        # Build rows first (outside transaction for speed)
         rows = [
             ComputedFLWCache(
                 opportunity_id=self.opportunity_id,
@@ -270,7 +266,13 @@ class SQLCacheManager:
             for f in flw_data
         ]
 
+        # DELETE and INSERT in same transaction to prevent race condition
+        # where concurrent requests could both insert, causing duplicates
         with transaction.atomic():
+            ComputedFLWCache.objects.filter(
+                opportunity_id=self.opportunity_id,
+                config_hash=self.config_hash,
+            ).delete()
             ComputedFLWCache.objects.bulk_create(rows, batch_size=1000)
 
         logger.info(f"[SQLCache] Stored {len(rows)} FLW results for opp {self.opportunity_id}")

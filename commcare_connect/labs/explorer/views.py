@@ -1168,3 +1168,225 @@ class TaskStatusAPIView(LoginRequiredMixin, View):
                 },
                 status=500,
             )
+
+
+# =============================================================================
+# App Downloader Views
+# =============================================================================
+
+
+class AppDownloaderView(LoginRequiredMixin, TemplateView):
+    """
+    View for downloading CommCare apps (CCZ files) for active opportunities.
+
+    Lists all active opportunities (is_active=True, end_date >= today) and allows
+    users to select opportunities and download their learn or deliver apps.
+    """
+
+    template_name = "labs/explorer/app_downloader.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Check for OAuth token
+        labs_oauth = self.request.session.get("labs_oauth", {})
+        has_token = bool(labs_oauth.get("access_token"))
+        context["has_connect_token"] = has_token
+
+        if not has_token:
+            context["opportunities"] = []
+            context["error"] = "Please connect to CommCare Connect to view opportunities."
+            return context
+
+        # Fetch active opportunities from API
+        try:
+            from commcare_connect.labs.explorer.app_data_access import AppDownloaderDataAccess
+
+            with AppDownloaderDataAccess(request=self.request) as data_access:
+                opportunities = data_access.get_active_opportunities()
+                context["opportunities"] = opportunities
+                context["opportunity_count"] = len(opportunities)
+        except Exception as e:
+            logger.error(f"[AppDownloader] Failed to fetch opportunities: {e}")
+            context["opportunities"] = []
+            context["error"] = f"Failed to load opportunities: {str(e)}"
+
+        return context
+
+
+class DownloadAppView(LoginRequiredMixin, View):
+    """
+    Redirect to CommCare HQ to download a CCZ file directly.
+
+    This avoids proxying the download through our server - the browser
+    downloads directly from CommCare HQ.
+    """
+
+    def get(self, request, opp_id: int, app_type: str):
+        """
+        Redirect to CommCare HQ CCZ download URL.
+
+        Args:
+            opp_id: Opportunity ID
+            app_type: "learn" or "deliver"
+        """
+        if app_type not in ("learn", "deliver"):
+            return JsonResponse({"error": "Invalid app_type. Must be 'learn' or 'deliver'"}, status=400)
+
+        # Check for OAuth token
+        labs_oauth = request.session.get("labs_oauth", {})
+        if not labs_oauth.get("access_token"):
+            return JsonResponse({"error": "Not authenticated"}, status=401)
+
+        try:
+            from commcare_connect.labs.explorer.app_data_access import AppDownloaderDataAccess
+
+            with AppDownloaderDataAccess(request=request) as data_access:
+                # Get opportunity details
+                details = data_access.get_opportunity_details(opp_id)
+                if not details:
+                    return JsonResponse({"error": f"Opportunity {opp_id} not found"}, status=404)
+
+                # Get the app
+                app_key = "learn_app" if app_type == "learn" else "deliver_app"
+                app_data = details.get(app_key)
+
+                if not app_data:
+                    return JsonResponse(
+                        {"error": f"No {app_type} app configured for this opportunity"},
+                        status=404,
+                    )
+
+                # Extract app details
+                domain = app_data.get("cc_domain")
+                cc_app_id = app_data.get("cc_app_id")
+
+                # Get HQ server URL
+                hq_server_url = "https://www.commcarehq.org"
+                if app_data.get("hq_server"):
+                    hq_server_url = app_data["hq_server"].get("url", hq_server_url)
+
+                if not domain or not cc_app_id:
+                    return JsonResponse(
+                        {"error": f"Missing domain or app_id for {app_type} app"},
+                        status=400,
+                    )
+
+                # Build the direct CommCare HQ download URL
+                ccz_url = f"{hq_server_url}/a/{domain}/apps/api/download_ccz/?app_id={cc_app_id}&latest=release"
+
+                logger.info(f"[AppDownloader] Redirecting to CCZ download: {ccz_url}")
+
+                # Redirect browser directly to CommCare HQ
+                return redirect(ccz_url)
+
+        except Exception as e:
+            logger.error(f"[AppDownloader] Failed to get app info: {e}")
+            return JsonResponse({"error": f"Failed to get app info: {str(e)}"}, status=500)
+
+
+class BulkDownloadAppsView(LoginRequiredMixin, View):
+    """
+    Get direct CommCare HQ download URLs for multiple apps.
+
+    Returns JSON with URLs that JavaScript can use to trigger
+    multiple direct downloads from CommCare HQ.
+    """
+
+    def post(self, request):
+        """
+        Get download URLs for multiple apps.
+
+        POST params:
+            opp_ids: Comma-separated list of opportunity IDs
+            app_type: "learn" or "deliver"
+
+        Returns:
+            JSON with list of download URLs and any errors
+        """
+        app_type = request.POST.get("app_type", "learn")
+        opp_ids_str = request.POST.get("opp_ids", "")
+
+        if app_type not in ("learn", "deliver"):
+            return JsonResponse({"error": "Invalid app_type. Must be 'learn' or 'deliver'"}, status=400)
+
+        if not opp_ids_str:
+            return JsonResponse({"error": "No opportunities selected"}, status=400)
+
+        # Parse opportunity IDs
+        try:
+            opp_ids = [int(x.strip()) for x in opp_ids_str.split(",") if x.strip()]
+        except ValueError:
+            return JsonResponse({"error": "Invalid opportunity ID format"}, status=400)
+
+        if not opp_ids:
+            return JsonResponse({"error": "No valid opportunity IDs provided"}, status=400)
+
+        # Check for OAuth token
+        labs_oauth = request.session.get("labs_oauth", {})
+        if not labs_oauth.get("access_token"):
+            return JsonResponse({"error": "Not authenticated"}, status=401)
+
+        try:
+            from commcare_connect.labs.explorer.app_data_access import AppDownloaderDataAccess
+
+            with AppDownloaderDataAccess(request=request) as data_access:
+                downloads = []
+                errors = []
+
+                for opp_id in opp_ids:
+                    # Get opportunity details
+                    details = data_access.get_opportunity_details(opp_id)
+                    if not details:
+                        errors.append(f"Opportunity {opp_id} not found")
+                        continue
+
+                    opp_name = details.get("name", f"opp_{opp_id}")
+
+                    # Get the app
+                    app_key = "learn_app" if app_type == "learn" else "deliver_app"
+                    app_data = details.get(app_key)
+
+                    if not app_data:
+                        errors.append(f"No {app_type} app for: {opp_name}")
+                        continue
+
+                    # Extract app details
+                    domain = app_data.get("cc_domain")
+                    cc_app_id = app_data.get("cc_app_id")
+                    app_name = app_data.get("name", f"{app_type}_app")
+
+                    # Get HQ server URL
+                    hq_server_url = "https://www.commcarehq.org"
+                    if app_data.get("hq_server"):
+                        hq_server_url = app_data["hq_server"].get("url", hq_server_url)
+
+                    if not domain or not cc_app_id:
+                        errors.append(f"Missing domain/app_id for: {opp_name}")
+                        continue
+
+                    # Build the direct CommCare HQ download URL
+                    ccz_url = f"{hq_server_url}/a/{domain}/apps/api/download_ccz/?app_id={cc_app_id}&latest=release"
+
+                    downloads.append(
+                        {
+                            "opp_id": opp_id,
+                            "opp_name": opp_name,
+                            "app_name": app_name,
+                            "url": ccz_url,
+                        }
+                    )
+
+                logger.info(f"[AppDownloader] Returning {len(downloads)} download URLs for {app_type} apps")
+
+                return JsonResponse(
+                    {
+                        "success": True,
+                        "downloads": downloads,
+                        "errors": errors,
+                    }
+                )
+
+        except Exception as e:
+            logger.error(f"[AppDownloader] Failed to get download URLs: {e}")
+            return JsonResponse({"error": f"Failed to get download URLs: {str(e)}"}, status=500)

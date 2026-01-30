@@ -20,6 +20,7 @@ import {
   Square,
   Check,
   Code,
+  Database,
 } from 'lucide-react';
 
 interface Message {
@@ -27,6 +28,7 @@ interface Message {
   content: string;
   definitionChanged?: boolean;
   renderCodeChanged?: boolean;
+  pipelineSchemaChanged?: boolean;
   isStreaming?: boolean;
 }
 
@@ -80,14 +82,14 @@ const AVAILABLE_MODELS = [
   {
     id: 'claude-sonnet-4.5',
     provider: 'anthropic',
-    model: 'anthropic:claude-sonnet-4.5-20250929',
+    model: 'anthropic:claude-sonnet-4-5-20250929',
     name: 'Sonnet 4.5',
     fullName: 'Claude Sonnet 4.5',
   },
   {
     id: 'claude-opus-4.5',
     provider: 'anthropic',
-    model: 'anthropic:claude-opus-4.5-20251124',
+    model: 'anthropic:claude-opus-4-5-20251101',
     name: 'Opus 4.5',
     fullName: 'Claude Opus 4.5',
   },
@@ -259,7 +261,12 @@ export function AIChat({
 
       try {
         const modelString =
-          selectedModel?.model || 'anthropic:claude-sonnet-4.5-20250929';
+          selectedModel?.model || 'anthropic:claude-sonnet-4-5-20250929';
+
+        // Build conversation history (exclude the streaming placeholder we just added)
+        const historyMessages = messages
+          .filter((m) => !m.isStreaming)
+          .map((m) => ({ role: m.role, content: m.content }));
 
         // Use POST with JSON body instead of GET with query params
         const response = await fetch('/ai/stream/', {
@@ -277,6 +284,7 @@ export function AIChat({
             current_render_code: currentRenderCode || '',
             model: modelString,
             active_context: activeContext || null,
+            messages: historyMessages,
           }),
           signal: abortController.signal,
         });
@@ -325,6 +333,16 @@ export function AIChat({
                   });
                 } else if (data.event_type === 'complete' && data.data) {
                   const result = data.data;
+                  console.log('[AIChat] Complete event received:', {
+                    schema_changed: result.schema_changed,
+                    definition_changed: result.definition_changed,
+                    render_code_changed: result.render_code_changed,
+                    pipeline_schema_changed: result.pipeline_schema_changed,
+                    has_schema: !!result.schema,
+                    has_definition: !!result.definition,
+                    has_pipeline_schema_updates:
+                      !!result.pipeline_schema_updates,
+                  });
                   setMessages((prev) => {
                     const newMessages = [...prev];
                     const lastIdx = newMessages.length - 1;
@@ -335,6 +353,7 @@ export function AIChat({
                         definitionChanged:
                           result.definition_changed || result.schema_changed,
                         renderCodeChanged: result.render_code_changed,
+                        pipelineSchemaChanged: result.pipeline_schema_changed,
                         isStreaming: false,
                       };
                     }
@@ -343,8 +362,15 @@ export function AIChat({
 
                   // Handle definition/schema update
                   if (result.definition_changed && result.definition) {
+                    console.log(
+                      '[AIChat] Calling onDefinitionUpdate with definition',
+                    );
                     onDefinitionUpdate(result.definition);
                   } else if (result.schema_changed && result.schema) {
+                    console.log(
+                      '[AIChat] Calling onDefinitionUpdate with schema:',
+                      result.schema,
+                    );
                     onDefinitionUpdate(result.schema);
                   }
 
@@ -567,13 +593,21 @@ export function AIChat({
                   </span>
                 )}
               </p>
-              {(message.definitionChanged || message.renderCodeChanged) && (
+              {(message.definitionChanged ||
+                message.renderCodeChanged ||
+                message.pipelineSchemaChanged) && (
                 <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-green-600 space-y-1">
                   {message.definitionChanged && (
                     <div className="flex items-center gap-1">
                       <Check size={12} />
                       {agentType === 'workflow' ? 'Definition' : 'Schema'}{' '}
                       updated
+                    </div>
+                  )}
+                  {message.pipelineSchemaChanged && (
+                    <div className="flex items-center gap-1">
+                      <Database size={12} />
+                      Pipeline schema updated
                     </div>
                   )}
                   {message.renderCodeChanged && (

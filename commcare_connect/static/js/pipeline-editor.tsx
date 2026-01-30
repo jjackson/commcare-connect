@@ -870,13 +870,25 @@ export function PipelineEditor({
   const handleDefinitionUpdate = useCallback(
     (newDef: Record<string, unknown>) => {
       console.log('Pipeline definition updated by AI:', newDef);
-      if (newDef.schema) {
+
+      // The AI sends the schema directly (not wrapped), so check if this looks like a schema
+      // A schema has fields array and typically grouping_key
+      if (newDef.fields && Array.isArray(newDef.fields)) {
+        // This is the schema itself
+        setSchema(newDef as unknown as PipelineSchema);
+        // Trigger a save to persist the AI changes
+        setHasChanges(true);
+      } else if (newDef.schema) {
+        // Legacy: wrapped schema format
         setSchema(newDef.schema as PipelineSchema);
+        setHasChanges(true);
       }
-      if (newDef.name) {
+
+      // Handle name/description updates
+      if (newDef.name && typeof newDef.name === 'string') {
         setDefinition((prev) => ({ ...prev, name: newDef.name as string }));
       }
-      if (newDef.description) {
+      if (newDef.description && typeof newDef.description === 'string') {
         setDefinition((prev) => ({
           ...prev,
           description: newDef.description as string,

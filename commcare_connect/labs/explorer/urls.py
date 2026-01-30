@@ -31,6 +31,10 @@ urlpatterns = [
     path("tasks/", views.TaskManagerView.as_view(), name="task_manager"),
     path("tasks/kill/", views.TaskKillView.as_view(), name="task_kill"),
     path("tasks/status/<str:task_id>/", views.TaskStatusAPIView.as_view(), name="task_status"),
+    # App Downloader
+    path("app-downloader/", views.AppDownloaderView.as_view(), name="app_downloader"),
+    path("app-downloader/download/<int:opp_id>/<str:app_type>/", views.DownloadAppView.as_view(), name="download_app"),
+    path("app-downloader/bulk-download/", views.BulkDownloadAppsView.as_view(), name="bulk_download_apps"),
     # Admin Boundaries
     path("boundaries/", include("commcare_connect.labs.admin_boundaries.urls")),
 ]

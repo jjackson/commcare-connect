@@ -378,6 +378,7 @@ def build_workflow_prompt(
     current_render_code: str | None = None,
     available_pipelines: list[dict] | None = None,
     active_context: dict | None = None,
+    conversation_history: list | None = None,
 ) -> str:
     """
     Build the prompt for the workflow agent including current context.
@@ -388,6 +389,7 @@ def build_workflow_prompt(
         current_render_code: The current React render code
         available_pipelines: List of available pipelines user can add as sources
         active_context: Dict with active_tab, pipeline_id, pipeline_schema if on pipeline tab
+        conversation_history: List of prior messages [{role, content}, ...]
 
     Returns:
         The full prompt to send to the agent
@@ -430,6 +432,15 @@ def build_workflow_prompt(
         for p in available_pipelines:
             prompt_parts.append(f"- ID {p['id']}: {p['name']} - {p.get('description', 'No description')}")
         prompt_parts.append("")
+
+    # Include conversation history if present
+    if conversation_history:
+        prompt_parts.append("## Conversation History")
+        for msg in conversation_history:
+            role = msg.get("role", "user").capitalize()
+            content = msg.get("content", "")
+            prompt_parts.append(f"**{role}:** {content}")
+            prompt_parts.append("")
 
     prompt_parts.append(f"## User Request\n{user_prompt}")
 

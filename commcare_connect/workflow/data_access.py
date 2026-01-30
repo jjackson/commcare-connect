@@ -1527,13 +1527,29 @@ class PipelineDataAccess(BaseDataAccess):
             rows = []
             if hasattr(result, "rows"):
                 for row in result.rows:
-                    row_dict = {}
-                    if hasattr(row, "username"):
-                        row_dict["username"] = row.username
-                    if hasattr(row, "visit_date"):
-                        row_dict["visit_date"] = str(row.visit_date) if row.visit_date else None
-                    if hasattr(row, "computed"):
-                        row_dict.update(row.computed or {})
+                    # Format dates consistently
+                    def format_date(d):
+                        if d and hasattr(d, "isoformat"):
+                            return d.isoformat()
+                        return str(d) if d else None
+
+                    row_dict = {
+                        "username": getattr(row, "username", None),
+                        "visit_date": format_date(getattr(row, "visit_date", None)),
+                        # Built-in FLW aggregation fields
+                        "total_visits": getattr(row, "total_visits", 0),
+                        "approved_visits": getattr(row, "approved_visits", 0),
+                        "pending_visits": getattr(row, "pending_visits", 0),
+                        "rejected_visits": getattr(row, "rejected_visits", 0),
+                        "flagged_visits": getattr(row, "flagged_visits", 0),
+                        "first_visit_date": format_date(getattr(row, "first_visit_date", None)),
+                        "last_visit_date": format_date(getattr(row, "last_visit_date", None)),
+                    }
+                    # Add computed fields (custom fields from config)
+                    # FLWRow uses custom_fields, VisitRow uses computed
+                    custom = getattr(row, "custom_fields", None) or getattr(row, "computed", None)
+                    if custom:
+                        row_dict.update(custom)
                     rows.append(row_dict)
 
             return {

@@ -335,7 +335,7 @@
             <!-- Metadata Section -->
             <div class="text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-0.5 mb-2">
               <span><i class="fa-solid fa-calendar mr-1"></i><span x-text="assessment.visit_date"></span></span>
-              <a :href="'{% url "audit:visit_detail_from_production" 0 %}'.replace('/0/', '/' + assessment.visit_id + '/')"
+              <a :href="visitDetailUrl(assessment.visit_id)"
                  target="_blank"
                  class="text-brand-indigo hover:underline">
                 <i class="fa-solid fa-hashtag mr-0.5"></i><span x-text="assessment.visit_id"></span>
@@ -448,7 +448,7 @@
             <template x-for="visit in visitSummaries" :key="visit.visit_id">
               <tr>
                 <td class="px-4 py-3">
-                  <a :href="'{% url "audit:visit_detail_from_production" 0 %}'.replace('/0/', '/' + visit.visit_id + '/')"
+                  <a :href="visitDetailUrl(visit.visit_id)"
                      target="_blank"
                      class="text-sm font-medium text-brand-indigo hover:text-brand-deep-purple hover:underline"
                      x-text="visit.visit_id"></a>
@@ -650,6 +650,8 @@
 // Global variables for AI review (accessible from widget scope)
 const sessionId = {{ session.pk }};
 const opportunityId = {{ opportunity_id|default:"null" }};
+const connectUrl = '{{ connect_url|default:"https://connect.dimagi.com" }}';
+const orgSlug = '{{ org_slug|default:"" }}';
 
 function bulkAssessmentInterface() {
   return {
@@ -669,6 +671,10 @@ function bulkAssessmentInterface() {
     bulkDataUrl: '{{ bulk_data_url }}',
     aiAgentsUrl: '{% url "audit:ai_agents_list" %}',
     aiReviewUrl: '{% url "audit:ai_review" session.pk %}',
+    // URL components for visit detail links to Connect production
+    connectUrl: connectUrl,
+    orgSlug: orgSlug,
+    opportunityId: opportunityId,
     csrfToken: '',
     loading: true,
     loadCancelled: false,
@@ -741,6 +747,15 @@ function bulkAssessmentInterface() {
         url.searchParams.delete('status');
       }
       window.history.replaceState({}, '', url);
+    },
+    visitDetailUrl(visitId) {
+      // Construct URL to Connect production for visit details
+      // Format: https://connect.dimagi.com/a/{org_slug}/opportunity/{opp_id}/user_visit_details/{visit_id}/
+      if (this.connectUrl && this.orgSlug && this.opportunityId) {
+        return `${this.connectUrl}/a/${this.orgSlug}/opportunity/${this.opportunityId}/user_visit_details/${visitId}/`;
+      }
+      // Fallback to labs visit detail view if missing data
+      return `/audit/visits/${visitId}/`;
     },
     async fetchData() {
       if (this.controller) {

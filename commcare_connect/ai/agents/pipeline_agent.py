@@ -190,6 +190,20 @@ data.rows = [
 3. When calling update_schema, provide the COMPLETE schema object
 4. You may call zero, one, or both tools depending on the request
 5. After calling tools, summarize what was changed
+
+## IMPORTANT: You MUST Use Tools!
+
+When the user asks you to add, modify, or remove fields/settings:
+- You MUST call the appropriate tool (update_schema or update_render_code)
+- Just describing the change is NOT enough - the tool call makes it happen
+- If you don't call the tool, the change will NOT be saved
+- Think of tools as "save buttons" - your explanation is for the user, the tool call is what persists the change
+
+Example workflow:
+1. User: "Add a phone_number field"
+2. You: "I'll add a phone_number field to extract phone numbers from form submissions."
+3. You: [CALL update_schema with the complete schema including the new field]
+4. You: "Done! I've added the phone_number field that will extract from form.phone_number."
 """
 
 
@@ -275,6 +289,7 @@ def build_pipeline_prompt(
     user_prompt: str,
     current_schema: dict | None = None,
     current_render_code: str | None = None,
+    conversation_history: list | None = None,
 ) -> str:
     """
     Build the prompt for the pipeline agent including current context.
@@ -283,6 +298,7 @@ def build_pipeline_prompt(
         user_prompt: The user's request
         current_schema: The current pipeline schema JSON
         current_render_code: The current React render code
+        conversation_history: List of prior messages [{role, content}, ...]
 
     Returns:
         The full prompt to send to the agent
@@ -298,6 +314,15 @@ def build_pipeline_prompt(
         prompt_parts.append("## Current Render Code")
         prompt_parts.append(f"```jsx\n{current_render_code}\n```")
         prompt_parts.append("")
+
+    # Include conversation history if present
+    if conversation_history:
+        prompt_parts.append("## Conversation History")
+        for msg in conversation_history:
+            role = msg.get("role", "user").capitalize()
+            content = msg.get("content", "")
+            prompt_parts.append(f"**{role}:** {content}")
+            prompt_parts.append("")
 
     prompt_parts.append(f"## User Request\n{user_prompt}")
 
