@@ -210,12 +210,8 @@ def get_table_data_for_year_month(
         .annotate(users=models.Count("username"))
         .order_by("month_group")
     )
-    sso_count = 0
-    hq_sso_users_data = {}
-    # activated commcare accounts is cumulative
-    for item in hq_sso_users:
-        sso_count += item["users"]
-        hq_sso_users_data[item["month_group"].strftime("%Y-%m")] = sso_count
+    hq_sso_user_months = {item["month_group"].strftime("%Y-%m"): item["users"] for item in hq_sso_users}
+    hq_sso_users_data = _get_cumulative_count(hq_sso_user_months)
 
     for group_key in visit_data_dict.keys():
         month_group = group_key[0]
