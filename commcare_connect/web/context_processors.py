@@ -24,8 +24,9 @@ def gtm_context(request):
 
 
 def chat_widget_context(request):
+    creds_configured = bool(settings.CHATBOT_ID and settings.CHATBOT_EMBED_KEY)
     return {
-        "chat_widget_enabled": Flag.is_flag_active_for_request(request, OPEN_CHAT_STUDIO_WIDGET),
+        "chat_widget_enabled": creds_configured and Flag.is_flag_active_for_request(request, OPEN_CHAT_STUDIO_WIDGET),
         "chatbot_id": settings.CHATBOT_ID,
         "chatbot_embed_key": settings.CHATBOT_EMBED_KEY,
     }
