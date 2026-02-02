@@ -298,7 +298,7 @@ def program_manager_home(request, org):
         .values("opportunity__id", "opportunity__name", "opportunity__organization__name")
         .annotate(
             count=Concat(
-                F("opportunity__currency_fk__code"),
+                F("opportunity__currency__code"),
                 Value(" "),
                 Sum("amount"),
                 output_field=CharField(),
