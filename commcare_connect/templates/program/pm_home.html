@@ -59,7 +59,7 @@
               </div>
             </div>
           </div>
-          {% with applications=program.programapplication_set.all %}
+          {% with applications=program.applications_with_budget|default:program.programapplication_set.all %}
 
           <div class="infocard-dark">
               <i class="fa-solid fa-file-circle-check"></i>
@@ -87,12 +87,21 @@
               </div>
             </div>
             <div class="line my-2 h-8 w-0.5 bg-gray-200 lg:block hidden"></div>
-            <div class="infocard-dark">
-                <i class="fa-solid fa-money-bill-wave"></i>
-                <div>
-                    <h6>{% translate "Budget" %}</h6>
-                    <p>{{program.budget}} {{program.currency_code|default:''}}</p>
-                </div>
+            <div class="flex flex-row gap-8">
+              <div class="infocard-dark">
+                  <i class="fa-solid fa-money-bill-wave"></i>
+                  <div>
+                      <h6>{% translate "Budget" %}</h6>
+                      <p>{{program.budget}} {{program.currency_code|default:''}}</p>
+                  </div>
+              </div>
+              <div class="infocard-dark">
+                  <i class="fa-solid fa-hand-holding-dollar"></i>
+                  <div>
+                      <h6 class="whitespace-nowrap">{% translate "Allocated Budget" %}</h6>
+                      <p>{{program.allocated_budget|default:0}} {{program.currency_code|default:''}}</p>
+                  </div>
+              </div>
             </div>
           </div>
 
@@ -134,7 +143,7 @@
           {% for application in applications %}
             <div class="relative flex flex-col gap-5 p-6 bg-white rounded-xl border border-gray-200">
               <div class="flex justify-between w-full">
-                <div class="flex flex-col gap-2 w-full">
+                <div class="flex flex-col w-full">
                   <div class="flex items-center justify-between gap-2 font-normal">
                     <p class="hint">{{ application.date_created|date }}</p>
                     <div class="flex items-center gap-2 font-normal">
@@ -151,8 +160,9 @@
                       {% endif %}
                     </div>
                   </div>
-                  <div>
+                  <div class="flex flex-col gap-2 font-normal">
                     <p class="card_title">{{ application.organization.name }}</p>
+                    <p class="hint">{% translate "Current Budget" %}: {{ application.current_budget|default:0 }} {{ program.currency_code|default:'' }}</p>
                   </div>
                 </div>
               </div>
