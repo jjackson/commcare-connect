@@ -21,12 +21,18 @@ class TestChatWidgetContext:
         assert context["chatbot_id"] == "test-chatbot-id"
         assert context["chatbot_embed_key"] == "test-embed-key"
 
-    def test_flag_missing(self):
+    def test_flag_missing(self, settings):
+        settings.CHATBOT_ID = "test-chatbot-id"
+        settings.CHATBOT_EMBED_KEY = "test-embed-key"
+
         request = RequestFactory().get("/")
         request.user = UserFactory()
         assert chat_widget_context(request)["chat_widget_enabled"] is False
 
-    def test_flag_enabled_for_org(self):
+    def test_flag_enabled_for_org(self, settings):
+        settings.CHATBOT_ID = "test-chatbot-id"
+        settings.CHATBOT_EMBED_KEY = "test-embed-key"
+
         org = OrganizationFactory()
         user = UserFactory()
         MembershipFactory(user=user, organization=org)
@@ -38,6 +44,22 @@ class TestChatWidgetContext:
         request.org = org
 
         assert chat_widget_context(request)["chat_widget_enabled"] is True
+
+    def test_flag_enabled_for_org_but_missing_creds(self, settings):
+        settings.CHATBOT_ID = ""
+        settings.CHATBOT_EMBED_KEY = ""
+
+        org = OrganizationFactory()
+        user = UserFactory()
+        MembershipFactory(user=user, organization=org)
+        flag = Flag.objects.create(name="open_chat_studio_widget")
+        flag.organizations.add(org)
+
+        request = RequestFactory().get("/")
+        request.user = user
+        request.org = org
+
+        assert chat_widget_context(request)["chat_widget_enabled"] is False
 
     def test_flag_enabled_for_user(self, settings):
         settings.CHATBOT_ID = "test-chatbot-id"
