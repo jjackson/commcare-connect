@@ -165,11 +165,6 @@ const MapboxUtils = {
     return draw;
   },
 
-  setStyle(map, styleId) {
-    if (!styleId) return;
-    map.setStyle('mapbox://styles/mapbox/' + styleId);
-  },
-
   createMarker(map, opts) {
     // Creating markers using HTML might present performance issues at scale, so better
     // to use layers instead for large datasets.

@@ -459,7 +459,7 @@
     for (const input of inputs) {
       input.onclick = (click) => {
         const styleId = click.target.id;
-        MapboxUtils.setStyle(map, styleId);
+        map.setStyle('mapbox://styles/mapbox/' + styleId);
         input.checked = true;
       };
     }
