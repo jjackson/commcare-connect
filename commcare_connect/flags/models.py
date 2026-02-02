@@ -63,8 +63,8 @@ class Flag(AbstractUserFlag):
         user = getattr(request, "user", None)
         if not (user and user.is_authenticated):
             return False
-        active_flags = cls.active_flags_for_user(user, include_role_flags=True).values_list("name", flat=True)
-        return flag_name in list(active_flags)
+        active_flags_query = cls.active_flags_for_user(user, include_role_flags=True).filter(name=flag_name)
+        return active_flags_query.exists()
 
     def is_active_for(self, obj: Organization | Opportunity | Program):
         if isinstance(obj, Organization):
