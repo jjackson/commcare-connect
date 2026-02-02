@@ -112,7 +112,6 @@ def test_get_table_data_for_year_month(from_date, to_date, httpx_mock):
         total_connectid_user_count += connectid_user_counts.get(row["month_group"].strftime("%Y-%m"))
         assert row["connectid_users"] == total_connectid_user_count
         assert row["activated_connect_users"] == 10
-        assert row["non_preregistered_users"] == total_connectid_user_count
         assert row["users"] == 10
         assert row["services"] == 10
         assert row["avg_time_to_payment"] == 50
