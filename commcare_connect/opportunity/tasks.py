@@ -6,12 +6,14 @@ import httpx
 import sentry_sdk
 import waffle
 from allauth.utils import build_absolute_uri
+from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.core.mail import send_mail
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.timezone import now
@@ -23,6 +25,7 @@ from commcare_connect.connect_id_client import fetch_users, send_message, send_m
 from commcare_connect.connect_id_client.models import ConnectIdUser, Message
 from commcare_connect.flags.switch_names import AUTOMATED_INVOICES_MONTHLY
 from commcare_connect.opportunity.app_xml import get_connect_blocks_for_app, get_deliver_units_for_app
+from commcare_connect.opportunity.deletion import delete_opportunity
 from commcare_connect.opportunity.export import (
     UserVisitExporter,
     export_catchment_area_table,
@@ -149,6 +152,30 @@ def invite_user(user_id, opportunity_access_id):
         },
     )
     send_message(message)
+
+
+@celery_app.task()
+def delete_stale_opportunities():
+    cutoff = now() - relativedelta(months=6)
+    visit_exists = UserVisit.objects.filter(opportunity=OuterRef("pk"))
+    stale_opportunities = (
+        Opportunity.objects.filter(date_created__lt=cutoff)
+        .annotate(has_visits=Exists(visit_exists))
+        .filter(has_visits=False)
+        .order_by("id")
+    )
+    count = 0
+    for opportunity in stale_opportunities:
+        logger.info(
+            "Deleting stale opportunity %s (%s) created on %s",
+            opportunity.id,
+            opportunity.name,
+            opportunity.date_created,
+        )
+        deleted = delete_opportunity(opportunity)
+        if deleted:
+            count += 1
+    logger.info("Deleted %s stale opportunities created before %s", count, cutoff)
 
 
 @celery_app.task()
@@ -309,8 +336,18 @@ def send_push_notification_task(user_ids: list[int], title: str, body: str):
     send_message(message)
 
 
-@celery_app.task()
-def download_user_visit_attachments(user_visit_id: id):
+RETRYABLE_EXCS = (httpx.ReadTimeout, httpx.ConnectTimeout)
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=RETRYABLE_EXCS,
+    retry_kwargs={"max_retries": 5},
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def download_user_visit_attachments(self, user_visit_id: int):
     user_visit = UserVisit.objects.get(id=user_visit_id)
     api_key = user_visit.opportunity.api_key
     blobs = user_visit.form_json.get("attachments", {})
@@ -467,7 +504,7 @@ def fetch_exchange_rates(date=None, currency=None):
     rates = request_rates(url)
 
     if currency is None:
-        currencies = Opportunity.objects.values_list("currency", flat=True).distinct()
+        currencies = Opportunity.objects.values_list("currency_fk__code", flat=True).distinct()
         for currency in currencies:
             rate = rates.get(currency)
             if rate is None:
@@ -548,6 +585,8 @@ def generate_automated_service_delivery_invoice():
     end_date_prev_month = get_end_date_previous_month()
 
     opp_start_date = datetime.date(2026, 1, 1)
+    created_invoices_ids = []
+
     for opportunity in Opportunity.objects.filter(active=True, managed=True, start_date__gte=opp_start_date).iterator(
         chunk_size=CHUNK_SIZE
     ):
@@ -580,15 +619,78 @@ def generate_automated_service_delivery_invoice():
         invoices_chunk.append(payment_invoice)
 
         if len(invoices_chunk) == CHUNK_SIZE:
-            _bulk_create_and_link_invoices(invoices_chunk)
+            created_invoices_ids += _bulk_create_and_link_invoices(invoices_chunk)
             invoices_chunk = []
 
     if invoices_chunk:
-        _bulk_create_and_link_invoices(invoices_chunk)
+        created_invoices_ids += _bulk_create_and_link_invoices(invoices_chunk)
+
+    _send_auto_invoice_created_notification(created_invoices_ids)
 
 
 def _bulk_create_and_link_invoices(invoices_chunk):
+    invoice_ids = []
     with transaction.atomic():
-        PaymentInvoice.objects.bulk_create(invoices_chunk)
-        for invoice in invoices_chunk:
+        invoice_objs = PaymentInvoice.objects.bulk_create(invoices_chunk)
+        for invoice in invoice_objs:
             link_invoice_to_completed_works(invoice, start_date=invoice.start_date, end_date=invoice.end_date)
+            invoice_ids.append(invoice.id)
+    return invoice_ids
+
+
+def _send_auto_invoice_created_notification(invoice_ids):
+    invoices = PaymentInvoice.objects.filter(id__in=invoice_ids).select_related("opportunity__organization")
+    org_invoices_map = {}
+    for invoice in invoices:
+        org = invoice.opportunity.organization
+        if org.id not in org_invoices_map:
+            org_invoices_map[org.id] = {"organization": org, "invoices": []}
+
+        org_invoices_map[org.id]["invoices"].append(
+            {
+                "opportunity": invoice.opportunity,
+                "invoice": invoice,
+                "invoice_url": build_absolute_uri(
+                    None,
+                    reverse(
+                        "opportunity:invoice_review",
+                        kwargs={
+                            "org_slug": org.slug,
+                            "opp_id": invoice.opportunity.id,
+                            "pk": invoice.pk,
+                        },
+                    ),
+                ),
+            }
+        )
+
+    for org_item in org_invoices_map.values():
+        try:
+            organization = org_item["organization"]
+            recipient_emails = organization.get_member_emails()
+            if not recipient_emails:
+                continue
+
+            subject = f"[{organization.name}] Automated Service Delivery Invoices Created"
+            context = {
+                "organization": organization,
+                "invoices_items": org_item["invoices"],
+            }
+
+            text_body = render_to_string(
+                "opportunity/email/automated_invoice_created.txt",
+                context,
+            )
+            html_body = render_to_string(
+                "opportunity/email/automated_invoice_created.html",
+                context,
+            )
+            send_mail(
+                subject=subject,
+                message=text_body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=recipient_emails,
+                html_message=html_body,
+            )
+        except Exception as e:
+            logger.error(f"Error sending automated invoice created email for organization {organization.slug}: {e}")
