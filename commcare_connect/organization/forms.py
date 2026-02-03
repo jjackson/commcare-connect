@@ -4,15 +4,15 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import gettext
 
 from commcare_connect.opportunity.forms import CHECKBOX_CLASS
-from commcare_connect.organization.models import Organization, UserOrganizationMembership
+from commcare_connect.organization.models import LLOEntity, Organization, UserOrganizationMembership
 from commcare_connect.users.models import User
-from commcare_connect.utils.permission_const import ORG_MANAGEMENT_SETTINGS_ACCESS
+from commcare_connect.utils.permission_const import ORG_MANAGEMENT_SETTINGS_ACCESS, WORKSPACE_ENTITY_MANAGEMENT_ACCESS
 
 
 class OrganizationChangeForm(forms.ModelForm):
     class Meta:
         model = Organization
-        fields = ("name", "program_manager")
+        fields = ("name", "program_manager", "llo_entity")
         labels = {
             "name": gettext("Organization Name"),
             "program_manager": gettext("Enable Program Manager"),
@@ -34,6 +34,42 @@ class OrganizationChangeForm(forms.ModelForm):
             )
         else:
             del self.fields["program_manager"]
+
+        if user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
+            self.fields["llo_entity"] = forms.ModelChoiceField(
+                label="",
+                queryset=LLOEntity.objects.order_by("name"),
+                widget=forms.Select(attrs={"data-tomselect": "1"}),
+                empty_label="Select a LLO Entity",
+                required=False,
+                help_text="Select an existing LLO Entity.",
+                initial=self.instance.llo_entity,
+            )
+            self.fields["llo_entity_name"] = forms.CharField(
+                label="",
+                required=False,
+                help_text="Create a new LLO Entity with the specified name and link it to the organization.",
+            )
+            layout_fields.append(
+                layout.Fieldset(
+                    "LLO Entity",
+                    layout.Div(
+                        layout.Field("llo_entity", wrapper_class="flex-1"),
+                        layout.HTML("<div class='flex-none mx-2'>OR</div>"),
+                        layout.Field("llo_entity_name", wrapper_class="flex-1"),
+                        css_class="flex gap-2",
+                    ),
+                )
+            )
+        else:
+            self.fields["llo_entity"] = forms.CharField(
+                label="LLO Entity",
+                disabled=True,
+                required=False,
+                initial=self.instance.llo_entity,
+                widget=forms.TextInput(attrs={"placeholder": "No LLO Entity linked."}),
+            )
+            layout_fields.append(layout.Field("llo_entity"))
 
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
