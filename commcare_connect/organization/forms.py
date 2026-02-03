@@ -80,6 +80,27 @@ class OrganizationChangeForm(forms.ModelForm):
             ),
         )
 
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data["llo_entity"] and cleaned_data["llo_entity_name"]:
+            raise ValidationError(
+                {
+                    "llo_entity": "Please provide only one LLO Entity:"
+                    " either select an existing one or create a new one.",
+                    "llo_entity_name": "Please provide only one LLO Entity:"
+                    " either select an existing one or create a new one.",
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        instance = super().save(commit=False)
+        if self.cleaned_data["llo_entity"]:
+            instance.llo_entity = self.cleaned_data["llo_entity"]
+        if self.cleaned_data["llo_entity_name"]:
+            instance.llo_entity = LLOEntity.objects.create(name=self.cleaned_data["llo_entity_name"])
+        instance.save()
+        return instance
+
 
 class MembershipForm(forms.ModelForm):
     email = forms.CharField(
