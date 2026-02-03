@@ -11,6 +11,9 @@ from commcare_connect.utils.db import BaseModel, slugify_uniquely
 class LLOEntity(models.Model):
     name = models.CharField(max_length=255)
 
+    def __str__(self):
+        return f"{self.name}"
+
 
 class Organization(BaseModel):
     name = models.CharField(max_length=255)
