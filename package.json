@@ -20,6 +20,7 @@
     "mapbox-gl": "^3.13.0",
     "@mapbox/mapbox-gl-draw": "^1.5.1",
     "mini-css-extract-plugin": "^2.4.5",
+    "open-chat-studio-widget": "^0.5.2",
     "node-sass-tilde-importer": "^1.0.2",
     "pixrem": "^5.0.0",
     "postcss": "^8.5.3",
