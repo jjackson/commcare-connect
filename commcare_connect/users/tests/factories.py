@@ -28,7 +28,7 @@ class UserFactory(DjangoModelFactory):
 
 class ConnectIdUserLinkFactory(DjangoModelFactory):
     user = SubFactory(UserFactory)
-    commcare_username = Faker("word")
+    commcare_username = Sequence(lambda n: "commcare_user_%d" % n)
     hq_server = SubFactory(HQServerFactory)
 
     class Meta:
