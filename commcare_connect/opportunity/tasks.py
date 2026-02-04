@@ -326,6 +326,7 @@ def send_payment_notification(opportunity_id: int, payment_ids: list[int]):
                         f"{opportunity.currency_code} {payment.amount} for {opportunity.name}.",
                     ),
                     "payment_id": str(payment.id),
+                    "payment_uuid": str(payment.payment_id),
                 },
             )
         )
