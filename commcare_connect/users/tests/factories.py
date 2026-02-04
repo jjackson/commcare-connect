@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from factory import Faker, RelatedFactory, SubFactory
+from factory import Faker, RelatedFactory, Sequence, SubFactory
 from factory.django import DjangoModelFactory, Password
 
 from commcare_connect.commcarehq.tests.factories import HQServerFactory
@@ -37,7 +37,7 @@ class ConnectIdUserLinkFactory(DjangoModelFactory):
 
 
 class MobileUserFactory(DjangoModelFactory):
-    username = Faker("word")
+    username = Sequence(lambda n: "mobile_user_%d" % n)
     name = Faker("name")
 
     class Meta:
