@@ -60,7 +60,7 @@ class CommCareAppSerializer(serializers.ModelSerializer):
 class PaymentUnitSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentUnit
-        fields = ["id", "name", "max_total", "max_daily", "amount", "end_date"]
+        fields = ["id", "payment_unit_id", "name", "max_total", "max_daily", "amount", "end_date"]
 
 
 class OpportunityClaimLimitSerializer(serializers.ModelSerializer):
@@ -103,7 +103,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     organization = serializers.SlugRelatedField(read_only=True, slug_field="slug")
     learn_app = CommCareAppSerializer()
     deliver_app = CommCareAppSerializer()
-    currency = serializers.CharField(source="currency_fk_id", read_only=True)
+    currency = serializers.CharField(source="currency_id", read_only=True)
     claim = serializers.SerializerMethodField()
     learn_progress = serializers.SerializerMethodField()
     deliver_progress = serializers.SerializerMethodField()
@@ -120,6 +120,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
         model = Opportunity
         fields = [
             "id",
+            "opportunity_id",
             "name",
             "description",
             "short_description",
@@ -230,6 +231,7 @@ class UserVisitSerializer(serializers.ModelSerializer):
         model = UserVisit
         fields = [
             "id",
+            "user_visit_id",
             "status",
             "visit_date",
             "deliver_unit_name",
@@ -283,7 +285,7 @@ class CompletedWorkSerializer(serializers.ModelSerializer):
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
-        fields = ["id", "amount", "date_paid", "confirmed", "confirmation_date"]
+        fields = ["id", "payment_id", "amount", "date_paid", "confirmed", "confirmation_date"]
 
 
 class DeliveryProgressSerializer(serializers.Serializer):
