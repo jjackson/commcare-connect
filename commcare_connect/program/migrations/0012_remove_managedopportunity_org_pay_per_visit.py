@@ -5,8 +5,8 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("program", "0010_alter_program_program_id_and_more"),
-        ("opportunity", "0108_paymentunit_org_amount"),
+        ("program", "0011_rename_currency_fk"),
+        ("opportunity", "0109_paymentunit_org_amount"),
     ]
 
     operations = [

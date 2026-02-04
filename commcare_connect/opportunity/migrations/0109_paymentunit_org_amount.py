@@ -23,7 +23,7 @@ def backfill_org_amount(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0107_backfill_payment_invoice_uuid_field"),
+        ("opportunity", "0108_rename_currency_fk"),
     ]
 
     operations = [
