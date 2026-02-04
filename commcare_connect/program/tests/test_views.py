@@ -30,7 +30,9 @@ class TestProgramCreateOrUpdateView(BaseProgramTest):
         self.program = ProgramFactory.create(organization=self.organization)
         self.delivery_type = DeliveryTypeFactory.create()
         self.init_url = reverse("program:init", kwargs={"org_slug": self.organization.slug})
-        self.edit_url = reverse("program:edit", kwargs={"org_slug": self.organization.slug, "pk": self.program.pk})
+        self.edit_url = reverse(
+            "program:edit", kwargs={"org_slug": self.organization.slug, "pk": self.program.program_id}
+        )
 
     def test_create_view(self):
         response = self.client.get(self.init_url)
@@ -43,7 +45,7 @@ class TestProgramCreateOrUpdateView(BaseProgramTest):
             "description": "A description for the new program",
             "delivery_type": self.delivery_type.id,
             "budget": 10000,
-            "currency_fk": "USD",
+            "currency": "USD",
             "country": "USA",
             "start_date": "2024-01-01",
             "end_date": "2024-12-31",
@@ -70,7 +72,7 @@ class TestProgramCreateOrUpdateView(BaseProgramTest):
             "delivery_type": self.delivery_type.id,
             "organization": self.organization.id,
             "budget": 15000,
-            "currency_fk": "INR",
+            "currency": "INR",
             "country": "IND",
             "start_date": "2024-02-01",
             "end_date": "2024-11-30",
@@ -81,7 +83,7 @@ class TestProgramCreateOrUpdateView(BaseProgramTest):
         self.program.refresh_from_db()
         assert self.program.name == "Updated Program Name"
         assert self.program.organization.slug == old_org
-        assert self.program.currency_fk_id == data["currency_fk"]
+        assert self.program.currency_id == data["currency"]
         assert "Program 'Updated Program Name' updated successfully." in [
             msg.message for msg in messages.get_messages(response.wsgi_request)
         ]
@@ -98,7 +100,7 @@ class TestInviteOrganizationView(BaseProgramTest):
             "program:invite_organization",
             kwargs={
                 "org_slug": self.organization.slug,
-                "pk": self.program.pk,
+                "pk": self.program.program_id,
             },
         )
 
