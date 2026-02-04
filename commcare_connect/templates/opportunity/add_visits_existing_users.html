@@ -60,7 +60,7 @@
       }
     },
       totalVisits() {
-        return this.selected_users.length * (parseInt(this.numberOfVisits) || 0);;
+        return this.selected_users.length * (parseInt(this.numberOfVisits) || 0);
       },
       calculatedBudget() {
         return (this.totalVisits() * budgetPerVisit)
