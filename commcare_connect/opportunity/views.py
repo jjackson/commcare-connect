@@ -169,7 +169,7 @@ from commcare_connect.opportunity.visit_import import (
     update_payment_accrued,
 )
 from commcare_connect.organization.decorators import (
-    OrganizationUserMemberRoleMixin,
+    OrganizationProgramManagerMixin,
     OrganizationUserMixin,
     opportunity_required,
     org_admin_required,
@@ -250,7 +250,7 @@ class OpportunityList(OrganizationUserMixin, FilterMixin, SingleTableView):
         return OpportunityData(org, is_program_manager, self.get_filter_values()).get_data()
 
 
-class OpportunityInit(OrganizationUserMemberRoleMixin, CreateView):
+class OpportunityInit(OrganizationProgramManagerMixin, CreateView):
     template_name = "opportunity/opportunity_init.html"
     form_class = OpportunityInitForm
 
@@ -275,7 +275,7 @@ class OpportunityInit(OrganizationUserMemberRoleMixin, CreateView):
         return response
 
 
-class OpportunityInitUpdate(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
+class OpportunityInitUpdate(OpportunityObjectMixin, OrganizationProgramManagerMixin, UpdateView):
     model = Opportunity
     template_name = "opportunity/opportunity_init.html"
     form_class = OpportunityInitUpdateForm
@@ -312,7 +312,7 @@ class OpportunityInitUpdate(OpportunityObjectMixin, OrganizationUserMemberRoleMi
         return context
 
 
-class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
+class OpportunityEdit(OpportunityObjectMixin, OrganizationProgramManagerMixin, UpdateView):
     model = Opportunity
     template_name = "opportunity/opportunity_edit.html"
     form_class = OpportunityChangeForm
@@ -334,7 +334,7 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
         return response
 
 
-class OpportunityFinalize(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
+class OpportunityFinalize(OpportunityObjectMixin, OrganizationProgramManagerMixin, UpdateView):
     model = Opportunity
     template_name = "opportunity/opportunity_finalize.html"
     form_class = OpportunityFinalizeForm
