@@ -9,8 +9,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!el.hasAttribute('data-tomselect:no-remove-button')) {
       plugins.push('remove_button');
     }
-    new TomSelect(el, {
+    let settings = {
       plugins: plugins,
-    });
+    };
+    if (el.hasAttribute('data-tomselect:settings')) {
+      let data = el.getAttribute('data-tomselect:settings');
+      Object.assign(settings, JSON.parse(data));
+    }
+    new TomSelect(el, settings);
   });
 });
