@@ -1,4 +1,5 @@
 {% extends 'program/program_base.html' %}
+{% load humanize %}
 {% load i18n %}
 {% load static %}
 
@@ -92,14 +93,14 @@
                   <i class="fa-solid fa-money-bill-wave"></i>
                   <div>
                       <h6>{% translate "Budget" %}</h6>
-                      <p>{{program.budget}} {{program.currency_code|default:''}}</p>
+                      <p>{{program.budget|intcomma}} {{program.currency_code|default:''}}</p>
                   </div>
               </div>
               <div class="infocard-dark">
                   <i class="fa-solid fa-hand-holding-dollar"></i>
                   <div>
                       <h6 class="whitespace-nowrap">{% translate "Allocated Budget" %}</h6>
-                      <p>{{program.allocated_budget|default:0}} {{program.currency_code|default:''}}</p>
+                      <p>{{program.allocated_budget|default:0|intcomma}} {{program.currency_code|default:''}}</p>
                   </div>
               </div>
             </div>
@@ -151,7 +152,7 @@
                       <p class="card_title">{{ application.organization.name }}</p>
                       <p class="hint">
                         {% translate "Current Budget" %}:
-                        {{ application.current_budget|default:0 }} {{ program.currency_code|default:'' }}
+                        {{ application.current_budget|default:0|intcomma }} {{ program.currency_code|default:'' }}
                       </p>
                     </div>
                   </div>
