@@ -69,7 +69,7 @@
               </div>
           </div>
 
-          <div class="flex justify-between xl:items-center items-start xl:flex-row flex-col lg:gap-6 gap-3">
+          <div class="flex xl:items-center items-start xl:flex-row flex-col lg:gap-6 gap-3">
             <div class="flex flex-row items-center lg:gap-6 gap-3">
               <div class="infocard-dark">
                   <i class="fa-solid fa-calendar-check"></i>
@@ -143,26 +143,30 @@
           {% for application in applications %}
             <div class="relative flex flex-col gap-5 p-6 bg-white rounded-xl border border-gray-200">
               <div class="flex justify-between w-full">
-                <div class="flex flex-col w-full">
-                  <div class="flex items-center justify-between gap-2 font-normal">
+                <div class="flex justify-between w-full">
+                  <div class="flex flex-col font-normal">
                     <p class="hint">{{ application.date_created|date }}</p>
-                    <div class="flex items-center gap-2 font-normal">
-                      {% if application.status == 'rejected' %}
-                      <span class="badge badge-md negative-dark">{% translate "Rejected" %}</span>
-                      {% elif application.status == 'declined' %}
-                      <span class="badge badge-md negative-dark">{% translate "Declined" %}</span>
-                      {% elif application.status == 'invited' %}
-                      <span class="badge badge-md warning-dark">{% translate "Invited" %}</span>
-                      {% elif application.status == 'applied' %}
-                      <span class="badge badge-md primary-dark">{% translate "Applied" %}</span>
-                      {% elif application.status == 'accepted' %}
-                      <span class="badge badge-md positive-dark">{% translate "Accepted" %}</span>
-                      {% endif %}
+
+                    <div class="flex flex-col gap-2">
+                      <p class="card_title">{{ application.organization.name }}</p>
+                      <p class="hint">
+                        {% translate "Current Budget" %}:
+                        {{ application.current_budget|default:0 }} {{ program.currency_code|default:'' }}
+                      </p>
                     </div>
                   </div>
-                  <div class="flex flex-col gap-2 font-normal">
-                    <p class="card_title">{{ application.organization.name }}</p>
-                    <p class="hint">{% translate "Current Budget" %}: {{ application.current_budget|default:0 }} {{ program.currency_code|default:'' }}</p>
+                  <div class="flex items-start">
+                    {% if application.status == 'rejected' %}
+                      <span class="badge badge-md negative-dark">{% translate "Rejected" %}</span>
+                    {% elif application.status == 'declined' %}
+                      <span class="badge badge-md negative-dark">{% translate "Declined" %}</span>
+                    {% elif application.status == 'invited' %}
+                      <span class="badge badge-md warning-dark">{% translate "Invited" %}</span>
+                    {% elif application.status == 'applied' %}
+                      <span class="badge badge-md primary-dark">{% translate "Applied" %}</span>
+                    {% elif application.status == 'accepted' %}
+                      <span class="badge badge-md positive-dark">{% translate "Accepted" %}</span>
+                    {% endif %}
                   </div>
                 </div>
               </div>
