@@ -11,11 +11,12 @@ from commcare_connect.utils.permission_const import ORG_MANAGEMENT_SETTINGS_ACCE
 
 
 class OrganizationChangeForm(forms.ModelForm):
-    llo_entity = forms.CharField(
+    llo_entity = forms.ModelChoiceField(
         label="LLO Entity",
-        disabled=True,
+        queryset=LLOEntity.objects.order_by("name"),
+        widget=forms.Select(attrs={"placeholder": "No LLO Entity linked."}),
         required=False,
-        widget=forms.TextInput(attrs={"placeholder": "No LLO Entity linked."}),
+        disabled=True,
     )
 
     class Meta:
@@ -53,7 +54,6 @@ class OrganizationChangeForm(forms.ModelForm):
                 create_key_name="name",
             )
 
-        self.fields["llo_entity"].initial = self.instance.llo_entity
         layout_fields.append(layout.Field("llo_entity"))
 
         self.helper = helper.FormHelper(self)
