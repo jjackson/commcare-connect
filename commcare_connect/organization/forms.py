@@ -27,12 +27,12 @@ class OrganizationChangeForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
-        user = kwargs.pop("user")
+        self.user = kwargs.pop("user")
         super().__init__(*args, **kwargs)
 
         layout_fields = [layout.Field("name")]
 
-        if user.has_perm(ORG_MANAGEMENT_SETTINGS_ACCESS):
+        if self.user.has_perm(ORG_MANAGEMENT_SETTINGS_ACCESS):
             layout_fields.append(
                 layout.Field(
                     "program_manager",
@@ -43,7 +43,7 @@ class OrganizationChangeForm(forms.ModelForm):
         else:
             del self.fields["program_manager"]
 
-        if user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
+        if self.user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
             self.fields["llo_entity"] = CreatableModelChoiceField(
                 label="LLO Entity",
                 queryset=LLOEntity.objects.order_by("name"),
@@ -64,6 +64,11 @@ class OrganizationChangeForm(forms.ModelForm):
                 css_class="flex justify-end",
             ),
         )
+
+    def clean_llo_entity(self):
+        if self.user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
+            return self.cleaned_data["llo_entity"]
+        return self.instance.llo_entity
 
 
 class MembershipForm(forms.ModelForm):
