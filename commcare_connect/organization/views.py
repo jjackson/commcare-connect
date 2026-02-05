@@ -41,6 +41,7 @@ def organization_home(request, org_slug):
         if form.is_valid():
             messages.success(request, gettext("Organization details saved!"))
             form.save()
+            form = OrganizationChangeForm(form.cleaned_data, instance=org, user=request.user)
 
     if not form:
         form = OrganizationChangeForm(instance=org, user=request.user)
