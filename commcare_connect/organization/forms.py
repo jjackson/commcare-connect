@@ -6,10 +6,18 @@ from django.utils.translation import gettext
 from commcare_connect.opportunity.forms import CHECKBOX_CLASS
 from commcare_connect.organization.models import LLOEntity, Organization, UserOrganizationMembership
 from commcare_connect.users.models import User
+from commcare_connect.utils.forms import CreatableModelChoiceField
 from commcare_connect.utils.permission_const import ORG_MANAGEMENT_SETTINGS_ACCESS, WORKSPACE_ENTITY_MANAGEMENT_ACCESS
 
 
 class OrganizationChangeForm(forms.ModelForm):
+    llo_entity = forms.CharField(
+        label="LLO Entity",
+        disabled=True,
+        required=False,
+        widget=forms.TextInput(attrs={"placeholder": "No LLO Entity linked."}),
+    )
+
     class Meta:
         model = Organization
         fields = ("name", "program_manager", "llo_entity")
@@ -36,40 +44,17 @@ class OrganizationChangeForm(forms.ModelForm):
             del self.fields["program_manager"]
 
         if user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
-            self.fields["llo_entity"] = forms.ModelChoiceField(
-                label="",
+            self.fields["llo_entity"] = CreatableModelChoiceField(
+                label="LLO Entity",
                 queryset=LLOEntity.objects.order_by("name"),
-                widget=forms.Select(attrs={"data-tomselect": "1"}),
+                widget=forms.Select(),
                 empty_label="Select a LLO Entity",
                 required=False,
-                help_text="Select an existing LLO Entity.",
-                initial=self.instance.llo_entity,
+                create_key_name="name",
             )
-            self.fields["llo_entity_name"] = forms.CharField(
-                label="",
-                required=False,
-                help_text="Create a new LLO Entity with the specified name and link it to the organization.",
-            )
-            layout_fields.append(
-                layout.Fieldset(
-                    "LLO Entity",
-                    layout.Div(
-                        layout.Field("llo_entity", wrapper_class="flex-1"),
-                        layout.HTML("<div class='flex-none mx-2'>OR</div>"),
-                        layout.Field("llo_entity_name", wrapper_class="flex-1"),
-                        css_class="flex gap-2",
-                    ),
-                )
-            )
-        else:
-            self.fields["llo_entity"] = forms.CharField(
-                label="LLO Entity",
-                disabled=True,
-                required=False,
-                initial=self.instance.llo_entity,
-                widget=forms.TextInput(attrs={"placeholder": "No LLO Entity linked."}),
-            )
-            layout_fields.append(layout.Field("llo_entity"))
+
+        self.fields["llo_entity"].initial = self.instance.llo_entity
+        layout_fields.append(layout.Field("llo_entity"))
 
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
@@ -79,27 +64,6 @@ class OrganizationChangeForm(forms.ModelForm):
                 css_class="flex justify-end",
             ),
         )
-
-    def clean(self):
-        cleaned_data = super().clean()
-        if cleaned_data["llo_entity"] and cleaned_data["llo_entity_name"]:
-            raise ValidationError(
-                {
-                    "llo_entity": "Please provide only one LLO Entity:"
-                    " either select an existing one or create a new one.",
-                    "llo_entity_name": "Please provide only one LLO Entity:"
-                    " either select an existing one or create a new one.",
-                }
-            )
-
-    def save(self, *args, **kwargs):
-        instance = super().save(commit=False)
-        if self.cleaned_data["llo_entity"]:
-            instance.llo_entity = self.cleaned_data["llo_entity"]
-        if self.cleaned_data["llo_entity_name"]:
-            instance.llo_entity = LLOEntity.objects.create(name=self.cleaned_data["llo_entity_name"])
-        instance.save()
-        return instance
 
 
 class MembershipForm(forms.ModelForm):
