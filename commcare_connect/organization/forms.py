@@ -12,9 +12,9 @@ from commcare_connect.utils.permission_const import ORG_MANAGEMENT_SETTINGS_ACCE
 
 class OrganizationChangeForm(forms.ModelForm):
     llo_entity = forms.ModelChoiceField(
-        label="LLO Entity",
+        label=gettext("LLO Entity"),
         queryset=LLOEntity.objects.order_by("name"),
-        widget=forms.Select(attrs={"placeholder": "No LLO Entity linked."}),
+        widget=forms.Select(attrs={"placeholder": gettext("No LLO Entity linked.")}),
         required=False,
         disabled=True,
     )
@@ -46,10 +46,10 @@ class OrganizationChangeForm(forms.ModelForm):
 
         if self.user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
             self.fields["llo_entity"] = CreatableModelChoiceField(
-                label="LLO Entity",
+                label=gettext("LLO Entity"),
                 queryset=LLOEntity.objects.order_by("name"),
                 widget=forms.Select(),
-                empty_label="Select a LLO Entity",
+                empty_label=gettext("Select a LLO Entity"),
                 required=False,
                 create_key_name="name",
             )
