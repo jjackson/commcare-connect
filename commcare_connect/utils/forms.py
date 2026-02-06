@@ -14,14 +14,20 @@ class CreatableModelChoiceField(forms.ModelChoiceField):
             key = self.to_field_name or "pk"
             if isinstance(value, self.queryset.model):
                 value = getattr(value, key)
-            value = self.queryset.get(**{key: value})
+            return self.queryset.get(**{key: value})
         except (ValueError, TypeError, self.queryset.model.DoesNotExist):
-            create_key = self.create_key_name
-            if create_key is None:
-                raise forms.ValidationError(
-                    self.error_messages["invalid_choice"],
-                    code="invalid_choice",
-                    params={"value": value},
-                )
-            value = self.queryset.create(**{create_key: value})
+            return value
+
+    def validate(self, value):
+        if isinstance(value, str):
+            # Skip queryset validation for new string values used for creation.
+            return
+        return super().validate(value)
+
+    def clean(self, value):
+        value = super().clean(value)
+        if isinstance(value, str) and value.strip():
+            # If the value is string, create the object and return it.
+            obj, _ = self.queryset.model.objects.get_or_create(**{self.create_key_name: value})
+            return obj
         return value
