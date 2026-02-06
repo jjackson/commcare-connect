@@ -2,7 +2,11 @@ from django import forms
 
 
 class CreatableModelChoiceField(forms.ModelChoiceField):
-    def __init__(self, *args, create_key_name=None, **kwargs):
+    """Dropdown field that can be used for creating new choices using the TomSelect library.
+    This takes an already present Option on the Dropdown or a new user specified String value
+    that will be used to create the object."""
+
+    def __init__(self, *args, create_key_name, **kwargs):
         super().__init__(*args, **kwargs)
         self.create_key_name = create_key_name
         self.widget.attrs.update({"data-tomselect": "1", "data-tomselect:settings": '{"create": true}'})
