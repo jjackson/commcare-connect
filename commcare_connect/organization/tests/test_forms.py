@@ -60,39 +60,26 @@ class TestAddMembersView:
 
 @pytest.mark.django_db
 class TestOrganizationChangeForm:
-    def test_update_name(self, organization: Organization):
-        user = UserFactory()
+    def test_update_name(self, organization: Organization, user: User):
         form = OrganizationChangeForm(data={"name": "New Name"}, user=user, instance=organization)
         assert form.is_valid()
         form.save()
         organization.refresh_from_db()
         assert organization.name == "New Name"
 
-    def test_update_program_manager_without_permission(self, organization: Organization):
-        user = UserFactory()
-        organization.program_manager = False
-        organization.save()
-        form = OrganizationChangeForm(
-            data={"name": "New Name", "program_manager": True},
-            user=user,
-            instance=organization,
-        )
-        assert form.is_valid()
-        form.save()
-        organization.refresh_from_db()
-        assert not organization.program_manager
-        assert organization.name == "New Name"
+    @pytest.mark.parametrize("permission", [None, WORKSPACE_ENTITY_MANAGEMENT_ACCESS])
+    def test_update_program_manager_without_permission(self, organization: Organization, user: User, permission):
+        if permission is not None:
+            app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
+            perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
+            user.user_permissions.add(perm)
 
-    def test_update_llo_entity_with_permission(self, organization: Organization):
-        user = UserFactory()
-        app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
-        perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
-        user.user_permissions.add(perm)
         user = User.objects.get(pk=user.pk)
         llo_entity = LLOEntity.objects.create(name="Test LLO")
-        organization.llo_entity = None
-        organization.save()
 
+        organization.llo_entity = None
+        organization.program_manager = False
+        organization.save()
         form = OrganizationChangeForm(
             data={"name": organization.name, "llo_entity": llo_entity.pk},
             user=user,
@@ -101,14 +88,19 @@ class TestOrganizationChangeForm:
         assert form.is_valid(), form.errors
         form.save()
         organization.refresh_from_db()
-        assert organization.llo_entity == llo_entity
+        if permission is None:
+            assert organization.llo_entity is None
+        else:
+            assert organization.llo_entity == llo_entity
 
-    def test_create_llo_entity_with_permission(self, organization: Organization):
-        user = UserFactory()
-        app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
-        perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
-        user.user_permissions.add(perm)
-        user = User.objects.get(pk=user.pk)
+    @pytest.mark.parametrize("permission", [None, WORKSPACE_ENTITY_MANAGEMENT_ACCESS])
+    def test_create_llo_entity(self, organization: Organization, user: User, permission):
+        if permission is not None:
+            app_label, codename = permission.split(".")
+            perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
+            user.user_permissions.add(perm)
+
+        user.refresh_from_db()
 
         organization.llo_entity = None
         organization.save()
@@ -122,23 +114,9 @@ class TestOrganizationChangeForm:
         assert form.is_valid(), form.errors
         form.save()
         organization.refresh_from_db()
-        assert organization.llo_entity is not None
-        assert organization.llo_entity.name == "New LLO Entity"
-        assert LLOEntity.objects.count() == 1
-
-    def test_update_llo_entity_without_permission(self, organization: Organization):
-        user = UserFactory()
-        llo_entity = LLOEntity.objects.create(name="Test LLO")
-        organization.llo_entity = None
-        organization.save()
-
-        form = OrganizationChangeForm(
-            data={"name": "New Name", "llo_entity": llo_entity.pk},
-            user=user,
-            instance=organization,
-        )
-        assert form.is_valid()
-        form.save()
-        organization.refresh_from_db()
-        assert organization.llo_entity is None
-        assert organization.name == "New Name"
+        if permission is None:
+            assert organization.llo_entity is None
+        else:
+            assert organization.llo_entity is not None
+            assert organization.llo_entity.name == "New LLO Entity"
+            assert LLOEntity.objects.count() == 1
