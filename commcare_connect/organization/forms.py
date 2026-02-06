@@ -11,12 +11,8 @@ from commcare_connect.utils.permission_const import ORG_MANAGEMENT_SETTINGS_ACCE
 
 
 class OrganizationChangeForm(forms.ModelForm):
-    llo_entity = forms.ModelChoiceField(
-        label=gettext("LLO Entity"),
-        queryset=LLOEntity.objects.order_by("name"),
-        widget=forms.Select(attrs={"placeholder": gettext("No LLO Entity linked.")}),
-        required=False,
-        disabled=True,
+    llo_entity = forms.ChoiceField(
+        choices=[(None, gettext("No LLO Entity linked."))], label=gettext("LLO Entity"), required=False, disabled=True
     )
 
     class Meta:
@@ -53,6 +49,9 @@ class OrganizationChangeForm(forms.ModelForm):
                 required=False,
                 create_key_name="name",
             )
+        else:
+            if self.instance and self.instance.llo_entity:
+                self.fields["llo_entity"].choices = [(self.instance.llo_entity_id, self.instance.llo_entity.name)]
 
         layout_fields.append(layout.Field("llo_entity"))
 
