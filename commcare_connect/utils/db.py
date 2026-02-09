@@ -37,7 +37,7 @@ def slugify_uniquely(value, model, slugfield="slug"):
         suffix += 1
 
 
-def get_object_or_list_for_api_version(request, queryset, pk_or_pk_list, uuid_field, int_field="pk"):
+def get_object_or_list_by_uuid_or_int(queryset, pk_or_pk_list, uuid_field, int_field="pk"):
     """
     Fetch object correctly based on whether API_UUID waffle switch is enabled.
 
