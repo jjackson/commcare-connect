@@ -192,10 +192,17 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
             },
             {
                 "name": "MBW GPS Analysis",
-                "url": "/custom_analysis/mbw/gps/",
+                "url": "/custom_analysis/mbw_monitoring/?tab=gps",
                 "icon": "fa-location-dot",
                 "description": "GPS distance metrics and travel analysis for Mother Baby Wellness",
                 "color": "emerald",
+            },
+            {
+                "name": "MBW Monitoring Dashboard",
+                "url": "/custom_analysis/mbw_monitoring/",
+                "icon": "fa-clipboard-check",
+                "description": "Followup visit completion rate tracking for Mother Baby Wellness",
+                "color": "teal",
             },
             {
                 "name": "RUTF Timeline",

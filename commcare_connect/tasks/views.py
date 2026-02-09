@@ -487,6 +487,7 @@ def task_single_create(request):
         priority = body.get("priority", "medium")
         title = body.get("title", "")
         description = body.get("description", "")
+        status = body.get("status", "investigating")
 
         if not username:
             return JsonResponse({"success": False, "error": "username is required"}, status=400)
@@ -515,6 +516,7 @@ def task_single_create(request):
                 title=title,
                 description=description,
                 creator_name=creator_name,
+                status=status,
             )
 
             return JsonResponse(

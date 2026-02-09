@@ -45,8 +45,8 @@ urlpatterns = [
         include("commcare_connect.custom_analysis.kmc.urls", namespace="kmc"),
     ),
     path(
-        "custom_analysis/mbw/",
-        include("commcare_connect.custom_analysis.mbw.urls", namespace="mbw"),
+        "custom_analysis/mbw_monitoring/",
+        include("commcare_connect.custom_analysis.mbw_monitoring.urls", namespace="mbw"),
     ),
     path(
         "custom_analysis/rutf/",

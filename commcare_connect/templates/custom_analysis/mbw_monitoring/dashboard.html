@@ -1,0 +1,1429 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}MBW Monitoring Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4" x-data="mbwDashboard()">
+
+    {% if error %}
+    <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+        <div class="flex">
+            <i class="fa-solid fa-exclamation-circle text-red-400 mr-3"></i>
+            <p class="text-sm text-red-700"><strong>Error:</strong> {{ error }}</p>
+        </div>
+    </div>
+    {% elif not has_context %}
+    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+        <div class="flex">
+            <i class="fa-solid fa-exclamation-triangle text-yellow-400 mr-3"></i>
+            <p class="text-sm text-yellow-700">Please select an opportunity from the labs context to view analysis.</p>
+        </div>
+    </div>
+    {% else %}
+
+    {% if not commcare_oauth_active %}
+    <!-- CommCare HQ Authorization Required -->
+    <div class="bg-red-50 border-l-4 border-red-500 rounded-lg p-6 mb-6">
+        <div class="flex items-start gap-4">
+            <div class="flex-shrink-0">
+                <i class="fa-solid fa-link-slash text-red-500 text-2xl mt-0.5"></i>
+            </div>
+            <div>
+                <h2 class="text-lg font-semibold text-red-800 mb-1">CommCare HQ Connection Required</h2>
+                <p class="text-sm text-red-700 mb-3">
+                    This dashboard needs access to CommCare HQ to fetch visit cases and follow-up data.
+                    Please authorize the connection to continue.
+                </p>
+                <a href="{{ commcare_authorize_url }}"
+                   class="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-medium text-sm px-5 py-2.5 rounded-md shadow-sm transition-colors">
+                    <i class="fa-solid fa-right-to-bracket"></i>
+                    Authorize CommCare HQ
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">MBW Monitoring Dashboard{% if dev_fixture %} <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-300 align-middle">DEV</span>{% endif %}</h1>
+            <p class="text-sm text-gray-600">Performance monitoring for frontline workers</p>
+        </div>
+        <div class="flex items-center gap-3" x-show="!loading && !loadError" x-cloak>
+            <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-md text-sm font-medium" x-text="opportunityName"></span>
+            {% if dev_fixture %}
+            <button @click="bustCache()" class="bg-amber-100 hover:bg-amber-200 text-amber-900 text-sm font-semibold px-4 py-2 rounded-md border-2 border-amber-400 shadow-sm transition-colors">
+                <i class="fa-solid fa-fire mr-1"></i> Bust Cache
+            </button>
+            {% endif %}
+            <button @click="refreshData()" class="button button-sm outline-style">
+                <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="border-b border-gray-200 mb-4" x-show="!loading && !loadError" x-cloak>
+        <nav class="-mb-px flex space-x-6">
+            <button @click="activeTab = 'overview'"
+                    :class="activeTab === 'overview' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                    class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors">
+                <i class="fa-solid fa-chart-line mr-1"></i> Overview
+            </button>
+            <button @click="activeTab = 'gps'"
+                    :class="activeTab === 'gps' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                    class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors">
+                <i class="fa-solid fa-location-dot mr-1"></i> GPS Analysis
+            </button>
+            <button @click="activeTab = 'followup'"
+                    :class="activeTab === 'followup' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                    class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors">
+                <i class="fa-solid fa-clipboard-check mr-1"></i> Follow-Up Rate
+            </button>
+        </nav>
+    </div>
+
+    <!-- Filters Bar -->
+    <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm mb-4" x-show="!loading && !loadError" x-cloak>
+        <div class="flex flex-wrap items-end gap-4">
+            <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">Start Date <span class="text-gray-400">(GPS only)</span></label>
+                <input type="date" x-model="startDate"
+                       class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">End Date <span class="text-gray-400">(GPS only)</span></label>
+                <input type="date" x-model="endDate"
+                       class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div class="flex-1 min-w-[180px]">
+                <label class="block text-xs font-medium text-gray-700 mb-1">Filter by FLW</label>
+                <select x-model="selectedFlws" multiple
+                        class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500 w-full"
+                        style="min-height: 34px; max-height: 80px;">
+                    <template x-for="u in allUsernames" :key="u">
+                        <option :value="u" x-text="flwNames[u] || u"></option>
+                    </template>
+                </select>
+            </div>
+            <div class="flex-1 min-w-[180px]">
+                <label class="block text-xs font-medium text-gray-700 mb-1">Filter by Mother</label>
+                <select x-model="selectedMothers" multiple
+                        class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500 w-full"
+                        style="min-height: 34px; max-height: 80px;">
+                    <template x-for="m in allMotherIds" :key="m">
+                        <option :value="m" x-text="motherNames[m] || m"></option>
+                    </template>
+                </select>
+            </div>
+            <button @click="applyFilters()" class="button primary-style text-sm py-1.5">
+                <i class="fa-solid fa-filter mr-1"></i> Apply
+            </button>
+            <button @click="resetFilters()" class="button outline-style text-sm py-1.5">
+                Reset
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div class="mb-6 p-6 bg-blue-50 border border-blue-200 rounded-lg" x-show="loading" x-cloak>
+        <div class="flex items-start gap-4">
+            <i class="fa-solid fa-spinner fa-spin text-blue-600 text-2xl mt-1"></i>
+            <div class="flex-1">
+                <h3 class="text-lg font-semibold text-blue-900 mb-2">Loading Dashboard Data</h3>
+                <p class="text-sm text-blue-700" x-text="loadingMessage || 'Connecting...'"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Display -->
+    <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg" x-show="loadError" x-cloak>
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <i class="fa-solid fa-circle-exclamation text-red-600 mr-3"></i>
+                <div>
+                    <strong class="text-red-800">Error:</strong>
+                    <span class="ml-2 text-red-700" x-text="loadError"></span>
+                </div>
+            </div>
+            <button @click="loadDataWithSSE()" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-medium">
+                <i class="fa-solid fa-rotate mr-1"></i>Retry
+            </button>
+        </div>
+    </div>
+
+    <!-- ======================== OVERVIEW TAB ======================== -->
+    <div x-show="activeTab === 'overview' && !loading && !loadError" x-cloak>
+
+        <!-- Visit Status Distribution Chart -->
+        <div class="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mb-4" x-show="visitStatusDist">
+            <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Visit Status Distribution</h3>
+            <div class="flex justify-center">
+                <div class="w-full max-w-2xl">
+                    <div class="flex h-8 rounded-lg overflow-hidden border border-gray-200">
+                        <div class="bg-green-500 transition-all" :style="'width:' + (visitStatusDist?.completed_on_time_pct || 0) + '%'"
+                             :title="'Completed On Time: ' + (visitStatusDist?.completed_on_time || 0) + ' (' + (visitStatusDist?.completed_on_time_pct || 0) + '%)'"></div>
+                        <div class="bg-green-300 transition-all" :style="'width:' + (visitStatusDist?.completed_late_pct || 0) + '%'"
+                             :title="'Completed Late: ' + (visitStatusDist?.completed_late || 0) + ' (' + (visitStatusDist?.completed_late_pct || 0) + '%)'"></div>
+                        <div class="bg-yellow-400 transition-all" :style="'width:' + (visitStatusDist?.due_on_time_pct || 0) + '%'"
+                             :title="'Due On Time: ' + (visitStatusDist?.due_on_time || 0) + ' (' + (visitStatusDist?.due_on_time_pct || 0) + '%)'"></div>
+                        <div class="bg-orange-400 transition-all" :style="'width:' + (visitStatusDist?.due_late_pct || 0) + '%'"
+                             :title="'Due Late: ' + (visitStatusDist?.due_late || 0) + ' (' + (visitStatusDist?.due_late_pct || 0) + '%)'"></div>
+                        <div class="bg-red-500 transition-all" :style="'width:' + (visitStatusDist?.missed_pct || 0) + '%'"
+                             :title="'Missed: ' + (visitStatusDist?.missed || 0) + ' (' + (visitStatusDist?.missed_pct || 0) + '%)'"></div>
+                    </div>
+                    <div class="flex flex-wrap justify-center gap-4 mt-2 text-xs text-gray-600">
+                        <span><span class="inline-block w-3 h-3 bg-green-500 rounded mr-1"></span>Completed On Time</span>
+                        <span><span class="inline-block w-3 h-3 bg-green-300 rounded mr-1"></span>Completed Late</span>
+                        <span><span class="inline-block w-3 h-3 bg-yellow-400 rounded mr-1"></span>Due On Time</span>
+                        <span><span class="inline-block w-3 h-3 bg-orange-400 rounded mr-1"></span>Due Late</span>
+                        <span><span class="inline-block w-3 h-3 bg-red-500 rounded mr-1"></span>Missed</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Overview FLW Table -->
+        <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <div class="px-6 py-3 border-b border-gray-200 bg-gray-50">
+                <h2 class="text-lg font-semibold text-gray-900">
+                    FLW Overview
+                    <span class="text-sm text-gray-600 font-normal">(<span x-text="filteredOverviewFlws.length"></span> FLWs)</span>
+                </h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th @click="sortOverview('display_name')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                                FLW Name <span x-text="getSortArrow('overview', 'display_name')"></span>
+                            </th>
+                            <th @click="sortOverview('cases_registered')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                                # Cases <span x-text="getSortArrow('overview', 'cases_registered')"></span>
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="First Gold Standard Score - TBD">
+                                GS Score
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Post-test attempts - TBD">
+                                Post-Test
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="% of visits due 5+ days ago - TBD">
+                                % Due 5+ Days
+                            </th>
+                            <th @click="sortOverview('completed_visits')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                                Completed <span x-text="getSortArrow('overview', 'completed_visits')"></span>
+                            </th>
+                            <th @click="sortOverview('median_meters_per_case')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                                Median m/Case <span x-text="getSortArrow('overview', 'median_meters_per_case')"></span>
+                            </th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <template x-for="flw in filteredOverviewFlws" :key="flw.username">
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-3 text-sm">
+                                    <div class="flex items-center">
+                                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold mr-2"
+                                             x-text="(flw.display_name || flw.username).charAt(0).toUpperCase()"></div>
+                                        <div>
+                                            <div class="font-medium text-gray-900" x-text="flw.display_name"></div>
+                                            <template x-if="flw.display_name !== flw.username">
+                                                <div class="text-xs text-gray-500" x-text="flw.username"></div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-sm text-gray-900" x-text="flw.cases_registered"></td>
+                                <td class="px-4 py-3 text-sm text-gray-400">&mdash;</td>
+                                <td class="px-4 py-3 text-sm text-gray-400">&mdash;</td>
+                                <td class="px-4 py-3 text-sm text-gray-400">&mdash;</td>
+                                <td class="px-4 py-3 text-sm text-gray-900" x-text="flw.completed_visits"></td>
+                                <td class="px-4 py-3 text-sm text-gray-900">
+                                    <template x-if="flw.median_meters_per_case !== null && flw.median_meters_per_case !== undefined">
+                                        <span x-text="flw.median_meters_per_case + ' km'"></span>
+                                    </template>
+                                    <template x-if="flw.median_meters_per_case === null || flw.median_meters_per_case === undefined">
+                                        <span class="text-gray-400">&mdash;</span>
+                                    </template>
+                                </td>
+                                <td class="px-4 py-3 text-sm text-right whitespace-nowrap">
+                                    <button @click="addToFilter(flw.username)"
+                                            class="inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-100 mr-1"
+                                            title="Add this FLW to filter">
+                                        <i class="fa-solid fa-filter mr-1"></i> Filter
+                                    </button>
+                                    <button @click="openAITaskModal(flw)"
+                                            :disabled="hasOpenTask(flw.username)"
+                                            class="inline-flex items-center px-2 py-1 border rounded text-xs"
+                                            :class="hasOpenTask(flw.username)
+                                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                                : 'border-blue-300 text-blue-700 hover:bg-blue-50'"
+                                            :title="hasOpenTask(flw.username) ? 'Open task exists' : 'Create task for this FLW'">
+                                        <i class="fa-solid fa-plus mr-1"></i> Task
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="filteredOverviewFlws.length === 0">
+                            <tr><td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500">No FLW data available</td></tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================== GPS TAB ======================== -->
+    <div x-show="activeTab === 'gps' && !loading && !loadError" x-cloak>
+
+        <!-- GPS Summary -->
+        <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="border-l-4 border-blue-500 pl-3">
+                    <div class="text-xs text-gray-600">Total Visits</div>
+                    <div class="text-xl font-bold text-gray-900" x-text="gpsData?.total_visits || 0"></div>
+                </div>
+                <div class="border-l-4 border-red-500 pl-3">
+                    <div class="text-xs text-gray-600">Flagged</div>
+                    <div class="text-xl font-bold" :class="(gpsData?.total_flagged || 0) > 0 ? 'text-red-600' : 'text-gray-900'" x-text="gpsData?.total_flagged || 0"></div>
+                </div>
+                <div class="border-l-4 border-green-500 pl-3">
+                    <div class="text-xs text-gray-600">Date Range</div>
+                    <div class="text-sm font-medium text-gray-900">
+                        <span x-text="gpsData?.date_range_start || '-'"></span> to <span x-text="gpsData?.date_range_end || '-'"></span>
+                    </div>
+                </div>
+                <div class="border-l-4 border-purple-500 pl-3">
+                    <div class="text-xs text-gray-600">Flag Threshold</div>
+                    <div class="text-lg font-bold text-gray-900">5 km</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GPS FLW Table -->
+        <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <div class="px-6 py-3 border-b border-gray-200 bg-gray-50">
+                <h2 class="text-lg font-semibold text-gray-900">
+                    FLW GPS Analysis <span class="text-sm text-gray-600 font-normal">(<span x-text="filteredGpsFlws.length"></span> FLWs)</span>
+                </h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th @click="sortGps('display_name')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                                FLW Name <span x-text="getSortArrow('gps', 'display_name')"></span>
+                            </th>
+                            <th @click="sortGps('total_visits')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                                Total Visits <span x-text="getSortArrow('gps', 'total_visits')"></span>
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">With GPS</th>
+                            <th @click="sortGps('flagged_visits')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                                Flagged <span x-text="getSortArrow('gps', 'flagged_visits')"></span>
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unique Cases</th>
+                            <th @click="sortGps('avg_case_distance_km')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                                Avg Case Dist <span x-text="getSortArrow('gps', 'avg_case_distance_km')"></span>
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Case Dist</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trailing 7 Days</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <template x-for="flw in filteredGpsFlws" :key="flw.username">
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-3 text-sm">
+                                    <div class="flex items-center">
+                                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold mr-2"
+                                             x-text="(flw.display_name || flw.username).charAt(0).toUpperCase()"></div>
+                                        <div>
+                                            <div class="font-medium text-gray-900" x-text="flw.display_name"></div>
+                                            <template x-if="flw.display_name !== flw.username">
+                                                <div class="text-xs text-gray-500" x-text="flw.username"></div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-sm text-gray-900" x-text="flw.total_visits"></td>
+                                <td class="px-4 py-3 text-sm text-gray-900">
+                                    <span x-text="flw.visits_with_gps"></span>
+                                    <span class="text-gray-500" x-text="'(' + Math.round(flw.visits_with_gps / Math.max(flw.total_visits, 1) * 100) + '%)'"></span>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <span :class="flw.flagged_visits > 0 ? 'text-red-600 font-bold' : 'text-gray-900'" x-text="flw.flagged_visits"></span>
+                                </td>
+                                <td class="px-4 py-3 text-sm text-gray-900" x-text="flw.unique_cases"></td>
+                                <td class="px-4 py-3 text-sm text-gray-900">
+                                    <span x-text="flw.avg_case_distance_km !== null ? flw.avg_case_distance_km + ' km' : ''" :class="flw.avg_case_distance_km === null ? 'text-gray-400' : ''">
+                                    </span>
+                                    <template x-if="flw.avg_case_distance_km === null"><span class="text-gray-400">-</span></template>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <template x-if="flw.max_case_distance_km !== null">
+                                        <span :class="flw.max_case_distance_km > 5 ? 'text-red-600 font-bold' : 'text-gray-900'" x-text="flw.max_case_distance_km + ' km'"></span>
+                                    </template>
+                                    <template x-if="flw.max_case_distance_km === null"><span class="text-gray-400">-</span></template>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <template x-if="flw.trailing_7_days && flw.trailing_7_days.length > 0">
+                                        <div class="flex items-center gap-2">
+                                            <div class="inline-flex items-end gap-0.5" style="height: 24px;">
+                                                <template x-for="(day, idx) in flw.trailing_7_days" :key="idx">
+                                                    <span class="w-2 rounded-sm bg-blue-500"
+                                                          :style="'height: ' + Math.max(2, Math.min(24, (day.distance_km / getMaxDailyTravel(flw)) * 24)) + 'px'"
+                                                          :title="day.date + ': ' + day.distance_km + ' km'"></span>
+                                                </template>
+                                            </div>
+                                            <span class="text-xs text-gray-500">Avg: <span x-text="flw.avg_daily_travel_km || '-'"></span> km/d</span>
+                                        </div>
+                                    </template>
+                                    <template x-if="!flw.trailing_7_days || flw.trailing_7_days.length === 0">
+                                        <span class="text-gray-400">-</span>
+                                    </template>
+                                </td>
+                                <td class="px-4 py-3 text-sm text-right whitespace-nowrap">
+                                    <button @click="toggleGpsDrillDown(flw.username)"
+                                            class="inline-flex items-center px-2 py-1 border border-blue-300 rounded text-xs text-blue-700 hover:bg-blue-50 mr-1">
+                                        <i class="fa-solid mr-1" :class="gpsExpandedFlw === flw.username ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                                        <span x-text="gpsExpandedFlw === flw.username ? 'Hide' : 'Details'"></span>
+                                    </button>
+                                    <button @click="openAITaskModal(flw)"
+                                            :disabled="hasOpenTask(flw.username)"
+                                            class="inline-flex items-center px-2 py-1 border rounded text-xs"
+                                            :class="hasOpenTask(flw.username)
+                                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                                : 'border-blue-300 text-blue-700 hover:bg-blue-50'"
+                                            :title="hasOpenTask(flw.username) ? 'Open task exists' : 'Create task'">
+                                        <i class="fa-solid fa-plus mr-1"></i> Task
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="filteredGpsFlws.length === 0">
+                            <tr><td colspan="9" class="px-4 py-8 text-center text-sm text-gray-500">No GPS data available</td></tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- GPS Drill-Down Panel -->
+        <div id="gps-details-panel" x-show="gpsExpandedFlw" x-cloak class="mt-4 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <div class="px-6 py-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                <h3 class="text-lg font-semibold text-gray-900">Visit Details for <span x-text="gpsExpandedFlwName"></span></h3>
+                <button @click="gpsExpandedFlw = null" class="text-gray-500 hover:text-gray-700"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div x-show="gpsDrillDownLoading" class="p-6 text-center">
+                <i class="fa-solid fa-spinner fa-spin text-blue-600 mr-2"></i> Loading visit details...
+            </div>
+            <div x-show="!gpsDrillDownLoading && gpsDrillDownVisits.length > 0" class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Form</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Entity</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">GPS</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Dist from Prev</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <template x-for="visit in gpsDrillDownVisits" :key="visit.visit_id">
+                            <tr :class="visit.is_flagged ? 'bg-red-50' : 'hover:bg-gray-50'">
+                                <td class="px-4 py-2 text-sm text-gray-900" x-text="visit.visit_date || '-'"></td>
+                                <td class="px-4 py-2 text-sm text-gray-900" x-text="visit.form_name || '-'"></td>
+                                <td class="px-4 py-2 text-sm text-gray-900" x-text="visit.entity_name || '-'"></td>
+                                <td class="px-4 py-2 text-sm text-gray-500">
+                                    <template x-if="visit.gps"><span x-text="visit.gps.latitude.toFixed(4) + ', ' + visit.gps.longitude.toFixed(4)"></span></template>
+                                    <template x-if="!visit.gps"><span class="text-gray-400">No GPS</span></template>
+                                </td>
+                                <td class="px-4 py-2 text-sm">
+                                    <template x-if="visit.distance_from_prev_km !== null">
+                                        <span :class="visit.distance_from_prev_km > 5 ? 'text-red-600 font-bold' : 'text-gray-900'" x-text="visit.distance_from_prev_km + ' km'"></span>
+                                    </template>
+                                    <template x-if="visit.distance_from_prev_km === null"><span class="text-gray-400">-</span></template>
+                                </td>
+                                <td class="px-4 py-2 text-sm">
+                                    <template x-if="visit.is_flagged">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                            <i class="fa-solid fa-flag mr-1"></i> Flagged
+                                        </span>
+                                    </template>
+                                    <template x-if="!visit.is_flagged"><span class="text-green-600"><i class="fa-solid fa-check"></i></span></template>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+            <div x-show="!gpsDrillDownLoading && gpsDrillDownVisits.length === 0" class="p-6 text-center text-gray-500">
+                No visits found for this FLW in the selected date range.
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================== FOLLOW-UP TAB ======================== -->
+    <div x-show="activeTab === 'followup' && !loading && !loadError" x-cloak>
+
+        <!-- Follow-up Summary -->
+        <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm mb-4" x-show="followupData">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="border-l-4 border-blue-500 pl-3">
+                    <div class="text-xs text-gray-600">Total Visit Cases</div>
+                    <div class="text-xl font-bold text-gray-900" x-text="followupData?.total_cases || 0"></div>
+                </div>
+                <div class="border-l-4 border-blue-500 pl-3">
+                    <div class="text-xs text-gray-600">Total FLWs</div>
+                    <div class="text-xl font-bold text-gray-900" x-text="filteredFollowupFlws.length"></div>
+                </div>
+                <div class="border-l-4 border-purple-500 pl-3">
+                    <div class="text-xs text-gray-600">Avg Completion Rate</div>
+                    <div class="text-xl font-bold text-gray-900" x-text="computeOverallFollowupRate() + '%'"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Follow-up FLW Table -->
+        <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <div class="px-6 py-3 border-b border-gray-200 bg-gray-50">
+                <h2 class="text-lg font-semibold text-gray-900">
+                    FLW Follow-Up Rates <span class="text-sm text-gray-600 font-normal">(<span x-text="filteredFollowupFlws.length"></span> FLWs)</span>
+                </h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th @click="sortFollowup('display_name')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                                FLW Name <span x-text="getSortArrow('followup', 'display_name')"></span>
+                            </th>
+                            <th @click="sortFollowup('completion_rate')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                                Completion Rate <span x-text="getSortArrow('followup', 'completion_rate')"></span>
+                            </th>
+                            <th @click="sortFollowup('completed_total')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                                Completed <span x-text="getSortArrow('followup', 'completed_total')"></span>
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Due</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ANC</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Postnatal</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Week 1</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Month 1</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Month 3</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Month 6</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <!-- One tbody per FLW so summary + detail rows stay grouped -->
+                    <template x-for="flw in filteredFollowupFlws" :key="flw.username">
+                        <tbody class="divide-y divide-gray-200">
+                            <!-- FLW summary row -->
+                            <tr class="hover:bg-gray-50 cursor-pointer" :class="followupExpandedFlw === flw.username ? 'bg-blue-50' : 'bg-white'" @click="toggleFollowupDrillDown(flw.username)">
+                                <td class="px-4 py-3 text-sm">
+                                    <div class="flex items-center">
+                                        <i class="fa-solid fa-chevron-right text-gray-400 mr-2 text-xs transition-transform duration-200"
+                                           :class="followupExpandedFlw === flw.username ? 'rotate-90' : ''"></i>
+                                        <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold mr-2"
+                                             :class="flw.status_color === 'green' ? 'bg-green-100 text-green-700' : flw.status_color === 'yellow' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'"
+                                             x-text="(flw.display_name || flw.username).charAt(0).toUpperCase()"></div>
+                                        <div>
+                                            <div class="font-medium text-gray-900" x-text="flw.display_name"></div>
+                                            <template x-if="flw.display_name !== flw.username">
+                                                <div class="text-xs text-gray-500" x-text="flw.username"></div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <div class="flex items-center">
+                                        <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                            <div class="h-2 rounded-full transition-all"
+                                                 :class="flw.status_color === 'green' ? 'bg-green-500' : flw.status_color === 'yellow' ? 'bg-yellow-500' : 'bg-red-500'"
+                                                 :style="'width: ' + Math.min(100, flw.completion_rate) + '%'"></div>
+                                        </div>
+                                        <span class="font-bold"
+                                              :class="flw.status_color === 'green' ? 'text-green-600' : flw.status_color === 'yellow' ? 'text-yellow-600' : 'text-red-600'"
+                                              x-text="flw.completion_rate + '%'"></span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-sm text-gray-900" x-text="flw.completed_total"></td>
+                                <td class="px-4 py-3 text-sm text-gray-900" x-text="flw.due_total"></td>
+                                <!-- Per-visit-type mini columns -->
+                                <template x-for="vtype in ['anc', 'postnatal', 'week1', 'month1', 'month3', 'month6']" :key="vtype">
+                                    <td class="px-4 py-3 whitespace-nowrap text-xs">
+                                        <div class="text-green-600"><i class="fa-solid fa-check mr-1"></i><span x-text="(flw[vtype + '_completed_on_time'] || 0) + (flw[vtype + '_completed_late'] || 0)"></span></div>
+                                        <div class="text-gray-500"><i class="fa-solid fa-clock mr-1"></i><span x-text="(flw[vtype + '_due_on_time'] || 0) + (flw[vtype + '_due_late'] || 0)"></span></div>
+                                        <div class="text-red-600"><i class="fa-solid fa-times mr-1"></i><span x-text="flw[vtype + '_missed'] || 0"></span></div>
+                                    </td>
+                                </template>
+                                <td class="px-4 py-3 text-sm text-right whitespace-nowrap" @click.stop>
+                                    <button @click="openAITaskModal(flw)"
+                                            :disabled="hasOpenTask(flw.username)"
+                                            class="inline-flex items-center px-2 py-1 border rounded text-xs"
+                                            :class="hasOpenTask(flw.username)
+                                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                                : 'border-blue-300 text-blue-700 hover:bg-blue-50'"
+                                            :title="hasOpenTask(flw.username) ? 'Open task exists' : 'Create task'">
+                                        <i class="fa-solid fa-plus mr-1"></i> Task
+                                    </button>
+                                </td>
+                            </tr>
+                            <!-- Inline drill-down row (expands under the FLW row) -->
+                            <tr x-show="followupExpandedFlw === flw.username" x-cloak>
+                                <td colspan="11" class="p-0 bg-gray-50 border-l-4 border-blue-400">
+                                    <!-- Header bar -->
+                                    <div class="px-6 py-3 border-b border-gray-200 flex justify-between items-center">
+                                        <h3 class="text-sm font-semibold text-gray-900">Visits for <span x-text="followupExpandedFlwName"></span></h3>
+                                        <div class="flex items-center gap-3">
+                                            <label class="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer" @click.stop>
+                                                <input type="checkbox" x-model="showAllVisits"
+                                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5">
+                                                Show missed/completed visits
+                                            </label>
+                                            <button @click.stop="openAITaskModal(flw)"
+                                                    :disabled="hasOpenTask(flw.username)"
+                                                    class="inline-flex items-center px-3 py-1.5 rounded text-xs font-medium"
+                                                    :class="hasOpenTask(flw.username)
+                                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                                        : 'bg-blue-600 text-white hover:bg-blue-700'"
+                                                    :title="hasOpenTask(flw.username) ? 'An open task already exists for this FLW' : 'Create task for this FLW'">
+                                                <i class="fa-solid fa-plus mr-1"></i> Task
+                                            </button>
+                                            <button @click.stop="confirmSuspend(followupExpandedFlw)"
+                                                    class="inline-flex items-center px-3 py-1.5 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700">
+                                                <i class="fa-solid fa-ban mr-1"></i> Suspend
+                                            </button>
+                                            <button @click.stop="followupExpandedFlw = null; followupDrillDownMothers = [];" class="text-gray-500 hover:text-gray-700">
+                                                <i class="fa-solid fa-times"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <!-- Mother groups -->
+                                    <div x-show="getVisibleMothers(followupDrillDownMothers).length > 0">
+                                        <template x-for="mother in getVisibleMothers(followupDrillDownMothers)" :key="mother.mother_case_id">
+                                            <div class="border-b border-gray-100">
+                                                <!-- Mother header: name (entity ID) + follow-up rate -->
+                                                <div class="px-6 py-2 bg-gray-100 flex items-center justify-between">
+                                                    <span class="text-sm font-medium text-gray-700">
+                                                        <template x-if="mother.mother_name">
+                                                            <span>
+                                                                <span x-text="mother.mother_name"></span>
+                                                                <span class="text-gray-400 font-normal text-xs ml-1" x-text="'(' + mother.mother_case_id.substring(0, 8) + '...)'"></span>
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="!mother.mother_name">
+                                                            <span class="font-mono text-xs" x-text="mother.mother_case_id"></span>
+                                                        </template>
+                                                    </span>
+                                                    <span class="text-xs px-2 py-1 rounded"
+                                                          :class="mother.follow_up_rate >= 80 ? 'bg-green-100 text-green-800' : mother.follow_up_rate >= 60 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'"
+                                                          x-text="mother.completed + '/' + mother.total + ' (' + mother.follow_up_rate + '%)'">
+                                                    </span>
+                                                </div>
+                                                <!-- Mother metadata row -->
+                                                <div class="px-6 py-1.5 bg-gray-50 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500 border-b border-gray-100">
+                                                    <span x-show="mother.registration_date"><i class="fa-solid fa-calendar-plus mr-1 text-gray-400"></i>Registered: <span class="text-gray-700" x-text="mother.registration_date"></span></span>
+                                                    <span x-show="mother.age"><i class="fa-solid fa-user mr-1 text-gray-400"></i>Age: <span class="text-gray-700" x-text="mother.age"></span></span>
+                                                    <span x-show="mother.phone_number"><i class="fa-solid fa-phone mr-1 text-gray-400"></i><span class="text-gray-700" x-text="mother.phone_number"></span></span>
+                                                    <span x-show="mother.anc_completion_date"><i class="fa-solid fa-check-circle mr-1 text-green-500"></i>ANC completed: <span class="text-gray-700" x-text="mother.anc_completion_date"></span></span>
+                                                    <span x-show="mother.pnc_completion_date"><i class="fa-solid fa-check-circle mr-1 text-green-500"></i>PNC completed: <span class="text-gray-700" x-text="mother.pnc_completion_date"></span></span>
+                                                    <span x-show="!mother.registration_date && !mother.age && !mother.phone_number && !mother.anc_completion_date && !mother.pnc_completion_date" class="text-gray-400 italic">No metadata available</span>
+                                                </div>
+                                                <!-- Visits table with fixed column widths for alignment -->
+                                                <table class="w-full table-fixed divide-y divide-gray-200">
+                                                    <thead>
+                                                        <tr>
+                                                            <th class="w-[25%] px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Visit Type</th>
+                                                            <th class="w-[25%] px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scheduled</th>
+                                                            <th class="w-[25%] px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry Date</th>
+                                                            <th class="w-[25%] px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <template x-for="visit in getVisibleVisits(mother)" :key="visit.case_id">
+                                                            <tr class="hover:bg-gray-50">
+                                                                <td class="px-4 py-2 text-sm text-gray-900" x-text="visit.visit_type"></td>
+                                                                <td class="px-4 py-2 text-sm text-gray-900" x-text="visit.visit_date_scheduled || '-'"></td>
+                                                                <td class="px-4 py-2 text-sm text-gray-900" x-text="visit.visit_expiry_date || '-'"></td>
+                                                                <td class="px-4 py-2 text-sm">
+                                                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                                                                          :class="getVisitStatusClass(visit.status)"
+                                                                          x-text="visit.status"></span>
+                                                                </td>
+                                                            </tr>
+                                                        </template>
+                                                        <template x-if="getVisibleVisits(mother).length === 0">
+                                                            <tr><td colspan="4" class="px-4 py-3 text-center text-xs text-gray-400 italic">No due visits</td></tr>
+                                                        </template>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <!-- Empty state -->
+                                    <div x-show="getVisibleMothers(followupDrillDownMothers).length === 0" class="p-6 text-center text-gray-500">
+                                        No due visits found for this FLW.
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </template>
+                    <tbody x-show="filteredFollowupFlws.length === 0">
+                        <tr><td colspan="11" class="px-4 py-8 text-center text-sm text-gray-500">No follow-up data available. Ensure CommCare HQ is authorized.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================== AI ASSISTANT MODAL ======================== -->
+    <div x-show="showAIModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <!-- Backdrop -->
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showAIModal = false"></div>
+        <!-- Modal card -->
+        <div class="relative bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div class="px-4 pt-5 pb-4 sm:p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Initiate AI Assistant</h3>
+
+                <!-- OCS not connected warning -->
+                <template x-if="aiBotsNeedsOAuth">
+                    <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                        <p class="text-sm text-yellow-800 mb-2">Open Chat Studio is not connected. Connect to initiate AI conversations.</p>
+                        <a href="{{ ocs_authorize_url }}"
+                           class="inline-flex items-center px-3 py-1.5 border border-yellow-400 rounded text-sm text-yellow-800 hover:bg-yellow-100">
+                            <i class="fa-solid fa-link mr-1"></i> Connect to Open Chat Studio
+                        </a>
+                    </div>
+                </template>
+
+                <div class="space-y-4">
+                    <!-- Participant ID (read-only) -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Participant ID</label>
+                        <input type="text" :value="aiModalFlw?.username" readonly
+                               class="mt-1 block w-full border-gray-300 rounded-md bg-gray-50 text-sm px-3 py-2 text-gray-600">
+                    </div>
+
+                    <!-- Bot selection -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Bot</label>
+                        <template x-if="aiBotsLoading">
+                            <div class="mt-1 flex items-center text-sm text-gray-500">
+                                <i class="fa-solid fa-spinner fa-spin mr-2"></i> Loading bots...
+                            </div>
+                        </template>
+                        <template x-if="!aiBotsLoading">
+                            <select x-model="aiSelectedBot"
+                                    class="mt-1 block w-full border border-gray-300 rounded-md text-sm px-3 py-2"
+                                    :disabled="aiBotsNeedsOAuth">
+                                <option value="">-- Select a bot --</option>
+                                <template x-for="bot in aiBots" :key="bot.id">
+                                    <option :value="bot.id" x-text="bot.name"></option>
+                                </template>
+                            </select>
+                        </template>
+                    </div>
+
+                    <!-- Automated prompt (collapsible) -->
+                    <div x-data="{ promptExpanded: false }">
+                        <button @click="promptExpanded = !promptExpanded" type="button"
+                                class="flex items-center text-sm font-medium text-gray-700 hover:text-gray-900">
+                            <i class="fa-solid fa-chevron-right mr-1 transition-transform duration-200"
+                               :class="{ 'rotate-90': promptExpanded }"></i>
+                            Automated Prompt
+                        </button>
+                        <div x-show="promptExpanded" x-collapse class="mt-2">
+                            <pre class="block w-full border border-gray-200 rounded-md bg-gray-50 text-xs px-3 py-2 text-gray-600 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto"
+                                 x-text="aiAutomatedPrompt"></pre>
+                        </div>
+                    </div>
+
+                    <!-- Custom message -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Supervisor Notes <span class="font-normal text-gray-400">(optional)</span></label>
+                        <textarea x-model="aiCustomMessage" rows="3" placeholder="Add any additional context or instructions..."
+                                  class="mt-1 block w-full border border-gray-300 rounded-md text-sm px-3 py-2 focus:ring-green-500 focus:border-green-500"></textarea>
+                    </div>
+                </div>
+
+                <!-- Progress message -->
+                <template x-if="aiProgress">
+                    <div class="mt-3 text-sm text-gray-600">
+                        <i class="fa-solid fa-spinner fa-spin mr-1"></i>
+                        <span x-text="aiProgress"></span>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Footer buttons -->
+            <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse rounded-b-lg">
+                <button @click="initiateAITask()"
+                        :disabled="aiSubmitting || aiBotsNeedsOAuth || !aiSelectedBot"
+                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                    <template x-if="aiSubmitting"><i class="fa-solid fa-spinner fa-spin mr-2"></i></template>
+                    Initiate AI
+                </button>
+                <button @click="cancelAITask()"
+                        :disabled="aiSubmitting"
+                        class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm disabled:opacity-50">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================== SUSPEND CONFIRMATION MODAL ======================== -->
+    <div x-show="showSuspendModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <!-- Backdrop -->
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showSuspendModal = false"></div>
+        <!-- Modal card -->
+        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div class="px-4 pt-5 pb-4 sm:p-6">
+                <div class="flex items-start">
+                    <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                        <i class="fa-solid fa-exclamation-triangle text-red-600"></i>
+                    </div>
+                </div>
+                <div class="mt-3 text-center">
+                    <h3 class="text-lg font-medium text-gray-900">Suspend User</h3>
+                    <p class="mt-2 text-sm text-gray-500">
+                        Are you sure you want to suspend this user? This action will prevent them from accessing the opportunity.
+                    </p>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse rounded-b-lg">
+                <button @click="executeSuspend()"
+                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 sm:ml-3 sm:w-auto sm:text-sm">
+                    Suspend
+                </button>
+                <button @click="showSuspendModal = false"
+                        class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div x-show="toastMessage" x-cloak
+         x-transition:enter="transform ease-out duration-300 transition"
+         x-transition:enter-start="translate-y-2 opacity-0"
+         x-transition:enter-end="translate-y-0 opacity-100"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed bottom-4 right-4 z-50 bg-gray-900 text-white px-4 py-3 rounded-lg shadow-lg text-sm">
+        <span x-text="toastMessage"></span>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block inline_javascript %}
+{{ block.super }}
+<script>
+function mbwDashboard() {
+    return {
+        // Loading state
+        loading: true,
+        loadingMessage: '',
+        loadError: null,
+
+        // Tab state
+        activeTab: '{{ active_tab|default:"overview" }}',
+
+        // Date range (GPS only)
+        startDate: '{{ start_date }}',
+        endDate: '{{ end_date }}',
+
+        // Filter state
+        selectedFlws: [],
+        selectedMothers: [],
+        allUsernames: [],
+        flwNames: {},
+        allMotherIds: [],
+        motherNames: {},
+
+        // Data
+        opportunityId: {{ opportunity_id|default:"null" }},
+        opportunityName: '{{ opportunity_name|default:"" }}',
+        gpsData: null,
+        followupData: null,
+        overviewData: null,
+        visitStatusDist: null,
+
+        // Raw data (unfiltered)
+        _rawGpsFlws: [],
+        _rawFollowupFlws: [],
+        _rawOverviewFlws: [],
+        _followupDrilldownByFlw: {},
+        _openTaskUsernames: new Set(),
+
+        // Filtered data (computed)
+        filteredGpsFlws: [],
+        filteredFollowupFlws: [],
+        filteredOverviewFlws: [],
+
+        // Sort state
+        sortState: {
+            overview: { column: null, direction: 'asc' },
+            gps: { column: null, direction: 'asc' },
+            followup: { column: 'completion_rate', direction: 'asc' },
+        },
+
+        // GPS drill-down
+        gpsExpandedFlw: null,
+        gpsExpandedFlwName: '',
+        gpsDrillDownLoading: false,
+        gpsDrillDownVisits: [],
+
+        // Follow-up drill-down
+        followupExpandedFlw: null,
+        followupExpandedFlwName: '',
+        followupDrillDownLoading: false,
+        followupDrillDownMothers: [],
+        showAllVisits: false,
+
+        // AI Task modal
+        showAIModal: false,
+        aiModalFlw: null,
+        aiAutomatedPrompt: '',
+        aiCustomMessage: '',
+        aiBots: [],
+        aiSelectedBot: '',
+        aiBotsLoading: false,
+        aiBotsNeedsOAuth: false,
+        aiSubmitting: false,
+        aiProgress: '',
+        MBW_BOT_ID: 'e91a72b6-627c-4ab5-a18e-1ed883c454b8',
+
+        // Suspend modal
+        showSuspendModal: false,
+        suspendUsername: null,
+
+        // Toast
+        toastMessage: '',
+
+        // URLs
+        streamApiUrl: '{{ stream_api_url|default:"" }}',
+        gpsDetailApiUrl: '{{ gps_detail_api_url|default:"" }}',
+        suspendApiUrl: '{{ suspend_api_url|default:"" }}',
+        taskCreateApiUrl: '{{ task_create_api_url|default:"" }}',
+        ocsBotsApiUrl: '{{ ocs_bots_api_url|default:"" }}',
+        aiInitiateUrlTemplate: '{{ ai_initiate_url_template|default:"" }}',
+
+        // SSE reference
+        eventSource: null,
+
+        // CommCare HQ OAuth status
+        commcareOAuthActive: {{ commcare_oauth_active|yesno:"true,false" }},
+
+        init() {
+            if (this.streamApiUrl && this.commcareOAuthActive) {
+                this.loadDataWithSSE();
+            } else if (!this.commcareOAuthActive) {
+                this.loading = false;
+                this.loadError = null;
+            }
+        },
+
+        // ---- Data Loading ----
+        loadDataWithSSE() {
+            this.loading = true;
+            this.loadError = null;
+            this.loadingMessage = 'Connecting...';
+
+            if (this.eventSource) this.eventSource.close();
+
+            const params = new URLSearchParams({
+                start_date: this.startDate,
+                end_date: this.endDate,
+            });
+            // Forward cache-busting params from the page URL to the SSE endpoint
+            const pageParams = new URLSearchParams(window.location.search);
+            if (pageParams.get('bust_cache') === '1') params.set('bust_cache', '1');
+            if (pageParams.get('refresh') === '1') params.set('refresh', '1');
+            // Forward cache_tolerance_pct (URL param overrides default from view context)
+            const cacheTolPct = pageParams.get('cache_tolerance_pct') || '{{ default_cache_tolerance_pct }}';
+            if (cacheTolPct) params.set('cache_tolerance_pct', cacheTolPct);
+            // Forward cache_tolerance (time-based, minutes)
+            const cacheTol = pageParams.get('cache_tolerance') || '{{ default_cache_tolerance }}';
+            if (cacheTol) params.set('cache_tolerance', cacheTol);
+
+            const url = this.streamApiUrl + '?' + params.toString();
+            this.eventSource = new EventSource(url);
+
+            this.eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    this.loadingMessage = data.message;
+
+                    if (data.error) {
+                        this.loadError = data.error;
+                        this.loading = false;
+                        this.eventSource.close();
+                        return;
+                    }
+
+                    if (data.complete && data.data) {
+                        this.processLoadedData(data.data);
+                        this.loading = false;
+                        this.eventSource.close();
+                    }
+                } catch (e) {
+                    console.error('[MBW Dashboard] Error parsing SSE:', e);
+                }
+            };
+
+            this.eventSource.onerror = () => {
+                this.eventSource.close();
+                this.loadError = 'Connection lost. Please try again.';
+                this.loading = false;
+            };
+        },
+
+        processLoadedData(data) {
+            this.opportunityName = data.opportunity_name || '';
+            this.allUsernames = data.active_usernames || [];
+            this.flwNames = data.flw_names || {};
+
+            // GPS data
+            this.gpsData = data.gps_data;
+            this._rawGpsFlws = data.gps_data?.flw_summaries || [];
+
+            // Follow-up data
+            this.followupData = data.followup_data;
+            this._rawFollowupFlws = data.followup_data?.flw_summaries || [];
+            this._followupDrilldownByFlw = data.followup_data?.flw_drilldown || {};
+
+            // Build mother names lookup from drilldown data
+            const motherMap = {};
+            for (const mothers of Object.values(this._followupDrilldownByFlw)) {
+                for (const m of mothers) {
+                    if (m.mother_case_id && !motherMap[m.mother_case_id]) {
+                        motherMap[m.mother_case_id] = m.mother_name || m.mother_case_id;
+                    }
+                }
+            }
+            this.motherNames = motherMap;
+            // Sort by display name for the dropdown
+            this.allMotherIds = Object.keys(motherMap).sort((a, b) =>
+                (motherMap[a] || a).localeCompare(motherMap[b] || b)
+            );
+
+            // Open task usernames (for greying out Task buttons)
+            this._openTaskUsernames = new Set(data.open_task_usernames || []);
+
+            // Overview data
+            this.overviewData = data.overview_data;
+            this._rawOverviewFlws = data.overview_data?.flw_summaries || [];
+            this.visitStatusDist = data.overview_data?.visit_status_distribution || null;
+
+            // Pre-load OCS bots so the AI modal dropdown is ready
+            this.loadBots();
+
+            // Apply initial filters
+            this.applyFilters();
+        },
+
+        // ---- Filtering ----
+        applyFilters() {
+            const flwFilter = this.selectedFlws.length > 0 ? new Set(this.selectedFlws) : null;
+            const motherFilter = this.selectedMothers.length > 0 ? new Set(this.selectedMothers) : null;
+
+            this.filteredGpsFlws = this._rawGpsFlws.filter(f => this.matchesFilter(f, flwFilter));
+            this.filteredOverviewFlws = this._rawOverviewFlws.filter(f => this.matchesFilter(f, flwFilter));
+
+            // Follow-up tab: also filter by selected mothers
+            if (motherFilter) {
+                this.filteredFollowupFlws = this._rawFollowupFlws.filter(f => {
+                    if (flwFilter && !flwFilter.has(f.username)) return false;
+                    // Keep FLW only if they have at least one selected mother
+                    const mothers = this._followupDrilldownByFlw[f.username] || [];
+                    return mothers.some(m => motherFilter.has(m.mother_case_id));
+                });
+            } else {
+                this.filteredFollowupFlws = this._rawFollowupFlws.filter(f => this.matchesFilter(f, flwFilter));
+            }
+
+            // Apply current sort
+            this.applySortToAll();
+        },
+
+        matchesFilter(flw, flwFilter) {
+            if (flwFilter && !flwFilter.has(flw.username)) return false;
+            return true;
+        },
+
+        resetFilters() {
+            this.selectedFlws = [];
+            this.selectedMothers = [];
+            this.applyFilters();
+        },
+
+        addToFilter(username) {
+            if (!this.selectedFlws.includes(username)) {
+                this.selectedFlws.push(username);
+            }
+            this.applyFilters();
+            this.showToast(`Filtered to ${this.flwNames[username] || username}`);
+        },
+
+        // ---- Sorting ----
+        sortOverview(column) { this._sortTable('overview', column); },
+        sortGps(column) { this._sortTable('gps', column); },
+        sortFollowup(column) { this._sortTable('followup', column); },
+
+        _sortTable(table, column) {
+            const state = this.sortState[table];
+            if (state.column === column) {
+                state.direction = state.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.column = column;
+                state.direction = 'asc';
+            }
+            this._applySort(table);
+        },
+
+        _applySort(table) {
+            const state = this.sortState[table];
+            if (!state.column) return;
+
+            const key = state.column;
+            const dir = state.direction === 'asc' ? 1 : -1;
+
+            let arr;
+            if (table === 'overview') arr = this.filteredOverviewFlws;
+            else if (table === 'gps') arr = this.filteredGpsFlws;
+            else arr = this.filteredFollowupFlws;
+
+            arr.sort((a, b) => {
+                let va = a[key], vb = b[key];
+                if (va === null || va === undefined) va = '';
+                if (vb === null || vb === undefined) vb = '';
+                if (typeof va === 'string') return va.localeCompare(vb) * dir;
+                return (va - vb) * dir;
+            });
+        },
+
+        applySortToAll() {
+            this._applySort('overview');
+            this._applySort('gps');
+            this._applySort('followup');
+        },
+
+        getSortArrow(table, column) {
+            const state = this.sortState[table];
+            if (state.column !== column) return '';
+            return state.direction === 'asc' ? '\u25B2' : '\u25BC';
+        },
+
+        // ---- GPS Drill-Down ----
+        async toggleGpsDrillDown(username) {
+            if (this.gpsExpandedFlw === username) {
+                this.gpsExpandedFlw = null;
+                this.gpsDrillDownVisits = [];
+                return;
+            }
+
+            this.gpsExpandedFlw = username;
+            this.gpsExpandedFlwName = this._rawGpsFlws.find(f => f.username === username)?.display_name || username;
+            this.gpsDrillDownLoading = true;
+            this.gpsDrillDownVisits = [];
+
+            try {
+                const url = this.gpsDetailApiUrl.replace('__USERNAME__', encodeURIComponent(username))
+                    + '?start_date=' + this.startDate + '&end_date=' + this.endDate + '&include_visits=1';
+                const response = await fetch(url);
+                if (response.status === 401) {
+                    alert('Session expired. Please refresh.');
+                    this.gpsExpandedFlw = null;
+                    return;
+                }
+                const data = await response.json();
+                this.gpsDrillDownVisits = data.visits || [];
+                this.$nextTick(() => {
+                    document.getElementById('gps-details-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            } catch (e) {
+                console.error('GPS drill-down failed:', e);
+            } finally {
+                this.gpsDrillDownLoading = false;
+            }
+        },
+
+        getMaxDailyTravel(flw) {
+            if (!flw.trailing_7_days || flw.trailing_7_days.length === 0) return 1;
+            return Math.max(...flw.trailing_7_days.map(d => d.distance_km), 1);
+        },
+
+        // ---- Follow-up Drill-Down ----
+        toggleFollowupDrillDown(username) {
+            if (this.followupExpandedFlw === username) {
+                this.followupExpandedFlw = null;
+                this.followupDrillDownMothers = [];
+                return;
+            }
+
+            this.followupExpandedFlw = username;
+            this.followupExpandedFlwName = this._rawFollowupFlws.find(f => f.username === username)?.display_name || username;
+            // Use pre-loaded drill-down data (computed during SSE load)
+            this.followupDrillDownMothers = this._followupDrilldownByFlw[username] || [];
+            this.followupDrillDownLoading = false;
+        },
+
+        getVisibleMothers(mothers) {
+            let filtered = mothers;
+            // Apply mother filter if active
+            if (this.selectedMothers.length > 0) {
+                const motherSet = new Set(this.selectedMothers);
+                filtered = filtered.filter(m => motherSet.has(m.mother_case_id));
+            }
+            if (!this.showAllVisits) {
+                filtered = filtered.filter(m => m.has_due_visits);
+            }
+            return filtered;
+        },
+
+        getVisibleVisits(mother) {
+            if (this.showAllVisits) return mother.visits;
+            return mother.visits.filter(v => v.status.startsWith('Due'));
+        },
+
+        hasOpenTask(username) {
+            return this._openTaskUsernames.has(username);
+        },
+
+        getVisitStatusClass(status) {
+            if (status.includes('Completed') && status.includes('On Time')) return 'bg-green-100 text-green-800';
+            if (status.includes('Completed') && status.includes('Late')) return 'bg-green-50 text-green-700';
+            if (status.includes('Due') && status.includes('On Time')) return 'bg-yellow-100 text-yellow-800';
+            if (status.includes('Due') && status.includes('Late')) return 'bg-orange-100 text-orange-800';
+            if (status.includes('Missed')) return 'bg-red-100 text-red-800';
+            return 'bg-gray-100 text-gray-800';
+        },
+
+        computeOverallFollowupRate() {
+            if (this.filteredFollowupFlws.length === 0) return 0;
+            const completed = this.filteredFollowupFlws.reduce((s, f) => s + f.completed_total, 0);
+            const total = this.filteredFollowupFlws.reduce((s, f) => s + f.due_total, 0);
+            return total > 0 ? Math.round((completed / total) * 100) : 0;
+        },
+
+        // ---- AI Task Modal ----
+        openAITaskModal(flw) {
+            this.aiModalFlw = flw;
+            this.aiAutomatedPrompt = this.buildAutomatedPrompt(flw);
+            this.aiCustomMessage = '';
+            this.aiProgress = '';
+            this.aiSubmitting = false;
+            this.showAIModal = true;
+        },
+
+        buildAutomatedPrompt(flw) {
+            const name = flw.display_name || flw.username;
+            // Look up follow-up data from raw arrays
+            const followup = this._rawFollowupFlws.find(f => f.username === flw.username) || {};
+            const overview = this._rawOverviewFlws.find(f => f.username === flw.username) || {};
+
+            let prompt = `FLW Name: ${name}\nUsername: ${flw.username}\n\n`;
+            prompt += `Behavior Being Investigated: Low Follow-Up Visit Rate\n\n`;
+            prompt += `Data Points:\n`;
+            prompt += `- Total visits due: ${followup.due_total ?? 'N/A'}\n`;
+            prompt += `- Total visits completed: ${followup.completed_total ?? 'N/A'} (${followup.completion_rate ?? 'N/A'}% completion rate)\n`;
+            prompt += `- Visits currently overdue (late): ${followup.due_late ?? 'N/A'} visits\n`;
+            prompt += `- Missed visits: ${followup.missed ?? 'N/A'}\n`;
+            prompt += `- Number of mother cases: ${overview.cases_registered ?? 'N/A'}\n\n`;
+            prompt += `Breakdown of overdue visits by type:\n`;
+            prompt += `- ANC visits overdue: ${followup.anc_due_late ?? 0}\n`;
+            prompt += `- PNC visits overdue: ${followup.postnatal_due_late ?? 0}\n`;
+            prompt += `- 1-2 week visits overdue: ${followup.week1_due_late ?? 0}\n`;
+            prompt += `- 1 month visits overdue: ${followup.month1_due_late ?? 0}\n`;
+            prompt += `- 3 month visits overdue: ${followup.month3_due_late ?? 0}\n`;
+            prompt += `- 6 month visits overdue: ${followup.month6_due_late ?? 0}`;
+
+            return prompt;
+        },
+
+        async loadBots() {
+            if (!this.ocsBotsApiUrl) return;
+            this.aiBotsLoading = true;
+            this.aiBotsNeedsOAuth = false;
+
+            try {
+                const response = await fetch(this.ocsBotsApiUrl);
+                const data = await response.json();
+
+                if (data.needs_oauth) {
+                    this.aiBotsNeedsOAuth = true;
+                    this.aiBots = [];
+                    this.aiSelectedBot = '';
+                } else if (data.success) {
+                    this.aiBots = data.bots || [];
+                    // Pre-select MBW bot if available
+                    const mbwBot = this.aiBots.find(b => b.id === this.MBW_BOT_ID);
+                    this.aiSelectedBot = mbwBot ? mbwBot.id : (this.aiBots[0]?.id || '');
+                } else {
+                    this.aiBotsNeedsOAuth = true;
+                    this.aiBots = [];
+                }
+            } catch (e) {
+                console.error('Failed to load bots:', e);
+                this.aiBotsNeedsOAuth = true;
+            } finally {
+                this.aiBotsLoading = false;
+            }
+        },
+
+        _getCSRFToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]')?.value
+                || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+        },
+
+        async _createTask() {
+            const flw = this.aiModalFlw;
+            const name = flw.display_name || flw.username;
+            const today = new Date().toISOString().split('T')[0];
+
+            const response = await fetch(this.taskCreateApiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this._getCSRFToken(),
+                },
+                body: JSON.stringify({
+                    username: flw.username,
+                    flw_name: name,
+                    title: `MBW Monitoring - ${name} - ${today}`,
+                    description: 'Task triggered from the MBW Monitoring Dashboard',
+                    priority: 'medium',
+                    status: 'flw_action_in_progress',
+                }),
+            });
+
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to create task');
+            }
+            // Mark this FLW as having an open task
+            this._openTaskUsernames.add(flw.username);
+            return data.task_id;
+        },
+
+        async initiateAITask() {
+            this.aiSubmitting = true;
+            this.aiProgress = 'Creating task...';
+
+            try {
+                // Step 1: Create task
+                const taskId = await this._createTask();
+
+                // Step 2: Initiate AI conversation
+                this.aiProgress = 'Initiating AI conversation...';
+
+                let promptText = this.aiAutomatedPrompt;
+                if (this.aiCustomMessage.trim()) {
+                    promptText += '\n\n--- Supervisor Notes ---\n' + this.aiCustomMessage.trim();
+                }
+
+                const aiUrl = this.aiInitiateUrlTemplate.replace('__TASK_ID__', taskId);
+                const aiResponse = await fetch(aiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': this._getCSRFToken(),
+                    },
+                    body: JSON.stringify({
+                        identifier: this.aiModalFlw.username,
+                        experiment: this.aiSelectedBot,
+                        platform: 'commcare_connect',
+                        prompt_text: promptText,
+                        start_new_session: true,
+                    }),
+                });
+
+                const aiData = await aiResponse.json();
+                if (aiData.error) {
+                    throw new Error(aiData.error);
+                }
+
+                this.showAIModal = false;
+                this.showToast('Task created and AI conversation initiated');
+            } catch (e) {
+                alert('Error: ' + e.message);
+            } finally {
+                this.aiSubmitting = false;
+                this.aiProgress = '';
+            }
+        },
+
+        cancelAITask() {
+            this.showAIModal = false;
+        },
+
+        // ---- Suspend ----
+        confirmSuspend(username) {
+            this.suspendUsername = username;
+            this.showSuspendModal = true;
+        },
+
+        async executeSuspend() {
+            try {
+                const response = await fetch(this.suspendApiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value
+                            || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+                    },
+                    body: JSON.stringify({
+                        username: this.suspendUsername,
+                        reason: 'Suspended from MBW Monitoring Dashboard',
+                    }),
+                });
+
+                const data = await response.json();
+                this.showSuspendModal = false;
+
+                if (data.success) {
+                    this.showToast('User suspended successfully');
+                } else {
+                    alert(data.error || 'Suspension not available yet');
+                }
+            } catch (e) {
+                this.showSuspendModal = false;
+                alert('Failed: ' + e.message);
+            }
+        },
+
+        // ---- Navigation ----
+        refreshData() {
+            const url = new URL(window.location.href);
+            url.searchParams.set('refresh', '1');
+            window.location.href = url.toString();
+        },
+
+        bustCache() {
+            // Full refresh: bust both the pipeline cache (?refresh=1) and HQ case cache (?bust_cache=1)
+            const url = new URL(window.location.href);
+            url.searchParams.set('refresh', '1');
+            url.searchParams.set('bust_cache', '1');
+            window.location.href = url.toString();
+        },
+
+        // ---- Toast ----
+        showToast(message) {
+            this.toastMessage = message;
+            setTimeout(() => { this.toastMessage = ''; }, 3000);
+        },
+    };
+}
+</script>
+{% endblock %}
