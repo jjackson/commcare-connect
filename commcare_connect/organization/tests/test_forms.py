@@ -87,7 +87,6 @@ class TestOrganizationChangeForm:
         user = User.objects.get(pk=user.pk)
         llo_entity = LLOEntity.objects.create(name="Test LLO")
 
-        organization.llo_entity = None
         organization.program_manager = program_manager
         organization.save()
         form = OrganizationChangeForm(
@@ -112,7 +111,6 @@ class TestOrganizationChangeForm:
 
         user.refresh_from_db()
 
-        organization.llo_entity = None
         organization.save()
 
         assert LLOEntity.objects.count() == 0
