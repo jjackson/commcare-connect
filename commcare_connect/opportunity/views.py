@@ -170,6 +170,7 @@ from commcare_connect.opportunity.visit_import import (
 )
 from commcare_connect.organization.decorators import (
     OrganizationProgramManagerMixin,
+    OrganizationUserMemberRoleMixin,
     OrganizationUserMixin,
     opportunity_required,
     org_admin_required,
@@ -312,7 +313,7 @@ class OpportunityInitUpdate(OpportunityObjectMixin, OrganizationProgramManagerMi
         return context
 
 
-class OpportunityEdit(OpportunityObjectMixin, OrganizationProgramManagerMixin, UpdateView):
+class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
     model = Opportunity
     template_name = "opportunity/opportunity_edit.html"
     form_class = OpportunityChangeForm
