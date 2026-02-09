@@ -1,6 +1,7 @@
 import datetime
 import logging
 
+import waffle
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404
@@ -11,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from commcare_connect.flags.switch_names import API_UUID
 from commcare_connect.opportunity.api.serializers import (
     CompletedWorkSerializer,
     DeliveryProgressSerializer,
@@ -155,7 +157,7 @@ def confirm_payments(request, user: User, payments_data: list):
         raise Http404
 
     lookup_keys = list(payment_map.keys())
-    use_int_pk = request.version == "1.0" and lookup_keys and all(val.isdigit() for val in lookup_keys)
+    use_int_pk = not waffle.switch_is_active(API_UUID) and all(val.isdigit() for val in lookup_keys)
 
     for payment in payments:
         payment_key = str(payment.pk) if use_int_pk else str(payment.payment_id)
