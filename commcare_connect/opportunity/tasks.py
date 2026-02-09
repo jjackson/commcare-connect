@@ -321,10 +321,7 @@ def send_payment_notification(opportunity_id: int, payment_ids: list[int]):
                     "opportunity_id": str(opportunity.id),
                     "opportunity_uuid": str(opportunity.opportunity_id),
                     "title": gettext("Payment received"),
-                    "body": gettext(
-                        "You have received a payment of "
-                        f"{opportunity.currency_code} {payment.amount} for {opportunity.name}.",
-                    ),
+                    "body": gettext(f"You have received a payment for {opportunity.name} Opportunity - see how much!"),
                     "payment_id": str(payment.id),
                     "payment_uuid": str(payment.payment_id),
                 },
