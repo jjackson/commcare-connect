@@ -67,8 +67,18 @@ class TestOrganizationChangeForm:
         organization.refresh_from_db()
         assert organization.name == "New Name"
 
-    @pytest.mark.parametrize("permission", [None, WORKSPACE_ENTITY_MANAGEMENT_ACCESS])
-    def test_update_program_manager_without_permission(self, organization: Organization, user: User, permission):
+    @pytest.mark.parametrize(
+        "permission, program_manager",
+        [
+            (None, False),
+            (None, True),
+            (WORKSPACE_ENTITY_MANAGEMENT_ACCESS, False),
+            (WORKSPACE_ENTITY_MANAGEMENT_ACCESS, True),
+        ],
+    )
+    def test_update_program_manager_without_permission(
+        self, organization: Organization, user: User, permission, program_manager
+    ):
         if permission is not None:
             app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
             perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
@@ -78,7 +88,7 @@ class TestOrganizationChangeForm:
         llo_entity = LLOEntity.objects.create(name="Test LLO")
 
         organization.llo_entity = None
-        organization.program_manager = False
+        organization.program_manager = program_manager
         organization.save()
         form = OrganizationChangeForm(
             data={"name": organization.name, "llo_entity": llo_entity.pk},
