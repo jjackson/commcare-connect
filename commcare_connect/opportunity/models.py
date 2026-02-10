@@ -426,7 +426,7 @@ class CompletedTask(XFormBaseModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["xform_id", "module", "opportunity_access"], name="unique_xform_completed_task"
+                fields=["xform_id", "task", "opportunity_access"], name="unique_xform_completed_task"
             )
         ]
 
