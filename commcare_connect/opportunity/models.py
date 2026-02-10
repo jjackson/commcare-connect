@@ -411,7 +411,7 @@ class CompletedTaskStatus(models.TextChoices):
 
 class CompletedTask(XFormBaseModel):
     task = models.ForeignKey(Task, on_delete=models.PROTECT)
-    opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE, null=True)
+    opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE)
     date = models.DateTimeField()
     duration = models.DurationField()
     xform_id = models.CharField(max_length=50, null=True)
