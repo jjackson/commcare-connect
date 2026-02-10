@@ -404,6 +404,22 @@ class CompletedModule(XFormBaseModel):
         ]
 
 
+class CompletedTask(XFormBaseModel):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    task = models.ForeignKey(Task, on_delete=models.PROTECT)
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.PROTECT)
+    opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE, null=True)
+    date = models.DateTimeField()
+    duration = models.DurationField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["xform_id", "module", "opportunity_access"], name="unique_xform_completed_task"
+            )
+        ]
+
+
 class Assessment(XFormBaseModel):
     user = models.ForeignKey(
         User,
