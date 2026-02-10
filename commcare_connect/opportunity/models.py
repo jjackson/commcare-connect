@@ -255,6 +255,17 @@ class LearnModule(models.Model):
         return self.name
 
 
+class Task(models.Model):
+    app = models.ForeignKey(CommCareApp, on_delete=models.CASCADE, related_name="tasks")
+    slug = models.SlugField()
+    name = models.CharField(max_length=255)
+    description = models.TextField()
+    time_estimate = models.IntegerField(help_text="Estimated hours to complete the task")
+
+    def __str__(self):
+        return self.name
+
+
 class XFormBaseModel(models.Model):
     xform_id = models.CharField(max_length=50)
     app_build_id = models.CharField(max_length=50, null=True, blank=True)
