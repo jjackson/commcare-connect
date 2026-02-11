@@ -18,22 +18,24 @@
     <!-- Top header section -->
     <header class="mb-4">
         <div class="w-full rounded-lg bg-brand-indigo p-5 shadow-sm sm:p-6">
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                 <div class="min-w-0 flex-1">
                     <h1 class="multi-line-clamp-2 text-2xl font-semibold text-white break-words hyphens-auto leading-snug">
                         {{ opportunity.name }}
                     </h1>
                 </div>
 
-                <div class="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 lg:w-auto lg:max-w-3xl xl:grid-cols-6">
-                    {% for metric in metrics %}
-                        <div class="rounded-md border border-brand-sky/30 bg-brand-cornflower-blue/25 p-3 text-center">
-                            <div class="text-xl font-semibold text-white">
-                                {{ metric.value|default_if_none:"--" }}
+                <div class="w-full border-t border-white/20 pt-4 lg:w-auto lg:border-t-0 lg:border-l lg:border-white/20 lg:pl-8 lg:pt-0">
+                    <div class="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 lg:w-auto lg:max-w-3xl xl:grid-cols-6">
+                        {% for metric in metrics %}
+                            <div class="rounded-md border border-brand-sky/30 bg-brand-cornflower-blue/25 p-3 text-center">
+                                <div class="text-xl font-semibold text-white">
+                                    {{ metric.value|default_if_none:"--" }}
+                                </div>
+                                <div class="mt-0.5 text-xs text-white/80">{{ metric.name }}</div>
                             </div>
-                            <div class="mt-0.5 text-xs text-white/80">{{ metric.name }}</div>
-                        </div>
-                    {% endfor %}
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
         </div>
