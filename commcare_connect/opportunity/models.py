@@ -265,6 +265,9 @@ class Task(models.Model):
     def __str__(self):
         return self.name
 
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["app_id", "slug"], name="unique_task_per_app")]
+
 
 class XFormBaseModel(models.Model):
     xform_id = models.CharField(max_length=50)
