@@ -4,6 +4,7 @@
 {% block title %}MBW Monitoring Dashboard{% endblock %}
 
 {% block content %}
+{% csrf_token %}
 <div class="container mx-auto p-4" x-data="mbwDashboard()">
 
     {% if error %}
@@ -61,6 +62,39 @@
             <button @click="refreshData()" class="button button-sm outline-style">
                 <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh
             </button>
+        </div>
+    </div>
+
+    <!-- Monitoring Session Header -->
+    <div x-show="monitoringSession && !loading && !loadError" x-cloak
+         class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-4">
+        <div class="flex justify-between items-center">
+            <div>
+                <h2 class="font-semibold text-indigo-900" x-text="monitoringSession?.title || 'Monitoring Session'"></h2>
+                <p class="text-sm text-indigo-700 mt-1">
+                    Progress: <span class="font-medium" x-text="monitoringSession?.progress?.assessed || 0"></span>
+                    / <span class="font-medium" x-text="monitoringSession?.progress?.total || 0"></span> FLWs assessed
+                </p>
+            </div>
+            <div class="flex gap-2">
+                <a href="{% url 'audit:session_list' %}" class="inline-flex items-center px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                    <i class="fa-solid fa-arrow-left mr-1"></i> Back to Sessions
+                </a>
+                <button @click="showCompleteModal = true"
+                        x-show="monitoringSession?.status === 'in_progress'"
+                        class="inline-flex items-center px-3 py-1.5 text-sm text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                    <i class="fa-solid fa-check mr-1"></i> Complete Audit
+                </button>
+                <span x-show="monitoringSession?.status === 'completed'"
+                      class="inline-flex items-center px-3 py-1.5 text-sm text-green-700 bg-green-50 border border-green-200 rounded-md">
+                    <i class="fa-solid fa-check-circle mr-1"></i> Completed
+                </span>
+            </div>
+        </div>
+        <!-- Progress bar -->
+        <div class="mt-3 bg-indigo-100 rounded-full h-2">
+            <div class="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                 :style="'width: ' + (monitoringSession?.progress?.percentage || 0) + '%'"></div>
         </div>
     </div>
 
@@ -197,26 +231,47 @@
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th @click="sortOverview('display_name')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                            <th @click="sortOverview('display_name')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Frontline worker name and ID">
                                 FLW Name <span x-text="getSortArrow('overview', 'display_name')"></span>
                             </th>
-                            <th @click="sortOverview('cases_registered')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
-                                # Cases <span x-text="getSortArrow('overview', 'cases_registered')"></span>
+                            <th @click="sortOverview('cases_registered')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Unique mothers from CCHQ registration forms. Eligible count in parentheses.">
+                                # Mothers <span x-text="getSortArrow('overview', 'cases_registered')"></span>
                             </th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="First Gold Standard Score - TBD">
-                                GS Score
+                            <th @click="sortOverview('first_gs_score')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Oldest Gold Standard Visit Checklist score submitted by a supervisor for this FLW. Green ≥70, Yellow 50-69, Red <50.">
+                                GS Score <span x-text="getSortArrow('overview', 'first_gs_score')"></span>
                             </th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Post-test attempts - TBD">
                                 Post-Test
                             </th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="% of visits due 5+ days ago - TBD">
-                                % Due 5+ Days
+                            <th @click="sortOverview('followup_rate')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Completed ÷ total visits due 5+ days ago, for mothers eligible for full intervention bonus only. Green ≥75%, Yellow ≥50%, Red <50%.">
+                                Follow-up Rate <span x-text="getSortArrow('overview', 'followup_rate')"></span>
                             </th>
-                            <th @click="sortOverview('completed_visits')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
-                                Completed <span x-text="getSortArrow('overview', 'completed_visits')"></span>
+                            <th @click="sortOverview('cases_still_eligible_pct')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Eligible mothers still on track: have 5+ completed visits OR ≤1 missed visit. Shows on-track / total eligible.">
+                                Eligible 5+ <span x-text="getSortArrow('overview', 'cases_still_eligible_pct')"></span>
                             </th>
-                            <th @click="sortOverview('median_meters_per_case')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
-                                Median m/Case <span x-text="getSortArrow('overview', 'median_meters_per_case')"></span>
+                            <th @click="sortOverview('revisit_distance_km')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Median haversine distance (km) between successive GPS coordinates for revisits to the same mother case.">
+                                Revisit Dist. <span x-text="getSortArrow('overview', 'revisit_distance_km')"></span>
+                            </th>
+                            <th @click="sortOverview('median_meters_per_visit')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Median haversine distance (m) between consecutive visits to different mothers on the same day. Green ≥1000m, Yellow ≥100m, Red <100m.">
+                                Meter/Visit <span x-text="getSortArrow('overview', 'median_meters_per_visit')"></span>
+                            </th>
+                            <th @click="sortOverview('median_minutes_per_visit')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Median time gap (min) between consecutive form submissions to different mothers on the same day.">
+                                Minute/Visit <span x-text="getSortArrow('overview', 'median_minutes_per_visit')"></span>
+                            </th>
+                            <th @click="sortOverview('phone_dup_pct')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="% of this FLW's mothers sharing a phone number with at least one other mother. High values may indicate data fabrication.">
+                                Phone Dup % <span x-text="getSortArrow('overview', 'phone_dup_pct')"></span>
+                            </th>
+                            <th @click="sortOverview('anc_pnc_same_date_count')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Count of mothers where ANC and PNC were recorded on the same date, out of those with both dates. Same-day ANC+PNC is suspicious.">
+                                ANC ≠ PNC <span x-text="getSortArrow('overview', 'anc_pnc_same_date_count')"></span>
+                            </th>
+                            <th @click="sortOverview('parity_concentration_pct')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="% of this FLW's mothers with a duplicate parity value (from ANC form). High concentration suggests fabrication.">
+                                Parity <span x-text="getSortArrow('overview', 'parity_concentration_pct')"></span>
+                            </th>
+                            <th @click="sortOverview('age_concentration_pct')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="% of this FLW's mothers with a duplicate age value. High concentration suggests fabrication.">
+                                Age <span x-text="getSortArrow('overview', 'age_concentration_pct')"></span>
+                            </th>
+                            <th @click="sortOverview('age_equals_reg_pct')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="% of mothers whose date of birth month+day matches the registration date month+day. Suggests FLW entered a fabricated DOB.">
+                                Age ≠ Reg <span x-text="getSortArrow('overview', 'age_equals_reg_pct')"></span>
                             </th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -236,39 +291,165 @@
                                         </div>
                                     </div>
                                 </td>
-                                <td class="px-4 py-3 text-sm text-gray-900" x-text="flw.cases_registered"></td>
-                                <td class="px-4 py-3 text-sm text-gray-400">&mdash;</td>
-                                <td class="px-4 py-3 text-sm text-gray-400">&mdash;</td>
-                                <td class="px-4 py-3 text-sm text-gray-400">&mdash;</td>
-                                <td class="px-4 py-3 text-sm text-gray-900" x-text="flw.completed_visits"></td>
                                 <td class="px-4 py-3 text-sm text-gray-900">
-                                    <template x-if="flw.median_meters_per_case !== null && flw.median_meters_per_case !== undefined">
-                                        <span x-text="flw.median_meters_per_case + ' km'"></span>
+                                    <span x-text="flw.cases_registered"></span>
+                                    <span class="text-xs text-gray-400" x-text="'(' + (flw.eligible_mothers || 0) + ' eligible)'"></span>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <template x-if="flw.first_gs_score !== null && flw.first_gs_score !== undefined">
+                                        <span :class="Number(flw.first_gs_score) >= 70 ? 'text-green-600 font-medium' : Number(flw.first_gs_score) >= 50 ? 'text-yellow-600' : 'text-red-600'"
+                                              x-text="flw.first_gs_score + '%'"></span>
                                     </template>
-                                    <template x-if="flw.median_meters_per_case === null || flw.median_meters_per_case === undefined">
+                                    <template x-if="flw.first_gs_score === null || flw.first_gs_score === undefined">
+                                        <span class="text-gray-400">&mdash;</span>
+                                    </template>
+                                </td>
+                                <td class="px-4 py-3 text-sm text-gray-400">&mdash;</td>
+                                <td class="px-4 py-3 text-sm">
+                                    <div class="flex items-center">
+                                        <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                            <div class="h-2 rounded-full transition-all"
+                                                 :class="flw.followup_rate >= 75 ? 'bg-green-500' : flw.followup_rate >= 50 ? 'bg-yellow-500' : 'bg-red-500'"
+                                                 :style="'width: ' + Math.min(100, flw.followup_rate || 0) + '%'"></div>
+                                        </div>
+                                        <span class="font-bold text-xs"
+                                              :class="flw.followup_rate >= 75 ? 'text-green-600' : flw.followup_rate >= 50 ? 'text-yellow-600' : 'text-red-600'"
+                                              x-text="(flw.followup_rate || 0) + '%'"></span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <template x-if="flw.cases_still_eligible && flw.cases_still_eligible.total > 0">
+                                        <span :class="flw.cases_still_eligible.pct >= 70 ? 'text-green-600 font-medium' : flw.cases_still_eligible.pct >= 50 ? 'text-yellow-600' : 'text-red-600'"
+                                              x-text="flw.cases_still_eligible.eligible + '/' + flw.cases_still_eligible.total + ' (' + flw.cases_still_eligible.pct + '%)'"></span>
+                                    </template>
+                                    <template x-if="!flw.cases_still_eligible || flw.cases_still_eligible.total === 0">
+                                        <span class="text-gray-400">&mdash;</span>
+                                    </template>
+                                </td>
+                                <td class="px-4 py-3 text-sm text-gray-900">
+                                    <template x-if="flw.revisit_distance_km !== null && flw.revisit_distance_km !== undefined">
+                                        <span x-text="flw.revisit_distance_km + ' km'"></span>
+                                    </template>
+                                    <template x-if="flw.revisit_distance_km === null || flw.revisit_distance_km === undefined">
+                                        <span class="text-gray-400">&mdash;</span>
+                                    </template>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <template x-if="flw.median_meters_per_visit !== null && flw.median_meters_per_visit !== undefined">
+                                        <span :class="flw.median_meters_per_visit >= 1000 ? 'text-green-600 font-medium' : flw.median_meters_per_visit >= 100 ? 'text-yellow-600' : 'text-red-600'"
+                                              x-text="flw.median_meters_per_visit + ' m'"></span>
+                                    </template>
+                                    <template x-if="flw.median_meters_per_visit === null || flw.median_meters_per_visit === undefined">
+                                        <span class="text-gray-400">&mdash;</span>
+                                    </template>
+                                </td>
+                                <td class="px-4 py-3 text-sm text-gray-900">
+                                    <template x-if="flw.median_minutes_per_visit !== null && flw.median_minutes_per_visit !== undefined">
+                                        <span x-text="flw.median_minutes_per_visit + ' min'"></span>
+                                    </template>
+                                    <template x-if="flw.median_minutes_per_visit === null || flw.median_minutes_per_visit === undefined">
+                                        <span class="text-gray-400">&mdash;</span>
+                                    </template>
+                                </td>
+                                <!-- Phone Dup % -->
+                                <td class="px-4 py-3 text-sm">
+                                    <template x-if="flw.phone_dup_pct !== null && flw.phone_dup_pct !== undefined">
+                                        <span :class="flw.phone_dup_pct <= 10 ? 'text-green-600 font-medium' : flw.phone_dup_pct <= 30 ? 'text-yellow-600' : 'text-red-600'"
+                                              x-text="flw.phone_dup_pct + '%'"></span>
+                                    </template>
+                                    <template x-if="flw.phone_dup_pct === null || flw.phone_dup_pct === undefined">
+                                        <span class="text-gray-400">&mdash;</span>
+                                    </template>
+                                </td>
+                                <!-- ANC ≠ PNC -->
+                                <td class="px-4 py-3 text-sm">
+                                    <template x-if="flw.anc_pnc_same_date_count !== null && flw.anc_pnc_same_date_count !== undefined">
+                                        <span :class="flw.anc_pnc_same_date_count <= 1 ? 'text-green-600 font-medium' : flw.anc_pnc_same_date_count < 5 ? 'text-yellow-600' : 'text-red-600'"
+                                              x-text="flw.anc_pnc_same_date_count"></span>
+                                    </template>
+                                    <template x-if="flw.anc_pnc_same_date_count === null || flw.anc_pnc_same_date_count === undefined">
+                                        <span class="text-gray-400">&mdash;</span>
+                                    </template>
+                                </td>
+                                <!-- Parity -->
+                                <td class="px-4 py-3 text-sm text-gray-900">
+                                    <template x-if="flw.parity_concentration">
+                                        <div>
+                                            <span x-text="flw.parity_concentration.pct_duplicate + '%'"></span>
+                                            <div class="text-xs text-gray-400"
+                                                 x-text="flw.parity_concentration.mode_pct + '% / ' + flw.parity_concentration.mode_value">
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="!flw.parity_concentration">
+                                        <span class="text-gray-400">&mdash;</span>
+                                    </template>
+                                </td>
+                                <!-- Age -->
+                                <td class="px-4 py-3 text-sm text-gray-900">
+                                    <template x-if="flw.age_concentration">
+                                        <div>
+                                            <span x-text="flw.age_concentration.pct_duplicate + '%'"></span>
+                                            <div class="text-xs text-gray-400"
+                                                 x-text="flw.age_concentration.mode_pct + '% / ' + flw.age_concentration.mode_value">
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="!flw.age_concentration">
+                                        <span class="text-gray-400">&mdash;</span>
+                                    </template>
+                                </td>
+                                <!-- Age ≠ Reg -->
+                                <td class="px-4 py-3 text-sm text-gray-900">
+                                    <template x-if="flw.age_equals_reg_pct !== null && flw.age_equals_reg_pct !== undefined">
+                                        <span x-text="flw.age_equals_reg_pct + '%'"></span>
+                                    </template>
+                                    <template x-if="flw.age_equals_reg_pct === null || flw.age_equals_reg_pct === undefined">
                                         <span class="text-gray-400">&mdash;</span>
                                     </template>
                                 </td>
                                 <td class="px-4 py-3 text-sm text-right whitespace-nowrap">
-                                    <button @click="addToFilter(flw.username)"
-                                            class="inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-100 mr-1"
-                                            title="Add this FLW to filter">
-                                        <i class="fa-solid fa-filter mr-1"></i> Filter
-                                    </button>
-                                    <button @click="openAITaskModal(flw)"
-                                            :disabled="hasOpenTask(flw.username)"
-                                            class="inline-flex items-center px-2 py-1 border rounded text-xs"
-                                            :class="hasOpenTask(flw.username)
-                                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                                : 'border-blue-300 text-blue-700 hover:bg-blue-50'"
-                                            :title="hasOpenTask(flw.username) ? 'Open task exists' : 'Create task for this FLW'">
-                                        <i class="fa-solid fa-plus mr-1"></i> Task
-                                    </button>
+                                    <div class="flex items-center justify-end gap-1">
+                                        <!-- Pass/Fail assessment (monitoring session only) -->
+                                        <template x-if="monitoringSession">
+                                            <div class="inline-flex items-center gap-1 mr-2">
+                                                <button @click="setFlwResult(flw.username, 'pass')"
+                                                        :class="getFlwResult(flw.username) === 'pass' ? 'bg-green-600 text-white border-green-600' : 'bg-green-50 text-green-800 border-green-300 hover:bg-green-100'"
+                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors">
+                                                    <i class="fa-solid fa-check"></i>
+                                                </button>
+                                                <button @click="setFlwResult(flw.username, 'fail')"
+                                                        :class="getFlwResult(flw.username) === 'fail' ? 'bg-red-600 text-white border-red-600' : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'"
+                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors">
+                                                    <i class="fa-solid fa-xmark"></i>
+                                                </button>
+                                                <button @click="openFlwNotesModal(flw.username)"
+                                                        :class="getFlwNotes(flw.username) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'"
+                                                        class="px-2 py-1 rounded text-xs border transition-colors">
+                                                    <i class="fa-solid fa-note-sticky"></i>
+                                                </button>
+                                            </div>
+                                        </template>
+                                        <button @click="addToFilter(flw.username)"
+                                                class="inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-100"
+                                                title="Add this FLW to filter">
+                                            <i class="fa-solid fa-filter mr-1"></i> Filter
+                                        </button>
+                                        <button @click="openAITaskModal(flw)"
+                                                :disabled="hasOpenTask(flw.username)"
+                                                class="inline-flex items-center px-2 py-1 border rounded text-xs"
+                                                :class="hasOpenTask(flw.username)
+                                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                                    : 'border-blue-300 text-blue-700 hover:bg-blue-50'"
+                                                :title="hasOpenTask(flw.username) ? 'Open task exists' : 'Create task for this FLW'">
+                                            <i class="fa-solid fa-plus mr-1"></i> Task
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         </template>
                         <template x-if="filteredOverviewFlws.length === 0">
-                            <tr><td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500">No FLW data available</td></tr>
+                            <tr><td colspan="15" class="px-4 py-8 text-center text-sm text-gray-500">No FLW data available</td></tr>
                         </template>
                     </tbody>
                 </table>
@@ -314,22 +495,22 @@
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th @click="sortGps('display_name')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                            <th @click="sortGps('display_name')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Frontline worker name and ID">
                                 FLW Name <span x-text="getSortArrow('gps', 'display_name')"></span>
                             </th>
-                            <th @click="sortGps('total_visits')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                            <th @click="sortGps('total_visits')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Total form submissions within the selected date range.">
                                 Total Visits <span x-text="getSortArrow('gps', 'total_visits')"></span>
                             </th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">With GPS</th>
-                            <th @click="sortGps('flagged_visits')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Visits with parseable GPS coordinates (lat, lon).">With GPS</th>
+                            <th @click="sortGps('flagged_visits')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Visits flagged for anomalous GPS: e.g. large distance between revisits to the same case.">
                                 Flagged <span x-text="getSortArrow('gps', 'flagged_visits')"></span>
                             </th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unique Cases</th>
-                            <th @click="sortGps('avg_case_distance_km')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Count of distinct mother case IDs visited by this FLW.">Unique Cases</th>
+                            <th @click="sortGps('avg_case_distance_km')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Average haversine distance (km) between GPS coordinates of successive visits to the same mother case.">
                                 Avg Case Dist <span x-text="getSortArrow('gps', 'avg_case_distance_km')"></span>
                             </th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Case Dist</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trailing 7 Days</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Largest haversine distance (km) observed between two visits to the same mother case.">Max Case Dist</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Daily visit count sparkline for the last 7 days; bar height = daily distance traveled.">Trailing 7 Days</th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
@@ -386,20 +567,42 @@
                                     </template>
                                 </td>
                                 <td class="px-4 py-3 text-sm text-right whitespace-nowrap">
-                                    <button @click="toggleGpsDrillDown(flw.username)"
-                                            class="inline-flex items-center px-2 py-1 border border-blue-300 rounded text-xs text-blue-700 hover:bg-blue-50 mr-1">
-                                        <i class="fa-solid mr-1" :class="gpsExpandedFlw === flw.username ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
-                                        <span x-text="gpsExpandedFlw === flw.username ? 'Hide' : 'Details'"></span>
-                                    </button>
-                                    <button @click="openAITaskModal(flw)"
-                                            :disabled="hasOpenTask(flw.username)"
-                                            class="inline-flex items-center px-2 py-1 border rounded text-xs"
-                                            :class="hasOpenTask(flw.username)
-                                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                                : 'border-blue-300 text-blue-700 hover:bg-blue-50'"
-                                            :title="hasOpenTask(flw.username) ? 'Open task exists' : 'Create task'">
-                                        <i class="fa-solid fa-plus mr-1"></i> Task
-                                    </button>
+                                    <div class="flex items-center justify-end gap-1">
+                                        <!-- Pass/Fail assessment (monitoring session only) -->
+                                        <template x-if="monitoringSession">
+                                            <div class="inline-flex items-center gap-1 mr-2">
+                                                <button @click="setFlwResult(flw.username, 'pass')"
+                                                        :class="getFlwResult(flw.username) === 'pass' ? 'bg-green-600 text-white border-green-600' : 'bg-green-50 text-green-800 border-green-300 hover:bg-green-100'"
+                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors">
+                                                    <i class="fa-solid fa-check"></i>
+                                                </button>
+                                                <button @click="setFlwResult(flw.username, 'fail')"
+                                                        :class="getFlwResult(flw.username) === 'fail' ? 'bg-red-600 text-white border-red-600' : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'"
+                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors">
+                                                    <i class="fa-solid fa-xmark"></i>
+                                                </button>
+                                                <button @click="openFlwNotesModal(flw.username)"
+                                                        :class="getFlwNotes(flw.username) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'"
+                                                        class="px-2 py-1 rounded text-xs border transition-colors">
+                                                    <i class="fa-solid fa-note-sticky"></i>
+                                                </button>
+                                            </div>
+                                        </template>
+                                        <button @click="toggleGpsDrillDown(flw.username)"
+                                                class="inline-flex items-center px-2 py-1 border border-blue-300 rounded text-xs text-blue-700 hover:bg-blue-50">
+                                            <i class="fa-solid mr-1" :class="gpsExpandedFlw === flw.username ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                                            <span x-text="gpsExpandedFlw === flw.username ? 'Hide' : 'Details'"></span>
+                                        </button>
+                                        <button @click="openAITaskModal(flw)"
+                                                :disabled="hasOpenTask(flw.username)"
+                                                class="inline-flex items-center px-2 py-1 border rounded text-xs"
+                                                :class="hasOpenTask(flw.username)
+                                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                                    : 'border-blue-300 text-blue-700 hover:bg-blue-50'"
+                                                :title="hasOpenTask(flw.username) ? 'Open task exists' : 'Create task'">
+                                            <i class="fa-solid fa-plus mr-1"></i> Task
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         </template>
@@ -481,9 +684,11 @@
                     <div class="text-xs text-gray-600">Total FLWs</div>
                     <div class="text-xl font-bold text-gray-900" x-text="filteredFollowupFlws.length"></div>
                 </div>
-                <div class="border-l-4 border-purple-500 pl-3">
-                    <div class="text-xs text-gray-600">Avg Completion Rate</div>
-                    <div class="text-xl font-bold text-gray-900" x-text="computeOverallFollowupRate() + '%'"></div>
+                <div class="border-l-4 border-green-500 pl-3">
+                    <div class="text-xs text-gray-600">Avg Follow-up Rate</div>
+                    <div class="text-xl font-bold"
+                         :class="computeOverallFollowupRate() >= 75 ? 'text-green-600' : computeOverallFollowupRate() >= 50 ? 'text-yellow-600' : 'text-red-600'"
+                         x-text="computeOverallFollowupRate() + '%'"></div>
                 </div>
             </div>
         </div>
@@ -499,22 +704,23 @@
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th @click="sortFollowup('display_name')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                            <th @click="sortFollowup('display_name')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Frontline worker name and ID">
                                 FLW Name <span x-text="getSortArrow('followup', 'display_name')"></span>
                             </th>
-                            <th @click="sortFollowup('completion_rate')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
-                                Completion Rate <span x-text="getSortArrow('followup', 'completion_rate')"></span>
+                            <th @click="sortFollowup('completion_rate')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Completed ÷ total visits due 5+ days ago, for eligible mothers only. Green ≥80%, Yellow ≥60%, Red <60%.">
+                                Follow-up Rate <span x-text="getSortArrow('followup', 'completion_rate')"></span>
                             </th>
-                            <th @click="sortFollowup('completed_total')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700">
+                            <th @click="sortFollowup('completed_total')" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700" title="Total completed visits out of all scheduled visits (on-time + late).">
                                 Completed <span x-text="getSortArrow('followup', 'completed_total')"></span>
                             </th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Due</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ANC</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Postnatal</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Week 1</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Month 1</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Month 3</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Month 6</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Visits not yet completed but not past expiry. Includes both on-time and late.">Due</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Visits past their expiry date that were never completed.">Missed</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Per-visit-type breakdown: ✓ completed / ◷ due / ✗ missed.">ANC</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Per-visit-type breakdown: ✓ completed / ◷ due / ✗ missed.">Postnatal</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Per-visit-type breakdown: ✓ completed / ◷ due / ✗ missed.">Week 1</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Per-visit-type breakdown: ✓ completed / ◷ due / ✗ missed.">Month 1</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Per-visit-type breakdown: ✓ completed / ◷ due / ✗ missed.">Month 3</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Per-visit-type breakdown: ✓ completed / ◷ due / ✗ missed.">Month 6</th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
@@ -550,35 +756,66 @@
                                               x-text="flw.completion_rate + '%'"></span>
                                     </div>
                                 </td>
-                                <td class="px-4 py-3 text-sm text-gray-900" x-text="flw.completed_total"></td>
+                                <td class="px-4 py-3 text-sm text-gray-900">
+                                    <span x-text="flw.completed_total"></span>
+                                    <span class="text-xs text-gray-400" x-text="flw.total_visits > 0 ? '(' + Math.round(flw.completed_total / flw.total_visits * 100) + '%)' : ''"></span>
+                                </td>
                                 <td class="px-4 py-3 text-sm text-gray-900" x-text="flw.due_total"></td>
+                                <td class="px-4 py-3 text-sm text-gray-900" x-text="flw.missed_total || 0"></td>
                                 <!-- Per-visit-type mini columns -->
                                 <template x-for="vtype in ['anc', 'postnatal', 'week1', 'month1', 'month3', 'month6']" :key="vtype">
                                     <td class="px-4 py-3 whitespace-nowrap text-xs">
                                         <div class="text-green-600"><i class="fa-solid fa-check mr-1"></i><span x-text="(flw[vtype + '_completed_on_time'] || 0) + (flw[vtype + '_completed_late'] || 0)"></span></div>
                                         <div class="text-gray-500"><i class="fa-solid fa-clock mr-1"></i><span x-text="(flw[vtype + '_due_on_time'] || 0) + (flw[vtype + '_due_late'] || 0)"></span></div>
-                                        <div class="text-red-600"><i class="fa-solid fa-times mr-1"></i><span x-text="flw[vtype + '_missed'] || 0"></span></div>
+                                        <div class="text-red-500"><i class="fa-solid fa-xmark mr-1"></i><span x-text="flw[vtype + '_missed'] || 0"></span></div>
                                     </td>
                                 </template>
                                 <td class="px-4 py-3 text-sm text-right whitespace-nowrap" @click.stop>
-                                    <button @click="openAITaskModal(flw)"
-                                            :disabled="hasOpenTask(flw.username)"
-                                            class="inline-flex items-center px-2 py-1 border rounded text-xs"
-                                            :class="hasOpenTask(flw.username)
-                                                ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                                : 'border-blue-300 text-blue-700 hover:bg-blue-50'"
-                                            :title="hasOpenTask(flw.username) ? 'Open task exists' : 'Create task'">
-                                        <i class="fa-solid fa-plus mr-1"></i> Task
-                                    </button>
+                                    <div class="flex items-center justify-end gap-1">
+                                        <!-- Pass/Fail assessment (monitoring session only) -->
+                                        <template x-if="monitoringSession">
+                                            <div class="inline-flex items-center gap-1 mr-2">
+                                                <button @click="setFlwResult(flw.username, 'pass')"
+                                                        :class="getFlwResult(flw.username) === 'pass' ? 'bg-green-600 text-white border-green-600' : 'bg-green-50 text-green-800 border-green-300 hover:bg-green-100'"
+                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors">
+                                                    <i class="fa-solid fa-check"></i>
+                                                </button>
+                                                <button @click="setFlwResult(flw.username, 'fail')"
+                                                        :class="getFlwResult(flw.username) === 'fail' ? 'bg-red-600 text-white border-red-600' : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'"
+                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors">
+                                                    <i class="fa-solid fa-xmark"></i>
+                                                </button>
+                                                <button @click="openFlwNotesModal(flw.username)"
+                                                        :class="getFlwNotes(flw.username) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'"
+                                                        class="px-2 py-1 rounded text-xs border transition-colors">
+                                                    <i class="fa-solid fa-note-sticky"></i>
+                                                </button>
+                                            </div>
+                                        </template>
+                                        <button @click="openAITaskModal(flw)"
+                                                :disabled="hasOpenTask(flw.username)"
+                                                class="inline-flex items-center px-2 py-1 border rounded text-xs"
+                                                :class="hasOpenTask(flw.username)
+                                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                                    : 'border-blue-300 text-blue-700 hover:bg-blue-50'"
+                                                :title="hasOpenTask(flw.username) ? 'Open task exists' : 'Create task'">
+                                            <i class="fa-solid fa-plus mr-1"></i> Task
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                             <!-- Inline drill-down row (expands under the FLW row) -->
                             <tr x-show="followupExpandedFlw === flw.username" x-cloak>
-                                <td colspan="11" class="p-0 bg-gray-50 border-l-4 border-blue-400">
+                                <td colspan="12" class="p-0 bg-gray-50 border-l-4 border-blue-400">
                                     <!-- Header bar -->
                                     <div class="px-6 py-3 border-b border-gray-200 flex justify-between items-center">
                                         <h3 class="text-sm font-semibold text-gray-900">Visits for <span x-text="followupExpandedFlwName"></span></h3>
                                         <div class="flex items-center gap-3">
+                                            <label class="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer" @click.stop>
+                                                <input type="checkbox" x-model="showEligibleOnly"
+                                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5">
+                                                Full intervention bonus only
+                                            </label>
                                             <label class="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer" @click.stop>
                                                 <input type="checkbox" x-model="showAllVisits"
                                                        class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5">
@@ -608,7 +845,7 @@
                                             <div class="border-b border-gray-100">
                                                 <!-- Mother header: name (entity ID) + follow-up rate -->
                                                 <div class="px-6 py-2 bg-gray-100 flex items-center justify-between">
-                                                    <span class="text-sm font-medium text-gray-700">
+                                                    <span class="text-sm font-medium text-gray-700 flex items-center">
                                                         <template x-if="mother.mother_name">
                                                             <span>
                                                                 <span x-text="mother.mother_name"></span>
@@ -617,6 +854,9 @@
                                                         </template>
                                                         <template x-if="!mother.mother_name">
                                                             <span class="font-mono text-xs" x-text="mother.mother_case_id"></span>
+                                                        </template>
+                                                        <template x-if="!mother.eligible">
+                                                            <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 ml-2">Not eligible</span>
                                                         </template>
                                                     </span>
                                                     <span class="text-xs px-2 py-1 rounded"
@@ -629,9 +869,13 @@
                                                     <span x-show="mother.registration_date"><i class="fa-solid fa-calendar-plus mr-1 text-gray-400"></i>Registered: <span class="text-gray-700" x-text="mother.registration_date"></span></span>
                                                     <span x-show="mother.age"><i class="fa-solid fa-user mr-1 text-gray-400"></i>Age: <span class="text-gray-700" x-text="mother.age"></span></span>
                                                     <span x-show="mother.phone_number"><i class="fa-solid fa-phone mr-1 text-gray-400"></i><span class="text-gray-700" x-text="mother.phone_number"></span></span>
+                                                    <span x-show="mother.household_size"><i class="fa-solid fa-people-roof mr-1 text-gray-400"></i>Household: <span class="text-gray-700" x-text="mother.household_size"></span></span>
+                                                    <span x-show="mother.preferred_time_of_visit"><i class="fa-solid fa-clock mr-1 text-gray-400"></i>Preferred time: <span class="text-gray-700" x-text="mother.preferred_time_of_visit"></span></span>
+                                                    <span x-show="mother.expected_delivery_date"><i class="fa-solid fa-calendar mr-1 text-gray-400"></i>EDD: <span class="text-gray-700" x-text="mother.expected_delivery_date"></span></span>
                                                     <span x-show="mother.anc_completion_date"><i class="fa-solid fa-check-circle mr-1 text-green-500"></i>ANC completed: <span class="text-gray-700" x-text="mother.anc_completion_date"></span></span>
                                                     <span x-show="mother.pnc_completion_date"><i class="fa-solid fa-check-circle mr-1 text-green-500"></i>PNC completed: <span class="text-gray-700" x-text="mother.pnc_completion_date"></span></span>
-                                                    <span x-show="!mother.registration_date && !mother.age && !mother.phone_number && !mother.anc_completion_date && !mother.pnc_completion_date" class="text-gray-400 italic">No metadata available</span>
+                                                    <span x-show="mother.baby_dob"><i class="fa-solid fa-baby mr-1 text-gray-400"></i>Baby DOB: <span class="text-gray-700" x-text="mother.baby_dob"></span></span>
+                                                    <span x-show="!mother.registration_date && !mother.age && !mother.phone_number && !mother.household_size && !mother.preferred_time_of_visit && !mother.anc_completion_date && !mother.pnc_completion_date && !mother.expected_delivery_date && !mother.baby_dob" class="text-gray-400 italic">No metadata available</span>
                                                 </div>
                                                 <!-- Visits table with fixed column widths for alignment -->
                                                 <table class="w-full table-fixed divide-y divide-gray-200">
@@ -673,7 +917,7 @@
                         </tbody>
                     </template>
                     <tbody x-show="filteredFollowupFlws.length === 0">
-                        <tr><td colspan="11" class="px-4 py-8 text-center text-sm text-gray-500">No follow-up data available. Ensure CommCare HQ is authorized.</td></tr>
+                        <tr><td colspan="12" class="px-4 py-8 text-center text-sm text-gray-500">No follow-up data available. Ensure CommCare HQ is authorized.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -810,6 +1054,94 @@
         </div>
     </div>
 
+    <!-- FLW Notes Modal (monitoring session) -->
+    <div x-show="showFlwNotesModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showFlwNotesModal = false"></div>
+        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div class="px-4 pt-5 pb-4 sm:p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-3">
+                    Notes for <span x-text="flwNames[flwNotesUsername] || flwNotesUsername"></span>
+                </h3>
+                <textarea x-model="flwNotesText" rows="4" placeholder="Add notes about this FLW's assessment..."
+                          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 text-sm"></textarea>
+                <div class="mt-3 flex items-center gap-2">
+                    <span class="text-sm text-gray-600">Result:</span>
+                    <button @click="flwNotesResult = 'pass'"
+                            :class="flwNotesResult === 'pass' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-800 hover:bg-green-100'"
+                            class="px-3 py-1 rounded text-xs font-medium border border-green-300 transition-colors">
+                        <i class="fa-solid fa-check mr-1"></i> Pass
+                    </button>
+                    <button @click="flwNotesResult = 'fail'"
+                            :class="flwNotesResult === 'fail' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-800 hover:bg-red-100'"
+                            class="px-3 py-1 rounded text-xs font-medium border border-red-300 transition-colors">
+                        <i class="fa-solid fa-xmark mr-1"></i> Fail
+                    </button>
+                    <button @click="flwNotesResult = null" x-show="flwNotesResult"
+                            class="px-3 py-1 rounded text-xs text-gray-600 hover:bg-gray-100 border border-gray-300">
+                        Clear
+                    </button>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse rounded-b-lg">
+                <button @click="saveFlwNotes()"
+                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 sm:ml-3 sm:w-auto sm:text-sm">
+                    Save
+                </button>
+                <button @click="showFlwNotesModal = false"
+                        class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Complete Monitoring Session Modal -->
+    <div x-show="showCompleteModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showCompleteModal = false"></div>
+        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div class="px-4 pt-5 pb-4 sm:p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-3">Complete Monitoring Audit</h3>
+                <p class="text-sm text-gray-600 mb-4">
+                    <span x-text="monitoringSession?.progress?.assessed || 0"></span>
+                    of <span x-text="monitoringSession?.progress?.total || 0"></span> FLWs have been assessed.
+                </p>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Overall Result</label>
+                    <div class="flex gap-2">
+                        <button @click="completeResult = 'pass'"
+                                :class="completeResult === 'pass' ? 'bg-green-600 text-white ring-2 ring-green-300' : 'bg-green-50 text-green-800 hover:bg-green-100'"
+                                class="flex-1 px-4 py-2 rounded-md text-sm font-medium border border-green-300 transition-colors">
+                            <i class="fa-solid fa-check mr-1"></i> Pass
+                        </button>
+                        <button @click="completeResult = 'fail'"
+                                :class="completeResult === 'fail' ? 'bg-red-600 text-white ring-2 ring-red-300' : 'bg-red-50 text-red-800 hover:bg-red-100'"
+                                class="flex-1 px-4 py-2 rounded-md text-sm font-medium border border-red-300 transition-colors">
+                            <i class="fa-solid fa-xmark mr-1"></i> Fail
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <textarea x-model="completeNotes" rows="3" placeholder="Overall monitoring notes..."
+                              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 text-sm"></textarea>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse rounded-b-lg">
+                <button @click="completeMonitoringSession()"
+                        :disabled="!completeResult || completingSession"
+                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed sm:ml-3 sm:w-auto sm:text-sm">
+                    <span x-text="completingSession ? 'Completing...' : 'Complete Audit'"></span>
+                </button>
+                <button @click="showCompleteModal = false"
+                        class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast notification -->
     <div x-show="toastMessage" x-cloak
          x-transition:enter="transform ease-out duration-300 transition"
@@ -890,6 +1222,7 @@ function mbwDashboard() {
         followupDrillDownLoading: false,
         followupDrillDownMothers: [],
         showAllVisits: false,
+        showEligibleOnly: true,
 
         // AI Task modal
         showAIModal: false,
@@ -907,6 +1240,25 @@ function mbwDashboard() {
         // Suspend modal
         showSuspendModal: false,
         suspendUsername: null,
+
+        // Monitoring session state
+        monitoringSession: null,
+        flwResults: {},
+        sessionId: '{{ session_id|default:"" }}',
+        saveFlwResultUrl: '{{ save_flw_result_url|default:"" }}',
+        completeSessionUrl: '{{ complete_session_url|default:"" }}',
+
+        // FLW notes modal
+        showFlwNotesModal: false,
+        flwNotesUsername: '',
+        flwNotesText: '',
+        flwNotesResult: null,
+
+        // Complete session modal
+        showCompleteModal: false,
+        completeResult: null,
+        completeNotes: '',
+        completingSession: false,
 
         // Toast
         toastMessage: '',
@@ -926,6 +1278,15 @@ function mbwDashboard() {
         commcareOAuthActive: {{ commcare_oauth_active|yesno:"true,false" }},
 
         init() {
+            // Initialize monitoring session from server-rendered context
+            const serverSession = {{ monitoring_session_json|safe }};
+            if (serverSession) {
+                this.monitoringSession = {
+                    ...serverSession,
+                    progress: serverSession.monitoring_progress || { percentage: 0, assessed: 0, total: 0 },
+                };
+            }
+
             if (this.streamApiUrl && this.commcareOAuthActive) {
                 this.loadDataWithSSE();
             } else if (!this.commcareOAuthActive) {
@@ -946,6 +1307,9 @@ function mbwDashboard() {
                 start_date: this.startDate,
                 end_date: this.endDate,
             });
+            // Forward session_id and opportunity_id to SSE endpoint
+            if (this.sessionId) params.set('session_id', this.sessionId);
+            if (this.opportunityId) params.set('opportunity_id', this.opportunityId);
             // Forward cache-busting params from the page URL to the SSE endpoint
             const pageParams = new URLSearchParams(window.location.search);
             if (pageParams.get('bust_cache') === '1') params.set('bust_cache', '1');
@@ -1023,11 +1387,21 @@ function mbwDashboard() {
 
             // Overview data
             this.overviewData = data.overview_data;
-            this._rawOverviewFlws = data.overview_data?.flw_summaries || [];
+            this._rawOverviewFlws = (data.overview_data?.flw_summaries || []).map(f => ({
+                ...f,
+                cases_still_eligible_pct: f.cases_still_eligible?.pct ?? 0,
+                parity_concentration_pct: f.parity_concentration?.pct_duplicate ?? 0,
+                age_concentration_pct: f.age_concentration?.pct_duplicate ?? 0,
+            }));
             this.visitStatusDist = data.overview_data?.visit_status_distribution || null;
 
-            // Pre-load OCS bots so the AI modal dropdown is ready
-            this.loadBots();
+            // Load monitoring session data if present
+            if (data.monitoring_session) {
+                this.monitoringSession = data.monitoring_session;
+                this.flwResults = data.monitoring_session.flw_results || {};
+            }
+
+            // OCS bots loaded lazily when AI task modal opens (see openAITaskModal)
 
             // Apply initial filters
             this.applyFilters();
@@ -1186,6 +1560,10 @@ function mbwDashboard() {
                 const motherSet = new Set(this.selectedMothers);
                 filtered = filtered.filter(m => motherSet.has(m.mother_case_id));
             }
+            // Filter to eligible mothers only when checkbox is checked
+            if (this.showEligibleOnly) {
+                filtered = filtered.filter(m => m.eligible);
+            }
             if (!this.showAllVisits) {
                 filtered = filtered.filter(m => m.has_due_visits);
             }
@@ -1213,8 +1591,146 @@ function mbwDashboard() {
         computeOverallFollowupRate() {
             if (this.filteredFollowupFlws.length === 0) return 0;
             const completed = this.filteredFollowupFlws.reduce((s, f) => s + f.completed_total, 0);
-            const total = this.filteredFollowupFlws.reduce((s, f) => s + f.due_total, 0);
+            const total = this.filteredFollowupFlws.reduce((s, f) => s + (f.total_visits || 0), 0);
             return total > 0 ? Math.round((completed / total) * 100) : 0;
+        },
+
+        // ---- Monitoring Session Methods ----
+        getFlwResult(username) {
+            return this.flwResults[username]?.result || null;
+        },
+
+        getFlwNotes(username) {
+            return this.flwResults[username]?.notes || '';
+        },
+
+        async setFlwResult(username, result) {
+            if (!this.monitoringSession) return;
+
+            // Toggle: if already set to same result, clear it
+            const currentResult = this.getFlwResult(username);
+            const newResult = currentResult === result ? null : result;
+
+            // Optimistic update
+            if (!this.flwResults[username]) this.flwResults[username] = {};
+            this.flwResults[username].result = newResult;
+            this._updateProgress();
+
+            // Save to backend
+            try {
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+                const response = await fetch(this.saveFlwResultUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({
+                        session_id: this.monitoringSession.id,
+                        username: username,
+                        result: newResult,
+                        notes: this.flwResults[username]?.notes || '',
+                    }),
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.flwResults = data.flw_results;
+                    this.monitoringSession.progress = data.progress;
+                    this.showToast(newResult ? `${this.flwNames[username] || username}: ${newResult}` : 'Result cleared');
+                }
+            } catch (e) {
+                console.error('Failed to save FLW result:', e);
+                // Revert optimistic update
+                if (this.flwResults[username]) this.flwResults[username].result = currentResult;
+                this._updateProgress();
+            }
+        },
+
+        openFlwNotesModal(username) {
+            this.flwNotesUsername = username;
+            this.flwNotesText = this.getFlwNotes(username);
+            this.flwNotesResult = this.getFlwResult(username);
+            this.showFlwNotesModal = true;
+        },
+
+        async saveFlwNotes() {
+            if (!this.monitoringSession || !this.flwNotesUsername) return;
+
+            try {
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+                const response = await fetch(this.saveFlwResultUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({
+                        session_id: this.monitoringSession.id,
+                        username: this.flwNotesUsername,
+                        result: this.flwNotesResult,
+                        notes: this.flwNotesText,
+                    }),
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.flwResults = data.flw_results;
+                    this.monitoringSession.progress = data.progress;
+                    this.showFlwNotesModal = false;
+                    this.showToast('Notes saved');
+                }
+            } catch (e) {
+                console.error('Failed to save notes:', e);
+                alert('Failed to save notes');
+            }
+        },
+
+        async completeMonitoringSession() {
+            if (!this.monitoringSession || !this.completeResult) return;
+
+            this.completingSession = true;
+            try {
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+                const response = await fetch(this.completeSessionUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({
+                        session_id: this.monitoringSession.id,
+                        overall_result: this.completeResult,
+                        notes: this.completeNotes,
+                    }),
+                });
+                const data = await response.json();
+                if (data.success) {
+                    this.monitoringSession.status = data.status;
+                    this.monitoringSession.overall_result = data.overall_result;
+                    this.showCompleteModal = false;
+                    this.showToast('Monitoring audit completed');
+                } else {
+                    alert(data.error || 'Failed to complete session');
+                }
+            } catch (e) {
+                console.error('Failed to complete session:', e);
+                alert('Failed to complete session');
+            } finally {
+                this.completingSession = false;
+            }
+        },
+
+        _updateProgress() {
+            if (!this.monitoringSession) return;
+            const total = this.monitoringSession.selected_flw_usernames?.length || 0;
+            let assessed = 0;
+            for (const r of Object.values(this.flwResults)) {
+                if (r.result) assessed++;
+            }
+            this.monitoringSession.progress = {
+                percentage: total > 0 ? Math.round((assessed / total) * 100) : 0,
+                assessed: assessed,
+                total: total,
+            };
         },
 
         // ---- AI Task Modal ----
@@ -1225,6 +1741,10 @@ function mbwDashboard() {
             this.aiProgress = '';
             this.aiSubmitting = false;
             this.showAIModal = true;
+            // Lazy-load bots on first modal open
+            if (!this.aiBots.length && !this.aiBotsLoading) {
+                this.loadBots();
+            }
         },
 
         buildAutomatedPrompt(flw) {

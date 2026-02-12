@@ -21,6 +21,7 @@ urlpatterns = [
     path("api/audit/create/", views.ExperimentAuditCreateAPIView.as_view(), name="create_session"),
     path("api/audit/create-async/", views.ExperimentAuditCreateAsyncAPIView.as_view(), name="create_session_async"),
     path("api/audit/preview/", views.ExperimentAuditPreviewAPIView.as_view(), name="preview_audit"),
+    path("api/audit/opportunity-flws/", views.OpportunityFLWListAPIView.as_view(), name="opportunity_flws"),
     path("api/audit/progress/", views.ExperimentAuditProgressAPIView.as_view(), name="audit_progress"),
     # Async creation progress endpoints
     path(

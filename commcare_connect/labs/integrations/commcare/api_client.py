@@ -265,6 +265,191 @@ class CommCareDataAccess:
         logger.info(f"Fetched {len(all_cases)}/{total} cases from CommCare")
         return all_cases
 
+    def fetch_forms(
+        self,
+        xmlns: str | None = None,
+        app_id: str | None = None,
+        limit: int = 1000,
+        received_on_start: str | None = None,
+        received_on_end: str | None = None,
+    ) -> list[dict]:
+        """Fetch form submissions from CCHQ Form API v1.
+
+        Uses /a/{domain}/api/form/v1/ with optional xmlns filter.
+        Paginates via meta.next URLs.
+        """
+        if not self.check_token_valid():
+            raise ValueError(
+                "CommCare OAuth not configured or expired. "
+                "Please authorize CommCare access at /labs/commcare/initiate/"
+            )
+
+        endpoint = f"{self.base_url}/a/{self.domain}/api/form/v1/"
+        params = {"limit": limit}
+        if xmlns:
+            params["xmlns"] = xmlns
+        if app_id:
+            params["app_id"] = app_id
+        if received_on_start:
+            params["received_on_start"] = received_on_start
+        if received_on_end:
+            params["received_on_end"] = received_on_end
+
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+
+        all_forms = []
+        next_url = endpoint
+        page = 0
+        while next_url:
+            page += 1
+            logger.info(f"Fetching forms page {page} from {next_url}")
+
+            response = httpx.get(
+                next_url,
+                params=params if next_url == endpoint else None,
+                headers=headers,
+                timeout=60.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+            forms = data.get("objects", [])
+            all_forms.extend(forms)
+
+            logger.info(f"Retrieved {len(forms)} forms (total so far: {len(all_forms)})")
+
+            next_url = data.get("meta", {}).get("next")
+            if next_url and not next_url.startswith("http"):
+                if next_url.startswith("?"):
+                    # Query-params-only relative URL — prepend full endpoint path
+                    next_url = f"{endpoint}{next_url}"
+                else:
+                    # Path-based relative URL (e.g., /a/domain/api/...)
+                    next_url = f"{self.base_url}{next_url}"
+
+        logger.info(f"Fetched total of {len(all_forms)} forms from CommCare")
+        return all_forms
+
+    def get_form_xmlns(self, app_id: str, form_name: str = "Register Mother") -> str | None:
+        """Look up a form's xmlns from the Application Structure API.
+
+        Calls GET /a/{domain}/api/application/v1/{app_id}/ and walks
+        modules[] -> forms[] matching by the form's multilingual name dict.
+
+        Args:
+            app_id: CommCare application ID
+            form_name: Human-readable form name to search for (matched against
+                       the values of each form's ``name`` dict, e.g. ``{"en": "Register Mother"}``)
+
+        Returns:
+            The xmlns string for the matching form, or None if not found.
+        """
+        if not self.check_token_valid():
+            logger.warning("Cannot look up form xmlns: OAuth token invalid")
+            return None
+
+        url = f"{self.base_url}/a/{self.domain}/api/application/v1/{app_id}/"
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+
+        try:
+            response = httpx.get(url, headers=headers, timeout=30.0)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"Application Structure API error for app {app_id}: {e.response.status_code}")
+            return None
+        except httpx.TimeoutException:
+            logger.warning(f"Timeout fetching application structure for app {app_id}")
+            return None
+
+        app_data = response.json()
+
+        for module in app_data.get("modules", []):
+            for form in module.get("forms", []):
+                name_dict = form.get("name", {})
+                # name_dict is multilingual, e.g. {"en": "Register Mother"}
+                if isinstance(name_dict, dict):
+                    if form_name in name_dict.values():
+                        xmlns = form.get("xmlns")
+                        if xmlns:
+                            logger.info(f"Discovered xmlns for '{form_name}': {xmlns}")
+                            return xmlns
+                elif isinstance(name_dict, str) and name_dict == form_name:
+                    xmlns = form.get("xmlns")
+                    if xmlns:
+                        logger.info(f"Discovered xmlns for '{form_name}': {xmlns}")
+                        return xmlns
+
+        logger.warning(f"Form '{form_name}' not found in app {app_id}")
+        return None
+
+    def list_applications(self) -> list[dict]:
+        """List all applications in the domain via Application API v1.
+
+        Returns list of app summary dicts (each has 'id', 'name', etc.).
+        Paginates through results using meta.next.
+        """
+        if not self.check_token_valid():
+            logger.warning("Cannot list applications: OAuth token invalid")
+            return []
+
+        endpoint = f"{self.base_url}/a/{self.domain}/api/application/v1/"
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        params = {"limit": 100}
+
+        all_apps = []
+        next_url = endpoint
+        page = 0
+        while next_url:
+            page += 1
+            logger.info(f"Fetching applications page {page} from {next_url}")
+
+            try:
+                response = httpx.get(
+                    next_url,
+                    params=params if next_url == endpoint else None,
+                    headers=headers,
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                logger.warning(f"Application API error: {e.response.status_code}")
+                break
+            except httpx.TimeoutException:
+                logger.warning("Timeout fetching applications list")
+                break
+
+            data = response.json()
+            apps = data.get("objects", [])
+            all_apps.extend(apps)
+
+            logger.info(f"Retrieved {len(apps)} applications (total so far: {len(all_apps)})")
+
+            next_url = data.get("meta", {}).get("next")
+            if next_url and not next_url.startswith("http"):
+                if next_url.startswith("?"):
+                    next_url = f"{endpoint}{next_url}"
+                else:
+                    next_url = f"{self.base_url}{next_url}"
+
+        logger.info(f"Listed {len(all_apps)} applications in domain {self.domain}")
+        return all_apps
+
+    def discover_form_xmlns(self, form_name: str) -> str | None:
+        """Search all apps in the domain for a form by name, return its xmlns.
+
+        Useful when the form is in a different app than the deliver app.
+        Calls list_applications(), then get_form_xmlns() for each app until found.
+        """
+        apps = self.list_applications()
+        for app in apps:
+            app_id = app.get("id")
+            if app_id:
+                xmlns = self.get_form_xmlns(app_id, form_name)
+                if xmlns:
+                    logger.info(f"Discovered xmlns for '{form_name}' in app {app_id}")
+                    return xmlns
+        logger.warning(f"Form '{form_name}' not found in any of {len(apps)} apps in domain {self.domain}")
+        return None
+
     def fetch_case_by_id(self, case_id: str) -> dict | None:
         """
         Fetch a single case by ID.

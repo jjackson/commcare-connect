@@ -15,6 +15,13 @@ class AuditTable(tables.Table):
         attrs={"td": {"class": "text-sm text-gray-600 font-mono"}},
     )
 
+    session_type_badge = tables.Column(
+        verbose_name=_("Type"),
+        accessor="session_type",
+        orderable=True,
+        attrs={"td": {"class": "whitespace-nowrap"}},
+    )
+
     title = tables.Column(
         verbose_name=_("Title"),
         attrs={
@@ -75,6 +82,7 @@ class AuditTable(tables.Table):
         # So we don't specify model= here
         fields = (
             "record_id",
+            "session_type_badge",
             "title",
             "opportunity_name",
             "description",
@@ -90,6 +98,16 @@ class AuditTable(tables.Table):
             "class": "base-table-full",
         }
         empty_text = _("No audit sessions yet. Create your first audit to get started.")
+
+    def render_session_type_badge(self, value, record):
+        """Render session type as a badge."""
+        if value == "mbw_monitoring":
+            return format_html(
+                '<span class="badge badge-sm bg-indigo-50 text-indigo-700">Monitoring</span>'
+            )
+        return format_html(
+            '<span class="badge badge-sm bg-slate-50 text-slate-600">Audit</span>'
+        )
 
     def render_title(self, value, record):
         """Display title with optional tag."""
@@ -159,12 +177,30 @@ class AuditTable(tables.Table):
         return format_html('<span class="{}">{}{}</span>', badge_class, mark_safe(icon), text)
 
     def render_visit_count(self, value, record):
-        """Display visit count."""
+        """Display visit count (or FLW count for monitoring sessions)."""
+        if record.is_monitoring:
+            flw_count = len(record.selected_flw_usernames)
+            return format_html(
+                '<span class="text-sm font-medium text-brand-indigo">{} FLWs</span>',
+                flw_count,
+            )
         count = len(value or [])
         return format_html('<span class="text-sm font-medium text-brand-indigo">{}</span>', count)
 
     def render_progress(self, value, record):
         """Display progress percentage based on assessments."""
+        if record.is_monitoring:
+            stats = record.get_monitoring_progress_stats()
+            return format_html(
+                '<div class="text-center">'
+                '<div class="text-sm font-medium text-brand-deep-purple">{}%</div>'
+                '<div class="text-xs text-gray-500">({} of {} FLWs)</div>'
+                "</div>",
+                stats["percentage"],
+                stats["assessed"],
+                stats["total"],
+            )
+
         visit_ids = record.visit_ids or []
         visit_results = record.visit_results or {}
 
@@ -194,6 +230,20 @@ class AuditTable(tables.Table):
     def render_actions(self, record):
         """Render action buttons for the audit session."""
         from urllib.parse import urlencode
+
+        if record.is_monitoring:
+            # Monitoring sessions open in MBW dashboard
+            mbw_url = reverse("mbw:dashboard") + f"?session_id={record.pk}"
+            button_label = _("Review") if record.status == "completed" else _("Open")
+            return format_html(
+                '<div class="flex gap-2 justify-end">'
+                '<a href="{}" class="button button-sm primary-light">'
+                '<i class="fa-solid fa-chart-line mr-1"></i>{}'
+                "</a>"
+                "</div>",
+                mbw_url,
+                button_label,
+            )
 
         bulk_url = reverse("audit:bulk_assessment", kwargs={"pk": record.pk})
         task_url = reverse("tasks:new")

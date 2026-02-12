@@ -16,4 +16,7 @@ urlpatterns = [
     path("api/gps/<str:username>/", views.MBWGPSDetailView.as_view(), name="gps_detail"),
     # Action endpoints
     path("api/suspend-user/", views.MBWSuspendUserView.as_view(), name="suspend_user"),
+    # Monitoring session endpoints
+    path("api/session/save-flw-result/", views.MBWSaveFlwResultView.as_view(), name="save_flw_result"),
+    path("api/session/complete/", views.MBWCompleteSessionView.as_view(), name="complete_session"),
 ]

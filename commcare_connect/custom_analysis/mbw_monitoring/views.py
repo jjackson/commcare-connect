@@ -7,7 +7,6 @@ client-side filtering, and interactive features.
 
 import json
 import logging
-import statistics
 from collections.abc import Generator
 from datetime import date, timedelta
 
@@ -24,6 +23,8 @@ from django.views.generic import TemplateView
 from commcare_connect.custom_analysis.mbw.gps_analysis import (
     analyze_gps_metrics,
     build_result_from_analyzed_visits,
+    compute_median_meters_per_visit,
+    compute_median_minutes_per_visit,
 )
 from commcare_connect.custom_analysis.mbw.pipeline_config import MBW_GPS_PIPELINE_CONFIG
 from commcare_connect.custom_analysis.mbw.views import (
@@ -33,21 +34,20 @@ from commcare_connect.custom_analysis.mbw.views import (
 )
 from commcare_connect.custom_analysis.mbw_monitoring.data_fetchers import (
     _get_cache_config,
-    bust_mbw_hq_cache,
-    count_mother_cases_by_flw,
-    extract_case_ids_from_visits,
-    extract_mother_case_ids_from_cases,
-    fetch_mother_cases_by_ids,
+    fetch_gs_forms,
     fetch_opportunity_metadata,
-    fetch_visit_cases_by_ids,
-    get_active_connect_usernames,
-    group_visit_cases_by_flw,
+    fetch_registration_forms,
 )
 from commcare_connect.custom_analysis.mbw_monitoring.followup_analysis import (
     aggregate_flw_followup,
     aggregate_mother_metrics,
     aggregate_visit_status_distribution,
+    build_followup_from_pipeline,
+    compute_overview_quality_metrics,
+    count_mothers_from_pipeline,
+    extract_mother_metadata_from_forms,
 )
+from commcare_connect.labs.analysis.data_access import fetch_flw_names
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, BaseSSEStreamView, send_sse_event
 
@@ -71,11 +71,27 @@ def parse_date_param(date_str: str | None, default: date) -> date:
         return default
 
 
+def _load_monitoring_session(request, session_id):
+    """Load a monitoring session by ID via AuditDataAccess."""
+    from commcare_connect.audit.data_access import AuditDataAccess
+
+    try:
+        data_access = AuditDataAccess(request=request)
+        session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
+        data_access.close()
+        if session and session.is_monitoring:
+            return session
+    except Exception as e:
+        logger.warning(f"[MBW Dashboard] Failed to load monitoring session {session_id}: {e}")
+    return None
+
+
 class MBWMonitoringDashboardView(LoginRequiredMixin, TemplateView):
     """
     Main dashboard view rendering the three-tab interface.
 
     Supports direct URL access to specific tabs via URL path or query param.
+    When ?session_id=X is provided, scopes the dashboard to a monitoring session.
     """
 
     template_name = "custom_analysis/mbw_monitoring/dashboard.html"
@@ -86,9 +102,24 @@ class MBWMonitoringDashboardView(LoginRequiredMixin, TemplateView):
         labs_context = getattr(self.request, "labs_context", {})
         opportunity_id = labs_context.get("opportunity_id")
 
+        # Check for monitoring session
+        session_id = self.request.GET.get("session_id")
+        monitoring_session = None
+        if session_id:
+            monitoring_session = _load_monitoring_session(self.request, int(session_id))
+            if monitoring_session:
+                # Use the session's opportunity_id as context
+                session_opp_id = monitoring_session.data.get("opportunity_id")
+                if session_opp_id:
+                    opportunity_id = session_opp_id
+
         context["opportunity_id"] = opportunity_id
         context["opportunity_name"] = labs_context.get("opportunity_name", "")
         context["has_context"] = bool(opportunity_id)
+        context["session_id"] = session_id or ""
+        context["monitoring_session_json"] = json.dumps(
+            monitoring_session.to_summary_dict() if monitoring_session else None
+        )
 
         if not opportunity_id:
             context["error"] = "No opportunity selected. Please select an opportunity from the labs context."
@@ -140,6 +171,10 @@ class MBWMonitoringDashboardView(LoginRequiredMixin, TemplateView):
         context["ocs_bots_api_url"] = reverse("tasks:ocs_bots")
         context["ai_initiate_url_template"] = "/tasks/__TASK_ID__/ai/initiate/"
 
+        # Session API URLs (for save/complete)
+        context["save_flw_result_url"] = reverse("mbw:save_flw_result")
+        context["complete_session_url"] = reverse("mbw:complete_session")
+
         # Dev fixture mode: show bust cache button
         context["dev_fixture"] = getattr(settings, "MBW_DEV_FIXTURE", False)
 
@@ -180,38 +215,100 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             start_date = parse_date_param(request.GET.get("start_date"), default_start)
             end_date = parse_date_param(request.GET.get("end_date"), default_end)
 
-            # Bust cache: when MBW_DEV_FIXTURE is on and ?bust_cache=1 is passed,
-            # clear the HQ case caches and force a full re-fetch
+            # Bust cache: when MBW_DEV_FIXTURE is on and ?bust_cache=1 is passed
             bust_cache = request.GET.get("bust_cache") == "1"
             if bust_cache:
-                bust_mbw_hq_cache()
                 yield send_sse_event("Cache busted — re-fetching all data...")
 
-            # Step 1: Fetch GPS visit forms via pipeline
-            yield send_sse_event("Loading visit forms from Connect...")
+            # Load monitoring session early so we know which opportunities to fetch
+            session_id = request.GET.get("session_id")
+            monitoring_session = None
+            session_flw_filter = None
+            if session_id:
+                monitoring_session = _load_monitoring_session(request, int(session_id))
+                if monitoring_session:
+                    session_flw_filter = set(monitoring_session.selected_flw_usernames)
+                    logger.info(
+                        f"[MBW Dashboard] Monitoring session {session_id}: "
+                        f"filtering to {len(session_flw_filter)} FLWs"
+                    )
 
-            pipeline = AnalysisPipeline(request)
-            pipeline_stream = pipeline.stream_analysis(MBW_GPS_PIPELINE_CONFIG, opportunity_id=opportunity_id)
-            yield from self.stream_pipeline_events(pipeline_stream)
+            # Determine which opportunities to load data from.
+            # Monitoring sessions may span multiple opportunities.
+            if monitoring_session:
+                opportunity_ids = monitoring_session.data.get("opportunity_ids", [opportunity_id])
+            else:
+                opportunity_ids = [opportunity_id]
 
+            # Step 1: Fetch GPS visit forms via pipeline (per opportunity, merge rows)
+            all_pipeline_rows = []
+            from_cache = False
+            for i, opp_id in enumerate(opportunity_ids):
+                if len(opportunity_ids) > 1:
+                    yield send_sse_event(
+                        f"Loading visits from opportunity {i + 1}/{len(opportunity_ids)}..."
+                    )
+                else:
+                    yield send_sse_event("Loading visit forms from Connect...")
+
+                pipeline = AnalysisPipeline(request)
+                pipeline_stream = pipeline.stream_analysis(
+                    MBW_GPS_PIPELINE_CONFIG, opportunity_id=opp_id
+                )
+                yield from self.stream_pipeline_events(pipeline_stream)
+
+                if self._pipeline_result:
+                    all_pipeline_rows.extend(self._pipeline_result.rows)
+                    from_cache = from_cache or self._pipeline_from_cache
+
+            # Use last pipeline result as a container, replace rows with merged set
             pipeline_result = self._pipeline_result
-            from_cache = self._pipeline_from_cache
+            if pipeline_result:
+                pipeline_result.rows = all_pipeline_rows
 
-            if not pipeline_result:
+            if not pipeline_result or not all_pipeline_rows:
                 yield send_sse_event("Error", error="No data returned from Connect API")
                 return
 
             total_rows = len(pipeline_result.rows)
-            logger.info(f"[MBW Dashboard] Pipeline returned {total_rows} visits")
+            logger.info(f"[MBW Dashboard] Pipeline returned {total_rows} visits across {len(opportunity_ids)} opportunities")
 
-            # Step 2: Get active Connect users and FLW names
+            # Step 2: Get active Connect users and FLW names (per opportunity, merge)
             yield send_sse_event("Loading FLW data...")
-            try:
-                active_usernames, flw_names = get_active_connect_usernames(request)
-            except Exception as e:
-                logger.warning(f"[MBW Dashboard] Failed to fetch FLW names: {e}")
-                active_usernames = set()
-                flw_names = {}
+            active_usernames = set()
+            flw_names = {}
+            for opp_id in opportunity_ids:
+                try:
+                    opp_flw_names = fetch_flw_names(access_token, opp_id)
+                    flw_names.update(opp_flw_names)
+                    active_usernames.update(opp_flw_names.keys())
+                except Exception as e:
+                    logger.warning(f"[MBW Dashboard] Failed to fetch FLW names for opp {opp_id}: {e}")
+            logger.info(
+                f"[MBW Dashboard] Fetched {len(active_usernames)} FLW usernames "
+                f"across {len(opportunity_ids)} opportunities"
+            )
+
+            # Scope to monitoring session FLWs if applicable
+            if session_flw_filter:
+                intersection = active_usernames & session_flw_filter
+                logger.info(
+                    f"[MBW Dashboard] Monitoring session {session_id}: "
+                    f"active_usernames={len(active_usernames)}, "
+                    f"session_flw_filter={len(session_flw_filter)}, "
+                    f"intersection={len(intersection)}"
+                )
+                if not intersection and session_flw_filter:
+                    # Fallback: if the intersection is empty (e.g., FLW names fetch failed
+                    # or returned a different set), use the session's FLWs directly.
+                    logger.warning(
+                        f"[MBW Dashboard] Empty intersection — falling back to session FLWs. "
+                        f"session_flw_filter sample: {list(session_flw_filter)[:3]}, "
+                        f"active_usernames sample: {list(active_usernames)[:3]}"
+                    )
+                    active_usernames = session_flw_filter
+                else:
+                    active_usernames = intersection
 
             # Step 3: GPS analysis (on ALL visits, then filter by date)
             yield send_sse_event("Analyzing GPS data...")
@@ -247,114 +344,231 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 "flw_summaries": [serialize_flw_summary(flw) for flw in gps_result.flw_summaries],
             }
 
-            # Step 4: Fetch opportunity metadata to get cc_domain
-            yield send_sse_event("Fetching opportunity metadata...")
+            # Step 4: Fetch registration forms from CCHQ
+            yield send_sse_event("Fetching registration data...")
             followup_data = None
             overview_data = None
             visit_status_distribution = None
+            registration_forms = []
 
             try:
-                metadata = fetch_opportunity_metadata(access_token, opportunity_id)
-                cc_domain = metadata["cc_domain"]
-
-                # Step 5: Extract case IDs and fetch visit cases from CommCare HQ
-                case_ids = extract_case_ids_from_visits(pipeline_result.rows)
-                logger.info(f"[MBW Dashboard] Found {len(case_ids)} unique case IDs")
-
-                if case_ids:
-                    yield send_sse_event(f"Fetching {len(case_ids)} visit cases from CommCare HQ...")
-
+                for opp_id in opportunity_ids:
                     try:
-                        visit_cases = fetch_visit_cases_by_ids(
-                            request, cc_domain, case_ids, bust_cache=bust_cache
-                        )
-                        logger.info(f"[MBW Dashboard] Fetched {len(visit_cases)} visit cases")
-
-                        # Step 6: Extract and fetch mother cases
-                        mother_case_ids = extract_mother_case_ids_from_cases(visit_cases)
-                        mother_cases = []
-                        if mother_case_ids:
-                            yield send_sse_event(f"Fetching {len(mother_case_ids)} mother cases...")
-                            mother_cases = fetch_mother_cases_by_ids(
-                                request, cc_domain, mother_case_ids, bust_cache=bust_cache
+                        metadata = fetch_opportunity_metadata(access_token, opp_id)
+                        cc_domain = metadata.get("cc_domain")
+                        cc_app_id = metadata.get("cc_app_id")
+                        if cc_domain:
+                            forms = fetch_registration_forms(
+                                request, cc_domain, cc_app_id=cc_app_id, bust_cache=bust_cache
                             )
+                            registration_forms.extend(forms)
+                    except Exception as e:
+                        logger.warning(f"[MBW Dashboard] Registration form fetch failed for opp {opp_id}: {e}")
+                logger.info(f"[MBW Dashboard] Fetched {len(registration_forms)} registration forms")
+            except Exception as e:
+                logger.warning(f"[MBW Dashboard] Registration form fetch failed: {e}")
 
-                        # Step 7: Group and calculate follow-up metrics
-                        yield send_sse_event("Calculating follow-up metrics...")
-
-                        visit_cases_by_flw = group_visit_cases_by_flw(
-                            visit_cases, pipeline_result.rows, active_usernames
-                        )
-
-                        current_date = date.today()
-                        flw_followup = aggregate_flw_followup(visit_cases_by_flw, current_date, flw_names)
-                        visit_status_distribution = aggregate_visit_status_distribution(
-                            visit_cases_by_flw, current_date
-                        )
-
-                        # Build mother case lookup for enriching drill-down data
-                        mother_cases_map = {
-                            c.get("case_id"): c for c in mother_cases
-                        } if mother_cases else {}
-
-                        # Pre-compute per-FLW mother drill-down data so the frontend
-                        # doesn't need to make separate API calls on row expand
-                        flw_drilldown = {}
-                        for flw_username, flw_cases in visit_cases_by_flw.items():
-                            flw_drilldown[flw_username] = aggregate_mother_metrics(
-                                flw_cases, current_date, mother_cases_map
+            # Step 4b: Fetch GS forms from CCHQ (supervisor app, not in Connect pipeline)
+            gs_forms = []
+            try:
+                for opp_id in opportunity_ids:
+                    try:
+                        metadata = fetch_opportunity_metadata(access_token, opp_id)
+                        cc_domain = metadata.get("cc_domain")
+                        cc_app_id = metadata.get("cc_app_id")
+                        if cc_domain:
+                            forms = fetch_gs_forms(
+                                request, cc_domain, cc_app_id=cc_app_id, bust_cache=bust_cache
                             )
+                            gs_forms.extend(forms)
+                    except Exception as e:
+                        logger.warning(f"[MBW Dashboard] GS form fetch failed for opp {opp_id}: {e}")
+                logger.info(f"[MBW Dashboard] Fetched {len(gs_forms)} GS forms from CCHQ")
+            except Exception as e:
+                logger.warning(f"[MBW Dashboard] GS form fetch failed: {e}")
 
-                        followup_data = {
-                            "flw_summaries": flw_followup,
-                            "total_cases": len(visit_cases),
-                            "flw_drilldown": flw_drilldown,
-                        }
+            # Step 5: Build follow-up data from registration forms + pipeline completions
+            yield send_sse_event("Calculating follow-up metrics...")
 
-                        # Step 8: Build overview metrics
-                        yield send_sse_event("Building overview...")
+            visit_cases_by_flw = build_followup_from_pipeline(
+                all_pipeline_rows, active_usernames, registration_forms=registration_forms
+            )
 
-                        mother_counts = count_mother_cases_by_flw(mother_cases, active_usernames)
+            current_date = date.today()
 
-                        # Build GPS median distances per FLW
-                        gps_median_by_flw = {}
-                        for flw in gps_result.flw_summaries:
-                            if flw.avg_case_distance_km is not None:
-                                gps_median_by_flw[flw.username] = round(flw.avg_case_distance_km, 2)
+            # Extract mother metadata FIRST (needed by both flw_followup and drilldown)
+            mother_metadata = extract_mother_metadata_from_forms(registration_forms, current_date=current_date)
 
-                        # Build completed visits from follow-up data
-                        completed_by_flw = {}
-                        for flw_summary in flw_followup:
-                            completed_by_flw[flw_summary["username"]] = flw_summary["completed_total"]
+            flw_followup = aggregate_flw_followup(
+                visit_cases_by_flw, current_date, flw_names, mother_cases_map=mother_metadata
+            )
+            visit_status_distribution = aggregate_visit_status_distribution(
+                visit_cases_by_flw, current_date
+            )
 
-                        overview_flws = []
-                        for username in sorted(active_usernames):
-                            display_name = flw_names.get(username, username)
-                            overview_flws.append({
-                                "username": username,
-                                "display_name": display_name,
-                                "cases_registered": mother_counts.get(username, 0),
-                                "first_gs_score": None,  # TBD
-                                "post_test_attempts": None,  # TBD
-                                "pct_visits_due_5_plus_days": None,  # TBD
-                                "completed_visits": completed_by_flw.get(username, 0),
-                                "median_meters_per_case": gps_median_by_flw.get(username),
-                            })
+            # Extract per-mother fields from pipeline rows (needed by drilldown + quality metrics)
+            parity_by_mother = {}
+            anc_date_by_mother = {}
+            pnc_date_by_mother = {}
+            baby_dob_by_mother = {}
+            for row in all_pipeline_rows:
+                form_name = row.computed.get("form_name", "").strip()
+                mother_id = row.computed.get("mother_case_id")
+                if not mother_id:
+                    continue
+                if form_name == "ANC Visit":
+                    parity = row.computed.get("parity")
+                    if parity:
+                        parity_by_mother[mother_id] = parity
+                    anc_date = row.computed.get("anc_completion_date")
+                    if anc_date:
+                        anc_date_by_mother[mother_id] = anc_date
+                elif form_name == "Post delivery visit":
+                    pnc_date = row.computed.get("pnc_completion_date")
+                    if pnc_date:
+                        pnc_date_by_mother[mother_id] = pnc_date
+                    baby_dob = row.computed.get("baby_dob")
+                    if baby_dob:
+                        baby_dob_by_mother[mother_id] = baby_dob
 
-                        overview_data = {
-                            "flw_summaries": overview_flws,
-                            "visit_status_distribution": visit_status_distribution,
-                        }
+            logger.info(
+                "[MBW Dashboard] Pipeline extraction: parity=%d, anc_date=%d, pnc_date=%d, baby_dob=%d mothers",
+                len(parity_by_mother), len(anc_date_by_mother),
+                len(pnc_date_by_mother), len(baby_dob_by_mother),
+            )
 
-                    except ValueError as e:
-                        logger.warning(f"[MBW Dashboard] CommCare HQ fetch failed: {e}")
-                        yield send_sse_event(f"Warning: Could not fetch CommCare HQ data: {e}")
-                else:
-                    logger.info("[MBW Dashboard] No case IDs found in visit data")
+            # Log form name distribution for debugging
+            from collections import Counter
+            form_name_counts = Counter(
+                row.computed.get("form_name", "").strip()
+                for row in all_pipeline_rows
+            )
+            logger.info("[MBW Dashboard] Form name distribution: %s", dict(form_name_counts))
 
-            except ValueError as e:
-                logger.warning(f"[MBW Dashboard] Metadata fetch failed: {e}")
-                yield send_sse_event(f"Warning: Could not fetch CommCare HQ data: {e}")
+            flw_drilldown = {}
+            for flw_username, flw_cases in visit_cases_by_flw.items():
+                flw_drilldown[flw_username] = aggregate_mother_metrics(
+                    flw_cases, current_date, mother_cases_map=mother_metadata,
+                    anc_date_by_mother=anc_date_by_mother,
+                    pnc_date_by_mother=pnc_date_by_mother,
+                    baby_dob_by_mother=baby_dob_by_mother,
+                )
+
+            followup_data = {
+                "flw_summaries": flw_followup,
+                "total_cases": sum(len(v) for v in visit_cases_by_flw.values()),
+                "flw_drilldown": flw_drilldown,
+            }
+
+            # Extract first (oldest) GS score per FLW from CCHQ forms
+            gs_scores_by_flw: dict[str, list[tuple[str, str]]] = {}
+            for form_dict in gs_forms:
+                form = form_dict.get("form", {})
+                connect_id = form.get("load_flw_connect_id", "")
+                score = form.get("checklist_percentage", "")
+                time_end = form.get("meta", {}).get("timeEnd", "")
+                if connect_id and score:
+                    gs_scores_by_flw.setdefault(connect_id, []).append((time_end, score))
+
+            first_gs_by_flw = {}
+            for connect_id, scores in gs_scores_by_flw.items():
+                scores.sort(key=lambda x: x[0])  # oldest first
+                first_gs_by_flw[connect_id] = scores[0][1]
+
+            logger.info(
+                "[MBW Dashboard] GS scores from CCHQ: %d forms found, %d unique FLWs. "
+                "Sample connect_ids: %s, Sample usernames: %s",
+                sum(len(v) for v in gs_scores_by_flw.values()),
+                len(gs_scores_by_flw),
+                list(gs_scores_by_flw.keys())[:3],
+                list(active_usernames)[:3],
+            )
+
+            # Compute quality/fraud overview metrics
+            quality_metrics = compute_overview_quality_metrics(
+                visit_cases_by_flw, mother_metadata, parity_by_mother, current_date,
+                anc_date_by_mother=anc_date_by_mother,
+                pnc_date_by_mother=pnc_date_by_mother,
+            )
+
+            # Step 6: Build overview metrics
+            yield send_sse_event("Building overview...")
+
+            mother_counts = count_mothers_from_pipeline(
+                all_pipeline_rows, active_usernames, registration_forms=registration_forms
+            )
+
+            # Build GPS median distances per FLW (revisit distance)
+            gps_median_by_flw = {}
+            for flw in gps_result.flw_summaries:
+                if flw.avg_case_distance_km is not None:
+                    gps_median_by_flw[flw.username] = round(flw.avg_case_distance_km, 2)
+
+            # Compute median meters/visit and minutes/visit from GPS visits
+            meters_per_visit_by_flw = compute_median_meters_per_visit(gps_result.visits)
+            minutes_per_visit_by_flw = compute_median_minutes_per_visit(gps_result.visits)
+
+            # Build completed visits and followup rate from follow-up data
+            completed_by_flw = {}
+            followup_rate_by_flw = {}
+            for flw_summary in flw_followup:
+                completed_by_flw[flw_summary["username"]] = flw_summary["completed_total"]
+                followup_rate_by_flw[flw_summary["username"]] = flw_summary["completion_rate"]
+
+            # Build eligible mothers count per FLW
+            eligible_mothers_by_flw = {}
+            for flw_username, flw_cases in visit_cases_by_flw.items():
+                mother_ids = {c.get("properties", {}).get("mother_case_id", "") for c in flw_cases if c.get("properties", {}).get("mother_case_id")}
+                eligible_count = sum(
+                    1 for mid in mother_ids
+                    if mother_metadata.get(mid, {}).get("properties", {}).get("eligible_full_intervention_bonus") == "1"
+                )
+                eligible_mothers_by_flw[flw_username] = eligible_count
+
+            # Compute "cases still eligible" per FLW from drill-down data
+            # Among eligible mothers, count those still on track (5+ completed OR <= 1 missed)
+            cases_eligible_by_flw = {}
+            for flw_username, mothers in flw_drilldown.items():
+                eligible_mothers = [m for m in mothers if m.get("eligible")]
+                still_on_track = 0
+                for m in eligible_mothers:
+                    completed_count = sum(
+                        1 for v in m["visits"] if v["status"].startswith("Completed")
+                    )
+                    missed_count = sum(
+                        1 for v in m["visits"] if v["status"] == "Missed"
+                    )
+                    if completed_count >= 5 or missed_count <= 1:
+                        still_on_track += 1
+                total_eligible = len(eligible_mothers)
+                cases_eligible_by_flw[flw_username] = {
+                    "eligible": still_on_track,
+                    "total": total_eligible,
+                    "pct": round(still_on_track / total_eligible * 100) if total_eligible > 0 else 0,
+                }
+
+            overview_flws = []
+            for username in sorted(active_usernames):
+                display_name = flw_names.get(username, username)
+                overview_flws.append({
+                    "username": username,
+                    "display_name": display_name,
+                    "cases_registered": mother_counts.get(username, 0),
+                    "eligible_mothers": eligible_mothers_by_flw.get(username, 0),
+                    "first_gs_score": first_gs_by_flw.get(username),
+                    "post_test_attempts": None,  # TBD
+                    "followup_rate": followup_rate_by_flw.get(username, 0),
+                    "revisit_distance_km": gps_median_by_flw.get(username),
+                    "median_meters_per_visit": meters_per_visit_by_flw.get(username),
+                    "median_minutes_per_visit": minutes_per_visit_by_flw.get(username),
+                    **quality_metrics.get(username, {}),
+                    "cases_still_eligible": cases_eligible_by_flw.get(username, {"eligible": 0, "total": 0, "pct": 0}),
+                })
+
+            overview_data = {
+                "flw_summaries": overview_flws,
+                "visit_status_distribution": visit_status_distribution,
+            }
 
             # Fetch open task usernames so the frontend can grey out the Task button
             open_task_usernames = []
@@ -386,6 +600,17 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 "flw_names": flw_names,
                 "open_task_usernames": open_task_usernames,
             }
+
+            # Include monitoring session data if active
+            if monitoring_session:
+                response_data["monitoring_session"] = {
+                    "id": monitoring_session.id,
+                    "title": monitoring_session.title,
+                    "status": monitoring_session.status,
+                    "flw_results": monitoring_session.flw_results,
+                    "progress": monitoring_session.get_monitoring_progress_stats(),
+                    "selected_flw_usernames": monitoring_session.selected_flw_usernames,
+                }
 
             yield send_sse_event("Complete!", response_data)
 
@@ -449,6 +674,97 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
         except Exception as e:
             logger.error(f"[MBW Dashboard] GPS detail failed: {e}", exc_info=True)
             sentry_sdk.capture_exception(e)
+            return JsonResponse({"error": str(e)}, status=500)
+
+
+class MBWSaveFlwResultView(LoginRequiredMixin, View):
+    """Save a pass/fail result for a FLW in a monitoring session."""
+
+    def post(self, request):
+        labs_oauth = request.session.get("labs_oauth", {})
+        if not labs_oauth.get("access_token"):
+            return JsonResponse({"error": "Session expired"}, status=401)
+
+        try:
+            body = json.loads(request.body)
+            session_id = body.get("session_id")
+            username = body.get("username")
+            result = body.get("result")  # "pass", "fail", or None
+            notes = body.get("notes", "")
+
+            if not session_id or not username:
+                return JsonResponse({"error": "session_id and username are required"}, status=400)
+
+            if result and result not in ("pass", "fail"):
+                return JsonResponse({"error": "result must be 'pass', 'fail', or null"}, status=400)
+
+            from commcare_connect.audit.data_access import AuditDataAccess
+
+            data_access = AuditDataAccess(request=request)
+            session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
+
+            if not session or not session.is_monitoring:
+                data_access.close()
+                return JsonResponse({"error": "Monitoring session not found"}, status=404)
+
+            assessed_by = request.user.id if request.user.is_authenticated else 0
+            updated_session = data_access.save_flw_result(session, username, result, notes, assessed_by)
+            data_access.close()
+
+            return JsonResponse({
+                "success": True,
+                "flw_results": updated_session.flw_results,
+                "progress": updated_session.get_monitoring_progress_stats(),
+            })
+
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        except Exception as e:
+            logger.error(f"[MBW Dashboard] Save FLW result failed: {e}", exc_info=True)
+            return JsonResponse({"error": str(e)}, status=500)
+
+
+class MBWCompleteSessionView(LoginRequiredMixin, View):
+    """Mark a monitoring session as completed."""
+
+    def post(self, request):
+        labs_oauth = request.session.get("labs_oauth", {})
+        if not labs_oauth.get("access_token"):
+            return JsonResponse({"error": "Session expired"}, status=401)
+
+        try:
+            body = json.loads(request.body)
+            session_id = body.get("session_id")
+            overall_result = body.get("overall_result", "")
+            notes = body.get("notes", "")
+
+            if not session_id:
+                return JsonResponse({"error": "session_id is required"}, status=400)
+
+            from commcare_connect.audit.data_access import AuditDataAccess
+
+            data_access = AuditDataAccess(request=request)
+            session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
+
+            if not session or not session.is_monitoring:
+                data_access.close()
+                return JsonResponse({"error": "Monitoring session not found"}, status=404)
+
+            updated_session = data_access.complete_audit_session(
+                session, overall_result=overall_result, notes=notes
+            )
+            data_access.close()
+
+            return JsonResponse({
+                "success": True,
+                "status": updated_session.status,
+                "overall_result": updated_session.overall_result,
+            })
+
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        except Exception as e:
+            logger.error(f"[MBW Dashboard] Complete session failed: {e}", exc_info=True)
             return JsonResponse({"error": str(e)}, status=500)
 
 

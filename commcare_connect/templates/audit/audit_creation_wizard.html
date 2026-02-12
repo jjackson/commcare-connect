@@ -9,8 +9,8 @@
   <div class="mb-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Create New Audit Session</h1>
-        <p class="text-gray-600">Search and select opportunities, configure audit criteria, and preview FLW counts</p>
+        <h1 class="text-2xl font-bold text-gray-900">{% if is_monitoring %}Create Monitoring Session{% else %}Create New Audit Session{% endif %}</h1>
+        <p class="text-gray-600">{% if is_monitoring %}Select opportunities and FLWs to monitor via the MBW dashboard{% else %}Search and select opportunities, configure audit criteria, and preview FLW counts{% endif %}</p>
       </div>
       <div class="flex gap-3">
         <a href="{% url 'audit:session_list' %}"
@@ -121,9 +121,9 @@
 
       <!-- Results Table -->
       <div x-show="searchResults.length > 0 && tableExpanded" class="overflow-hidden table-container flex flex-col gap-2 mb-1">
-        <div class="w-full overflow-x-auto block">
+        <div class="w-full overflow-x-auto overflow-y-auto block" style="max-height: 600px;">
           <table class="base-table">
-            <thead>
+            <thead class="sticky top-0 z-10">
               <tr>
                 <th class="w-12">
                   <span>Select</span>
@@ -297,8 +297,8 @@
         </div>
       </div>
 
-      <!-- Per FLW Option -->
-      <div class="flex items-start p-4 border border-gray-200 rounded-lg hover:border-brand-indigo transition-colors">
+      <!-- Per FLW Option (hidden in monitoring mode) -->
+      <div x-show="!isMonitoring" class="flex items-start p-4 border border-gray-200 rounded-lg hover:border-brand-indigo transition-colors">
         <input
           type="radio"
           id="granularity-per-flw"
@@ -319,8 +319,8 @@
     </div>
   </div>
 
-  <!-- Step 3: Audit Criteria -->
-  <div x-show="selectedOpportunities.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+  <!-- Step 3: Audit Criteria (full version for audit mode, simplified for monitoring) -->
+  <div x-show="selectedOpportunities.length > 0 && !isMonitoring" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
       <i class="fa-solid fa-cog mr-2"></i>
       Step 3: Configure Audit Criteria
@@ -579,29 +579,91 @@
 
   </div>
 
+  <!-- Step 3 (Monitoring Mode): Simplified criteria + preview -->
+  <div x-show="selectedOpportunities.length > 0 && isMonitoring" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
+      <i class="fa-solid fa-cog mr-2"></i>
+      Step 3: Configure Date Range (Optional)
+    </h2>
+    <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+      <div class="flex items-start gap-2">
+        <i class="fa-solid fa-info-circle text-blue-600 mt-0.5"></i>
+        <p class="text-xs text-blue-800">
+          Optionally set a date range to pre-filter the MBW dashboard. You can also change dates from the dashboard later.
+        </p>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+        <input type="date" x-model="auditCriteria.startDate"
+               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-brand-indigo focus:border-brand-indigo">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+        <input type="date" x-model="auditCriteria.endDate"
+               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-brand-indigo focus:border-brand-indigo">
+      </div>
+    </div>
+
+    <!-- Load all opportunity FLWs for monitoring (no visit download needed) -->
+    <div class="flex justify-center">
+      <button
+        @click="loadMonitoringFlws()"
+        :disabled="updating"
+        class="px-6 py-2 bg-brand-indigo text-white rounded-md hover:bg-brand-indigo/90 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
+        <i class="fa-solid fa-users" :class="{'fa-spin': updating}"></i>
+        <span x-text="updating ? 'Loading FLWs...' : 'Load All FLWs'"></span>
+      </button>
+    </div>
+  </div>
+
   <!-- Step 4: Preview Results -->
   <div x-show="previewResults.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
       <i class="fa-solid fa-eye mr-2"></i>
-      Step 4: Preview - Select FLWs to Audit
+      <span x-text="isMonitoring ? 'Step 4: Select FLWs to Monitor' : 'Step 4: Preview - Select FLWs to Audit'"></span>
     </h2>
+
+    <!-- Search box for filtering FLWs -->
+    <div class="mb-4">
+      <div class="relative">
+        <input type="text" x-model="flwSearchQuery"
+               placeholder="Search by name or Connect ID..."
+               class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-brand-indigo focus:border-brand-indigo">
+        <div class="absolute inset-y-0 right-0 flex items-center pr-3">
+          <i class="fa-solid fa-search text-gray-400"></i>
+        </div>
+      </div>
+    </div>
 
     <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
       <div class="flex items-center gap-4 text-sm">
         <span class="text-blue-600 font-medium">
           <i class="fa-solid fa-users mr-1"></i>
-          <span x-text="previewResults.length"></span> FLWs
+          <template x-if="flwSearchQuery.trim()">
+            <span>
+              Showing <span x-text="filteredFlws.length"></span> of <span x-text="previewResults.length"></span> FLWs
+            </span>
+          </template>
+          <template x-if="!flwSearchQuery.trim()">
+            <span><span x-text="previewResults.length"></span> FLWs</span>
+          </template>
         </span>
-        <span class="text-green-600 font-medium">
+        <span x-show="!isMonitoring" class="text-green-600 font-medium">
           <i class="fa-solid fa-chart-line mr-1"></i>
-          <span x-text="previewResults.reduce((sum, flw) => sum + flw.visit_count, 0)"></span> Total Visits
+          <span x-text="previewResults.reduce((sum, flw) => sum + (flw.visit_count || 0), 0)"></span> Total Visits
+        </span>
+        <span class="text-indigo-600 font-medium">
+          <i class="fa-solid fa-check-square mr-1"></i>
+          <span x-text="selectedFlwUserIds.length"></span> selected
         </span>
       </div>
     </div>
 
-    <div class="overflow-x-auto">
+    <div class="overflow-x-auto overflow-y-auto" style="max-height: 600px;">
       <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
+        <thead class="bg-gray-50 sticky top-0 z-10">
           <tr>
             <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
               <input type="checkbox" @change="toggleAllFlws()" :checked="areAllFlwsSelected()" class="h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300 rounded">
@@ -612,16 +674,25 @@
             <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Connect ID
             </th>
-            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th x-show="!isMonitoring" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Visits in Audit
             </th>
-            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th x-show="!isMonitoring" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Date Range
+            </th>
+            <th x-show="isMonitoring" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Last Audit
+            </th>
+            <th x-show="isMonitoring" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Result
+            </th>
+            <th x-show="isMonitoring" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Open Tasks
             </th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          <template x-for="flw in previewResults" :key="flw.connect_id || flw.username">
+          <template x-for="flw in filteredFlws" :key="flw.connect_id || flw.username">
             <tr class="hover:bg-gray-50">
               <td class="px-2 py-2 text-center whitespace-nowrap">
                 <input type="checkbox" :checked="isFlwSelected(flw)" @change="toggleFlwSelection(flw)" class="h-4 w-4 text-brand-indigo focus:ring-brand-indigo border-gray-300 rounded">
@@ -632,16 +703,39 @@
               <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                 <span x-text="flw.connect_id || flw.user_id"></span>
               </td>
-              <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+              <td x-show="!isMonitoring" class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                 <span x-text="flw.visit_count"></span>
               </td>
-              <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+              <td x-show="!isMonitoring" class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
                 <template x-if="flw.earliest_visit && flw.latest_visit">
                   <span>
                     <span x-text="formatDate(flw.earliest_visit)"></span> -
                     <span x-text="formatDate(flw.latest_visit)"></span>
                   </span>
                 </template>
+              </td>
+              <td x-show="isMonitoring" class="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                <span x-text="flw.history?.last_audit_date ? formatDate(flw.history.last_audit_date) : '-'"></span>
+              </td>
+              <td x-show="isMonitoring" class="px-4 py-2 whitespace-nowrap text-sm">
+                <template x-if="flw.history?.last_audit_result === 'pass'">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
+                    <i class="fa-solid fa-thumbs-up mr-1"></i>Pass
+                  </span>
+                </template>
+                <template x-if="flw.history?.last_audit_result === 'fail'">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-700">
+                    <i class="fa-solid fa-thumbs-down mr-1"></i>Fail
+                  </span>
+                </template>
+                <span x-show="!flw.history?.last_audit_result" class="text-gray-400">-</span>
+              </td>
+              <td x-show="isMonitoring" class="px-4 py-2 whitespace-nowrap text-sm">
+                <template x-if="flw.history?.open_task_count > 0">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-50 text-orange-700"
+                        x-text="flw.history.open_task_count + ' open'"></span>
+                </template>
+                <span x-show="!flw.history?.open_task_count" class="text-gray-400">-</span>
               </td>
             </tr>
           </template>
@@ -650,8 +744,8 @@
     </div>
   </div>
 
-  <!-- Step 5: Related Fields Configuration (Optional) -->
-  <div x-show="previewResults.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+  <!-- Step 5: Related Fields Configuration (Optional, hidden in monitoring mode) -->
+  <div x-show="previewResults.length > 0 && !isMonitoring" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
       <i class="fa-solid fa-link mr-2"></i>
       Step 5: Related Fields Configuration (Optional)
@@ -781,7 +875,7 @@
   <div x-show="selectedOpportunities.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-brand-deep-purple mb-4">
       <i class="fa-solid fa-tag mr-2"></i>
-      Step 6: Audit Metadata & Creation
+      <span x-text="isMonitoring ? 'Step 5: Monitoring Metadata & Creation' : 'Step 6: Audit Metadata & Creation'"></span>
     </h2>
 
     <div class="grid grid-cols-2 gap-4 mb-6">
@@ -817,6 +911,7 @@
         Clear All
       </button>
       <button
+        x-show="!isMonitoring"
         @click="createAuditSessionAsync()"
         :disabled="!isAuditCriteriaValid() || creating || creatingAsync"
         class="px-4 py-2 text-brand-indigo bg-white border border-brand-indigo rounded-md hover:bg-brand-indigo/5 disabled:bg-gray-100 disabled:border-gray-300 disabled:text-gray-400 disabled:cursor-not-allowed flex items-center gap-2">
@@ -828,7 +923,7 @@
         :disabled="!isAuditCriteriaValid() || creating || creatingAsync"
         class="px-4 py-2 bg-brand-indigo text-white rounded-md hover:bg-brand-indigo/90 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2">
         <i class="fa-solid fa-plus" :class="{'fa-spin': creating}"></i>
-        <span x-text="creating ? 'Creating...' : 'Create Audit Session'"></span>
+        <span x-text="creating ? 'Creating...' : (isMonitoring ? 'Create Monitoring Session' : 'Create Audit Session')"></span>
       </button>
     </div>
   </div>
@@ -994,6 +1089,9 @@
 <script>
 function auditCreationPage() {
   return {
+    // Monitoring mode
+    isMonitoring: {{ is_monitoring|yesno:"true,false" }},
+
     // Progress tracking state (reusable for preview and creation)
     showProgressModal: false,
     progressTitle: '',
@@ -1043,6 +1141,7 @@ function auditCreationPage() {
 
     // Preview state
     previewResults: [],
+    flwSearchQuery: '',  // Search filter for FLW list
     precomputedVisitIds: [],  // Pre-computed visit IDs from preview (optimization)
     precomputedFlwVisitIds: {},  // {username: [visit_ids]} mapping (optimization)
     auditDefinitionId: null,  // Stores the audit definition ID from preview
@@ -1168,6 +1267,16 @@ function auditCreationPage() {
       this.auditTag = '';
     },
 
+    // FLW filtering (client-side search)
+    get filteredFlws() {
+      if (!this.flwSearchQuery.trim()) return this.previewResults;
+      const q = this.flwSearchQuery.trim().toLowerCase();
+      return this.previewResults.filter(flw =>
+        (flw.name && flw.name.toLowerCase().includes(q)) ||
+        (flw.connect_id && flw.connect_id.toLowerCase().includes(q))
+      );
+    },
+
     // FLW selection methods
     // Use connect_id as the canonical identifier (always present, equals Connect username)
     getFlwId(flw) {
@@ -1261,6 +1370,48 @@ function auditCreationPage() {
         { name: 'sessions', message: 'Creating sessions...', percentage: 0, status: 'pending' },
         { name: 'attachments', message: 'Downloading attachments...', percentage: 0, status: 'pending' }
       ];
+    },
+
+    // Load all FLWs for monitoring mode (lightweight, no visit download)
+    async loadMonitoringFlws() {
+      if (this.selectedOpportunities.length === 0) {
+        return;
+      }
+
+      this.updating = true;
+      this.previewResults = [];
+
+      try {
+        const response = await fetch('{% url "audit:opportunity_flws" %}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+          },
+          body: JSON.stringify({
+            opportunities: this.selectedOpportunities.map(o => o.id)
+          })
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+          alert(data.error || 'Failed to load FLWs');
+          this.updating = false;
+          return;
+        }
+
+        this.previewResults = data.flws;
+
+        // Select all FLWs by default
+        this.selectedFlwUserIds = data.flws.map(flw => flw.connect_id || flw.username);
+
+        console.log(`Loaded ${data.total} FLWs from opportunity`);
+      } catch (e) {
+        console.error('Error loading FLWs:', e);
+        alert('Failed to load FLWs: ' + e.message);
+      }
+      this.updating = false;
     },
 
     // Update preview - synchronous API call
@@ -1538,10 +1689,15 @@ function auditCreationPage() {
         const payload = {
           opportunities: this.selectedOpportunities.map(o => o.id),
           criteria: criteria,
-          // Pass pre-computed data from preview (optimization: skip CSV re-parsing)
-          visit_ids: this.precomputedVisitIds,
-          flw_visit_ids: selectedFlwVisitIds
         };
+
+        if (this.isMonitoring) {
+          payload.session_type = 'mbw_monitoring';
+        } else {
+          // Pass pre-computed data from preview (optimization: skip CSV re-parsing)
+          payload.visit_ids = this.precomputedVisitIds;
+          payload.flw_visit_ids = selectedFlwVisitIds;
+        }
 
         const response = await fetch('{% url "audit:create_session" %}', {
           method: 'POST',

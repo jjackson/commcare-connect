@@ -39,7 +39,12 @@ class ExperimentAuditCreateView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["page_title"] = "Create New Audit Session"
+
+        # Monitoring mode: ?mode=monitoring
+        mode = self.request.GET.get("mode", "audit")
+        is_monitoring = mode == "monitoring"
+        context["is_monitoring"] = is_monitoring
+        context["page_title"] = "Create Monitoring Session" if is_monitoring else "Create New Audit Session"
 
         # Pass labs_context to template for pre-selection
         labs_context = getattr(self.request, "labs_context", {})
@@ -667,6 +672,11 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
             # Get auditor username
             username = request.user.username
 
+            # Handle monitoring session creation (short-circuit: no visits/images)
+            session_type = data.get("session_type", "audit")
+            if session_type == "mbw_monitoring":
+                return self._create_monitoring_session(request, data, opportunity_ids, criteria, username)
+
             # Initialize data access with first selected opportunity ID
             # (Currently requires exactly one opportunity, will support multiple in future)
             data_access = AuditDataAccess(opportunity_id=opportunity_ids[0], request=request)
@@ -872,6 +882,95 @@ class ExperimentAuditCreateAPIView(LoginRequiredMixin, View):
                 }
             )
 
+        except Exception as e:
+            import traceback
+
+            print(f"[ERROR] {traceback.format_exc()}")
+            return JsonResponse({"error": str(e)}, status=500)
+        finally:
+            if data_access:
+                data_access.close()
+
+    def _create_monitoring_session(self, request, data, opportunity_ids, criteria, username):
+        """Create MBW monitoring session(s) — no visit IDs or images needed."""
+        data_access = None
+        try:
+            data_access = AuditDataAccess(opportunity_id=opportunity_ids[0], request=request)
+
+            granularity = criteria.get("granularity", "combined")
+            selected_flw_usernames = criteria.get("selected_flw_user_ids", [])
+            title_suffix = criteria.get("title", "").strip()
+
+            # Build opportunity name mapping
+            opp_names = {}
+            try:
+                opps = data_access.search_opportunities("", limit=1000)
+                opp_lookup = {opp["id"]: opp.get("name", "") for opp in opps}
+                opp_names = {oid: opp_lookup.get(oid, f"Opportunity #{oid}") for oid in opportunity_ids}
+            except Exception:
+                opp_names = {oid: f"Opportunity #{oid}" for oid in opportunity_ids}
+
+            # Build description
+            description = f"MBW Monitoring: {len(selected_flw_usernames)} FLWs"
+            start_date = criteria.get("startDate")
+            end_date = criteria.get("endDate")
+            if start_date and end_date:
+                description += f" ({start_date} to {end_date})"
+
+            sessions_created = []
+
+            if granularity == "per_opp" and len(opportunity_ids) > 1:
+                # Create one session per opportunity
+                for opp_id in opportunity_ids:
+                    opp_name = opp_names.get(opp_id, f"Opportunity #{opp_id}")
+                    session_title = f"{opp_name} - {title_suffix}" if title_suffix else opp_name
+
+                    # Use a data access scoped to this opportunity
+                    opp_data_access = AuditDataAccess(opportunity_id=opp_id, request=request)
+                    try:
+                        session = opp_data_access.create_monitoring_session(
+                            username=username,
+                            opportunity_ids=[opp_id],
+                            opportunity_names={opp_id: opp_name},
+                            selected_flw_usernames=selected_flw_usernames,
+                            title=session_title,
+                            tag=criteria.get("tag", ""),
+                            description=description,
+                            start_date=start_date,
+                            end_date=end_date,
+                        )
+                        sessions_created.append({"session_id": session.id, "opportunity_id": opp_id})
+                    finally:
+                        opp_data_access.close()
+            else:
+                # Combined or single opportunity: one session
+                if len(opportunity_ids) == 1:
+                    opp_name = opp_names.get(opportunity_ids[0], "")
+                    session_title = f"{opp_name} - {title_suffix}" if title_suffix else opp_name
+                else:
+                    session_title = title_suffix or f"MBW Monitoring {timezone.now().strftime('%Y-%m-%d')}"
+
+                session = data_access.create_monitoring_session(
+                    username=username,
+                    opportunity_ids=opportunity_ids,
+                    opportunity_names=opp_names,
+                    selected_flw_usernames=selected_flw_usernames,
+                    title=session_title,
+                    tag=criteria.get("tag", ""),
+                    description=description,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+                sessions_created.append({"session_id": session.id})
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "redirect_url": str(reverse_lazy("audit:session_list")),
+                    "sessions_created": len(sessions_created),
+                    "sessions": sessions_created,
+                }
+            )
         except Exception as e:
             import traceback
 
@@ -1345,6 +1444,144 @@ class ExperimentAuditPreviewAPIView(LoginRequiredMixin, View):
         finally:
             if data_access:
                 data_access.close()
+
+
+class OpportunityFLWListAPIView(LoginRequiredMixin, View):
+    """Lightweight API endpoint to list all FLWs registered in an opportunity.
+
+    Used by the monitoring wizard to show all users without downloading visits.
+    Returns the full user roster from Connect's /user_data/ export, enriched
+    with audit history and open task indicators per FLW.
+    """
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            opportunity_ids = data.get("opportunities", [])
+
+            if not opportunity_ids:
+                return JsonResponse({"error": "No opportunities provided"}, status=400)
+
+            access_token = request.session.get("labs_oauth", {}).get("access_token")
+            if not access_token:
+                return JsonResponse({"error": "Not authenticated"}, status=401)
+
+            from commcare_connect.labs.analysis.data_access import fetch_flw_names
+
+            # Fetch users for each opportunity and merge
+            all_flws = []
+            seen_usernames = set()
+
+            for opp_id in opportunity_ids:
+                try:
+                    flw_names = fetch_flw_names(access_token, opp_id)
+                    for username, display_name in flw_names.items():
+                        if username not in seen_usernames:
+                            seen_usernames.add(username)
+                            all_flws.append({
+                                "username": username,
+                                "name": display_name,
+                                "connect_id": username,
+                                "opportunity_id": opp_id,
+                            })
+                except Exception as e:
+                    logger.warning(f"Failed to fetch FLWs for opportunity {opp_id}: {e}")
+
+            # Enrich with audit history and task indicators
+            flw_history = self._build_flw_history(request)
+            for flw in all_flws:
+                flw["history"] = flw_history.get(flw["username"], {})
+
+            return JsonResponse({
+                "success": True,
+                "flws": all_flws,
+                "total": len(all_flws),
+            })
+
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        except Exception as e:
+            logger.error(f"Failed to list opportunity FLWs: {e}", exc_info=True)
+            return JsonResponse({"error": str(e)}, status=500)
+
+    def _build_flw_history(self, request):
+        """Build per-FLW audit history and open task indicators.
+
+        Returns dict: {username: {last_audit_date, last_audit_result, audit_count,
+                                   open_task_count, latest_task_date, latest_task_title}}
+        """
+        history = defaultdict(lambda: {
+            "last_audit_date": None,
+            "last_audit_result": None,
+            "audit_count": 0,
+            "open_task_count": 0,
+            "latest_task_date": None,
+            "latest_task_title": None,
+        })
+
+        # Fetch all audit sessions for the opportunity
+        try:
+            data_access = AuditDataAccess(request=request)
+            all_sessions = data_access.get_audit_sessions()
+            data_access.close()
+
+            for session in all_sessions:
+                if session.is_monitoring:
+                    # Monitoring sessions: per-FLW results
+                    for username, result_data in session.flw_results.items():
+                        assessed_at = result_data.get("assessed_at")
+                        result = result_data.get("result")
+                        if not result:
+                            continue
+                        h = history[username]
+                        h["audit_count"] += 1
+                        if not h["last_audit_date"] or (assessed_at and assessed_at > h["last_audit_date"]):
+                            h["last_audit_date"] = assessed_at
+                            h["last_audit_result"] = result
+                else:
+                    # Traditional audit: single FLW per session
+                    username = session.flw_username
+                    if not username:
+                        continue
+                    result = session.overall_result
+                    if not result:
+                        continue
+                    h = history[username]
+                    h["audit_count"] += 1
+                    # Use session creation date (approximate from data)
+                    session_date = session.data.get("created_at") or session.data.get("start_date")
+                    if session_date:
+                        if not h["last_audit_date"] or session_date > h["last_audit_date"]:
+                            h["last_audit_date"] = session_date
+                            h["last_audit_result"] = result.lower()
+        except Exception as e:
+            logger.warning(f"Failed to fetch audit history: {e}")
+
+        # Fetch all tasks for the opportunity
+        try:
+            from commcare_connect.tasks.data_access import TaskDataAccess
+
+            task_access = TaskDataAccess(request=request)
+            all_tasks = task_access.get_tasks()
+            task_access.close()
+
+            for task in all_tasks:
+                username = task.task_username
+                if not username:
+                    continue
+                if task.status != "closed":
+                    h = history[username]
+                    h["open_task_count"] += 1
+                    task_date = None
+                    if task.date_created:
+                        task_date = task.date_created.isoformat()
+                    if task_date and (not h["latest_task_date"] or task_date > h["latest_task_date"]):
+                        h["latest_task_date"] = task_date
+                        h["latest_task_title"] = task.title
+        except Exception as e:
+            logger.warning(f"Failed to fetch task history: {e}")
+
+        return dict(history)
 
 
 class VisitDetailFromProductionView(LoginRequiredMixin, TemplateView):

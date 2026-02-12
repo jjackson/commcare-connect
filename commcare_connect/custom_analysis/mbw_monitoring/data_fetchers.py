@@ -149,8 +149,11 @@ def fetch_opportunity_metadata(access_token: str, opportunity_id: int) -> dict:
             f"deliver_app: {deliver_app}, learn_app: {learn_app}"
         )
 
+    cc_app_id = deliver_app.get("cc_app_id") or learn_app.get("cc_app_id")
+
     result = {
         "cc_domain": cc_domain,
+        "cc_app_id": cc_app_id,
         "opportunity_name": data.get("name", ""),
         "opportunity_id": opportunity_id,
         "raw": data,
@@ -364,13 +367,38 @@ def group_visit_cases_by_flw(
         if case_id and row.username:
             case_to_username[case_id] = row.username
 
+    pipeline_ids = list(case_to_username.keys())[:3]
+    hq_ids = [c.get("case_id") for c in visit_cases[:3]]
+    logger.info(
+        "[MBW Follow-Up] case_to_username size=%d, visit_cases size=%d, "
+        "sample pipeline case_ids=%s, sample HQ case_ids=%s",
+        len(case_to_username),
+        len(visit_cases),
+        pipeline_ids,
+        hq_ids,
+    )
+
     # Group cases by username
+    matched = 0
+    active_matched = 0
     by_flw = defaultdict(list)
     for case in visit_cases:
         case_id = case.get("case_id")
         username = case_to_username.get(case_id)
-        if username and username in active_usernames:
-            by_flw[username].append(case)
+        if username:
+            matched += 1
+            if username in active_usernames:
+                active_matched += 1
+                by_flw[username].append(case)
+
+    logger.info(
+        "[MBW Follow-Up] matched=%d, active_matched=%d, unique_flws=%d, "
+        "active_usernames size=%d",
+        matched,
+        active_matched,
+        len(by_flw),
+        len(active_usernames),
+    )
 
     return dict(by_flw)
 
@@ -422,3 +450,131 @@ def bust_mbw_hq_cache() -> int:
         cache.clear()
         cleared = -1
     return cleared
+
+
+def fetch_gs_forms(
+    request: HttpRequest,
+    cc_domain: str,
+    cc_app_id: str | None = None,
+    bust_cache: bool = False,
+) -> list[dict]:
+    """Fetch Gold Standard Visit Checklist forms from CCHQ Form API v1.
+
+    The GS form is in a separate supervisor app (not the deliver app),
+    so we first try the deliver app's cc_app_id, then fall back to
+    searching across all apps in the domain via discover_form_xmlns().
+
+    Args:
+        request: HttpRequest with commcare_oauth in session
+        cc_domain: CommCare HQ domain
+        cc_app_id: Optional deliver app ID to try first
+        bust_cache: If True, ignore cached data and re-fetch
+
+    Returns:
+        List of form dicts from CommCare Form API
+    """
+    cache_key = f"mbw_gs_forms:{cc_domain}"
+    if not bust_cache:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            logger.info(f"[MBW Dashboard] GS forms cache hit: {len(cached)} forms")
+            return cached
+
+    client = CommCareDataAccess(request, cc_domain)
+    if not client.check_token_valid():
+        raise ValueError("CommCare OAuth not configured or expired.")
+
+    # Try deliver app first (quick check)
+    xmlns = None
+    if cc_app_id:
+        xmlns = client.get_form_xmlns(cc_app_id, "Gold Standard Visit Checklist")
+
+    # If not in deliver app, search all apps in the domain
+    if not xmlns:
+        xmlns = client.discover_form_xmlns("Gold Standard Visit Checklist")
+
+    if xmlns:
+        logger.info(f"[MBW Dashboard] Discovered GS form xmlns: {xmlns}")
+        forms = client.fetch_forms(xmlns=xmlns)  # No app_id filter — xmlns is unique
+    else:
+        # Last resort: fetch all forms, filter client-side
+        logger.warning("[MBW Dashboard] Could not discover GS xmlns, falling back to client-side filtering")
+        forms = client.fetch_forms()
+        forms = [
+            f for f in forms
+            if (f.get("form", {}).get("@name") or "") == "Gold Standard Visit Checklist"
+        ]
+
+    logger.info(f"[MBW Dashboard] Fetched {len(forms)} GS forms from CCHQ ({cc_domain})")
+
+    cache.set(cache_key, forms, CASES_CACHE_TTL)
+    return forms
+
+
+def fetch_registration_forms(
+    request: HttpRequest,
+    cc_domain: str,
+    cc_app_id: str | None = None,
+    bust_cache: bool = False,
+) -> list[dict]:
+    """Fetch 'Register Mother' forms from CCHQ Form API v1, cached for 1 hour.
+
+    Dynamically discovers the xmlns for the "Register Mother" form via the
+    Application Structure API, so the correct xmlns is used regardless of
+    which app (production vs testing) is configured for the opportunity.
+
+    Falls back to fetching all forms for the app and filtering client-side
+    by form name if xmlns discovery fails.
+
+    Args:
+        request: HttpRequest with commcare_oauth in session
+        cc_domain: CommCare HQ domain
+        cc_app_id: Optional app ID to filter forms
+        bust_cache: If True, ignore cached data and re-fetch
+
+    Returns:
+        List of form dicts from CommCare Form API
+    """
+    cache_key = f"mbw_registration_forms:{cc_domain}"
+    if not bust_cache:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            logger.info(f"[MBW Dashboard] Registration forms cache hit: {len(cached)} forms")
+            return cached
+
+    client = CommCareDataAccess(request, cc_domain)
+    if not client.check_token_valid():
+        raise ValueError("CommCare OAuth not configured or expired.")
+
+    # Dynamically discover the xmlns for "Register Mother"
+    xmlns = None
+    if cc_app_id:
+        xmlns = client.get_form_xmlns(cc_app_id, "Register Mother")
+        if xmlns:
+            logger.info(f"[MBW Dashboard] Discovered Register Mother xmlns: {xmlns}")
+        else:
+            logger.warning(
+                f"[MBW Dashboard] Could not discover xmlns for 'Register Mother' "
+                f"in app {cc_app_id}, falling back to client-side filtering"
+            )
+
+    if xmlns:
+        # Happy path: fetch forms filtered by discovered xmlns
+        forms = client.fetch_forms(xmlns=xmlns, app_id=cc_app_id)
+    else:
+        # Fallback: fetch all forms for the app and filter client-side
+        forms = client.fetch_forms(app_id=cc_app_id)
+        pre_filter_count = len(forms)
+        forms = [
+            f for f in forms
+            if f.get("@name") == "Register Mother"
+        ]
+        logger.info(
+            f"[MBW Dashboard] Client-side filter: {len(forms)}/{pre_filter_count} "
+            f"forms matched 'Register Mother'"
+        )
+
+    logger.info(f"[MBW Dashboard] Fetched {len(forms)} registration forms from CCHQ ({cc_domain})")
+
+    cache.set(cache_key, forms, CASES_CACHE_TTL)
+    return forms
