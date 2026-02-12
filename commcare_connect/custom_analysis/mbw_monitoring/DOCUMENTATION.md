@@ -7,13 +7,16 @@
 3. [Data Flow](#data-flow)
 4. [Three-Tab Dashboard](#three-tab-dashboard)
 5. [Data Sources & APIs](#data-sources--apis)
-6. [Caching Strategy](#caching-strategy)
-7. [Authentication & OAuth](#authentication--oauth)
-8. [Frontend Architecture](#frontend-architecture)
-9. [Features & Capabilities](#features--capabilities)
-10. [Configuration](#configuration)
-11. [File Reference](#file-reference)
-12. [Requirements Traceability](#requirements-traceability)
+6. [Pipeline Configuration](#pipeline-configuration)
+7. [Follow-Up Rate Business Logic](#follow-up-rate-business-logic)
+8. [Quality Metrics](#quality-metrics)
+9. [Caching Strategy](#caching-strategy)
+10. [Authentication & OAuth](#authentication--oauth)
+11. [Frontend Architecture](#frontend-architecture)
+12. [Features & Capabilities](#features--capabilities)
+13. [Configuration](#configuration)
+14. [File Reference](#file-reference)
+15. [Key Field Paths](#key-field-paths)
 
 ---
 
@@ -21,9 +24,9 @@
 
 The MBW (Mother Baby Wellness) Monitoring Dashboard is a real-time performance monitoring tool for frontline health workers (FLWs) operating within the CommCare Connect ecosystem. It provides supervisors with a unified view of FLW performance across three dimensions:
 
-- **Overview**: High-level per-FLW summary combining cases registered, visit completion, and GPS metrics
+- **Overview**: High-level per-FLW summary combining cases registered, follow-up rate, GS score, GPS metrics, and quality/fraud indicators
 - **GPS Analysis**: Distance-based anomaly detection using Haversine calculations to flag suspicious travel patterns
-- **Follow-Up Rate**: Visit completion tracking across 6 visit types (ANC, Postnatal, Week 1, Month 1, Month 3, Month 6) with per-mother drill-down
+- **Follow-Up Rate**: Visit completion tracking across 6 visit types (ANC, Postnatal, Week 1, Month 1, Month 3, Month 6) with per-mother drill-down, eligibility filtering, and grace period
 
 The dashboard is designed for the **Labs environment** (a session-based, database-light variant of CommCare Connect) and loads all data in a single Server-Sent Events (SSE) connection, enabling real-time progress feedback during data loading.
 
@@ -31,9 +34,11 @@ The dashboard is designed for the **Labs environment** (a session-based, databas
 
 - **Single SSE connection**: All three tabs load data from one streaming endpoint, avoiding redundant API calls
 - **Client-side filtering**: Raw data is sent once; FLW and mother filtering happens entirely in the browser via Alpine.js
-- **Two-layer caching**: Pipeline-level cache (Redis) for visit form data + HQ case cache (Django cache) for CommCare HQ case data
+- **Two-layer caching**: Pipeline-level cache (Redis) for visit form data + Django cache for CCHQ form/case data
 - **Tolerance-based cache validation**: Caches are accepted if they meet count, percentage, or time-based tolerance thresholds
 - **No database writes**: All data is fetched from external APIs (Connect Production + CommCare HQ) and cached transiently
+- **CCHQ Form API for metadata**: Registration forms and GS forms are fetched directly from CCHQ Form API v1 (not from cases), with dynamic xmlns discovery via the Application Structure API
+- **Cross-app xmlns discovery**: GS forms live in a separate supervisor app; the system searches all apps in the domain to find the correct xmlns
 
 ---
 
@@ -49,17 +54,22 @@ User Browser
     │
     ├── SSE /custom_analysis/mbw_monitoring/stream/
     │   └── MBWMonitoringStreamView (streams all data)
-    │       ├── Step 1: AnalysisPipeline → Connect API (visit forms)
+    │       ├── Step 1: AnalysisPipeline → Connect API (visit forms, 12 fields)
     │       ├── Step 2: Connect API → FLW names
     │       ├── Step 3: GPS analysis (Haversine distances)
-    │       ├── Step 4: Connect API → opportunity metadata (cc_domain)
-    │       ├── Step 5: CommCare HQ API → visit cases (by case IDs)
-    │       ├── Step 6: CommCare HQ API → mother cases
-    │       ├── Step 7: Follow-up metric aggregation
-    │       └── Step 8: Overview metric computation
+    │       ├── Step 4a: CCHQ Form API → Registration forms (mother metadata)
+    │       ├── Step 4b: CCHQ Form API → GS forms (Gold Standard scores)
+    │       ├── Step 5: Follow-up metric aggregation (eligibility + grace period)
+    │       └── Step 6: Overview metric computation (quality, GPS, follow-up, GS)
     │
     ├── GET /custom_analysis/mbw_monitoring/api/gps/<username>/
     │   └── MBWGPSDetailView (JSON drill-down for GPS visits)
+    │
+    ├── POST /custom_analysis/mbw_monitoring/api/save-flw-result/
+    │   └── MBWSaveFlwResultView (save pass/fail for monitoring session)
+    │
+    ├── POST /custom_analysis/mbw_monitoring/api/complete-session/
+    │   └── MBWCompleteSessionView (mark monitoring session complete)
     │
     └── POST /custom_analysis/mbw_monitoring/api/suspend-user/
         └── MBWSuspendUserView (placeholder for user suspension)
@@ -72,25 +82,27 @@ User Browser
 │  Dashboard View  │────>│   Stream View (SSE)  │────>│ AnalysisPipeline │
 │  (Template +     │     │  MBWMonitoringStream │     │  (Labs Framework)│
 │   Context)       │     │       View           │     │                  │
-└────────────────-─┘     └────────┬───────────┘     └────────┬─────────┘
-                                  │                           │
-                    ┌─────────────┼─────────────┐             │
-                    │             │             │             │
-              ┌─────▼────-──┐ ┌───▼────────┐ ┌──▼─────────┐   │
-              │ data_       │ │ followup_  │ │ gps_       │   │
-              │ fetchers.py │ │ analysis.py│ │ analysis.py│   │
-              │ (HQ cases)  │ │ (metrics)  │ │ (MBW core) │   │
-              └─────────────┘ └────────────┘ └────────────┘   │
-                    │                                         │
-              ┌─────▼─────────────────────────────────────────▼-─┐
-              │              External APIs                       │
-              │  ┌──────────────────┐  ┌─────────────────────┐   │
-              │  │  CommCare HQ     │  │  Connect Production │   │
-              │  │  Case API v2     │  │  API                │   │
-              │  │  (visit + mother │  │  (visits, FLW names,│   │
-              │  │   cases)         │  │   opportunity meta) │   │
-              │  └──────────────────┘  └─────────────────────┘   │
-              └──────────────────────────────────────────────────┘
+└─────────────────┘     └────────┬─────────────┘     └────────┬─────────┘
+                                 │                             │
+                   ┌─────────────┼─────────────┐               │
+                   │             │             │               │
+             ┌─────▼──────┐ ┌───▼────────┐ ┌──▼─────────┐     │
+             │ data_       │ │ followup_  │ │ gps_       │     │
+             │ fetchers.py │ │ analysis.py│ │ analysis.py│     │
+             │ (CCHQ forms │ │ (metrics,  │ │ (MBW core) │     │
+             │  + cases)   │ │ quality)   │ │            │     │
+             └─────────────┘ └────────────┘ └────────────┘     │
+                   │                                           │
+             ┌─────▼───────────────────────────────────────────▼───┐
+             │              External APIs                          │
+             │  ┌──────────────────┐  ┌─────────────────────────┐  │
+             │  │  CommCare HQ     │  │  Connect Production     │  │
+             │  │  Form API v1     │  │  API                    │  │
+             │  │  Application API │  │  (visits, FLW names,    │  │
+             │  │  (reg forms,     │  │   opportunity metadata) │  │
+             │  │   GS forms)      │  │                         │  │
+             │  └──────────────────┘  └─────────────────────────┘  │
+             └─────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -99,22 +111,21 @@ User Browser
 
 ### Step-by-Step Data Loading Sequence
 
-1. **Browser requests dashboard page** → `MBWMonitoringDashboardView` renders the HTML template with context (URLs, dates, OAuth status, cache config defaults)
+1. **Browser requests dashboard page** → `MBWMonitoringDashboardView` renders the HTML template with context (URLs, dates, OAuth status, cache config defaults, monitoring session)
 
 2. **Browser opens SSE connection** → Alpine.js `init()` calls `loadDataWithSSE()` which opens an `EventSource` to the stream endpoint
 
-3. **Stream view executes 8 steps**, yielding progress messages at each stage:
+3. **Stream view executes 6 steps**, yielding progress messages at each stage:
 
    | Step | Data Source | What It Fetches | Cache |
    |------|-----------|-----------------|-------|
-   | 1 | Connect API via AnalysisPipeline | Visit form data (GPS locations, case IDs, dates) | Pipeline cache (Redis) |
-   | 2 | Connect API | Active FLW usernames + display names | Django cache |
+   | 1 | Connect API via AnalysisPipeline | Visit form data (12 FieldComputations: GPS, case IDs, form names, dates, parity, etc.) | Pipeline cache (Redis, config-hash based) |
+   | 2 | Connect API | Active FLW usernames + display names | In-memory |
    | 3 | In-memory | GPS metrics (Haversine distances, daily travel) | None (computed) |
-   | 4 | Connect API | Opportunity metadata (cc_domain) | Django cache (1hr) |
-   | 5 | CommCare HQ Case API v2 | Visit cases (by case IDs from step 1) | Django cache (tolerance-validated) |
-   | 6 | CommCare HQ Case API v2 | Mother cases (by mother_case_id from step 5) | Django cache (tolerance-validated) |
-   | 7 | In-memory | Follow-up metrics (status, completion rates) | None (computed) |
-   | 8 | In-memory | Overview metrics (merge GPS + follow-up + mother counts) | None (computed) |
+   | 4a | CCHQ Form API v1 | Registration forms → mother metadata (name, age, phone, eligibility, EDD, etc.) | Django cache (1hr) |
+   | 4b | CCHQ Form API v1 | Gold Standard Visit Checklist forms → GS scores per FLW | Django cache (1hr) |
+   | 5 | In-memory | Follow-up metrics (visit status, completion rates with eligibility + grace period) | None (computed) |
+   | 6 | In-memory | Overview metrics (merge follow-up rate, GS score, GPS, quality metrics) | None (computed) |
 
 4. **Final SSE event** contains the combined payload for all three tabs, sent as `data.complete = true`
 
@@ -136,22 +147,7 @@ The final SSE payload (`data.data`) contains:
     "total_flagged": 12,
     "date_range_start": "2025-01-01",
     "date_range_end": "2025-01-31",
-    "flw_summaries": [
-      {
-        "username": "flw001",
-        "display_name": "Alice Mensah",
-        "total_visits": 50,
-        "visits_with_gps": 48,
-        "flagged_visits": 2,
-        "unique_cases": 15,
-        "avg_case_distance_km": 1.2,
-        "max_case_distance_km": 7.5,
-        "avg_daily_travel_km": 3.4,
-        "trailing_7_days": [
-          {"date": "2025-01-25", "distance_km": 4.2, "visit_count": 8}
-        ]
-      }
-    ]
+    "flw_summaries": [...]
   },
   "followup_data": {
     "total_cases": 300,
@@ -165,14 +161,11 @@ The final SSE payload (`data.data`) contains:
         "due_late": 2,
         "missed": 1,
         "completed_total": 25,
-        "due_total": 31,
+        "due_total": 5,
+        "missed_total": 1,
+        "total_visits": 31,
         "completion_rate": 81,
-        "status_color": "green",
-        "anc_completed_on_time": 5,
-        "anc_completed_late": 1,
-        "anc_due_on_time": 0,
-        "anc_due_late": 1,
-        "anc_missed": 0
+        "status_color": "green"
       }
     ],
     "flw_drilldown": {
@@ -183,19 +176,18 @@ The final SSE payload (`data.data`) contains:
           "registration_date": "2024-11-15",
           "age": "28",
           "phone_number": "+234...",
+          "household_size": "5",
+          "preferred_time_of_visit": "morning",
+          "anc_completion_date": "2024-12-01",
+          "pnc_completion_date": "",
+          "expected_delivery_date": "2025-03-15",
+          "baby_dob": "",
+          "eligible": true,
           "completed": 4,
           "total": 5,
           "follow_up_rate": 80,
           "has_due_visits": true,
-          "visits": [
-            {
-              "case_id": "visit001",
-              "visit_type": "ANC",
-              "visit_date_scheduled": "2024-12-01",
-              "visit_expiry_date": "2025-01-01",
-              "status": "Completed - On Time"
-            }
-          ]
+          "visits": [...]
         }
       ]
     }
@@ -206,11 +198,20 @@ The final SSE payload (`data.data`) contains:
         "username": "flw001",
         "display_name": "Alice Mensah",
         "cases_registered": 15,
-        "completed_visits": 25,
-        "median_meters_per_case": 1.2,
-        "first_gs_score": null,
+        "eligible_mothers": 12,
+        "first_gs_score": "86",
         "post_test_attempts": null,
-        "pct_visits_due_5_plus_days": null
+        "followup_rate": 81,
+        "revisit_distance_km": 1.2,
+        "median_meters_per_visit": 450,
+        "median_minutes_per_visit": 35,
+        "phone_dup_pct": 5,
+        "anc_pnc_same_date_count": 0,
+        "anc_pnc_denominator": 8,
+        "parity_concentration": {"pct_duplicate": 10, "mode_value": "2", "mode_pct": 30},
+        "age_concentration": {"pct_duplicate": 8, "mode_value": "25", "mode_pct": 15},
+        "age_equals_reg_pct": 2,
+        "cases_still_eligible": {"eligible": 10, "total": 12, "pct": 83}
       }
     ],
     "visit_status_distribution": {
@@ -219,13 +220,13 @@ The final SSE payload (`data.data`) contains:
       "due_on_time": 20,
       "due_late": 15,
       "missed": 5,
-      "completed_on_time_pct": 68.2,
       "total": 220
     }
   },
   "active_usernames": ["flw001", "flw002"],
   "flw_names": {"flw001": "Alice Mensah", "flw002": "Bob Kone"},
-  "open_task_usernames": ["flw002"]
+  "open_task_usernames": ["flw002"],
+  "monitoring_session": { "id": 1, "title": "...", "status": "in_progress", "flw_results": {...} }
 }
 ```
 
@@ -241,17 +242,22 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 - Color-coded segments: Completed On Time (green), Completed Late (light green), Due On Time (yellow), Due Late (orange), Missed (red)
 
 **FLW Table Columns**:
-| Column | Data Source | Status |
-|--------|-----------|--------|
-| FLW Name | Connect API | Active |
-| # Cases (registered mothers) | CommCare HQ mother cases | Active |
-| GS Score (first Gold Standard) | - | TBD |
-| Post-Test | - | TBD |
-| % Due 5+ Days | - | TBD |
-| Completed Visits | Follow-up analysis | Active |
-| Median m/Case (GPS distance) | GPS analysis | Active |
+| Column | Data Source | Description |
+|--------|-----------|-------------|
+| FLW Name | Connect API | Display name with avatar |
+| # Mothers | Registration forms + pipeline | Total registered / eligible for full intervention bonus |
+| GS Score | CCHQ GS forms | First (oldest) Gold Standard Visit Checklist score. Color: green ≥70, yellow 50-69, red <50 |
+| Follow-up Rate | Follow-up analysis | % of visits due 5+ days ago that are completed, among eligible mothers |
+| Eligible 5+ | Drill-down data | Eligible mothers still on track (5+ completed OR ≤1 missed). Color: green ≥70%, yellow 50-69%, red <50% |
+| Revisit Dist. | GPS analysis | Median haversine distance (km) between revisits to the same mother |
+| Meter/Visit | GPS analysis | Median meters traveled per visit (filtered by app build version) |
+| Min/Visit | GPS analysis | Median minutes per visit |
+| Phone Dup % | Quality metrics | % of mothers sharing duplicate phone numbers |
+| Parity Conc. | Quality metrics | Parity value concentration (% duplicate + mode) |
+| Age Conc. | Quality metrics | Age value concentration (% duplicate + mode) |
+| ANC≠PNC | Quality metrics | Count of mothers where ANC and PNC completion dates match |
 
-**Actions per FLW**: Filter button, Task creation button
+**Actions per FLW**: Filter button, Task creation button (greyed out if open task exists)
 
 ### GPS Analysis Tab
 
@@ -279,38 +285,34 @@ Identifies potential fraud or GPS anomalies by analyzing distances between conse
 - Sequential visits to the same mother are compared; distance > 5km triggers a flag
 - Daily travel is computed as the path distance through all visits in a day
 - Trailing 7-day sparkline shows daily travel pattern for quick visual assessment
+- **Meter/Visit**: Median meters per visit, filtered by `app_build_version` (requires extractor-based extraction from pipeline)
+- **Minute/Visit**: Median minutes per visit from GPS timestamps
 
 ### Follow-Up Rate Tab
 
-Tracks visit completion across 6 visit types with per-mother granularity.
+Tracks visit completion across 6 visit types with per-mother granularity, eligibility filtering, and grace period.
 
-**Summary Cards**: Total Visit Cases, Total FLWs, Average Completion Rate
+**Summary Cards**: Total Visit Cases, Total FLWs, Average Follow-up Rate (color-coded: green ≥80%, yellow ≥60%, red <60%)
 
 **FLW Table Columns**:
 | Column | Description |
 |--------|-----------|
-| FLW Name | Color-coded avatar (green/yellow/red based on completion rate) |
-| Completion Rate | Progress bar + percentage |
-| Completed | Total completed visits (on-time + late) |
-| Total Due | All visits (completed + due + missed) |
-| ANC through Month 6 | Per-visit-type breakdown showing completed/due/missed counts |
+| FLW Name | Color-coded avatar (green/yellow/red based on follow-up rate) |
+| Follow-up Rate | Progress bar + percentage (business definition: eligible mothers, 5+ day grace) |
+| Completed | Total completed visits with percentage: "8 (20%)" |
+| Due | Due visits (on-time + late only, excludes completed and missed) |
+| Missed | Missed visits count |
+| ANC through Month 6 | Per-visit-type breakdown showing completed/due/missed counts in mini columns |
 
-**Color Thresholds**: Green >= 80%, Yellow >= 60%, Red < 60%
+**Eligibility Filter**: "Full intervention bonus only" checkbox (default checked). When checked, follow-up rate only counts mothers with `eligible_full_intervention_bonus = "1"`. Non-eligible mothers show "Not eligible" badge.
 
 **Drill-Down**: Clicking a FLW row expands to show per-mother visit details:
-- Mother header with metadata (name, age, phone, registration date, ANC/PNC completion dates)
+- Mother header with metadata (name, age, phone, registration date, household size, preferred visit time)
+- Additional fields: ANC/PNC completion dates, expected delivery date, baby DOB
+- Eligibility badge (eligible / not eligible)
 - Visit table showing visit type, scheduled date, expiry date, and status
 - "Show missed/completed visits" toggle (default: shows only due visits)
 - Mother filter dropdown to narrow by specific mothers
-
-**Visit Status Calculation** (from `followup_analysis.py`):
-| Status | Condition |
-|--------|-----------|
-| Completed - On Time | Completed within 7 days of scheduled date |
-| Completed - Late | Completed after 7-day window |
-| Due - On Time | Not completed, within 7-day window |
-| Due - Late | Not completed, past 7-day window but before expiry |
-| Missed | Not completed, past expiry date |
 
 ---
 
@@ -320,53 +322,177 @@ Tracks visit completion across 6 visit types with per-mother granularity.
 
 Used for: Visit form data, FLW names, opportunity metadata
 
-- **Visit forms**: Fetched via `AnalysisPipeline` using `MBW_GPS_PIPELINE_CONFIG` from `mbw/pipeline_config.py`
-- **FLW names**: `get_flw_names_for_opportunity()` from `labs/analysis/data_access.py`
-- **Opportunity metadata**: `GET /export/opportunity/{id}/` — extracts `cc_domain` from `deliver_app` or `learn_app`
+- **Visit forms**: Fetched via `AnalysisPipeline` using `MBW_GPS_PIPELINE_CONFIG` from `mbw/pipeline_config.py`. Extracts 12 fields per visit using FieldComputations (3 use `extractor`, 9 use `path`).
+- **FLW names**: `fetch_flw_names()` from `labs/analysis/data_access.py`
+- **Opportunity metadata**: `GET /export/opportunity/{id}/` — extracts `cc_domain` and `cc_app_id` from `deliver_app` or `learn_app`
 
 Authentication: Connect OAuth token from `request.session["labs_oauth"]`
 
-### CommCare HQ Case API v2
+### CommCare HQ Form API v1
 
-Used for: Visit cases, mother cases
+Used for: Registration forms (mother metadata) and Gold Standard Visit Checklist forms (GS scores)
 
-- **Visit cases**: Bulk-fetched via `CommCareDataAccess.fetch_cases_by_ids()` using comma-separated IDs in URL path
-  - Endpoint: `GET /a/{domain}/api/case/v2/{id1},{id2},...,{idN}/`
-  - Batch size: 100 cases per request (URL length limit)
-  - Handles pagination within each batch
-- **Mother cases**: Same API, different case IDs extracted from visit case properties
+- **Registration forms**: `fetch_registration_forms()` in `data_fetchers.py`
+  - Dynamically discovers xmlns for "Register Mother" via Application Structure API
+  - Endpoint: `GET /a/{domain}/api/form/v1/?xmlns={xmlns}`
+  - Extracts: mother name, phone, age (from DOB), household size, eligibility, EDD, preferred visit time
+- **Gold Standard forms**: `fetch_gs_forms()` in `data_fetchers.py`
+  - GS form lives in a **separate supervisor app** (not the deliver app)
+  - First tries deliver app's `cc_app_id`, then falls back to cross-app xmlns discovery via `discover_form_xmlns()`
+  - Cross-app discovery: `list_applications()` lists all apps in the domain, then `get_form_xmlns()` checks each app
+  - Extracts: `load_flw_connect_id` (assessed FLW), `checklist_percentage` (GS score), `meta.timeEnd` (for oldest-first sorting)
 
 Authentication: CommCare OAuth token from `request.session["commcare_oauth"]`
 
-### Case Data Relationships
+### CommCare HQ Application Structure API
+
+Used for: Dynamic xmlns discovery (so the correct form xmlns is used regardless of which app version is deployed)
+
+- **Single app**: `GET /a/{domain}/api/application/v1/{app_id}/` → walks `modules[].forms[]` matching by multilingual name dict
+- **All apps**: `GET /a/{domain}/api/application/v1/` → paginated listing of all apps in the domain
+
+### Data Relationships
 
 ```
-Visit Forms (Connect API)
-    │
-    ├── case_id ──────────> Visit Cases (CommCare HQ)
-    │                           │
-    │                           ├── properties.mother_case_id ──> Mother Cases (CommCare HQ)
-    │                           ├── properties.visit_type
-    │                           ├── properties.visit_date_scheduled
-    │                           ├── properties.visit_expiry_date
-    │                           └── properties.*_visit_completion
+Pipeline Visit Forms (Connect API)
     │
     ├── username ──────────> FLW Names (Connect API)
+    ├── GPS coordinates ──> GPS Analysis (Haversine, meter/visit, min/visit)
+    ├── form_name ─────────> Visit type normalization (FORM_NAME_TO_VISIT_TYPE)
+    ├── mother_case_id ───> Mother-to-FLW mapping
+    ├── parity ────────────> Quality metrics (from ANC Visit rows)
+    ├── anc/pnc dates ────> Quality metrics + drill-down metadata
+    └── baby_dob ──────────> Drill-down metadata (from Post delivery visit rows)
+
+Registration Forms (CCHQ Form API)
     │
-    └── GPS coordinates ──> GPS Analysis (in-memory computation)
+    ├── var_visit_1..6 ───> Expected visit schedules (type, dates, mother_case_id)
+    ├── mother_details ───> Mother metadata (name, phone, age/DOB)
+    ├── eligible_full_intervention_bonus ──> Eligibility filtering
+    ├── mother_birth_outcome.expected_delivery_date ──> EDD
+    └── metadata.username ──> FLW-to-mother mapping
+
+Gold Standard Forms (CCHQ Form API, separate supervisor app)
+    │
+    ├── load_flw_connect_id ──> Maps to FLW username (assessed FLW)
+    ├── checklist_percentage ──> GS score (0-100)
+    └── meta.timeEnd ──────────> Sorting (oldest first)
 ```
+
+---
+
+## Pipeline Configuration
+
+The `MBW_GPS_PIPELINE_CONFIG` in `pipeline_config.py` defines 12 FieldComputations for visit-level data extraction:
+
+| Name | Type | Path / Extractor | Notes |
+|------|------|-----------------|-------|
+| `gps_location` | extractor | `extract_gps_location(visit_data)` | Reads `form_json.form.meta.location` |
+| `case_id` | path | `form.case.@case_id` | |
+| `mother_case_id` | path | `form.parents.parent.case.@case_id` | |
+| `form_name` | path | `form.@name` | Has trailing space variant ("ANC Visit ") |
+| `visit_datetime` | extractor | `extract_visit_datetime(visit_data)` | Reads `form_json.form.meta.timeEnd` |
+| `entity_id_deliver` | paths | `form.mbw_visit.deliver.entity_id` (+ alt) | |
+| `entity_name` | paths | `form.mbw_visit.deliver.entity_name` (+ alt) | |
+| `parity` | path | `form.confirm_visit_information.parity__of_...` | From ANC forms only |
+| `anc_completion_date` | path | `form.visit_completion.anc_completion_date` | From ANC forms only |
+| `pnc_completion_date` | path | `form.pnc_completion_date` | From PNC forms only |
+| `baby_dob` | path | `form.capture_the_following_birth_details.baby_dob` | From PNC forms only |
+| `app_build_version` | extractor | `extract_app_build_version(visit_data)` | Integer from `form_json.form.meta.app_build_version` |
+
+**Important**: Three fields (`gps_location`, `visit_datetime`, `app_build_version`) use the `extractor` parameter instead of `path+transform`. This is required because the PythonRedis backend cannot pass the full visit dict to transform functions — it only passes the extracted path value. The `extractor` parameter receives the full `visit._data` dict directly via `computations.py:47-49`.
+
+---
+
+## Follow-Up Rate Business Logic
+
+### Business Definition
+
+**Follow-up rate** = % of visits due 5+ days ago that have been completed, among mothers marked as eligible for full intervention bonus at registration.
+
+### Key Constants
+
+```python
+GRACE_PERIOD_DAYS = 5       # Only count visits due 5+ days ago
+THRESHOLD_GREEN = 80        # Follow-up rate ≥80% = green
+THRESHOLD_YELLOW = 60       # Follow-up rate ≥60% = yellow
+```
+
+### Eligibility Filtering
+
+- `eligible_full_intervention_bonus` is extracted from registration form top-level field
+- Value `"1"` = eligible, `"0"` = not eligible
+- Non-eligible mothers show "Not eligible" badge in drill-down and "N/A" rate
+- "Full intervention bonus only" checkbox (default checked) toggles eligibility filtering in the UI
+
+### Visit Status Calculation
+
+| Status | Condition |
+|--------|-----------|
+| Completed - On Time | Completed within 7 days of scheduled date |
+| Completed - Late | Completed after 7-day window |
+| Due - On Time | Not completed, within 7-day window |
+| Due - Late | Not completed, past 7-day window but before expiry |
+| Missed | Not completed, past expiry date |
+
+### Follow-Up Data Pipeline
+
+1. **Registration forms** (CCHQ Form API) → expected visits with schedules (var_visit_1..6, checking create flags)
+2. **Pipeline rows** → mother-to-FLW mapping (username + mother_case_id)
+3. **Pipeline completion forms** → mark matching visits as completed (via COMPLETION_FLAGS + FORM_NAME_TO_VISIT_TYPE normalization)
+4. **Aggregation** → per-FLW and per-mother metrics with filtered follow-up rate
+
+### Key Mappings
+
+```python
+COMPLETION_FLAGS = {
+    "ANC Visit": "antenatal_visit_completion",
+    "Postnatal Visit": "postnatal_visit_completion",
+    "Postnatal Delivery Visit": "postnatal_visit_completion",
+    "1 Week Visit": "one_two_week_visit_completion",
+    "1 Month Visit": "one_month_visit_completion",
+    "3 Month Visit": "three_month_visit_completion",
+    "6 Month Visit": "six_month_visit_completion",
+}
+
+FORM_NAME_TO_VISIT_TYPE = {
+    "ANC Visit": "ANC Visit",
+    "ANC Visit ": "ANC Visit",       # trailing space variant
+    "Post delivery visit": "Postnatal Delivery Visit",
+    "1 Week Visit": "1 Week Visit",
+    "1 Month Visit": "1 Month Visit",
+    "3 Month Visit": "3 Month Visit",
+    "6 Month Visit": "6 Month Visit",
+}
+```
+
+---
+
+## Quality Metrics
+
+Computed per FLW in `compute_overview_quality_metrics()` from `followup_analysis.py`:
+
+| Metric | Description | Fraud Signal |
+|--------|-------------|-------------|
+| Phone Dup % | % of mothers sharing duplicate phone numbers | High % = possible fabrication |
+| ANC≠PNC | Count of mothers where ANC and PNC completion dates are identical | Same-day = suspicious |
+| Parity Concentration | % of parity values appearing more than once + mode value | High concentration = possible data copying |
+| Age Concentration | % of age values appearing more than once + mode value | High concentration = possible data copying |
+| Age = Reg % | % of mothers where DOB month/day matches registration month/day | Suggests DOB was fabricated from registration date |
 
 ---
 
 ## Caching Strategy
 
-### Two-Layer Cache Architecture
+### Cache Layers
 
-| Layer | What | Backend | TTL | Scope |
-|-------|------|---------|-----|-------|
-| Pipeline Cache | Processed visit form data | Redis (via `AnalysisPipeline`) | Configurable | Per opportunity + config hash |
-| HQ Case Cache | Visit cases + mother cases | Django cache (Redis-backed) | 1hr prod / 24hr dev | Per cc_domain |
-| Metadata Cache | Opportunity metadata | Django cache | 1 hour | Per opportunity_id |
+| Layer | What | Key Pattern | TTL | Scope |
+|-------|------|-------------|-----|-------|
+| Pipeline Cache | Processed visit form data | Config hash-based | Configurable | Per opportunity + config hash |
+| Registration Forms | CCHQ registration forms | `mbw_registration_forms:{domain}` | 1hr | Per domain |
+| GS Forms | CCHQ Gold Standard forms | `mbw_gs_forms:{domain}` | 1hr | Per domain |
+| Metadata Cache | Opportunity metadata | `mbw_opp_metadata:{opp_id}` | 1hr | Per opportunity_id |
+| HQ Case Cache | Visit + mother cases | `mbw_visit_cases:{domain}` | 1hr prod / 24hr dev | Per domain |
 
 ### Tolerance-Based Cache Validation
 
@@ -381,29 +507,31 @@ HQ case caches use a 3-tier validation system (implemented in `_validate_hq_cach
 | Production | 98% | 30 minutes | 1 hour |
 | Dev Fixture (`MBW_DEV_FIXTURE=1`) | 85% | 90 minutes | 24 hours |
 
-### Cache Busting
+### Cache Invalidation
 
-- **Bust Cache button** (dev mode only): Clears all MBW HQ caches (`mbw_visit_cases:*`, `mbw_mother_cases:*`, `mbw_opp_metadata:*`) and forces full re-fetch
-- **Refresh button**: Forces pipeline cache miss via `?refresh=1` URL parameter
-- Both can be combined: `?refresh=1&bust_cache=1` clears everything
+- **Pipeline cache**: Auto-invalidates when `MBW_GPS_PIPELINE_CONFIG` changes (config hash)
+- **CCHQ form caches**: TTL-based (1 hour)
+- **Bust Cache button** (dev mode): Clears all MBW caches and forces full re-fetch
+- **Refresh button**: Forces pipeline cache miss via `?bust_cache=1` URL parameter
 
 ---
 
 ## Authentication & OAuth
 
-### Dual OAuth Requirement
+### Triple OAuth Requirement
 
-The dashboard requires two separate OAuth tokens:
+The dashboard uses up to three OAuth tokens:
 
 1. **Connect OAuth** (`labs_oauth` in session): For accessing Connect Production API (visit data, FLW names, metadata)
-2. **CommCare OAuth** (`commcare_oauth` in session): For accessing CommCare HQ Case API (visit cases, mother cases)
+2. **CommCare OAuth** (`commcare_oauth` in session): For accessing CommCare HQ APIs (Form API, Application API)
+3. **OCS OAuth** (`ocs_oauth` in session): For AI task creation via Open Chat Studio (optional)
 
 ### CommCare OAuth Flow
 
 Implemented in `labs/integrations/commcare/oauth_views.py`:
 
-1. **Initiate**: `GET /labs/commcare/initiate/?next=/mbw/` → Redirects to CommCare HQ authorization page with PKCE (S256 code challenge)
-2. **Callback**: `GET /labs/commcare/callback/` → Exchanges authorization code for access token, stores in `request.session["commcare_oauth"]`
+1. **Initiate**: `GET /labs/commcare/initiate/?next=/mbw/` → Redirects to CommCare HQ authorization page with PKCE
+2. **Callback**: `GET /labs/commcare/callback/` → Exchanges authorization code for access token, stores in session
 3. **Logout**: `GET /labs/commcare/logout/` → Clears CommCare OAuth from session
 
 ### Automatic Token Refresh
@@ -414,12 +542,6 @@ The `CommCareDataAccess` client automatically refreshes expired tokens:
 2. If expired, calls `_refresh_token()` which POSTs to `/oauth/token/` with `grant_type=refresh_token`
 3. On success, updates both instance state and session storage
 4. On failure, returns `False` — caller raises `ValueError` prompting re-authorization
-
-### Dashboard OAuth UI
-
-- If CommCare OAuth is not active, a prominent red banner with "Authorize CommCare HQ" button is shown
-- The authorize URL includes `?next=` pointing back to the current dashboard URL, so the user returns after authorization
-- OCS (Open Chat Studio) OAuth status is also tracked for the AI task creation feature
 
 ---
 
@@ -432,81 +554,27 @@ The `CommCareDataAccess` client automatically refreshes expired tokens:
 - **Server-Sent Events (SSE)**: Real-time data streaming from backend
 - **Fetch API**: JSON API calls for drill-down and actions
 
-### Alpine.js State Structure
-
-```javascript
-mbwDashboard() {
-    return {
-        // Loading
-        loading: true,
-        loadingMessage: '',
-        loadError: null,
-
-        // Navigation
-        activeTab: 'overview',  // 'overview' | 'gps' | 'followup'
-
-        // Filters
-        startDate, endDate,          // GPS date range (ISO strings)
-        selectedFlws: [],             // Multi-select FLW usernames
-        selectedMothers: [],          // Multi-select mother case IDs
-        allUsernames: [],             // All available FLW usernames
-        flwNames: {},                 // username → display name mapping
-        allMotherIds: [],             // All mother case IDs (sorted by name)
-        motherNames: {},              // mother_case_id → display name mapping
-
-        // Raw data (unfiltered, set once from SSE)
-        _rawGpsFlws: [],
-        _rawFollowupFlws: [],
-        _rawOverviewFlws: [],
-        _followupDrilldownByFlw: {},  // Pre-computed per-FLW mother drill-down
-        _openTaskUsernames: new Set(),
-
-        // Filtered data (recomputed on filter change)
-        filteredGpsFlws: [],
-        filteredFollowupFlws: [],
-        filteredOverviewFlws: [],
-
-        // Sort state (per-table)
-        sortState: {
-            overview: { column: null, direction: 'asc' },
-            gps: { column: null, direction: 'asc' },
-            followup: { column: 'completion_rate', direction: 'asc' },
-        },
-
-        // GPS drill-down
-        gpsExpandedFlw: null,
-        gpsDrillDownVisits: [],
-
-        // Follow-up drill-down
-        followupExpandedFlw: null,
-        followupDrillDownMothers: [],
-        showAllVisits: false,
-
-        // AI Task modal
-        showAIModal: false,
-        aiModalFlw: null,
-        aiBots: [],
-        aiSelectedBot: '',
-
-        // Suspend modal
-        showSuspendModal: false,
-        suspendUsername: null,
-    }
-}
-```
-
 ### Client-Side Filtering
 
 All filtering happens in the browser without additional API calls:
 
 - **FLW filter**: Multi-select dropdown. Filters all three tabs by `username` set membership
-- **Mother filter**: Multi-select dropdown (populated from drilldown data with display names). Filters follow-up tab by `mother_case_id`; FLWs without matching mothers are hidden
-- **Date filter**: Start/end date inputs affect GPS data only (date filtering happens server-side during GPS analysis)
-- **"Show missed/completed" toggle**: Filters visible visits in follow-up drill-down (default: only due visits shown)
+- **Mother filter**: Multi-select dropdown (populated from drilldown data with display names). Filters follow-up tab by `mother_case_id`
+- **Date filter**: Start/end date inputs affect GPS data only
+- **"Full intervention bonus only" checkbox**: Toggles eligibility filtering in follow-up rate
+- **"Show missed/completed" toggle**: Filters visible visits in follow-up drill-down (default: only due visits)
 
 ### Sorting
 
 Each table has independent sort state. Clicking a column header toggles ascending/descending. Numeric columns sort numerically; string columns sort alphabetically using `localeCompare()`.
+
+### Monitoring Session Mode
+
+When `?session_id=X` is provided:
+- Dashboard scopes to the monitoring session's selected FLWs
+- Pass/fail buttons appear per FLW for assessment
+- Progress bar tracks assessed vs total FLWs
+- Session can be completed with overall result and notes
 
 ---
 
@@ -517,40 +585,35 @@ Each table has independent sort state. Clicking a column header toggles ascendin
 | Feature | Tab | Description |
 |---------|-----|------------|
 | Three-tab navigation | All | Overview, GPS Analysis, Follow-Up Rate tabs |
-| SSE streaming with progress | All | Real-time loading messages ("Loading visit forms...", "Fetching 500 visit cases...") |
+| SSE streaming with progress | All | Real-time loading messages during data loading |
 | FLW filter (multi-select) | All | Filter by FLW name across all tabs |
-| Mother filter (multi-select) | Follow-Up | Filter by mother name across follow-up tab |
+| Mother filter (multi-select) | Follow-Up | Filter by mother name |
 | Column sorting | All | Click column headers to sort asc/desc |
-| GPS drill-down | GPS | Expand FLW row to see individual visit GPS details |
-| Follow-up drill-down | Follow-Up | Expand FLW row to see per-mother visit details |
-| Visit status distribution chart | Overview | 100% stacked bar with 5 status categories |
-| Per-visit-type breakdown | Follow-Up | ANC, Postnatal, Week 1, Month 1, Month 3, Month 6 columns |
-| Trailing 7-day sparkline | GPS | Mini bar chart showing daily travel distances |
-| GPS flag threshold (5km) | GPS | Visits with case distance > 5km highlighted in red |
-| Completion rate color coding | Follow-Up | Green (>=80%), Yellow (>=60%), Red (<60%) avatars and bars |
-| Task creation | All | Create task for FLW with automated prompt including performance data |
-| AI conversation initiation | All | Initiate OCS bot conversation with pre-built prompt |
-| Task button state | All | Greyed out if FLW already has an open task |
-| Suspend user | Follow-Up | Confirmation modal (placeholder - not yet implemented) |
-| Cache busting (dev mode) | All | "Bust Cache" button clears all MBW caches |
-| Refresh | All | "Refresh" button forces pipeline cache miss |
-| CommCare OAuth prompt | All | Red banner when CommCare HQ not authorized |
-| OCS OAuth prompt | AI Modal | Warning when Open Chat Studio not connected |
-| DEV badge | Header | Shows "DEV" badge when `MBW_DEV_FIXTURE=1` |
-| Mother metadata display | Follow-Up | Registration date, age, phone, ANC/PNC completion dates |
+| GPS drill-down | GPS | Individual visit GPS details |
+| Follow-up drill-down | Follow-Up | Per-mother visit details with metadata |
+| Visit status distribution | Overview | 100% stacked bar chart |
+| Per-visit-type breakdown | Follow-Up | ANC through Month 6 mini columns with completed/due/missed rows |
+| Trailing 7-day sparkline | GPS | Daily travel distance bar chart |
+| GPS flag threshold (5km) | GPS | Red highlighting for suspicious distances |
+| Follow-up rate (business def) | Follow-Up | Eligibility + grace period filtered rate |
+| GS Score from CCHQ | Overview | First Gold Standard score fetched from supervisor app |
+| Eligible 5+ column | Overview | Eligible mothers on track (5+ completed OR ≤1 missed) |
+| Quality/fraud metrics | Overview | Phone dup, parity/age concentration, ANC≠PNC, age=reg |
+| Mother metadata | Follow-Up | Name, age, phone, household size, visit time, EDD, baby DOB, eligibility |
+| Meter/Visit, Min/Visit | Overview | GPS-based per-visit metrics (extractor-based extraction) |
+| Monitoring session mode | All | Pass/fail assessment per FLW with progress tracking |
+| Task creation | All | Create task for FLW with automated performance prompt |
+| AI conversation initiation | All | OCS bot conversation with pre-built prompt |
 | Automatic token refresh | Backend | CommCare OAuth token auto-refreshed when expired |
+| Cross-app xmlns discovery | Backend | GS form xmlns found by searching all apps in domain |
 | Tolerance-based caching | Backend | 3-tier cache validation (count, percentage, time) |
-| Bulk case fetching | Backend | Comma-separated IDs in URL path, batched at 100 |
-| "Add to filter" shortcut | All | Click filter icon on a FLW row to add them to the filter |
-| Toast notifications | All | Temporary notification messages (3-second duration) |
+| Toast notifications | All | Temporary notification messages |
 
 ### Placeholder / TBD Features
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| GS Score (Gold Standard) | TBD | Column present in overview table, shows "—" |
 | Post-Test attempts | TBD | Column present in overview table, shows "—" |
-| % Due 5+ Days | TBD | Column present in overview table, shows "—" |
 | User suspension | Placeholder | API endpoint exists but returns "not yet available" |
 
 ---
@@ -570,29 +633,24 @@ Each table has independent sort state. Clicking a column header toggles ascendin
 | `OCS_OAUTH_CLIENT_ID` | OCS OAuth client ID | Optional |
 | `OCS_OAUTH_CLIENT_SECRET` | OCS OAuth client secret | Optional |
 
-### Cache Configuration Constants
+### Follow-Up Analysis Constants
 
-Defined in `data_fetchers.py`:
+Defined in `followup_analysis.py`:
 
-```python
-METADATA_CACHE_TTL = 3600          # 1 hour (opportunity metadata)
-CASES_CACHE_TTL = 3600             # 1 hour (production HQ case cache)
-DEV_FIXTURE_CACHE_TTL = 86400      # 24 hours (dev mode HQ case cache)
-```
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `GRACE_PERIOD_DAYS` | 5 | Only count visits due 5+ days ago in follow-up rate |
+| `THRESHOLD_GREEN` | 80% | Follow-up rate for green status |
+| `THRESHOLD_YELLOW` | 60% | Follow-up rate for yellow status |
+| On-time window | 7 days | Days after scheduled date for on-time completion |
 
-Dynamic configuration via `_get_cache_config()`:
+### Overview Color Thresholds
 
-| Setting | Production | Dev Fixture |
-|---------|-----------|-------------|
-| `cases_ttl` | 3600s (1hr) | 86400s (24hr) |
-| `cache_tolerance_pct` | 98% | 85% |
-| `cache_tolerance_minutes` | 30 min | 90 min |
-
-Pipeline-level cache TTL is configured in `labs/analysis/utils.py`:
-
-```python
-DJANGO_CACHE_TTL = 5400 if MBW_DEV_FIXTURE else 3600  # 90min dev / 1hr prod
-```
+| Column | Green | Yellow | Red |
+|--------|-------|--------|-----|
+| Follow-up Rate | ≥80% | ≥60% | <60% |
+| GS Score | ≥70 | 50-69 | <50 |
+| Eligible 5+ | ≥70% | 50-69% | <50% |
 
 ### GPS Analysis Constants
 
@@ -603,16 +661,6 @@ Defined in `mbw/gps_analysis.py`:
 | Flag threshold | 5 km | Distance above which a visit is flagged |
 | Trailing days | 7 | Number of days for the sparkline chart |
 | Earth radius | 6,371,000 m | Used in Haversine calculation |
-
-### Follow-Up Analysis Constants
-
-Defined in `followup_analysis.py`:
-
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `THRESHOLD_GREEN` | 80% | Completion rate for green status |
-| `THRESHOLD_YELLOW` | 60% | Completion rate for yellow status |
-| On-time window | 7 days | Days after scheduled date for on-time completion |
 
 ### Visit Type Completion Flags
 
@@ -632,27 +680,26 @@ Defined in `followup_analysis.py`:
 
 ### Core Dashboard Files
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `views.py` | ~496 | 4 views: Dashboard (template), Stream (SSE), GPS Detail (JSON), Suspend (placeholder) |
-| `data_fetchers.py` | ~425 | HQ case fetching, caching with tolerance validation, metadata fetching, FLW grouping |
-| `followup_analysis.py` | ~393 | Visit status calculation, per-FLW aggregation, per-mother metrics, status distribution |
-| `urls.py` | ~19 | URL routing for dashboard, tab aliases, stream, and API endpoints |
-| `__init__.py` | 1 | Empty init |
+| File | Purpose |
+|------|---------|
+| `views.py` | 6 views: Dashboard (template), Stream (SSE), GPS Detail (JSON), Save FLW Result, Complete Session, Suspend (placeholder) |
+| `data_fetchers.py` | CCHQ form fetching (registration + GS), case fetching, caching with tolerance validation, metadata fetching |
+| `followup_analysis.py` | Visit status calculation, per-FLW/per-mother aggregation, eligibility filtering, quality metrics |
+| `urls.py` | URL routing for dashboard, tab aliases, stream, and API endpoints |
 
 ### Template
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `templates/custom_analysis/mbw_monitoring/dashboard.html` | ~1430 | Full dashboard UI: tabs, tables, filters, modals, Alpine.js state + methods |
+| File | Purpose |
+|------|---------|
+| `templates/custom_analysis/mbw_monitoring/dashboard.html` | Full dashboard UI: tabs, tables, filters, modals, monitoring session, Alpine.js state + methods |
 
 ### Shared Dependencies (from existing MBW module)
 
 | File | What's Reused |
 |------|--------------|
-| `custom_analysis/mbw/gps_analysis.py` | `analyze_gps_metrics()`, `build_result_from_analyzed_visits()` |
+| `custom_analysis/mbw/gps_analysis.py` | `analyze_gps_metrics()`, `compute_median_meters_per_visit()`, `compute_median_minutes_per_visit()` |
 | `custom_analysis/mbw/gps_utils.py` | Haversine distance calculation, GPS coordinate parsing |
-| `custom_analysis/mbw/pipeline_config.py` | `MBW_GPS_PIPELINE_CONFIG` (field extraction configuration) |
+| `custom_analysis/mbw/pipeline_config.py` | `MBW_GPS_PIPELINE_CONFIG` (12 FieldComputations, 3 extractor-based) |
 | `custom_analysis/mbw/views.py` | `filter_visits_by_date()`, `serialize_flw_summary()`, `serialize_visit()` |
 
 ### Labs Framework Dependencies
@@ -661,72 +708,44 @@ Defined in `followup_analysis.py`:
 |------|------------|
 | `labs/analysis/pipeline.py` | `AnalysisPipeline` — data fetching and caching facade |
 | `labs/analysis/sse_streaming.py` | `BaseSSEStreamView`, `AnalysisPipelineSSEMixin`, `send_sse_event()` |
-| `labs/analysis/data_access.py` | `get_flw_names_for_opportunity()` |
-| `labs/analysis/utils.py` | `DJANGO_CACHE_TTL` |
-| `labs/integrations/commcare/api_client.py` | `CommCareDataAccess` — CommCare HQ API client with OAuth |
+| `labs/analysis/data_access.py` | `fetch_flw_names()` |
+| `labs/integrations/commcare/api_client.py` | `CommCareDataAccess` — CommCare HQ API client with OAuth, `list_applications()`, `discover_form_xmlns()` |
 | `labs/integrations/commcare/oauth_views.py` | CommCare OAuth initiate/callback/logout views |
 
-### URL Configuration
+---
 
-Registered in `config/urls.py`:
+## Key Field Paths
 
-```python
-path("custom_analysis/mbw_monitoring/",
-     include("commcare_connect.custom_analysis.mbw_monitoring.urls", namespace="mbw"))
-```
+### Registration Form (CCHQ)
 
-Dashboard URL endpoints:
+| Field | Path | Notes |
+|-------|------|-------|
+| Mother name | `form.mother_details.format_mother_name` (fallbacks: `mother_full_name`, `mother_name` + `mother_surname`) | |
+| Phone | `form.mother_details.phone_number` (fallback: `back_up_phone_number`) | |
+| Age | Computed from `form.mother_details.mother_dob` (fallback: `age_in_years_rounded`, `mothers_age`) | |
+| Household size | `form.number_of_other_household_members` | Top-level |
+| Eligibility | `form.eligible_full_intervention_bonus` | Top-level, "1"/"0" |
+| Expected delivery date | `form.mother_birth_outcome.expected_delivery_date` | |
+| Preferred visit time | `form.var_visit_1.preferred_visit_time` | Per-visit block |
+| Mother case ID | `form.var_visit_N.mother_case_id` | First non-empty from var_visit_1..6 |
 
-| URL | View | Name |
-|-----|------|------|
-| `/custom_analysis/mbw_monitoring/` | `MBWMonitoringDashboardView` | `mbw:dashboard` |
-| `/custom_analysis/mbw_monitoring/gps/` | Same view, `default_tab="gps"` | `mbw:gps` |
-| `/custom_analysis/mbw_monitoring/followup/` | Same view, `default_tab="followup"` | `mbw:followup` |
-| `/custom_analysis/mbw_monitoring/stream/` | `MBWMonitoringStreamView` | `mbw:stream` |
-| `/custom_analysis/mbw_monitoring/api/gps/<username>/` | `MBWGPSDetailView` | `mbw:gps_detail` |
-| `/custom_analysis/mbw_monitoring/api/suspend-user/` | `MBWSuspendUserView` | `mbw:suspend_user` |
+### Gold Standard Form (CCHQ, supervisor app)
+
+| Field | Path | Notes |
+|-------|------|-------|
+| Assessed FLW connect ID | `form.load_flw_connect_id` | Maps to FLW username |
+| GS Score | `form.checklist_percentage` | 0-100 integer |
+| Visit datetime | `form.meta.timeEnd` | For oldest-first sorting |
+| GS visit number | `form.gs_visit_number.which_gold_standard_visit_are_you_assessing` | e.g. "gold_standard_1" |
+
+### Pipeline FieldComputation Extractors
+
+| Field | Source in `visit._data` | Notes |
+|-------|------------------------|-------|
+| `gps_location` | `form_json.form.meta.location.#text` or string | |
+| `visit_datetime` | `form_json.form.meta.timeEnd` | ISO datetime |
+| `app_build_version` | `form_json.form.meta.app_build_version` | Parsed to integer |
 
 ---
 
-## Requirements Traceability
-
-### Original Requirements (from MBW_Monitoring_Dashboard_Requirements.md)
-
-| Requirement | Status | Implementation |
-|------------|--------|---------------|
-| Overview tab with per-FLW summary table | Done | Overview tab with 8-column table |
-| GPS Analysis tab with distance metrics | Done | GPS tab with Haversine analysis, 5km flag threshold |
-| Follow-up Rate tab with visit tracking | Done | Follow-up tab with 6 visit types, per-mother drill-down |
-| 5 visit statuses (Completed On Time, Late, Due On Time, Late, Missed) | Done | `calculate_visit_status()` in `followup_analysis.py` |
-| Per-visit-type breakdown | Done | ANC through Month 6 columns in follow-up table |
-| Completion rate thresholds (80%/60%) | Done | Green/yellow/red color coding |
-| Visit Status Distribution chart | Done | 100% stacked bar in overview tab |
-| GPS trailing 7-day sparkline | Done | Mini bar chart per FLW in GPS table |
-| GPS flagging for distances > 5km | Done | Red highlighting, flag badge |
-| FLW filtering | Done | Multi-select dropdown by display name |
-| Column sorting | Done | Click-to-sort with direction toggle |
-| Real-time loading progress | Done | SSE streaming with step-by-step messages |
-| Task creation from dashboard | Done | Modal with bot selection and automated prompt |
-| AI conversation initiation | Done | OCS integration with pre-built performance data prompt |
-| User suspension | Partial | Modal + endpoint exist, actual API call not implemented |
-| Mother filter | Done | Multi-select dropdown by mother name (addendum) |
-| Mother metadata display | Done | Registration date, age, phone, ANC/PNC dates (addendum) |
-| CommCare HQ OAuth integration | Done | PKCE flow with auto-refresh |
-| Cache tolerance validation | Done | 3-tier validation (count, percentage, time) |
-| Bust cache capability | Done | Dev-mode button + URL parameter |
-| Bulk case fetching | Done | Comma-separated IDs, batched at 100 |
-
-### Addendum Requirements (from MBW_Monitoring_Dashboard_Requirements_ADDENDUM.md)
-
-| Requirement | Status | Implementation |
-|------------|--------|---------------|
-| Mother name display in drill-down | Done | Mother case lookup enriches drill-down data |
-| Mother metadata (age, phone, dates) | Done | Extracted from mother case properties |
-| Mother filter dropdown | Done | Multi-select with display names, sorted alphabetically |
-| Show/hide completed visits toggle | Done | "Show missed/completed visits" checkbox |
-| Per-mother follow-up rate badge | Done | Color-coded rate badge on each mother header |
-| Due visits default view | Done | Only due visits shown by default in drill-down |
-
----
-
-*Documentation generated for the MBW Monitoring Dashboard as implemented on branch `labs-mbw`.*
+*Documentation updated for the MBW Monitoring Dashboard as implemented on branch `labs-mbw`.*
