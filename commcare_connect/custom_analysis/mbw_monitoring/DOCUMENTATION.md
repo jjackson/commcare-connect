@@ -66,13 +66,13 @@ User Browser
     │   └── MBWGPSDetailView (JSON drill-down for GPS visits)
     │
     ├── POST /custom_analysis/mbw_monitoring/api/save-flw-result/
-    │   └── MBWSaveFlwResultView (save pass/fail for monitoring session)
+    │   └── MBWSaveFlwResultView (save FLW assessment: eligible_for_renewal/probation/suspended)
     │
     ├── POST /custom_analysis/mbw_monitoring/api/complete-session/
     │   └── MBWCompleteSessionView (mark monitoring session complete)
     │
     └── POST /custom_analysis/mbw_monitoring/api/suspend-user/
-        └── MBWSuspendUserView (placeholder for user suspension)
+        └── MBWSuspendUserView (retained but disabled — suspension is now a status label)
 ```
 
 ### Component Relationships
@@ -257,7 +257,11 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 | Age Conc. | Quality metrics | Age value concentration (% duplicate + mode) |
 | ANC≠PNC | Quality metrics | Count of mothers where ANC and PNC completion dates match |
 
-**Actions per FLW**: Filter button, Task creation button (greyed out if open task exists)
+**Actions per FLW** (Overview tab only — other tabs have Filter only):
+- **Assessment buttons** (monitoring session only): Eligible for Renewal (green), Probation (yellow), Suspended (red) — toggle on click, stored in `flw_results`
+- **Notes button**: Opens modal with assessment + notes for the FLW
+- **Filter button**: Adds FLW to the multi-select filter
+- **Task creation button**: Creates a task for the FLW (greyed out if open task exists)
 
 ### GPS Analysis Tab
 
@@ -276,6 +280,8 @@ Identifies potential fraud or GPS anomalies by analyzing distances between conse
 | Avg Case Dist | Average distance between visits to same case (km) |
 | Max Case Dist | Maximum distance (red if >5km) |
 | Trailing 7 Days | Sparkline bar chart of daily travel distance |
+
+**Actions per FLW**: Filter button, Details drill-down button (no assessment or task buttons)
 
 **Drill-Down**: Clicking "Details" on a FLW row expands an inline panel showing individual visit records with date, form name, entity, GPS coordinates, distance from previous visit, and flagged status.
 
@@ -306,13 +312,17 @@ Tracks visit completion across 6 visit types with per-mother granularity, eligib
 
 **Eligibility Filter**: "Full intervention bonus only" checkbox (default checked). When checked, follow-up rate only counts mothers with `eligible_full_intervention_bonus = "1"`. Non-eligible mothers show "Not eligible" badge.
 
+**Actions per FLW**: Filter button only (no assessment or task buttons)
+
 **Drill-Down**: Clicking a FLW row expands to show per-mother visit details:
 - Mother header with metadata (name, age, phone, registration date, household size, preferred visit time)
 - Additional fields: ANC/PNC completion dates, expected delivery date, baby DOB
 - Eligibility badge (eligible / not eligible)
 - Visit table showing visit type, scheduled date, expiry date, and status
 - "Show missed/completed visits" toggle (default: shows only due visits)
+- "Full intervention bonus only" checkbox (default checked)
 - Mother filter dropdown to narrow by specific mothers
+- Close button (no task or suspend buttons in drill-down)
 
 ---
 
@@ -572,9 +582,24 @@ Each table has independent sort state. Clicking a column header toggles ascendin
 
 When `?session_id=X` is provided:
 - Dashboard scopes to the monitoring session's selected FLWs
-- Pass/fail buttons appear per FLW for assessment
+- Three assessment buttons appear per FLW on the **Overview tab only**: Eligible for Renewal (green), Probation (yellow), Suspended (red)
+- Toggle behavior: clicking the same button clears the result; clicking a different button changes it
 - Progress bar tracks assessed vs total FLWs
-- Session can be completed with overall result and notes
+- Notes modal allows adding per-FLW notes alongside the assessment
+- Session completion shows assessment summary (counts per status) — no overall pass/fail required
+
+**FLW Assessment Statuses** (stored in `AuditSessionRecord.flw_results[username].result`):
+
+| Status | Value | Color | Meaning |
+|--------|-------|-------|---------|
+| (No assessment) | `null` | — | Audit in progress, FLW not yet assessed |
+| Eligible for Renewal | `eligible_for_renewal` | Green | Good performance, eligible for renewal in future MBW opps |
+| Probation | `probation` | Yellow/Amber | Poor performance or potentially fraudulent, not eligible for renewal |
+| Suspended | `suspended` | Red | Strong evidence of fraud or very poor performance, FLW should be replaced |
+
+**Note**: The "Suspended" status is a **label only** — it does NOT trigger any action on Connect. The existing `MBWSuspendUserView` endpoint is retained but disabled in the UI.
+
+Valid values are defined by `VALID_FLW_RESULTS` in `views.py`.
 
 ---
 
@@ -601,9 +626,9 @@ When `?session_id=X` is provided:
 | Quality/fraud metrics | Overview | Phone dup, parity/age concentration, ANC≠PNC, age=reg |
 | Mother metadata | Follow-Up | Name, age, phone, household size, visit time, EDD, baby DOB, eligibility |
 | Meter/Visit, Min/Visit | Overview | GPS-based per-visit metrics (extractor-based extraction) |
-| Monitoring session mode | All | Pass/fail assessment per FLW with progress tracking |
-| Task creation | All | Create task for FLW with automated performance prompt |
-| AI conversation initiation | All | OCS bot conversation with pre-built prompt |
+| Monitoring session mode | Overview | 3-option FLW assessment (Eligible for Renewal / Probation / Suspended) with progress tracking |
+| Task creation | Overview | Create task for FLW with automated performance prompt |
+| AI conversation initiation | Overview | OCS bot conversation with pre-built prompt |
 | Automatic token refresh | Backend | CommCare OAuth token auto-refreshed when expired |
 | Cross-app xmlns discovery | Backend | GS form xmlns found by searching all apps in domain |
 | Tolerance-based caching | Backend | 3-tier cache validation (count, percentage, time) |
@@ -614,7 +639,7 @@ When `?session_id=X` is provided:
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Post-Test attempts | TBD | Column present in overview table, shows "—" |
-| User suspension | Placeholder | API endpoint exists but returns "not yet available" |
+| User suspension (Connect action) | Disabled | "Suspended" is now an assessment label only. `MBWSuspendUserView` endpoint retained but not called from UI. Actual Connect API suspension TBD. |
 
 ---
 
@@ -682,7 +707,7 @@ Defined in `mbw/gps_analysis.py`:
 
 | File | Purpose |
 |------|---------|
-| `views.py` | 6 views: Dashboard (template), Stream (SSE), GPS Detail (JSON), Save FLW Result, Complete Session, Suspend (placeholder) |
+| `views.py` | 6 views: Dashboard (template), Stream (SSE), GPS Detail (JSON), Save FLW Result (3-option assessment), Complete Session, Suspend (retained, disabled). Defines `VALID_FLW_RESULTS` constant. |
 | `data_fetchers.py` | CCHQ form fetching (registration + GS), case fetching, caching with tolerance validation, metadata fetching |
 | `followup_analysis.py` | Visit status calculation, per-FLW/per-mother aggregation, eligibility filtering, quality metrics |
 | `urls.py` | URL routing for dashboard, tab aliases, stream, and API endpoints |

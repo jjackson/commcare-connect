@@ -410,22 +410,31 @@
                                 </td>
                                 <td class="px-4 py-3 text-sm text-right whitespace-nowrap">
                                     <div class="flex items-center justify-end gap-1">
-                                        <!-- Pass/Fail assessment (monitoring session only) -->
+                                        <!-- Assessment buttons (monitoring session only) -->
                                         <template x-if="monitoringSession">
                                             <div class="inline-flex items-center gap-1 mr-2">
-                                                <button @click="setFlwResult(flw.username, 'pass')"
-                                                        :class="getFlwResult(flw.username) === 'pass' ? 'bg-green-600 text-white border-green-600' : 'bg-green-50 text-green-800 border-green-300 hover:bg-green-100'"
-                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors">
-                                                    <i class="fa-solid fa-check"></i>
+                                                <button @click="setFlwResult(flw.username, 'eligible_for_renewal')"
+                                                        :class="getFlwResult(flw.username) === 'eligible_for_renewal' ? 'bg-green-600 text-white border-green-600' : 'bg-green-50 text-green-800 border-green-300 hover:bg-green-100'"
+                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors"
+                                                        title="Eligible for Renewal">
+                                                    <i class="fa-solid fa-circle-check"></i>
                                                 </button>
-                                                <button @click="setFlwResult(flw.username, 'fail')"
-                                                        :class="getFlwResult(flw.username) === 'fail' ? 'bg-red-600 text-white border-red-600' : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'"
-                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors">
-                                                    <i class="fa-solid fa-xmark"></i>
+                                                <button @click="setFlwResult(flw.username, 'probation')"
+                                                        :class="getFlwResult(flw.username) === 'probation' ? 'bg-amber-500 text-white border-amber-500' : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'"
+                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors"
+                                                        title="Probation">
+                                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                                </button>
+                                                <button @click="setFlwResult(flw.username, 'suspended')"
+                                                        :class="getFlwResult(flw.username) === 'suspended' ? 'bg-red-600 text-white border-red-600' : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'"
+                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors"
+                                                        title="Suspended">
+                                                    <i class="fa-solid fa-ban"></i>
                                                 </button>
                                                 <button @click="openFlwNotesModal(flw.username)"
                                                         :class="getFlwNotes(flw.username) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'"
-                                                        class="px-2 py-1 rounded text-xs border transition-colors">
+                                                        class="px-2 py-1 rounded text-xs border transition-colors"
+                                                        title="Notes">
                                                     <i class="fa-solid fa-note-sticky"></i>
                                                 </button>
                                             </div>
@@ -568,39 +577,15 @@
                                 </td>
                                 <td class="px-4 py-3 text-sm text-right whitespace-nowrap">
                                     <div class="flex items-center justify-end gap-1">
-                                        <!-- Pass/Fail assessment (monitoring session only) -->
-                                        <template x-if="monitoringSession">
-                                            <div class="inline-flex items-center gap-1 mr-2">
-                                                <button @click="setFlwResult(flw.username, 'pass')"
-                                                        :class="getFlwResult(flw.username) === 'pass' ? 'bg-green-600 text-white border-green-600' : 'bg-green-50 text-green-800 border-green-300 hover:bg-green-100'"
-                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors">
-                                                    <i class="fa-solid fa-check"></i>
-                                                </button>
-                                                <button @click="setFlwResult(flw.username, 'fail')"
-                                                        :class="getFlwResult(flw.username) === 'fail' ? 'bg-red-600 text-white border-red-600' : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'"
-                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors">
-                                                    <i class="fa-solid fa-xmark"></i>
-                                                </button>
-                                                <button @click="openFlwNotesModal(flw.username)"
-                                                        :class="getFlwNotes(flw.username) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'"
-                                                        class="px-2 py-1 rounded text-xs border transition-colors">
-                                                    <i class="fa-solid fa-note-sticky"></i>
-                                                </button>
-                                            </div>
-                                        </template>
+                                        <button @click="addToFilter(flw.username)"
+                                                class="inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-100"
+                                                title="Add this FLW to filter">
+                                            <i class="fa-solid fa-filter mr-1"></i> Filter
+                                        </button>
                                         <button @click="toggleGpsDrillDown(flw.username)"
                                                 class="inline-flex items-center px-2 py-1 border border-blue-300 rounded text-xs text-blue-700 hover:bg-blue-50">
                                             <i class="fa-solid mr-1" :class="gpsExpandedFlw === flw.username ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                                             <span x-text="gpsExpandedFlw === flw.username ? 'Hide' : 'Details'"></span>
-                                        </button>
-                                        <button @click="openAITaskModal(flw)"
-                                                :disabled="hasOpenTask(flw.username)"
-                                                class="inline-flex items-center px-2 py-1 border rounded text-xs"
-                                                :class="hasOpenTask(flw.username)
-                                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                                    : 'border-blue-300 text-blue-700 hover:bg-blue-50'"
-                                                :title="hasOpenTask(flw.username) ? 'Open task exists' : 'Create task'">
-                                            <i class="fa-solid fa-plus mr-1"></i> Task
                                         </button>
                                     </div>
                                 </td>
@@ -772,34 +757,10 @@
                                 </template>
                                 <td class="px-4 py-3 text-sm text-right whitespace-nowrap" @click.stop>
                                     <div class="flex items-center justify-end gap-1">
-                                        <!-- Pass/Fail assessment (monitoring session only) -->
-                                        <template x-if="monitoringSession">
-                                            <div class="inline-flex items-center gap-1 mr-2">
-                                                <button @click="setFlwResult(flw.username, 'pass')"
-                                                        :class="getFlwResult(flw.username) === 'pass' ? 'bg-green-600 text-white border-green-600' : 'bg-green-50 text-green-800 border-green-300 hover:bg-green-100'"
-                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors">
-                                                    <i class="fa-solid fa-check"></i>
-                                                </button>
-                                                <button @click="setFlwResult(flw.username, 'fail')"
-                                                        :class="getFlwResult(flw.username) === 'fail' ? 'bg-red-600 text-white border-red-600' : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'"
-                                                        class="px-2 py-1 rounded text-xs font-medium border transition-colors">
-                                                    <i class="fa-solid fa-xmark"></i>
-                                                </button>
-                                                <button @click="openFlwNotesModal(flw.username)"
-                                                        :class="getFlwNotes(flw.username) ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'"
-                                                        class="px-2 py-1 rounded text-xs border transition-colors">
-                                                    <i class="fa-solid fa-note-sticky"></i>
-                                                </button>
-                                            </div>
-                                        </template>
-                                        <button @click="openAITaskModal(flw)"
-                                                :disabled="hasOpenTask(flw.username)"
-                                                class="inline-flex items-center px-2 py-1 border rounded text-xs"
-                                                :class="hasOpenTask(flw.username)
-                                                    ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                                    : 'border-blue-300 text-blue-700 hover:bg-blue-50'"
-                                                :title="hasOpenTask(flw.username) ? 'Open task exists' : 'Create task'">
-                                            <i class="fa-solid fa-plus mr-1"></i> Task
+                                        <button @click="addToFilter(flw.username)"
+                                                class="inline-flex items-center px-2 py-1 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-100"
+                                                title="Add this FLW to filter">
+                                            <i class="fa-solid fa-filter mr-1"></i> Filter
                                         </button>
                                     </div>
                                 </td>
@@ -821,19 +782,6 @@
                                                        class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5">
                                                 Show missed/completed visits
                                             </label>
-                                            <button @click.stop="openAITaskModal(flw)"
-                                                    :disabled="hasOpenTask(flw.username)"
-                                                    class="inline-flex items-center px-3 py-1.5 rounded text-xs font-medium"
-                                                    :class="hasOpenTask(flw.username)
-                                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                                        : 'bg-blue-600 text-white hover:bg-blue-700'"
-                                                    :title="hasOpenTask(flw.username) ? 'An open task already exists for this FLW' : 'Create task for this FLW'">
-                                                <i class="fa-solid fa-plus mr-1"></i> Task
-                                            </button>
-                                            <button @click.stop="confirmSuspend(followupExpandedFlw)"
-                                                    class="inline-flex items-center px-3 py-1.5 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700">
-                                                <i class="fa-solid fa-ban mr-1"></i> Suspend
-                                            </button>
                                             <button @click.stop="followupExpandedFlw = null; followupDrillDownMothers = [];" class="text-gray-500 hover:text-gray-700">
                                                 <i class="fa-solid fa-times"></i>
                                             </button>
@@ -1022,6 +970,7 @@
     </div>
 
     <!-- ======================== SUSPEND CONFIRMATION MODAL ======================== -->
+    <!-- DISABLED: Suspend is now a status label, not an action. This modal is not triggered from any UI element. -->
     <div x-show="showSuspendModal" x-cloak
          class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
         <!-- Backdrop -->
@@ -1067,15 +1016,20 @@
                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 text-sm"></textarea>
                 <div class="mt-3 flex items-center gap-2">
                     <span class="text-sm text-gray-600">Result:</span>
-                    <button @click="flwNotesResult = 'pass'"
-                            :class="flwNotesResult === 'pass' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-800 hover:bg-green-100'"
+                    <button @click="flwNotesResult = 'eligible_for_renewal'"
+                            :class="flwNotesResult === 'eligible_for_renewal' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-800 hover:bg-green-100'"
                             class="px-3 py-1 rounded text-xs font-medium border border-green-300 transition-colors">
-                        <i class="fa-solid fa-check mr-1"></i> Pass
+                        <i class="fa-solid fa-circle-check mr-1"></i> Eligible
                     </button>
-                    <button @click="flwNotesResult = 'fail'"
-                            :class="flwNotesResult === 'fail' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-800 hover:bg-red-100'"
+                    <button @click="flwNotesResult = 'probation'"
+                            :class="flwNotesResult === 'probation' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-800 hover:bg-amber-100'"
+                            class="px-3 py-1 rounded text-xs font-medium border border-amber-300 transition-colors">
+                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> Probation
+                    </button>
+                    <button @click="flwNotesResult = 'suspended'"
+                            :class="flwNotesResult === 'suspended' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-800 hover:bg-red-100'"
                             class="px-3 py-1 rounded text-xs font-medium border border-red-300 transition-colors">
-                        <i class="fa-solid fa-xmark mr-1"></i> Fail
+                        <i class="fa-solid fa-ban mr-1"></i> Suspended
                     </button>
                     <button @click="flwNotesResult = null" x-show="flwNotesResult"
                             class="px-3 py-1 rounded text-xs text-gray-600 hover:bg-gray-100 border border-gray-300">
@@ -1108,18 +1062,28 @@
                     of <span x-text="monitoringSession?.progress?.total || 0"></span> FLWs have been assessed.
                 </p>
                 <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Overall Result</label>
-                    <div class="flex gap-2">
-                        <button @click="completeResult = 'pass'"
-                                :class="completeResult === 'pass' ? 'bg-green-600 text-white ring-2 ring-green-300' : 'bg-green-50 text-green-800 hover:bg-green-100'"
-                                class="flex-1 px-4 py-2 rounded-md text-sm font-medium border border-green-300 transition-colors">
-                            <i class="fa-solid fa-check mr-1"></i> Pass
-                        </button>
-                        <button @click="completeResult = 'fail'"
-                                :class="completeResult === 'fail' ? 'bg-red-600 text-white ring-2 ring-red-300' : 'bg-red-50 text-red-800 hover:bg-red-100'"
-                                class="flex-1 px-4 py-2 rounded-md text-sm font-medium border border-red-300 transition-colors">
-                            <i class="fa-solid fa-xmark mr-1"></i> Fail
-                        </button>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Assessment Summary</label>
+                    <div class="space-y-1.5 text-sm">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-green-500 inline-block"></span>
+                            <span class="text-gray-700">Eligible for Renewal:</span>
+                            <span class="font-medium" x-text="countFlwsByResult('eligible_for_renewal')"></span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
+                            <span class="text-gray-700">Probation:</span>
+                            <span class="font-medium" x-text="countFlwsByResult('probation')"></span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>
+                            <span class="text-gray-700">Suspended:</span>
+                            <span class="font-medium" x-text="countFlwsByResult('suspended')"></span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-gray-400 inline-block"></span>
+                            <span class="text-gray-700">Not assessed:</span>
+                            <span class="font-medium" x-text="countFlwsByResult(null)"></span>
+                        </div>
                     </div>
                 </div>
                 <div>
@@ -1130,7 +1094,7 @@
             </div>
             <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse rounded-b-lg">
                 <button @click="completeMonitoringSession()"
-                        :disabled="!completeResult || completingSession"
+                        :disabled="completingSession"
                         class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed sm:ml-3 sm:w-auto sm:text-sm">
                     <span x-text="completingSession ? 'Completing...' : 'Complete Audit'"></span>
                 </button>
@@ -1256,7 +1220,6 @@ function mbwDashboard() {
 
         // Complete session modal
         showCompleteModal: false,
-        completeResult: null,
         completeNotes: '',
         completingSession: false,
 
@@ -1604,6 +1567,22 @@ function mbwDashboard() {
             return this.flwResults[username]?.notes || '';
         },
 
+        getFlwResultLabel(username) {
+            const labels = {
+                'eligible_for_renewal': 'Eligible',
+                'probation': 'Probation',
+                'suspended': 'Suspended',
+            };
+            return labels[this.getFlwResult(username)] || '';
+        },
+
+        countFlwsByResult(resultValue) {
+            if (!this.monitoringSession) return 0;
+            const allFlws = this.monitoringSession.selected_flw_usernames || [];
+            if (resultValue === null) return allFlws.filter(u => !this.flwResults[u]?.result).length;
+            return Object.values(this.flwResults).filter(r => r.result === resultValue).length;
+        },
+
         async setFlwResult(username, result) {
             if (!this.monitoringSession) return;
 
@@ -1636,7 +1615,8 @@ function mbwDashboard() {
                 if (data.success) {
                     this.flwResults = data.flw_results;
                     this.monitoringSession.progress = data.progress;
-                    this.showToast(newResult ? `${this.flwNames[username] || username}: ${newResult}` : 'Result cleared');
+                    const labels = {'eligible_for_renewal': 'Eligible for Renewal', 'probation': 'Probation', 'suspended': 'Suspended'};
+                    this.showToast(newResult ? `${this.flwNames[username] || username}: ${labels[newResult]}` : 'Result cleared');
                 }
             } catch (e) {
                 console.error('Failed to save FLW result:', e);
@@ -1685,7 +1665,7 @@ function mbwDashboard() {
         },
 
         async completeMonitoringSession() {
-            if (!this.monitoringSession || !this.completeResult) return;
+            if (!this.monitoringSession) return;
 
             this.completingSession = true;
             try {
@@ -1698,7 +1678,7 @@ function mbwDashboard() {
                     },
                     body: JSON.stringify({
                         session_id: this.monitoringSession.id,
-                        overall_result: this.completeResult,
+                        overall_result: 'completed',
                         notes: this.completeNotes,
                     }),
                 });
@@ -1888,39 +1868,15 @@ function mbwDashboard() {
             this.showAIModal = false;
         },
 
-        // ---- Suspend ----
+        // ---- Suspend (disabled — "Suspended" is now an assessment label, not an action) ----
         confirmSuspend(username) {
-            this.suspendUsername = username;
-            this.showSuspendModal = true;
+            console.warn('confirmSuspend is disabled — "Suspended" is now an assessment label only');
+            return;
         },
 
         async executeSuspend() {
-            try {
-                const response = await fetch(this.suspendApiUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value
-                            || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
-                    },
-                    body: JSON.stringify({
-                        username: this.suspendUsername,
-                        reason: 'Suspended from MBW Monitoring Dashboard',
-                    }),
-                });
-
-                const data = await response.json();
-                this.showSuspendModal = false;
-
-                if (data.success) {
-                    this.showToast('User suspended successfully');
-                } else {
-                    alert(data.error || 'Suspension not available yet');
-                }
-            } catch (e) {
-                this.showSuspendModal = false;
-                alert('Failed: ' + e.message);
-            }
+            console.warn('executeSuspend is disabled — "Suspended" is now an assessment label only');
+            return;
         },
 
         // ---- Navigation ----

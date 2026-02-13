@@ -53,6 +53,8 @@ from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixi
 
 logger = logging.getLogger(__name__)
 
+VALID_FLW_RESULTS = ("eligible_for_renewal", "probation", "suspended")
+
 
 def get_default_date_range() -> tuple[date, date]:
     """Get default date range (last 30 days)."""
@@ -678,7 +680,7 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
 
 
 class MBWSaveFlwResultView(LoginRequiredMixin, View):
-    """Save a pass/fail result for a FLW in a monitoring session."""
+    """Save an assessment result for a FLW in a monitoring session."""
 
     def post(self, request):
         labs_oauth = request.session.get("labs_oauth", {})
@@ -689,14 +691,17 @@ class MBWSaveFlwResultView(LoginRequiredMixin, View):
             body = json.loads(request.body)
             session_id = body.get("session_id")
             username = body.get("username")
-            result = body.get("result")  # "pass", "fail", or None
+            result = body.get("result")  # One of VALID_FLW_RESULTS or None
             notes = body.get("notes", "")
 
             if not session_id or not username:
                 return JsonResponse({"error": "session_id and username are required"}, status=400)
 
-            if result and result not in ("pass", "fail"):
-                return JsonResponse({"error": "result must be 'pass', 'fail', or null"}, status=400)
+            if result and result not in VALID_FLW_RESULTS:
+                return JsonResponse(
+                    {"error": f"result must be one of {VALID_FLW_RESULTS} or null"},
+                    status=400,
+                )
 
             from commcare_connect.audit.data_access import AuditDataAccess
 
@@ -735,7 +740,7 @@ class MBWCompleteSessionView(LoginRequiredMixin, View):
         try:
             body = json.loads(request.body)
             session_id = body.get("session_id")
-            overall_result = body.get("overall_result", "")
+            overall_result = body.get("overall_result", "completed")
             notes = body.get("notes", "")
 
             if not session_id:
@@ -772,8 +777,10 @@ class MBWSuspendUserView(LoginRequiredMixin, View):
     """
     API endpoint to suspend a user.
 
-    Note: This is a placeholder for MVP. The actual Connect API endpoint
-    for suspension from Labs environment needs to be confirmed.
+    Note: This endpoint is retained but not called from the UI.
+    "Suspended" is now an assessment label only (stored in flw_results),
+    not a Connect API action. The actual Connect API endpoint for
+    suspension from Labs environment needs to be confirmed.
     """
 
     def post(self, request):
