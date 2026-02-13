@@ -131,6 +131,29 @@ User Browser
 
 5. **Browser processes data** → `processLoadedData()` stores raw arrays, builds mother name lookup, loads OCS bots, and calls `applyFilters()` for initial display
 
+### Two-Source Visit Architecture
+
+The follow-up rate calculation relies on two fundamentally different data sources that are merged at computation time. Understanding this split is critical to the dashboard's architecture.
+
+**Background**: FLWs use a CommCare application on their devices. All form submissions are stored in CommCare HQ (CCHQ), which is the primary data store. A forwarder then sends a subset of that data to Connect. The Connect API only exposes what has been forwarded — not the full CCHQ dataset. Since Connect Labs is built on the Connect codebase, the pipeline uses the Connect API as its primary data access layer. However, some data needed by the dashboard (registration forms, GS forms) is not available through the Connect API and must be fetched directly from CCHQ.
+
+| Data Layer | Source | What It Provides | Granularity |
+|------------|--------|-----------------|-------------|
+| **Completed visits** | Connect API via AnalysisPipeline | Form submissions forwarded from CCHQ (ANC Visit, PNC Visit, 1 Week, etc.) with GPS, timestamps, case IDs | 1 form submission → 1 VisitRow |
+| **Expected visits** (scheduled, due, missed) | CCHQ Form API (registration forms) | Visit schedules extracted from `var_visit_1..6` blocks: visit type, scheduled date, expiry date, mother_case_id | 1 registration form → up to 6 expected visit records |
+| **Mother metadata** | CCHQ Form API (registration forms) | Name, phone, age, household size, eligibility, EDD, preferred visit time | 1 registration form → 1 mother record |
+| **GS scores** | CCHQ Form API (GS forms, separate supervisor app) | Gold Standard assessment scores per FLW | 1 GS form → 1 FLW score |
+
+**Key insight**: The pipeline (via Connect API) contains **only completed visits** — actual form submissions that FLWs have filed. It has no knowledge of what visits *should* exist. The expected visit schedules — which define the "due" and "missed" statuses — come entirely from CCHQ registration forms (`var_visit_1..6`). These registration forms are not available through the Connect API, so they are fetched directly from the CCHQ Form API.
+
+**Merge logic** (in `build_followup_from_pipeline()` and `followup_analysis.py`):
+1. Registration forms (from CCHQ) provide the expected visits with scheduled dates and expiry dates
+2. Pipeline rows (from Connect API) provide completed form submissions with timestamps
+3. For each expected visit, the system checks if a matching completed visit exists (via `COMPLETION_FLAGS` + `FORM_NAME_TO_VISIT_TYPE` normalization)
+4. Unmatched expected visits become "due" or "missed" depending on the current date vs expiry date
+
+**Why two API sources**: While all data originates in CCHQ, only a subset is forwarded to Connect. The Connect API exposes visit form submissions but not registration form data or GS assessment forms. Since Connect Labs focuses on data available through the Connect API, the pipeline uses Connect as its primary source. Registration forms and GS forms are fetched directly from CCHQ to fill the gap. The merge happens server-side in Python during SSE streaming.
+
 ### Data Payload Structure
 
 The final SSE payload (`data.data`) contains:
@@ -340,12 +363,13 @@ Authentication: Connect OAuth token from `request.session["labs_oauth"]`
 
 ### CommCare HQ Form API v1
 
-Used for: Registration forms (mother metadata) and Gold Standard Visit Checklist forms (GS scores)
+Used for: Registration forms (expected visit schedules + mother metadata) and Gold Standard Visit Checklist forms (GS scores). These forms are not available through the Connect API and must be fetched directly from CCHQ.
 
 - **Registration forms**: `fetch_registration_forms()` in `data_fetchers.py`
   - Dynamically discovers xmlns for "Register Mother" via Application Structure API
   - Endpoint: `GET /a/{domain}/api/form/v1/?xmlns={xmlns}`
-  - Extracts: mother name, phone, age (from DOB), household size, eligibility, EDD, preferred visit time
+  - Extracts **expected visit schedules**: `var_visit_1..6` blocks containing visit type, scheduled date, expiry date, mother_case_id, and create flags — these are the source of all "due" and "missed" visits in the follow-up rate calculation (see [Two-Source Visit Architecture](#two-source-visit-architecture))
+  - Extracts **mother metadata**: mother name, phone, age (from DOB), household size, eligibility, EDD, preferred visit time
 - **Gold Standard forms**: `fetch_gs_forms()` in `data_fetchers.py`
   - GS form lives in a **separate supervisor app** (not the deliver app)
   - First tries deliver app's `cc_app_id`, then falls back to cross-app xmlns discovery via `discover_form_xmlns()`
