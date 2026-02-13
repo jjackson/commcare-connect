@@ -54,7 +54,7 @@ from geopy import distance
 from waffle import switch_is_active
 
 from commcare_connect.connect_id_client import fetch_users
-from commcare_connect.flags.switch_names import AUTOMATED_INVOICES, INVOICE_REVIEW, USER_VISIT_FILTERS
+from commcare_connect.flags.switch_names import INVOICE_REVIEW, USER_VISIT_FILTERS
 from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.api.serializers import remove_opportunity_access_cache
 from commcare_connect.opportunity.app_xml import AppNoBuildException
@@ -78,7 +78,6 @@ from commcare_connect.opportunity.forms import (
     OpportunityUserInviteForm,
     OpportunityVerificationFlagsConfigForm,
     PaymentExportForm,
-    PaymentInvoiceForm,
     PaymentUnitForm,
     SendMessageMobileUsersForm,
     VisitExportForm,
@@ -1425,6 +1424,7 @@ def invoice_list(request, org_slug, opp_id):
 class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateView):
     model = PaymentInvoice
     template_name = "opportunity/invoice_create.html"
+    form_class = AutomatedPaymentInvoiceForm
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1456,12 +1456,6 @@ class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateVie
         return context
 
     @property
-    def form_class(self):
-        if waffle.switch_is_active(AUTOMATED_INVOICES):
-            return AutomatedPaymentInvoiceForm
-        return PaymentInvoiceForm
-
-    @property
     def breadcrumb_title(self):
         service_delivery = PaymentInvoice.InvoiceType.service_delivery
         if self.request.GET.get("invoice_type", service_delivery) == service_delivery:
@@ -1485,8 +1479,7 @@ class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateVie
         kwargs["opportunity"] = self.get_opportunity()
         kwargs["invoice_type"] = self.request.GET.get("invoice_type", PaymentInvoice.InvoiceType.service_delivery)
         kwargs["status"] = InvoiceStatus.SUBMITTED
-        if waffle.switch_is_active(AUTOMATED_INVOICES):
-            kwargs["is_opportunity_pm"] = self.request.is_opportunity_pm
+        kwargs["is_opportunity_pm"] = self.request.is_opportunity_pm
         return kwargs
 
     def get_success_url(self):
@@ -1548,14 +1541,6 @@ class InvoiceReviewView(OrganizationUserMixin, OpportunityObjectMixin, DetailVie
             if invoice.service_delivery
             else PaymentInvoice.InvoiceType.custom
         )
-
-        if not waffle.switch_is_active(AUTOMATED_INVOICES):
-            return PaymentInvoiceForm(
-                instance=invoice,
-                opportunity=opportunity,
-                invoice_type=invoice_type,
-                read_only=True,
-            )
 
         line_items_table = None
         if invoice.service_delivery:
