@@ -4,19 +4,20 @@
 
 1. [Overview](#overview)
 2. [Architecture](#architecture)
-3. [Data Flow](#data-flow)
-4. [Three-Tab Dashboard](#three-tab-dashboard)
-5. [Data Sources & APIs](#data-sources--apis)
-6. [Pipeline Configuration](#pipeline-configuration)
-7. [Follow-Up Rate Business Logic](#follow-up-rate-business-logic)
-8. [Quality Metrics](#quality-metrics)
-9. [Caching Strategy](#caching-strategy)
-10. [Authentication & OAuth](#authentication--oauth)
-11. [Frontend Architecture](#frontend-architecture)
-12. [Features & Capabilities](#features--capabilities)
-13. [Configuration](#configuration)
-14. [File Reference](#file-reference)
-15. [Key Field Paths](#key-field-paths)
+3. [Workflow Integration](#workflow-integration)
+4. [Data Flow](#data-flow)
+5. [Three-Tab Dashboard](#three-tab-dashboard)
+6. [Data Sources & APIs](#data-sources--apis)
+7. [Pipeline Configuration](#pipeline-configuration)
+8. [Follow-Up Rate Business Logic](#follow-up-rate-business-logic)
+9. [Quality Metrics](#quality-metrics)
+10. [Caching Strategy](#caching-strategy)
+11. [Authentication & OAuth](#authentication--oauth)
+12. [Frontend Architecture](#frontend-architecture)
+13. [Features & Capabilities](#features--capabilities)
+14. [Configuration](#configuration)
+15. [File Reference](#file-reference)
+16. [Key Field Paths](#key-field-paths)
 
 ---
 
@@ -65,11 +66,14 @@ User Browser
     ├── GET /custom_analysis/mbw_monitoring/api/gps/<username>/
     │   └── MBWGPSDetailView (JSON drill-down for GPS visits)
     │
-    ├── POST /custom_analysis/mbw_monitoring/api/save-flw-result/
-    │   └── MBWSaveFlwResultView (save FLW assessment: eligible_for_renewal/probation/suspended)
+    ├── POST /custom_analysis/mbw_monitoring/api/session/save-flw-result/
+    │   └── MBWSaveFlwResultView (save FLW assessment via workflow_adapter)
     │
-    ├── POST /custom_analysis/mbw_monitoring/api/complete-session/
-    │   └── MBWCompleteSessionView (mark monitoring session complete)
+    ├── POST /custom_analysis/mbw_monitoring/api/session/complete/
+    │   └── MBWCompleteSessionView (mark monitoring run complete via workflow_adapter)
+    │
+    ├── POST /custom_analysis/mbw_monitoring/api/opportunity-flws/
+    │   └── OpportunityFLWListAPIView (FLW list with audit history for workflow render_code)
     │
     └── POST /custom_analysis/mbw_monitoring/api/suspend-user/
         └── MBWSuspendUserView (retained but disabled — suspension is now a status label)
@@ -103,6 +107,166 @@ User Browser
              │  │   GS forms)      │  │                         │  │
              │  └──────────────────┘  └─────────────────────────┘  │
              └─────────────────────────────────────────────────────┘
+```
+
+---
+
+## Workflow Integration
+
+### Overview
+
+MBW monitoring sessions are managed through the **Workflow module** (`commcare_connect/workflow/`). The Workflow module provides session creation, listing, state persistence, and a React-based render_code UI for FLW selection. The MBW dashboard (`custom_analysis/mbw_monitoring/`) handles data visualization, analysis, and assessment actions.
+
+This hybrid approach means:
+- **Session lifecycle** (create, list, resume, complete) is handled by the Workflow module
+- **Data analysis and visualization** (GPS, follow-up, overview tabs) is handled by the MBW dashboard
+- **State persistence** (FLW results, session metadata) is stored in `WorkflowRunRecord.state` via `WorkflowDataAccess.update_run_state()`
+
+### Workflow Template
+
+The MBW Monitoring workflow template is defined in `commcare_connect/workflow/templates/mbw_monitoring.py` and auto-discovered by `__init__.py`'s `pkgutil` scan.
+
+**Template structure:**
+
+| Field | Value |
+|-------|-------|
+| `key` | `mbw_monitoring` |
+| `templateType` | `mbw_monitoring` |
+| `name` | MBW Monitoring |
+| `icon` | `fa-chart-line` |
+| `color` | `purple` |
+| `pipeline_schema` | `None` (MBW has its own data pipeline) |
+| `statuses` | `in_progress`, `completed` |
+| `config` | `showSummaryCards: False`, `showFilters: False` |
+
+**Render code** (React JSX, ~200 lines): Handles the pre-dashboard workflow UI:
+1. **FLW Selection step**: Lists all FLWs for the opportunity with checkboxes, enriched with audit history indicators (past audit count, last result, open task count). FLW history is fetched via `POST /custom_analysis/mbw_monitoring/api/opportunity-flws/`.
+2. **Metadata inputs**: Session title and optional tag.
+3. **Launch Dashboard**: Saves selected FLWs to `WorkflowRunRecord.state.selected_flws` via `onUpdateState()`, then redirects to `/custom_analysis/mbw_monitoring/?run_id={instance.id}`.
+4. **Resume view** (when `state.selected_flws` exists): Shows progress bar (assessed/total FLWs), result summary table, and "Continue in Dashboard" link.
+
+### WorkflowMonitoringSession Adapter
+
+The `WorkflowMonitoringSession` class in `workflow_adapter.py` wraps a `WorkflowRunRecord` to expose the same interface the dashboard expects. This adapter pattern allows the dashboard to work with workflow runs without changing its internal data access patterns.
+
+**Adapted properties:**
+
+| Property | Source in `WorkflowRunRecord` |
+|----------|-------------------------------|
+| `id` / `pk` | `run.id` |
+| `title` | `state.title` (default: "MBW Monitoring") |
+| `tag` | `state.tag` |
+| `status` | `run.data.status` (default: "in_progress") |
+| `overall_result` | `state.overall_result` |
+| `session_type` | Always `"mbw_monitoring"` |
+| `is_monitoring` | Always `True` |
+| `opportunity_id` | `run.data.opportunity_id` or `run.opportunity_id` |
+| `opportunity_name` | `state.opportunity_name` |
+| `selected_flw_usernames` | `state.selected_flws` (list of usernames) |
+| `flw_results` | `state.flw_results` (dict: `{username: {result, notes, assessed_by, assessed_at}}`) |
+
+**Methods:**
+- `get_flw_result(username)` → single FLW's result dict
+- `get_monitoring_progress_stats()` → `{percentage, assessed, total}`
+- `to_summary_dict()` → serializable summary for JSON context
+
+### Helper Functions
+
+Three helper functions in `workflow_adapter.py` handle state mutations:
+
+**`load_monitoring_run(request, run_id)`**
+- Loads a `WorkflowRunRecord` via `WorkflowDataAccess.get_run()`
+- Validates it's a monitoring run (has `selected_flws` in state)
+- Returns `WorkflowMonitoringSession` or `None`
+
+**`save_flw_result(request, run_id, username, result, notes, assessed_by)`**
+- Reads the current full `flw_results` dict from state
+- Merges the new entry: `{result, notes, assessed_by, assessed_at}`
+- Passes the **entire** `flw_results` dict to `update_run_state()` (required because `update_run_state()` does a **shallow merge** — `{**current_state, **new_state}` — so passing only the changed entry would overwrite all other FLW results)
+- Returns updated `WorkflowMonitoringSession`
+
+**`complete_monitoring_run(request, run_id, overall_result, notes)`**
+- Sets `data.status = "completed"` and `state.overall_result`
+- Uses `labs_api.update_record()` directly (no `complete_run()` method exists in `WorkflowDataAccess`)
+- Returns updated `WorkflowMonitoringSession`
+
+### FLW API (OpportunityFLWListAPIView)
+
+The `flw_api.py` module provides a `POST /custom_analysis/mbw_monitoring/api/opportunity-flws/` endpoint used by the workflow template's render_code during FLW selection.
+
+**Request:** `{"opportunities": ["765"]}`
+
+**Response:** `{"success": true, "flws": [...], "total": N}`
+
+Each FLW entry includes:
+- `username`, `name`, `connect_id`, `opportunity_id`
+- `history`: `{last_audit_date, last_audit_result, audit_count, open_task_count, latest_task_date, latest_task_title}`
+
+**Two-source history enrichment** (`_build_flw_history()`):
+1. **Traditional audit sessions** (via `AuditDataAccess`): Reads `flw_username` and `overall_result` from past audit sessions
+2. **Workflow monitoring runs** (via `WorkflowDataAccess`): Reads per-FLW results from `state.flw_results` across all workflow runs
+3. **Open tasks** (via `TaskDataAccess`): Counts non-closed tasks per FLW
+
+This dual-source approach ensures the FLW selection UI shows complete history regardless of whether past assessments were done via traditional audits or workflow-based monitoring.
+
+### State Structure
+
+The `WorkflowRunRecord.state` dict for an MBW monitoring session:
+
+```json
+{
+  "selected_flws": ["flw001", "flw002", "flw003"],
+  "title": "March 2025 Review",
+  "tag": "monthly-review",
+  "opportunity_name": "MBW Nigeria",
+  "flw_results": {
+    "flw001": {
+      "result": "eligible_for_renewal",
+      "notes": "Good performance across all metrics",
+      "assessed_by": 42,
+      "assessed_at": "2025-03-15T14:30:00+00:00"
+    },
+    "flw002": {
+      "result": "probation",
+      "notes": "Low follow-up rate, GPS anomalies detected",
+      "assessed_by": 42,
+      "assessed_at": "2025-03-15T14:35:00+00:00"
+    }
+  },
+  "overall_result": "completed"
+}
+```
+
+### Shallow Merge Caveat
+
+`WorkflowDataAccess.update_run_state()` (at `workflow/data_access.py:655-681`) performs a **shallow merge**: `new_state = {**current_state, **updates}`. This means:
+- Top-level keys are replaced entirely, not deep-merged
+- When saving a single FLW result, the entire `flw_results` dict must be passed, not just the changed entry
+- If only `{"flw_results": {"flw001": {...}}}` is passed, it overwrites the entire `flw_results` dict, losing all other FLWs
+- The `save_flw_result()` helper reads the current full dict, merges the new entry, then passes the complete dict
+
+### URL Parameter Compatibility
+
+The dashboard accepts both `?run_id=X` (new workflow path) and `?session_id=X` (backward compatibility) in:
+- `MBWMonitoringDashboardView.get_context_data()`
+- `MBWMonitoringStreamView.stream_data()`
+
+Both resolve to `load_monitoring_run()` which loads from the Workflow module.
+
+### User Flow
+
+```
+1. User navigates to /labs/workflow/
+2. Clicks "Create Workflow" → selects "MBW Monitoring" template
+3. Workflow Run page renders the RENDER_CODE (React JSX)
+4. User selects FLWs, enters title/tag, clicks "Launch Dashboard"
+5. RENDER_CODE calls onUpdateState() to save selected_flws to state
+6. Browser redirects to /custom_analysis/mbw_monitoring/?run_id={run_id}
+7. Dashboard loads, scoped to the selected FLWs
+8. User assesses each FLW (eligible_for_renewal / probation / suspended)
+9. Each assessment calls POST /api/session/save-flw-result/ → workflow_adapter.save_flw_result()
+10. User clicks "Complete Session" → POST /api/session/complete/ → workflow_adapter.complete_monitoring_run()
+11. "Back to Workflows" link returns to /labs/workflow/
 ```
 
 ---
@@ -249,7 +413,7 @@ The final SSE payload (`data.data`) contains:
   "active_usernames": ["flw001", "flw002"],
   "flw_names": {"flw001": "Alice Mensah", "flw002": "Bob Kone"},
   "open_task_usernames": ["flw002"],
-  "monitoring_session": { "id": 1, "title": "...", "status": "in_progress", "flw_results": {...} }
+  "monitoring_session": { "id": 884, "title": "March 2025 Review", "tag": "monthly-review", "status": "in_progress", "session_type": "mbw_monitoring", "opportunity_id": "765", "selected_flw_usernames": ["flw001", "flw002"], "flw_results": {...}, "run_id": 884 }
 }
 ```
 
@@ -604,26 +768,27 @@ Each table has independent sort state. Clicking a column header toggles ascendin
 
 ### Monitoring Session Mode
 
-When `?session_id=X` is provided:
-- Dashboard scopes to the monitoring session's selected FLWs
-- Three assessment buttons appear per FLW on the **Overview tab only**: Eligible for Renewal (green), Probation (yellow), Suspended (red)
+When `?run_id=X` (or `?session_id=X` for backward compatibility) is provided:
+- Dashboard loads the `WorkflowRunRecord` via `load_monitoring_run()` from `workflow_adapter.py`
+- Dashboard scopes to the monitoring session's selected FLWs (from `state.selected_flws`)
+- Three assessment buttons appear per FLW on the **Overview tab only**: Eligible for Renewal (green), Probation (amber), Suspended (red)
 - Toggle behavior: clicking the same button clears the result; clicking a different button changes it
 - Progress bar tracks assessed vs total FLWs
 - Notes modal allows adding per-FLW notes alongside the assessment
 - Session completion shows assessment summary (counts per status) — no overall pass/fail required
 
-**FLW Assessment Statuses** (stored in `AuditSessionRecord.flw_results[username].result`):
+**FLW Assessment Statuses** (stored in `WorkflowRunRecord.state.flw_results[username].result`):
 
 | Status | Value | Color | Meaning |
 |--------|-------|-------|---------|
-| (No assessment) | `null` | — | Audit in progress, FLW not yet assessed |
+| (No assessment) | `null` | — | Monitoring in progress, FLW not yet assessed |
 | Eligible for Renewal | `eligible_for_renewal` | Green | Good performance, eligible for renewal in future MBW opps |
-| Probation | `probation` | Yellow/Amber | Poor performance or potentially fraudulent, not eligible for renewal |
+| Probation | `probation` | Amber | Poor performance or potentially fraudulent, not eligible for renewal |
 | Suspended | `suspended` | Red | Strong evidence of fraud or very poor performance, FLW should be replaced |
 
 **Note**: The "Suspended" status is a **label only** — it does NOT trigger any action on Connect. The existing `MBWSuspendUserView` endpoint is retained but disabled in the UI.
 
-Valid values are defined by `VALID_FLW_RESULTS` in `views.py`.
+Valid values are defined by `VALID_FLW_RESULTS` in `workflow_adapter.py` (tuple: `("eligible_for_renewal", "probation", "suspended")`).
 
 ---
 
@@ -731,16 +896,24 @@ Defined in `mbw/gps_analysis.py`:
 
 | File | Purpose |
 |------|---------|
-| `views.py` | 6 views: Dashboard (template), Stream (SSE), GPS Detail (JSON), Save FLW Result (3-option assessment), Complete Session, Suspend (retained, disabled). Defines `VALID_FLW_RESULTS` constant. |
+| `views.py` | 6 views: Dashboard (template), Stream (SSE), GPS Detail (JSON), Save FLW Result (3-option assessment via `workflow_adapter`), Complete Session (via `workflow_adapter`), Suspend (retained, disabled). Imports `VALID_FLW_RESULTS` from `workflow_adapter.py`. |
+| `workflow_adapter.py` | `WorkflowMonitoringSession` adapter class wrapping `WorkflowRunRecord`. Helper functions: `load_monitoring_run()`, `save_flw_result()`, `complete_monitoring_run()`. Defines `VALID_FLW_RESULTS` constant. |
+| `flw_api.py` | `OpportunityFLWListAPIView` — lists FLWs for an opportunity enriched with audit history from both traditional audit sessions and workflow monitoring runs. Used by the workflow template's render_code during FLW selection. |
 | `data_fetchers.py` | CCHQ form fetching (registration + GS), case fetching, caching with tolerance validation, metadata fetching |
 | `followup_analysis.py` | Visit status calculation, per-FLW/per-mother aggregation, eligibility filtering, quality metrics |
-| `urls.py` | URL routing for dashboard, tab aliases, stream, and API endpoints |
+| `urls.py` | URL routing for dashboard, tab aliases, stream, API endpoints, and `opportunity-flws` endpoint |
 
-### Template
+### Workflow Template
 
 | File | Purpose |
 |------|---------|
-| `templates/custom_analysis/mbw_monitoring/dashboard.html` | Full dashboard UI: tabs, tables, filters, modals, monitoring session, Alpine.js state + methods |
+| `workflow/templates/mbw_monitoring.py` | Workflow template definition (`DEFINITION`, `RENDER_CODE`, `TEMPLATE`). Auto-discovered by `workflow/templates/__init__.py`. RENDER_CODE is React JSX handling FLW selection, audit history display, metadata inputs, and dashboard launch. |
+
+### Dashboard Template
+
+| File | Purpose |
+|------|---------|
+| `templates/custom_analysis/mbw_monitoring/dashboard.html` | Full dashboard UI: tabs, tables, filters, modals, monitoring session, Alpine.js state + methods. "Back to Workflows" link navigates to `/labs/workflow/`. |
 
 ### Shared Dependencies (from existing MBW module)
 
@@ -760,6 +933,26 @@ Defined in `mbw/gps_analysis.py`:
 | `labs/analysis/data_access.py` | `fetch_flw_names()` |
 | `labs/integrations/commcare/api_client.py` | `CommCareDataAccess` — CommCare HQ API client with OAuth, `list_applications()`, `discover_form_xmlns()` |
 | `labs/integrations/commcare/oauth_views.py` | CommCare OAuth initiate/callback/logout views |
+
+### Workflow Module Dependencies
+
+| File | What's Used |
+|------|------------|
+| `workflow/data_access.py` | `WorkflowDataAccess` (session CRUD, `update_run_state()` with shallow merge), `WorkflowRunRecord` |
+| `workflow/templates/__init__.py` | Template registry (auto-discovers `mbw_monitoring.py` via `pkgutil`), `create_workflow_from_template()` |
+| `workflow/urls.py` | Workflow list/create/run URLs (nested under `/labs/workflow/`) |
+
+### Audit Module Dependencies (read-only)
+
+| File | What's Used |
+|------|------------|
+| `audit/data_access.py` | `AuditDataAccess.get_audit_sessions()` — read-only, used by `flw_api.py` to fetch traditional audit history for FLW enrichment |
+
+### Task Module Dependencies (read-only)
+
+| File | What's Used |
+|------|------------|
+| `tasks/data_access.py` | `TaskDataAccess.get_tasks()` — read-only, used by `flw_api.py` to count open tasks per FLW |
 
 ---
 
@@ -797,4 +990,4 @@ Defined in `mbw/gps_analysis.py`:
 
 ---
 
-*Documentation updated for the MBW Monitoring Dashboard as implemented on branch `labs-mbw`.*
+*Documentation updated for the MBW Monitoring Dashboard with Workflow integration, as implemented on branch `labs-mbw-workflow`.*

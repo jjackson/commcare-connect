@@ -194,7 +194,7 @@ def create_workflow_from_template(
 # =============================================================================
 
 # Re-export individual template modules for direct access if needed
-from . import audit_with_ai_review, ocs_outreach, performance_review  # noqa: E402
+from . import audit_with_ai_review, mbw_monitoring, ocs_outreach, performance_review  # noqa: E402
 
 __all__ = [
     "TEMPLATES",
@@ -205,4 +205,5 @@ __all__ = [
     "performance_review",
     "ocs_outreach",
     "audit_with_ai_review",
+    "mbw_monitoring",
 ]

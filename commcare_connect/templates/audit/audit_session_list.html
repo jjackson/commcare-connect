@@ -111,10 +111,6 @@
       </a>
       {% endif %}
       {% if has_context %}
-        <a class="button button-md outline-style text-indigo-700 border-indigo-300 hover:bg-indigo-50" href="{% url 'audit:creation_wizard' %}?mode=monitoring">
-          <i class="fa-solid fa-chart-line mr-2"></i>
-          {% translate "Create Monitoring" %}
-        </a>
         <a class="button button-md primary-dark" href="{% url 'audit:creation_wizard' %}">
           <i class="fa-solid fa-plus mr-2"></i>
           {% translate "Create Audit" %}

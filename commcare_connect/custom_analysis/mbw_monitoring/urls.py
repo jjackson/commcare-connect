@@ -1,6 +1,7 @@
 from django.urls import path
 
 from commcare_connect.custom_analysis.mbw_monitoring import views
+from commcare_connect.custom_analysis.mbw_monitoring.flw_api import OpportunityFLWListAPIView
 
 app_name = "mbw"
 
@@ -19,4 +20,6 @@ urlpatterns = [
     # Monitoring session endpoints
     path("api/session/save-flw-result/", views.MBWSaveFlwResultView.as_view(), name="save_flw_result"),
     path("api/session/complete/", views.MBWCompleteSessionView.as_view(), name="complete_session"),
+    # FLW API for workflow template render_code
+    path("api/opportunity-flws/", OpportunityFLWListAPIView.as_view(), name="opportunity_flws"),
 ]

@@ -77,8 +77,8 @@
                 </p>
             </div>
             <div class="flex gap-2">
-                <a href="{% url 'audit:session_list' %}" class="inline-flex items-center px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-                    <i class="fa-solid fa-arrow-left mr-1"></i> Back to Sessions
+                <a href="{% url 'labs:workflow:list' %}" class="inline-flex items-center px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                    <i class="fa-solid fa-arrow-left mr-1"></i> Back to Workflows
                 </a>
                 <button @click="showCompleteModal = true"
                         x-show="monitoringSession?.status === 'in_progress'"
@@ -420,7 +420,7 @@
                                                     <i class="fa-solid fa-circle-check"></i>
                                                 </button>
                                                 <button @click="setFlwResult(flw.username, 'probation')"
-                                                        :class="getFlwResult(flw.username) === 'probation' ? 'bg-amber-500 text-white border-amber-500' : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'"
+                                                        :class="getFlwResult(flw.username) === 'probation' ? 'bg-amber-600 text-white border-amber-600' : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'"
                                                         class="px-2 py-1 rounded text-xs font-medium border transition-colors"
                                                         title="Probation">
                                                     <i class="fa-solid fa-triangle-exclamation"></i>
@@ -1022,7 +1022,7 @@
                         <i class="fa-solid fa-circle-check mr-1"></i> Eligible
                     </button>
                     <button @click="flwNotesResult = 'probation'"
-                            :class="flwNotesResult === 'probation' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-800 hover:bg-amber-100'"
+                            :class="flwNotesResult === 'probation' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800 hover:bg-amber-100'"
                             class="px-3 py-1 rounded text-xs font-medium border border-amber-300 transition-colors">
                         <i class="fa-solid fa-triangle-exclamation mr-1"></i> Probation
                     </button>

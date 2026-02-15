@@ -6,8 +6,6 @@ for the audit workflow. LocalLabsRecord is a transient Python object
 that deserializes production API responses - no database storage.
 """
 
-from datetime import datetime, timezone
-
 from commcare_connect.labs.models import LocalLabsRecord
 
 
@@ -75,56 +73,9 @@ class AuditTemplateRecord(LocalLabsRecord):
 
 
 class AuditSessionRecord(LocalLabsRecord):
-    """Proxy model for AuditSession-type LocalLabsRecords with nested visit results.
-
-    Supports two session types:
-    - "audit" (default): Traditional image-based audit with visit results
-    - "mbw_monitoring": MBW monitoring session with per-FLW pass/fail results
-    """
+    """Proxy model for AuditSession-type LocalLabsRecords with nested visit results."""
 
     # Properties for convenient access
-    @property
-    def session_type(self) -> str:
-        """Session type: 'audit' (default) or 'mbw_monitoring'."""
-        return self.data.get("session_type", "audit")
-
-    @property
-    def is_monitoring(self) -> bool:
-        return self.session_type == "mbw_monitoring"
-
-    @property
-    def selected_flw_usernames(self) -> list[str]:
-        """FLW usernames selected for this monitoring session."""
-        return self.data.get("selected_flw_usernames", [])
-
-    @property
-    def flw_results(self) -> dict:
-        """Per-FLW pass/fail results for monitoring sessions."""
-        return self.data.get("flw_results", {})
-
-    def set_flw_result(self, username: str, result: str, notes: str, assessed_by: int):
-        """Store pass/fail result for a FLW in a monitoring session."""
-        results = self.data.setdefault("flw_results", {})
-        results[username] = {
-            "result": result,
-            "notes": notes,
-            "assessed_by": assessed_by,
-            "assessed_at": datetime.now(timezone.utc).isoformat(),
-        }
-
-    def get_flw_result(self, username: str) -> dict | None:
-        return self.flw_results.get(username)
-
-    def get_monitoring_progress_stats(self) -> dict:
-        """Progress for monitoring sessions: FLWs assessed / total FLWs."""
-        total = len(self.selected_flw_usernames)
-        assessed = sum(1 for r in self.flw_results.values() if r.get("result"))
-        return {
-            "percentage": round((assessed / total) * 100) if total > 0 else 0,
-            "assessed": assessed,
-            "total": total,
-        }
-
     @property
     def title(self):
         """Audit session title."""
@@ -442,26 +393,18 @@ class AuditSessionRecord(LocalLabsRecord):
 
         Includes core fields and computed statistics for display.
         """
-        result = {
+        stats = self.get_assessment_stats()
+        return {
             "id": self.id,
             "title": self.title,
             "tag": self.tag,
             "status": self.status,
             "overall_result": self.overall_result,
-            "session_type": self.session_type,
             "opportunity_id": self.opportunity_id,
             "opportunity_name": self.opportunity_name,
             "description": self.description,
+            "visit_count": self.get_visit_count(),
+            "assessment_stats": stats,
             "workflow_run_id": self.workflow_run_id,
+            "flw_username": self.flw_username,
         }
-
-        if self.is_monitoring:
-            result["monitoring_progress"] = self.get_monitoring_progress_stats()
-            result["selected_flw_usernames"] = self.selected_flw_usernames
-        else:
-            stats = self.get_assessment_stats()
-            result["visit_count"] = self.get_visit_count()
-            result["assessment_stats"] = stats
-            result["flw_username"] = self.flw_username
-
-        return result

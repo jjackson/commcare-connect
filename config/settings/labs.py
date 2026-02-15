@@ -61,7 +61,3 @@ OCS_OAUTH_CLIENT_SECRET = env("OCS_OAUTH_CLIENT_SECRET", default="")  # noqa: F4
 # python_redis: Redis/file caching with pandas computation
 # sql: PostgreSQL table caching with SQL computation
 LABS_ANALYSIS_BACKEND = env("LABS_ANALYSIS_BACKEND", default="python_redis")  # noqa: F405
-
-# MBW Development Fixture: when "1", caches CommCare HQ case data locally
-# to avoid re-fetching on every page load. Shows a "Bust Cache" button on the dashboard.
-MBW_DEV_FIXTURE = env.bool("MBW_DEV_FIXTURE", default=False)  # noqa: F405

@@ -47,13 +47,18 @@ from commcare_connect.custom_analysis.mbw_monitoring.followup_analysis import (
     count_mothers_from_pipeline,
     extract_mother_metadata_from_forms,
 )
+from commcare_connect.custom_analysis.mbw_monitoring.workflow_adapter import (
+    VALID_FLW_RESULTS,
+    WorkflowMonitoringSession,
+    complete_monitoring_run,
+    load_monitoring_run,
+    save_flw_result as save_flw_result_helper,
+)
 from commcare_connect.labs.analysis.data_access import fetch_flw_names
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, BaseSSEStreamView, send_sse_event
 
 logger = logging.getLogger(__name__)
-
-VALID_FLW_RESULTS = ("eligible_for_renewal", "probation", "suspended")
 
 
 def get_default_date_range() -> tuple[date, date]:
@@ -73,21 +78,6 @@ def parse_date_param(date_str: str | None, default: date) -> date:
         return default
 
 
-def _load_monitoring_session(request, session_id):
-    """Load a monitoring session by ID via AuditDataAccess."""
-    from commcare_connect.audit.data_access import AuditDataAccess
-
-    try:
-        data_access = AuditDataAccess(request=request)
-        session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
-        data_access.close()
-        if session and session.is_monitoring:
-            return session
-    except Exception as e:
-        logger.warning(f"[MBW Dashboard] Failed to load monitoring session {session_id}: {e}")
-    return None
-
-
 class MBWMonitoringDashboardView(LoginRequiredMixin, TemplateView):
     """
     Main dashboard view rendering the three-tab interface.
@@ -104,21 +94,20 @@ class MBWMonitoringDashboardView(LoginRequiredMixin, TemplateView):
         labs_context = getattr(self.request, "labs_context", {})
         opportunity_id = labs_context.get("opportunity_id")
 
-        # Check for monitoring session
-        session_id = self.request.GET.get("session_id")
+        # Check for monitoring session (accept both run_id and session_id for backward compat)
+        run_id = self.request.GET.get("run_id") or self.request.GET.get("session_id")
         monitoring_session = None
-        if session_id:
-            monitoring_session = _load_monitoring_session(self.request, int(session_id))
+        if run_id:
+            monitoring_session = load_monitoring_run(self.request, int(run_id))
             if monitoring_session:
-                # Use the session's opportunity_id as context
-                session_opp_id = monitoring_session.data.get("opportunity_id")
+                session_opp_id = monitoring_session.opportunity_id
                 if session_opp_id:
                     opportunity_id = session_opp_id
 
         context["opportunity_id"] = opportunity_id
         context["opportunity_name"] = labs_context.get("opportunity_name", "")
         context["has_context"] = bool(opportunity_id)
-        context["session_id"] = session_id or ""
+        context["session_id"] = run_id or ""  # template uses session_id for display
         context["monitoring_session_json"] = json.dumps(
             monitoring_session.to_summary_dict() if monitoring_session else None
         )
@@ -222,12 +211,12 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             if bust_cache:
                 yield send_sse_event("Cache busted — re-fetching all data...")
 
-            # Load monitoring session early so we know which opportunities to fetch
-            session_id = request.GET.get("session_id")
+            # Load monitoring session early so we know which FLWs to filter to
+            session_id = request.GET.get("run_id") or request.GET.get("session_id")
             monitoring_session = None
             session_flw_filter = None
             if session_id:
-                monitoring_session = _load_monitoring_session(request, int(session_id))
+                monitoring_session = load_monitoring_run(request, int(session_id))
                 if monitoring_session:
                     session_flw_filter = set(monitoring_session.selected_flw_usernames)
                     logger.info(
@@ -236,9 +225,9 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     )
 
             # Determine which opportunities to load data from.
-            # Monitoring sessions may span multiple opportunities.
+            # Workflow-based monitoring is single-opportunity.
             if monitoring_session:
-                opportunity_ids = monitoring_session.data.get("opportunity_ids", [opportunity_id])
+                opportunity_ids = [monitoring_session.opportunity_id or opportunity_id]
             else:
                 opportunity_ids = [opportunity_id]
 
@@ -703,18 +692,10 @@ class MBWSaveFlwResultView(LoginRequiredMixin, View):
                     status=400,
                 )
 
-            from commcare_connect.audit.data_access import AuditDataAccess
-
-            data_access = AuditDataAccess(request=request)
-            session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
-
-            if not session or not session.is_monitoring:
-                data_access.close()
-                return JsonResponse({"error": "Monitoring session not found"}, status=404)
-
             assessed_by = request.user.id if request.user.is_authenticated else 0
-            updated_session = data_access.save_flw_result(session, username, result, notes, assessed_by)
-            data_access.close()
+            updated_session = save_flw_result_helper(request, int(session_id), username, result, notes, assessed_by)
+            if not updated_session:
+                return JsonResponse({"error": "Monitoring session not found"}, status=404)
 
             return JsonResponse({
                 "success": True,
@@ -746,19 +727,9 @@ class MBWCompleteSessionView(LoginRequiredMixin, View):
             if not session_id:
                 return JsonResponse({"error": "session_id is required"}, status=400)
 
-            from commcare_connect.audit.data_access import AuditDataAccess
-
-            data_access = AuditDataAccess(request=request)
-            session = data_access.get_audit_session(session_id, try_multiple_opportunities=True)
-
-            if not session or not session.is_monitoring:
-                data_access.close()
+            updated_session = complete_monitoring_run(request, int(session_id), overall_result, notes)
+            if not updated_session:
                 return JsonResponse({"error": "Monitoring session not found"}, status=404)
-
-            updated_session = data_access.complete_audit_session(
-                session, overall_result=overall_result, notes=notes
-            )
-            data_access.close()
 
             return JsonResponse({
                 "success": True,

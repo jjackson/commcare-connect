@@ -9,18 +9,14 @@ import hashlib
 import logging
 from typing import Any
 
-from django.conf import settings
-
 logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Cache Constants and Utilities
 # =============================================================================
 
-# TTL for Django cache backend
-# Dev mode (MBW_DEV_FIXTURE=1): 5400s (90 min)
-# Prod mode: 3600s (1 hr)
-DJANGO_CACHE_TTL = 5400 if getattr(settings, "MBW_DEV_FIXTURE", False) else 3600
+# TTL for Django cache backend (1 hour)
+DJANGO_CACHE_TTL = 3600
 
 
 def get_config_hash(config) -> str:
