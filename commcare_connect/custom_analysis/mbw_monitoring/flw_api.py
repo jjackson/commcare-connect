@@ -90,6 +90,7 @@ class OpportunityFLWListAPIView(LoginRequiredMixin, View):
             "last_audit_result": None,
             "audit_count": 0,
             "open_task_count": 0,
+            "latest_task_id": None,
             "latest_task_date": None,
             "latest_task_title": None,
         })
@@ -165,6 +166,7 @@ class OpportunityFLWListAPIView(LoginRequiredMixin, View):
                     if task.date_created:
                         task_date = task.date_created.isoformat()
                     if task_date and (not h["latest_task_date"] or task_date > h["latest_task_date"]):
+                        h["latest_task_id"] = task.id
                         h["latest_task_date"] = task_date
                         h["latest_task_title"] = task.title
         except Exception as e:

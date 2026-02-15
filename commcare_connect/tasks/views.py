@@ -7,6 +7,7 @@ implementation using TaskDataAccess for OAuth-based API access.
 
 import json
 import logging
+import time
 from datetime import datetime
 
 from django.contrib.auth.decorators import login_required
@@ -763,7 +764,7 @@ def task_initiate_ai(request, task_id):
 
         # Trigger bot with OCS using OAuth
         ocs_client = OCSDataAccess(request=request)
-        ocs_client.trigger_bot(
+        trigger_response = ocs_client.trigger_bot(
             identifier=identifier,
             platform=platform,
             experiment_id=experiment,
@@ -771,9 +772,43 @@ def task_initiate_ai(request, task_id):
             start_new_session=start_new_session,
             session_data=session_data,
         )
+        logger.info(f"OCS trigger_bot response for task {task_id}: {trigger_response}")
+
+        # Try to extract session_id from trigger response
+        session_id = None
+        if trigger_response:
+            session_id = (
+                trigger_response.get("session_id")
+                or trigger_response.get("session", {}).get("id")
+                or trigger_response.get("id")
+            )
+
+        # If not in response, poll OCS a few times to discover the session
+        if not session_id:
+            for attempt in range(3):
+                time.sleep(2)
+                try:
+                    sessions = ocs_client.list_sessions(experiment_id=experiment, limit=5)
+                    identifier_lower = identifier.lower()
+                    matched = [
+                        s
+                        for s in (sessions or [])
+                        if s.get("participant", {}).get("identifier", "").lower() == identifier_lower
+                    ]
+                    if matched:
+                        session_id = matched[0].get("id")
+                        if session_id:
+                            logger.info(
+                                f"Server-side poll found session {session_id} for task {task_id} "
+                                f"on attempt {attempt + 1}"
+                            )
+                            break
+                except Exception as e:
+                    logger.warning(f"Server-side poll attempt {attempt + 1} for task {task_id} failed: {e}")
+
         ocs_client.close()
 
-        # Add AI session event - session_id will be linked via polling after OCS creates it
+        # Add AI session event with session_id if found, or pending if not
         actor_name = request.user.get_display_name()
         session_params = {
             "identifier": identifier,
@@ -784,8 +819,8 @@ def task_initiate_ai(request, task_id):
         task.add_ai_session(
             actor=actor_name,
             session_params=session_params,
-            session_id=None,
-            status="pending",
+            session_id=session_id,
+            status="completed" if session_id else "pending",
         )
 
         # Save task via data access

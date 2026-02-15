@@ -173,54 +173,95 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 </div>
             </div>
 
-            {/* FLW list with checkboxes + audit history */}
+            {/* FLW list table with checkboxes + audit history */}
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
-                    <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox"
-                               checked={workers.length > 0 && workers.every(w => selectedFlws[w.username])}
-                               onChange={toggleAll} />
-                        Select All ({workers.length})
-                    </label>
-                    <span className="text-sm text-gray-500">{selectedCount} selected</span>
-                </div>
                 {historyLoading && (
                     <div className="px-4 py-2 text-xs text-gray-400 bg-gray-50 border-b">
                         Loading audit history...
                     </div>
                 )}
-                <div className="max-h-96 overflow-y-auto divide-y">
-                    {workers.map(w => {
-                        const h = flwHistory[w.username] || {};
-                        return (
-                            <div key={w.username} className="px-4 py-3 flex items-center gap-3 hover:bg-gray-50">
-                                <input type="checkbox" checked={!!selectedFlws[w.username]}
-                                       onChange={() => toggleFlw(w.username)} />
-                                <div className="flex-1 min-w-0">
-                                    <div className="font-medium text-sm">{w.name || w.username}</div>
-                                    <div className="text-xs text-gray-500">{w.username}</div>
-                                </div>
-                                {/* Audit history indicators */}
-                                {h.audit_count > 0 && (
-                                    <span className="text-xs text-gray-500">
-                                        {h.audit_count} past audit(s)
-                                        {h.last_audit_result && (
-                                            <span className={
-                                                h.last_audit_result === 'eligible_for_renewal' ? ' text-green-600' :
-                                                h.last_audit_result === 'probation' ? ' text-amber-600' :
-                                                h.last_audit_result === 'suspended' ? ' text-red-600' : ''
-                                            }> ({h.last_audit_result.replace(/_/g, ' ')})</span>
-                                        )}
-                                    </span>
-                                )}
-                                {h.open_task_count > 0 && (
-                                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
-                                        {h.open_task_count} open task(s)
-                                    </span>
-                                )}
-                            </div>
-                        );
-                    })}
+                <div className="max-h-96 overflow-y-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th className="px-4 py-2 text-left w-10">
+                                    <input type="checkbox"
+                                           checked={workers.length > 0 && workers.every(w => selectedFlws[w.username])}
+                                           onChange={toggleAll} />
+                                </th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                    FLW ({workers.length})
+                                </th>
+                                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">
+                                    Past Audits
+                                </th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                    Last Audit Date
+                                </th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                    Last Result
+                                </th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                    Open Tasks
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                            {workers.map(w => {
+                                const h = flwHistory[w.username] || {};
+                                return (
+                                    <tr key={w.username} className="hover:bg-gray-50">
+                                        <td className="px-4 py-2">
+                                            <input type="checkbox" checked={!!selectedFlws[w.username]}
+                                                   onChange={() => toggleFlw(w.username)} />
+                                        </td>
+                                        <td className="px-4 py-2">
+                                            <div className="font-medium text-sm">{w.name || w.username}</div>
+                                            <div className="text-xs text-gray-500">{w.username}</div>
+                                        </td>
+                                        <td className="px-4 py-2 text-center text-sm text-gray-600">
+                                            {h.audit_count > 0 ? h.audit_count : <span className="text-gray-300">—</span>}
+                                        </td>
+                                        <td className="px-4 py-2 text-sm text-gray-600">
+                                            {h.last_audit_date ? (
+                                                new Date(h.last_audit_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                            ) : <span className="text-gray-300">—</span>}
+                                        </td>
+                                        <td className="px-4 py-2 text-sm">
+                                            {h.last_audit_result ? (
+                                                <span className={
+                                                    h.last_audit_result === 'eligible_for_renewal' ? 'text-green-700 bg-green-50 px-2 py-0.5 rounded text-xs' :
+                                                    h.last_audit_result === 'probation' ? 'text-amber-700 bg-amber-50 px-2 py-0.5 rounded text-xs' :
+                                                    h.last_audit_result === 'suspended' ? 'text-red-700 bg-red-50 px-2 py-0.5 rounded text-xs' :
+                                                    'text-gray-600 text-xs'
+                                                }>{h.last_audit_result.replace(/_/g, ' ')}</span>
+                                            ) : <span className="text-gray-300">—</span>}
+                                        </td>
+                                        <td className="px-4 py-2">
+                                            {h.open_task_count > 0 ? (
+                                                <div>
+                                                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+                                                        {h.open_task_count} open
+                                                    </span>
+                                                    {h.latest_task_id && h.latest_task_date && (
+                                                        <a href={'/tasks/' + h.latest_task_id + '/edit/'}
+                                                           className="block mt-1 text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
+                                                           title={h.latest_task_title || 'View task'}>
+                                                            {new Date(h.latest_task_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                            <i className="fa-solid fa-arrow-up-right-from-square ml-1 text-[10px]"></i>
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            ) : <span className="text-gray-300 text-sm">—</span>}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="px-4 py-2 bg-gray-50 border-t text-sm text-gray-500 text-right">
+                    {selectedCount} selected
                 </div>
             </div>
 

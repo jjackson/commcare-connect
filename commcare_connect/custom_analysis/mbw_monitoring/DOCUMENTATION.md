@@ -139,11 +139,22 @@ The MBW Monitoring workflow template is defined in `commcare_connect/workflow/te
 | `statuses` | `in_progress`, `completed` |
 | `config` | `showSummaryCards: False`, `showFilters: False` |
 
-**Render code** (React JSX, ~200 lines): Handles the pre-dashboard workflow UI:
-1. **FLW Selection step**: Lists all FLWs for the opportunity with checkboxes, enriched with audit history indicators (past audit count, last result, open task count). FLW history is fetched via `POST /custom_analysis/mbw_monitoring/api/opportunity-flws/`.
+**Render code** (React JSX, ~275 lines): Handles the pre-dashboard workflow UI:
+1. **FLW Selection step**: Lists all FLWs for the opportunity with checkboxes, enriched with audit history indicators. FLW history is fetched via `POST /custom_analysis/mbw_monitoring/api/opportunity-flws/`.
 2. **Metadata inputs**: Session title and optional tag.
 3. **Launch Dashboard**: Saves selected FLWs to `WorkflowRunRecord.state.selected_flws` via `onUpdateState()`, then redirects to `/custom_analysis/mbw_monitoring/?run_id={instance.id}`.
 4. **Resume view** (when `state.selected_flws` exists): Shows progress bar (assessed/total FLWs), result summary table, and "Continue in Dashboard" link.
+
+**FLW Selection Table Columns:**
+
+| Column | Source | Description |
+|--------|--------|-------------|
+| Checkbox | — | Select/deselect FLW for monitoring |
+| FLW | `w.name`, `w.username` | Display name + username |
+| Past Audits | `h.audit_count` | Count of past audit sessions (traditional + workflow) |
+| Last Audit Date | `h.last_audit_date` | Date of most recent audit, formatted as "Mon DD, YYYY" |
+| Last Result | `h.last_audit_result` | Color-coded badge: green (eligible), amber (probation), red (suspended) |
+| Open Tasks | `h.open_task_count`, `h.latest_task_id`, `h.latest_task_date` | Count badge + clickable link to latest task (`/tasks/{id}/edit/`) with date |
 
 ### WorkflowMonitoringSession Adapter
 
@@ -200,7 +211,7 @@ The `flw_api.py` module provides a `POST /custom_analysis/mbw_monitoring/api/opp
 
 Each FLW entry includes:
 - `username`, `name`, `connect_id`, `opportunity_id`
-- `history`: `{last_audit_date, last_audit_result, audit_count, open_task_count, latest_task_date, latest_task_title}`
+- `history`: `{last_audit_date, last_audit_result, audit_count, open_task_count, latest_task_id, latest_task_date, latest_task_title}`
 
 **Two-source history enrichment** (`_build_flw_history()`):
 1. **Traditional audit sessions** (via `AuditDataAccess`): Reads `flw_username` and `overall_result` from past audit sessions
@@ -990,4 +1001,23 @@ Defined in `mbw/gps_analysis.py`:
 
 ---
 
-*Documentation updated for the MBW Monitoring Dashboard with Workflow integration, as implemented on branch `labs-mbw-workflow`.*
+## Related: OCS Session Linking Fix (Task Module)
+
+The Task module's AI assistant integration (`tasks/views.py`) was updated to improve OCS session linking reliability. This affects all tasks (not MBW-specific).
+
+**Problem:** `task_initiate_ai()` discarded the `trigger_bot()` response and always saved `session_id=None`. A fragile frontend-only polling mechanism (5 attempts x 2s) often failed to link the session.
+
+**Fix (3-layer approach):**
+
+1. **Capture `trigger_bot()` response** — session_id extracted from response if OCS returns it (checks `session_id`, `session.id`, `id` keys). Response is logged for debugging.
+2. **Server-side polling fallback** — if no session_id in response, polls OCS `list_sessions()` 3 times x 2s, matching by experiment_id + identifier. `ocs_client.close()` moved after the polling loop.
+3. **Frontend polling increased** — from 5x2s (10s) to 8x3s (24s) total window.
+4. **"Retry Linking" button** — added to the Session Pending UI, allowing manual re-attempt via `task_ai_sessions()` endpoint.
+
+**Files changed:**
+- `tasks/views.py` — `task_initiate_ai()`: capture response, server-side polling, deferred `ocs_client.close()`
+- `templates/tasks/task_create_edit.html` — increased polling, added `retrySessionLink()` method and retry button
+
+---
+
+*Documentation updated for the MBW Monitoring Dashboard with Workflow integration, FLW selection table enhancements, and OCS session linking fix.*
