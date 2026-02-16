@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import models
@@ -18,6 +20,7 @@ class User(AbstractUser):
 
     username_validator = UnicodeUsernameValidator()
 
+    user_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     # First and last name do not cover name patterns around the globe
     name = models.CharField(_("Name of User"), blank=True, max_length=255)
     first_name = None  # type: ignore
@@ -58,6 +61,7 @@ class User(AbstractUser):
             ("all_org_access", "Allow admin access to all organizations"),
             ("view_commcarehq_form_link", "Can view CommCareHQ form link"),
             ("org_management_settings_access", "Can manage organizations settings"),
+            ("workspace_entity_management_access", "Can manage LLO Entities for organizations"),
         ]
 
     def __str__(self):

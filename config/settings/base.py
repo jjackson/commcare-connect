@@ -151,6 +151,7 @@ LOCAL_APPS = [
     "commcare_connect.solicitations",
     "commcare_connect.users",
     "commcare_connect.web",
+    "commcare_connect.microplanning",
 ]
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -240,6 +241,7 @@ TEMPLATES = [
                 "commcare_connect.users.context_processors.allauth_settings",
                 "commcare_connect.web.context_processors.page_settings",
                 "commcare_connect.web.context_processors.gtm_context",
+                "commcare_connect.web.context_processors.chat_widget_context",
             ],
         },
     }
@@ -485,3 +487,7 @@ SCALE_VALIDATION_API_URL = env(
     default="https://image-pipeline-scale-gw-4pc8jsfa.uc.gateway.dev",
 )
 SCALE_VALIDATION_API_KEY = env("SCALE_VALIDATION_API_KEY", default="")
+
+# Chatbot Widget Settings
+CHATBOT_ID = env("CHATBOT_ID", default="")
+CHATBOT_EMBED_KEY = env("CHATBOT_EMBED_KEY", default="")
