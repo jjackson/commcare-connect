@@ -619,6 +619,7 @@ def save_worker_result_api(request, run_id):
     """
     VALID_RESULTS = ("eligible_for_renewal", "probation", "suspended")
 
+    data_access = None
     try:
         data = json.loads(request.body)
         username = data.get("username")
@@ -680,6 +681,9 @@ def save_worker_result_api(request, run_id):
     except Exception as e:
         logger.error(f"Failed to save worker result for run {run_id}: {e}", exc_info=True)
         return JsonResponse({"error": str(e)}, status=500)
+    finally:
+        if data_access:
+            data_access.close()
 
 
 @login_required
@@ -688,8 +692,7 @@ def complete_run_api(request, run_id):
     """Mark a workflow run as completed.
 
     Updates run.data.status to 'completed' and stores overall_result/notes
-    in the state. Uses labs_api.update_record() directly since
-    WorkflowDataAccess has no complete_run() method.
+    in the state via WorkflowDataAccess.complete_run().
 
     Request body:
         {
@@ -697,6 +700,7 @@ def complete_run_api(request, run_id):
             "notes": ""  // optional
         }
     """
+    data_access = None
     try:
         data = json.loads(request.body)
         overall_result = data.get("overall_result", "completed")
@@ -707,23 +711,11 @@ def complete_run_api(request, run_id):
         if not run:
             return JsonResponse({"error": "Run not found"}, status=404)
 
-        # Update status at top level + store result/notes in state
-        current_state = run.data.get("state", {})
-        updated_data = {
-            **run.data,
-            "status": "completed",
-            "state": {
-                **current_state,
-                "overall_result": overall_result,
-                "notes": notes,
-            },
-        }
-
-        result = data_access.labs_api.update_record(
-            record_id=run_id,
-            experiment=data_access.EXPERIMENT,
-            type="workflow_run",
-            data=updated_data,
+        result = data_access.complete_run(
+            run_id=run_id,
+            overall_result=overall_result,
+            notes=notes,
+            run=run,
         )
 
         if not result:
@@ -740,6 +732,9 @@ def complete_run_api(request, run_id):
     except Exception as e:
         logger.error(f"Failed to complete run {run_id}: {e}", exc_info=True)
         return JsonResponse({"error": str(e)}, status=500)
+    finally:
+        if data_access:
+            data_access.close()
 
 
 @login_required
@@ -934,6 +929,7 @@ def sync_template_render_code_api(request, definition_id):
     Accepts JSON body with optional 'template_key'. If not provided, tries to
     detect the template from the definition name.
     """
+    data_access = None
     try:
         data = json.loads(request.body) if request.body else {}
         template_key = data.get("template_key")
@@ -978,8 +974,11 @@ def sync_template_render_code_api(request, definition_id):
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
     except Exception as e:
-        logger.error(f"Failed to sync template render code for definition {definition_id}: {e}")
+        logger.error(f"Failed to sync template render code for definition {definition_id}: {e}", exc_info=True)
         return JsonResponse({"error": str(e)}, status=500)
+    finally:
+        if data_access:
+            data_access.close()
 
 
 # =============================================================================

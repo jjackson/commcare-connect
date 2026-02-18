@@ -279,6 +279,12 @@ class LabsRecordAPIClient:
             LabsAPIError: If API request fails
         """
         # Use provided record or fetch current to read metadata
+        if current_record is not None and current_record.id != record_id:
+            logger.warning(
+                f"current_record.id ({current_record.id}) != record_id ({record_id}); "
+                f"ignoring current_record and fetching fresh"
+            )
+            current_record = None
         current = current_record or self.get_record_by_id(record_id, experiment=experiment, type=type)
         if not current:
             raise LabsAPIError(f"Record {record_id} not found")
