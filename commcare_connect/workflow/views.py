@@ -658,7 +658,7 @@ def save_worker_result_api(request, run_id):
         # Write back the full dict (shallow merge safe)
         updated_run = data_access.update_run_state(run_id, {
             "worker_results": updated_results,
-        })
+        }, run=run)
 
         if not updated_run:
             return JsonResponse({"error": "Failed to update run"}, status=500)

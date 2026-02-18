@@ -670,9 +670,16 @@ class WorkflowDataAccess(BaseDataAccess):
         """Alias for get_or_create_run (deprecated)."""
         return self.get_or_create_run(definition_id, opportunity_id)
 
-    def update_run_state(self, run_id: int, new_state: dict) -> WorkflowRunRecord | None:
-        """Update workflow run state (merge with existing)."""
-        run = self.get_run(run_id)
+    def update_run_state(self, run_id: int, new_state: dict, run: WorkflowRunRecord | None = None) -> WorkflowRunRecord | None:
+        """Update workflow run state (merge with existing).
+
+        Args:
+            run_id: The workflow run ID.
+            new_state: Dict of state keys to merge.
+            run: Optional pre-fetched run record (avoids redundant API call).
+        """
+        if run is None:
+            run = self.get_run(run_id)
         if not run:
             return None
 
@@ -685,6 +692,7 @@ class WorkflowDataAccess(BaseDataAccess):
             experiment=self.EXPERIMENT,
             type="workflow_run",
             data=updated_data,
+            current_record=run,
         )
         if result:
             return WorkflowRunRecord(
@@ -719,6 +727,7 @@ class WorkflowDataAccess(BaseDataAccess):
             experiment=self.EXPERIMENT,
             type="workflow_run",
             data=updated_data,
+            current_record=run,
         )
         if result:
             return WorkflowRunRecord(
