@@ -58,6 +58,10 @@ class WorkflowDefinitionRecord(LocalLabsRecord):
         return self.data.get("pipeline_sources", [])
 
     @property
+    def template_type(self) -> str:
+        return self.data.get("config", {}).get("templateType", "")
+
+    @property
     def is_shared(self) -> bool:
         return self.data.get("is_shared", False)
 
@@ -104,6 +108,16 @@ class WorkflowRunRecord(LocalLabsRecord):
     @property
     def state(self):
         return self.data.get("state", {})
+
+    @property
+    def created_at(self):
+        return self.data.get("created_at", "")
+
+    @property
+    def selected_count(self) -> int:
+        state = self.data.get("state", {})
+        selected = state.get("selected_workers") or state.get("selected_flws", [])
+        return len(selected) if isinstance(selected, list) else 0
 
 
 class WorkflowChatHistoryRecord(LocalLabsRecord):
@@ -555,6 +569,7 @@ class WorkflowDataAccess(BaseDataAccess):
             "period_end": period_end,
             "status": "in_progress",
             "state": initial_state or {},
+            "created_at": datetime.now().isoformat(),
         }
 
         record = self.labs_api.create_record(
@@ -683,6 +698,36 @@ class WorkflowDataAccess(BaseDataAccess):
     def update_instance_state(self, instance_id: int, new_state: dict) -> WorkflowRunRecord | None:
         """Alias for update_run_state (deprecated)."""
         return self.update_run_state(instance_id, new_state)
+
+    def save_run_snapshot(self, run_id: int, snapshot: dict) -> WorkflowRunRecord | None:
+        """Save a data snapshot on the run (writes to run.data['snapshot']).
+
+        Unlike update_run_state() which merges into run.data['state'],
+        this writes directly to run.data['snapshot'] as a sibling key.
+        """
+        run = self.get_run(run_id)
+        if not run:
+            return None
+
+        updated_data = {**run.data, "snapshot": snapshot}
+
+        result = self.labs_api.update_record(
+            record_id=run_id,
+            experiment=self.EXPERIMENT,
+            type="workflow_run",
+            data=updated_data,
+        )
+        if result:
+            return WorkflowRunRecord(
+                {
+                    "id": result.id,
+                    "experiment": result.experiment,
+                    "type": result.type,
+                    "data": result.data,
+                    "opportunity_id": result.opportunity_id,
+                }
+            )
+        return None
 
     # -------------------------------------------------------------------------
     # Pipeline Source Methods

@@ -29,6 +29,8 @@ urlpatterns = [
     path("api/workers/", views.get_workers_api, name="api_workers"),
     # API endpoints - Workflow runs
     path("api/run/<int:run_id>/state/", views.update_state_api, name="api_update_state"),
+    path("api/run/<int:run_id>/worker-result/", views.save_worker_result_api, name="api_save_worker_result"),
+    path("api/run/<int:run_id>/complete/", views.complete_run_api, name="api_complete_run"),
     path("api/run/<int:run_id>/", views.get_run_api, name="api_get_run"),
     # API endpoints - Chat history
     path("api/<int:definition_id>/chat/history/", views.get_chat_history_api, name="api_chat_history"),
@@ -36,6 +38,7 @@ urlpatterns = [
     path("api/<int:definition_id>/chat/clear/", views.clear_chat_history_api, name="api_chat_clear"),
     # API endpoints - Render code
     path("api/<int:definition_id>/render-code/", views.save_render_code_api, name="api_save_render_code"),
+    path("api/<int:definition_id>/sync-template/", views.sync_template_render_code_api, name="api_sync_template"),
     # API endpoints - OCS integration
     path("api/ocs/status/", views.ocs_status_api, name="api_ocs_status"),
     path("api/ocs/bots/", views.ocs_bots_api, name="api_ocs_bots"),
