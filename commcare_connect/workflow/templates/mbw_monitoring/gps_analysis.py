@@ -8,6 +8,7 @@ Computes GPS-based metrics:
 """
 
 import logging
+import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -40,6 +41,7 @@ class VisitWithGPS:
     visit_datetime: datetime | None
     gps: GPSCoordinate | None
     gps_raw: str | None
+    app_build_version: int | None = None
 
     # Computed metrics
     distance_from_prev_case_visit: float | None = None  # meters
@@ -164,6 +166,7 @@ def extract_visits_with_gps(visits: list[dict]) -> list[VisitWithGPS]:
             visit_datetime=parse_visit_datetime(visit_date_str),
             gps=gps,
             gps_raw=gps_raw,
+            app_build_version=computed.get("app_build_version"),
         )
         result.append(visit_with_gps)
 
@@ -505,3 +508,86 @@ def analyze_gps_metrics(
         date_range_start=date_range_start,
         date_range_end=date_range_end,
     )
+
+
+def _prepare_daily_visit_pairs(
+    visits: list[VisitWithGPS],
+) -> dict[str, list[tuple[VisitWithGPS, VisitWithGPS]]]:
+    """
+    Group visits by (FLW, day), deduplicate by mother_case_id (keep first
+    visit per mother per day), and return consecutive visit pairs per FLW.
+
+    Only includes days where the FLW visited 2+ unique mothers.
+    Filters to visits with GPS, mother_case_id, and visit_date.
+
+    Returns: {username: [(visit_a, visit_b), ...]}
+    """
+    valid = [v for v in visits if v.gps and v.mother_case_id and v.visit_date and v.visit_datetime]
+
+    by_flw_day: dict[tuple[str, date], list[VisitWithGPS]] = defaultdict(list)
+    for v in valid:
+        by_flw_day[(v.username, v.visit_date)].append(v)
+
+    pairs_by_flw: dict[str, list[tuple[VisitWithGPS, VisitWithGPS]]] = defaultdict(list)
+
+    for (username, _day), day_visits in by_flw_day.items():
+        day_visits.sort(key=lambda v: v.visit_datetime or datetime.min)
+
+        # Dedup by mother_case_id (keep first visit per mother per day)
+        seen_mothers: set[str] = set()
+        unique_visits: list[VisitWithGPS] = []
+        for v in day_visits:
+            if v.mother_case_id not in seen_mothers:
+                seen_mothers.add(v.mother_case_id)
+                unique_visits.append(v)
+
+        if len(unique_visits) < 2:
+            continue
+
+        for i in range(len(unique_visits) - 1):
+            pairs_by_flw[username].append((unique_visits[i], unique_visits[i + 1]))
+
+    return dict(pairs_by_flw)
+
+
+def compute_median_meters_per_visit(
+    visits: list[VisitWithGPS],
+    min_app_version: int = 0,
+) -> dict[str, float | None]:
+    """
+    Median haversine distance (meters) between consecutive visits to
+    different mothers within a day. Only visits with a known app_build_version.
+    """
+    filtered = [v for v in visits if v.app_build_version is not None and v.app_build_version > min_app_version]
+    pairs_by_flw = _prepare_daily_visit_pairs(filtered)
+
+    result: dict[str, float | None] = {}
+    for username, pairs in pairs_by_flw.items():
+        distances = []
+        for a, b in pairs:
+            dist = haversine_distance(a.gps.latitude, a.gps.longitude, b.gps.latitude, b.gps.longitude)
+            distances.append(dist)
+        result[username] = round(statistics.median(distances)) if distances else None
+
+    return result
+
+
+def compute_median_minutes_per_visit(
+    visits: list[VisitWithGPS],
+) -> dict[str, float | None]:
+    """
+    Median time difference (minutes) between consecutive visits to
+    different mothers within a day. All app versions included.
+    """
+    pairs_by_flw = _prepare_daily_visit_pairs(visits)
+
+    result: dict[str, float | None] = {}
+    for username, pairs in pairs_by_flw.items():
+        time_diffs = []
+        for a, b in pairs:
+            if a.visit_datetime and b.visit_datetime:
+                diff_minutes = abs((b.visit_datetime - a.visit_datetime).total_seconds()) / 60.0
+                time_diffs.append(diff_minutes)
+        result[username] = round(statistics.median(time_diffs)) if time_diffs else None
+
+    return result
