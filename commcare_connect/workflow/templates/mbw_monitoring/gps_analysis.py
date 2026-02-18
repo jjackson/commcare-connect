@@ -11,7 +11,7 @@ import logging
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from commcare_connect.workflow.templates.mbw_monitoring.gps_utils import (
     GPSCoordinate,
@@ -204,7 +204,7 @@ def analyze_case_distances(
         # Sort by visit datetime
         sorted_visits = sorted(
             case_visits,
-            key=lambda v: v.visit_datetime or datetime.min,
+            key=lambda v: v.visit_datetime or datetime.min.replace(tzinfo=timezone.utc),
         )
 
         prev_visit: VisitWithGPS | None = None
@@ -258,7 +258,7 @@ def analyze_daily_travel(visits: list[VisitWithGPS]) -> dict[str, dict[date, Dai
             # Sort by datetime
             sorted_visits = sorted(
                 day_visits,
-                key=lambda v: v.visit_datetime or datetime.min,
+                key=lambda v: v.visit_datetime or datetime.min.replace(tzinfo=timezone.utc),
             )
 
             # Extract GPS coordinates in order
@@ -531,7 +531,7 @@ def _prepare_daily_visit_pairs(
     pairs_by_flw: dict[str, list[tuple[VisitWithGPS, VisitWithGPS]]] = defaultdict(list)
 
     for (username, _day), day_visits in by_flw_day.items():
-        day_visits.sort(key=lambda v: v.visit_datetime or datetime.min)
+        day_visits.sort(key=lambda v: v.visit_datetime or datetime.min.replace(tzinfo=timezone.utc))
 
         # Dedup by mother_case_id (keep first visit per mother per day)
         seen_mothers: set[str] = set()

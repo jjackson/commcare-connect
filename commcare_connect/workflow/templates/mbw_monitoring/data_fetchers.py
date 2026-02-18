@@ -441,14 +441,9 @@ def bust_mbw_hq_cache() -> int:
             cleared += cache.delete_pattern("mbw_opp_metadata:*")
             logger.info(f"[HQ Cache] Busted {cleared} cache keys via pattern")
         else:
-            # Fallback: clear the entire cache (safe for dev)
-            cache.clear()
-            cleared = -1  # Indicate full clear
-            logger.info("[HQ Cache] Cleared entire Django cache (no pattern support)")
+            logger.warning("[HQ Cache] Cache backend does not support delete_pattern; skipping bust")
     except Exception as e:
         logger.warning(f"[HQ Cache] Cache bust failed: {e}")
-        cache.clear()
-        cleared = -1
     return cleared
 
 

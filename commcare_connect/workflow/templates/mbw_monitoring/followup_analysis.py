@@ -59,6 +59,19 @@ VISIT_TYPE_TO_KEY = {
     "6 Month Visit": "month6",
 }
 
+# On-time window days per visit type (from MBW schedule spec).
+# Most visits: 7 days from scheduled date. PNC: 4 days (delivery through day 4).
+VISIT_ON_TIME_DAYS = {
+    "ANC Visit": 7,
+    "Postnatal Visit": 4,
+    "Postnatal Delivery Visit": 4,
+    "1 Week Visit": 7,
+    "1 Month Visit": 7,
+    "3 Month Visit": 7,
+    "6 Month Visit": 7,
+}
+DEFAULT_ON_TIME_DAYS = 7
+
 
 def _parse_date(date_str: str | None) -> date | None:
     """Parse a date string (YYYY-MM-DD) into a date object."""
@@ -129,8 +142,9 @@ def calculate_visit_status(visit_case: dict, current_date: date) -> str:
             return STATUS_COMPLETED_LATE
         return STATUS_DUE_ON_TIME
 
-    # On-time window: within 7 days of scheduled date
-    on_time_end = scheduled_date + timedelta(days=7)
+    # On-time window varies by visit type (PNC = 4 days, others = 7 days)
+    on_time_days = VISIT_ON_TIME_DAYS.get(visit_type, DEFAULT_ON_TIME_DAYS)
+    on_time_end = scheduled_date + timedelta(days=on_time_days)
 
     if completed:
         # Try to get completion date from case modified date
@@ -368,7 +382,6 @@ def aggregate_mother_metrics(
     anc_date_by_mother = anc_date_by_mother or {}
     pnc_date_by_mother = pnc_date_by_mother or {}
     baby_dob_by_mother = baby_dob_by_mother or {}
-    grace_cutoff = current_date - timedelta(days=GRACE_PERIOD_DAYS)
 
     by_mother = defaultdict(list)
     for case in visit_cases:
@@ -442,7 +455,7 @@ def _build_visit_details(cases: list[dict], current_date: date) -> list[dict]:
     return details
 
 
-    # Visit type → form-level create flag name (used in Register Mother forms)
+# Visit type → form-level create flag name (used in Register Mother forms)
 VISIT_CREATE_FLAGS = {
     "ANC Visit": "create_antenatal_visit",
     "Postnatal Delivery Visit": "create_postnatal_visit",
@@ -898,7 +911,6 @@ def compute_overview_quality_metrics(
     visit_cases_by_flw: dict[str, list[dict]],
     mother_metadata: dict[str, dict],
     parity_by_mother: dict[str, str],
-    current_date: date,
     anc_date_by_mother: dict[str, str] | None = None,
     pnc_date_by_mother: dict[str, str] | None = None,
 ) -> dict[str, dict]:

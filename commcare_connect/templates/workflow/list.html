@@ -783,7 +783,7 @@
                                 </td>
                                 <td class="py-3">
                                     <span class="text-sm text-gray-500">
-                                        {% if run.created_at %}{{ run.created_at|truncatechars:10 }}{% else %}&mdash;{% endif %}
+                                        {% if run.created_at %}{{ run.created_at|slice:":10" }}{% else %}&mdash;{% endif %}
                                     </span>
                                 </td>
                                 <td class="py-3">
