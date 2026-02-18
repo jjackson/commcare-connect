@@ -57,10 +57,17 @@ class WorkflowListView(LoginRequiredMixin, TemplateView):
                 # Build a cache of pipeline names
                 pipeline_cache = {}
 
+                # Fetch all runs once, then group by definition_id
+                all_runs = data_access.list_runs()
+                runs_by_def = {}
+                for run in all_runs:
+                    def_id = run.data.get("definition_id")
+                    runs_by_def.setdefault(def_id, []).append(run)
+
                 # For each definition, get its runs and pipeline info
                 workflows_with_runs = []
                 for definition in definitions:
-                    runs = data_access.list_runs(definition.id)
+                    runs = runs_by_def.get(definition.id, [])
                     # Sort runs by ID descending (latest first)
                     runs.sort(key=lambda r: r.id, reverse=True)
 

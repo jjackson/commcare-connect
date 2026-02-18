@@ -60,7 +60,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [sseComplete, setSseComplete] = React.useState(false);
     var [fromSnapshot, setFromSnapshot] = React.useState(false);
     var [snapshotTimestamp, setSnapshotTimestamp] = React.useState(null);
-    var [forceRefresh, setForceRefresh] = React.useState(false);
+    var [refreshTrigger, setRefreshTrigger] = React.useState(0);
     var [activeTab, setActiveTab] = React.useState('overview');
     var [overviewSearch, setOverviewSearch] = React.useState('');
     var [overviewSort, setOverviewSort] = React.useState({ col: 'display_name', dir: 'asc' });
@@ -176,7 +176,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         setFromSnapshot(false);
         setSnapshotTimestamp(null);
 
-        function startSSEStream() {
+        function startSSEStream(bustCache) {
             var end = new Date();
             var start = new Date();
             start.setDate(end.getDate() - 30);
@@ -188,6 +188,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 start_date: startStr,
                 end_date: endStr
             });
+            if (bustCache) {
+                params.set('bust_cache', '1');
+            }
             var url = '/custom_analysis/mbw_monitoring/stream/?' + params.toString();
             var es = new EventSource(url);
 
@@ -226,8 +229,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             sseCleanupRef.current = function() { es.close(); };
         }
 
-        // If not forcing refresh, try snapshot first
-        if (!forceRefresh && instance.id) {
+        // refreshTrigger=0 means initial load → try snapshot first
+        // refreshTrigger>0 means user clicked Refresh Data → SSE with bust_cache
+        if (refreshTrigger === 0 && instance.id) {
             fetch('/custom_analysis/mbw_monitoring/api/snapshot/?run_id=' + instance.id)
             .then(function(r) { return r.json(); })
             .then(function(data) {
@@ -241,18 +245,17 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     }
                     return;
                 }
-                startSSEStream();
+                startSSEStream(false);
             })
-            .catch(function() { startSSEStream(); });
+            .catch(function() { startSSEStream(false); });
         } else {
-            setForceRefresh(false);
-            startSSEStream();
+            startSSEStream(refreshTrigger > 0);
         }
 
         return function() {
             if (sseCleanupRef.current) sseCleanupRef.current();
         };
-    }, [step, instance.id, forceRefresh]);
+    }, [step, instance.id, refreshTrigger]);
 
     // =========================================================================
     // Helpers
@@ -1225,7 +1228,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         </div>
                     )}
                     <button onClick={function() {
-                        setForceRefresh(true);
+                        setRefreshTrigger(function(n) { return n + 1; });
                         setDashData(null);
                         setSseComplete(false);
                     }} disabled={!sseComplete}
