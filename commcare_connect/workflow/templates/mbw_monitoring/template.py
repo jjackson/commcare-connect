@@ -49,6 +49,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [gsAppId, setGsAppId] = React.useState(instance.state?.gs_app_id || '2ca67a89dd8a2209d75ed5599b45a5d1');
     var [launching, setLaunching] = React.useState(false);
     var [selSearch, setSelSearch] = React.useState('');
+    var [selSort, setSelSort] = React.useState({ col: 'name', dir: 'asc' });
 
     // =========================================================================
     // STEP 2: Dashboard State
@@ -503,6 +504,34 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             });
         }
 
+        // Sort filtered workers
+        var sortCol = selSort.col;
+        var sortDir = selSort.dir;
+        filteredWorkers = filteredWorkers.slice().sort(function(a, b) {
+            var ha = flwHistory[a.username] || {};
+            var hb = flwHistory[b.username] || {};
+            var va, vb;
+            if (sortCol === 'name') { va = (a.name || a.username || '').toLowerCase(); vb = (b.name || b.username || '').toLowerCase(); }
+            else if (sortCol === 'username') { va = (a.username || '').toLowerCase(); vb = (b.username || '').toLowerCase(); }
+            else if (sortCol === 'audit_count') { va = ha.audit_count || 0; vb = hb.audit_count || 0; }
+            else if (sortCol === 'last_audit_date') { va = ha.last_audit_date || ''; vb = hb.last_audit_date || ''; }
+            else if (sortCol === 'last_audit_result') { va = ha.last_audit_result || ''; vb = hb.last_audit_result || ''; }
+            else if (sortCol === 'open_task_count') { va = ha.open_task_count || 0; vb = hb.open_task_count || 0; }
+            else { va = ''; vb = ''; }
+            var cmp = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb));
+            return sortDir === 'asc' ? cmp : -cmp;
+        });
+
+        var selSortHeader = function(col, label, align) {
+            var active = selSort.col === col;
+            return (
+                <th className={'px-4 py-2 text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none' + (align === 'center' ? ' text-center' : ' text-left')}
+                    onClick={function() { setSelSort({ col: col, dir: active && selSort.dir === 'asc' ? 'desc' : 'asc' }); }}>
+                    {label} {active ? (selSort.dir === 'asc' ? '\u25B2' : '\u25BC') : ''}
+                </th>
+            );
+        };
+
         return (
             <div className="space-y-6">
                 <div className="bg-white rounded-lg shadow-sm p-6">
@@ -549,12 +578,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                checked={workers.length > 0 && workers.every(function(w) { return selectedFlws[w.username]; })}
                                                onChange={toggleAll} />
                                     </th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">FLW ({workers.length})</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Connect ID</th>
-                                    <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Past Audits</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Last Audit Date</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Last Result</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Open Tasks</th>
+                                    {selSortHeader('name', 'FLW (' + workers.length + ')')}
+                                    {selSortHeader('username', 'Connect ID')}
+                                    {selSortHeader('audit_count', 'Past Audits', 'center')}
+                                    {selSortHeader('last_audit_date', 'Last Audit Date')}
+                                    {selSortHeader('last_audit_result', 'Last Result')}
+                                    {selSortHeader('open_task_count', 'Open Tasks')}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
