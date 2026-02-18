@@ -7,6 +7,7 @@ client-side filtering, and interactive features.
 
 import json
 import logging
+from collections import Counter
 from collections.abc import Generator
 from datetime import date, timedelta
 
@@ -349,43 +350,37 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             visit_status_distribution = None
             registration_forms = []
 
-            try:
-                for opp_id in opportunity_ids:
-                    try:
-                        metadata = fetch_opportunity_metadata(access_token, opp_id)
-                        cc_domain = metadata.get("cc_domain")
-                        cc_app_id = metadata.get("cc_app_id")
-                        if cc_domain:
-                            forms = fetch_registration_forms(
-                                request, cc_domain, cc_app_id=cc_app_id, bust_cache=bust_cache
-                            )
-                            registration_forms.extend(forms)
-                    except Exception as e:
-                        logger.warning(f"[MBW Dashboard] Registration form fetch failed for opp {opp_id}: {e}")
-                logger.info(f"[MBW Dashboard] Fetched {len(registration_forms)} registration forms")
-            except Exception as e:
-                logger.warning(f"[MBW Dashboard] Registration form fetch failed: {e}")
+            for opp_id in opportunity_ids:
+                try:
+                    metadata = fetch_opportunity_metadata(access_token, opp_id)
+                    cc_domain = metadata.get("cc_domain")
+                    cc_app_id = metadata.get("cc_app_id")
+                    if cc_domain:
+                        forms = fetch_registration_forms(
+                            request, cc_domain, cc_app_id=cc_app_id, bust_cache=bust_cache
+                        )
+                        registration_forms.extend(forms)
+                except Exception as e:
+                    logger.warning(f"[MBW Dashboard] Registration form fetch failed for opp {opp_id}: {e}")
+            logger.info(f"[MBW Dashboard] Fetched {len(registration_forms)} registration forms")
 
             # Step 4b: Fetch GS forms from CCHQ (supervisor app, not in Connect pipeline)
             gs_forms = []
             gs_app_id = monitoring_session.gs_app_id if monitoring_session else None
-            try:
-                for opp_id in opportunity_ids:
-                    try:
-                        metadata = fetch_opportunity_metadata(access_token, opp_id)
-                        cc_domain = metadata.get("cc_domain")
-                        cc_app_id = metadata.get("cc_app_id")
-                        if cc_domain:
-                            forms = fetch_gs_forms(
-                                request, cc_domain, cc_app_id=cc_app_id,
-                                gs_app_id=gs_app_id, bust_cache=bust_cache,
-                            )
-                            gs_forms.extend(forms)
-                    except Exception as e:
-                        logger.warning(f"[MBW Dashboard] GS form fetch failed for opp {opp_id}: {e}")
-                logger.info(f"[MBW Dashboard] Fetched {len(gs_forms)} GS forms from CCHQ")
-            except Exception as e:
-                logger.warning(f"[MBW Dashboard] GS form fetch failed: {e}")
+            for opp_id in opportunity_ids:
+                try:
+                    metadata = fetch_opportunity_metadata(access_token, opp_id)
+                    cc_domain = metadata.get("cc_domain")
+                    cc_app_id = metadata.get("cc_app_id")
+                    if cc_domain:
+                        forms = fetch_gs_forms(
+                            request, cc_domain, cc_app_id=cc_app_id,
+                            gs_app_id=gs_app_id, bust_cache=bust_cache,
+                        )
+                        gs_forms.extend(forms)
+                except Exception as e:
+                    logger.warning(f"[MBW Dashboard] GS form fetch failed for opp {opp_id}: {e}")
+            logger.info(f"[MBW Dashboard] Fetched {len(gs_forms)} GS forms from CCHQ")
 
             # Step 5: Build follow-up data from registration forms + pipeline completions
             yield send_sse_event("Calculating follow-up metrics...")
@@ -438,7 +433,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             )
 
             # Log form name distribution for debugging
-            from collections import Counter
+
             form_name_counts = Counter(
                 row.computed.get("form_name", "").strip()
                 for row in all_pipeline_rows

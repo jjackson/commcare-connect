@@ -7,7 +7,7 @@ from Connect API and CommCare HQ.
 
 import logging
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 from django.conf import settings
@@ -82,7 +82,7 @@ def _validate_hq_cache(cached_data: dict, requested_count: int, config: dict) ->
     if cached_at_str:
         try:
             cached_at = datetime.fromisoformat(cached_at_str)
-            age_minutes = (datetime.utcnow() - cached_at).total_seconds() / 60
+            age_minutes = (datetime.now(timezone.utc) - cached_at).total_seconds() / 60
             if age_minutes <= tolerance_minutes:
                 logger.info(
                     f"[HQ Cache] ACCEPTED (time): cached={cached_count}, requested={requested_count}, "
@@ -222,7 +222,7 @@ def fetch_visit_cases_by_ids(
     cache_data = {
         "cases": all_cases,
         "cached_count": len(unique_ids),
-        "cached_at": datetime.utcnow().isoformat(),
+        "cached_at": datetime.now(timezone.utc).isoformat(),
     }
     cache.set(cache_key, cache_data, config["cases_ttl"])
     logger.info(
@@ -288,7 +288,7 @@ def fetch_mother_cases_by_ids(
     cache_data = {
         "cases": all_cases,
         "cached_count": len(unique_ids),
-        "cached_at": datetime.utcnow().isoformat(),
+        "cached_at": datetime.now(timezone.utc).isoformat(),
     }
     cache.set(cache_key, cache_data, config["cases_ttl"])
     logger.info(

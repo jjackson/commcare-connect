@@ -149,10 +149,10 @@ def load_monitoring_run(request, run_id):
     Returns:
         WorkflowMonitoringSession or None if not found / not a monitoring run
     """
+    data_access = None
     try:
         data_access = WorkflowDataAccess(request=request)
         run = data_access.get_run(int(run_id))
-        data_access.close()
 
         if not run:
             return None
@@ -167,6 +167,9 @@ def load_monitoring_run(request, run_id):
     except Exception as e:
         logger.warning(f"Failed to load monitoring run {run_id}: {e}")
         return None
+    finally:
+        if data_access:
+            data_access.close()
 
 
 def save_flw_result(request, run_id, username, result, notes, assessed_by):
@@ -186,11 +189,11 @@ def save_flw_result(request, run_id, username, result, notes, assessed_by):
     Returns:
         WorkflowMonitoringSession or None on failure
     """
+    data_access = None
     try:
         data_access = WorkflowDataAccess(request=request)
         run = data_access.get_run(int(run_id))
         if not run:
-            data_access.close()
             return None
 
         current_state = run.data.get("state", {})
@@ -211,7 +214,6 @@ def save_flw_result(request, run_id, username, result, notes, assessed_by):
         updated_run = data_access.update_run_state(run_id, {
             "flw_results": updated_results,
         })
-        data_access.close()
 
         if updated_run:
             return WorkflowMonitoringSession(updated_run)
@@ -219,6 +221,9 @@ def save_flw_result(request, run_id, username, result, notes, assessed_by):
     except Exception as e:
         logger.error(f"Failed to save FLW result for run {run_id}: {e}", exc_info=True)
         return None
+    finally:
+        if data_access:
+            data_access.close()
 
 
 def complete_monitoring_run(request, run_id, overall_result="completed", notes=""):
@@ -236,11 +241,11 @@ def complete_monitoring_run(request, run_id, overall_result="completed", notes="
     Returns:
         WorkflowMonitoringSession or None on failure
     """
+    data_access = None
     try:
         data_access = WorkflowDataAccess(request=request)
         run = data_access.get_run(int(run_id))
         if not run:
-            data_access.close()
             return None
 
         # Update status at top level + store result/notes in state
@@ -268,7 +273,6 @@ def complete_monitoring_run(request, run_id, overall_result="completed", notes="
             type="workflow_run",
             data=updated_data,
         )
-        data_access.close()
 
         if result:
             updated_run = WorkflowRunRecord({
@@ -283,6 +287,9 @@ def complete_monitoring_run(request, run_id, overall_result="completed", notes="
     except Exception as e:
         logger.error(f"Failed to complete monitoring run {run_id}: {e}", exc_info=True)
         return None
+    finally:
+        if data_access:
+            data_access.close()
 
 
 def save_dashboard_snapshot(request, run_id, snapshot_data):
@@ -298,6 +305,7 @@ def save_dashboard_snapshot(request, run_id, snapshot_data):
     Returns:
         True on success, False on failure
     """
+    data_access = None
     try:
         data_access = WorkflowDataAccess(request=request)
         snapshot = {
@@ -305,8 +313,10 @@ def save_dashboard_snapshot(request, run_id, snapshot_data):
             **snapshot_data,
         }
         result = data_access.save_run_snapshot(int(run_id), snapshot)
-        data_access.close()
         return result is not None
     except Exception as e:
         logger.error(f"Failed to save dashboard snapshot for run {run_id}: {e}", exc_info=True)
         return False
+    finally:
+        if data_access:
+            data_access.close()
