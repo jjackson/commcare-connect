@@ -221,7 +221,7 @@ def fetch_visit_cases_by_ids(
     # Store in cache with metadata
     cache_data = {
         "cases": all_cases,
-        "cached_count": len(unique_ids),
+        "cached_count": len(all_cases),
         "cached_at": datetime.now(timezone.utc).isoformat(),
     }
     cache.set(cache_key, cache_data, config["cases_ttl"])
@@ -287,7 +287,7 @@ def fetch_mother_cases_by_ids(
     # Store in cache with metadata
     cache_data = {
         "cases": all_cases,
-        "cached_count": len(unique_ids),
+        "cached_count": len(all_cases),
         "cached_at": datetime.now(timezone.utc).isoformat(),
     }
     cache.set(cache_key, cache_data, config["cases_ttl"])

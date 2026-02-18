@@ -63,6 +63,16 @@ from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixi
 logger = logging.getLogger(__name__)
 
 
+def _parse_int_param(value: str | None) -> int | None:
+    """Safely parse a query parameter to int, returning None if invalid."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return None
+
+
 def get_default_date_range() -> tuple[date, date]:
     """Get default date range (last 30 days)."""
     end_date = date.today()
@@ -97,10 +107,10 @@ class MBWMonitoringDashboardView(LoginRequiredMixin, TemplateView):
         opportunity_id = labs_context.get("opportunity_id")
 
         # Check for monitoring session (accept both run_id and session_id for backward compat)
-        run_id = self.request.GET.get("run_id") or self.request.GET.get("session_id")
+        run_id = _parse_int_param(self.request.GET.get("run_id") or self.request.GET.get("session_id"))
         monitoring_session = None
         if run_id:
-            monitoring_session = load_monitoring_run(self.request, int(run_id))
+            monitoring_session = load_monitoring_run(self.request, run_id)
             if monitoring_session:
                 session_opp_id = monitoring_session.opportunity_id
                 if session_opp_id:
@@ -214,11 +224,11 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 yield send_sse_event("Cache busted — re-fetching all data...")
 
             # Load monitoring session early so we know which FLWs to filter to
-            session_id = request.GET.get("run_id") or request.GET.get("session_id")
+            session_id = _parse_int_param(request.GET.get("run_id") or request.GET.get("session_id"))
             monitoring_session = None
             session_flw_filter = None
             if session_id:
-                monitoring_session = load_monitoring_run(request, int(session_id))
+                monitoring_session = load_monitoring_run(request, session_id)
                 if monitoring_session:
                     session_flw_filter = {u.lower() for u in monitoring_session.selected_flw_usernames}
                     logger.info(
@@ -658,7 +668,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     "open_task_usernames": open_task_usernames,
                 }
                 try:
-                    save_dashboard_snapshot(request, int(session_id), snapshot_payload)
+                    save_dashboard_snapshot(request, session_id, snapshot_payload)
                     logger.info(f"[MBW Dashboard] Saved snapshot for run {session_id}")
                 except Exception as e:
                     logger.warning(f"[MBW Dashboard] Snapshot save failed: {e}")
@@ -739,7 +749,7 @@ class MBWSaveFlwResultView(LoginRequiredMixin, View):
 
         try:
             body = json.loads(request.body)
-            session_id = body.get("session_id")
+            session_id = _parse_int_param(body.get("session_id"))
             username = body.get("username")
             result = body.get("result")  # One of VALID_FLW_RESULTS or None
             notes = body.get("notes", "")
@@ -754,7 +764,7 @@ class MBWSaveFlwResultView(LoginRequiredMixin, View):
                 )
 
             assessed_by = request.user.id if request.user.is_authenticated else 0
-            updated_session = save_flw_result_helper(request, int(session_id), username, result, notes, assessed_by)
+            updated_session = save_flw_result_helper(request, session_id, username, result, notes, assessed_by)
             if not updated_session:
                 return JsonResponse({"error": "Monitoring session not found"}, status=404)
 
@@ -781,14 +791,14 @@ class MBWCompleteSessionView(LoginRequiredMixin, View):
 
         try:
             body = json.loads(request.body)
-            session_id = body.get("session_id")
+            session_id = _parse_int_param(body.get("session_id"))
             overall_result = body.get("overall_result", "completed")
             notes = body.get("notes", "")
 
             if not session_id:
                 return JsonResponse({"error": "session_id is required"}, status=400)
 
-            updated_session = complete_monitoring_run(request, int(session_id), overall_result, notes)
+            updated_session = complete_monitoring_run(request, session_id, overall_result, notes)
             if not updated_session:
                 return JsonResponse({"error": "Monitoring session not found"}, status=404)
 
@@ -813,11 +823,11 @@ class MBWSnapshotView(LoginRequiredMixin, View):
         if not labs_oauth.get("access_token"):
             return JsonResponse({"error": "Session expired"}, status=401)
 
-        run_id = request.GET.get("run_id") or request.GET.get("session_id")
+        run_id = _parse_int_param(request.GET.get("run_id") or request.GET.get("session_id"))
         if not run_id:
             return JsonResponse({"error": "run_id is required"}, status=400)
 
-        monitoring_session = load_monitoring_run(request, int(run_id))
+        monitoring_session = load_monitoring_run(request, run_id)
         if not monitoring_session:
             return JsonResponse({"error": "Run not found"}, status=404)
 
