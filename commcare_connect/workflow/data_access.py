@@ -15,7 +15,7 @@ This is a pure API client with no local database storage.
 import logging
 import os
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pandas as pd
@@ -56,6 +56,10 @@ class WorkflowDefinitionRecord(LocalLabsRecord):
     def pipeline_sources(self) -> list[dict]:
         """List of pipeline sources: [{"pipeline_id": 123, "alias": "visits"}]"""
         return self.data.get("pipeline_sources", [])
+
+    @property
+    def template_type(self) -> str:
+        return self.data.get("config", {}).get("templateType", "")
 
     @property
     def is_shared(self) -> bool:
@@ -104,6 +108,19 @@ class WorkflowRunRecord(LocalLabsRecord):
     @property
     def state(self):
         return self.data.get("state", {})
+
+    @property
+    def created_at(self):
+        return self.data.get("created_at", "")
+
+    @property
+    def selected_count(self) -> int:
+        state = self.data.get("state", {})
+        if "selected_workers" in state:
+            selected = state.get("selected_workers", [])
+        else:
+            selected = state.get("selected_flws", [])
+        return len(selected) if isinstance(selected, list) else 0
 
 
 class WorkflowChatHistoryRecord(LocalLabsRecord):
@@ -555,6 +572,7 @@ class WorkflowDataAccess(BaseDataAccess):
             "period_end": period_end,
             "status": "in_progress",
             "state": initial_state or {},
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
         record = self.labs_api.create_record(
@@ -615,7 +633,7 @@ class WorkflowDataAccess(BaseDataAccess):
 
     def get_or_create_run(self, definition_id: int, opportunity_id: int) -> WorkflowRunRecord:
         """Get or create a workflow run for the current week."""
-        today = datetime.now().date()
+        today = datetime.now(timezone.utc).date()
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
 
@@ -630,6 +648,7 @@ class WorkflowDataAccess(BaseDataAccess):
             "period_end": week_end.isoformat(),
             "status": "in_progress",
             "state": {},
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
         record = self.labs_api.create_record(
@@ -652,9 +671,16 @@ class WorkflowDataAccess(BaseDataAccess):
         """Alias for get_or_create_run (deprecated)."""
         return self.get_or_create_run(definition_id, opportunity_id)
 
-    def update_run_state(self, run_id: int, new_state: dict) -> WorkflowRunRecord | None:
-        """Update workflow run state (merge with existing)."""
-        run = self.get_run(run_id)
+    def update_run_state(self, run_id: int, new_state: dict, run: WorkflowRunRecord | None = None) -> WorkflowRunRecord | None:
+        """Update workflow run state (merge with existing).
+
+        Args:
+            run_id: The workflow run ID.
+            new_state: Dict of state keys to merge.
+            run: Optional pre-fetched run record (avoids redundant API call).
+        """
+        if run is None:
+            run = self.get_run(run_id)
         if not run:
             return None
 
@@ -667,6 +693,7 @@ class WorkflowDataAccess(BaseDataAccess):
             experiment=self.EXPERIMENT,
             type="workflow_run",
             data=updated_data,
+            current_record=run,
         )
         if result:
             return WorkflowRunRecord(
@@ -683,6 +710,93 @@ class WorkflowDataAccess(BaseDataAccess):
     def update_instance_state(self, instance_id: int, new_state: dict) -> WorkflowRunRecord | None:
         """Alias for update_run_state (deprecated)."""
         return self.update_run_state(instance_id, new_state)
+
+    def save_run_snapshot(self, run_id: int, snapshot: dict) -> WorkflowRunRecord | None:
+        """Save a data snapshot on the run (writes to run.data['snapshot']).
+
+        Unlike update_run_state() which merges into run.data['state'],
+        this writes directly to run.data['snapshot'] as a sibling key.
+        """
+        run = self.get_run(run_id)
+        if not run:
+            return None
+
+        updated_data = {**run.data, "snapshot": snapshot}
+
+        result = self.labs_api.update_record(
+            record_id=run_id,
+            experiment=self.EXPERIMENT,
+            type="workflow_run",
+            data=updated_data,
+            current_record=run,
+        )
+        if result:
+            return WorkflowRunRecord(
+                {
+                    "id": result.id,
+                    "experiment": result.experiment,
+                    "type": result.type,
+                    "data": result.data,
+                    "opportunity_id": result.opportunity_id,
+                }
+            )
+        return None
+
+    def complete_run(
+        self,
+        run_id: int,
+        overall_result: str = "completed",
+        notes: str = "",
+        run: WorkflowRunRecord | None = None,
+    ) -> WorkflowRunRecord | None:
+        """Mark a workflow run as completed.
+
+        Updates run.data.status to 'completed' and stores overall_result/notes
+        in the state.
+
+        Args:
+            run_id: The workflow run ID.
+            overall_result: Completion result string.
+            notes: Completion notes.
+            run: Optional pre-fetched run record (avoids redundant API call).
+
+        Returns:
+            Updated WorkflowRunRecord, or None if not found.
+        """
+        if run is None:
+            run = self.get_run(run_id)
+        if not run:
+            return None
+
+        current_state = run.data.get("state", {})
+        updated_data = {
+            **run.data,
+            "status": "completed",
+            "state": {
+                **current_state,
+                "overall_result": overall_result,
+                "notes": notes,
+            },
+        }
+
+        result = self.labs_api.update_record(
+            record_id=run_id,
+            experiment=self.EXPERIMENT,
+            type="workflow_run",
+            data=updated_data,
+            current_record=run,
+        )
+        if result:
+            return WorkflowRunRecord(
+                {
+                    "id": result.id,
+                    "experiment": result.experiment,
+                    "type": result.type,
+                    "data": result.data,
+                    "opportunity_id": result.opportunity_id,
+                }
+            )
+        return None
 
     # -------------------------------------------------------------------------
     # Pipeline Source Methods
@@ -942,7 +1056,7 @@ class WorkflowDataAccess(BaseDataAccess):
 
     def save_chat_history(self, definition_id: int, messages: list[dict]) -> WorkflowChatHistoryRecord:
         """Save chat history for a workflow definition."""
-        now = datetime.now().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         definition_id_int = int(definition_id)
         existing = self.get_chat_history(definition_id_int)
 
@@ -1440,7 +1554,7 @@ class PipelineDataAccess(BaseDataAccess):
         message = {
             "role": role,
             "content": content,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         if existing_record:
@@ -1448,7 +1562,7 @@ class PipelineDataAccess(BaseDataAccess):
             messages = data.get("messages", [])
             messages.append(message)
             data["messages"] = messages
-            data["updated_at"] = datetime.now().isoformat()
+            data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             self.labs_api.update_record(
                 existing_record.id,
@@ -1463,8 +1577,8 @@ class PipelineDataAccess(BaseDataAccess):
                 data={
                     "definition_id": definition_id,
                     "messages": [message],
-                    "created_at": datetime.now().isoformat(),
-                    "updated_at": datetime.now().isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
             )
 
@@ -1480,7 +1594,7 @@ class PipelineDataAccess(BaseDataAccess):
             if record.data.get("definition_id") == definition_id:
                 data = record.data.copy()
                 data["messages"] = []
-                data["updated_at"] = datetime.now().isoformat()
+                data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
                 self.labs_api.update_record(
                     record.id,

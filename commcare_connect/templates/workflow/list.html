@@ -272,11 +272,86 @@
         </div>
     </div>
 
+    <!-- Sort/Filter Controls -->
+    {% if workflows %}
+    <div class="mb-4 flex items-center justify-between flex-wrap gap-3"
+         x-data="{
+             sortBy: 'created_desc',
+             filterTemplate: 'all',
+             get sortedFilteredIds() {
+                 const cards = document.querySelectorAll('[data-workflow-id]');
+                 let items = Array.from(cards).map(el => ({
+                     id: el.dataset.workflowId,
+                     name: (el.dataset.workflowName || '').toLowerCase(),
+                     defId: parseInt(el.dataset.workflowDefId || '0'),
+                     template: el.dataset.workflowTemplate || '',
+                     latestRunId: parseInt(el.dataset.workflowLatestRun || '0'),
+                 }));
+                 // Filter
+                 if (this.filterTemplate !== 'all') {
+                     items = items.filter(i => i.template === this.filterTemplate);
+                 }
+                 // Sort
+                 if (this.sortBy === 'name_asc') items.sort((a, b) => a.name.localeCompare(b.name));
+                 else if (this.sortBy === 'name_desc') items.sort((a, b) => b.name.localeCompare(a.name));
+                 else if (this.sortBy === 'created_asc') items.sort((a, b) => a.defId - b.defId);
+                 else if (this.sortBy === 'created_desc') items.sort((a, b) => b.defId - a.defId);
+                 else if (this.sortBy === 'latest_run') items.sort((a, b) => b.latestRunId - a.latestRunId);
+                 return items.map(i => i.id);
+             },
+             applySort() {
+                 const container = document.getElementById('workflow-list');
+                 const ids = this.sortedFilteredIds;
+                 const allCards = container.querySelectorAll('[data-workflow-id]');
+                 // Apply CSS order + visibility
+                 allCards.forEach(el => {
+                     const idx = ids.indexOf(el.dataset.workflowId);
+                     if (idx === -1) {
+                         el.style.display = 'none';
+                         el.style.order = '9999';
+                     } else {
+                         el.style.display = '';
+                         el.style.order = String(idx);
+                     }
+                 });
+             }
+         }"
+         x-effect="applySort()">
+        <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-500 font-medium">Sort:</span>
+            <select x-model="sortBy"
+                    class="text-sm border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500 py-1">
+                <option value="created_desc">Newest First</option>
+                <option value="created_asc">Oldest First</option>
+                <option value="name_asc">Name (A-Z)</option>
+                <option value="name_desc">Name (Z-A)</option>
+                <option value="latest_run">Latest Run</option>
+            </select>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-500 font-medium">Template:</span>
+            <select x-model="filterTemplate"
+                    class="text-sm border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500 py-1">
+                <option value="all">All Templates</option>
+                {% for tmpl in available_templates %}
+                <option value="{{ tmpl.key }}">{{ tmpl.name }}</option>
+                {% endfor %}
+                <option value="">Unknown</option>
+            </select>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Workflow Definitions List -->
-    <div class="space-y-4">
+    <div id="workflow-list" style="display: flex; flex-direction: column; gap: 1rem;">
         {% if workflows %}
         {% for workflow in workflows %}
         <div class="bg-white rounded-lg shadow-sm"
+             data-workflow-id="{{ workflow.definition.id }}"
+             data-workflow-name="{{ workflow.definition.name|escapejs }}"
+             data-workflow-def-id="{{ workflow.definition.id }}"
+             data-workflow-template="{{ workflow.template_type }}"
+             data-workflow-latest-run="{{ workflow.latest_run_id }}"
              x-data="{
                  expanded: false,
                  editing: false,
@@ -588,7 +663,9 @@
                         <thead>
                             <tr class="text-xs text-gray-500 uppercase">
                                 <th class="py-2 text-left font-medium">Run</th>
+                                <th class="py-2 text-left font-medium">Created</th>
                                 <th class="py-2 text-left font-medium">Period</th>
+                                <th class="py-2 text-center font-medium">FLWs</th>
                                 <th class="py-2 text-left font-medium">Status</th>
                                 <th class="py-2 text-right font-medium">Actions</th>
                             </tr>
@@ -705,9 +782,21 @@
                                     <span class="text-sm font-medium text-gray-900">Run #{{ run.id }}</span>
                                 </td>
                                 <td class="py-3">
+                                    <span class="text-sm text-gray-500">
+                                        {% if run.created_at %}{{ run.created_at|slice:":10" }}{% else %}&mdash;{% endif %}
+                                    </span>
+                                </td>
+                                <td class="py-3">
                                     <span class="text-sm text-gray-600">
                                         {{ run.period_start|default:"-" }} - {{ run.period_end|default:"-" }}
                                     </span>
+                                </td>
+                                <td class="py-3 text-center">
+                                    {% if run.selected_count > 0 %}
+                                    <span class="text-sm text-gray-700">{{ run.selected_count }}</span>
+                                    {% else %}
+                                    <span class="text-sm text-gray-400">&mdash;</span>
+                                    {% endif %}
                                 </td>
                                 <td class="py-3">
                                     <div class="flex items-center gap-2 flex-wrap">
