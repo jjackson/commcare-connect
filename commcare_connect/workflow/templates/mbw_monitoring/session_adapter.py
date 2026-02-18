@@ -213,7 +213,7 @@ def save_flw_result(request, run_id, username, result, notes, assessed_by):
         # Shallow merge: pass entire flw_results dict
         updated_run = data_access.update_run_state(run_id, {
             "flw_results": updated_results,
-        })
+        }, run=run)
 
         if updated_run:
             return WorkflowMonitoringSession(updated_run)

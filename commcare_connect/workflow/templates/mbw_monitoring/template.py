@@ -355,30 +355,38 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         }, result.replace(/_/g, ' '));
     };
 
-    // Save worker assessment result
+    // Save worker assessment result (optimistic UI — updates instantly, reverts on error)
+    // Toggle behavior: clicking the active status clears it
     var handleAssessment = function(username, result) {
         if (!actions || !actions.saveWorkerResult) {
             showToast('Assessment not available — please hard-refresh (Cmd+Shift+R)');
             return;
         }
-        setSavingResult(username + '_' + result);
-        actions.saveWorkerResult(instance.id, { username: username, result: result, notes: '' })
+        // Toggle: if already set to this result, clear it
+        var currentResult = (workerResults[username] || {}).result;
+        var newResult = currentResult === result ? null : result;
+
+        // Optimistic: update UI immediately
+        var previous = Object.assign({}, workerResults);
+        var updated = Object.assign({}, workerResults);
+        updated[username] = { result: newResult, notes: (workerResults[username] || {}).notes || '' };
+        setWorkerResults(updated);
+
+        // Save to backend (UI already updated, no need to disable buttons)
+        actions.saveWorkerResult(instance.id, { username: username, result: newResult, notes: updated[username].notes })
             .then(function(resp) {
                 if (resp && resp.success !== false) {
-                    var updated = Object.assign({}, workerResults);
-                    updated[username] = { result: result, notes: '' };
-                    setWorkerResults(updated);
-                    onUpdateState({ worker_results: updated, flw_results: updated });
-                    showToast('Assessment saved: ' + result.replace(/_/g, ' '));
+                    showToast(newResult ? 'Assessment saved: ' + newResult.replace(/_/g, ' ') : 'Assessment cleared');
                 } else {
+                    setWorkerResults(previous);
                     showToast('Failed to save: ' + (resp.error || 'Unknown error'));
                 }
             })
             .catch(function(err) {
+                setWorkerResults(previous);
                 console.error('Assessment save failed:', err);
                 showToast('Assessment save failed: ' + (err.message || err));
-            })
-            .finally(function() { setSavingResult(null); });
+            });
     };
 
     // Complete session
@@ -471,7 +479,6 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     var updated = Object.assign({}, workerResults);
                     updated[username] = { result: result, notes: notes };
                     setWorkerResults(updated);
-                    onUpdateState({ worker_results: updated, flw_results: updated });
                     showToast('Notes saved');
                 } else {
                     showToast('Failed to save notes: ' + (resp.error || 'Unknown error'));

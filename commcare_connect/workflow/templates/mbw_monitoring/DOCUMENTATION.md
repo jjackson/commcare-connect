@@ -647,6 +647,12 @@ actions.saveWorkerResult(instance.id, {
 }
 ```
 
+**Assessment button behavior**:
+- Buttons are **toggles**: clicking an active status clears it (sends `result: null`)
+- **Optimistic UI**: button state updates instantly before the API responds; reverts on error
+- Only `saveWorkerResult` is called per click — `onUpdateState` is NOT called (the backend already persists the state, so the second POST to `/state/` is unnecessary)
+- Notes are preserved when toggling status
+
 **completeRun**:
 ```javascript
 // Request
@@ -930,6 +936,7 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | Workflow listing sort/filter | Listing page | Sort by name/date/latest run; filter by template type; runs sorted latest-first with Created and FLWs columns |
 | Tasks pagination | Tasks page | Previous/Next controls when >50 tasks; preserves filter query params across pages |
 | Case-insensitive usernames | Backend | All username comparisons normalized to lowercase (Connect vs CCHQ casing differences) |
+| Optimistic assessment UI | Overview | Status buttons update instantly; revert on error. Toggle behavior (click active status to clear). 1 GET + 1 POST per click (down from 5 GETs + 2 POSTs) |
 
 ### Placeholder / TBD Features
 
