@@ -12,7 +12,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
-from commcare_connect.custom_analysis.mbw.gps_utils import (
+from commcare_connect.workflow.templates.mbw_monitoring.gps_utils import (
     GPSCoordinate,
     calculate_path_distance,
     haversine_distance,
