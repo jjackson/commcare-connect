@@ -116,7 +116,10 @@ class WorkflowRunRecord(LocalLabsRecord):
     @property
     def selected_count(self) -> int:
         state = self.data.get("state", {})
-        selected = state.get("selected_workers") or state.get("selected_flws", [])
+        if "selected_workers" in state:
+            selected = state.get("selected_workers", [])
+        else:
+            selected = state.get("selected_flws", [])
         return len(selected) if isinstance(selected, list) else 0
 
 
