@@ -648,6 +648,7 @@ class WorkflowDataAccess(BaseDataAccess):
             "period_end": week_end.isoformat(),
             "status": "in_progress",
             "state": {},
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
         record = self.labs_api.create_record(

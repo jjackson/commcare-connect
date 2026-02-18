@@ -442,7 +442,9 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 bf_status = (row.computed.get("bf_status") or "").strip()
                 if not bf_status:
                     continue
-                username = row.username
+                username = (row.username or "").strip().lower()
+                if not username:
+                    continue
                 if username not in ebf_counts_by_flw:
                     ebf_counts_by_flw[username] = {"ebf": 0, "total": 0}
                 ebf_counts_by_flw[username]["total"] += 1
