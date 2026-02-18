@@ -742,6 +742,62 @@ class WorkflowDataAccess(BaseDataAccess):
             )
         return None
 
+    def complete_run(
+        self,
+        run_id: int,
+        overall_result: str = "completed",
+        notes: str = "",
+        run: WorkflowRunRecord | None = None,
+    ) -> WorkflowRunRecord | None:
+        """Mark a workflow run as completed.
+
+        Updates run.data.status to 'completed' and stores overall_result/notes
+        in the state.
+
+        Args:
+            run_id: The workflow run ID.
+            overall_result: Completion result string.
+            notes: Completion notes.
+            run: Optional pre-fetched run record (avoids redundant API call).
+
+        Returns:
+            Updated WorkflowRunRecord, or None if not found.
+        """
+        if run is None:
+            run = self.get_run(run_id)
+        if not run:
+            return None
+
+        current_state = run.data.get("state", {})
+        updated_data = {
+            **run.data,
+            "status": "completed",
+            "state": {
+                **current_state,
+                "overall_result": overall_result,
+                "notes": notes,
+            },
+        }
+
+        result = self.labs_api.update_record(
+            record_id=run_id,
+            experiment=self.EXPERIMENT,
+            type="workflow_run",
+            data=updated_data,
+            current_record=run,
+        )
+        if result:
+            return WorkflowRunRecord(
+                {
+                    "id": result.id,
+                    "experiment": result.experiment,
+                    "type": result.type,
+                    "data": result.data,
+                    "opportunity_id": result.opportunity_id,
+                }
+            )
+        return None
+
     # -------------------------------------------------------------------------
     # Pipeline Source Methods
     # -------------------------------------------------------------------------

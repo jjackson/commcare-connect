@@ -69,11 +69,11 @@ class WorkflowMonitoringSession:
 
     @property
     def selected_flw_usernames(self):
-        return self._state.get("selected_flws", [])
+        return self._state.get("selected_workers", self._state.get("selected_flws", []))
 
     @property
     def flw_results(self):
-        return self._state.get("flw_results", {})
+        return self._state.get("worker_results", self._state.get("flw_results", {}))
 
     @property
     def gs_app_id(self):
@@ -159,8 +159,8 @@ def load_monitoring_run(request, run_id):
 
         # Verify it's a monitoring run (has selected_flws in state)
         state = run.data.get("state", {})
-        if "selected_flws" not in state:
-            logger.warning(f"Run {run_id} is not a monitoring session (no selected_flws)")
+        if "selected_flws" not in state and "selected_workers" not in state:
+            logger.warning(f"Run {run_id} is not a monitoring session (no selected_flws/selected_workers)")
             return None
 
         return WorkflowMonitoringSession(run)
@@ -197,7 +197,7 @@ def save_flw_result(request, run_id, username, result, notes, assessed_by):
             return None
 
         current_state = run.data.get("state", {})
-        current_results = current_state.get("flw_results", {})
+        current_results = current_state.get("worker_results", current_state.get("flw_results", {}))
 
         # Build updated flw_results (full dict, not just the changed entry)
         updated_results = {
@@ -210,9 +210,9 @@ def save_flw_result(request, run_id, username, result, notes, assessed_by):
             },
         }
 
-        # Shallow merge: pass entire flw_results dict
+        # Shallow merge: pass entire worker_results dict
         updated_run = data_access.update_run_state(run_id, {
-            "flw_results": updated_results,
+            "worker_results": updated_results,
         }, run=run)
 
         if updated_run:
