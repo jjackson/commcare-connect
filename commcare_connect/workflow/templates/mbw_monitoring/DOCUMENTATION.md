@@ -250,7 +250,7 @@ The stream view executes 6 steps, yielding progress messages at each stage:
 
 | Step | Data Source | What It Fetches | Cache |
 |------|-----------|-----------------|-------|
-| 1 | Connect API via AnalysisPipeline | Visit form data (12 FieldComputations: GPS, case IDs, form names, dates, parity, etc.) | Pipeline cache (Redis, config-hash based) |
+| 1 | Connect API via AnalysisPipeline | Visit form data (13 FieldComputations: GPS, case IDs, form names, dates, parity, etc.) | Pipeline cache (Redis, config-hash based) |
 | 2 | Connect API | Active FLW usernames + display names | In-memory |
 | 3 | In-memory | GPS metrics (Haversine distances, daily travel) | None (computed) |
 | 4a | CCHQ Form API v1 | Registration forms -> mother metadata (name, age, phone, eligibility, EDD, etc.) | Django cache (1hr) |
@@ -374,9 +374,10 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 | Parity | Quality metrics | Parity value concentration (% duplicate + mode) |
 | Age | Quality metrics | Age value concentration (% duplicate + mode) |
 | Age = Reg | Quality metrics | % of mothers where DOB month/day matches registration date |
+| % EBF | Pipeline (bf_status) | % of FLW's postnatal visits reporting exclusive breastfeeding. Color: green 50-85%, yellow 31-49% or 86-95%, red 0-30% or 96-100%. Red flag in OCS prompt when in red zone. |
 | Actions | Action handlers | Assessment buttons, notes, filter, task creation (locked, always visible) |
 
-**Column Selector**: Dropdown next to "FLW Overview" title showing N/13 visible columns. Toggle individual columns, "Show All", or "Minimal" presets.
+**Column Selector**: Dropdown next to "FLW Overview" title showing N/16 visible columns. Toggle individual columns, "Show All", or "Minimal" presets.
 
 **Actions per FLW** (Overview tab only - other tabs have Filter only):
 
@@ -497,7 +498,7 @@ Gold Standard Forms (CCHQ Form API, separate supervisor app)
 
 ## Pipeline Configuration
 
-The `MBW_GPS_PIPELINE_CONFIG` in `pipeline_config.py` defines 12 FieldComputations for visit-level data extraction:
+The `MBW_GPS_PIPELINE_CONFIG` in `pipeline_config.py` defines 13 FieldComputations for visit-level data extraction:
 
 | Name | Type | Path / Extractor | Notes |
 |------|------|-----------------|-------|
@@ -513,6 +514,7 @@ The `MBW_GPS_PIPELINE_CONFIG` in `pipeline_config.py` defines 12 FieldComputatio
 | `pnc_completion_date` | path | `form.pnc_completion_date` | From PNC forms only |
 | `baby_dob` | path | `form.capture_the_following_birth_details.baby_dob` | From PNC forms only |
 | `app_build_version` | extractor | `extract_app_build_version(visit_data)` | Integer from `form_json.form.meta.app_build_version` |
+| `bf_status` | paths | `form.feeding_history.{pnc,oneweek,onemonth,threemonth,sixmonth}_current_bf_status` | Multi-choice, space-separated; "ebf" = exclusive breastfeeding. From postnatal forms only (not ANC). |
 
 **Important**: Three fields (`gps_location`, `visit_datetime`, `app_build_version`) use the `extractor` parameter instead of `path+transform`. This is required because the PythonRedis backend cannot pass the full visit dict to transform functions - it only passes the extracted path value. The `extractor` parameter receives the full `visit._data` dict directly.
 
@@ -901,7 +903,7 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | SSE streaming with progress | All | Real-time loading messages during data loading |
 | FLW filter (multi-select) | All | Filter by FLW name across all tabs |
 | Mother filter (multi-select) | Follow-Up | Filter by mother name |
-| Column selector | Overview | Toggle 13 columns with Show All / Minimal presets |
+| Column selector | Overview | Toggle 16 columns with Show All / Minimal presets |
 | Column sorting | All | Click column headers to sort asc/desc |
 | Horizontal table scrolling | Overview | Scroll wrapper with `width: 0; minWidth: 100%` pattern |
 | GPS drill-down | GPS | Individual visit GPS details |
@@ -986,7 +988,7 @@ All files under `commcare_connect/workflow/templates/mbw_monitoring/`:
 | `data_fetchers.py` | CCHQ form fetching (registration + GS), case fetching, caching |
 | `followup_analysis.py` | Visit status calculation, per-FLW/per-mother aggregation, quality metrics |
 | `gps_analysis.py` | GPS metrics computation (Haversine, flagging, daily travel) |
-| `pipeline_config.py` | MBW_GPS_PIPELINE_CONFIG (12 FieldComputations) |
+| `pipeline_config.py` | MBW_GPS_PIPELINE_CONFIG (13 FieldComputations) |
 | `flw_api.py` | FLW list endpoint with audit history enrichment |
 | `session_adapter.py` | Monitoring session persistence (selected FLWs, results) |
 | `serializers.py` | Data normalization for SSE payload |

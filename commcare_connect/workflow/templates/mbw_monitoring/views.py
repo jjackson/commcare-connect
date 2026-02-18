@@ -426,10 +426,29 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     if baby_dob:
                         baby_dob_by_mother[mother_id] = baby_dob
 
+            # Compute % EBF (exclusive breastfeeding) per FLW from pipeline rows
+            ebf_counts_by_flw: dict[str, dict] = {}
+            for row in all_pipeline_rows:
+                bf_status = (row.computed.get("bf_status") or "").strip()
+                if not bf_status:
+                    continue
+                username = row.username
+                if username not in ebf_counts_by_flw:
+                    ebf_counts_by_flw[username] = {"ebf": 0, "total": 0}
+                ebf_counts_by_flw[username]["total"] += 1
+                if "ebf" in bf_status.split():
+                    ebf_counts_by_flw[username]["ebf"] += 1
+
+            ebf_pct_by_flw: dict[str, int] = {}
+            for username, counts in ebf_counts_by_flw.items():
+                if counts["total"] > 0:
+                    ebf_pct_by_flw[username] = round(counts["ebf"] / counts["total"] * 100)
+
             logger.info(
-                "[MBW Dashboard] Pipeline extraction: parity=%d, anc_date=%d, pnc_date=%d, baby_dob=%d mothers",
+                "[MBW Dashboard] Pipeline extraction: parity=%d, anc_date=%d, pnc_date=%d, baby_dob=%d mothers, ebf=%d FLWs",
                 len(parity_by_mother), len(anc_date_by_mother),
                 len(pnc_date_by_mother), len(baby_dob_by_mother),
+                len(ebf_pct_by_flw),
             )
 
             # Log form name distribution for debugging
@@ -553,6 +572,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     "first_gs_score": first_gs_by_flw.get(username),
                     "post_test_attempts": None,  # TBD
                     "followup_rate": followup_rate_by_flw.get(username, 0),
+                    "ebf_pct": ebf_pct_by_flw.get(username),
                     "revisit_distance_km": gps_median_by_flw.get(username),
                     "median_meters_per_visit": meters_per_visit_by_flw.get(username),
                     "median_minutes_per_visit": minutes_per_visit_by_flw.get(username),
