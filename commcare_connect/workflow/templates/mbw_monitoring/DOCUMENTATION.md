@@ -731,7 +731,7 @@ All workflow data is persisted via the **LabsRecord API** (no local database). R
 | (No assessment) | `null` | - | Not yet assessed |
 | Eligible for Renewal | `eligible_for_renewal` | Green | Good performance |
 | Probation | `probation` | Yellow | Poor performance, not eligible for renewal |
-| Suspended | `suspended` | Red | Strong evidence of fraud or very poor performance |
+| Suspended | `suspended` | Red | Strong evidence of fraud or severe performance deficiencies |
 
 Note: "Suspended" is a **label only** - it does NOT trigger any action on Connect.
 
