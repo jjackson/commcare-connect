@@ -108,6 +108,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         { id: 'post_test', label: 'Post-Test' },
         { id: 'followup_rate', label: 'Follow-up Rate' },
         { id: 'eligible_5', label: 'Eligible 5+' },
+        { id: 'ebf_pct', label: '% EBF' },
         { id: 'revisit_dist', label: 'Revisit Dist.' },
         { id: 'meter_visit', label: 'Meter/Visit' },
         { id: 'minute_visit', label: 'Minute/Visit' },
@@ -743,6 +744,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         if (ov.median_meters_per_visit != null && ov.median_meters_per_visit < 100) redFlags.push({ label: 'Low Travel Distance Per Visit', detail: 'Meter/Visit: ' + ov.median_meters_per_visit + 'm (below 100m threshold)' });
         if (ov.phone_dup_pct != null && ov.phone_dup_pct > 30) redFlags.push({ label: 'High Phone Duplicate Rate', detail: 'Phone Dup: ' + ov.phone_dup_pct + '% (above 30% threshold)' });
         if (ov.anc_pnc_same_date_count != null && ov.anc_pnc_same_date_count >= 5) redFlags.push({ label: 'ANC/PNC Same-Date Anomaly', detail: 'ANC=PNC same date: ' + ov.anc_pnc_same_date_count + ' cases (5+ threshold)' });
+        if (ov.ebf_pct != null && (ov.ebf_pct <= 30 || ov.ebf_pct > 95)) redFlags.push({ label: 'Abnormal EBF Rate', detail: 'EBF Rate: ' + ov.ebf_pct + '% (' + (ov.ebf_pct <= 30 ? 'below 30%' : 'above 95%') + ' threshold)' });
 
         var behavior = redFlags.length > 0
             ? redFlags.map(function(r) { return r.label; }).join(', ')
@@ -760,6 +762,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         lines.push('- GS Score: ' + (ov.first_gs_score != null ? ov.first_gs_score + '%' : '\u2014'));
         lines.push('- Follow-up Rate: ' + (ov.followup_rate != null ? ov.followup_rate + '%' : '\u2014'));
         lines.push('- Cases still eligible (5+): ' + (ov.cases_still_eligible && ov.cases_still_eligible.pct != null ? ov.cases_still_eligible.pct + '% (' + ov.cases_still_eligible.eligible + '/' + ov.cases_still_eligible.total + ')' : '\u2014'));
+        lines.push('- % EBF (Exclusive Breastfeeding): ' + (ov.ebf_pct != null ? ov.ebf_pct + '%' : '\u2014'));
         lines.push('');
         lines.push('Visit Overview:');
         var completionPct = fu.total_visits > 0 ? Math.round(fu.completed_total / fu.total_visits * 100) : 0;
@@ -1411,6 +1414,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         {isColVisible('eligible_5') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'cases_still_eligible.pct'); }}
                                             sortIndicator={sortIcon(overviewSort, 'cases_still_eligible.pct')}
                                             tooltip="Eligible mothers still on track">Eligible 5+</Th>}
+                                        {isColVisible('ebf_pct') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'ebf_pct'); }}
+                                            sortIndicator={sortIcon(overviewSort, 'ebf_pct')}
+                                            tooltip="% of FLW's postnatal visits reporting exclusive breastfeeding (EBF)">% EBF</Th>}
                                         {isColVisible('revisit_dist') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'revisit_distance_km'); }}
                                             sortIndicator={sortIcon(overviewSort, 'revisit_distance_km')}
                                             tooltip="Median haversine distance (km) between successive GPS">Revisit Dist.</Th>}
@@ -1504,6 +1510,20 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                     {cse.total > 0 ? (
                                                         <span className={cse.pct >= 70 ? 'text-green-600 font-medium' : cse.pct >= 50 ? 'text-yellow-600' : 'text-red-600'}>
                                                             {cse.eligible}/{cse.total} ({cse.pct}%)
+                                                        </span>
+                                                    ) : <span className="text-gray-400">{'\u2014'}</span>}
+                                                </td>
+                                                )}
+                                                {/* % EBF */}
+                                                {isColVisible('ebf_pct') && (
+                                                <td className="px-4 py-3 text-sm">
+                                                    {f.ebf_pct != null ? (
+                                                        <span className={
+                                                            f.ebf_pct >= 50 && f.ebf_pct <= 85 ? 'text-green-600 font-medium' :
+                                                            (f.ebf_pct >= 31 && f.ebf_pct < 50) || (f.ebf_pct > 85 && f.ebf_pct <= 95) ? 'text-yellow-600' :
+                                                            'text-red-600'
+                                                        }>
+                                                            {f.ebf_pct}%
                                                         </span>
                                                     ) : <span className="text-gray-400">{'\u2014'}</span>}
                                                 </td>
