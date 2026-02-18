@@ -171,11 +171,13 @@ def create_workflow_from_template(
         ]
 
     # Create the workflow definition with pipeline source if created
+    config = template_def.get("config", {})
+    config["templateType"] = template_key  # Store template type for filtering
     definition = data_access.create_definition(
         name=template_def["name"],
         description=template_def["description"],
         statuses=template_def.get("statuses", []),
-        config=template_def.get("config", {}),
+        config=config,
         pipeline_sources=pipeline_sources,
     )
 

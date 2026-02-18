@@ -57,10 +57,19 @@ class WorkflowListView(LoginRequiredMixin, TemplateView):
                 # Build a cache of pipeline names
                 pipeline_cache = {}
 
+                # Fetch all runs once, then group by definition_id
+                all_runs = data_access.list_runs()
+                runs_by_def = {}
+                for run in all_runs:
+                    def_id = run.data.get("definition_id")
+                    runs_by_def.setdefault(def_id, []).append(run)
+
                 # For each definition, get its runs and pipeline info
                 workflows_with_runs = []
                 for definition in definitions:
-                    runs = data_access.list_runs(definition.id)
+                    runs = runs_by_def.get(definition.id, [])
+                    # Sort runs by ID descending (latest first)
+                    runs.sort(key=lambda r: r.id, reverse=True)
 
                     # Get pipeline details for this workflow
                     pipelines = []
@@ -87,12 +96,15 @@ class WorkflowListView(LoginRequiredMixin, TemplateView):
                             "runs": runs,
                             "run_count": len(runs),
                             "pipelines": pipelines,
+                            "template_type": definition.template_type,
+                            "latest_run_id": runs[0].id if runs else 0,
                         }
                     )
 
                 pipeline_access.close()
                 context["workflows"] = workflows_with_runs
                 context["definitions"] = definitions  # Keep for backwards compatibility
+                context["available_templates"] = list_templates()
             except Exception as e:
                 logger.error(f"Failed to load workflow definitions: {e}")
                 context["workflows"] = []
@@ -202,6 +214,29 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                 return context
             context["definition"] = definition
 
+            # Sync render code from template if requested via ?sync=true
+            # Supports ?sync=true&template=mbw_monitoring to specify template explicitly
+            if self.request.GET.get("sync") == "true":
+                explicit_template = self.request.GET.get("template")
+                matched_template = None
+
+                if explicit_template and explicit_template in TEMPLATES:
+                    matched_template = explicit_template
+                else:
+                    name_lower = definition.name.lower().replace(" ", "_")
+                    for key, tmpl in TEMPLATES.items():
+                        if key == name_lower or tmpl["name"].lower() == definition.name.lower():
+                            matched_template = key
+                            break
+
+                if matched_template:
+                    data_access.save_render_code(
+                        definition_id=definition_id,
+                        component_code=TEMPLATES[matched_template]["render_code"],
+                        version=1,
+                    )
+                    logger.info(f"Synced render code for definition {definition_id} from template '{matched_template}'")
+
             # Get render code
             render_code = data_access.get_render_code(definition_id)
             context["render_code"] = render_code.data.get("component_code") if render_code else None
@@ -296,6 +331,9 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                     "getPipelineData": f"/labs/workflow/api/{definition_id}/pipeline-data/",
                     # SSE stream for async pipeline data loading
                     "streamPipelineData": f"/labs/workflow/api/{definition_id}/pipeline-data/stream/",
+                    # MBW monitoring actions
+                    "saveWorkerResult": f"/labs/workflow/api/run/{run_data['id']}/worker-result/",
+                    "completeRun": f"/labs/workflow/api/run/{run_data['id']}/complete/",
                 },
             }
 
@@ -564,6 +602,142 @@ def update_state_api(request, run_id):
 
 
 @login_required
+@require_POST
+def save_worker_result_api(request, run_id):
+    """Save an assessment result for a worker in a workflow run.
+
+    Handles the shallow-merge caveat: reads the full worker_results dict,
+    adds/updates the entry for the specified worker, then writes the entire
+    dict back via update_run_state().
+
+    Request body:
+        {
+            "username": "worker@example.com",
+            "result": "eligible_for_renewal" | "probation" | "suspended" | null,
+            "notes": "Optional notes"
+        }
+    """
+    VALID_RESULTS = ("eligible_for_renewal", "probation", "suspended")
+
+    data_access = None
+    try:
+        data = json.loads(request.body)
+        username = data.get("username")
+        result = data.get("result")
+        notes = data.get("notes", "")
+
+        if not username:
+            return JsonResponse({"error": "username is required"}, status=400)
+
+        if result and result not in VALID_RESULTS:
+            return JsonResponse(
+                {"error": f"result must be one of {VALID_RESULTS} or null"},
+                status=400,
+            )
+
+        data_access = WorkflowDataAccess(request=request)
+        run = data_access.get_run(run_id)
+        if not run:
+            return JsonResponse({"error": "Run not found"}, status=404)
+
+        # Read-modify-write: get full worker_results, update one entry, write back
+        current_state = run.data.get("state", {})
+        current_results = current_state.get("worker_results") or current_state.get("flw_results", {})
+
+        from datetime import datetime, timezone as tz
+
+        updated_results = {
+            **current_results,
+            username: {
+                "result": result,
+                "notes": notes,
+                "assessed_by": request.user.id if request.user.is_authenticated else 0,
+                "assessed_at": datetime.now(tz.utc).isoformat(),
+            },
+        }
+
+        # Write back the full dict (shallow merge safe)
+        updated_run = data_access.update_run_state(run_id, {
+            "worker_results": updated_results,
+        }, run=run)
+
+        if not updated_run:
+            return JsonResponse({"error": "Failed to update run"}, status=500)
+
+        # Compute progress
+        selected = current_state.get("selected_workers") or current_state.get("selected_flws", [])
+        total = len(selected)
+        assessed = sum(1 for u in selected if updated_results.get(u, {}).get("result"))
+        pct = round((assessed / total) * 100) if total > 0 else 0
+
+        return JsonResponse({
+            "success": True,
+            "worker_results": updated_results,
+            "progress": {"percentage": pct, "assessed": assessed, "total": total},
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to save worker result for run {run_id}: {e}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
+    finally:
+        if data_access:
+            data_access.close()
+
+
+@login_required
+@require_POST
+def complete_run_api(request, run_id):
+    """Mark a workflow run as completed.
+
+    Updates run.data.status to 'completed' and stores overall_result/notes
+    in the state via WorkflowDataAccess.complete_run().
+
+    Request body:
+        {
+            "overall_result": "completed",  // optional, defaults to "completed"
+            "notes": ""  // optional
+        }
+    """
+    data_access = None
+    try:
+        data = json.loads(request.body)
+        overall_result = data.get("overall_result", "completed")
+        notes = data.get("notes", "")
+
+        data_access = WorkflowDataAccess(request=request)
+        run = data_access.get_run(run_id)
+        if not run:
+            return JsonResponse({"error": "Run not found"}, status=404)
+
+        result = data_access.complete_run(
+            run_id=run_id,
+            overall_result=overall_result,
+            notes=notes,
+            run=run,
+        )
+
+        if not result:
+            return JsonResponse({"error": "Failed to update run"}, status=500)
+
+        return JsonResponse({
+            "success": True,
+            "status": "completed",
+            "overall_result": overall_result,
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to complete run {run_id}: {e}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
+    finally:
+        if data_access:
+            data_access.close()
+
+
+@login_required
 @require_GET
 def get_run_api(request, run_id):
     """API endpoint to get workflow run details."""
@@ -745,6 +919,66 @@ def save_render_code_api(request, definition_id):
     except Exception as e:
         logger.error(f"Failed to save render code for definition {definition_id}: {e}")
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def sync_template_render_code_api(request, definition_id):
+    """Sync render code from the source template for a workflow definition.
+
+    Accepts JSON body with optional 'template_key'. If not provided, tries to
+    detect the template from the definition name.
+    """
+    data_access = None
+    try:
+        data = json.loads(request.body) if request.body else {}
+        template_key = data.get("template_key")
+
+        data_access = WorkflowDataAccess(request=request)
+        definition = data_access.get_definition(definition_id)
+        if not definition:
+            return JsonResponse({"error": "Workflow not found"}, status=404)
+
+        # Auto-detect template from definition name if not provided
+        if not template_key:
+            name_lower = definition.name.lower().replace(" ", "_")
+            for key in TEMPLATES:
+                if key == name_lower or TEMPLATES[key]["name"].lower() == definition.name.lower():
+                    template_key = key
+                    break
+
+        if not template_key:
+            return JsonResponse(
+                {"error": "Could not detect template. Pass 'template_key' in request body.", "available": list(TEMPLATES.keys())},
+                status=400,
+            )
+
+        from commcare_connect.workflow.templates import get_template
+
+        template = get_template(template_key)
+        if not template:
+            return JsonResponse({"error": f"Template '{template_key}' not found"}, status=404)
+
+        render_code_record = data_access.save_render_code(
+            definition_id=definition_id,
+            component_code=template["render_code"],
+            version=1,
+        )
+
+        return JsonResponse({
+            "success": True,
+            "definition_id": definition_id,
+            "render_code_id": render_code_record.id,
+            "template_key": template_key,
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.error(f"Failed to sync template render code for definition {definition_id}: {e}", exc_info=True)
+        return JsonResponse({"error": str(e)}, status=500)
+    finally:
+        if data_access:
+            data_access.close()
 
 
 # =============================================================================

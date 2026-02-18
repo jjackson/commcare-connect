@@ -400,6 +400,18 @@ export interface ActionHandlers {
     onComplete: (result: AuditCreationResult) => void,
     onError: (error: string) => void,
   ): () => void; // Returns cleanup function
+  cancelAudit(taskId: string): Promise<{ success: boolean; error?: string }>;
+
+  // MBW Monitoring Actions
+  saveWorkerResult(
+    runId: number,
+    params: SaveWorkerResultParams,
+  ): Promise<SaveWorkerResultResponse>;
+  completeRun(
+    runId: number,
+    params?: CompleteRunParams,
+  ): Promise<CompleteRunResponse>;
+  openTaskCreator(params: TaskUrlParams): void;
 }
 
 export interface CreateTaskParams {
@@ -407,6 +419,7 @@ export interface CreateTaskParams {
   title: string;
   description?: string;
   priority?: 'low' | 'medium' | 'high';
+  flw_name?: string;
 }
 
 export interface TaskResult {
@@ -623,6 +636,43 @@ export interface ActiveJobState {
 }
 
 // =============================================================================
+// MBW Monitoring Types
+// =============================================================================
+
+export interface SaveWorkerResultParams {
+  username: string;
+  result: 'eligible_for_renewal' | 'probation' | 'suspended' | null;
+  notes?: string;
+}
+
+export interface SaveWorkerResultResponse {
+  success: boolean;
+  worker_results?: Record<
+    string,
+    {
+      result: string | null;
+      notes: string;
+      assessed_by: number;
+      assessed_at: string;
+    }
+  >;
+  progress?: { percentage: number; assessed: number; total: number };
+  error?: string;
+}
+
+export interface CompleteRunParams {
+  overall_result?: string;
+  notes?: string;
+}
+
+export interface CompleteRunResponse {
+  success: boolean;
+  status?: string;
+  overall_result?: string;
+  error?: string;
+}
+
+// =============================================================================
 // API Response Types
 // =============================================================================
 
@@ -670,6 +720,9 @@ export interface WorkflowDataFromDjango {
     updateState: string;
     getWorkers: string;
     getPipelineData?: string;
+    streamPipelineData?: string;
+    saveWorkerResult?: string;
+    completeRun?: string;
   };
   render_code?: string;
   is_edit_mode?: boolean;
