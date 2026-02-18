@@ -481,7 +481,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
 
             # Compute quality/fraud overview metrics
             quality_metrics = compute_overview_quality_metrics(
-                visit_cases_by_flw, mother_metadata, parity_by_mother, current_date,
+                visit_cases_by_flw, mother_metadata, parity_by_mother,
                 anc_date_by_mother=anc_date_by_mother,
                 pnc_date_by_mother=pnc_date_by_mother,
             )
@@ -567,12 +567,12 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
 
             # Fetch open task usernames so the frontend can grey out the Task button
             open_task_usernames = []
+            task_data_access = None
             try:
                 from commcare_connect.tasks.data_access import TaskDataAccess
 
-                data_access = TaskDataAccess(user=request.user, request=request)
-                all_tasks = data_access.get_tasks()
-                data_access.close()
+                task_data_access = TaskDataAccess(user=request.user, request=request)
+                all_tasks = task_data_access.get_tasks()
                 closed_statuses = {"closed", "resolved"}
                 open_task_usernames = sorted(set(
                     t.username.lower() for t in all_tasks
@@ -580,6 +580,9 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 ))
             except Exception as e:
                 logger.warning(f"[MBW Dashboard] Failed to fetch tasks: {e}")
+            finally:
+                if task_data_access:
+                    task_data_access.close()
 
             # Build combined response
             response_data = {

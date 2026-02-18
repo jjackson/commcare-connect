@@ -15,7 +15,7 @@ This is a pure API client with no local database storage.
 import logging
 import os
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pandas as pd
@@ -569,7 +569,7 @@ class WorkflowDataAccess(BaseDataAccess):
             "period_end": period_end,
             "status": "in_progress",
             "state": initial_state or {},
-            "created_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
         record = self.labs_api.create_record(
@@ -630,7 +630,7 @@ class WorkflowDataAccess(BaseDataAccess):
 
     def get_or_create_run(self, definition_id: int, opportunity_id: int) -> WorkflowRunRecord:
         """Get or create a workflow run for the current week."""
-        today = datetime.now().date()
+        today = datetime.now(timezone.utc).date()
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
 
@@ -987,7 +987,7 @@ class WorkflowDataAccess(BaseDataAccess):
 
     def save_chat_history(self, definition_id: int, messages: list[dict]) -> WorkflowChatHistoryRecord:
         """Save chat history for a workflow definition."""
-        now = datetime.now().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         definition_id_int = int(definition_id)
         existing = self.get_chat_history(definition_id_int)
 
@@ -1485,7 +1485,7 @@ class PipelineDataAccess(BaseDataAccess):
         message = {
             "role": role,
             "content": content,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         if existing_record:
@@ -1493,7 +1493,7 @@ class PipelineDataAccess(BaseDataAccess):
             messages = data.get("messages", [])
             messages.append(message)
             data["messages"] = messages
-            data["updated_at"] = datetime.now().isoformat()
+            data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             self.labs_api.update_record(
                 existing_record.id,
@@ -1508,8 +1508,8 @@ class PipelineDataAccess(BaseDataAccess):
                 data={
                     "definition_id": definition_id,
                     "messages": [message],
-                    "created_at": datetime.now().isoformat(),
-                    "updated_at": datetime.now().isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
             )
 
@@ -1525,7 +1525,7 @@ class PipelineDataAccess(BaseDataAccess):
             if record.data.get("definition_id") == definition_id:
                 data = record.data.copy()
                 data["messages"] = []
-                data["updated_at"] = datetime.now().isoformat()
+                data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
                 self.labs_api.update_record(
                     record.id,

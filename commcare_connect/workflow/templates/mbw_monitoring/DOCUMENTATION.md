@@ -542,11 +542,24 @@ THRESHOLD_YELLOW = 60       # Follow-up rate >=60% = yellow
 
 | Status | Condition |
 |--------|-----------|
-| Completed - On Time | Completed within 7 days of scheduled date |
-| Completed - Late | Completed after 7-day window |
-| Due - On Time | Not completed, within 7-day window |
-| Due - Late | Not completed, past 7-day window but before expiry |
+| Completed - On Time | Completed within the on-time window (varies by visit type) |
+| Completed - Late | Completed after on-time window but before expiry |
+| Due - On Time | Not completed, within on-time window |
+| Due - Late | Not completed, past on-time window but before expiry |
 | Missed | Not completed, past expiry date |
+
+#### On-Time Windows by Visit Type (MBW Schedule Spec)
+
+| Visit Type | Scheduled Date | On-Time Range | Late Range | Expiry |
+|---|---|---|---|---|
+| ANC Visit | 28 weeks (or today if >=28 weeks at registration) | Within 7 days of scheduled date | >7 days, before delivery | After delivery |
+| PNC / Postnatal Delivery Visit | EDD (expected delivery date) | Delivery through **4 days** post delivery | 5-6 days after delivery | 7+ days after delivery |
+| 1 Week Visit | 7 days after delivery | 7-13 days after delivery (within 7 days of scheduled) | 14-29 days after delivery | 30+ days after delivery |
+| 1 Month Visit | 30 days after delivery | 30-36 days (within 7 days of scheduled) | 37-89 days after delivery | 90+ days after delivery |
+| 3 Month Visit | 90 days after delivery | 90-96 days (within 7 days of scheduled) | 97-179 days after delivery | 180+ days after delivery |
+| 6 Month Visit | 180 days after delivery | 180-186 days (within 7 days of scheduled) | — | — |
+
+Configured via `VISIT_ON_TIME_DAYS` mapping in `followup_analysis.py`. Expiry dates come from CommCare case properties (`visit_expiry_date`). Reschedule window: PNC = 3 days later, all others = 7 days later.
 
 ### Key Mappings
 
@@ -947,7 +960,7 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | `GRACE_PERIOD_DAYS` | 5 | Only count visits due 5+ days ago |
 | `THRESHOLD_GREEN` | 80% | Follow-up rate for green status |
 | `THRESHOLD_YELLOW` | 60% | Follow-up rate for yellow status |
-| On-time window | 7 days | Days after scheduled date for on-time completion |
+| On-time window | 7 days (4 for PNC) | Days after scheduled date for on-time completion (see `VISIT_ON_TIME_DAYS`) |
 
 ### GPS Analysis Constants
 
