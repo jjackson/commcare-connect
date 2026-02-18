@@ -6,7 +6,7 @@
         <!-- Left Section: Module Name -->
         <h1 class="text-lg text-brand-deep-purple font-medium">
             {% if request.user.is_labs_user %}
-                {{ header_title|default:"Connect Labs" }}
+                <a href="{% url 'labs:overview' %}" class="hover:underline">{{ header_title|default:"Connect Labs" }}</a>
             {% else %}
                 {{ header_title|default:"CommCare Connect" }}
             {% endif %}
