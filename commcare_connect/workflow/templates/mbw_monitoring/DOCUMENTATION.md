@@ -53,7 +53,7 @@ The dashboard runs within the **Workflow module** of Connect Labs. The UI is a R
 
 ### High-Level Architecture
 
-```
+```text
 User Browser
     |
     +-- GET /labs/workflow/<id>/run/
@@ -95,7 +95,7 @@ User Browser
 
 ### Component Relationships
 
-```
+```text
 +-------------------+     +-------------------------+     +------------------+
 |  WorkflowRunView  |---->|  run.html               |---->| workflow-runner   |
 |  (Django view)    |     |  (Django template)       |     | -bundle.js       |
@@ -127,7 +127,7 @@ User Browser
 
 ### Render Code Execution Pipeline
 
-```
+```text
 Python (template.py)          Browser                         React
 +------------------+     +-------------------+     +-------------------+
 | RENDER_CODE      |     | Babel standalone  |     | DynamicWorkflow   |
@@ -469,7 +469,7 @@ Used for: Dynamic xmlns discovery
 
 ### Data Relationships
 
-```
+```text
 Pipeline Visit Forms (Connect API)
     |
     +-- username ----------> FLW Names (Connect API)
@@ -867,11 +867,11 @@ The overview table uses a CSS pattern to enable horizontal scrolling within flex
 When `RENDER_CODE` is updated in `template.py`, existing workflows in the DB still use the old version. Two mechanisms sync the template to the DB:
 
 **URL Parameter**: Append `?sync=true` to the workflow run URL:
-```
+```text
 /labs/workflow/<id>/run/?run_id=<id>&sync=true
 ```
 For workflows whose name doesn't match the template name, use an explicit template key:
-```
+```text
 /labs/workflow/<id>/run/?run_id=<id>&sync=true&template=mbw_monitoring
 ```
 The view matches the definition name against registered templates and updates the render code.
