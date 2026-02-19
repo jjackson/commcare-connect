@@ -57,6 +57,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [dashData, setDashData] = React.useState(null);
     var [sseMessages, setSseMessages] = React.useState([]);
     var [sseError, setSseError] = React.useState(null);
+    var [sseAuthorizeUrl, setSseAuthorizeUrl] = React.useState(null);
     var [sseComplete, setSseComplete] = React.useState(false);
     var [fromSnapshot, setFromSnapshot] = React.useState(false);
     var [snapshotTimestamp, setSnapshotTimestamp] = React.useState(null);
@@ -222,6 +223,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     var parsed = JSON.parse(event.data);
                     if (parsed.error) {
                         setSseError(parsed.error);
+                        if (parsed.authorize_url) {
+                            setSseAuthorizeUrl(parsed.authorize_url);
+                        }
                         es.close();
                         return;
                     }
@@ -892,15 +896,24 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 <div className="bg-white rounded-lg shadow-sm p-6">
                     <h2 className="text-xl font-bold text-gray-900">{instance.state?.title || 'MBW Monitoring'}</h2>
                 </div>
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 text-red-800">
-                        <i className="fa-solid fa-circle-exclamation"></i>
+                <div className={sseAuthorizeUrl ? "bg-amber-50 border border-amber-300 rounded-lg p-4" : "bg-red-50 border border-red-200 rounded-lg p-4"}>
+                    <div className={"flex items-center gap-2 " + (sseAuthorizeUrl ? "text-amber-800" : "text-red-800")}>
+                        <i className={"fa-solid " + (sseAuthorizeUrl ? "fa-link-slash" : "fa-circle-exclamation")}></i>
                         <span className="font-medium">{sseError}</span>
                     </div>
-                    <button onClick={function() { window.location.reload(); }}
-                            className="mt-3 px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700">
-                        Retry
-                    </button>
+                    <div className="mt-3 flex gap-2">
+                        {sseAuthorizeUrl ? (
+                            <a href={sseAuthorizeUrl}
+                               className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 inline-block no-underline">
+                                <i className="fa-solid fa-arrow-right-to-bracket mr-1"></i> Authorize CommCare
+                            </a>
+                        ) : (
+                            <button onClick={function() { window.location.reload(); }}
+                                    className="px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700">
+                                Retry
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         );

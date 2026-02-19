@@ -294,6 +294,40 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 yield send_sse_event("Error", error="No OAuth token found. Please log in to Connect.")
                 return
 
+            # Check CommCare HQ OAuth — block if expired (require re-authorization)
+            commcare_oauth = request.session.get("commcare_oauth", {})
+            commcare_expires_at = commcare_oauth.get("expires_at", 0)
+            cchq_oauth_valid = bool(
+                commcare_oauth.get("access_token")
+                and timezone.now().timestamp() < commcare_expires_at
+            )
+            if not cchq_oauth_valid:
+                logger.warning("[MBW Dashboard] CommCare OAuth expired or missing — blocking stream")
+                # Build authorize URL with return to the current page (Referer)
+                referer = request.headers.get("Referer", "")
+                if referer and "://" in referer:
+                    # Extract path from full URL (e.g. https://host/path/?q → /path/?q)
+                    after_scheme = referer.split("://", 1)[1]
+                    slash_pos = after_scheme.find("/")
+                    next_page = after_scheme[slash_pos:] if slash_pos >= 0 else "/labs/overview/"
+                else:
+                    next_page = referer if referer.startswith("/") else "/labs/overview/"
+                authorize_url = reverse("labs:commcare_initiate") + "?" + urlencode({"next": next_page})
+
+                error_msg = (
+                    "CommCare HQ authorization required. "
+                    "Please authorize CommCare access to load dashboard data."
+                )
+                # Include authorize_url as extra field for frontend to render a button
+                event = {
+                    "message": "Error",
+                    "complete": False,
+                    "error": error_msg,
+                    "authorize_url": authorize_url,
+                }
+                yield f"data: {json.dumps(event)}\n\n"
+                return
+
             # Parse date range (for GPS filtering only)
             default_start, default_end = get_default_date_range()
             start_date = parse_date_param(request.GET.get("start_date"), default_start)
@@ -460,12 +494,11 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             registration_forms = []
             gs_forms = []
 
-            # Pre-check CCHQ OAuth before attempting API calls
-            commcare_oauth = request.session.get("commcare_oauth", {})
-            commcare_token = commcare_oauth.get("access_token")
-            commcare_expires_at = commcare_oauth.get("expires_at", 0)
+            # Re-check CCHQ OAuth (may have expired during earlier steps)
             cchq_oauth_valid = bool(
-                commcare_token and timezone.now().timestamp() < commcare_expires_at
+                request.session.get("commcare_oauth", {}).get("access_token")
+                and timezone.now().timestamp()
+                < request.session.get("commcare_oauth", {}).get("expires_at", 0)
             )
 
             if not cchq_oauth_valid:
