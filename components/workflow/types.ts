@@ -412,6 +412,22 @@ export interface ActionHandlers {
     params?: CompleteRunParams,
   ): Promise<CompleteRunResponse>;
   openTaskCreator(params: TaskUrlParams): void;
+
+  // Generic Task Management (reusable by any workflow template)
+  getTaskDetail(taskId: number): Promise<Record<string, unknown>>;
+  getAITranscript(
+    taskId: number,
+    sessionId?: string,
+    refresh?: boolean,
+  ): Promise<Record<string, unknown>>;
+  updateTask(
+    taskId: number,
+    data: Record<string, unknown>,
+  ): Promise<Record<string, unknown>>;
+  saveAITranscript(
+    taskId: number,
+    data: Record<string, unknown>,
+  ): Promise<Record<string, unknown>>;
 }
 
 export interface CreateTaskParams {

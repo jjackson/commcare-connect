@@ -63,6 +63,23 @@ from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixi
 logger = logging.getLogger(__name__)
 
 
+def _check_app_version(version, op: str, val: int) -> bool:
+    """Check if a visit's app_build_version satisfies the operator comparison."""
+    if version is None:
+        return False
+    try:
+        version = int(version)
+    except (ValueError, TypeError):
+        return False
+    if op == "gte":
+        return version >= val
+    if op == "eq":
+        return version == val
+    if op == "lte":
+        return version <= val
+    return True
+
+
 def _parse_int_param(value: str | None) -> int | None:
     """Safely parse a query parameter to int, returning None if invalid."""
     if value is None:
@@ -218,6 +235,10 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             start_date = parse_date_param(request.GET.get("start_date"), default_start)
             end_date = parse_date_param(request.GET.get("end_date"), default_end)
 
+            # App version filter (for GPS data only)
+            app_version_op = request.GET.get("app_version_op", "")
+            app_version_val = _parse_int_param(request.GET.get("app_version_val"))
+
             # Bust cache: when MBW_DEV_FIXTURE is on and ?bust_cache=1 is passed
             bust_cache = request.GET.get("bust_cache") == "1"
             if bust_cache:
@@ -338,6 +359,18 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     "computed": row.computed,
                     "metadata": {"location": gps_location},
                 })
+
+            # Apply app version filter to GPS visits if configured
+            if app_version_op and app_version_val is not None:
+                pre_filter_count = len(visits_for_gps)
+                visits_for_gps = [
+                    v for v in visits_for_gps
+                    if _check_app_version(v["computed"].get("app_build_version"), app_version_op, app_version_val)
+                ]
+                logger.info(
+                    "[MBW Dashboard] App version filter (%s %d): %d -> %d GPS visits",
+                    app_version_op, app_version_val, pre_filter_count, len(visits_for_gps),
+                )
 
             gps_result = analyze_gps_metrics(visits_for_gps, flw_names)
 
@@ -597,8 +630,9 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 "visit_status_distribution": visit_status_distribution,
             }
 
-            # Fetch open task usernames so the frontend can grey out the Task button
-            open_task_usernames = []
+            # Fetch open tasks so the frontend can grey out the Task button and
+            # provide inline task management (task_id needed for detail/update APIs)
+            open_tasks = {}
             task_data_access = None
             try:
                 from commcare_connect.tasks.data_access import TaskDataAccess
@@ -606,15 +640,19 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 task_data_access = TaskDataAccess(user=request.user, request=request)
                 all_tasks = task_data_access.get_tasks()
                 closed_statuses = {"closed", "resolved"}
-                open_task_usernames = sorted(set(
-                    t.username.lower() for t in all_tasks
-                    if t.username and t.status not in closed_statuses
-                ))
+                for t in all_tasks:
+                    if t.username and t.status not in closed_statuses:
+                        open_tasks[t.username.lower()] = {
+                            "task_id": t.id,
+                            "status": t.status,
+                            "title": t.title,
+                        }
             except Exception as e:
                 logger.warning(f"[MBW Dashboard] Failed to fetch tasks: {e}")
             finally:
                 if task_data_access:
                     task_data_access.close()
+            open_task_usernames = sorted(open_tasks.keys())
 
             # Build combined response
             response_data = {
@@ -628,6 +666,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 "overview_data": overview_data,
                 "active_usernames": sorted(active_usernames),
                 "flw_names": flw_names,
+                "open_tasks": open_tasks,
                 "open_task_usernames": open_task_usernames,
             }
 
@@ -667,6 +706,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     "overview_data": overview_data,
                     "active_usernames": sorted(active_usernames),
                     "flw_names": flw_names,
+                    "open_tasks": open_tasks,
                     "open_task_usernames": open_task_usernames,
                 }
                 try:
@@ -723,6 +763,15 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
                     "computed": row.computed,
                     "metadata": {"location": gps_location},
                 })
+
+            # Apply app version filter if configured
+            app_version_op = request.GET.get("app_version_op", "")
+            app_version_val = _parse_int_param(request.GET.get("app_version_val"))
+            if app_version_op and app_version_val is not None:
+                visits_for_analysis = [
+                    v for v in visits_for_analysis
+                    if _check_app_version(v["computed"].get("app_build_version"), app_version_op, app_version_val)
+                ]
 
             gps_result = analyze_gps_metrics(visits_for_analysis, {})
             filtered_visits = filter_visits_by_date(gps_result.visits, start_date, end_date)
@@ -847,6 +896,7 @@ class MBWSnapshotView(LoginRequiredMixin, View):
             "overview_data": snapshot.get("overview_data"),
             "active_usernames": snapshot.get("active_usernames", []),
             "flw_names": snapshot.get("flw_names", {}),
+            "open_tasks": snapshot.get("open_tasks", {}),
             "open_task_usernames": snapshot.get("open_task_usernames", []),
             "monitoring_session": {
                 "id": monitoring_session.id,

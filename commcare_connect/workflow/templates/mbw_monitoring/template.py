@@ -88,6 +88,11 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [toastMessage, setToastMessage] = React.useState('');
     var [filterStartDate, setFilterStartDate] = React.useState('');
     var [filterEndDate, setFilterEndDate] = React.useState('');
+    var [appVersionOp, setAppVersionOp] = React.useState(instance.state?.app_version_op || 'gte');
+    var [appVersionVal, setAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
+    var [appliedAppVersionOp, setAppliedAppVersionOp] = React.useState(instance.state?.app_version_op || 'gte');
+    var [appliedAppVersionVal, setAppliedAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
+    var [hiddenCategories, setHiddenCategories] = React.useState({});
 
     // OCS Task Modal state
     var [showOcsModal, setShowOcsModal] = React.useState(false);
@@ -99,6 +104,18 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [ocsCreating, setOcsCreating] = React.useState(false);
     var [ocsError, setOcsError] = React.useState('');
     var [createdTaskUsernames, setCreatedTaskUsernames] = React.useState([]);
+
+    // Inline task expansion state
+    var [expandedTaskFlw, setExpandedTaskFlw] = React.useState(null);
+    var [taskDetail, setTaskDetail] = React.useState(null);
+    var [taskTranscript, setTaskTranscript] = React.useState(null);
+    var [taskLoading, setTaskLoading] = React.useState(false);
+    var [taskStatus, setTaskStatus] = React.useState('');
+    var [taskOriginalStatus, setTaskOriginalStatus] = React.useState('');
+    var [taskSaving, setTaskSaving] = React.useState(false);
+    var [showCloseForm, setShowCloseForm] = React.useState(false);
+    var [closeAction, setCloseAction] = React.useState('none');
+    var [closeNote, setCloseNote] = React.useState('');
 
     // Column selector for Overview table
     var OVERVIEW_COLUMNS = [
@@ -191,6 +208,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             });
             if (bustCache) {
                 params.set('bust_cache', '1');
+            }
+            if (appVersionOp && appVersionVal) {
+                params.set('app_version_op', appVersionOp);
+                params.set('app_version_val', appVersionVal);
             }
             var url = '/custom_analysis/mbw_monitoring/stream/?' + params.toString();
             var es = new EventSource(url);
@@ -286,6 +307,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             title: title || definition.name,
             tag: tag,
             gs_app_id: gsAppId,
+            app_version_op: appVersionOp,
+            app_version_val: appVersionVal,
             worker_results: {},
             flw_results: {},
         }).then(function() {
@@ -454,6 +477,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var resetFilters = function() {
         setFilterFlws([]);
         setFilterMothers([]);
+        var needsRefresh = appliedAppVersionOp !== 'gte' || appliedAppVersionVal !== '14';
+        setAppVersionOp('gte');
+        setAppVersionVal('14');
+        setAppliedAppVersionOp('gte');
+        setAppliedAppVersionVal('14');
+        if (needsRefresh) {
+            setRefreshTrigger(function(n) { return n + 1; });
+            setDashData(null);
+            setSseComplete(false);
+        }
     };
 
     // FLW Notes modal helpers
@@ -717,7 +750,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var fuFlws = (followupData.flw_summaries || []);
     var fuDrilldown = followupData.flw_drilldown || {};
     var visitDist = dashData?.overview_data?.visit_status_distribution || {};
-    var openTaskUsernames = dashData?.open_task_usernames || [];
+    var openTasks = dashData?.open_tasks || {};
+    var openTaskUsernames = dashData?.open_task_usernames || Object.keys(openTasks);
     var flwNames = dashData?.flw_names || {};
     var activeUsernames = dashData?.active_usernames || [];
 
@@ -847,6 +881,115 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             }
         });
     };
+
+    // ---- Inline task handlers ----
+    var toggleTaskExpand = function(username) {
+        if (expandedTaskFlw === username) {
+            setExpandedTaskFlw(null);
+            setTaskDetail(null);
+            setTaskTranscript(null);
+            setShowCloseForm(false);
+            return;
+        }
+        var taskInfo = openTasks[username];
+        if (!taskInfo) return;
+        setExpandedTaskFlw(username);
+        setTaskLoading(true);
+        setTaskDetail(null);
+        setTaskTranscript(null);
+        setShowCloseForm(false);
+        setCloseAction('none');
+        setCloseNote('');
+        if (!actions || !actions.getTaskDetail) {
+            showToast('Task detail not available — please hard-refresh (Cmd+Shift+R)');
+            setTaskLoading(false);
+            return;
+        }
+        actions.getTaskDetail(taskInfo.task_id).then(function(result) {
+            if (result.success && result.task) {
+                setTaskDetail(result.task);
+                setTaskStatus(result.task.status || 'investigating');
+                setTaskOriginalStatus(result.task.status || 'investigating');
+                return actions.getAITranscript(taskInfo.task_id);
+            } else {
+                setTaskLoading(false);
+                showToast('Failed to load task: ' + (result.error || 'Unknown error'));
+            }
+        }).then(function(transcriptResult) {
+            setTaskLoading(false);
+            if (transcriptResult && transcriptResult.success) {
+                setTaskTranscript(transcriptResult.messages || []);
+            } else if (transcriptResult) {
+                // Transcript not available — set empty array so UI shows "No messages yet" with error context
+                setTaskTranscript([]);
+            }
+        }).catch(function(err) {
+            setTaskLoading(false);
+            console.error('Error loading task:', err);
+        });
+    };
+
+    var handleTaskSave = function() {
+        if (!taskDetail || taskStatus === taskOriginalStatus) return;
+        setTaskSaving(true);
+        actions.updateTask(taskDetail.id, { status: taskStatus }).then(function(result) {
+            setTaskSaving(false);
+            if (result.success) {
+                setTaskOriginalStatus(taskStatus);
+                showToast('Task status updated');
+            } else {
+                showToast('Failed to update: ' + (result.error || 'Unknown error'));
+            }
+        }).catch(function() { setTaskSaving(false); });
+    };
+
+    var handleTaskClose = function() {
+        if (!taskDetail) return;
+        setTaskSaving(true);
+        actions.updateTask(taskDetail.id, {
+            status: 'closed',
+            resolution_details: { official_action: closeAction, resolution_note: closeNote }
+        }).then(function(result) {
+            setTaskSaving(false);
+            if (result.success) {
+                showToast('Task closed');
+                // Remove from local open_tasks
+                var newOpenTasks = Object.assign({}, openTasks);
+                delete newOpenTasks[expandedTaskFlw];
+                if (dashData) {
+                    setDashData(Object.assign({}, dashData, {
+                        open_tasks: newOpenTasks,
+                        open_task_usernames: Object.keys(newOpenTasks)
+                    }));
+                }
+                setExpandedTaskFlw(null);
+                setTaskDetail(null);
+                setTaskTranscript(null);
+                setShowCloseForm(false);
+            } else {
+                showToast('Failed to close: ' + (result.error || 'Unknown error'));
+            }
+        }).catch(function() { setTaskSaving(false); });
+    };
+
+    var handleTaskRefreshTranscript = function() {
+        if (!taskDetail) return;
+        setTaskLoading(true);
+        actions.getAITranscript(taskDetail.id, undefined, true).then(function(result) {
+            setTaskLoading(false);
+            if (result.success) {
+                setTaskTranscript(result.messages || []);
+                showToast('Transcript refreshed');
+            }
+        }).catch(function() { setTaskLoading(false); });
+    };
+
+    var TASK_STATUS_OPTIONS = [
+        { value: 'investigating', label: 'Investigating', color: 'blue' },
+        { value: 'flw_action_in_progress', label: 'FLW Action In Progress', color: 'yellow' },
+        { value: 'flw_action_completed', label: 'FLW Action Completed', color: 'green' },
+        { value: 'review_needed', label: 'Review Needed', color: 'purple' },
+    ];
 
     // Apply filters
     var flwFilterSet = filterFlws.length > 0 ? filterFlws : null;
@@ -1266,6 +1409,24 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                onChange={function(e) { setFilterEndDate(e.target.value); }}
                                className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500" />
                     </div>
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">App Version <span className="text-gray-400">(GPS only)</span></label>
+                        <div className="flex gap-1">
+                            <select value={appVersionOp}
+                                    onChange={function(e) { setAppVersionOp(e.target.value); }}
+                                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">No filter</option>
+                                <option value="gte">{'>='}</option>
+                                <option value="eq">{'='}</option>
+                                <option value="lte">{'<='}</option>
+                            </select>
+                            <input type="number" value={appVersionVal}
+                                   onChange={function(e) { setAppVersionVal(e.target.value); }}
+                                   placeholder="#"
+                                   disabled={!appVersionOp}
+                                   className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500 w-16" />
+                        </div>
+                    </div>
                     <div className="flex-1 min-w-[180px]">
                         <label className="block text-xs font-medium text-gray-700 mb-1">Filter by FLW</label>
                         <select multiple value={filterFlws}
@@ -1302,7 +1463,17 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                             })}
                         </select>
                     </div>
-                    <button onClick={function() { /* filters are applied reactively */ }}
+                    <button onClick={function() {
+                                var opChanged = appVersionOp !== appliedAppVersionOp;
+                                var valChanged = appVersionVal !== appliedAppVersionVal;
+                                if (opChanged || valChanged) {
+                                    setAppliedAppVersionOp(appVersionOp);
+                                    setAppliedAppVersionVal(appVersionVal);
+                                    setRefreshTrigger(function(n) { return n + 1; });
+                                    setDashData(null);
+                                    setSseComplete(false);
+                                }
+                            }}
                             className="inline-flex items-center px-4 py-1.5 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700">
                         <i className="fa-solid fa-filter mr-1"></i> Apply
                     </button>
@@ -1318,36 +1489,6 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             {/* ============================================================ */}
             {activeTab === 'overview' && (
                 <div>
-                    {/* Visit Status Distribution */}
-                    {visitDist && (visitDist.total > 0) && (
-                        <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mb-4">
-                            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Visit Status Distribution</h3>
-                            <div className="flex justify-center">
-                                <div className="w-full max-w-2xl">
-                                    <div className="flex h-8 rounded-lg overflow-hidden border border-gray-200">
-                                        <div style={{ width: (visitDist.completed_on_time_pct || 0) + '%', backgroundColor: '#22c55e', transition: 'all 0.3s' }}
-                                             title={'Completed On Time: ' + (visitDist.completed_on_time || 0) + ' (' + (visitDist.completed_on_time_pct || 0) + '%)'}></div>
-                                        <div style={{ width: (visitDist.completed_late_pct || 0) + '%', backgroundColor: '#86efac', transition: 'all 0.3s' }}
-                                             title={'Completed Late: ' + (visitDist.completed_late || 0) + ' (' + (visitDist.completed_late_pct || 0) + '%)'}></div>
-                                        <div style={{ width: (visitDist.due_on_time_pct || 0) + '%', backgroundColor: '#facc15', transition: 'all 0.3s' }}
-                                             title={'Due On Time: ' + (visitDist.due_on_time || 0) + ' (' + (visitDist.due_on_time_pct || 0) + '%)'}></div>
-                                        <div style={{ width: (visitDist.due_late_pct || 0) + '%', backgroundColor: '#fb923c', transition: 'all 0.3s' }}
-                                             title={'Due Late: ' + (visitDist.due_late || 0) + ' (' + (visitDist.due_late_pct || 0) + '%)'}></div>
-                                        <div style={{ width: (visitDist.missed_pct || 0) + '%', backgroundColor: '#ef4444', transition: 'all 0.3s' }}
-                                             title={'Missed: ' + (visitDist.missed || 0) + ' (' + (visitDist.missed_pct || 0) + '%)'}></div>
-                                    </div>
-                                    <div className="flex flex-wrap justify-center gap-4 mt-2 text-xs text-gray-600">
-                                        <span><span className="inline-block w-3 h-3 rounded mr-1" style={{ backgroundColor: '#22c55e' }}></span>Completed On Time</span>
-                                        <span><span className="inline-block w-3 h-3 rounded mr-1" style={{ backgroundColor: '#86efac' }}></span>Completed Late</span>
-                                        <span><span className="inline-block w-3 h-3 rounded mr-1" style={{ backgroundColor: '#facc15' }}></span>Due On Time</span>
-                                        <span><span className="inline-block w-3 h-3 rounded mr-1" style={{ backgroundColor: '#fb923c' }}></span>Due Late</span>
-                                        <span><span className="inline-block w-3 h-3 rounded mr-1" style={{ backgroundColor: '#ef4444' }}></span>Missed</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     {/* FLW Overview Table */}
                     <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
                         <div className="px-6 py-3 border-b border-gray-200 bg-gray-50">
@@ -1457,7 +1598,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         var cse = f.cases_still_eligible || {};
                                         var hasNotes = wr.notes && wr.notes.length > 0;
                                         return (
-                                            <tr key={f.username} className="hover:bg-gray-50">
+                                            <React.Fragment key={f.username}>
+                                            <tr className="hover:bg-gray-50">
                                                 {/* FLW Name */}
                                                 {isColVisible('flw_name') && (
                                                 <td className="px-4 py-3 text-sm">
@@ -1655,25 +1797,196 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                                 title="Add this FLW to filter">
                                                             <i className="fa-solid fa-filter mr-1"></i> Filter
                                                         </button>
-                                                        <button onClick={function() {
-                                                                    if (!actions || !actions.createTaskWithOCS) {
-                                                                        showToast('Task creation not available — please hard-refresh (Cmd+Shift+R)');
-                                                                        return;
-                                                                    }
-                                                                    openOcsModal(f);
-                                                                }}
-                                                                disabled={openTaskUsernames.indexOf(f.username) >= 0 || createdTaskUsernames.indexOf(f.username) >= 0}
+                                                        {(openTaskUsernames.indexOf(f.username) >= 0 || openTasks[f.username]) ? (
+                                                            <button onClick={function() { toggleTaskExpand(f.username); }}
                                                                 className={'inline-flex items-center px-2 py-1 border rounded text-xs ' +
-                                                                    (openTaskUsernames.indexOf(f.username) >= 0 || createdTaskUsernames.indexOf(f.username) >= 0
-                                                                        ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                                                                        : 'border-blue-300 text-blue-700 hover:bg-blue-50')}
-                                                                title={openTaskUsernames.indexOf(f.username) >= 0 || createdTaskUsernames.indexOf(f.username) >= 0 ? 'Open task exists' : 'Create task & initiate AI for this FLW'}>
-                                                            <i className="fa-solid fa-plus mr-1"></i> Task
-                                                        </button>
+                                                                    (expandedTaskFlw === f.username
+                                                                        ? 'border-purple-400 text-purple-700 bg-purple-50'
+                                                                        : 'border-gray-300 text-gray-500 hover:bg-gray-100')}
+                                                                title="View open task">
+                                                                <i className={'fa-solid mr-1 ' + (expandedTaskFlw === f.username ? 'fa-chevron-up' : 'fa-clipboard-list')}></i> Task
+                                                            </button>
+                                                        ) : (
+                                                            <button onClick={function() {
+                                                                        if (!actions || !actions.createTaskWithOCS) {
+                                                                            showToast('Task creation not available — please hard-refresh (Cmd+Shift+R)');
+                                                                            return;
+                                                                        }
+                                                                        openOcsModal(f);
+                                                                    }}
+                                                                    disabled={createdTaskUsernames.indexOf(f.username) >= 0}
+                                                                    className={'inline-flex items-center px-2 py-1 border rounded text-xs ' +
+                                                                        (createdTaskUsernames.indexOf(f.username) >= 0
+                                                                            ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                                                            : 'border-blue-300 text-blue-700 hover:bg-blue-50')}
+                                                                    title={createdTaskUsernames.indexOf(f.username) >= 0 ? 'Task recently created' : 'Create task & initiate AI for this FLW'}>
+                                                                <i className="fa-solid fa-plus mr-1"></i> Task
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                                 )}
                                             </tr>
+                                            {expandedTaskFlw === f.username && (
+                                                <tr key={f.username + '-task'}>
+                                                    <td colSpan={visibleCols.length} className="px-0 py-0 bg-gray-50">
+                                                        <div className="border-t border-b border-purple-200 bg-white mx-4 my-2 rounded-lg shadow-sm overflow-hidden">
+                                                            {taskLoading && !taskDetail && (
+                                                                <div className="p-6 text-center text-gray-500">
+                                                                    <i className="fa-solid fa-spinner fa-spin mr-2"></i> Loading task...
+                                                                </div>
+                                                            )}
+                                                            {taskDetail && (
+                                                                <div>
+                                                                    {/* Task header */}
+                                                                    <div className="px-4 py-3 bg-purple-50 border-b border-purple-100 flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <i className="fa-solid fa-clipboard-list text-purple-600"></i>
+                                                                            <span className="font-medium text-sm text-purple-900">{taskDetail.title}</span>
+                                                                            <span className={'px-2 py-0.5 rounded-full text-xs font-medium ' +
+                                                                                (taskStatus === 'investigating' ? 'bg-blue-100 text-blue-700' :
+                                                                                 taskStatus === 'flw_action_in_progress' ? 'bg-yellow-100 text-yellow-700' :
+                                                                                 taskStatus === 'flw_action_completed' ? 'bg-green-100 text-green-700' :
+                                                                                 taskStatus === 'review_needed' ? 'bg-purple-100 text-purple-700' :
+                                                                                 'bg-gray-100 text-gray-700')}>
+                                                                                {(TASK_STATUS_OPTIONS.find(function(s) { return s.value === taskStatus; }) || {}).label || taskStatus}
+                                                                            </span>
+                                                                        </div>
+                                                                        <button onClick={function() { setExpandedTaskFlw(null); }}
+                                                                                className="text-gray-400 hover:text-gray-600 text-sm">
+                                                                            <i className="fa-solid fa-xmark"></i>
+                                                                        </button>
+                                                                    </div>
+
+                                                                    <div className="flex flex-col lg:flex-row">
+                                                                        {/* AI Conversation panel */}
+                                                                        <div className="flex-1 border-r border-gray-100 min-w-0">
+                                                                            <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                                                                                <span className="text-xs font-medium text-gray-600">
+                                                                                    <i className="fa-solid fa-comments mr-1"></i> AI Conversation
+                                                                                </span>
+                                                                                <button onClick={handleTaskRefreshTranscript}
+                                                                                        disabled={taskLoading}
+                                                                                        className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+                                                                                        title="Refresh from OCS">
+                                                                                    <i className={'fa-solid fa-rotate-right' + (taskLoading ? ' fa-spin' : '')}></i> Refresh
+                                                                                </button>
+                                                                            </div>
+                                                                            <div className="p-3 max-h-64 overflow-y-auto space-y-2" style={{minHeight: '120px'}}>
+                                                                                {taskTranscript && taskTranscript.length > 0 ? (
+                                                                                    taskTranscript.map(function(msg, idx) {
+                                                                                        var isAssistant = msg.role === 'assistant';
+                                                                                        return (
+                                                                                            <div key={idx} className={'flex ' + (isAssistant ? 'justify-start' : 'justify-end')}>
+                                                                                                <div className={'max-w-[80%] rounded-lg px-3 py-2 text-sm ' +
+                                                                                                    (isAssistant ? 'bg-gray-100 text-gray-800' : 'bg-blue-500 text-white')}>
+                                                                                                    <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                                                                                                    {msg.created_at && (
+                                                                                                        <div className={'text-xs mt-1 ' + (isAssistant ? 'text-gray-400' : 'text-blue-200')}>
+                                                                                                            {new Date(msg.created_at).toLocaleString()}
+                                                                                                        </div>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        );
+                                                                                    })
+                                                                                ) : taskTranscript && taskTranscript.length === 0 ? (
+                                                                                    <div className="text-center text-gray-400 text-sm py-4">
+                                                                                        <i className="fa-solid fa-comment-slash mr-1"></i> No messages yet
+                                                                                    </div>
+                                                                                ) : !taskLoading ? (
+                                                                                    <div className="text-center text-gray-400 text-sm py-4">
+                                                                                        <i className="fa-solid fa-circle-info mr-1"></i> Transcript not available
+                                                                                    </div>
+                                                                                ) : null}
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {/* Task controls panel */}
+                                                                        <div className="w-full lg:w-64 p-4 space-y-3 bg-gray-50">
+                                                                            {/* Status dropdown */}
+                                                                            <div>
+                                                                                <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                                                                                <select value={taskStatus}
+                                                                                        onChange={function(e) { setTaskStatus(e.target.value); }}
+                                                                                        className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:ring-1 focus:ring-purple-400 focus:border-purple-400">
+                                                                                    {TASK_STATUS_OPTIONS.map(function(opt) {
+                                                                                        return <option key={opt.value} value={opt.value}>{opt.label}</option>;
+                                                                                    })}
+                                                                                </select>
+                                                                            </div>
+
+                                                                            {/* Save / Discard */}
+                                                                            <div className="flex gap-2">
+                                                                                <button onClick={handleTaskSave}
+                                                                                        disabled={taskSaving || taskStatus === taskOriginalStatus}
+                                                                                        className={'flex-1 px-3 py-1.5 rounded text-xs font-medium ' +
+                                                                                            (taskStatus !== taskOriginalStatus
+                                                                                                ? 'bg-purple-600 text-white hover:bg-purple-700'
+                                                                                                : 'bg-gray-200 text-gray-400 cursor-not-allowed')}>
+                                                                                    {taskSaving ? 'Saving...' : 'Save'}
+                                                                                </button>
+                                                                                <button onClick={function() { setTaskStatus(taskOriginalStatus); }}
+                                                                                        disabled={taskStatus === taskOriginalStatus}
+                                                                                        className={'flex-1 px-3 py-1.5 rounded text-xs font-medium border ' +
+                                                                                            (taskStatus !== taskOriginalStatus
+                                                                                                ? 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                                                                                                : 'border-gray-200 text-gray-400 cursor-not-allowed')}>
+                                                                                    Discard
+                                                                                </button>
+                                                                            </div>
+
+                                                                            {/* Close Task */}
+                                                                            <div className="border-t border-gray-200 pt-3">
+                                                                                {!showCloseForm ? (
+                                                                                    <button onClick={function() { setShowCloseForm(true); }}
+                                                                                            className="w-full px-3 py-1.5 rounded text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50">
+                                                                                        <i className="fa-solid fa-circle-xmark mr-1"></i> Close Task
+                                                                                    </button>
+                                                                                ) : (
+                                                                                    <div className="space-y-2">
+                                                                                        <div className="text-xs font-medium text-gray-600">Outcome</div>
+                                                                                        <div className="space-y-1">
+                                                                                            {[{v:'none', l:'None'}, {v:'satisfactory', l:'Satisfactory'}, {v:'warned', l:'Warned'}, {v:'suspended', l:'Suspended'}].map(function(o) {
+                                                                                                return (
+                                                                                                    <label key={o.v} className="flex items-center gap-2 text-xs cursor-pointer">
+                                                                                                        <input type="radio" name="close_action" value={o.v}
+                                                                                                               checked={closeAction === o.v}
+                                                                                                               onChange={function() { setCloseAction(o.v); }}
+                                                                                                               className="text-purple-600 focus:ring-purple-500" />
+                                                                                                        {o.l}
+                                                                                                    </label>
+                                                                                                );
+                                                                                            })}
+                                                                                        </div>
+                                                                                        <textarea value={closeNote}
+                                                                                                  onChange={function(e) { setCloseNote(e.target.value); }}
+                                                                                                  placeholder="Resolution note (optional)"
+                                                                                                  rows={2}
+                                                                                                  className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-purple-400" />
+                                                                                        <div className="flex gap-2">
+                                                                                            <button onClick={handleTaskClose}
+                                                                                                    disabled={taskSaving}
+                                                                                                    className="flex-1 px-3 py-1.5 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700">
+                                                                                                {taskSaving ? 'Closing...' : 'Confirm Close'}
+                                                                                            </button>
+                                                                                            <button onClick={function() { setShowCloseForm(false); }}
+                                                                                                    className="flex-1 px-3 py-1.5 rounded text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-100">
+                                                                                                Cancel
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
                                         );
                                     })}
                                     {sortedOverview.length === 0 && (
@@ -1933,6 +2246,83 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                             </div>
                         </div>
                     </div>
+
+                    {/* Visit Status Distribution — per-visit-type stacked bar chart */}
+                    {visitDist && visitDist.by_visit_type && visitDist.totals && (visitDist.totals.total > 0) && (function() {
+                        var categories = [
+                            { key: 'completed_on_time', label: 'Completed On Time', color: '#22c55e' },
+                            { key: 'completed_late',    label: 'Completed Late',    color: '#86efac' },
+                            { key: 'due_on_time',       label: 'Due On Time',       color: '#facc15' },
+                            { key: 'due_late',          label: 'Due Late',          color: '#fb923c' },
+                            { key: 'missed',            label: 'Missed',            color: '#ef4444' },
+                            { key: 'not_due_yet',       label: 'Not Due Yet',       color: '#9ca3af' },
+                        ];
+                        var visibleCategories = categories.filter(function(c) { return !hiddenCategories[c.key]; });
+                        var maxTotal = Math.max.apply(null, visitDist.by_visit_type.map(function(vt) {
+                            var sum = 0;
+                            visibleCategories.forEach(function(c) { sum += (vt[c.key] || 0); });
+                            return sum;
+                        }));
+                        var chartHeight = 180;
+
+                        return (
+                            <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mb-4">
+                                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">Visit Status Distribution</h3>
+                                {/* Bar chart */}
+                                <div className="flex items-end justify-center gap-3" style={{ height: chartHeight + 30 }}>
+                                    {visitDist.by_visit_type.map(function(vt) {
+                                        var visibleTotal = 0;
+                                        visibleCategories.forEach(function(c) { visibleTotal += (vt[c.key] || 0); });
+                                        var barHeight = maxTotal > 0 ? Math.round((visibleTotal / maxTotal) * chartHeight) : 0;
+
+                                        return (
+                                            <div key={vt.visit_type} className="flex flex-col items-center" style={{ flex: '1 1 0', maxWidth: 80 }}>
+                                                {/* Stacked bar */}
+                                                <div className="w-full flex flex-col-reverse rounded-t overflow-hidden border border-gray-200"
+                                                     style={{ height: Math.max(barHeight, 2) }}>
+                                                    {visibleCategories.map(function(c) {
+                                                        var count = vt[c.key] || 0;
+                                                        if (count === 0) return null;
+                                                        var segPct = visibleTotal > 0 ? (count / visibleTotal * 100) : 0;
+                                                        return (
+                                                            <div key={c.key}
+                                                                 style={{ height: segPct + '%', backgroundColor: c.color, transition: 'all 0.3s', minHeight: count > 0 ? 2 : 0 }}
+                                                                 title={c.label + ': ' + count + ' (' + Math.round(segPct) + '%)'}></div>
+                                                        );
+                                                    })}
+                                                </div>
+                                                {/* Total count */}
+                                                <div className="text-xs text-gray-500 mt-1 font-medium">{visibleTotal}</div>
+                                                {/* Visit type label */}
+                                                <div className="text-xs text-gray-700 font-medium mt-0.5 text-center">{vt.visit_type}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                {/* Interactive legend */}
+                                <div className="flex flex-wrap justify-center gap-3 mt-4">
+                                    {categories.map(function(c) {
+                                        var isHidden = !!hiddenCategories[c.key];
+                                        return (
+                                            <button key={c.key}
+                                                    onClick={function() {
+                                                        setHiddenCategories(function(prev) {
+                                                            var next = Object.assign({}, prev);
+                                                            if (next[c.key]) { delete next[c.key]; } else { next[c.key] = true; }
+                                                            return next;
+                                                        });
+                                                    }}
+                                                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer border border-transparent hover:border-gray-300"
+                                                    style={{ opacity: isHidden ? 0.4 : 1, textDecoration: isHidden ? 'line-through' : 'none' }}>
+                                                <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: c.color }}></span>
+                                                {c.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     {/* Follow-up FLW Table */}
                     <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
