@@ -44,6 +44,7 @@ from commcare_connect.workflow.templates.mbw_monitoring.followup_analysis import
     aggregate_mother_metrics,
     aggregate_visit_status_distribution,
     build_followup_from_pipeline,
+    compute_flw_performance_by_status,
     compute_overview_quality_metrics,
     count_mothers_from_pipeline,
     extract_mother_metadata_from_forms,
@@ -57,6 +58,7 @@ from commcare_connect.workflow.templates.mbw_monitoring.session_adapter import (
     save_flw_result as save_flw_result_helper,
 )
 from commcare_connect.labs.analysis.data_access import fetch_flw_names
+from commcare_connect.workflow.data_access import WorkflowDataAccess
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, BaseSSEStreamView, send_sse_event
 
@@ -105,6 +107,68 @@ def parse_date_param(date_str: str | None, default: date) -> date:
         return date.fromisoformat(date_str)
     except ValueError:
         return default
+
+
+def _get_latest_flw_statuses(
+    request,
+    active_usernames: set[str],
+) -> dict[str, str]:
+    """Get the latest known assessment status for each FLW.
+
+    Checks two sources (same logic as flw_api._build_flw_history):
+    1. Traditional audit sessions (AuditDataAccess)
+    2. All workflow monitoring runs (flw_results in run state)
+
+    Returns dict mapping username (lowercase) → status key.
+    FLWs in active_usernames with no assessment get "none".
+    """
+    # Track latest per FLW: {username: (date_str, result)}
+    latest: dict[str, tuple[str, str]] = {}
+
+    def _update(uname: str, date_str: str, result: str):
+        uname = uname.lower()
+        prev = latest.get(uname)
+        if prev is None or (date_str and date_str > prev[0]):
+            latest[uname] = (date_str or "", result)
+
+    # 1. Traditional audit sessions
+    try:
+        from commcare_connect.audit.data_access import AuditDataAccess
+
+        audit_access = AuditDataAccess(request=request)
+        for session in audit_access.get_audit_sessions():
+            username = session.flw_username
+            result = session.overall_result
+            if not username or not result:
+                continue
+            session_date = session.data.get("created_at") or session.data.get("start_date") or ""
+            _update(username, session_date, result.lower())
+        audit_access.close()
+    except Exception as e:
+        logger.warning("[MBW Dashboard] Failed to fetch audit sessions: %s", e)
+
+    # 2. All workflow monitoring runs (including in-progress)
+    try:
+        wf_access = WorkflowDataAccess(request=request)
+        for run in wf_access.list_runs():
+            state = run.data.get("state", {})
+            flw_results = state.get("flw_results", {})
+            for username, result_data in flw_results.items():
+                if not isinstance(result_data, dict):
+                    continue
+                result = result_data.get("result")
+                if not result:
+                    continue
+                _update(username, result_data.get("assessed_at", ""), result)
+        wf_access.close()
+    except Exception as e:
+        logger.warning("[MBW Dashboard] Failed to fetch workflow runs: %s", e)
+
+    # Build final mapping: all active usernames get a status
+    return {
+        username: latest[username][1] if username in latest else "none"
+        for username in active_usernames
+    }
 
 
 class MBWMonitoringDashboardView(LoginRequiredMixin, TemplateView):
@@ -630,6 +694,13 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 "visit_status_distribution": visit_status_distribution,
             }
 
+            # Step 7: FLW Performance by assessment status
+            yield send_sse_event("Computing FLW performance metrics...")
+            flw_statuses = _get_latest_flw_statuses(request, active_usernames)
+            performance_data = compute_flw_performance_by_status(
+                flw_statuses, flw_drilldown, current_date
+            )
+
             # Fetch open tasks so the frontend can grey out the Task button and
             # provide inline task management (task_id needed for detail/update APIs)
             open_tasks = {}
@@ -668,6 +739,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 "flw_names": flw_names,
                 "open_tasks": open_tasks,
                 "open_task_usernames": open_task_usernames,
+                "performance_data": performance_data,
             }
 
             # Include monitoring session data if active
@@ -708,6 +780,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     "flw_names": flw_names,
                     "open_tasks": open_tasks,
                     "open_task_usernames": open_task_usernames,
+                    "performance_data": performance_data,
                 }
                 try:
                     save_dashboard_snapshot(request, session_id, snapshot_payload)
@@ -898,6 +971,7 @@ class MBWSnapshotView(LoginRequiredMixin, View):
             "flw_names": snapshot.get("flw_names", {}),
             "open_tasks": snapshot.get("open_tasks", {}),
             "open_task_usernames": snapshot.get("open_task_usernames", []),
+            "performance_data": snapshot.get("performance_data", []),
             "monitoring_session": {
                 "id": monitoring_session.id,
                 "title": monitoring_session.title,
@@ -905,6 +979,32 @@ class MBWSnapshotView(LoginRequiredMixin, View):
                 "flw_results": monitoring_session.flw_results,
                 "progress": monitoring_session.get_monitoring_progress_stats(),
                 "selected_flw_usernames": monitoring_session.selected_flw_usernames,
+            },
+        })
+
+
+class MBWOAuthStatusView(LoginRequiredMixin, View):
+    """Return current OAuth token status for Connect, CommCare HQ, and OCS."""
+
+    def get(self, request):
+        now_ts = timezone.now().timestamp()
+        next_url = request.GET.get("next", request.get_full_path())
+
+        labs = request.session.get("labs_oauth", {})
+        cchq = request.session.get("commcare_oauth", {})
+        ocs = request.session.get("ocs_oauth", {})
+
+        return JsonResponse({
+            "connect": {
+                "active": bool(labs.get("access_token") and now_ts < labs.get("expires_at", 0)),
+            },
+            "commcare": {
+                "active": bool(cchq.get("access_token") and now_ts < cchq.get("expires_at", 0)),
+                "authorize_url": reverse("labs:commcare_initiate") + "?" + urlencode({"next": next_url}),
+            },
+            "ocs": {
+                "active": bool(ocs.get("access_token") and now_ts < ocs.get("expires_at", 0)),
+                "authorize_url": reverse("labs:ocs_initiate") + "?" + urlencode({"next": next_url}),
             },
         })
 

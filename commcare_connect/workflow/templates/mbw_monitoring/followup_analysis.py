@@ -1047,3 +1047,130 @@ def compute_overview_quality_metrics(
         }
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# FLW Performance by Status
+# ---------------------------------------------------------------------------
+
+# Display label → (status_key, color hint)
+FLW_STATUS_DISPLAY = {
+    "eligible_for_renewal": "Eligible for Renewal",
+    "probation": "Probation",
+    "suspended": "Suspended",
+    "none": "No Category",
+}
+
+# Visit milestones: (display visit_type, min_completed_to_be_on_track, output_key)
+_VISIT_MILESTONES = [
+    ("Month 1", 3, "pct_4_visits_on_track"),
+    ("Month 3", 4, "pct_5_visits_complete"),
+    ("Month 6", 5, "pct_6_visits_complete"),
+]
+
+
+def compute_flw_performance_by_status(
+    flw_statuses: dict[str, str],
+    flw_drilldown: dict[str, list],
+    current_date: date,
+) -> list[dict]:
+    """Aggregate case-level performance metrics grouped by FLW assessment status.
+
+    Args:
+        flw_statuses: username (lowercase) → status key
+            ("eligible_for_renewal", "probation", "suspended", or "none").
+        flw_drilldown: username → list of mother summary dicts
+            (output of aggregate_mother_metrics). Each mother has:
+            - "eligible": bool
+            - "visits": list of {visit_type, visit_date_scheduled, status}
+        current_date: reference date for grace-period check.
+
+    Returns:
+        List of 4 dicts, one per status category (ordered: eligible, probation,
+        suspended, none). Each dict contains aggregated metrics.
+    """
+    grace_cutoff = current_date - timedelta(days=GRACE_PERIOD_DAYS)
+
+    # Group FLW usernames by status bucket
+    status_order = ["eligible_for_renewal", "probation", "suspended", "none"]
+    buckets: dict[str, list[str]] = {s: [] for s in status_order}
+    for username, status in flw_statuses.items():
+        bucket = status if status in buckets else "none"
+        buckets[bucket].append(username)
+
+    results = []
+    for status_key in status_order:
+        flw_list = buckets[status_key]
+
+        # Collect all mothers across FLWs in this bucket
+        all_mothers = []
+        for username in flw_list:
+            all_mothers.extend(flw_drilldown.get(username, []))
+
+        total_cases = len(all_mothers)
+        eligible_mothers = [m for m in all_mothers if m.get("eligible")]
+        total_eligible = len(eligible_mothers)
+
+        # --- still eligible: eligible AND (completed >= 5 OR missed <= 1) ---
+        still_eligible = 0
+        for m in eligible_mothers:
+            completed = sum(1 for v in m["visits"] if v["status"].startswith("Completed"))
+            missed = sum(1 for v in m["visits"] if v["status"] == "Missed")
+            if completed >= 5 or missed <= 1:
+                still_eligible += 1
+
+        # --- pct missed ≤1 (all mothers, not just eligible) ---
+        missed_1_or_less = 0
+        for m in all_mothers:
+            missed = sum(1 for v in m["visits"] if v["status"] == "Missed")
+            if missed <= 1:
+                missed_1_or_less += 1
+
+        # --- visit milestone percentages ---
+        milestone_results: dict[str, int] = {}
+        for visit_display_type, min_completed, metric_key in _VISIT_MILESTONES:
+            denominator = 0
+            numerator = 0
+            for m in all_mothers:
+                # Find the specific visit type for this mother
+                milestone_visit = None
+                for v in m["visits"]:
+                    if v["visit_type"] == visit_display_type:
+                        milestone_visit = v
+                        break
+                if milestone_visit is None:
+                    continue
+                # Check if this visit is due past grace period
+                sched_str = milestone_visit.get("visit_date_scheduled")
+                if not sched_str:
+                    continue
+                try:
+                    sched_date = date.fromisoformat(sched_str[:10])
+                except (ValueError, TypeError):
+                    continue
+                if sched_date >= grace_cutoff:
+                    continue  # not yet due past buffer
+                denominator += 1
+                # Count total completed visits for this mother
+                completed = sum(
+                    1 for v in m["visits"] if v["status"].startswith("Completed")
+                )
+                if completed >= min_completed:
+                    numerator += 1
+            milestone_results[metric_key] = (
+                round(numerator / denominator * 100) if denominator > 0 else 0
+            )
+
+        results.append({
+            "status": FLW_STATUS_DISPLAY.get(status_key, status_key),
+            "status_key": status_key,
+            "num_flws": len(flw_list),
+            "total_cases": total_cases,
+            "total_cases_eligible_at_registration": total_eligible,
+            "total_cases_still_eligible": still_eligible,
+            "pct_still_eligible": round(still_eligible / total_eligible * 100) if total_eligible > 0 else 0,
+            "pct_missed_1_or_less_visits": round(missed_1_or_less / total_cases * 100) if total_cases > 0 else 0,
+            **milestone_results,
+        })
+
+    return results

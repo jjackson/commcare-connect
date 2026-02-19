@@ -6,7 +6,7 @@
 2. [Architecture](#architecture)
 3. [Workflow Module Integration](#workflow-module-integration)
 4. [Data Flow](#data-flow)
-5. [Three-Tab Dashboard](#three-tab-dashboard)
+5. [Four-Tab Dashboard](#four-tab-dashboard)
 6. [Data Sources & APIs](#data-sources--apis)
 7. [Pipeline Configuration](#pipeline-configuration)
 8. [Follow-Up Rate Business Logic](#follow-up-rate-business-logic)
@@ -32,6 +32,7 @@ The MBW (Mother Baby Wellness) Monitoring Dashboard is a real-time performance m
 - **Overview**: High-level per-FLW summary combining cases registered, follow-up rate, GS score, GPS metrics, and quality/fraud indicators
 - **GPS Analysis**: Distance-based anomaly detection using Haversine calculations to flag suspicious travel patterns
 - **Follow-Up Rate**: Visit completion tracking across 6 visit types (ANC, Postnatal, Week 1, Month 1, Month 3, Month 6) with per-mother drill-down, eligibility filtering, and grace period
+- **FLW Performance**: Aggregated case metrics grouped by each FLW's latest assessment status (Eligible for Renewal, Probation, Suspended, No Category)
 
 The dashboard runs within the **Workflow module** of Connect Labs. The UI is a React component defined as a JSX string in Python (`template.py`), transpiled client-side by Babel standalone, and rendered dynamically by `DynamicWorkflow.tsx`. All data is loaded via a single Server-Sent Events (SSE) connection, enabling real-time progress feedback during data loading.
 
@@ -91,6 +92,9 @@ User Browser
     |
     +-- GET /custom_analysis/mbw_monitoring/api/snapshot/
     |   +-- MBWSnapshotView (returns stored dashboard snapshot or {has_snapshot: false})
+    |
+    +-- GET /custom_analysis/mbw_monitoring/api/oauth-status/
+    |   +-- MBWOAuthStatusView (checks Connect/CommCare/OCS token expiry)
     |
     +-- GET /tasks/api/<task_id>/
     |   +-- task_detail_api (returns task data as JSON for inline task management)
@@ -255,7 +259,7 @@ var eventSource = new EventSource(
 );
 ```
 
-The stream view executes 6 steps, yielding progress messages at each stage:
+The stream view executes 7 steps, yielding progress messages at each stage:
 
 | Step | Data Source | What It Fetches | Cache |
 |------|-----------|-----------------|-------|
@@ -266,8 +270,9 @@ The stream view executes 6 steps, yielding progress messages at each stage:
 | 4b | CCHQ Form API v1 | Gold Standard Visit Checklist forms -> GS scores per FLW | Django cache (1hr) |
 | 5 | In-memory | Follow-up metrics (visit status, completion rates with eligibility + grace period) | None (computed) |
 | 6 | In-memory | Overview metrics (merge follow-up rate, GS score, GPS, quality metrics) | None (computed) |
+| 7 | Connect API (audit sessions + workflow runs) | FLW Performance by assessment status (latest status per FLW + aggregated case metrics) | None (computed) |
 
-The final SSE event contains the combined payload for all three tabs, which is stored in React state via `setDashData()`.
+The final SSE event contains the combined payload for all four tabs, which is stored in React state via `setDashData()`.
 
 ### Dashboard Data Snapshotting
 
@@ -349,13 +354,19 @@ The final SSE payload (`data.data`) contains:
   "active_usernames": ["flw001", "flw002"],
   "flw_names": {"flw001": "Alice Mensah", "flw002": "Bob Kone"},
   "open_task_usernames": ["flw002"],
+  "performance_data": [
+    {"status": "eligible_for_renewal", "num_flws": 5, "total_cases": 200, "eligible_at_registration": 180, "still_eligible": 150, "pct_still_eligible": 83.3, ...},
+    {"status": "probation", ...},
+    {"status": "suspended", ...},
+    {"status": "none", ...}
+  ],
   "monitoring_session": { "id": 1, "title": "...", "status": "in_progress", "worker_results": {...} }
 }
 ```
 
 ---
 
-## Three-Tab Dashboard
+## Four-Tab Dashboard
 
 ### Overview Tab
 
@@ -444,6 +455,33 @@ Tracks visit completion across 6 visit types with per-mother granularity, eligib
 **Eligibility Filter**: "Full intervention bonus only" checkbox (default checked). When checked, follow-up rate only counts mothers with `eligible_full_intervention_bonus = "1"`.
 
 **Drill-Down**: Clicking a FLW row expands to show per-mother visit details with metadata (name, age, phone, registration date, household size, preferred visit time, ANC/PNC dates, EDD, baby DOB, eligibility).
+
+### FLW Performance Tab
+
+Aggregated case metrics grouped by each FLW's latest known assessment status. Computed by `compute_flw_performance_by_status()` in `followup_analysis.py`.
+
+**Status Groups**: Eligible for Renewal, Probation, Suspended, No Category (FLWs without any assessment)
+
+**Status Source**: FLW assessment statuses are retrieved from both audit sessions (`AuditDataAccess.get_audit_sessions()`) and all workflow monitoring runs (`WorkflowDataAccess.list_runs()`), matching the logic in `flw_api._build_flw_history()`. The latest status by date is used.
+
+**Table Columns**:
+
+| Column | Description |
+|--------|-------------|
+| Status | Assessment status category (color-coded chip) |
+| # FLWs | Number of FLWs in this status group |
+| Total Cases | Total registered mothers across all FLWs in the group |
+| Eligible at Reg | Mothers marked eligible for full intervention bonus at registration |
+| Still Eligible | Mothers with 5+ completed visits OR <=1 missed visits |
+| % Still Eligible | Still Eligible / Eligible at Reg (color: green >=70%, yellow 50-69%, red <50%) |
+| % <=1 Missed | Cases with 0 or 1 missed visits / all cases |
+| % 4 Visits On Track | Cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer) |
+| % 5 Visits Complete | Cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer) |
+| % 6 Visits Complete | Cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer) |
+
+**Totals Row**: Aggregated totals across all status groups.
+
+**Data in Snapshot**: Performance data is included in the dashboard snapshot (`performance_data` key) and restored from it on subsequent loads.
 
 ---
 
@@ -820,6 +858,14 @@ The dashboard uses up to three OAuth tokens:
 2. **CommCare OAuth** (`commcare_oauth` in session): For accessing CommCare HQ APIs (Form API, Application API)
 3. **OCS OAuth** (`ocs_oauth` in session): For AI task creation via Open Chat Studio (optional)
 
+### Pre-Refresh OAuth Expiration Check
+
+Before starting an SSE data stream, the frontend calls `GET /custom_analysis/mbw_monitoring/api/oauth-status/` to check if Connect and CommCare HQ tokens are still active. If either is expired, a red warning banner is shown with "Authorize" buttons linking to the OAuth initiate endpoints. The `next` parameter uses `window.location.pathname + window.location.search` (relative path) to redirect back after authorization.
+
+This check is skipped when loading from a snapshot (no OAuth needed for cached data). OCS token expiry is displayed but not blocking (OCS is optional).
+
+**Endpoint**: `MBWOAuthStatusView` in `views.py` — returns `{connect: {active}, commcare: {active, authorize_url}, ocs: {active, authorize_url}}`
+
 ### Automatic Token Refresh
 
 The `CommCareDataAccess` client automatically refreshes expired tokens:
@@ -869,6 +915,14 @@ All filtering happens in the browser without additional API calls:
 ### Sorting
 
 Each table has independent sort state. Clicking a column header toggles ascending/descending. Numeric columns sort numerically; string columns sort alphabetically.
+
+### Sticky Table Headers
+
+Table headers freeze below the Connect Labs header bar (64px) when scrolling long tables. Implemented via JavaScript (not CSS `position: sticky`) because Chrome doesn't support sticky on `<thead>`/`<th>` elements when ancestor containers have `overflow` or `border-collapse: collapse` (Tailwind preflight).
+
+**Approach**: A `useEffect` with a `scroll` event listener finds all `<table data-sticky-header>` elements, calculates each `<thead>`'s document offset via `offsetTop`/`offsetParent` chain, and applies `transform: translateY(offset)` when the header scrolls past 64px. The transform keeps the thead within the table's bounds, so `overflow: clip` on card wrappers doesn't clip it.
+
+**Dependencies**: Re-runs on `[activeTab, sseComplete]` to detect tables in newly rendered tabs. The `data-sticky-header` attribute marks which tables participate.
 
 ### Table Horizontal Scrolling
 
@@ -929,7 +983,7 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 
 | Feature | Tab | Description |
 |---------|-----|-------------|
-| Three-tab navigation | All | Overview, GPS Analysis, Follow-Up Rate tabs |
+| Four-tab navigation | All | Overview, GPS Analysis, Follow-Up Rate, FLW Performance tabs |
 | SSE streaming with progress | All | Real-time loading messages during data loading |
 | FLW filter (multi-select) | All | Filter by FLW name across all tabs |
 | Mother filter (multi-select) | Follow-Up | Filter by mother name |
@@ -963,6 +1017,9 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | Tasks pagination | Tasks page | Previous/Next controls when >50 tasks; preserves filter query params across pages |
 | Case-insensitive usernames | Backend | All username comparisons normalized to lowercase (Connect vs CCHQ casing differences) |
 | Optimistic assessment UI | Overview | Status buttons update instantly; revert on error. Toggle behavior (click active status to clear). 1 GET + 1 POST per click (down from 5 GETs + 2 POSTs) |
+| FLW Performance tab | Performance | Aggregated case metrics grouped by FLW assessment status (Eligible/Probation/Suspended/None) with visit milestone tracking |
+| Pre-refresh OAuth check | All | Checks token expiry before SSE stream; shows warning banner with authorize buttons if expired; skipped for snapshot loads |
+| Sticky table headers | All | JS-based scroll handler using `transform: translateY()` pins `<thead>` at 64px below viewport top when scrolling long tables |
 
 ### Placeholder / TBD Features
 
@@ -1040,7 +1097,7 @@ All files under `commcare_connect/workflow/templates/mbw_monitoring/`:
 | `commcare_connect/workflow/urls.py` | All workflow URL patterns (96 routes) |
 | `commcare_connect/workflow/data_access.py` | WorkflowDataAccess (incl. save_run_snapshot()), PipelineDataAccess, proxy records. Properties: `template_type` on definitions, `created_at` + `selected_count` on runs |
 | `commcare_connect/workflow/templates/__init__.py` | Template auto-discovery and registry |
-| `commcare_connect/templates/workflow/run.html` | Django template (JSON script tag, bundle loading, overflow-x-hidden) |
+| `commcare_connect/templates/workflow/run.html` | Django template (JSON script tag, bundle loading, overflow-x: clip for sticky header support) |
 
 ### Frontend Files
 
