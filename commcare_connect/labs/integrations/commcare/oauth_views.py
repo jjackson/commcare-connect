@@ -57,7 +57,7 @@ def labs_commcare_initiate(request: HttpRequest) -> HttpResponseRedirect:
     auth_params = {
         "client_id": client_id,
         "redirect_uri": callback_url,
-        "scope": "access_apis offline_access",
+        "scope": "access_apis",
         "response_type": "code",
         "state": state,
         "code_challenge": code_challenge,
