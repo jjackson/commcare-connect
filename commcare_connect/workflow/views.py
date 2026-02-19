@@ -220,6 +220,9 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                 explicit_template = self.request.GET.get("template")
                 matched_template = None
 
+                if explicit_template:
+                    # Normalize dashes to underscores (e.g. mbw-monitoring → mbw_monitoring)
+                    explicit_template = explicit_template.replace("-", "_")
                 if explicit_template and explicit_template in TEMPLATES:
                     matched_template = explicit_template
                 else:
