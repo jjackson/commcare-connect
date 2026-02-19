@@ -61,6 +61,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [fromSnapshot, setFromSnapshot] = React.useState(false);
     var [snapshotTimestamp, setSnapshotTimestamp] = React.useState(null);
     var [refreshTrigger, setRefreshTrigger] = React.useState(0);
+    var [oauthStatus, setOauthStatus] = React.useState(null);
     var [activeTab, setActiveTab] = React.useState('overview');
     var [overviewSearch, setOverviewSearch] = React.useState('');
     var [overviewSort, setOverviewSort] = React.useState({ col: 'display_name', dir: 'asc' });
@@ -251,6 +252,32 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             sseCleanupRef.current = function() { es.close(); };
         }
 
+        // Check OAuth status before starting SSE stream
+        function checkOAuthAndStream(bustCache) {
+            setOauthStatus(null);
+            setSseMessages(['Checking authentication...']);
+            fetch('/custom_analysis/mbw_monitoring/api/oauth-status/?next=' + encodeURIComponent(window.location.pathname + window.location.search))
+            .then(function(r) { return r.json(); })
+            .then(function(status) {
+                var expired = [];
+                if (!status.connect?.active) expired.push('connect');
+                if (!status.commcare?.active) expired.push('commcare');
+                if (!status.ocs?.active) expired.push('ocs');
+                // Connect + CommCare are required; OCS is optional
+                if (!status.connect?.active || !status.commcare?.active) {
+                    setOauthStatus(status);
+                    setSseMessages([]);
+                    return;
+                }
+                setOauthStatus(null);
+                startSSEStream(bustCache);
+            })
+            .catch(function() {
+                // Network error checking OAuth — proceed anyway, SSE will fail with its own error
+                startSSEStream(bustCache);
+            });
+        }
+
         // refreshTrigger=0 means initial load → try snapshot first
         // refreshTrigger>0 means user clicked Refresh Data → SSE with bust_cache
         if (refreshTrigger === 0 && instance.id) {
@@ -267,17 +294,94 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     }
                     return;
                 }
-                startSSEStream(false);
+                checkOAuthAndStream(false);
             })
-            .catch(function() { startSSEStream(false); });
+            .catch(function() { checkOAuthAndStream(false); });
         } else {
-            startSSEStream(refreshTrigger > 0);
+            checkOAuthAndStream(refreshTrigger > 0);
         }
 
         return function() {
             if (sseCleanupRef.current) sseCleanupRef.current();
         };
     }, [step, instance.id, refreshTrigger]);
+
+    // =========================================================================
+    // Sticky table headers via JS (CSS sticky breaks in Chrome due to ancestors)
+    // =========================================================================
+    React.useEffect(function() {
+        var HEADER_HEIGHT = 64;
+        var theadCache = [];
+
+        function getDocumentOffsetTop(el) {
+            var top = 0;
+            while (el) { top += el.offsetTop; el = el.offsetParent; }
+            return top;
+        }
+
+        function cacheTheads() {
+            theadCache = [];
+            document.querySelectorAll('[data-sticky-header] thead').forEach(function(thead) {
+                var table = thead.closest('table');
+                if (!table) return;
+                theadCache.push({
+                    thead: thead,
+                    table: table,
+                    offsetTop: getDocumentOffsetTop(thead)
+                });
+            });
+        }
+
+        function handleScroll() {
+            if (theadCache.length === 0) cacheTheads();
+            var scrollY = window.scrollY || window.pageYOffset;
+            var threshold = scrollY + HEADER_HEIGHT;
+
+            theadCache.forEach(function(d) {
+                var tableBottom = d.offsetTop + d.table.offsetHeight;
+                var theadH = d.thead.offsetHeight;
+                if (threshold > d.offsetTop && threshold < tableBottom - theadH) {
+                    var offset = threshold - d.offsetTop;
+                    d.thead.style.transform = 'translateY(' + offset + 'px)';
+                    d.thead.style.position = 'relative';
+                    d.thead.style.zIndex = '20';
+                    d.thead.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+                    // Ensure opaque background on all th cells
+                    Array.from(d.thead.querySelectorAll('th')).forEach(function(th) {
+                        if (!th.style.backgroundColor) th.style.backgroundColor = '#f9fafb';
+                    });
+                } else {
+                    d.thead.style.transform = '';
+                    d.thead.style.position = '';
+                    d.thead.style.zIndex = '';
+                    d.thead.style.boxShadow = '';
+                    Array.from(d.thead.querySelectorAll('th')).forEach(function(th) {
+                        th.style.backgroundColor = '';
+                    });
+                }
+            });
+        }
+
+        // Small delay to let React finish rendering the active tab
+        var timer = setTimeout(function() {
+            cacheTheads();
+            handleScroll();
+        }, 50);
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        window.addEventListener('resize', function() { theadCache = []; });
+
+        return function() {
+            clearTimeout(timer);
+            window.removeEventListener('scroll', handleScroll);
+            theadCache.forEach(function(d) {
+                d.thead.style.transform = '';
+                d.thead.style.position = '';
+                d.thead.style.zIndex = '';
+                d.thead.style.boxShadow = '';
+            });
+        };
+    }, [activeTab, sseComplete]);
 
     // =========================================================================
     // Helpers
@@ -697,6 +801,66 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var isCompleted = instance.status === 'completed';
     var monitoringSession = dashData?.monitoring_session || null;
     var isSessionActive = monitoringSession ? monitoringSession.status === 'in_progress' : !isCompleted;
+
+    // ---- OAuth expired state ----
+    if (oauthStatus && (!oauthStatus.connect?.active || !oauthStatus.commcare?.active)) {
+        var expiredServices = [];
+        if (!oauthStatus.connect?.active) expiredServices.push({ name: 'Connect', key: 'connect', url: oauthStatus.connect?.authorize_url });
+        if (!oauthStatus.commcare?.active) expiredServices.push({ name: 'CommCare HQ', key: 'commcare', url: oauthStatus.commcare?.authorize_url });
+        if (!oauthStatus.ocs?.active) expiredServices.push({ name: 'OCS', key: 'ocs', url: oauthStatus.ocs?.authorize_url });
+        var activeServices = [];
+        if (oauthStatus.connect?.active) activeServices.push('Connect');
+        if (oauthStatus.commcare?.active) activeServices.push('CommCare HQ');
+        if (oauthStatus.ocs?.active) activeServices.push('OCS');
+
+        return (
+            <div className="space-y-4">
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                    <h2 className="text-xl font-bold text-gray-900">{instance.state?.title || 'MBW Monitoring'}</h2>
+                    <p className="text-gray-500 mt-1">Authentication required before loading data</p>
+                </div>
+                <div className="bg-red-50 border border-red-300 rounded-lg p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                        <i className="fa-solid fa-triangle-exclamation text-red-600"></i>
+                        <span className="font-semibold text-red-800">OAuth tokens expired</span>
+                    </div>
+                    <p className="text-sm text-red-700 mb-4">
+                        One or more authentication tokens have expired. Please re-authorize before loading data.
+                    </p>
+                    <div className="space-y-2 mb-4">
+                        {expiredServices.map(function(svc) {
+                            return (
+                                <div key={svc.key} className="flex items-center gap-3">
+                                    <i className="fa-solid fa-circle-xmark text-red-500"></i>
+                                    <span className="text-sm font-medium text-gray-800 w-32">{svc.name}</span>
+                                    {svc.url ? (
+                                        <a href={svc.url} className="px-3 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 no-underline">
+                                            Authorize {svc.name}
+                                        </a>
+                                    ) : (
+                                        <span className="text-sm text-gray-500">No authorization URL available</span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                        {activeServices.map(function(name) {
+                            return (
+                                <div key={name} className="flex items-center gap-3">
+                                    <i className="fa-solid fa-circle-check text-green-500"></i>
+                                    <span className="text-sm font-medium text-gray-800 w-32">{name}</span>
+                                    <span className="text-sm text-green-600">Active</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <button onClick={function() { setRefreshTrigger(function(c) { return c + 1; }); }}
+                            className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">
+                        <i className="fa-solid fa-rotate-right mr-1"></i> Retry
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     // ---- Loading state ----
     if (!sseComplete && !sseError) {
@@ -1360,6 +1524,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         { id: 'overview', label: 'Overview', icon: 'fa-chart-line' },
                         { id: 'gps', label: 'GPS Analysis', icon: 'fa-location-dot' },
                         { id: 'followup', label: 'Follow-Up Rate', icon: 'fa-clipboard-check' },
+                        { id: 'performance', label: 'FLW Performance', icon: 'fa-ranking-star' },
                     ].map(function(t) {
                         var active = activeTab === t.id;
                         return (
@@ -1543,7 +1708,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                             </div>
                         </div>
                         <div style={{ width: 0, minWidth: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                            <table className="divide-y divide-gray-200" style={{ width: 'max-content', minWidth: '100%' }}>
+                            <table data-sticky-header className="divide-y divide-gray-200" style={{ width: 'max-content', minWidth: '100%' }}>
                                 <thead className="bg-gray-50">
                                     <tr>
                                         {isColVisible('flw_name') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'display_name'); }}
@@ -2031,14 +2196,14 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     </div>
 
                     {/* GPS FLW Table */}
-                    <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                    <div className="bg-white border border-gray-200 rounded-lg shadow-sm" style={{overflow: 'clip'}}>
                         <div className="px-6 py-3 border-b border-gray-200 bg-gray-50">
                             <h2 className="text-lg font-semibold text-gray-900">
                                 FLW GPS Analysis <span className="text-sm text-gray-600 font-normal">({filteredGpsFlws.length} FLWs)</span>
                             </h2>
                         </div>
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
+                            <table data-sticky-header className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                     <tr>
                                         <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'display_name'); }}
@@ -2156,7 +2321,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
                     {/* GPS Drill-Down Panel (below table) */}
                     {expandedGps && (
-                        <div className="mt-4 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                        <div className="mt-4 bg-white border border-gray-200 rounded-lg shadow-sm" style={{overflow: 'clip'}}>
                             <div className="px-6 py-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
                                 <h3 className="text-lg font-semibold text-gray-900">
                                     Visit Details for {(gpsFlws.find(function(f) { return f.username === expandedGps; }) || {}).display_name || expandedGps}
@@ -2171,7 +2336,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                 </div>
                             ) : gpsDetail ? (
                                 <div className="overflow-x-auto">
-                                    <table className="min-w-full divide-y divide-gray-200">
+                                    <table data-sticky-header className="min-w-full divide-y divide-gray-200">
                                         <thead className="bg-gray-50">
                                             <tr>
                                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
@@ -2325,14 +2490,14 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     })()}
 
                     {/* Follow-up FLW Table */}
-                    <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                    <div className="bg-white border border-gray-200 rounded-lg shadow-sm" style={{overflow: 'clip'}}>
                         <div className="px-6 py-3 border-b border-gray-200 bg-gray-50">
                             <h2 className="text-lg font-semibold text-gray-900">
                                 FLW Follow-Up Rates <span className="text-sm text-gray-600 font-normal">({filteredFuFlws.length} FLWs)</span>
                             </h2>
                         </div>
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
+                            <table data-sticky-header className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                     <tr>
                                         <Th onClick={function() { toggleSort(setFuSort, fuSort, 'display_name'); }}
@@ -2572,6 +2737,116 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                 )}
                             </table>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ========== FLW PERFORMANCE TAB ========== */}
+            {activeTab === 'performance' && (
+                <div>
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200" style={{overflow: 'clip'}}>
+                        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                            <h3 className="text-sm font-semibold text-gray-700">
+                                <i className="fa-solid fa-ranking-star mr-1"></i> FLW Performance by Assessment Status
+                            </h3>
+                            <p className="text-xs text-gray-500 mt-1">
+                                Aggregated case metrics grouped by each FLW's latest known assessment outcome across all completed monitoring runs.
+                            </p>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table data-sticky-header className="min-w-full divide-y divide-gray-200 text-sm">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"># FLWs</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Cases</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Eligible at Reg</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Still Eligible</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">% Still Eligible</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 0 or 1 missed visits / all cases">% &le;1 Missed</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer)">% 4 Visits On Track</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer)">% 5 Visits Complete</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer)">% 6 Visits Complete</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {(dashData?.performance_data || []).map(function(row) {
+                                        var statusColors = {
+                                            eligible_for_renewal: '#22c55e',
+                                            probation: '#eab308',
+                                            suspended: '#ef4444',
+                                            none: '#9ca3af',
+                                        };
+                                        var color = statusColors[row.status_key] || '#9ca3af';
+                                        return (
+                                            <tr key={row.status_key} className="hover:bg-gray-50">
+                                                <td className="px-3 py-2 whitespace-nowrap">
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <span style={{width: 10, height: 10, borderRadius: '50%', backgroundColor: color, display: 'inline-block'}}></span>
+                                                        <span className="font-medium text-gray-900">{row.status}</span>
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2 text-right text-gray-700">{row.num_flws}</td>
+                                                <td className="px-3 py-2 text-right text-gray-700">{row.total_cases}</td>
+                                                <td className="px-3 py-2 text-right text-gray-700">{row.total_cases_eligible_at_registration}</td>
+                                                <td className="px-3 py-2 text-right text-gray-700">{row.total_cases_still_eligible}</td>
+                                                <td className="px-3 py-2 text-right font-medium" style={{color: row.pct_still_eligible >= 80 ? '#22c55e' : row.pct_still_eligible >= 60 ? '#eab308' : '#ef4444'}}>{row.pct_still_eligible}%</td>
+                                                <td className="px-3 py-2 text-right text-gray-700">{row.pct_missed_1_or_less_visits}%</td>
+                                                <td className="px-3 py-2 text-right text-gray-700">{row.pct_4_visits_on_track}%</td>
+                                                <td className="px-3 py-2 text-right text-gray-700">{row.pct_5_visits_complete}%</td>
+                                                <td className="px-3 py-2 text-right text-gray-700">{row.pct_6_visits_complete}%</td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {/* Totals row */}
+                                    {(function() {
+                                        var perf = dashData?.performance_data || [];
+                                        if (perf.length === 0) return null;
+                                        var totals = {
+                                            num_flws: 0, total_cases: 0,
+                                            total_cases_eligible_at_registration: 0,
+                                            total_cases_still_eligible: 0,
+                                        };
+                                        perf.forEach(function(r) {
+                                            totals.num_flws += r.num_flws;
+                                            totals.total_cases += r.total_cases;
+                                            totals.total_cases_eligible_at_registration += r.total_cases_eligible_at_registration;
+                                            totals.total_cases_still_eligible += r.total_cases_still_eligible;
+                                        });
+                                        var pctStill = totals.total_cases_eligible_at_registration > 0
+                                            ? Math.round(totals.total_cases_still_eligible / totals.total_cases_eligible_at_registration * 100) : 0;
+                                        // Weighted averages for percentage columns
+                                        var totalMissedNum = 0;
+                                        var total4Num = 0; var total4Den = 0;
+                                        var total5Num = 0; var total5Den = 0;
+                                        var total6Num = 0; var total6Den = 0;
+                                        perf.forEach(function(r) {
+                                            totalMissedNum += Math.round(r.pct_missed_1_or_less_visits * r.total_cases / 100);
+                                        });
+                                        var pctMissed = totals.total_cases > 0 ? Math.round(totalMissedNum / totals.total_cases * 100) : 0;
+                                        return (
+                                            <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
+                                                <td className="px-3 py-2 text-gray-900">Total</td>
+                                                <td className="px-3 py-2 text-right text-gray-900">{totals.num_flws}</td>
+                                                <td className="px-3 py-2 text-right text-gray-900">{totals.total_cases}</td>
+                                                <td className="px-3 py-2 text-right text-gray-900">{totals.total_cases_eligible_at_registration}</td>
+                                                <td className="px-3 py-2 text-right text-gray-900">{totals.total_cases_still_eligible}</td>
+                                                <td className="px-3 py-2 text-right text-gray-900">{pctStill}%</td>
+                                                <td className="px-3 py-2 text-right text-gray-900">{pctMissed}%</td>
+                                                <td className="px-3 py-2 text-right text-gray-500">-</td>
+                                                <td className="px-3 py-2 text-right text-gray-500">-</td>
+                                                <td className="px-3 py-2 text-right text-gray-500">-</td>
+                                            </tr>
+                                        );
+                                    })()}
+                                </tbody>
+                            </table>
+                        </div>
+                        {(!dashData?.performance_data || dashData.performance_data.length === 0) && (
+                            <div className="px-4 py-8 text-center text-sm text-gray-500">
+                                No performance data available. Data will appear after the dashboard finishes loading.
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

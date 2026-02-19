@@ -22,6 +22,8 @@ urlpatterns = [
     path("api/session/complete/", views.MBWCompleteSessionView.as_view(), name="complete_session"),
     # Dashboard snapshot retrieval
     path("api/snapshot/", views.MBWSnapshotView.as_view(), name="snapshot"),
+    # OAuth token status check
+    path("api/oauth-status/", views.MBWOAuthStatusView.as_view(), name="oauth_status"),
     # FLW API for workflow template render_code
     path("api/opportunity-flws/", OpportunityFLWListAPIView.as_view(), name="opportunity_flws"),
 ]
