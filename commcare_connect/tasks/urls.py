@@ -12,6 +12,7 @@ urlpatterns = [
     path("<int:task_id>/edit/", views.TaskCreateEditView.as_view(), name="edit"),  # Edit mode
     path("bulk-create/", views.task_bulk_create, name="bulk_create"),
     path("api/single-create/", views.task_single_create, name="single_create"),  # Single task API
+    path("api/<int:task_id>/", views.task_detail_api, name="task_detail"),  # Task detail JSON API
     path("api/<int:task_id>/update/", views.task_update, name="task_update"),  # Task update API
     path("api/<int:task_id>/comment/", views.task_add_comment, name="add_comment"),  # Add comment API
     # Removed TaskDetailView - using TaskCreateEditView as the main interface

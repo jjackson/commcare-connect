@@ -535,6 +535,36 @@ def task_single_create(request):
 
 
 @login_required
+def task_detail_api(request, task_id):
+    """Return task data as JSON for inline task management."""
+    data_access = TaskDataAccess(user=request.user, request=request)
+    try:
+        task = data_access.get_task(task_id)
+        if not task:
+            return JsonResponse({"success": False, "error": "Task not found"}, status=404)
+
+        return JsonResponse({
+            "success": True,
+            "task": {
+                "id": task.id,
+                "title": task.title,
+                "status": task.status,
+                "username": task.username,
+                "flw_name": task.flw_name,
+                "priority": task.priority,
+                "description": task.description,
+                "resolution_details": task.resolution_details,
+                "events": task.events,
+            },
+        })
+    except Exception as e:
+        logger.error(f"Error fetching task detail: {e}", exc_info=True)
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+    finally:
+        data_access.close()
+
+
+@login_required
 @csrf_exempt
 @require_POST
 def task_update(request, task_id):

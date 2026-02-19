@@ -90,7 +90,16 @@ User Browser
     |   +-- OpportunityFLWListAPIView (FLW list with audit history)
     |
     +-- GET /custom_analysis/mbw_monitoring/api/snapshot/
-        +-- MBWSnapshotView (returns stored dashboard snapshot or {has_snapshot: false})
+    |   +-- MBWSnapshotView (returns stored dashboard snapshot or {has_snapshot: false})
+    |
+    +-- GET /tasks/api/<task_id>/
+    |   +-- task_detail_api (returns task data as JSON for inline task management)
+    |
+    +-- GET /tasks/<task_id>/ai/transcript/
+    |   +-- task_ai_transcript (AI conversation messages)
+    |
+    +-- POST /tasks/api/<task_id>/update/
+        +-- task_update (update task status, resolution details)
 ```
 
 ### Component Relationships
@@ -121,7 +130,7 @@ User Browser
                                      +--------v------+    +--------v------+   +--------v------+
                                      | SSE Stream    |    | Action        |   | onUpdateState |
                                      | (dashboard    |    | Handlers      |   | (persist      |
-                                     |  data)        |    | (16 methods)  |   |  state)       |
+                                     |  data)        |    | (20 methods)  |   |  state)       |
                                      +---------------+    +---------------+   +---------------+
 ```
 
@@ -340,7 +349,7 @@ The final SSE payload (`data.data`) contains:
   "active_usernames": ["flw001", "flw002"],
   "flw_names": {"flw001": "Alice Mensah", "flw002": "Bob Kone"},
   "open_task_usernames": ["flw002"],
-  "monitoring_session": { "id": 1, "title": "...", "status": "in_progress", "flw_results": {...} }
+  "monitoring_session": { "id": 1, "title": "...", "status": "in_progress", "worker_results": {...} }
 }
 ```
 
@@ -352,9 +361,13 @@ The final SSE payload (`data.data`) contains:
 
 Provides a bird's-eye view of each FLW's performance by merging data from all sources.
 
-**Summary Card**: Visit Status Distribution (100% stacked bar chart)
+**Summary Card**: Visit Status Distribution (per-visit-type stacked bar chart)
 
-- Color-coded segments: Completed On Time (green), Completed Late (light green), Due On Time (yellow), Due Late (orange), Missed (red)
+- 6 vertical stacked bars, one per visit type: ANC, Postnatal, Week 1, Month 1, Month 3, Month 6
+- Stacking order (bottom to top): Completed On Time (#22c55e), Completed Late (#86efac), Due On Time (#facc15), Due Late (#fb923c), Missed (#ef4444), Not Due Yet (#9ca3af grey)
+- "Not Due Yet" category: visits whose scheduled date is in the future
+- Interactive legend below the chart: click categories to toggle visibility on/off (dimmed + strike-through when hidden)
+- Bar heights proportional to count (tallest bar = full height, others scaled)
 
 **FLW Table Columns** (13 columns, toggleable via Column Selector):
 
@@ -367,7 +380,7 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 | Follow-up Rate | Follow-up analysis | % of visits due 5+ days ago that are completed, among eligible mothers |
 | Eligible 5+ | Drill-down data | Eligible mothers still on track (5+ completed OR <=1 missed). Color: green >=70%, yellow 50-69%, red <50% |
 | Revisit Dist. | GPS analysis | Median haversine distance (km) between revisits to the same mother |
-| Meter/Visit | GPS analysis | Median meters traveled per visit (filtered by app build version) |
+| Meter/Visit | GPS analysis | Median meters traveled per visit (configurable app version filter via Filter bar) |
 | Minute/Visit | GPS analysis | Median minutes per visit |
 | Phone Dup % | Quality metrics | % of mothers sharing duplicate phone numbers |
 | ANC = PNC | Quality metrics | Count of mothers where ANC and PNC completion dates match |
@@ -384,7 +397,9 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 - **Assessment buttons** (monitoring session only): Eligible for Renewal (green), Probation (yellow), Suspended (red) - toggle on click, stored in `worker_results`
 - **Notes button**: Opens modal with assessment + notes for the FLW
 - **Filter button**: Adds FLW to the multi-select filter
-- **Task creation button**: Creates a task for the FLW (greyed out if open task exists)
+- **Task button**: Two modes depending on task state:
+  - **No open task** (blue): Opens OCS modal to create a task + AI session
+  - **Open task exists** (grey): Click expands an inline panel showing AI conversation preview + task management controls (status dropdown, save, discard, close task with outcome/resolution)
 
 ### GPS Analysis Tab
 
@@ -607,7 +622,7 @@ Computed per FLW in `compute_overview_quality_metrics()` from `followup_analysis
 
 All user actions flow through the `ActionHandlers` interface, created by `createActionHandlers(csrfToken)` in `workflow-runner.tsx`. The render code calls these via the `actions` prop.
 
-### All 16 Action Handlers
+### All 20 Action Handlers
 
 | # | Action | Endpoint | Purpose |
 |---|--------|----------|---------|
@@ -627,6 +642,10 @@ All user actions flow through the `ActionHandlers` interface, created by `create
 | 14 | **`saveWorkerResult`** | `POST /labs/workflow/api/run/{runId}/worker-result/` | Save FLW assessment (MBW-specific) |
 | 15 | **`completeRun`** | `POST /labs/workflow/api/run/{runId}/complete/` | Mark run completed (MBW-specific) |
 | 16 | **`openTaskCreator`** | Opens `/tasks/new/?{params}` | Open task creation in new window (replaced by in-page OCS modal in MBW template) |
+| 17 | `getTaskDetail` | `GET /tasks/api/{taskId}/` | Fetch task data as JSON (generic, reusable) |
+| 18 | `getAITranscript` | `GET /tasks/{taskId}/ai/transcript/` | Fetch AI conversation messages (generic, reusable) |
+| 19 | `updateTask` | `POST /tasks/api/{taskId}/update/` | Update task fields (status, resolution, etc.) (generic, reusable) |
+| 20 | `saveAITranscript` | `POST /tasks/{taskId}/ai/save-transcript/` | Save AI transcript to task events (generic, reusable) |
 
 ### MBW-Specific Action Details
 
@@ -717,7 +736,11 @@ All workflow data is persisted via the **LabsRecord API** (no local database). R
 
         # Session metadata
         "title": "MBW Monitoring - QA Round 4",
-        "tag": "qa4"
+        "tag": "qa4",
+
+        # App version filter (GPS only)
+        "app_version_op": "gte",  # "gte", "eq", "lte", or "" (no filter)
+        "app_version_val": "14"   # Version number string, or "" (no filter)
     },
     "data": {
         # Dashboard data snapshot (saved after SSE load, stripped on completion)
@@ -728,7 +751,8 @@ All workflow data is persisted via the **LabsRecord API** (no local database). R
             "overview_data": {...},
             "active_usernames": [...],
             "flw_names": {...},
-            "open_task_usernames": [...]
+            "open_task_usernames": [...],
+            "open_tasks": {"flw@domain": {"task_id": 123, "status": "investigating", "title": "..."}}
         }
     }
 }
@@ -914,7 +938,7 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | Horizontal table scrolling | Overview | Scroll wrapper with `width: 0; minWidth: 100%` pattern |
 | GPS drill-down | GPS | Individual visit GPS details |
 | Follow-up drill-down | Follow-Up | Per-mother visit details with metadata |
-| Visit status distribution | Overview | 100% stacked bar chart |
+| Visit status distribution | Overview | Per-visit-type stacked bar chart (6 bars) with toggleable legend and "Not Due Yet" category |
 | Per-visit-type breakdown | Follow-Up | ANC through Month 6 mini columns |
 | Trailing 7-day sparkline | GPS | Daily travel distance bar chart |
 | GPS flag threshold (5km) | GPS | Red highlighting for suspicious distances |
@@ -923,6 +947,8 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | Quality/fraud metrics | Overview | Phone dup, parity/age concentration, ANC=PNC, age=reg |
 | 3-option FLW assessment | Overview | Eligible for Renewal / Probation / Suspended with progress |
 | Task creation | Overview | Create task for FLW with OCS integration |
+| Inline task management | Overview | Expand FLW row to view AI conversation, update status, close task with outcome |
+| App version filter (GPS) | Filter Bar | User-configurable operator (>=, =, <=) + version number for GPS data filtering; persisted in run state |
 | Template sync | - | Sync render code from template.py to DB via `?sync=true` |
 | Template registry | - | Auto-discovery of workflow templates |
 | Automatic token refresh | Backend | CommCare OAuth token auto-refreshed when expired |
@@ -971,6 +997,10 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | `THRESHOLD_YELLOW` | 60% | Follow-up rate for yellow status |
 | On-time window | 7 days (4 for PNC) | Days after scheduled date for on-time completion (see `VISIT_ON_TIME_DAYS`) |
 
+**Visit status categories** (in `calculate_visit_status`): Completed On Time, Completed Late, Due On Time, Due Late, Missed, Not Due Yet (visits with `current_date < scheduled_date`).
+
+**Aggregation** (`aggregate_visit_status_distribution`): Returns per-visit-type breakdown (ANC, Postnatal, Week 1, Month 1, Month 3, Month 6) with counts for each status category, plus overall totals.
+
 ### GPS Analysis Constants
 
 | Constant | Value | Description |
@@ -1016,9 +1046,16 @@ All files under `commcare_connect/workflow/templates/mbw_monitoring/`:
 
 | File | Purpose |
 |------|---------|
-| `commcare_connect/static/js/workflow-runner.tsx` | Entry point, createActionHandlers (16 handlers), React app bootstrap |
+| `commcare_connect/static/js/workflow-runner.tsx` | Entry point, createActionHandlers (20 handlers), React app bootstrap |
 | `components/workflow/DynamicWorkflow.tsx` | Babel loading, JSX transpilation, error boundary, prop passing |
 | `components/workflow/types.ts` | TypeScript interfaces: WorkflowProps, ActionHandlers, WorkflowInstance, etc. |
+
+### Task Module Files (used by inline task management)
+
+| File | Purpose |
+|------|---------|
+| `commcare_connect/tasks/views.py` | Task CRUD views, AI transcript, OCS integration. New: `task_detail_api` for JSON task detail |
+| `commcare_connect/tasks/urls.py` | Task URL routing. New: `api/<int:task_id>/` for task detail JSON API |
 
 ### Shared Dependencies
 
