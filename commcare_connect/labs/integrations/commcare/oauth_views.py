@@ -57,7 +57,7 @@ def labs_commcare_initiate(request: HttpRequest) -> HttpResponseRedirect:
     auth_params = {
         "client_id": client_id,
         "redirect_uri": callback_url,
-        "scope": "access_apis",
+        "scope": "access_apis offline_access",
         "response_type": "code",
         "state": state,
         "code_challenge": code_challenge,
@@ -149,7 +149,8 @@ def labs_commcare_callback(request: HttpRequest) -> HttpResponseRedirect:
         request.session.pop("commcare_oauth_state", None)
         request.session.pop("commcare_oauth_code_verifier", None)
 
-        logger.info(f"CommCare OAuth successful for user {request.user.username}")
+        has_refresh = bool(token_data.get("refresh_token"))
+        logger.info(f"CommCare OAuth successful for user {request.user.username} (refresh_token={has_refresh})")
         messages.success(request, "Successfully connected to CommCare!")
 
         # Ensure next_url is valid - default to /audit/ if empty or invalid
