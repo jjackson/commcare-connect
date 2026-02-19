@@ -79,7 +79,7 @@ def _check_app_version(version, op: str, val: int) -> bool:
         return version == val
     if op == "lte":
         return version <= val
-    return True
+    return False
 
 
 def _parse_int_param(value: str | None) -> int | None:
@@ -301,6 +301,8 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
 
             # App version filter (for GPS data only)
             app_version_op = request.GET.get("app_version_op", "")
+            if app_version_op and app_version_op not in ("gte", "eq", "lte"):
+                app_version_op = ""
             app_version_val = _parse_int_param(request.GET.get("app_version_val"))
 
             # Bust cache: when MBW_DEV_FIXTURE is on and ?bust_cache=1 is passed
@@ -456,38 +458,61 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             overview_data = None
             visit_status_distribution = None
             registration_forms = []
-
-            for opp_id in opportunity_ids:
-                try:
-                    metadata = fetch_opportunity_metadata(access_token, opp_id)
-                    cc_domain = metadata.get("cc_domain")
-                    cc_app_id = metadata.get("cc_app_id")
-                    if cc_domain:
-                        forms = fetch_registration_forms(
-                            request, cc_domain, cc_app_id=cc_app_id, bust_cache=bust_cache
-                        )
-                        registration_forms.extend(forms)
-                except Exception as e:
-                    logger.warning(f"[MBW Dashboard] Registration form fetch failed for opp {opp_id}: {e}")
-            logger.info(f"[MBW Dashboard] Fetched {len(registration_forms)} registration forms")
-
-            # Step 4b: Fetch GS forms from CCHQ (supervisor app, not in Connect pipeline)
             gs_forms = []
-            gs_app_id = monitoring_session.gs_app_id if monitoring_session else None
-            for opp_id in opportunity_ids:
-                try:
-                    metadata = fetch_opportunity_metadata(access_token, opp_id)
-                    cc_domain = metadata.get("cc_domain")
-                    cc_app_id = metadata.get("cc_app_id")
-                    if cc_domain:
-                        forms = fetch_gs_forms(
-                            request, cc_domain, cc_app_id=cc_app_id,
-                            gs_app_id=gs_app_id, bust_cache=bust_cache,
-                        )
-                        gs_forms.extend(forms)
-                except Exception as e:
-                    logger.warning(f"[MBW Dashboard] GS form fetch failed for opp {opp_id}: {e}")
-            logger.info(f"[MBW Dashboard] Fetched {len(gs_forms)} GS forms from CCHQ")
+
+            # Pre-check CCHQ OAuth before attempting API calls
+            commcare_oauth = request.session.get("commcare_oauth", {})
+            commcare_token = commcare_oauth.get("access_token")
+            commcare_expires_at = commcare_oauth.get("expires_at", 0)
+            cchq_oauth_valid = bool(
+                commcare_token and timezone.now().timestamp() < commcare_expires_at
+            )
+
+            if not cchq_oauth_valid:
+                logger.warning("[MBW Dashboard] CommCare OAuth expired or missing, skipping CCHQ data")
+                yield send_sse_event(
+                    "Fetching registration data... skipped "
+                    "(CommCare authorization expired \u2014 please re-authorize CommCare HQ)"
+                )
+            else:
+                for opp_id in opportunity_ids:
+                    try:
+                        yield send_sse_event("Fetching registration data... (metadata)")
+                        metadata = fetch_opportunity_metadata(access_token, opp_id)
+                        cc_domain = metadata.get("cc_domain")
+                        cc_app_id = metadata.get("cc_app_id")
+                        if cc_domain:
+                            yield send_sse_event("Fetching registration data... (forms)")
+                            forms = fetch_registration_forms(
+                                request, cc_domain, cc_app_id=cc_app_id,
+                                bust_cache=bust_cache, opportunity_id=opp_id,
+                            )
+                            registration_forms.extend(forms)
+                            yield send_sse_event(f"Fetching registration data... ({len(registration_forms)} forms)")
+                    except Exception as e:
+                        logger.warning(f"[MBW Dashboard] Registration form fetch failed for opp {opp_id}: {e}")
+                logger.info(f"[MBW Dashboard] Fetched {len(registration_forms)} registration forms")
+
+                # Step 4b: Fetch GS forms from CCHQ (supervisor app, not in Connect pipeline)
+                gs_app_id = monitoring_session.gs_app_id if monitoring_session else None
+                for opp_id in opportunity_ids:
+                    try:
+                        yield send_sse_event("Fetching GS forms... (metadata)")
+                        metadata = fetch_opportunity_metadata(access_token, opp_id)
+                        cc_domain = metadata.get("cc_domain")
+                        cc_app_id = metadata.get("cc_app_id")
+                        if cc_domain:
+                            yield send_sse_event("Fetching GS forms... (forms)")
+                            forms = fetch_gs_forms(
+                                request, cc_domain, cc_app_id=cc_app_id,
+                                gs_app_id=gs_app_id, bust_cache=bust_cache,
+                                opportunity_id=opp_id,
+                            )
+                            gs_forms.extend(forms)
+                            yield send_sse_event(f"Fetching GS forms... ({len(gs_forms)} forms)")
+                    except Exception as e:
+                        logger.warning(f"[MBW Dashboard] GS form fetch failed for opp {opp_id}: {e}")
+                logger.info(f"[MBW Dashboard] Fetched {len(gs_forms)} GS forms from CCHQ")
 
             # Step 5: Build follow-up data from registration forms + pipeline completions
             yield send_sse_event("Calculating follow-up metrics...")
@@ -793,7 +818,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
         except Exception as e:
             logger.error(f"[MBW Dashboard] Stream failed: {e}", exc_info=True)
             sentry_sdk.capture_exception(e)
-            yield send_sse_event("Error", error=f"Failed to load dashboard data: {str(e)}")
+            yield send_sse_event("Error", error="Failed to load dashboard data. Please try again or contact support.")
 
 
 class MBWGPSDetailView(LoginRequiredMixin, View):
@@ -860,7 +885,7 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
         except Exception as e:
             logger.error(f"[MBW Dashboard] GPS detail failed: {e}", exc_info=True)
             sentry_sdk.capture_exception(e)
-            return JsonResponse({"error": str(e)}, status=500)
+            return JsonResponse({"error": "An error occurred. Please try again."}, status=500)
 
 
 class MBWSaveFlwResultView(LoginRequiredMixin, View):
@@ -902,7 +927,7 @@ class MBWSaveFlwResultView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
         except Exception as e:
             logger.error(f"[MBW Dashboard] Save FLW result failed: {e}", exc_info=True)
-            return JsonResponse({"error": str(e)}, status=500)
+            return JsonResponse({"error": "An error occurred. Please try again."}, status=500)
 
 
 class MBWCompleteSessionView(LoginRequiredMixin, View):
@@ -936,7 +961,7 @@ class MBWCompleteSessionView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
         except Exception as e:
             logger.error(f"[MBW Dashboard] Complete session failed: {e}", exc_info=True)
-            return JsonResponse({"error": str(e)}, status=500)
+            return JsonResponse({"error": "An error occurred. Please try again."}, status=500)
 
 
 class MBWSnapshotView(LoginRequiredMixin, View):
@@ -1051,4 +1076,4 @@ class MBWSuspendUserView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
         except Exception as e:
             logger.error(f"[MBW Dashboard] Suspend failed: {e}", exc_info=True)
-            return JsonResponse({"error": str(e)}, status=500)
+            return JsonResponse({"error": "An error occurred. Please try again."}, status=500)
