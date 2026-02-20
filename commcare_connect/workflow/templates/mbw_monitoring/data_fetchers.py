@@ -144,10 +144,11 @@ def fetch_opportunity_metadata(access_token: str, opportunity_id: int) -> dict:
     cc_domain = deliver_app.get("cc_domain") or learn_app.get("cc_domain")
 
     if not cc_domain:
-        raise ValueError(
-            f"No cc_domain found in opportunity {opportunity_id} metadata. "
-            f"deliver_app: {deliver_app}, learn_app: {learn_app}"
+        logger.error(
+            f"No cc_domain in opportunity {opportunity_id} metadata. "
+            f"deliver_app keys: {list(deliver_app.keys())}, learn_app keys: {list(learn_app.keys())}"
         )
+        raise ValueError(f"Opportunity {opportunity_id} is missing CommCare domain configuration.")
 
     cc_app_id = deliver_app.get("cc_app_id") or learn_app.get("cc_app_id")
 
@@ -170,6 +171,7 @@ def fetch_visit_cases_by_ids(
     cc_domain: str,
     case_ids: list[str],
     bust_cache: bool = False,
+    opportunity_id: int | str = "",
 ) -> list[dict]:
     """
     Fetch visit cases from CommCare HQ by case IDs.
@@ -193,7 +195,7 @@ def fetch_visit_cases_by_ids(
     # Deduplicate
     unique_ids = list(set(case_ids))
     config = _get_cache_config()
-    cache_key = f"mbw_visit_cases:{cc_domain}"
+    cache_key = f"mbw_visit_cases:{opportunity_id}:{cc_domain}"
 
     # Check cache with tolerance validation
     if not bust_cache:
@@ -238,6 +240,7 @@ def fetch_mother_cases_by_ids(
     cc_domain: str,
     mother_case_ids: list[str],
     bust_cache: bool = False,
+    opportunity_id: int | str = "",
 ) -> list[dict]:
     """
     Fetch mother cases from CommCare HQ by case IDs.
@@ -259,7 +262,7 @@ def fetch_mother_cases_by_ids(
 
     unique_ids = list(set(mother_case_ids))
     config = _get_cache_config()
-    cache_key = f"mbw_mother_cases:{cc_domain}"
+    cache_key = f"mbw_mother_cases:{opportunity_id}:{cc_domain}"
 
     # Check cache with tolerance validation
     if not bust_cache:
@@ -439,6 +442,8 @@ def bust_mbw_hq_cache() -> int:
             cleared += cache.delete_pattern("mbw_visit_cases:*")
             cleared += cache.delete_pattern("mbw_mother_cases:*")
             cleared += cache.delete_pattern("mbw_opp_metadata:*")
+            cleared += cache.delete_pattern("mbw_registration_forms:*")
+            cleared += cache.delete_pattern("mbw_gs_forms:*")
             logger.info(f"[HQ Cache] Busted {cleared} cache keys via pattern")
         else:
             logger.warning("[HQ Cache] Cache backend does not support delete_pattern; skipping bust")
@@ -453,6 +458,7 @@ def fetch_gs_forms(
     cc_app_id: str | None = None,
     gs_app_id: str | None = None,
     bust_cache: bool = False,
+    opportunity_id: int | str = "",
 ) -> list[dict]:
     """Fetch Gold Standard Visit Checklist forms from CCHQ Form API v1.
 
@@ -475,7 +481,7 @@ def fetch_gs_forms(
     Returns:
         List of form dicts from CommCare Form API
     """
-    cache_key = f"mbw_gs_forms:{cc_domain}"
+    cache_key = f"mbw_gs_forms:{opportunity_id}:{cc_domain}"
     if not bust_cache:
         cached = cache.get(cache_key)
         if cached is not None:
@@ -522,6 +528,7 @@ def fetch_registration_forms(
     cc_domain: str,
     cc_app_id: str | None = None,
     bust_cache: bool = False,
+    opportunity_id: int | str = "",
 ) -> list[dict]:
     """Fetch 'Register Mother' forms from CCHQ Form API v1, cached for 1 hour.
 
@@ -541,7 +548,7 @@ def fetch_registration_forms(
     Returns:
         List of form dicts from CommCare Form API
     """
-    cache_key = f"mbw_registration_forms:{cc_domain}"
+    cache_key = f"mbw_registration_forms:{opportunity_id}:{cc_domain}"
     if not bust_cache:
         cached = cache.get(cache_key)
         if cached is not None:

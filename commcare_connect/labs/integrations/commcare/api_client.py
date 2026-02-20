@@ -5,6 +5,7 @@ Provides access to CommCare Case API v2 for fetching case data.
 """
 
 import logging
+from urllib.parse import urlparse
 
 import httpx
 from django.conf import settings
@@ -123,6 +124,15 @@ class CommCareDataAccess:
             logger.warning(f"CommCare token refresh error: {e}")
             return False
 
+    def _validate_pagination_url(self, url: str) -> bool:
+        """Check that a pagination URL points to the expected CommCare HQ domain."""
+        parsed = urlparse(url)
+        expected = urlparse(self.base_url)
+        if parsed.netloc and parsed.netloc != expected.netloc:
+            logger.warning(f"Unexpected domain in pagination URL: {parsed.netloc} (expected {expected.netloc})")
+            return False
+        return True
+
     def fetch_cases(
         self,
         case_type: str,
@@ -187,6 +197,8 @@ class CommCareDataAccess:
             logger.info(f"Retrieved {len(cases)} cases (total so far: {len(all_cases)})")
 
             next_url = data.get("next")
+            if next_url and not self._validate_pagination_url(next_url):
+                break
             params = None  # Don't send params for next page URLs
 
         logger.info(f"Fetched total of {len(all_cases)} {case_type} cases from CommCare")
@@ -249,6 +261,8 @@ class CommCareDataAccess:
                         cases = data.get("cases", [])
                         all_cases.extend(cases)
                         url = data.get("next")  # follow pagination
+                        if url and not self._validate_pagination_url(url):
+                            url = None
                     elif isinstance(data, list):
                         all_cases.extend(data)
                         url = None
@@ -325,6 +339,8 @@ class CommCareDataAccess:
                 else:
                     # Path-based relative URL (e.g., /a/domain/api/...)
                     next_url = f"{self.base_url}{next_url}"
+            if next_url and not self._validate_pagination_url(next_url):
+                break
 
         logger.info(f"Fetched total of {len(all_forms)} forms from CommCare")
         return all_forms
@@ -429,6 +445,8 @@ class CommCareDataAccess:
                     next_url = f"{endpoint}{next_url}"
                 else:
                     next_url = f"{self.base_url}{next_url}"
+            if next_url and not self._validate_pagination_url(next_url):
+                break
 
         logger.info(f"Listed {len(all_apps)} applications in domain {self.domain}")
         return all_apps

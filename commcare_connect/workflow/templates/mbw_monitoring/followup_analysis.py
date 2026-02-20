@@ -17,6 +17,7 @@ STATUS_COMPLETED_LATE = "Completed - Late"
 STATUS_DUE_ON_TIME = "Due - On Time"
 STATUS_DUE_LATE = "Due - Late"
 STATUS_MISSED = "Missed"
+STATUS_NOT_DUE_YET = "Not Due Yet"
 
 # Status color thresholds
 THRESHOLD_GREEN = 80
@@ -122,13 +123,14 @@ def calculate_visit_status(visit_case: dict, current_date: date) -> str:
     - Due - On Time: Not completed, currently within on-time window
     - Due - Late: Not completed, past on-time window but before expiry
     - Missed: Not completed and past expiry date
+    - Not Due Yet: Not completed and not yet within the on-time window
 
     Args:
         visit_case: Case dict from CommCare HQ with properties
         current_date: Reference date for status calculation
 
     Returns:
-        Status string (one of the 5 categories)
+        Status string (one of the 6 categories)
     """
     props = visit_case.get("properties", {})
     visit_type = props.get("visit_type", "")
@@ -157,6 +159,9 @@ def calculate_visit_status(visit_case: dict, current_date: date) -> str:
     # Not completed
     if expiry_date and current_date > expiry_date:
         return STATUS_MISSED
+
+    if current_date < scheduled_date:
+        return STATUS_NOT_DUE_YET
 
     if current_date <= on_time_end:
         return STATUS_DUE_ON_TIME
@@ -316,44 +321,81 @@ def _build_flw_summary(
     return summary
 
 
+_STATUS_KEYS = [
+    "completed_on_time",
+    "completed_late",
+    "due_on_time",
+    "due_late",
+    "missed",
+    "not_due_yet",
+]
+
+_STATUS_TO_KEY = {
+    STATUS_COMPLETED_ON_TIME: "completed_on_time",
+    STATUS_COMPLETED_LATE: "completed_late",
+    STATUS_DUE_ON_TIME: "due_on_time",
+    STATUS_DUE_LATE: "due_late",
+    STATUS_MISSED: "missed",
+    STATUS_NOT_DUE_YET: "not_due_yet",
+}
+
+# Reverse lookup: visit type key -> display name for chart labels
+_VISIT_TYPE_KEY_TO_DISPLAY = {
+    "anc": "ANC",
+    "postnatal": "Postnatal",
+    "week1": "Week 1",
+    "month1": "Month 1",
+    "month3": "Month 3",
+    "month6": "Month 6",
+}
+
+
 def aggregate_visit_status_distribution(
     visit_cases_by_flw: dict[str, list[dict]],
     current_date: date,
 ) -> dict:
     """
-    Aggregate visit status distribution across all FLWs for the overview chart.
+    Aggregate visit status distribution per visit type across all FLWs.
 
     Returns:
-        Dict with status counts and percentages for 100% stacked bar chart
+        Dict with ``by_visit_type`` (list of per-type counts) and ``totals``.
     """
-    totals = {
-        "completed_on_time": 0,
-        "completed_late": 0,
-        "due_on_time": 0,
-        "due_late": 0,
-        "missed": 0,
-    }
+    # Initialise counters per visit-type key
+    by_type: dict[str, dict[str, int]] = {}
+    for vt_key in VISIT_TYPE_KEYS:
+        by_type[vt_key] = {sk: 0 for sk in _STATUS_KEYS}
+
+    totals = {sk: 0 for sk in _STATUS_KEYS}
 
     for cases in visit_cases_by_flw.values():
         for case in cases:
+            props = case.get("properties", {})
+            visit_type = props.get("visit_type", "")
+            vt_key = VISIT_TYPE_TO_KEY.get(visit_type)
+            if not vt_key:
+                continue
+
             status = calculate_visit_status(case, current_date)
-            if status == STATUS_COMPLETED_ON_TIME:
-                totals["completed_on_time"] += 1
-            elif status == STATUS_COMPLETED_LATE:
-                totals["completed_late"] += 1
-            elif status == STATUS_DUE_ON_TIME:
-                totals["due_on_time"] += 1
-            elif status == STATUS_DUE_LATE:
-                totals["due_late"] += 1
-            elif status == STATUS_MISSED:
-                totals["missed"] += 1
+            status_key = _STATUS_TO_KEY.get(status)
+            if not status_key:
+                continue
 
-    total = sum(totals.values())
-    percentages = {}
-    for key, count in totals.items():
-        percentages[f"{key}_pct"] = round((count / total) * 100, 1) if total > 0 else 0
+            by_type[vt_key][status_key] += 1
+            totals[status_key] += 1
 
-    return {**totals, **percentages, "total": total}
+    # Build ordered list for the frontend
+    by_visit_type = []
+    for vt_key in VISIT_TYPE_KEYS:
+        counts = by_type[vt_key]
+        total = sum(counts.values())
+        by_visit_type.append({
+            "visit_type": _VISIT_TYPE_KEY_TO_DISPLAY.get(vt_key, vt_key),
+            **counts,
+            "total": total,
+        })
+
+    totals["total"] = sum(totals.values())
+    return {"by_visit_type": by_visit_type, "totals": totals}
 
 
 def aggregate_mother_metrics(
@@ -1006,3 +1048,130 @@ def compute_overview_quality_metrics(
         }
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# FLW Performance by Status
+# ---------------------------------------------------------------------------
+
+# Display label → (status_key, color hint)
+FLW_STATUS_DISPLAY = {
+    "eligible_for_renewal": "Eligible for Renewal",
+    "probation": "Probation",
+    "suspended": "Suspended",
+    "none": "No Category",
+}
+
+# Visit milestones: (display visit_type, min_completed_to_be_on_track, output_key)
+_VISIT_MILESTONES = [
+    ("Month 1", 3, "pct_4_visits_on_track"),
+    ("Month 3", 4, "pct_5_visits_complete"),
+    ("Month 6", 5, "pct_6_visits_complete"),
+]
+
+
+def compute_flw_performance_by_status(
+    flw_statuses: dict[str, str],
+    flw_drilldown: dict[str, list],
+    current_date: date,
+) -> list[dict]:
+    """Aggregate case-level performance metrics grouped by FLW assessment status.
+
+    Args:
+        flw_statuses: username (lowercase) → status key
+            ("eligible_for_renewal", "probation", "suspended", or "none").
+        flw_drilldown: username → list of mother summary dicts
+            (output of aggregate_mother_metrics). Each mother has:
+            - "eligible": bool
+            - "visits": list of {visit_type, visit_date_scheduled, status}
+        current_date: reference date for grace-period check.
+
+    Returns:
+        List of 4 dicts, one per status category (ordered: eligible, probation,
+        suspended, none). Each dict contains aggregated metrics.
+    """
+    grace_cutoff = current_date - timedelta(days=GRACE_PERIOD_DAYS)
+
+    # Group FLW usernames by status bucket
+    status_order = ["eligible_for_renewal", "probation", "suspended", "none"]
+    buckets: dict[str, list[str]] = {s: [] for s in status_order}
+    for username, status in flw_statuses.items():
+        bucket = status if status in buckets else "none"
+        buckets[bucket].append(username)
+
+    results = []
+    for status_key in status_order:
+        flw_list = buckets[status_key]
+
+        # Collect all mothers across FLWs in this bucket
+        all_mothers = []
+        for username in flw_list:
+            all_mothers.extend(flw_drilldown.get(username, []))
+
+        total_cases = len(all_mothers)
+        eligible_mothers = [m for m in all_mothers if m.get("eligible")]
+        total_eligible = len(eligible_mothers)
+
+        # --- still eligible: eligible AND (completed >= 5 OR missed <= 1) ---
+        still_eligible = 0
+        for m in eligible_mothers:
+            completed = sum(1 for v in m["visits"] if v["status"].startswith("Completed"))
+            missed = sum(1 for v in m["visits"] if v["status"] == "Missed")
+            if completed >= 5 or missed <= 1:
+                still_eligible += 1
+
+        # --- pct missed ≤1 (all mothers, not just eligible) ---
+        missed_1_or_less = 0
+        for m in all_mothers:
+            missed = sum(1 for v in m["visits"] if v["status"] == "Missed")
+            if missed <= 1:
+                missed_1_or_less += 1
+
+        # --- visit milestone percentages ---
+        milestone_results: dict[str, int] = {}
+        for visit_display_type, min_completed, metric_key in _VISIT_MILESTONES:
+            denominator = 0
+            numerator = 0
+            for m in all_mothers:
+                # Find the specific visit type for this mother
+                milestone_visit = None
+                for v in m["visits"]:
+                    if v["visit_type"] == visit_display_type:
+                        milestone_visit = v
+                        break
+                if milestone_visit is None:
+                    continue
+                # Check if this visit is due past grace period
+                sched_str = milestone_visit.get("visit_date_scheduled")
+                if not sched_str:
+                    continue
+                try:
+                    sched_date = date.fromisoformat(sched_str[:10])
+                except (ValueError, TypeError):
+                    continue
+                if sched_date > grace_cutoff:
+                    continue  # not yet due past buffer
+                denominator += 1
+                # Count total completed visits for this mother
+                completed = sum(
+                    1 for v in m["visits"] if v["status"].startswith("Completed")
+                )
+                if completed >= min_completed:
+                    numerator += 1
+            milestone_results[metric_key] = (
+                round(numerator / denominator * 100) if denominator > 0 else 0
+            )
+
+        results.append({
+            "status": FLW_STATUS_DISPLAY.get(status_key, status_key),
+            "status_key": status_key,
+            "num_flws": len(flw_list),
+            "total_cases": total_cases,
+            "total_cases_eligible_at_registration": total_eligible,
+            "total_cases_still_eligible": still_eligible,
+            "pct_still_eligible": round(still_eligible / total_eligible * 100) if total_eligible > 0 else 0,
+            "pct_missed_1_or_less_visits": round(missed_1_or_less / total_cases * 100) if total_cases > 0 else 0,
+            **milestone_results,
+        })
+
+    return results
