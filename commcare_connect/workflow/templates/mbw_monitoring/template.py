@@ -1116,8 +1116,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
     var handleTaskSave = function() {
         if (!taskDetail || taskStatus === taskOriginalStatus) return;
+        var reqId = taskRequestIdRef.current;
         setTaskSaving(true);
         actions.updateTask(taskDetail.id, { status: taskStatus }).then(function(result) {
+            if (reqId !== taskRequestIdRef.current) return;
             setTaskSaving(false);
             if (result.success) {
                 setTaskOriginalStatus(taskStatus);
@@ -1125,16 +1127,21 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             } else {
                 showToast('Failed to update: ' + (result.error || 'Unknown error'));
             }
-        }).catch(function() { setTaskSaving(false); });
+        }).catch(function() {
+            if (reqId !== taskRequestIdRef.current) return;
+            setTaskSaving(false);
+        });
     };
 
     var handleTaskClose = function() {
         if (!taskDetail) return;
+        var reqId = taskRequestIdRef.current;
         setTaskSaving(true);
         actions.updateTask(taskDetail.id, {
             status: 'closed',
             resolution_details: { official_action: closeAction, resolution_note: closeNote }
         }).then(function(result) {
+            if (reqId !== taskRequestIdRef.current) return;
             setTaskSaving(false);
             if (result.success) {
                 showToast('Task closed');
@@ -1154,7 +1161,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             } else {
                 showToast('Failed to close: ' + (result.error || 'Unknown error'));
             }
-        }).catch(function() { setTaskSaving(false); });
+        }).catch(function() {
+            if (reqId !== taskRequestIdRef.current) return;
+            setTaskSaving(false);
+        });
     };
 
     var handleTaskRefreshTranscript = function() {
