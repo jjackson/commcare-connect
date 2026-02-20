@@ -559,7 +559,7 @@ def task_detail_api(request, task_id):
         })
     except Exception as e:
         logger.error(f"Error fetching task detail: {e}", exc_info=True)
-        return JsonResponse({"success": False, "error": str(e)}, status=500)
+        return JsonResponse({"success": False, "error": "Failed to fetch task details. Please try again or contact support."}, status=500)
     finally:
         data_access.close()
 
