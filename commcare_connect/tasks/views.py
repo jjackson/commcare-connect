@@ -531,7 +531,7 @@ def task_single_create(request):
         return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
     except Exception as e:
         logger.error(f"Error in single task creation: {e}", exc_info=True)
-        return JsonResponse({"success": False, "error": str(e)}, status=500)
+        return JsonResponse({"success": False, "error": "Failed to create task. Please try again or contact support."}, status=500)
 
 
 @login_required

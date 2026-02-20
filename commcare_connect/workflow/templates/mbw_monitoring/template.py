@@ -1159,14 +1159,19 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
     var handleTaskRefreshTranscript = function() {
         if (!taskDetail) return;
+        var requestId = ++taskRequestIdRef.current;
         setTaskLoading(true);
         actions.getAITranscript(taskDetail.id, undefined, true).then(function(result) {
+            if (requestId !== taskRequestIdRef.current) return;
             setTaskLoading(false);
             if (result.success) {
                 setTaskTranscript(result.messages || []);
                 showToast('Transcript refreshed');
             }
-        }).catch(function() { setTaskLoading(false); });
+        }).catch(function() {
+            if (requestId !== taskRequestIdRef.current) return;
+            setTaskLoading(false);
+        });
     };
 
     var TASK_STATUS_OPTIONS = [
