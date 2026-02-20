@@ -549,7 +549,7 @@ def task_detail_api(request, task_id):
                 "id": task.id,
                 "title": task.title,
                 "status": task.status,
-                "username": task.username,
+                "username": task.task_username,
                 "flw_name": task.flw_name,
                 "priority": task.priority,
                 "description": task.description,

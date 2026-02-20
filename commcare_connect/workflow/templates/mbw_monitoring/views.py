@@ -73,12 +73,16 @@ def _check_app_version(version, op: str, val: int) -> bool:
         version = int(version)
     except (ValueError, TypeError):
         return False
+    if op == "gt":
+        return version > val
     if op == "gte":
         return version >= val
     if op == "eq":
         return version == val
     if op == "lte":
         return version <= val
+    if op == "lt":
+        return version < val
     return False
 
 
@@ -335,7 +339,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
 
             # App version filter (for GPS data only)
             app_version_op = request.GET.get("app_version_op", "")
-            if app_version_op and app_version_op not in ("gte", "eq", "lte"):
+            if app_version_op and app_version_op not in ("gt", "gte", "eq", "lte", "lt"):
                 app_version_op = ""
             app_version_val = _parse_int_param(request.GET.get("app_version_val"))
 
@@ -897,6 +901,8 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
 
             # Apply app version filter if configured
             app_version_op = request.GET.get("app_version_op", "")
+            if app_version_op and app_version_op not in ("gt", "gte", "eq", "lte", "lt"):
+                app_version_op = ""
             app_version_val = _parse_int_param(request.GET.get("app_version_val"))
             if app_version_op and app_version_val is not None:
                 visits_for_analysis = [
@@ -1047,6 +1053,9 @@ class MBWOAuthStatusView(LoginRequiredMixin, View):
     def get(self, request):
         now_ts = timezone.now().timestamp()
         next_url = request.GET.get("next", request.get_full_path())
+        # Sanitize: only allow internal paths (single leading /, no scheme)
+        if not next_url or not next_url.startswith("/") or next_url.startswith("//") or "://" in next_url:
+            next_url = request.get_full_path()
 
         labs = request.session.get("labs_oauth", {})
         cchq = request.session.get("commcare_oauth", {})

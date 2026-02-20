@@ -777,8 +777,8 @@ All workflow data is persisted via the **LabsRecord API** (no local database). R
         "tag": "qa4",
 
         # App version filter (GPS only)
-        "app_version_op": "gte",  # "gte", "eq", "lte", or "" (no filter)
-        "app_version_val": "14"   # Version number string, or "" (no filter)
+        "app_version_op": "gt",  # "gt", "gte", "eq", "lte", "lt", or "" (no filter)
+        "app_version_val": "14"  # Version number string, or "" (no filter)
     },
     "data": {
         # Dashboard data snapshot (saved after SSE load, stripped on completion)
@@ -1002,7 +1002,7 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | 3-option FLW assessment | Overview | Eligible for Renewal / Probation / Suspended with progress |
 | Task creation | Overview | Create task for FLW with OCS integration |
 | Inline task management | Overview | Expand FLW row to view AI conversation, update status, close task with outcome |
-| App version filter (GPS) | Filter Bar | User-configurable operator (>=, =, <=) + version number for GPS data filtering; persisted in run state |
+| App version filter (GPS) | Filter Bar | User-configurable operator (>, >=, =, <=, <) + version number for GPS data filtering; default > 14; persisted in run state |
 | Template sync | - | Sync render code from template.py to DB via `?sync=true` |
 | Template registry | - | Auto-discovery of workflow templates |
 | Automatic token refresh | Backend | CommCare OAuth token auto-refreshed when expired |

@@ -151,6 +151,10 @@ def labs_ocs_callback(request: HttpRequest) -> HttpResponseRedirect:
         logger.info(f"Open Chat Studio OAuth successful for user {request.user.username}")
         messages.success(request, "Successfully connected to Open Chat Studio!")
 
+        # Sanitize next_url: only allow internal paths (single leading /, no scheme)
+        if not next_url or not next_url.startswith("/") or next_url.startswith("//") or "://" in next_url:
+            next_url = "/labs/overview/"
+
         return redirect(next_url)
 
     except Exception as e:

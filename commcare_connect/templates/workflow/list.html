@@ -506,10 +506,11 @@
 
                         <!-- Editable Title -->
                         <template x-if="!editing">
-                            <h3 @click="editing = true; $nextTick(() => $refs.nameInput.focus())"
-                                class="font-semibold text-gray-900 cursor-pointer hover:text-blue-600 transition-colors truncate"
+                            <button type="button"
+                                @click="editing = true; $nextTick(() => $refs.nameInput.focus())"
+                                class="font-semibold text-gray-900 cursor-pointer hover:text-blue-600 transition-colors truncate text-left bg-transparent border-0 p-0"
                                 title="Click to edit"
-                                x-text="name"></h3>
+                                x-text="name"></button>
                         </template>
                         <template x-if="editing">
                             <div class="flex items-center gap-2">
