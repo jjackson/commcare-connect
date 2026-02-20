@@ -17,7 +17,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.http import urlencode
+from django.utils.http import url_has_allowed_host_and_scheme, urlencode
 from django.views import View
 from django.views.generic import TemplateView
 
@@ -140,31 +140,35 @@ def _get_latest_flw_statuses(
         from commcare_connect.audit.data_access import AuditDataAccess
 
         audit_access = AuditDataAccess(request=request)
-        for session in audit_access.get_audit_sessions():
-            username = session.flw_username
-            result = session.overall_result
-            if not username or not result:
-                continue
-            session_date = session.data.get("created_at") or session.data.get("start_date") or ""
-            _update(username, session_date, result.lower())
-        audit_access.close()
+        try:
+            for session in audit_access.get_audit_sessions():
+                username = session.flw_username
+                result = session.overall_result
+                if not username or not result:
+                    continue
+                session_date = session.data.get("created_at") or session.data.get("start_date") or ""
+                _update(username, session_date, result.lower())
+        finally:
+            audit_access.close()
     except Exception as e:
         logger.warning("[MBW Dashboard] Failed to fetch audit sessions: %s", e)
 
     # 2. All workflow monitoring runs (including in-progress)
     try:
         wf_access = WorkflowDataAccess(request=request)
-        for run in wf_access.list_runs():
-            state = run.data.get("state", {})
-            flw_results = state.get("flw_results", {})
-            for username, result_data in flw_results.items():
-                if not isinstance(result_data, dict):
-                    continue
-                result = result_data.get("result")
-                if not result:
-                    continue
-                _update(username, result_data.get("assessed_at", ""), result)
-        wf_access.close()
+        try:
+            for run in wf_access.list_runs():
+                state = run.data.get("state", {})
+                flw_results = state.get("flw_results", {})
+                for username, result_data in flw_results.items():
+                    if not isinstance(result_data, dict):
+                        continue
+                    result = result_data.get("result")
+                    if not result:
+                        continue
+                    _update(username, result_data.get("assessed_at", ""), result)
+        finally:
+            wf_access.close()
     except Exception as e:
         logger.warning("[MBW Dashboard] Failed to fetch workflow runs: %s", e)
 
@@ -316,6 +320,9 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     next_page = after_scheme[slash_pos:] if slash_pos >= 0 else "/labs/overview/"
                 else:
                     next_page = referer if referer.startswith("/") else "/labs/overview/"
+                # Sanitize: reject protocol-relative or scheme URLs
+                if not next_page or not next_page.startswith("/") or next_page.startswith("//") or "://" in next_page:
+                    next_page = "/labs/overview/"
                 authorize_url = reverse("labs:commcare_initiate") + "?" + urlencode({"next": next_page})
 
                 error_msg = (
@@ -1053,8 +1060,9 @@ class MBWOAuthStatusView(LoginRequiredMixin, View):
     def get(self, request):
         now_ts = timezone.now().timestamp()
         next_url = request.GET.get("next", request.get_full_path())
-        # Sanitize: only allow internal paths (single leading /, no scheme)
-        if not next_url or not next_url.startswith("/") or next_url.startswith("//") or "://" in next_url:
+        # Sanitize: only allow safe internal paths
+        next_url = (next_url or "").replace("\\", "/")
+        if not url_has_allowed_host_and_scheme(next_url, allowed_hosts=None):
             next_url = request.get_full_path()
 
         labs = request.session.get("labs_oauth", {})
