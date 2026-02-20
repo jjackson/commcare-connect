@@ -509,6 +509,81 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
 
       window.open(`/tasks/new/?${urlParams.toString()}`, '_blank');
     },
+
+    // --- Generic task management handlers (reusable by any workflow template) ---
+
+    getTaskDetail: async (taskId: number): Promise<Record<string, unknown>> => {
+      try {
+        const response = await fetch(`/tasks/api/${taskId}/`, {
+          headers: { 'X-CSRFToken': csrfToken },
+        });
+        try {
+          return await response.json();
+        } catch {
+          return { success: false, error: `Server error: ${response.status}` };
+        }
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Failed to fetch task' };
+      }
+    },
+
+    getAITranscript: async (taskId: number, sessionId?: string, refresh?: boolean): Promise<Record<string, unknown>> => {
+      try {
+        const params = new URLSearchParams();
+        if (sessionId) params.set('session_id', sessionId);
+        if (refresh) params.set('refresh', 'true');
+        const response = await fetch(`/tasks/${taskId}/ai/transcript/?${params.toString()}`, {
+          headers: { 'X-CSRFToken': csrfToken },
+        });
+        try {
+          return await response.json();
+        } catch {
+          return { success: false, error: `Server error: ${response.status}` };
+        }
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Failed to fetch transcript' };
+      }
+    },
+
+    updateTask: async (taskId: number, data: Record<string, unknown>): Promise<Record<string, unknown>> => {
+      try {
+        const response = await fetch(`/tasks/api/${taskId}/update/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+          },
+          body: JSON.stringify(data),
+        });
+        try {
+          return await response.json();
+        } catch {
+          return { success: false, error: `Server error: ${response.status}` };
+        }
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Failed to update task' };
+      }
+    },
+
+    saveAITranscript: async (taskId: number, data: Record<string, unknown>): Promise<Record<string, unknown>> => {
+      try {
+        const response = await fetch(`/tasks/${taskId}/ai/save-transcript/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+          },
+          body: JSON.stringify(data),
+        });
+        try {
+          return await response.json();
+        } catch {
+          return { success: false, error: `Server error: ${response.status}` };
+        }
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Failed to save transcript' };
+      }
+    },
   };
 }
 

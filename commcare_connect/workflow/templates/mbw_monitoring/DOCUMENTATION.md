@@ -6,7 +6,7 @@
 2. [Architecture](#architecture)
 3. [Workflow Module Integration](#workflow-module-integration)
 4. [Data Flow](#data-flow)
-5. [Three-Tab Dashboard](#three-tab-dashboard)
+5. [Four-Tab Dashboard](#four-tab-dashboard)
 6. [Data Sources & APIs](#data-sources--apis)
 7. [Pipeline Configuration](#pipeline-configuration)
 8. [Follow-Up Rate Business Logic](#follow-up-rate-business-logic)
@@ -32,6 +32,7 @@ The MBW (Mother Baby Wellness) Monitoring Dashboard is a real-time performance m
 - **Overview**: High-level per-FLW summary combining cases registered, follow-up rate, GS score, GPS metrics, and quality/fraud indicators
 - **GPS Analysis**: Distance-based anomaly detection using Haversine calculations to flag suspicious travel patterns
 - **Follow-Up Rate**: Visit completion tracking across 6 visit types (ANC, Postnatal, Week 1, Month 1, Month 3, Month 6) with per-mother drill-down, eligibility filtering, and grace period
+- **FLW Performance**: Aggregated case metrics grouped by each FLW's latest assessment status (Eligible for Renewal, Probation, Suspended, No Category)
 
 The dashboard runs within the **Workflow module** of Connect Labs. The UI is a React component defined as a JSX string in Python (`template.py`), transpiled client-side by Babel standalone, and rendered dynamically by `DynamicWorkflow.tsx`. All data is loaded via a single Server-Sent Events (SSE) connection, enabling real-time progress feedback during data loading.
 
@@ -90,7 +91,19 @@ User Browser
     |   +-- OpportunityFLWListAPIView (FLW list with audit history)
     |
     +-- GET /custom_analysis/mbw_monitoring/api/snapshot/
-        +-- MBWSnapshotView (returns stored dashboard snapshot or {has_snapshot: false})
+    |   +-- MBWSnapshotView (returns stored dashboard snapshot or {has_snapshot: false})
+    |
+    +-- GET /custom_analysis/mbw_monitoring/api/oauth-status/
+    |   +-- MBWOAuthStatusView (checks Connect/CommCare/OCS token expiry)
+    |
+    +-- GET /tasks/api/<task_id>/
+    |   +-- task_detail_api (returns task data as JSON for inline task management)
+    |
+    +-- GET /tasks/<task_id>/ai/transcript/
+    |   +-- task_ai_transcript (AI conversation messages)
+    |
+    +-- POST /tasks/api/<task_id>/update/
+        +-- task_update (update task status, resolution details)
 ```
 
 ### Component Relationships
@@ -121,7 +134,7 @@ User Browser
                                      +--------v------+    +--------v------+   +--------v------+
                                      | SSE Stream    |    | Action        |   | onUpdateState |
                                      | (dashboard    |    | Handlers      |   | (persist      |
-                                     |  data)        |    | (16 methods)  |   |  state)       |
+                                     |  data)        |    | (20 methods)  |   |  state)       |
                                      +---------------+    +---------------+   +---------------+
 ```
 
@@ -246,7 +259,7 @@ var eventSource = new EventSource(
 );
 ```
 
-The stream view executes 6 steps, yielding progress messages at each stage:
+The stream view executes 7 steps, yielding progress messages at each stage:
 
 | Step | Data Source | What It Fetches | Cache |
 |------|-----------|-----------------|-------|
@@ -257,8 +270,9 @@ The stream view executes 6 steps, yielding progress messages at each stage:
 | 4b | CCHQ Form API v1 | Gold Standard Visit Checklist forms -> GS scores per FLW | Django cache (1hr) |
 | 5 | In-memory | Follow-up metrics (visit status, completion rates with eligibility + grace period) | None (computed) |
 | 6 | In-memory | Overview metrics (merge follow-up rate, GS score, GPS, quality metrics) | None (computed) |
+| 7 | Connect API (audit sessions + workflow runs) | FLW Performance by assessment status (latest status per FLW + aggregated case metrics) | None (computed) |
 
-The final SSE event contains the combined payload for all three tabs, which is stored in React state via `setDashData()`.
+The final SSE event contains the combined payload for all four tabs, which is stored in React state via `setDashData()`.
 
 ### Dashboard Data Snapshotting
 
@@ -340,21 +354,31 @@ The final SSE payload (`data.data`) contains:
   "active_usernames": ["flw001", "flw002"],
   "flw_names": {"flw001": "Alice Mensah", "flw002": "Bob Kone"},
   "open_task_usernames": ["flw002"],
-  "monitoring_session": { "id": 1, "title": "...", "status": "in_progress", "flw_results": {...} }
+  "performance_data": [
+    {"status": "eligible_for_renewal", "num_flws": 5, "total_cases": 200, "eligible_at_registration": 180, "still_eligible": 150, "pct_still_eligible": 83.3, ...},
+    {"status": "probation", ...},
+    {"status": "suspended", ...},
+    {"status": "none", ...}
+  ],
+  "monitoring_session": { "id": 1, "title": "...", "status": "in_progress", "worker_results": {...} }
 }
 ```
 
 ---
 
-## Three-Tab Dashboard
+## Four-Tab Dashboard
 
 ### Overview Tab
 
 Provides a bird's-eye view of each FLW's performance by merging data from all sources.
 
-**Summary Card**: Visit Status Distribution (100% stacked bar chart)
+**Summary Card**: Visit Status Distribution (per-visit-type stacked bar chart)
 
-- Color-coded segments: Completed On Time (green), Completed Late (light green), Due On Time (yellow), Due Late (orange), Missed (red)
+- 6 vertical stacked bars, one per visit type: ANC, Postnatal, Week 1, Month 1, Month 3, Month 6
+- Stacking order (bottom to top): Completed On Time (#22c55e), Completed Late (#86efac), Due On Time (#facc15), Due Late (#fb923c), Missed (#ef4444), Not Due Yet (#9ca3af grey)
+- "Not Due Yet" category: visits whose scheduled date is in the future
+- Interactive legend below the chart: click categories to toggle visibility on/off (dimmed + strike-through when hidden)
+- Bar heights proportional to count (tallest bar = full height, others scaled)
 
 **FLW Table Columns** (13 columns, toggleable via Column Selector):
 
@@ -367,7 +391,7 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 | Follow-up Rate | Follow-up analysis | % of visits due 5+ days ago that are completed, among eligible mothers |
 | Eligible 5+ | Drill-down data | Eligible mothers still on track (5+ completed OR <=1 missed). Color: green >=70%, yellow 50-69%, red <50% |
 | Revisit Dist. | GPS analysis | Median haversine distance (km) between revisits to the same mother |
-| Meter/Visit | GPS analysis | Median meters traveled per visit (filtered by app build version) |
+| Meter/Visit | GPS analysis | Median meters traveled per visit (configurable app version filter via Filter bar) |
 | Minute/Visit | GPS analysis | Median minutes per visit |
 | Phone Dup % | Quality metrics | % of mothers sharing duplicate phone numbers |
 | ANC = PNC | Quality metrics | Count of mothers where ANC and PNC completion dates match |
@@ -384,7 +408,9 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 - **Assessment buttons** (monitoring session only): Eligible for Renewal (green), Probation (yellow), Suspended (red) - toggle on click, stored in `worker_results`
 - **Notes button**: Opens modal with assessment + notes for the FLW
 - **Filter button**: Adds FLW to the multi-select filter
-- **Task creation button**: Creates a task for the FLW (greyed out if open task exists)
+- **Task button**: Two modes depending on task state:
+  - **No open task** (blue): Opens OCS modal to create a task + AI session
+  - **Open task exists** (grey): Click expands an inline panel showing AI conversation preview + task management controls (status dropdown, save, discard, close task with outcome/resolution)
 
 ### GPS Analysis Tab
 
@@ -429,6 +455,33 @@ Tracks visit completion across 6 visit types with per-mother granularity, eligib
 **Eligibility Filter**: "Full intervention bonus only" checkbox (default checked). When checked, follow-up rate only counts mothers with `eligible_full_intervention_bonus = "1"`.
 
 **Drill-Down**: Clicking a FLW row expands to show per-mother visit details with metadata (name, age, phone, registration date, household size, preferred visit time, ANC/PNC dates, EDD, baby DOB, eligibility).
+
+### FLW Performance Tab
+
+Aggregated case metrics grouped by each FLW's latest known assessment status. Computed by `compute_flw_performance_by_status()` in `followup_analysis.py`.
+
+**Status Groups**: Eligible for Renewal, Probation, Suspended, No Category (FLWs without any assessment)
+
+**Status Source**: FLW assessment statuses are retrieved from both audit sessions (`AuditDataAccess.get_audit_sessions()`) and all workflow monitoring runs (`WorkflowDataAccess.list_runs()`), matching the logic in `flw_api._build_flw_history()`. The latest status by date is used.
+
+**Table Columns**:
+
+| Column | Description |
+|--------|-------------|
+| Status | Assessment status category (color-coded chip) |
+| # FLWs | Number of FLWs in this status group |
+| Total Cases | Total registered mothers across all FLWs in the group |
+| Eligible at Reg | Mothers marked eligible for full intervention bonus at registration |
+| Still Eligible | Mothers with 5+ completed visits OR <=1 missed visits |
+| % Still Eligible | Still Eligible / Eligible at Reg (color: green >=70%, yellow 50-69%, red <50%) |
+| % <=1 Missed | Cases with 0 or 1 missed visits / all cases |
+| % 4 Visits On Track | Cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer) |
+| % 5 Visits Complete | Cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer) |
+| % 6 Visits Complete | Cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer) |
+
+**Totals Row**: Aggregated totals across all status groups.
+
+**Data in Snapshot**: Performance data is included in the dashboard snapshot (`performance_data` key) and restored from it on subsequent loads.
 
 ---
 
@@ -607,7 +660,7 @@ Computed per FLW in `compute_overview_quality_metrics()` from `followup_analysis
 
 All user actions flow through the `ActionHandlers` interface, created by `createActionHandlers(csrfToken)` in `workflow-runner.tsx`. The render code calls these via the `actions` prop.
 
-### All 16 Action Handlers
+### All 20 Action Handlers
 
 | # | Action | Endpoint | Purpose |
 |---|--------|----------|---------|
@@ -627,6 +680,10 @@ All user actions flow through the `ActionHandlers` interface, created by `create
 | 14 | **`saveWorkerResult`** | `POST /labs/workflow/api/run/{runId}/worker-result/` | Save FLW assessment (MBW-specific) |
 | 15 | **`completeRun`** | `POST /labs/workflow/api/run/{runId}/complete/` | Mark run completed (MBW-specific) |
 | 16 | **`openTaskCreator`** | Opens `/tasks/new/?{params}` | Open task creation in new window (replaced by in-page OCS modal in MBW template) |
+| 17 | `getTaskDetail` | `GET /tasks/api/{taskId}/` | Fetch task data as JSON (generic, reusable) |
+| 18 | `getAITranscript` | `GET /tasks/{taskId}/ai/transcript/` | Fetch AI conversation messages (generic, reusable) |
+| 19 | `updateTask` | `POST /tasks/api/{taskId}/update/` | Update task fields (status, resolution, etc.) (generic, reusable) |
+| 20 | `saveAITranscript` | `POST /tasks/{taskId}/ai/save-transcript/` | Save AI transcript to task events (generic, reusable) |
 
 ### MBW-Specific Action Details
 
@@ -717,7 +774,11 @@ All workflow data is persisted via the **LabsRecord API** (no local database). R
 
         # Session metadata
         "title": "MBW Monitoring - QA Round 4",
-        "tag": "qa4"
+        "tag": "qa4",
+
+        # App version filter (GPS only)
+        "app_version_op": "gt",  # "gt", "gte", "eq", "lte", "lt", or "" (no filter)
+        "app_version_val": "14"  # Version number string, or "" (no filter)
     },
     "data": {
         # Dashboard data snapshot (saved after SSE load, stripped on completion)
@@ -728,7 +789,8 @@ All workflow data is persisted via the **LabsRecord API** (no local database). R
             "overview_data": {...},
             "active_usernames": [...],
             "flw_names": {...},
-            "open_task_usernames": [...]
+            "open_task_usernames": [...],
+            "open_tasks": {"flw@domain": {"task_id": 123, "status": "investigating", "title": "..."}}
         }
     }
 }
@@ -796,6 +858,14 @@ The dashboard uses up to three OAuth tokens:
 2. **CommCare OAuth** (`commcare_oauth` in session): For accessing CommCare HQ APIs (Form API, Application API)
 3. **OCS OAuth** (`ocs_oauth` in session): For AI task creation via Open Chat Studio (optional)
 
+### Pre-Refresh OAuth Expiration Check
+
+Before starting an SSE data stream, the frontend calls `GET /custom_analysis/mbw_monitoring/api/oauth-status/` to check if Connect and CommCare HQ tokens are still active. If either is expired, a red warning banner is shown with "Authorize" buttons linking to the OAuth initiate endpoints. The `next` parameter uses `window.location.pathname + window.location.search` (relative path) to redirect back after authorization.
+
+This check is skipped when loading from a snapshot (no OAuth needed for cached data). OCS token expiry is displayed but not blocking (OCS is optional).
+
+**Endpoint**: `MBWOAuthStatusView` in `views.py` — returns `{connect: {active}, commcare: {active, authorize_url}, ocs: {active, authorize_url}}`
+
 ### Automatic Token Refresh
 
 The `CommCareDataAccess` client automatically refreshes expired tokens:
@@ -845,6 +915,14 @@ All filtering happens in the browser without additional API calls:
 ### Sorting
 
 Each table has independent sort state. Clicking a column header toggles ascending/descending. Numeric columns sort numerically; string columns sort alphabetically.
+
+### Sticky Table Headers
+
+Table headers freeze below the Connect Labs header bar (64px) when scrolling long tables. Implemented via JavaScript (not CSS `position: sticky`) because Chrome doesn't support sticky on `<thead>`/`<th>` elements when ancestor containers have `overflow` or `border-collapse: collapse` (Tailwind preflight).
+
+**Approach**: A `useEffect` with a `scroll` event listener finds all `<table data-sticky-header>` elements, calculates each `<thead>`'s document offset via `offsetTop`/`offsetParent` chain, and applies `transform: translateY(offset)` when the header scrolls past 64px. The transform keeps the thead within the table's bounds, so `overflow: clip` on card wrappers doesn't clip it.
+
+**Dependencies**: Re-runs on `[activeTab, sseComplete]` to detect tables in newly rendered tabs. The `data-sticky-header` attribute marks which tables participate.
 
 ### Table Horizontal Scrolling
 
@@ -905,7 +983,7 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 
 | Feature | Tab | Description |
 |---------|-----|-------------|
-| Three-tab navigation | All | Overview, GPS Analysis, Follow-Up Rate tabs |
+| Four-tab navigation | All | Overview, GPS Analysis, Follow-Up Rate, FLW Performance tabs |
 | SSE streaming with progress | All | Real-time loading messages during data loading |
 | FLW filter (multi-select) | All | Filter by FLW name across all tabs |
 | Mother filter (multi-select) | Follow-Up | Filter by mother name |
@@ -914,7 +992,7 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | Horizontal table scrolling | Overview | Scroll wrapper with `width: 0; minWidth: 100%` pattern |
 | GPS drill-down | GPS | Individual visit GPS details |
 | Follow-up drill-down | Follow-Up | Per-mother visit details with metadata |
-| Visit status distribution | Overview | 100% stacked bar chart |
+| Visit status distribution | Overview | Per-visit-type stacked bar chart (6 bars) with toggleable legend and "Not Due Yet" category |
 | Per-visit-type breakdown | Follow-Up | ANC through Month 6 mini columns |
 | Trailing 7-day sparkline | GPS | Daily travel distance bar chart |
 | GPS flag threshold (5km) | GPS | Red highlighting for suspicious distances |
@@ -923,6 +1001,8 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | Quality/fraud metrics | Overview | Phone dup, parity/age concentration, ANC=PNC, age=reg |
 | 3-option FLW assessment | Overview | Eligible for Renewal / Probation / Suspended with progress |
 | Task creation | Overview | Create task for FLW with OCS integration |
+| Inline task management | Overview | Expand FLW row to view AI conversation, update status, close task with outcome |
+| App version filter (GPS) | Filter Bar | User-configurable operator (>, >=, =, <=, <) + version number for GPS data filtering; default > 14; persisted in run state |
 | Template sync | - | Sync render code from template.py to DB via `?sync=true` |
 | Template registry | - | Auto-discovery of workflow templates |
 | Automatic token refresh | Backend | CommCare OAuth token auto-refreshed when expired |
@@ -937,6 +1017,9 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | Tasks pagination | Tasks page | Previous/Next controls when >50 tasks; preserves filter query params across pages |
 | Case-insensitive usernames | Backend | All username comparisons normalized to lowercase (Connect vs CCHQ casing differences) |
 | Optimistic assessment UI | Overview | Status buttons update instantly; revert on error. Toggle behavior (click active status to clear). 1 GET + 1 POST per click (down from 5 GETs + 2 POSTs) |
+| FLW Performance tab | Performance | Aggregated case metrics grouped by FLW assessment status (Eligible/Probation/Suspended/None) with visit milestone tracking |
+| Pre-refresh OAuth check | All | Checks token expiry before SSE stream; shows warning banner with authorize buttons if expired; skipped for snapshot loads |
+| Sticky table headers | All | JS-based scroll handler using `transform: translateY()` pins `<thead>` at 64px below viewport top when scrolling long tables |
 
 ### Placeholder / TBD Features
 
@@ -970,6 +1053,10 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | `THRESHOLD_GREEN` | 80% | Follow-up rate for green status |
 | `THRESHOLD_YELLOW` | 60% | Follow-up rate for yellow status |
 | On-time window | 7 days (4 for PNC) | Days after scheduled date for on-time completion (see `VISIT_ON_TIME_DAYS`) |
+
+**Visit status categories** (in `calculate_visit_status`): Completed On Time, Completed Late, Due On Time, Due Late, Missed, Not Due Yet (visits with `current_date < scheduled_date`).
+
+**Aggregation** (`aggregate_visit_status_distribution`): Returns per-visit-type breakdown (ANC, Postnatal, Week 1, Month 1, Month 3, Month 6) with counts for each status category, plus overall totals.
 
 ### GPS Analysis Constants
 
@@ -1010,15 +1097,22 @@ All files under `commcare_connect/workflow/templates/mbw_monitoring/`:
 | `commcare_connect/workflow/urls.py` | All workflow URL patterns (96 routes) |
 | `commcare_connect/workflow/data_access.py` | WorkflowDataAccess (incl. save_run_snapshot()), PipelineDataAccess, proxy records. Properties: `template_type` on definitions, `created_at` + `selected_count` on runs |
 | `commcare_connect/workflow/templates/__init__.py` | Template auto-discovery and registry |
-| `commcare_connect/templates/workflow/run.html` | Django template (JSON script tag, bundle loading, overflow-x-hidden) |
+| `commcare_connect/templates/workflow/run.html` | Django template (JSON script tag, bundle loading, overflow-x: clip for sticky header support) |
 
 ### Frontend Files
 
 | File | Purpose |
 |------|---------|
-| `commcare_connect/static/js/workflow-runner.tsx` | Entry point, createActionHandlers (16 handlers), React app bootstrap |
+| `commcare_connect/static/js/workflow-runner.tsx` | Entry point, createActionHandlers (20 handlers), React app bootstrap |
 | `components/workflow/DynamicWorkflow.tsx` | Babel loading, JSX transpilation, error boundary, prop passing |
 | `components/workflow/types.ts` | TypeScript interfaces: WorkflowProps, ActionHandlers, WorkflowInstance, etc. |
+
+### Task Module Files (used by inline task management)
+
+| File | Purpose |
+|------|---------|
+| `commcare_connect/tasks/views.py` | Task CRUD views, AI transcript, OCS integration. New: `task_detail_api` for JSON task detail |
+| `commcare_connect/tasks/urls.py` | Task URL routing. New: `api/<int:task_id>/` for task detail JSON API |
 
 ### Shared Dependencies
 

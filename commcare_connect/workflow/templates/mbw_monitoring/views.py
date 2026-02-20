@@ -17,7 +17,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.http import urlencode
+from django.utils.http import url_has_allowed_host_and_scheme, urlencode
 from django.views import View
 from django.views.generic import TemplateView
 
@@ -44,6 +44,7 @@ from commcare_connect.workflow.templates.mbw_monitoring.followup_analysis import
     aggregate_mother_metrics,
     aggregate_visit_status_distribution,
     build_followup_from_pipeline,
+    compute_flw_performance_by_status,
     compute_overview_quality_metrics,
     count_mothers_from_pipeline,
     extract_mother_metadata_from_forms,
@@ -57,10 +58,32 @@ from commcare_connect.workflow.templates.mbw_monitoring.session_adapter import (
     save_flw_result as save_flw_result_helper,
 )
 from commcare_connect.labs.analysis.data_access import fetch_flw_names
+from commcare_connect.workflow.data_access import WorkflowDataAccess
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, BaseSSEStreamView, send_sse_event
 
 logger = logging.getLogger(__name__)
+
+
+def _check_app_version(version, op: str, val: int) -> bool:
+    """Check if a visit's app_build_version satisfies the operator comparison."""
+    if version is None:
+        return False
+    try:
+        version = int(version)
+    except (ValueError, TypeError):
+        return False
+    if op == "gt":
+        return version > val
+    if op == "gte":
+        return version >= val
+    if op == "eq":
+        return version == val
+    if op == "lte":
+        return version <= val
+    if op == "lt":
+        return version < val
+    return False
 
 
 def _parse_int_param(value: str | None) -> int | None:
@@ -88,6 +111,72 @@ def parse_date_param(date_str: str | None, default: date) -> date:
         return date.fromisoformat(date_str)
     except ValueError:
         return default
+
+
+def _get_latest_flw_statuses(
+    request,
+    active_usernames: set[str],
+) -> dict[str, str]:
+    """Get the latest known assessment status for each FLW.
+
+    Checks two sources (same logic as flw_api._build_flw_history):
+    1. Traditional audit sessions (AuditDataAccess)
+    2. All workflow monitoring runs (flw_results in run state)
+
+    Returns dict mapping username (lowercase) → status key.
+    FLWs in active_usernames with no assessment get "none".
+    """
+    # Track latest per FLW: {username: (date_str, result)}
+    latest: dict[str, tuple[str, str]] = {}
+
+    def _update(uname: str, date_str: str, result: str):
+        uname = uname.lower()
+        prev = latest.get(uname)
+        if prev is None or (date_str and date_str > prev[0]):
+            latest[uname] = (date_str or "", result)
+
+    # 1. Traditional audit sessions
+    try:
+        from commcare_connect.audit.data_access import AuditDataAccess
+
+        audit_access = AuditDataAccess(request=request)
+        try:
+            for session in audit_access.get_audit_sessions():
+                username = session.flw_username
+                result = session.overall_result
+                if not username or not result:
+                    continue
+                session_date = session.data.get("created_at") or session.data.get("start_date") or ""
+                _update(username, session_date, result.lower())
+        finally:
+            audit_access.close()
+    except Exception as e:
+        logger.warning("[MBW Dashboard] Failed to fetch audit sessions: %s", e)
+
+    # 2. All workflow monitoring runs (including in-progress)
+    try:
+        wf_access = WorkflowDataAccess(request=request)
+        try:
+            for run in wf_access.list_runs():
+                state = run.data.get("state", {})
+                flw_results = state.get("flw_results", {})
+                for username, result_data in flw_results.items():
+                    if not isinstance(result_data, dict):
+                        continue
+                    result = result_data.get("result")
+                    if not result:
+                        continue
+                    _update(username, result_data.get("assessed_at", ""), result)
+        finally:
+            wf_access.close()
+    except Exception as e:
+        logger.warning("[MBW Dashboard] Failed to fetch workflow runs: %s", e)
+
+    # Build final mapping: all active usernames get a status
+    return {
+        username: latest[username][1] if username in latest else "none"
+        for username in active_usernames
+    }
 
 
 class MBWMonitoringDashboardView(LoginRequiredMixin, TemplateView):
@@ -213,10 +302,53 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 yield send_sse_event("Error", error="No OAuth token found. Please log in to Connect.")
                 return
 
+            # Check CommCare HQ OAuth — block if expired (require re-authorization)
+            commcare_oauth = request.session.get("commcare_oauth", {})
+            commcare_expires_at = commcare_oauth.get("expires_at", 0)
+            cchq_oauth_valid = bool(
+                commcare_oauth.get("access_token")
+                and timezone.now().timestamp() < commcare_expires_at
+            )
+            if not cchq_oauth_valid:
+                logger.warning("[MBW Dashboard] CommCare OAuth expired or missing — blocking stream")
+                # Build authorize URL with return to the current page (Referer)
+                referer = request.headers.get("Referer", "")
+                if referer and "://" in referer:
+                    # Extract path from full URL (e.g. https://host/path/?q → /path/?q)
+                    after_scheme = referer.split("://", 1)[1]
+                    slash_pos = after_scheme.find("/")
+                    next_page = after_scheme[slash_pos:] if slash_pos >= 0 else "/labs/overview/"
+                else:
+                    next_page = referer if referer.startswith("/") else "/labs/overview/"
+                # Sanitize: reject protocol-relative or scheme URLs
+                if not next_page or not next_page.startswith("/") or next_page.startswith("//") or "://" in next_page:
+                    next_page = "/labs/overview/"
+                authorize_url = reverse("labs:commcare_initiate") + "?" + urlencode({"next": next_page})
+
+                error_msg = (
+                    "CommCare HQ authorization required. "
+                    "Please authorize CommCare access to load dashboard data."
+                )
+                # Include authorize_url as extra field for frontend to render a button
+                event = {
+                    "message": "Error",
+                    "complete": False,
+                    "error": error_msg,
+                    "authorize_url": authorize_url,
+                }
+                yield f"data: {json.dumps(event)}\n\n"
+                return
+
             # Parse date range (for GPS filtering only)
             default_start, default_end = get_default_date_range()
             start_date = parse_date_param(request.GET.get("start_date"), default_start)
             end_date = parse_date_param(request.GET.get("end_date"), default_end)
+
+            # App version filter (for GPS data only)
+            app_version_op = request.GET.get("app_version_op", "")
+            if app_version_op and app_version_op not in ("gt", "gte", "eq", "lte", "lt"):
+                app_version_op = ""
+            app_version_val = _parse_int_param(request.GET.get("app_version_val"))
 
             # Bust cache: when MBW_DEV_FIXTURE is on and ?bust_cache=1 is passed
             bust_cache = request.GET.get("bust_cache") == "1"
@@ -339,6 +471,18 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     "metadata": {"location": gps_location},
                 })
 
+            # Apply app version filter to GPS visits if configured
+            if app_version_op and app_version_val is not None:
+                pre_filter_count = len(visits_for_gps)
+                visits_for_gps = [
+                    v for v in visits_for_gps
+                    if _check_app_version(v["computed"].get("app_build_version"), app_version_op, app_version_val)
+                ]
+                logger.info(
+                    "[MBW Dashboard] App version filter (%s %d): %d -> %d GPS visits",
+                    app_version_op, app_version_val, pre_filter_count, len(visits_for_gps),
+                )
+
             gps_result = analyze_gps_metrics(visits_for_gps, flw_names)
 
             # Filter GPS by date range
@@ -359,38 +503,60 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             overview_data = None
             visit_status_distribution = None
             registration_forms = []
-
-            for opp_id in opportunity_ids:
-                try:
-                    metadata = fetch_opportunity_metadata(access_token, opp_id)
-                    cc_domain = metadata.get("cc_domain")
-                    cc_app_id = metadata.get("cc_app_id")
-                    if cc_domain:
-                        forms = fetch_registration_forms(
-                            request, cc_domain, cc_app_id=cc_app_id, bust_cache=bust_cache
-                        )
-                        registration_forms.extend(forms)
-                except Exception as e:
-                    logger.warning(f"[MBW Dashboard] Registration form fetch failed for opp {opp_id}: {e}")
-            logger.info(f"[MBW Dashboard] Fetched {len(registration_forms)} registration forms")
-
-            # Step 4b: Fetch GS forms from CCHQ (supervisor app, not in Connect pipeline)
             gs_forms = []
-            gs_app_id = monitoring_session.gs_app_id if monitoring_session else None
-            for opp_id in opportunity_ids:
-                try:
-                    metadata = fetch_opportunity_metadata(access_token, opp_id)
-                    cc_domain = metadata.get("cc_domain")
-                    cc_app_id = metadata.get("cc_app_id")
-                    if cc_domain:
-                        forms = fetch_gs_forms(
-                            request, cc_domain, cc_app_id=cc_app_id,
-                            gs_app_id=gs_app_id, bust_cache=bust_cache,
-                        )
-                        gs_forms.extend(forms)
-                except Exception as e:
-                    logger.warning(f"[MBW Dashboard] GS form fetch failed for opp {opp_id}: {e}")
-            logger.info(f"[MBW Dashboard] Fetched {len(gs_forms)} GS forms from CCHQ")
+
+            # Re-check CCHQ OAuth (may have expired during earlier steps)
+            cchq_oauth_valid = bool(
+                request.session.get("commcare_oauth", {}).get("access_token")
+                and timezone.now().timestamp()
+                < request.session.get("commcare_oauth", {}).get("expires_at", 0)
+            )
+
+            if not cchq_oauth_valid:
+                logger.warning("[MBW Dashboard] CommCare OAuth expired or missing, skipping CCHQ data")
+                yield send_sse_event(
+                    "Fetching registration data... skipped "
+                    "(CommCare authorization expired \u2014 please re-authorize CommCare HQ)"
+                )
+            else:
+                for opp_id in opportunity_ids:
+                    try:
+                        yield send_sse_event("Fetching registration data... (metadata)")
+                        metadata = fetch_opportunity_metadata(access_token, opp_id)
+                        cc_domain = metadata.get("cc_domain")
+                        cc_app_id = metadata.get("cc_app_id")
+                        if cc_domain:
+                            yield send_sse_event("Fetching registration data... (forms)")
+                            forms = fetch_registration_forms(
+                                request, cc_domain, cc_app_id=cc_app_id,
+                                bust_cache=bust_cache, opportunity_id=opp_id,
+                            )
+                            registration_forms.extend(forms)
+                            yield send_sse_event(f"Fetching registration data... ({len(registration_forms)} forms)")
+                    except Exception as e:
+                        logger.warning(f"[MBW Dashboard] Registration form fetch failed for opp {opp_id}: {e}")
+                logger.info(f"[MBW Dashboard] Fetched {len(registration_forms)} registration forms")
+
+                # Step 4b: Fetch GS forms from CCHQ (supervisor app, not in Connect pipeline)
+                gs_app_id = monitoring_session.gs_app_id if monitoring_session else None
+                for opp_id in opportunity_ids:
+                    try:
+                        yield send_sse_event("Fetching GS forms... (metadata)")
+                        metadata = fetch_opportunity_metadata(access_token, opp_id)
+                        cc_domain = metadata.get("cc_domain")
+                        cc_app_id = metadata.get("cc_app_id")
+                        if cc_domain:
+                            yield send_sse_event("Fetching GS forms... (forms)")
+                            forms = fetch_gs_forms(
+                                request, cc_domain, cc_app_id=cc_app_id,
+                                gs_app_id=gs_app_id, bust_cache=bust_cache,
+                                opportunity_id=opp_id,
+                            )
+                            gs_forms.extend(forms)
+                            yield send_sse_event(f"Fetching GS forms... ({len(gs_forms)} forms)")
+                    except Exception as e:
+                        logger.warning(f"[MBW Dashboard] GS form fetch failed for opp {opp_id}: {e}")
+                logger.info(f"[MBW Dashboard] Fetched {len(gs_forms)} GS forms from CCHQ")
 
             # Step 5: Build follow-up data from registration forms + pipeline completions
             yield send_sse_event("Calculating follow-up metrics...")
@@ -597,8 +763,16 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 "visit_status_distribution": visit_status_distribution,
             }
 
-            # Fetch open task usernames so the frontend can grey out the Task button
-            open_task_usernames = []
+            # Step 7: FLW Performance by assessment status
+            yield send_sse_event("Computing FLW performance metrics...")
+            flw_statuses = _get_latest_flw_statuses(request, active_usernames)
+            performance_data = compute_flw_performance_by_status(
+                flw_statuses, flw_drilldown, current_date
+            )
+
+            # Fetch open tasks so the frontend can grey out the Task button and
+            # provide inline task management (task_id needed for detail/update APIs)
+            open_tasks = {}
             task_data_access = None
             try:
                 from commcare_connect.tasks.data_access import TaskDataAccess
@@ -606,15 +780,19 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 task_data_access = TaskDataAccess(user=request.user, request=request)
                 all_tasks = task_data_access.get_tasks()
                 closed_statuses = {"closed", "resolved"}
-                open_task_usernames = sorted(set(
-                    t.username.lower() for t in all_tasks
-                    if t.username and t.status not in closed_statuses
-                ))
+                for t in all_tasks:
+                    if t.username and t.status not in closed_statuses:
+                        open_tasks[t.username.lower()] = {
+                            "task_id": t.id,
+                            "status": t.status,
+                            "title": t.title,
+                        }
             except Exception as e:
                 logger.warning(f"[MBW Dashboard] Failed to fetch tasks: {e}")
             finally:
                 if task_data_access:
                     task_data_access.close()
+            open_task_usernames = sorted(open_tasks.keys())
 
             # Build combined response
             response_data = {
@@ -628,7 +806,9 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 "overview_data": overview_data,
                 "active_usernames": sorted(active_usernames),
                 "flw_names": flw_names,
+                "open_tasks": open_tasks,
                 "open_task_usernames": open_task_usernames,
+                "performance_data": performance_data,
             }
 
             # Include monitoring session data if active
@@ -667,7 +847,9 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     "overview_data": overview_data,
                     "active_usernames": sorted(active_usernames),
                     "flw_names": flw_names,
+                    "open_tasks": open_tasks,
                     "open_task_usernames": open_task_usernames,
+                    "performance_data": performance_data,
                 }
                 try:
                     save_dashboard_snapshot(request, session_id, snapshot_payload)
@@ -680,7 +862,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
         except Exception as e:
             logger.error(f"[MBW Dashboard] Stream failed: {e}", exc_info=True)
             sentry_sdk.capture_exception(e)
-            yield send_sse_event("Error", error=f"Failed to load dashboard data: {str(e)}")
+            yield send_sse_event("Error", error="Failed to load dashboard data. Please try again or contact support.")
 
 
 class MBWGPSDetailView(LoginRequiredMixin, View):
@@ -724,6 +906,17 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
                     "metadata": {"location": gps_location},
                 })
 
+            # Apply app version filter if configured
+            app_version_op = request.GET.get("app_version_op", "")
+            if app_version_op and app_version_op not in ("gt", "gte", "eq", "lte", "lt"):
+                app_version_op = ""
+            app_version_val = _parse_int_param(request.GET.get("app_version_val"))
+            if app_version_op and app_version_val is not None:
+                visits_for_analysis = [
+                    v for v in visits_for_analysis
+                    if _check_app_version(v["computed"].get("app_build_version"), app_version_op, app_version_val)
+                ]
+
             gps_result = analyze_gps_metrics(visits_for_analysis, {})
             filtered_visits = filter_visits_by_date(gps_result.visits, start_date, end_date)
 
@@ -738,7 +931,7 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
         except Exception as e:
             logger.error(f"[MBW Dashboard] GPS detail failed: {e}", exc_info=True)
             sentry_sdk.capture_exception(e)
-            return JsonResponse({"error": str(e)}, status=500)
+            return JsonResponse({"error": "An error occurred. Please try again."}, status=500)
 
 
 class MBWSaveFlwResultView(LoginRequiredMixin, View):
@@ -780,7 +973,7 @@ class MBWSaveFlwResultView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
         except Exception as e:
             logger.error(f"[MBW Dashboard] Save FLW result failed: {e}", exc_info=True)
-            return JsonResponse({"error": str(e)}, status=500)
+            return JsonResponse({"error": "An error occurred. Please try again."}, status=500)
 
 
 class MBWCompleteSessionView(LoginRequiredMixin, View):
@@ -814,7 +1007,7 @@ class MBWCompleteSessionView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
         except Exception as e:
             logger.error(f"[MBW Dashboard] Complete session failed: {e}", exc_info=True)
-            return JsonResponse({"error": str(e)}, status=500)
+            return JsonResponse({"error": "An error occurred. Please try again."}, status=500)
 
 
 class MBWSnapshotView(LoginRequiredMixin, View):
@@ -847,7 +1040,9 @@ class MBWSnapshotView(LoginRequiredMixin, View):
             "overview_data": snapshot.get("overview_data"),
             "active_usernames": snapshot.get("active_usernames", []),
             "flw_names": snapshot.get("flw_names", {}),
+            "open_tasks": snapshot.get("open_tasks", {}),
             "open_task_usernames": snapshot.get("open_task_usernames", []),
+            "performance_data": snapshot.get("performance_data", []),
             "monitoring_session": {
                 "id": monitoring_session.id,
                 "title": monitoring_session.title,
@@ -855,6 +1050,36 @@ class MBWSnapshotView(LoginRequiredMixin, View):
                 "flw_results": monitoring_session.flw_results,
                 "progress": monitoring_session.get_monitoring_progress_stats(),
                 "selected_flw_usernames": monitoring_session.selected_flw_usernames,
+            },
+        })
+
+
+class MBWOAuthStatusView(LoginRequiredMixin, View):
+    """Return current OAuth token status for Connect, CommCare HQ, and OCS."""
+
+    def get(self, request):
+        now_ts = timezone.now().timestamp()
+        next_url = request.GET.get("next", request.get_full_path())
+        # Sanitize: only allow safe internal paths
+        next_url = (next_url or "").replace("\\", "/")
+        if not url_has_allowed_host_and_scheme(next_url, allowed_hosts=None):
+            next_url = request.get_full_path()
+
+        labs = request.session.get("labs_oauth", {})
+        cchq = request.session.get("commcare_oauth", {})
+        ocs = request.session.get("ocs_oauth", {})
+
+        return JsonResponse({
+            "connect": {
+                "active": bool(labs.get("access_token") and now_ts < labs.get("expires_at", 0)),
+            },
+            "commcare": {
+                "active": bool(cchq.get("access_token") and now_ts < cchq.get("expires_at", 0)),
+                "authorize_url": reverse("labs:commcare_initiate") + "?" + urlencode({"next": next_url}),
+            },
+            "ocs": {
+                "active": bool(ocs.get("access_token") and now_ts < ocs.get("expires_at", 0)),
+                "authorize_url": reverse("labs:ocs_initiate") + "?" + urlencode({"next": next_url}),
             },
         })
 
@@ -901,4 +1126,4 @@ class MBWSuspendUserView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
         except Exception as e:
             logger.error(f"[MBW Dashboard] Suspend failed: {e}", exc_info=True)
-            return JsonResponse({"error": str(e)}, status=500)
+            return JsonResponse({"error": "An error occurred. Please try again."}, status=500)
