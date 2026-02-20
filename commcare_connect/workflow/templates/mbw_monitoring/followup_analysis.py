@@ -123,13 +123,14 @@ def calculate_visit_status(visit_case: dict, current_date: date) -> str:
     - Due - On Time: Not completed, currently within on-time window
     - Due - Late: Not completed, past on-time window but before expiry
     - Missed: Not completed and past expiry date
+    - Not Due Yet: Not completed and not yet within the on-time window
 
     Args:
         visit_case: Case dict from CommCare HQ with properties
         current_date: Reference date for status calculation
 
     Returns:
-        Status string (one of the 5 categories)
+        Status string (one of the 6 categories)
     """
     props = visit_case.get("properties", {})
     visit_type = props.get("visit_type", "")
@@ -1148,7 +1149,7 @@ def compute_flw_performance_by_status(
                     sched_date = date.fromisoformat(sched_str[:10])
                 except (ValueError, TypeError):
                     continue
-                if sched_date >= grace_cutoff:
+                if sched_date > grace_cutoff:
                     continue  # not yet due past buffer
                 denominator += 1
                 # Count total completed visits for this mother

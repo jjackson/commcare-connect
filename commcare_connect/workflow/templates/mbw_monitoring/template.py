@@ -90,9 +90,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [toastMessage, setToastMessage] = React.useState('');
     var [filterStartDate, setFilterStartDate] = React.useState('');
     var [filterEndDate, setFilterEndDate] = React.useState('');
-    var [appVersionOp, setAppVersionOp] = React.useState(instance.state?.app_version_op || 'gte');
+    var [appVersionOp, setAppVersionOp] = React.useState(instance.state?.app_version_op || 'gt');
     var [appVersionVal, setAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
-    var [appliedAppVersionOp, setAppliedAppVersionOp] = React.useState(instance.state?.app_version_op || 'gte');
+    var [appliedAppVersionOp, setAppliedAppVersionOp] = React.useState(instance.state?.app_version_op || 'gt');
     var [appliedAppVersionVal, setAppliedAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
     var [hiddenCategories, setHiddenCategories] = React.useState({});
 
@@ -192,6 +192,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
         setSseComplete(false);
         setSseError(null);
+        setSseAuthorizeUrl(null);
         setSseMessages([]);
         setFromSnapshot(false);
         setSnapshotTimestamp(null);
@@ -211,9 +212,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             if (bustCache) {
                 params.set('bust_cache', '1');
             }
-            if (appVersionOp && appVersionVal) {
-                params.set('app_version_op', appVersionOp);
-                params.set('app_version_val', appVersionVal);
+            if (appliedAppVersionOp && appliedAppVersionVal) {
+                params.set('app_version_op', appliedAppVersionOp);
+                params.set('app_version_val', appliedAppVersionVal);
             }
             var url = '/custom_analysis/mbw_monitoring/stream/?' + params.toString();
             var es = new EventSource(url);
@@ -372,12 +373,14 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             handleScroll();
         }, 50);
 
+        var resizeHandler = function() { theadCache = []; };
         window.addEventListener('scroll', handleScroll, { passive: true });
-        window.addEventListener('resize', function() { theadCache = []; });
+        window.addEventListener('resize', resizeHandler);
 
         return function() {
             clearTimeout(timer);
             window.removeEventListener('scroll', handleScroll);
+            window.removeEventListener('resize', resizeHandler);
             theadCache.forEach(function(d) {
                 d.thead.style.transform = '';
                 d.thead.style.position = '';
@@ -585,10 +588,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var resetFilters = function() {
         setFilterFlws([]);
         setFilterMothers([]);
-        var needsRefresh = appliedAppVersionOp !== 'gte' || appliedAppVersionVal !== '14';
-        setAppVersionOp('gte');
+        var needsRefresh = appliedAppVersionOp !== 'gt' || appliedAppVersionVal !== '14';
+        setAppVersionOp('gt');
         setAppVersionVal('14');
-        setAppliedAppVersionOp('gte');
+        setAppliedAppVersionOp('gt');
         setAppliedAppVersionVal('14');
         if (needsRefresh) {
             setRefreshTrigger(function(n) { return n + 1; });
@@ -1594,9 +1597,11 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                     onChange={function(e) { setAppVersionOp(e.target.value); }}
                                     className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500">
                                 <option value="">No filter</option>
+                                <option value="gt">{'>'}</option>
                                 <option value="gte">{'>='}</option>
                                 <option value="eq">{'='}</option>
                                 <option value="lte">{'<='}</option>
+                                <option value="lt">{'<'}</option>
                             </select>
                             <input type="number" value={appVersionVal}
                                    onChange={function(e) { setAppVersionVal(e.target.value); }}
