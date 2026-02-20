@@ -17,6 +17,7 @@ from django.http import HttpRequest, HttpResponseRedirect
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
 logger = logging.getLogger(__name__)
 
@@ -153,8 +154,9 @@ def labs_commcare_callback(request: HttpRequest) -> HttpResponseRedirect:
         logger.info(f"CommCare OAuth successful for user {request.user.username} (refresh_token={has_refresh})")
         messages.success(request, "Successfully connected to CommCare!")
 
-        # Sanitize next_url: only allow internal paths (single leading /, no scheme)
-        if not next_url or not next_url.startswith("/") or next_url.startswith("//") or "://" in next_url:
+        # Sanitize next_url: only allow safe internal paths
+        next_url = (next_url or "").replace("\\", "/")
+        if not url_has_allowed_host_and_scheme(next_url, allowed_hosts=None):
             next_url = "/audit/"
 
         return redirect(next_url)

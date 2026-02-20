@@ -108,6 +108,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [createdTaskUsernames, setCreatedTaskUsernames] = React.useState([]);
 
     // Inline task expansion state
+    var taskRequestIdRef = React.useRef(0);
     var [expandedTaskFlw, setExpandedTaskFlw] = React.useState(null);
     var [taskDetail, setTaskDetail] = React.useState(null);
     var [taskTranscript, setTaskTranscript] = React.useState(null);
@@ -268,13 +269,13 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 if (!status.connect?.active) expired.push('connect');
                 if (!status.commcare?.active) expired.push('commcare');
                 if (!status.ocs?.active) expired.push('ocs');
+                // Always store OAuth status (used by inline task OCS check)
+                setOauthStatus(status);
                 // Connect + CommCare are required; OCS is optional
                 if (!status.connect?.active || !status.commcare?.active) {
-                    setOauthStatus(status);
                     setSseMessages([]);
                     return;
                 }
-                setOauthStatus(null);
                 startSSEStream(bustCache);
             })
             .catch(function() {
@@ -1065,6 +1066,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // ---- Inline task handlers ----
     var toggleTaskExpand = function(username) {
         if (expandedTaskFlw === username) {
+            taskRequestIdRef.current++;
             setExpandedTaskFlw(null);
             setTaskDetail(null);
             setTaskTranscript(null);
@@ -1073,6 +1075,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         }
         var taskInfo = openTasks[username];
         if (!taskInfo) return;
+        var requestId = ++taskRequestIdRef.current;
         setExpandedTaskFlw(username);
         setTaskLoading(true);
         setTaskDetail(null);
@@ -1086,6 +1089,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             return;
         }
         actions.getTaskDetail(taskInfo.task_id).then(function(result) {
+            if (requestId !== taskRequestIdRef.current) return;
             if (result.success && result.task) {
                 setTaskDetail(result.task);
                 setTaskStatus(result.task.status || 'investigating');
@@ -1096,14 +1100,15 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 showToast('Failed to load task: ' + (result.error || 'Unknown error'));
             }
         }).then(function(transcriptResult) {
+            if (requestId !== taskRequestIdRef.current) return;
             setTaskLoading(false);
             if (transcriptResult && transcriptResult.success) {
                 setTaskTranscript(transcriptResult.messages || []);
             } else if (transcriptResult) {
-                // Transcript not available — set empty array so UI shows "No messages yet" with error context
                 setTaskTranscript([]);
             }
         }).catch(function(err) {
+            if (requestId !== taskRequestIdRef.current) return;
             setTaskLoading(false);
             console.error('Error loading task:', err);
         });
@@ -2075,9 +2080,23 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                                                         );
                                                                                     })
                                                                                 ) : taskTranscript && taskTranscript.length === 0 ? (
-                                                                                    <div className="text-center text-gray-400 text-sm py-4">
-                                                                                        <i className="fa-solid fa-comment-slash mr-1"></i> No messages yet
-                                                                                    </div>
+                                                                                    oauthStatus && !oauthStatus.ocs?.active ? (
+                                                                                        <div className="text-center py-4">
+                                                                                            <div className="text-amber-600 text-sm mb-2">
+                                                                                                <i className="fa-solid fa-link-slash mr-1"></i> OCS authorization required to load AI conversation
+                                                                                            </div>
+                                                                                            {oauthStatus.ocs?.authorize_url ? (
+                                                                                                <a href={oauthStatus.ocs.authorize_url}
+                                                                                                   className="inline-block px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 no-underline">
+                                                                                                    <i className="fa-solid fa-arrow-right-to-bracket mr-1"></i> Connect to OCS
+                                                                                                </a>
+                                                                                            ) : null}
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <div className="text-center text-gray-400 text-sm py-4">
+                                                                                            <i className="fa-solid fa-comment-slash mr-1"></i> No messages yet
+                                                                                        </div>
+                                                                                    )
                                                                                 ) : !taskLoading ? (
                                                                                     <div className="text-center text-gray-400 text-sm py-4">
                                                                                         <i className="fa-solid fa-circle-info mr-1"></i> Transcript not available
