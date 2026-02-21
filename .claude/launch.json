@@ -1,0 +1,30 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "django",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["manage.py", "runserver"],
+      "port": 8000
+    },
+    {
+      "name": "webpack-watch",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "webpack",
+        "--mode",
+        "development",
+        "--config",
+        "webpack/base.config.js",
+        "--watch"
+      ],
+      "port": 0
+    },
+    {
+      "name": "celery",
+      "runtimeExecutable": "celery",
+      "runtimeArgs": ["-A", "config.celery_app", "worker", "-l", "info"],
+      "port": 0
+    }
+  ]
+}
